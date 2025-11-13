@@ -11,9 +11,13 @@ export {
   type Facts,
   type ExecutionResult,
   type NodeResult,
+  type Task,
+  type TaskParameter,
   BoltExecutionError,
   BoltTimeoutError,
   BoltParseError,
   BoltInventoryNotFoundError,
   BoltNodeUnreachableError,
+  BoltTaskNotFoundError,
+  BoltTaskParameterError,
 } from './types';

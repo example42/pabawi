@@ -309,3 +309,287 @@ describe('BoltService - runCommand', () => {
     expect(result.status).toBe('success');
   });
 });
+
+describe('BoltService - runTask', () => {
+  let boltService: BoltService;
+
+  beforeEach(() => {
+    boltService = new BoltService('/test/bolt/project', 300000);
+  });
+
+  it('should parse successful task execution output', () => {
+    const nodeId = 'test-node';
+    const taskName = 'package::install';
+    const parameters = { name: 'nginx', ensure: 'present' };
+    const mockOutput = {
+      items: [
+        {
+          target: 'test-node',
+          status: 'success',
+          value: {
+            status: 'installed',
+            version: '1.18.0',
+          },
+        },
+      ],
+    };
+
+    const startTime = Date.now();
+    const endTime = startTime + 2000;
+    const result = (boltService as any).transformTaskOutput(
+      'exec_task_123',
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime
+    );
+
+    expect(result).toBeDefined();
+    expect(result.id).toBe('exec_task_123');
+    expect(result.type).toBe('task');
+    expect(result.targetNodes).toEqual([nodeId]);
+    expect(result.action).toBe(taskName);
+    expect(result.parameters).toEqual(parameters);
+    expect(result.status).toBe('success');
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].nodeId).toBe(nodeId);
+    expect(result.results[0].status).toBe('success');
+    expect(result.results[0].value).toEqual({
+      status: 'installed',
+      version: '1.18.0',
+    });
+    expect(result.results[0].duration).toBe(2000);
+  });
+
+  it('should parse failed task execution output', () => {
+    const nodeId = 'test-node';
+    const taskName = 'service::restart';
+    const parameters = { name: 'nonexistent' };
+    const mockOutput = {
+      items: [
+        {
+          target: 'test-node',
+          status: 'failed',
+          error: {
+            msg: 'Service not found: nonexistent',
+          },
+        },
+      ],
+    };
+
+    const startTime = Date.now();
+    const endTime = startTime + 1000;
+    const result = (boltService as any).transformTaskOutput(
+      'exec_task_456',
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime
+    );
+
+    expect(result).toBeDefined();
+    expect(result.status).toBe('failed');
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].status).toBe('failed');
+    expect(result.results[0].error).toBe('Service not found: nonexistent');
+  });
+
+  it('should handle task execution without parameters', () => {
+    const nodeId = 'test-node';
+    const taskName = 'facts';
+    const mockOutput = {
+      items: [
+        {
+          target: 'test-node',
+          status: 'success',
+          value: {
+            os: { family: 'RedHat' },
+          },
+        },
+      ],
+    };
+
+    const startTime = Date.now();
+    const endTime = startTime + 500;
+    const result = (boltService as any).transformTaskOutput(
+      'exec_task_789',
+      nodeId,
+      taskName,
+      undefined,
+      mockOutput,
+      startTime,
+      endTime
+    );
+
+    expect(result).toBeDefined();
+    expect(result.parameters).toBeUndefined();
+    expect(result.status).toBe('success');
+    expect(result.results[0].value).toEqual({
+      os: { family: 'RedHat' },
+    });
+  });
+
+  it('should handle task with complex return value', () => {
+    const nodeId = 'test-node';
+    const taskName = 'custom::complex_task';
+    const parameters = { action: 'analyze' };
+    const mockOutput = {
+      items: [
+        {
+          target: 'test-node',
+          status: 'success',
+          value: {
+            results: [
+              { id: 1, status: 'ok' },
+              { id: 2, status: 'warning' },
+            ],
+            summary: {
+              total: 2,
+              ok: 1,
+              warning: 1,
+            },
+          },
+        },
+      ],
+    };
+
+    const startTime = Date.now();
+    const endTime = startTime + 3000;
+    const result = (boltService as any).transformTaskOutput(
+      'exec_task_complex',
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime
+    );
+
+    expect(result).toBeDefined();
+    expect(result.results[0].value).toEqual({
+      results: [
+        { id: 1, status: 'ok' },
+        { id: 2, status: 'warning' },
+      ],
+      summary: {
+        total: 2,
+        ok: 1,
+        warning: 1,
+      },
+    });
+  });
+
+  it('should handle task with error object containing message field', () => {
+    const nodeId = 'test-node';
+    const taskName = 'test::task';
+    const mockOutput = {
+      items: [
+        {
+          target: 'test-node',
+          status: 'failed',
+          error: {
+            message: 'Task failed with custom message',
+          },
+        },
+      ],
+    };
+
+    const startTime = Date.now();
+    const endTime = startTime + 800;
+    const result = (boltService as any).transformTaskOutput(
+      'exec_task_err',
+      nodeId,
+      taskName,
+      undefined,
+      mockOutput,
+      startTime,
+      endTime
+    );
+
+    expect(result).toBeDefined();
+    expect(result.results[0].error).toBe('Task failed with custom message');
+  });
+
+  it('should handle empty items array for task', () => {
+    const nodeId = 'test-node';
+    const taskName = 'test::task';
+    const mockOutput = {
+      items: [],
+    };
+
+    const startTime = Date.now();
+    const endTime = startTime + 100;
+    const result = (boltService as any).transformTaskOutput(
+      'exec_task_empty',
+      nodeId,
+      taskName,
+      undefined,
+      mockOutput,
+      startTime,
+      endTime
+    );
+
+    expect(result).toBeDefined();
+    expect(result.results).toHaveLength(0);
+    expect(result.status).toBe('success');
+  });
+
+  it('should extract parameter errors from stderr', () => {
+    const stderr = `Error: Task validation failed
+Parameter 'name' is required but not provided
+Parameter 'version' must be a string
+Invalid parameter 'unknown_param'`;
+
+    const errors = (boltService as any).extractParameterErrors(stderr);
+
+    expect(errors).toBeDefined();
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors.some((e: string) => e.includes('required'))).toBe(true);
+    expect(errors.some((e: string) => e.includes('Parameter'))).toBe(true);
+  });
+
+  it('should return full stderr when no specific parameter errors found', () => {
+    const stderr = 'Some generic error message';
+
+    const errors = (boltService as any).extractParameterErrors(stderr);
+
+    expect(errors).toBeDefined();
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBe('Some generic error message');
+  });
+
+  it('should handle task execution with empty parameters object', () => {
+    const nodeId = 'test-node';
+    const taskName = 'test::task';
+    const parameters = {};
+    const mockOutput = {
+      items: [
+        {
+          target: 'test-node',
+          status: 'success',
+          value: { result: 'ok' },
+        },
+      ],
+    };
+
+    const startTime = Date.now();
+    const endTime = startTime + 500;
+    const result = (boltService as any).transformTaskOutput(
+      'exec_task_empty_params',
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime
+    );
+
+    expect(result).toBeDefined();
+    expect(result.parameters).toEqual({});
+    expect(result.status).toBe('success');
+  });
+});

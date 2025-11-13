@@ -171,3 +171,51 @@ export interface NodeResult {
   error?: string;
   duration: number;
 }
+
+/**
+ * Bolt task definition
+ */
+export interface Task {
+  name: string;
+  description?: string;
+  parameters: TaskParameter[];
+  modulePath: string;
+}
+
+/**
+ * Task parameter definition
+ */
+export interface TaskParameter {
+  name: string;
+  type: "String" | "Integer" | "Boolean" | "Array" | "Hash";
+  description?: string;
+  required: boolean;
+  default?: unknown;
+}
+
+/**
+ * Error thrown when a task is not found
+ */
+export class BoltTaskNotFoundError extends Error {
+  constructor(
+    message: string,
+    public readonly taskName: string,
+  ) {
+    super(message);
+    this.name = "BoltTaskNotFoundError";
+  }
+}
+
+/**
+ * Error thrown when task parameters are invalid
+ */
+export class BoltTaskParameterError extends Error {
+  constructor(
+    message: string,
+    public readonly taskName: string,
+    public readonly parameterErrors: string[],
+  ) {
+    super(message);
+    this.name = "BoltTaskParameterError";
+  }
+}

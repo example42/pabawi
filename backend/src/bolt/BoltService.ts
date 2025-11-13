@@ -12,6 +12,8 @@ import {
   BoltParseError,
   BoltInventoryNotFoundError,
   BoltNodeUnreachableError,
+  BoltTaskNotFoundError,
+  BoltTaskParameterError,
 } from './types';
 
 /**
@@ -675,5 +677,241 @@ export class BoltService {
    */
   private generateExecutionId(): string {
     return `exec_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  }
+
+  /**
+   * Execute a task on a target node
+   * 
+   * Executes `bolt task run <task> --targets <node> --params <json> --format json`
+   * and returns structured execution results
+   * 
+   * @param nodeId - The ID/name of the target node
+   * @param taskName - The name of the task to execute
+   * @param parameters - Task parameters as key-value pairs
+   * @returns Promise resolving to ExecutionResult object
+   * @throws BoltTaskNotFoundError if the task does not exist
+   * @throws BoltTaskParameterError if parameters are invalid
+   * @throws BoltNodeUnreachableError if the node is unreachable
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   * @throws BoltTimeoutError if execution exceeds timeout
+   */
+  public async runTask(
+    nodeId: string,
+    taskName: string,
+    parameters?: Record<string, unknown>
+  ): Promise<ExecutionResult> {
+    const startTime = Date.now();
+    const executionId = this.generateExecutionId();
+
+    try {
+      // Build command arguments
+      const args = [
+        'task',
+        'run',
+        taskName,
+        '--targets',
+        nodeId,
+        '--format',
+        'json',
+      ];
+
+      // Add parameters if provided
+      if (parameters && Object.keys(parameters).length > 0) {
+        args.push('--params', JSON.stringify(parameters));
+      }
+
+      const jsonOutput = await this.executeCommandWithJsonOutput(args);
+
+      const endTime = Date.now();
+      return this.transformTaskOutput(
+        executionId,
+        nodeId,
+        taskName,
+        parameters,
+        jsonOutput,
+        startTime,
+        endTime
+      );
+    } catch (error) {
+      const endTime = Date.now();
+
+      // Check if error is due to task not found
+      if (error instanceof BoltExecutionError && error.stderr) {
+        const errorMessage = error.stderr.toLowerCase();
+        
+        if (
+          errorMessage.includes('could not find') ||
+          errorMessage.includes('task not found') ||
+          errorMessage.includes('no such task') ||
+          errorMessage.includes('unknown task')
+        ) {
+          throw new BoltTaskNotFoundError(
+            `Task '${taskName}' not found in Bolt modules`,
+            taskName
+          );
+        }
+
+        // Check for parameter validation errors
+        if (
+          errorMessage.includes('parameter') ||
+          errorMessage.includes('invalid') ||
+          errorMessage.includes('required') ||
+          errorMessage.includes('missing')
+        ) {
+          const paramErrors = this.extractParameterErrors(error.stderr);
+          throw new BoltTaskParameterError(
+            `Invalid parameters for task '${taskName}'`,
+            taskName,
+            paramErrors
+          );
+        }
+
+        // Check if error is due to node being unreachable
+        if (
+          errorMessage.includes('unreachable') ||
+          errorMessage.includes('connection') ||
+          errorMessage.includes('could not connect') ||
+          errorMessage.includes('timed out') ||
+          errorMessage.includes('connection refused') ||
+          errorMessage.includes('no route to host')
+        ) {
+          throw new BoltNodeUnreachableError(
+            `Node ${nodeId} is unreachable`,
+            nodeId,
+            error.stderr
+          );
+        }
+      }
+
+      // Return failed execution result for other errors
+      if (error instanceof BoltExecutionError) {
+        return {
+          id: executionId,
+          type: 'task',
+          targetNodes: [nodeId],
+          action: taskName,
+          parameters,
+          status: 'failed',
+          startedAt: new Date(startTime).toISOString(),
+          completedAt: new Date(endTime).toISOString(),
+          results: [
+            {
+              nodeId,
+              status: 'failed',
+              error: error.message,
+              duration: endTime - startTime,
+            },
+          ],
+          error: error.message,
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Transform Bolt task output to ExecutionResult object
+   * 
+   * @param executionId - Unique execution identifier
+   * @param nodeId - The ID of the target node
+   * @param taskName - The name of the task that was executed
+   * @param parameters - Task parameters that were provided
+   * @param jsonOutput - Raw JSON output from Bolt task command
+   * @param startTime - Execution start timestamp
+   * @param endTime - Execution end timestamp
+   * @returns ExecutionResult object
+   */
+  private transformTaskOutput(
+    executionId: string,
+    nodeId: string,
+    taskName: string,
+    parameters: Record<string, unknown> | undefined,
+    jsonOutput: BoltJsonOutput,
+    startTime: number,
+    endTime: number
+  ): ExecutionResult {
+    // Bolt task output structure: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
+    const items = jsonOutput.items;
+    const results: NodeResult[] = [];
+    let overallStatus: ExecutionResult['status'] = 'success';
+
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        const itemObj = item as Record<string, unknown>;
+        const target = typeof itemObj.target === 'string' ? itemObj.target : nodeId;
+        const status = itemObj.status === 'success' ? 'success' : 'failed';
+        
+        if (status === 'failed') {
+          overallStatus = 'failed';
+        }
+
+        const nodeResult: NodeResult = {
+          nodeId: target,
+          status,
+          duration: endTime - startTime,
+        };
+
+        // Extract task result value
+        if (itemObj.value !== undefined) {
+          nodeResult.value = itemObj.value;
+        }
+
+        // Extract error message if present
+        if (typeof itemObj.error === 'object' && itemObj.error !== null) {
+          const errorObj = itemObj.error as Record<string, unknown>;
+          nodeResult.error = typeof errorObj.msg === 'string' 
+            ? errorObj.msg 
+            : typeof errorObj.message === 'string'
+            ? errorObj.message
+            : 'Task execution failed';
+        }
+
+        results.push(nodeResult);
+      }
+    }
+
+    return {
+      id: executionId,
+      type: 'task',
+      targetNodes: [nodeId],
+      action: taskName,
+      parameters,
+      status: overallStatus,
+      startedAt: new Date(startTime).toISOString(),
+      completedAt: new Date(endTime).toISOString(),
+      results,
+    };
+  }
+
+  /**
+   * Extract parameter error messages from Bolt stderr output
+   * 
+   * @param stderr - Error output from Bolt
+   * @returns Array of parameter error messages
+   */
+  private extractParameterErrors(stderr: string): string[] {
+    const errors: string[] = [];
+    const lines = stderr.split('\n');
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (
+        trimmed.includes('parameter') ||
+        trimmed.includes('required') ||
+        trimmed.includes('invalid') ||
+        trimmed.includes('missing')
+      ) {
+        errors.push(trimmed);
+      }
+    }
+
+    // If no specific errors found, return the full stderr as a single error
+    if (errors.length === 0) {
+      errors.push(stderr.trim());
+    }
+
+    return errors;
   }
 }
