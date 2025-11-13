@@ -131,26 +131,26 @@
   - Create shared components: LoadingSpinner, ErrorAlert, StatusBadge
   - _Requirements: 8.1, 8.4_
 
-- [ ] 8. Implement Inventory page component
-  - [ ] 8.1 Create InventoryPage component with data fetching
+- [x] 8. Implement Inventory page component
+  - [x] 8.1 Create InventoryPage component with data fetching
     - Fetch inventory from /api/inventory on mount
     - Display loading state during fetch
     - Handle and display errors
     - _Requirements: 1.1, 9.2_
   
-  - [ ] 8.2 Implement inventory display with virtual scrolling
+  - [x] 8.2 Implement inventory display with virtual scrolling
     - Render node list with virtual scrolling for performance
     - Display node name, transport type, and URI
     - Support grid and list view toggle
     - _Requirements: 1.2, 1.3, 8.2_
   
-  - [ ] 8.3 Add search and filter functionality
+  - [x] 8.3 Add search and filter functionality
     - Implement search input with debouncing (300ms)
     - Filter nodes by name, transport type
     - Update displayed nodes reactively
     - _Requirements: 1.4_
   
-  - [ ] 8.4 Implement navigation to node detail
+  - [x] 8.4 Implement navigation to node detail
     - Add click handlers to navigate to node detail page
     - Pass node ID as route parameter
     - _Requirements: 1.5_
