@@ -73,52 +73,52 @@
     - CountByStatus method for summary statistics
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 6. Implement Express API endpoints
-  - [ ] 6.1 Set up Express server with middleware
+- [x] 6. Implement Express API endpoints
+  - [x] 6.1 Set up Express server with middleware
     - Configure JSON body parser
     - Add CORS middleware for same-origin requests
     - Implement request logging middleware
     - Add global error handling middleware
     - _Requirements: 10.5_
   
-  - [ ] 6.2 Implement inventory endpoints
+  - [x] 6.2 Implement inventory endpoints
     - GET /api/inventory - return all nodes from Bolt inventory
     - GET /api/nodes/:id - return specific node details
     - Add request validation with Zod schemas
     - _Requirements: 1.1, 1.3, 2.1_
   
-  - [ ] 6.3 Implement facts endpoint
+  - [x] 6.3 Implement facts endpoint
     - POST /api/nodes/:id/facts - trigger facts gathering for node
     - Return structured facts data or error response
     - Handle node not found and unreachable errors
     - _Requirements: 3.1, 3.3, 3.4_
   
-  - [ ] 6.4 Implement command execution endpoint
+  - [x] 6.4 Implement command execution endpoint
     - POST /api/nodes/:id/command - execute command on node
     - Validate command against whitelist before execution
     - Store execution record in database
     - Return execution ID and initial status
     - _Requirements: 4.1, 4.3, 4.5, 4.6, 4.7, 4.8, 4.9_
   
-  - [ ] 6.5 Implement task execution endpoint
+  - [x] 6.5 Implement task execution endpoint
     - POST /api/nodes/:id/task - execute task on node
     - Validate task name and parameters
     - Store execution record in database
     - Return execution ID and initial status
     - _Requirements: 5.3, 5.4, 5.5_
   
-  - [ ] 6.6 Implement task listing endpoint
+  - [x] 6.6 Implement task listing endpoint
     - GET /api/tasks - return available Bolt tasks
     - Include task metadata and parameter definitions
     - _Requirements: 5.1_
   
-  - [ ] 6.7 Implement execution history endpoints
+  - [x] 6.7 Implement execution history endpoints
     - GET /api/executions - return paginated execution list with filters
     - GET /api/executions/:id - return detailed execution results
     - Support filtering by date, status, and target node
     - _Requirements: 6.1, 6.3, 6.4_
   
-  - [ ] 6.8 Implement configuration endpoint
+  - [x] 6.8 Implement configuration endpoint
     - GET /api/config - return system configuration (whitelist status, allowed commands)
     - Exclude sensitive configuration values
     - _Requirements: 10.1, 10.2_

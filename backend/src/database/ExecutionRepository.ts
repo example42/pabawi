@@ -101,6 +101,9 @@ export class ExecutionRepository {
   private db: sqlite3.Database;
 
   constructor(db: sqlite3.Database) {
+    if (!db) {
+      throw new Error('Database connection is required');
+    }
     this.db = db;
   }
 

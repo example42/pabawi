@@ -1,0 +1,135 @@
+import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
+import { ExecutionRepository, type ExecutionFilters } from '../database/ExecutionRepository';
+
+/**
+ * Request validation schemas
+ */
+const ExecutionIdParamSchema = z.object({
+  id: z.string().min(1, 'Execution ID is required'),
+});
+
+const ExecutionFiltersQuerySchema = z.object({
+  type: z.enum(['command', 'task', 'facts']).optional(),
+  status: z.enum(['running', 'success', 'failed', 'partial']).optional(),
+  targetNode: z.string().optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).default(50),
+});
+
+/**
+ * Create executions router
+ */
+export function createExecutionsRouter(executionRepository: ExecutionRepository): Router {
+  const router = Router();
+
+  /**
+   * GET /api/executions
+   * Return paginated execution list with filters
+   */
+  router.get('/', async (req: Request, res: Response) => {
+    try {
+      // Validate and parse query parameters
+      const query = ExecutionFiltersQuerySchema.parse(req.query);
+
+      // Build filters
+      const filters: ExecutionFilters = {
+        type: query.type,
+        status: query.status,
+        targetNode: query.targetNode,
+        startDate: query.startDate,
+        endDate: query.endDate,
+      };
+
+      // Get executions with pagination
+      const executions = await executionRepository.findAll(filters, {
+        page: query.page,
+        pageSize: query.pageSize,
+      });
+
+      // Get status counts for summary
+      const statusCounts = await executionRepository.countByStatus();
+
+      res.json({
+        executions,
+        pagination: {
+          page: query.page,
+          pageSize: query.pageSize,
+          hasMore: executions.length === query.pageSize,
+        },
+        summary: statusCounts,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_REQUEST',
+            message: 'Invalid query parameters',
+            details: error.errors,
+          },
+        });
+        return;
+      }
+
+      // Unknown error
+      console.error('Error fetching executions:', error);
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch executions',
+        },
+      });
+    }
+  });
+
+  /**
+   * GET /api/executions/:id
+   * Return detailed execution results
+   */
+  router.get('/:id', async (req: Request, res: Response) => {
+    try {
+      // Validate request parameters
+      const params = ExecutionIdParamSchema.parse(req.params);
+      const executionId = params.id;
+
+      // Get execution by ID
+      const execution = await executionRepository.findById(executionId);
+
+      if (!execution) {
+        res.status(404).json({
+          error: {
+            code: 'EXECUTION_NOT_FOUND',
+            message: `Execution '${executionId}' not found`,
+          },
+        });
+        return;
+      }
+
+      res.json({ execution });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_REQUEST',
+            message: 'Invalid execution ID parameter',
+            details: error.errors,
+          },
+        });
+        return;
+      }
+
+      // Unknown error
+      console.error('Error fetching execution details:', error);
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch execution details',
+        },
+      });
+    }
+  });
+
+  return router;
+}
