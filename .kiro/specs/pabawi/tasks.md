@@ -155,21 +155,21 @@
     - Pass node ID as route parameter
     - _Requirements: 1.5_
 
-- [ ] 9. Implement Node Detail page component
-  - [ ] 9.1 Create NodeDetailPage component with node loading
+- [x] 9. Implement Node Detail page component
+  - [x] 9.1 Create NodeDetailPage component with node loading
     - Extract node ID from route parameters
     - Fetch node details from /api/nodes/:id
     - Display node metadata (name, URI, transport, config)
     - _Requirements: 2.1_
   
-  - [ ] 9.2 Implement facts display section
+  - [x] 9.2 Implement facts display section
     - Add "Gather Facts" button to trigger facts collection
     - POST to /api/nodes/:id/facts when button clicked
     - Display facts in collapsible tree structure (FactsViewer component)
     - Show loading state during facts gathering
     - _Requirements: 2.2, 3.3_
   
-  - [ ] 9.3 Implement command execution form
+  - [x] 9.3 Implement command execution form
     - Create form with command input field
     - Add validation for empty commands
     - POST to /api/nodes/:id/command on submit
@@ -177,7 +177,7 @@
     - Show command whitelist errors clearly
     - _Requirements: 2.3, 4.3, 4.4, 9.2, 9.3_
   
-  - [ ] 9.4 Implement task execution form
+  - [x] 9.4 Implement task execution form
     - Fetch available tasks from /api/tasks
     - Create dropdown to select task
     - Dynamically generate parameter inputs based on task definition
@@ -185,7 +185,7 @@
     - Display task execution results
     - _Requirements: 2.4, 5.1, 5.2, 5.5_
   
-  - [ ] 9.5 Display execution history for node
+  - [x] 9.5 Display execution history for node
     - Fetch executions filtered by node ID from /api/executions
     - Display recent executions with status and timestamp
     - Link to full execution details
