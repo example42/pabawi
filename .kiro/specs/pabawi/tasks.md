@@ -16,13 +16,13 @@
   - _Requirements: 7.1, 7.4, 7.5, 10.1_
 
 - [ ] 3. Implement Bolt service for CLI integration
-  - [ ] 3.1 Create BoltService class with child process execution wrapper
+  - [x] 3.1 Create BoltService class with child process execution wrapper
     - Implement command execution with timeout handling
     - Add JSON output parsing from Bolt CLI
     - Implement stderr capture for error messages
     - _Requirements: 4.1, 4.2, 5.2, 7.2_
   
-  - [ ] 3.2 Implement inventory retrieval method
+  - [x] 3.2 Implement inventory retrieval method
     - Execute `bolt inventory show --format json` command
     - Parse and transform inventory JSON to Node model
     - Handle inventory file not found errors
