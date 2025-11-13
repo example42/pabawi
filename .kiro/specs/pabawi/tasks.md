@@ -52,7 +52,7 @@
     - Cache task list until server restart
     - _Requirements: 5.1, 5.2_
 
-- [ ] 4. Implement command whitelist service
+- [x] 4. Implement command whitelist service
   - Create CommandWhitelistService class with configuration loading
   - Implement command validation logic with exact and prefix match modes
   - Add isCommandAllowed method that checks against whitelist or allowAll flag
@@ -60,12 +60,12 @@
   - _Requirements: 4.6, 4.7, 4.8, 4.9_
 
 - [ ] 5. Implement execution repository for persistence
-  - [ ] 5.1 Create ExecutionRepository class with SQLite connection
+  - [x] 5.1 Create ExecutionRepository class with SQLite connection
     - Initialize database connection with proper error handling
     - Implement connection pooling configuration
     - _Requirements: 6.2_
   
-  - [ ] 5.2 Implement CRUD operations for executions
+  - [x] 5.2 Implement CRUD operations for executions
     - Create method to insert new execution records
     - Update method to modify execution status and results
     - FindById method to retrieve single execution
