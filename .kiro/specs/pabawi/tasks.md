@@ -46,7 +46,7 @@
     - Handle task not found and parameter validation errors
     - _Requirements: 5.3, 5.4, 5.5_
   
-  - [ ] 3.6 Implement task listing method
+  - [x] 3.6 Implement task listing method
     - Execute `bolt task show --format json` to list available tasks
     - Parse task metadata including parameters and descriptions
     - Cache task list until server restart

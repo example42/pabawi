@@ -7,6 +7,8 @@ import {
   type Facts,
   type ExecutionResult,
   type NodeResult,
+  type Task,
+  type TaskParameter,
   BoltExecutionError,
   BoltTimeoutError,
   BoltParseError,
@@ -23,6 +25,7 @@ import {
 export class BoltService {
   private readonly defaultTimeout: number;
   private readonly boltProjectPath: string;
+  private taskListCache: Task[] | null = null;
 
   constructor(boltProjectPath: string, defaultTimeout = 300000) {
     this.boltProjectPath = boltProjectPath;
@@ -676,7 +679,7 @@ export class BoltService {
    * @returns Unique execution identifier
    */
   private generateExecutionId(): string {
-    return `exec_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    return `exec_${String(Date.now())}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   /**
@@ -913,5 +916,219 @@ export class BoltService {
     }
 
     return errors;
+  }
+
+  /**
+   * List available Bolt tasks
+   * 
+   * Executes `bolt task show --format json` to retrieve available tasks
+   * with their metadata including parameters and descriptions.
+   * Results are cached until server restart.
+   * 
+   * @returns Promise resolving to array of Task objects
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   */
+  public async listTasks(): Promise<Task[]> {
+    // Return cached result if available
+    if (this.taskListCache !== null) {
+      return this.taskListCache;
+    }
+
+    const jsonOutput = await this.executeCommandWithJsonOutput([
+      'task',
+      'show',
+      '--format',
+      'json',
+    ]);
+
+    const tasks = this.transformTaskListOutput(jsonOutput);
+    
+    // Cache the result
+    this.taskListCache = tasks;
+    
+    return tasks;
+  }
+
+  /**
+   * Transform Bolt task show output to Task array
+   * 
+   * @param jsonOutput - Raw JSON output from Bolt task show command
+   * @returns Array of Task objects
+   */
+  private transformTaskListOutput(jsonOutput: BoltJsonOutput): Task[] {
+    const tasks: Task[] = [];
+
+    // Bolt task show output structure can vary:
+    // Format 1: { "tasks": [{ "name": "...", "metadata": {...} }] }
+    // Format 2: { "task_name": { "metadata": {...} }, ... }
+    
+    // Handle tasks array format
+    if (Array.isArray(jsonOutput.tasks)) {
+      for (const taskData of jsonOutput.tasks) {
+        const task = this.parseTaskData(taskData);
+        if (task) {
+          tasks.push(task);
+        }
+      }
+      return tasks;
+    }
+
+    // Handle object format where keys are task names
+    for (const [taskName, taskData] of Object.entries(jsonOutput)) {
+      if (typeof taskData === 'object' && taskData !== null) {
+        const task = this.parseTaskData({ name: taskName, ...taskData });
+        if (task) {
+          tasks.push(task);
+        }
+      }
+    }
+
+    return tasks;
+  }
+
+  /**
+   * Parse a single task data object into a Task object
+   * 
+   * @param taskData - Raw task data from Bolt
+   * @returns Task object or null if parsing fails
+   */
+  private parseTaskData(taskData: unknown): Task | null {
+    if (typeof taskData !== 'object' || taskData === null) {
+      return null;
+    }
+
+    const taskObj = taskData as Record<string, unknown>;
+
+    // Extract task name
+    const name = typeof taskObj.name === 'string' ? taskObj.name : null;
+    if (!name) {
+      return null;
+    }
+
+    // Extract metadata
+    const metadata = typeof taskObj.metadata === 'object' && taskObj.metadata !== null
+      ? taskObj.metadata as Record<string, unknown>
+      : taskObj;
+
+    // Extract description
+    const description = typeof metadata.description === 'string' 
+      ? metadata.description 
+      : undefined;
+
+    // Extract module path
+    const modulePath = typeof taskObj.module === 'string'
+      ? taskObj.module
+      : typeof metadata.module === 'string'
+      ? metadata.module
+      : typeof taskObj.file === 'string'
+      ? taskObj.file
+      : typeof metadata.file === 'string'
+      ? metadata.file
+      : '';
+
+    // Extract parameters
+    const parameters = this.parseTaskParameters(metadata);
+
+    return {
+      name,
+      description,
+      parameters,
+      modulePath,
+    };
+  }
+
+  /**
+   * Parse task parameters from metadata
+   * 
+   * @param metadata - Task metadata object
+   * @returns Array of TaskParameter objects
+   */
+  private parseTaskParameters(metadata: Record<string, unknown>): TaskParameter[] {
+    const parameters: TaskParameter[] = [];
+
+    // Parameters can be in metadata.parameters or metadata.params
+    const paramsData = metadata.parameters ?? metadata.params;
+
+    if (typeof paramsData !== 'object' || paramsData === null) {
+      return parameters;
+    }
+
+    // Parameters can be an object with parameter names as keys
+    // or an array of parameter objects
+    if (Array.isArray(paramsData)) {
+      for (const paramData of paramsData) {
+        const param = this.parseTaskParameter(paramData);
+        if (param) {
+          parameters.push(param);
+        }
+      }
+    } else {
+      const paramsObj = paramsData as Record<string, unknown>;
+      for (const [paramName, paramData] of Object.entries(paramsObj)) {
+        if (typeof paramData === 'object' && paramData !== null) {
+          const param = this.parseTaskParameter({ name: paramName, ...paramData as Record<string, unknown> });
+          if (param) {
+            parameters.push(param);
+          }
+        }
+      }
+    }
+
+    return parameters;
+  }
+
+  /**
+   * Parse a single task parameter
+   * 
+   * @param paramData - Raw parameter data
+   * @returns TaskParameter object or null if parsing fails
+   */
+  private parseTaskParameter(paramData: unknown): TaskParameter | null {
+    if (typeof paramData !== 'object' || paramData === null) {
+      return null;
+    }
+
+    const paramObj = paramData as Record<string, unknown>;
+
+    // Extract parameter name
+    const name = typeof paramObj.name === 'string' ? paramObj.name : null;
+    if (!name) {
+      return null;
+    }
+
+    // Extract parameter type (default to String if not specified)
+    let type: TaskParameter['type'] = 'String';
+    if (typeof paramObj.type === 'string') {
+      const typeValue = paramObj.type;
+      if (
+        typeValue === 'String' ||
+        typeValue === 'Integer' ||
+        typeValue === 'Boolean' ||
+        typeValue === 'Array' ||
+        typeValue === 'Hash'
+      ) {
+        type = typeValue;
+      }
+    }
+
+    // Extract description
+    const description = typeof paramObj.description === 'string'
+      ? paramObj.description
+      : undefined;
+
+    // Extract required flag (default to false)
+    const required = paramObj.required === true;
+
+    // Extract default value
+    const defaultValue = paramObj.default;
+
+    return {
+      name,
+      type,
+      description,
+      required,
+      default: defaultValue,
+    };
   }
 }

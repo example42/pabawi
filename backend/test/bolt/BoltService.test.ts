@@ -593,3 +593,384 @@ Invalid parameter 'unknown_param'`;
     expect(result.status).toBe('success');
   });
 });
+
+describe('BoltService - listTasks', () => {
+  let boltService: BoltService;
+
+  beforeEach(() => {
+    boltService = new BoltService('/test/bolt/project', 300000);
+  });
+
+  it('should parse task list output with tasks array format', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'package::install',
+          metadata: {
+            description: 'Install a package',
+            parameters: {
+              name: {
+                type: 'String',
+                description: 'Package name',
+                required: true,
+              },
+              version: {
+                type: 'String',
+                description: 'Package version',
+                required: false,
+                default: 'latest',
+              },
+            },
+          },
+          module: 'package',
+        },
+        {
+          name: 'service::restart',
+          metadata: {
+            description: 'Restart a service',
+            parameters: {
+              name: {
+                type: 'String',
+                description: 'Service name',
+                required: true,
+              },
+            },
+          },
+          file: '/modules/service/tasks/restart.sh',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(2);
+    
+    expect(result[0].name).toBe('package::install');
+    expect(result[0].description).toBe('Install a package');
+    expect(result[0].modulePath).toBe('package');
+    expect(result[0].parameters).toHaveLength(2);
+    expect(result[0].parameters[0].name).toBe('name');
+    expect(result[0].parameters[0].type).toBe('String');
+    expect(result[0].parameters[0].required).toBe(true);
+    expect(result[0].parameters[1].name).toBe('version');
+    expect(result[0].parameters[1].default).toBe('latest');
+    
+    expect(result[1].name).toBe('service::restart');
+    expect(result[1].description).toBe('Restart a service');
+    expect(result[1].modulePath).toBe('/modules/service/tasks/restart.sh');
+    expect(result[1].parameters).toHaveLength(1);
+  });
+
+  it('should parse task list output with object format', () => {
+    const mockOutput = {
+      'facts': {
+        description: 'Gather system facts',
+        module: 'facts',
+        parameters: {},
+      },
+      'custom::deploy': {
+        description: 'Deploy application',
+        file: '/modules/custom/tasks/deploy.rb',
+        parameters: {
+          environment: {
+            type: 'String',
+            required: true,
+          },
+          version: {
+            type: 'String',
+            required: false,
+          },
+        },
+      },
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(2);
+    
+    const factsTask = result.find((t: any) => t.name === 'facts');
+    expect(factsTask).toBeDefined();
+    expect(factsTask.description).toBe('Gather system facts');
+    expect(factsTask.parameters).toHaveLength(0);
+    
+    const deployTask = result.find((t: any) => t.name === 'custom::deploy');
+    expect(deployTask).toBeDefined();
+    expect(deployTask.description).toBe('Deploy application');
+    expect(deployTask.parameters).toHaveLength(2);
+  });
+
+  it('should handle task with array of parameters', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'test::task',
+          metadata: {
+            description: 'Test task',
+            parameters: [
+              {
+                name: 'param1',
+                type: 'String',
+                required: true,
+              },
+              {
+                name: 'param2',
+                type: 'Integer',
+                required: false,
+                default: 42,
+              },
+            ],
+          },
+          module: 'test',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(1);
+    expect(result[0].parameters).toHaveLength(2);
+    expect(result[0].parameters[0].name).toBe('param1');
+    expect(result[0].parameters[1].name).toBe('param2');
+    expect(result[0].parameters[1].type).toBe('Integer');
+    expect(result[0].parameters[1].default).toBe(42);
+  });
+
+  it('should handle task with all parameter types', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'test::types',
+          metadata: {
+            parameters: {
+              str_param: { type: 'String', required: true },
+              int_param: { type: 'Integer', required: false },
+              bool_param: { type: 'Boolean', required: false },
+              array_param: { type: 'Array', required: false },
+              hash_param: { type: 'Hash', required: false },
+            },
+          },
+          module: 'test',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result[0].parameters).toHaveLength(5);
+    expect(result[0].parameters.find((p: any) => p.name === 'str_param')?.type).toBe('String');
+    expect(result[0].parameters.find((p: any) => p.name === 'int_param')?.type).toBe('Integer');
+    expect(result[0].parameters.find((p: any) => p.name === 'bool_param')?.type).toBe('Boolean');
+    expect(result[0].parameters.find((p: any) => p.name === 'array_param')?.type).toBe('Array');
+    expect(result[0].parameters.find((p: any) => p.name === 'hash_param')?.type).toBe('Hash');
+  });
+
+  it('should handle task without parameters', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'simple::task',
+          metadata: {
+            description: 'Simple task with no parameters',
+          },
+          module: 'simple',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(1);
+    expect(result[0].parameters).toHaveLength(0);
+  });
+
+  it('should handle task without description', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'undocumented::task',
+          metadata: {
+            parameters: {},
+          },
+          module: 'undocumented',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBeUndefined();
+  });
+
+  it('should default parameter type to String if not specified', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'test::task',
+          metadata: {
+            parameters: {
+              untyped_param: {
+                description: 'Parameter without type',
+                required: true,
+              },
+            },
+          },
+          module: 'test',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result[0].parameters).toHaveLength(1);
+    expect(result[0].parameters[0].type).toBe('String');
+  });
+
+  it('should handle empty task list', () => {
+    const mockOutput = {
+      tasks: [],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(0);
+  });
+
+  it('should skip invalid task entries', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          // Missing name
+          metadata: {
+            description: 'Invalid task',
+          },
+        },
+        {
+          name: 'valid::task',
+          metadata: {
+            description: 'Valid task',
+          },
+          module: 'valid',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('valid::task');
+  });
+
+  it('should handle parameter with description', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'test::task',
+          metadata: {
+            parameters: {
+              documented_param: {
+                type: 'String',
+                description: 'This parameter is well documented',
+                required: true,
+              },
+            },
+          },
+          module: 'test',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result[0].parameters[0].description).toBe('This parameter is well documented');
+  });
+
+  it('should handle task with params instead of parameters', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'test::task',
+          metadata: {
+            params: {
+              param1: {
+                type: 'String',
+                required: true,
+              },
+            },
+          },
+          module: 'test',
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result[0].parameters).toHaveLength(1);
+    expect(result[0].parameters[0].name).toBe('param1');
+  });
+
+  it('should handle task with module path variations', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'task1',
+          module: 'module1',
+        },
+        {
+          name: 'task2',
+          file: '/path/to/task2.sh',
+        },
+        {
+          name: 'task3',
+          metadata: {
+            module: 'module3',
+          },
+        },
+        {
+          name: 'task4',
+          metadata: {
+            file: '/path/to/task4.rb',
+          },
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result).toHaveLength(4);
+    expect(result[0].modulePath).toBe('module1');
+    expect(result[1].modulePath).toBe('/path/to/task2.sh');
+    expect(result[2].modulePath).toBe('module3');
+    expect(result[3].modulePath).toBe('/path/to/task4.rb');
+  });
+
+  it('should handle task with no module path', () => {
+    const mockOutput = {
+      tasks: [
+        {
+          name: 'orphan::task',
+          metadata: {
+            description: 'Task without module path',
+          },
+        },
+      ],
+    };
+
+    const result = (boltService as any).transformTaskListOutput(mockOutput);
+
+    expect(result).toBeDefined();
+    expect(result[0].modulePath).toBe('');
+  });
+});
