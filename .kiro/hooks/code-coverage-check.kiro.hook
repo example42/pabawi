@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Code Coverage Check",
+  "description": "Run tests with coverage and report on coverage gaps following testing best practices",
+  "version": "1",
+  "when": {
+    "type": "manual",
+    "button_text": "Check Coverage"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Run tests with code coverage analysis following testing best practices. Please:\n1. Run the test suite with coverage reporting enabled using minimal verbosity (--silent, --quiet flags)\n2. Generate a coverage report showing which lines/functions are not covered\n3. Identify files with low coverage (< 80%)\n4. Suggest specific areas that need more tests\n5. Check for any dead code that can be removed\n6. Report overall coverage statistics\n7. Suggest improvements to increase coverage\n8. Use commands like: npm test -- --coverage --silent, yarn test --coverage --silent, or pytest --cov --tb=short -q\n9. Focus on testing behavior, not implementation\n10. Ensure tests are descriptive and well-organized"
+  }
+}

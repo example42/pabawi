@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "CDK Synth on Change",
+  "description": "Run CDK synth when CDK code is modified following CDK best practices",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "src/**/*.ts",
+      "lib/**/*.ts",
+      "cdk.json",
+      "**/*Stack.ts",
+      "**/*Construct.ts"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "CDK code has been modified. Please:\n1. Run 'cdk synth' to validate the CDK code\n2. Check for any synthesis errors or warnings\n3. Validate that the generated CloudFormation templates are correct\n4. Run CDK diff if there's an existing deployment to show what would change\n5. Check for any security issues in the generated templates\n6. Ensure all constructs follow the established CDK patterns and best practices\n7. Verify proper resource naming and tagging conventions\n8. Check that all resources are properly configured for the target environment"
+  }
+}

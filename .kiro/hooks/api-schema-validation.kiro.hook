@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "name": "API Schema Validation",
+  "description": "Validate API schemas and generate types when OpenAPI/GraphQL schemas change",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.openapi.yml",
+      "**/*.openapi.yaml",
+      "**/*.swagger.yml",
+      "**/*.swagger.yaml",
+      "**/*.graphql",
+      "**/schema.json"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "An API schema file has been modified. Please:\n1. Validate the schema syntax (OpenAPI/Swagger or GraphQL)\n2. Generate TypeScript types from the schema\n3. Update any existing API client code to match schema changes\n4. Check for breaking changes and document them\n5. Validate that examples in the schema are correct\n6. Update API documentation if needed\n7. Run any schema-based tests to ensure compatibility\n8. Follow TypeScript best practices for generated types\n9. Ensure proper error handling for API responses\n10. Document API endpoints and data structures\n11. Include relevant documentation links in code comments"
+  }
+}

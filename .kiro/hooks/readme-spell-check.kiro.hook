@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "README Spell Check",
+  "description": "Check and fix spelling/grammar in README files following documentation standards",
+  "version": "1",
+  "when": {
+    "type": "manual",
+    "button_text": "Spell Check README"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Please review and fix spelling and grammar errors in README files following documentation best practices. Please:\n1. Check all README.md files in the project\n2. Identify spelling errors, grammar issues, and typos\n3. Fix obvious errors while preserving the original meaning\n4. Improve readability and clarity where needed\n5. Ensure consistent formatting and style\n6. Check that code examples are properly formatted\n7. Verify that links are working and properly formatted\n8. Maintain single comprehensive README covering all aspects including deployment\n9. Reference official sources through MCP servers when available"
+  }
+}

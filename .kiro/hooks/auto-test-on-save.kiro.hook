@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Auto Test on Save",
+  "description": "Automatically run tests when TypeScript or JavaScript files are saved with minimal verbosity",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.ts",
+      "**/*.js",
+      "**/*.tsx",
+      "**/*.jsx"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A code file has been saved. Run the appropriate tests for this file and report any failures. IMPORTANT: Use minimal verbosity to prevent session timeouts - add --silent, --quiet, or similar flags. If this is a test file, run it directly with filtering (--grep, --testNamePattern). If this is a source file, find and run related tests. Use commands like: npm test -- --silent, yarn test --silent, npx jest --silent --testNamePattern='specific', or pytest -q -k 'test_name'."
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "name": "Accessibility Audit",
+  "description": "Audit React/HTML components for accessibility issues (disabled by default for performance)",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.tsx",
+      "**/*.jsx",
+      "**/*.html"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A UI component file has been modified. Please audit it for accessibility issues following React and web accessibility best practices:\n1. Check for proper ARIA labels and roles\n2. Ensure all interactive elements are keyboard accessible\n3. Verify proper heading hierarchy (h1, h2, h3, etc.)\n4. Check color contrast ratios\n5. Ensure images have alt text\n6. Verify form labels are properly associated\n7. Check for semantic HTML usage\n8. Suggest improvements for screen reader compatibility\n9. Follow React accessibility patterns and hooks usage\n10. Ensure components are properly tested for accessibility"
+  }
+}

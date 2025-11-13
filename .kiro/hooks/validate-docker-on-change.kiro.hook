@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "Validate Docker on Change",
+  "description": "Validate Docker files when they are modified following Docker best practices",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "Dockerfile*",
+      "docker-compose*.yml",
+      "docker-compose*.yaml",
+      "*.dockerfile"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A Docker file has been modified. Please:\n1. Validate the Dockerfile syntax\n2. Check for Docker best practices (multi-stage builds, non-root user, minimal layers)\n3. Scan for security issues (hardcoded secrets, vulnerable base images)\n4. Suggest optimizations for image size and build time\n5. Verify that .dockerignore is properly configured\n6. Check for proper use of specific base image tags (avoid 'latest')\n7. Ensure proper health checks and metadata are included\n8. Test build the image if possible to catch any build errors"
+  }
+}

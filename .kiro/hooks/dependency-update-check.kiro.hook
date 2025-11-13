@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Dependency Update Check",
+  "description": "Check for outdated dependencies and suggest updates following dependency management best practices",
+  "version": "1",
+  "when": {
+    "type": "manual",
+    "button_text": "Check Dependencies"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Check for outdated dependencies and suggest updates following dependency management best practices. Please:\n1. Run dependency check commands (npm outdated, pip list --outdated, etc.)\n2. Identify packages that have newer versions available\n3. Categorize updates by severity (major, minor, patch)\n4. Check for security vulnerabilities in current versions\n5. Suggest which updates are safe to apply immediately\n6. Warn about potentially breaking changes in major updates\n7. Provide commands to update specific packages\n8. Use latest stable versions of all libraries and dependencies\n9. Leverage Context7 MCP server to verify compatibility before adding dependencies\n10. Justify each new dependency with clear business or technical value"
+  }
+}

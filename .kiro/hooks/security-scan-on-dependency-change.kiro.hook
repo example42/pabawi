@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "name": "Security Scan on Dependency Change",
+  "description": "Run security audit when package files are modified following security best practices",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "package.json",
+      "package-lock.json",
+      "yarn.lock",
+      "requirements.txt",
+      "poetry.lock",
+      "Pipfile.lock"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A dependency file has been modified. Please:\n1. Run security audit (npm audit, yarn audit, or pip-audit for Python)\n2. Check for known vulnerabilities in dependencies\n3. Suggest updates for vulnerable packages\n4. Report any high-severity issues that need immediate attention\n5. Check for any new dependencies that might introduce security risks\n6. Ensure all dependencies are from trusted sources and have active maintenance\n7. Follow security best practices for dependency management"
+  }
+}

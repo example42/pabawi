@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "name": "Translation Update",
+  "description": "Update translations when base language files change (disabled by default for performance)",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/locales/en/**/*.json",
+      "**/i18n/en/**/*.json",
+      "**/translations/en.json"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Base language translation file has been updated. Please:\n1. Identify what keys were added, modified, or removed\n2. Update corresponding translation files for other languages\n3. Mark new or changed keys as needing translation\n4. Preserve existing translations where keys haven't changed\n5. Generate placeholder translations or mark missing translations\n6. Update any translation documentation or guides\n7. Follow consistent naming conventions across translations\n8. Ensure proper file organization and structure\n9. Validate JSON syntax and structure\n10. Document any breaking changes in translation keys"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "Environment File Validation",
+  "description": "Validate environment files and check for missing variables following security best practices",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      ".env*",
+      "**/.env*",
+      "*.env"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "An environment file has been modified. Please:\n1. Check that no secrets or sensitive data are included (follow security best practices)\n2. Validate the format of environment variables\n3. Compare with .env.example to ensure all required variables are present\n4. Check that the corresponding .env file is in .gitignore\n5. Verify that environment variables are properly used in the code\n6. Suggest creating .env.example if it doesn't exist\n7. Check for any unused environment variables\n8. Ensure proper naming conventions (UPPER_SNAKE_CASE)\n9. Validate that sensitive data uses proper encryption or external secret management"
+  }
+}

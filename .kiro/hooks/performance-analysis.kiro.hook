@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "Performance Analysis",
+  "description": "Analyze code for performance issues and optimization opportunities following development standards",
+  "version": "1",
+  "when": {
+    "type": "manual",
+    "button_text": "Analyze Performance"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Analyze the codebase for performance issues and optimization opportunities following development standards. Please:\n1. Look for common performance anti-patterns (N+1 queries, inefficient loops, etc.)\n2. Check for memory leaks or excessive memory usage\n3. Identify slow or blocking operations\n4. Suggest optimizations for database queries\n5. Look for opportunities to use caching\n6. Check bundle size and suggest ways to reduce it\n7. Identify unused code that can be removed\n8. Suggest performance monitoring tools if not already in use\n9. Follow language-specific performance best practices\n10. Keep functions small and focused on single responsibilities\n11. Implement proper error handling and logging"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Test MCP Servers",
+  "description": "Test all configured MCP servers and their tools following MCP best practices",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Test all configured MCP servers and their functionality following MCP best practices. Please:\n1. Check which MCP servers are currently configured and enabled\n2. Test basic connectivity to each server\n3. List available tools from each server\n4. Run sample calls to verify tool functionality\n5. Check for any connection errors or timeouts\n6. Verify that auto-approved tools are working correctly\n7. Report any servers that are disabled and suggest re-enabling if appropriate\n8. Document any issues found and suggest fixes\n9. Test with various parameter combinations\n10. Don't inspect the configuration files unless there are specific issues - focus on testing the actual tool functionality"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "enabled": false,
+  "name": "Update Documentation",
+  "description": "Update documentation when code changes (disabled by default for performance)",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "src/**/*.ts",
+      "src/**/*.js",
+      "lib/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "A source code file has been modified. Please update documentation following documentation best practices:\n1. Check if this file has associated documentation that needs updating\n2. Look for README files, API documentation, or inline comments that reference this code\n3. Update any outdated documentation to reflect the changes\n4. Generate JSDoc/docstring comments if they're missing from new functions\n5. Update any relevant examples or usage instructions\n6. Maintain single comprehensive README covering all aspects including deployment\n7. Reference official sources through MCP servers when available\n8. Keep documentation close to relevant code\n9. Include relevant documentation links in code comments\n10. Update documentation when upgrading dependencies"
+  }
+}

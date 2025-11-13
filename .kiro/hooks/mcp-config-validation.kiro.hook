@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "name": "MCP Configuration Validation",
+  "description": "Validate MCP server configuration when mcp.json files are modified following MCP best practices",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      ".kiro/settings/mcp.json",
+      "~/.kiro/settings/mcp.json"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "An MCP configuration file has been modified. Please:\n1. Validate the JSON syntax and structure\n2. Check that all required fields are present (command, args)\n3. Verify server names are unique and descriptive\n4. Review autoApprove settings for security implications\n5. Suggest testing the configured servers immediately\n6. Check for common configuration issues (missing uvx, incorrect paths)\n7. Recommend appropriate FASTMCP_LOG_LEVEL settings\n8. Verify that disabled servers are intentionally disabled\n9. Ensure version pinning follows MCP best practices (@latest or specific versions)\n10. Test servers immediately after configuration changes"
+  }
+}
