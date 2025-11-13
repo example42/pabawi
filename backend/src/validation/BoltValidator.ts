@@ -29,7 +29,7 @@ export class BoltValidator {
    * Validate Bolt configuration on startup
    * Checks for required files and directory structure
    */
-  public async validate(): Promise<void> {
+  public validate(): void {
     const missingFiles: string[] = [];
     const errors: string[] = [];
 

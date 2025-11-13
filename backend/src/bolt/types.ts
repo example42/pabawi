@@ -16,9 +16,7 @@ export interface BoltExecutionResult {
 /**
  * Parsed JSON output from Bolt CLI
  */
-export interface BoltJsonOutput {
-  [key: string]: unknown;
-}
+export type BoltJsonOutput = Record<string, unknown>;
 
 /**
  * Options for executing Bolt commands
@@ -103,10 +101,9 @@ export interface Node {
   name: string;
   uri: string;
   transport: "ssh" | "winrm" | "docker" | "local";
-  config: {
+  config: Record<string, unknown> & {
     user?: string;
     port?: number;
-    [key: string]: unknown;
   };
 }
 
@@ -141,4 +138,36 @@ export interface Facts {
     };
     [key: string]: unknown;
   };
+}
+
+/**
+ * Result of executing a command or task on target nodes
+ */
+export interface ExecutionResult {
+  id: string;
+  type: "command" | "task" | "facts";
+  targetNodes: string[];
+  action: string;
+  parameters?: Record<string, unknown>;
+  status: "running" | "success" | "failed" | "partial";
+  startedAt: string;
+  completedAt?: string;
+  results: NodeResult[];
+  error?: string;
+}
+
+/**
+ * Result of executing a command or task on a single node
+ */
+export interface NodeResult {
+  nodeId: string;
+  status: "success" | "failed";
+  output?: {
+    stdout?: string;
+    stderr?: string;
+    exitCode?: number;
+  };
+  value?: unknown;
+  error?: string;
+  duration: number;
 }

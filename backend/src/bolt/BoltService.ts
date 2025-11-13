@@ -5,6 +5,8 @@ import {
   type BoltJsonOutput,
   type Node,
   type Facts,
+  type ExecutionResult,
+  type NodeResult,
   BoltExecutionError,
   BoltTimeoutError,
   BoltParseError,
@@ -20,7 +22,7 @@ export class BoltService {
   private readonly defaultTimeout: number;
   private readonly boltProjectPath: string;
 
-  constructor(boltProjectPath: string, defaultTimeout: number = 300000) {
+  constructor(boltProjectPath: string, defaultTimeout = 300000) {
     this.boltProjectPath = boltProjectPath;
     this.defaultTimeout = defaultTimeout;
   }
@@ -90,7 +92,7 @@ export class BoltService {
           if (timedOut) {
             reject(
               new BoltTimeoutError(
-                `Bolt command execution exceeded timeout of ${timeout}ms`,
+                `Bolt command execution exceeded timeout of ${String(timeout)}ms`,
                 timeout
               )
             );
@@ -105,7 +107,7 @@ export class BoltService {
           };
 
           if (exitCode !== 0) {
-            result.error = stderr.trim() || `Bolt command failed with exit code ${exitCode}`;
+            result.error = stderr.trim() !== '' ? stderr.trim() : `Bolt command failed with exit code ${String(exitCode)}`;
           }
 
           resolve(result);
@@ -125,7 +127,7 @@ export class BoltService {
         });
       } catch (error) {
         clearTimeout(timeoutId);
-        reject(error);
+        reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
   }
@@ -145,15 +147,15 @@ export class BoltService {
     options: BoltExecutionOptions = {}
   ): Promise<BoltJsonOutput> {
     // Ensure --format json is included in args
-    if (!args.includes('--format') && !args.includes('json')) {
-      args = [...args, '--format', 'json'];
-    }
+    const argsToUse = (!args.includes('--format') && !args.includes('json'))
+      ? [...args, '--format', 'json']
+      : args;
 
-    const result = await this.executeCommand(args, options);
+    const result = await this.executeCommand(argsToUse, options);
 
     if (!result.success) {
       throw new BoltExecutionError(
-        result.error || 'Bolt command failed',
+        result.error ?? 'Bolt command failed',
         result.exitCode,
         result.stderr,
         result.stdout
@@ -227,7 +229,7 @@ export class BoltService {
       return this.transformInventoryToNodes(jsonOutput);
     } catch (error) {
       // Check if error is due to missing inventory file
-      if (error instanceof BoltExecutionError) {
+      if (error instanceof BoltExecutionError && error.stderr) {
         const errorMessage = error.stderr.toLowerCase();
         if (
           errorMessage.includes('inventory file') ||
@@ -254,13 +256,11 @@ export class BoltService {
 
     // Bolt inventory output structure: { "targets": [...], "groups": [...] }
     // or it can be a flat object with node names as keys
-    if (typeof jsonOutput !== 'object' || jsonOutput === null) {
-      return nodes;
-    }
-
+    
     // Handle targets array format
-    if (Array.isArray(jsonOutput.targets)) {
-      for (const target of jsonOutput.targets) {
+    const targets = jsonOutput.targets;
+    if (Array.isArray(targets)) {
+      for (const target of targets) {
         const node = this.parseInventoryTarget(target);
         if (node) {
           nodes.push(node);
@@ -326,10 +326,10 @@ export class BoltService {
     }
 
     // Extract common config fields from top level if not in config object
-    if (typeof targetObj.user === 'string' && !config.user) {
+    if (typeof targetObj.user === 'string' && config.user === undefined) {
       config.user = targetObj.user;
     }
-    if (typeof targetObj.port === 'number' && !config.port) {
+    if (typeof targetObj.port === 'number' && config.port === undefined) {
       config.port = targetObj.port;
     }
 
@@ -372,7 +372,7 @@ export class BoltService {
       return this.transformFactsOutput(nodeId, jsonOutput);
     } catch (error) {
       // Check if error is due to node being unreachable
-      if (error instanceof BoltExecutionError) {
+      if (error instanceof BoltExecutionError && error.stderr) {
         const errorMessage = error.stderr.toLowerCase();
         if (
           errorMessage.includes('unreachable') ||
@@ -407,12 +407,13 @@ export class BoltService {
     let factsData: Record<string, unknown> = {};
 
     // Handle items array format
-    if (Array.isArray(jsonOutput.items) && jsonOutput.items.length > 0) {
-      const item = jsonOutput.items[0] as Record<string, unknown>;
+    const items = jsonOutput.items;
+    if (Array.isArray(items) && items.length > 0) {
+      const item = items[0] as Record<string, unknown>;
       if (item.status === 'success' && typeof item.value === 'object' && item.value !== null) {
         factsData = item.value as Record<string, unknown>;
       }
-    } else if (typeof jsonOutput === 'object' && jsonOutput !== null) {
+    } else {
       // Handle direct facts format
       factsData = jsonOutput;
     }
@@ -491,11 +492,188 @@ export class BoltService {
   private extractNetworkingFacts(factsData: Record<string, unknown>): Facts['facts']['networking'] {
     const networking = factsData.networking as Record<string, unknown> | undefined;
     
+    const hostname = networking !== undefined && typeof networking.hostname === 'string' 
+      ? networking.hostname 
+      : 'unknown';
+    
+    const interfaces = networking !== undefined && typeof networking.interfaces === 'object' && networking.interfaces !== null
+      ? networking.interfaces as Record<string, unknown>
+      : {};
+    
     return {
-      hostname: typeof networking?.hostname === 'string' ? networking.hostname : 'unknown',
-      interfaces: typeof networking?.interfaces === 'object' && networking?.interfaces !== null
-        ? networking.interfaces as Record<string, unknown>
-        : {},
+      hostname,
+      interfaces,
     };
+  }
+
+  /**
+   * Execute a command on a target node
+   * 
+   * Executes `bolt command run <cmd> --targets <node> --format json` and
+   * returns structured execution results including stdout, stderr, and exit code
+   * 
+   * @param nodeId - The ID/name of the target node
+   * @param command - The command string to execute
+   * @returns Promise resolving to ExecutionResult object
+   * @throws BoltNodeUnreachableError if the node is unreachable
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   * @throws BoltTimeoutError if execution exceeds timeout
+   */
+  public async runCommand(nodeId: string, command: string): Promise<ExecutionResult> {
+    const startTime = Date.now();
+    const executionId = this.generateExecutionId();
+
+    try {
+      const jsonOutput = await this.executeCommandWithJsonOutput([
+        'command',
+        'run',
+        command,
+        '--targets',
+        nodeId,
+        '--format',
+        'json',
+      ]);
+
+      const endTime = Date.now();
+      return this.transformCommandOutput(
+        executionId,
+        nodeId,
+        command,
+        jsonOutput,
+        startTime,
+        endTime
+      );
+    } catch (error) {
+      const endTime = Date.now();
+
+      // Check if error is due to node being unreachable
+      if (error instanceof BoltExecutionError && error.stderr) {
+        const errorMessage = error.stderr.toLowerCase();
+        if (
+          errorMessage.includes('unreachable') ||
+          errorMessage.includes('connection') ||
+          errorMessage.includes('could not connect') ||
+          errorMessage.includes('timed out') ||
+          errorMessage.includes('connection refused') ||
+          errorMessage.includes('no route to host')
+        ) {
+          throw new BoltNodeUnreachableError(
+            `Node ${nodeId} is unreachable`,
+            nodeId,
+            error.stderr
+          );
+        }
+      }
+
+      // Return failed execution result for other errors
+      if (error instanceof BoltExecutionError) {
+        return {
+          id: executionId,
+          type: 'command',
+          targetNodes: [nodeId],
+          action: command,
+          status: 'failed',
+          startedAt: new Date(startTime).toISOString(),
+          completedAt: new Date(endTime).toISOString(),
+          results: [
+            {
+              nodeId,
+              status: 'failed',
+              error: error.message,
+              duration: endTime - startTime,
+            },
+          ],
+          error: error.message,
+        };
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Transform Bolt command output to ExecutionResult object
+   * 
+   * @param executionId - Unique execution identifier
+   * @param nodeId - The ID of the target node
+   * @param command - The command that was executed
+   * @param jsonOutput - Raw JSON output from Bolt command
+   * @param startTime - Execution start timestamp
+   * @param endTime - Execution end timestamp
+   * @returns ExecutionResult object
+   */
+  private transformCommandOutput(
+    executionId: string,
+    nodeId: string,
+    command: string,
+    jsonOutput: BoltJsonOutput,
+    startTime: number,
+    endTime: number
+  ): ExecutionResult {
+    // Bolt command output structure: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
+    const items = jsonOutput.items;
+    const results: NodeResult[] = [];
+    let overallStatus: ExecutionResult['status'] = 'success';
+
+    if (Array.isArray(items)) {
+      for (const item of items) {
+        const itemObj = item as Record<string, unknown>;
+        const target = typeof itemObj.target === 'string' ? itemObj.target : nodeId;
+        const status = itemObj.status === 'success' ? 'success' : 'failed';
+        
+        if (status === 'failed') {
+          overallStatus = 'failed';
+        }
+
+        const nodeResult: NodeResult = {
+          nodeId: target,
+          status,
+          duration: endTime - startTime,
+        };
+
+        // Extract output from value object
+        if (typeof itemObj.value === 'object' && itemObj.value !== null) {
+          const value = itemObj.value as Record<string, unknown>;
+          nodeResult.output = {
+            stdout: typeof value.stdout === 'string' ? value.stdout : '',
+            stderr: typeof value.stderr === 'string' ? value.stderr : '',
+            exitCode: typeof value.exit_code === 'number' ? value.exit_code : undefined,
+          };
+        }
+
+        // Extract error message if present
+        if (typeof itemObj.error === 'object' && itemObj.error !== null) {
+          const errorObj = itemObj.error as Record<string, unknown>;
+          nodeResult.error = typeof errorObj.msg === 'string' 
+            ? errorObj.msg 
+            : typeof errorObj.message === 'string'
+            ? errorObj.message
+            : 'Command execution failed';
+        }
+
+        results.push(nodeResult);
+      }
+    }
+
+    return {
+      id: executionId,
+      type: 'command',
+      targetNodes: [nodeId],
+      action: command,
+      status: overallStatus,
+      startedAt: new Date(startTime).toISOString(),
+      completedAt: new Date(endTime).toISOString(),
+      results,
+    };
+  }
+
+  /**
+   * Generate a unique execution ID
+   * 
+   * @returns Unique execution identifier
+   */
+  private generateExecutionId(): string {
+    return `exec_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 }

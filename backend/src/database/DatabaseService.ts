@@ -108,8 +108,9 @@ export class DatabaseService {
       return;
     }
 
+    const dbToClose = this.db;
     return new Promise((resolve, reject) => {
-      this.db!.close((err) => {
+      dbToClose.close((err) => {
         if (err) {
           reject(new Error(`Failed to close database: ${err.message}`));
         } else {

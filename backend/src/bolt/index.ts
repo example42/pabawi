@@ -9,6 +9,8 @@ export {
   type BoltJsonOutput,
   type Node,
   type Facts,
+  type ExecutionResult,
+  type NodeResult,
   BoltExecutionError,
   BoltTimeoutError,
   BoltParseError,

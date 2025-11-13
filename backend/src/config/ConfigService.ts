@@ -25,12 +25,16 @@ export class ConfigService {
       // Parse command whitelist from JSON string
       let commandWhitelist: WhitelistConfig;
       try {
-        const whitelistJson = process.env.COMMAND_WHITELIST || '[]';
-        const parsedWhitelist = JSON.parse(whitelistJson);
+        const whitelistJson = process.env.COMMAND_WHITELIST ?? '[]';
+        const parsedWhitelist: unknown = JSON.parse(whitelistJson);
+        const whitelistArray: string[] = Array.isArray(parsedWhitelist) 
+          ? parsedWhitelist.filter((item): item is string => typeof item === 'string')
+          : [];
+        const matchMode = process.env.COMMAND_WHITELIST_MATCH_MODE;
         commandWhitelist = {
           allowAll: process.env.COMMAND_WHITELIST_ALLOW_ALL === 'true',
-          whitelist: Array.isArray(parsedWhitelist) ? parsedWhitelist : [],
-          matchMode: (process.env.COMMAND_WHITELIST_MATCH_MODE as 'exact' | 'prefix') || 'exact',
+          whitelist: whitelistArray,
+          matchMode: (matchMode === 'exact' || matchMode === 'prefix') ? matchMode : 'exact',
         };
       } catch (error) {
         throw new Error(`Failed to parse COMMAND_WHITELIST: ${error instanceof Error ? error.message : 'Unknown error'}`);

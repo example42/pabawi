@@ -10,29 +10,29 @@ import { BoltValidator } from './validation/BoltValidator';
 async function startServer(): Promise<Express> {
   try {
     // Load configuration
-    console.log('Loading configuration...');
+    console.warn('Loading configuration...');
     const configService = new ConfigService();
     const config = configService.getConfig();
     
-    console.log(`Configuration loaded successfully`);
-    console.log(`- Port: ${config.port}`);
-    console.log(`- Bolt Project Path: ${config.boltProjectPath}`);
-    console.log(`- Database Path: ${config.databasePath}`);
-    console.log(`- Execution Timeout: ${config.executionTimeout}ms`);
-    console.log(`- Command Whitelist Allow All: ${config.commandWhitelist.allowAll}`);
-    console.log(`- Command Whitelist Count: ${config.commandWhitelist.whitelist.length}`);
+    console.warn(`Configuration loaded successfully`);
+    console.warn(`- Port: ${String(config.port)}`);
+    console.warn(`- Bolt Project Path: ${config.boltProjectPath}`);
+    console.warn(`- Database Path: ${config.databasePath}`);
+    console.warn(`- Execution Timeout: ${String(config.executionTimeout)}ms`);
+    console.warn(`- Command Whitelist Allow All: ${String(config.commandWhitelist.allowAll)}`);
+    console.warn(`- Command Whitelist Count: ${String(config.commandWhitelist.whitelist.length)}`);
 
     // Validate Bolt configuration
-    console.log('Validating Bolt configuration...');
+    console.warn('Validating Bolt configuration...');
     const boltValidator = new BoltValidator(config.boltProjectPath);
-    await boltValidator.validate();
-    console.log('Bolt configuration validated successfully');
+    boltValidator.validate();
+    console.warn('Bolt configuration validated successfully');
 
     // Initialize database
-    console.log('Initializing database...');
+    console.warn('Initializing database...');
     const databaseService = new DatabaseService(config.databasePath);
     await databaseService.initialize();
-    console.log('Database initialized successfully');
+    console.warn('Database initialized successfully');
 
     // Create Express app
     const app: Express = express();
@@ -44,7 +44,7 @@ async function startServer(): Promise<Express> {
     // Request logging middleware
     app.use((req: Request, _res: Response, next) => {
       const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] ${req.method} ${req.path}`);
+      console.warn(`[${timestamp}] ${req.method} ${req.path}`);
       next();
     });
 
@@ -86,21 +86,22 @@ async function startServer(): Promise<Express> {
 
     // Start server
     const server = app.listen(config.port, () => {
-      console.log(`Backend server running on port ${config.port}`);
+      console.warn(`Backend server running on port ${String(config.port)}`);
     });
 
     // Graceful shutdown
-    process.on('SIGTERM', async () => {
-      console.log('SIGTERM received, shutting down gracefully...');
-      server.close(async () => {
-        await databaseService.close();
-        console.log('Server closed');
-        process.exit(0);
+    process.on('SIGTERM', () => {
+      console.warn('SIGTERM received, shutting down gracefully...');
+      server.close(() => {
+        void databaseService.close().then(() => {
+          console.warn('Server closed');
+          process.exit(0);
+        });
       });
     });
 
     return app;
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('Failed to start server:', error);
     if (error instanceof Error) {
       console.error(error.message);
@@ -110,7 +111,7 @@ async function startServer(): Promise<Express> {
 }
 
 // Start the server
-startServer().catch((error) => {
+startServer().catch((error: unknown) => {
   console.error('Unhandled error during startup:', error);
   process.exit(1);
 });
