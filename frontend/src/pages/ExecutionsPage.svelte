@@ -5,6 +5,8 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
   import { router } from '../lib/router.svelte';
+  import { get } from '../lib/api';
+  import { showError } from '../lib/toast.svelte';
 
   interface ExecutionResult {
     id: string;
@@ -92,11 +94,9 @@
   // Fetch nodes for target filter
   async function fetchNodes(): Promise<void> {
     try {
-      const response = await fetch('/api/inventory');
-      if (!response.ok) {
-        throw new Error('Failed to fetch nodes');
-      }
-      const data = await response.json();
+      const data = await get<{ nodes: Node[] }>('/api/inventory', {
+        maxRetries: 2,
+      });
       nodes = data.nodes || [];
     } catch (err) {
       console.error('Error fetching nodes:', err);
@@ -131,20 +131,21 @@
         params.append('endDate', endDate.toISOString());
       }
 
-      const response = await fetch(`/api/executions?${params}`);
+      const data = await get<{
+        executions: ExecutionResult[];
+        pagination: PaginationInfo;
+        summary: StatusCounts;
+      }>(`/api/executions?${params}`, {
+        maxRetries: 2,
+      });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to fetch executions: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       executions = data.executions || [];
       pagination = data.pagination || pagination;
       summary = data.summary || summary;
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching executions:', err);
+      showError('Failed to load executions', error);
     } finally {
       loading = false;
     }
@@ -227,18 +228,16 @@
     detailError = null;
 
     try {
-      const response = await fetch(`/api/executions/${executionId}`);
+      const data = await get<{ execution: ExecutionResult }>(
+        `/api/executions/${executionId}`,
+        { maxRetries: 2 }
+      );
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to fetch execution details: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       selectedExecution = data.execution || data;
     } catch (err) {
       detailError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching execution details:', err);
+      showError('Failed to load execution details', detailError);
     } finally {
       loadingDetail = false;
     }

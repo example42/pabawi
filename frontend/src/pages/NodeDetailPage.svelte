@@ -6,6 +6,8 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import FactsViewer from '../components/FactsViewer.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
+  import { get, post } from '../lib/api';
+  import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
 
   interface Props {
     params?: { id: string };
@@ -111,18 +113,15 @@
     error = null;
 
     try {
-      const response = await fetch(`/api/nodes/${nodeId}`);
+      const data = await get<{ node: Node }>(`/api/nodes/${nodeId}`, {
+        maxRetries: 2,
+      });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to fetch node: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       node = data.node;
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching node:', err);
+      showError('Failed to load node details', error);
     } finally {
       loading = false;
     }
@@ -134,20 +133,18 @@
     factsError = null;
 
     try {
-      const response = await fetch(`/api/nodes/${nodeId}/facts`, {
-        method: 'POST',
+      showInfo('Gathering facts...');
+      
+      const data = await post<{ facts: Facts }>(`/api/nodes/${nodeId}/facts`, undefined, {
+        maxRetries: 1,
       });
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to gather facts: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       facts = data.facts;
+      showSuccess('Facts gathered successfully');
     } catch (err) {
       factsError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error gathering facts:', err);
+      showError('Failed to gather facts', factsError);
     } finally {
       factsLoading = false;
     }
@@ -159,6 +156,7 @@
     
     if (!commandInput.trim()) {
       commandError = 'Command cannot be empty';
+      showError('Command cannot be empty');
       return;
     }
 
@@ -167,27 +165,24 @@
     commandResult = null;
 
     try {
-      const response = await fetch(`/api/nodes/${nodeId}/command`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ command: commandInput }),
-      });
+      showInfo('Executing command...');
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to execute command: ${response.statusText}`);
-      }
-
-      const data = await response.json();
+      const data = await post<{ executionId: string }>(
+        `/api/nodes/${nodeId}/command`,
+        { command: commandInput },
+        { maxRetries: 0 } // Don't retry command executions
+      );
+      
       const executionId = data.executionId;
 
       // Poll for execution result
       await pollExecutionResult(executionId, 'command');
+      
+      showSuccess('Command executed successfully');
     } catch (err) {
       commandError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error executing command:', err);
+      showError('Command execution failed', commandError);
     } finally {
       commandExecuting = false;
     }
@@ -198,16 +193,14 @@
     tasksLoading = true;
 
     try {
-      const response = await fetch('/api/tasks');
+      const data = await get<{ tasks: Task[] }>('/api/tasks', {
+        maxRetries: 2,
+      });
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch tasks: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       availableTasks = data.tasks || [];
     } catch (err) {
       console.error('Error fetching tasks:', err);
+      showError('Failed to load available tasks');
     } finally {
       tasksLoading = false;
     }
@@ -219,6 +212,7 @@
     
     if (!selectedTask) {
       taskError = 'Please select a task';
+      showError('Please select a task');
       return;
     }
 
@@ -227,30 +221,27 @@
     taskResult = null;
 
     try {
-      const response = await fetch(`/api/nodes/${nodeId}/task`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      showInfo('Executing task...');
+      
+      const data = await post<{ executionId: string }>(
+        `/api/nodes/${nodeId}/task`,
+        {
           taskName: selectedTask,
           parameters: taskParameters,
-        }),
-      });
+        },
+        { maxRetries: 0 } // Don't retry task executions
+      );
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `Failed to execute task: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       const executionId = data.executionId;
 
       // Poll for execution result
       await pollExecutionResult(executionId, 'task');
+      
+      showSuccess('Task executed successfully');
     } catch (err) {
       taskError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error executing task:', err);
+      showError('Task execution failed', taskError);
     } finally {
       taskExecuting = false;
     }
@@ -306,13 +297,11 @@
     executionsError = null;
 
     try {
-      const response = await fetch(`/api/executions?targetNode=${nodeId}&pageSize=10`);
+      const data = await get<{ executions: ExecutionResult[] }>(
+        `/api/executions?targetNode=${nodeId}&pageSize=10`,
+        { maxRetries: 2 }
+      );
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch executions: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       executions = data.executions || [];
     } catch (err) {
       executionsError = err instanceof Error ? err.message : 'An unknown error occurred';

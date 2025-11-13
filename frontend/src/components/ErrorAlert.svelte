@@ -1,13 +1,21 @@
 <script lang="ts">
+  import { getErrorGuidance } from '../lib/api';
+
   interface Props {
     message: string;
     details?: string;
+    guidance?: string;
     onRetry?: () => void;
     onDismiss?: () => void;
   }
 
-  let { message, details, onRetry, onDismiss }: Props = $props();
+  let { message, details, guidance, onRetry, onDismiss }: Props = $props();
   let showDetails = $state(false);
+
+  // Get actionable guidance if not provided
+  const errorGuidance = $derived(
+    guidance || (details ? getErrorGuidance(new Error(details)).guidance : undefined)
+  );
 </script>
 
 <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20" role="alert">
@@ -28,6 +36,11 @@
       <h3 class="text-sm font-medium text-red-800 dark:text-red-200">
         {message}
       </h3>
+      {#if errorGuidance}
+        <p class="mt-1 text-sm text-red-700 dark:text-red-300">
+          {errorGuidance}
+        </p>
+      {/if}
       {#if details}
         <button
           type="button"

@@ -3,6 +3,8 @@
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import { router } from '../lib/router.svelte';
+  import { get } from '../lib/api';
+  import { showError, showSuccess } from '../lib/toast.svelte';
 
   interface Node {
     id: string;
@@ -51,17 +53,23 @@
     error = null;
 
     try {
-      const response = await fetch('/api/inventory');
+      const data = await get<{ nodes: Node[] }>('/api/inventory', {
+        maxRetries: 2,
+        onRetry: (attempt) => {
+          console.log(`Retrying inventory fetch (attempt ${attempt})...`);
+        },
+      });
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch inventory: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       nodes = data.nodes || [];
+      
+      // Show success toast only on retry success
+      if (error) {
+        showSuccess('Inventory loaded successfully');
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching inventory:', err);
+      showError('Failed to load inventory', error);
     } finally {
       loading = false;
     }
