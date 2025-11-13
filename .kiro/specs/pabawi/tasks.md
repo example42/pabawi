@@ -15,7 +15,7 @@
   - Add startup validation for Bolt configuration files
   - _Requirements: 7.1, 7.4, 7.5, 10.1_
 
-- [ ] 3. Implement Bolt service for CLI integration
+- [x] 3. Implement Bolt service for CLI integration
   - [x] 3.1 Create BoltService class with child process execution wrapper
     - Implement command execution with timeout handling
     - Add JSON output parsing from Bolt CLI
@@ -59,7 +59,7 @@
   - Handle empty whitelist with allowAll disabled (reject all commands)
   - _Requirements: 4.6, 4.7, 4.8, 4.9_
 
-- [ ] 5. Implement execution repository for persistence
+- [x] 5. Implement execution repository for persistence
   - [x] 5.1 Create ExecutionRepository class with SQLite connection
     - Initialize database connection with proper error handling
     - Implement connection pooling configuration
@@ -236,39 +236,70 @@
   - Display actionable error messages with guidance
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 13. Create Docker container configuration
-  - [ ] 13.1 Write Dockerfile with multi-stage build
+- [x] 13. Create Docker container configuration
+  - [x] 13.1 Write Dockerfile with multi-stage build
     - Stage 1: Build frontend with Vite
     - Stage 2: Build backend TypeScript
     - Stage 3: Production image with Node.js and Bolt CLI
+    - Install Bolt CLI in production image
+    - Copy built frontend to public directory
+    - Copy built backend and node_modules
     - _Requirements: 7.1_
   
-  - [ ] 13.2 Configure container runtime
+  - [x] 13.2 Create .dockerignore file
+    - Exclude node_modules, dist, build artifacts
+    - Exclude development files and documentation
+    - _Requirements: 7.1_
+  
+  - [x] 13.3 Configure container runtime
     - Set up volume mounts for Bolt project and database
     - Configure environment variables
     - Expose port 3000
-    - Run as non-root user
+    - Run as non-root user with proper permissions
     - _Requirements: 7.1, 7.2_
   
-  - [ ] 13.3 Create docker-compose.yml for local development
+  - [x] 13.4 Create docker-compose.yml for local development
     - Define service with volume mounts
-    - Set environment variables
-    - Configure port mapping
+    - Set environment variables from .env file
+    - Configure port mapping (3000:3000)
+    - Add healthcheck configuration
     - _Requirements: 7.1_
 
-- [ ] 14. Create API documentation
-  - Write OpenAPI 3.0 specification for all endpoints
-  - Document request/response schemas
-  - Include error response examples
-  - Add authentication placeholders for future versions
-  - _Requirements: 10.1, 10.2, 10.3, 10.4_
+- [ ] 14. Create comprehensive API documentation
+  - [ ] 14.1 Write OpenAPI 3.0 specification document
+    - Document all API endpoints with paths and methods
+    - Define request/response schemas for all endpoints
+    - Include error response examples for each endpoint
+    - Add authentication placeholders for future versions
+    - Document query parameters and pagination
+    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+  
+  - [ ] 14.2 Add API documentation to docs directory
+    - Create docs/api.md with endpoint descriptions
+    - Include example requests and responses
+    - Document error codes and their meanings
+    - Add usage examples for common workflows
+    - _Requirements: 10.1, 10.2_
 
 - [ ] 15. Implement performance optimizations
-  - Add inventory caching with 30-second TTL
-  - Implement facts caching per node (5-minute TTL)
-  - Add database indexes for execution queries
-  - Configure concurrent execution limit (default: 5)
-  - _Requirements: 1.2, 8.1, 8.2, 8.3_
+  - [ ] 15.1 Add caching layer for inventory and facts
+    - Implement inventory caching with 30-second TTL
+    - Implement facts caching per node (5-minute TTL)
+    - Add cache invalidation mechanism
+    - Use in-memory cache (Map) with timestamp tracking
+    - _Requirements: 1.2, 8.1, 8.2, 8.3_
+  
+  - [ ] 15.2 Optimize database queries
+    - Add database indexes for execution queries (status, started_at, target_nodes)
+    - Verify indexes are created in schema.sql
+    - Test query performance with large datasets
+    - _Requirements: 6.3, 6.5_
+  
+  - [ ] 15.3 Add concurrent execution limiting
+    - Implement execution queue with configurable limit (default: 5)
+    - Add queue status endpoint to monitor pending executions
+    - Handle queue overflow gracefully
+    - _Requirements: 8.1, 8.2_
 
 - [ ]* 16. Write integration tests
   - [ ]* 16.1 Test API endpoints with Supertest
@@ -293,10 +324,33 @@
     - Test executions page filtering and detail view
     - _Requirements: 1.1, 1.5, 2.1, 4.1, 5.3, 6.1_
 
-- [ ] 18. Create project documentation
-  - Write README with setup instructions
-  - Document environment variables and configuration options
-  - Create user guide for command whitelist configuration
-  - Add troubleshooting section for common issues
-  - Document Bolt project requirements (inventory format, etc.)
-  - _Requirements: 7.1, 7.4, 7.5_
+- [ ] 18. Enhance project documentation
+  - [ ] 18.1 Expand README with comprehensive setup instructions
+    - Add detailed prerequisites section
+    - Document installation steps for all platforms
+    - Add quick start guide
+    - Document development workflow
+    - Add production deployment instructions
+    - _Requirements: 7.1, 7.4, 7.5_
+  
+  - [ ] 18.2 Create configuration guide
+    - Document all environment variables and their defaults
+    - Create user guide for command whitelist configuration
+    - Document Bolt project requirements (inventory format, bolt-project.yaml)
+    - Add examples for different deployment scenarios
+    - _Requirements: 7.4, 7.5, 10.1_
+  
+  - [ ] 18.3 Create troubleshooting guide
+    - Add troubleshooting section for common issues
+    - Document error messages and their solutions
+    - Add debugging tips for Bolt integration issues
+    - Include FAQ section
+    - _Requirements: 9.1, 9.2, 9.5_
+  
+  - [ ] 18.4 Create user guide
+    - Document how to use the web interface
+    - Add screenshots or diagrams for key features
+    - Document command execution workflow
+    - Document task execution workflow
+    - Document facts gathering workflow
+    - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1_

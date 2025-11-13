@@ -67,6 +67,59 @@ DATABASE_PATH=./data/executions.db
 npm test
 ```
 
+## Docker Deployment
+
+### Building the Docker Image
+
+```bash
+docker build -t pabawi:latest .
+```
+
+### Running with Docker
+
+```bash
+# Using the provided script
+./scripts/docker-run.sh
+
+# Or manually
+docker run -d \
+  --name pabawi \
+  -p 3000:3000 \
+  -v $(pwd)/test-bolt-project:/bolt-project:ro \
+  -v $(pwd)/data:/data \
+  -e COMMAND_WHITELIST_ALLOW_ALL=false \
+  pabawi:latest
+```
+
+### Running with Docker Compose
+
+```bash
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+```
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure as needed. Key variables:
+
+- `PORT`: Application port (default: 3000)
+- `BOLT_PROJECT_PATH`: Path to Bolt project directory
+- `COMMAND_WHITELIST_ALLOW_ALL`: Allow all commands (default: false)
+- `COMMAND_WHITELIST`: JSON array of allowed commands
+- `EXECUTION_TIMEOUT`: Timeout in milliseconds (default: 300000)
+- `LOG_LEVEL`: Logging level (default: info)
+
+### Volume Mounts
+
+- `/bolt-project`: Mount your Bolt project directory (read-only)
+- `/data`: Persistent storage for SQLite database
+
 ## Documentation
 
 See `docs/` directory for detailed documentation.

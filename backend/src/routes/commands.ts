@@ -4,11 +4,7 @@ import { BoltService } from '../bolt/BoltService';
 import { ExecutionRepository } from '../database/ExecutionRepository';
 import { CommandWhitelistService, CommandNotAllowedError } from '../validation/CommandWhitelistService';
 import {
-  BoltNodeUnreachableError,
-  BoltExecutionError,
-  BoltParseError,
   BoltInventoryNotFoundError,
-  BoltTimeoutError,
 } from '../bolt/types';
 
 /**

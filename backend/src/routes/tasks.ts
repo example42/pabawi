@@ -3,13 +3,11 @@ import { z } from 'zod';
 import { BoltService } from '../bolt/BoltService';
 import { ExecutionRepository } from '../database/ExecutionRepository';
 import {
-  BoltNodeUnreachableError,
   BoltExecutionError,
   BoltParseError,
   BoltInventoryNotFoundError,
   BoltTaskNotFoundError,
   BoltTaskParameterError,
-  BoltTimeoutError,
 } from '../bolt/types';
 
 /**
@@ -129,14 +127,11 @@ export function createTasksRouter(
           console.error('Error executing task:', error);
           
           let errorMessage = 'Unknown error';
-          let errorCode = 'INTERNAL_SERVER_ERROR';
           
           if (error instanceof BoltTaskNotFoundError) {
             errorMessage = error.message;
-            errorCode = 'TASK_NOT_FOUND';
           } else if (error instanceof BoltTaskParameterError) {
             errorMessage = error.message;
-            errorCode = 'TASK_PARAMETER_ERROR';
           } else if (error instanceof Error) {
             errorMessage = error.message;
           }
