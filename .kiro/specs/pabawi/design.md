@@ -2,7 +2,7 @@
 
 ## Overview
 
-Version 0.1.0 of the Unified Remote Execution Interface provides a web-based interface for managing Bolt automation. The system consists of a Svelte frontend and a TypeScript/Node.js backend API server that orchestrates Bolt operations. The design emphasizes simplicity, using existing local Bolt configurations without requiring additional setup.
+Version 0.1.0 of Pabawi, a Unified Remote Execution Interface, provides a web-based interface for managing Bolt automation. The system consists of a Svelte frontend and a TypeScript/Node.js backend API server that orchestrates Bolt operations. The design emphasizes simplicity, using existing local Bolt configurations without requiring additional setup.
 
 ### Key Design Principles
 

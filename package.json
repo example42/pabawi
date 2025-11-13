@@ -1,0 +1,27 @@
+{
+  "name": "pabawi",
+  "version": "0.1.0",
+  "description": "Pabawi - Web interface for Bolt automation tool",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "build": "npm run build:frontend && npm run build:backend",
+    "test": "npm run test --workspace=backend && npm run test --workspace=frontend"
+  },
+  "keywords": [
+    "pabawi",
+    "bolt",
+    "automation",
+    "web-interface"
+  ],
+  "author": "",
+  "license": "MIT"
+}

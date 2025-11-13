@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document specifies the requirements for version 0.1.0 of the Unified Remote Execution Interface. This initial version provides a web interface for the Bolt automation tool, enabling users to view inventory, gather facts, execute commands and tasks, and monitor execution results through an intuitive web UI.
+This document specifies the requirements for version 0.1.0 of Pabawi, a Unified Remote Execution Interface. This initial version provides a web interface for the Bolt automation tool, enabling users to view inventory, gather facts, execute commands and tasks, and monitor execution results through an intuitive web UI.
 
 ## Glossary
 
