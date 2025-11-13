@@ -191,7 +191,7 @@
     - Link to full execution details
     - _Requirements: 2.5_
 
-- [ ] 10. Implement Executions page component
+- [x] 10. Implement Executions page component
   - [x] 10.1 Create ExecutionsPage component with data fetching
     - Fetch executions from /api/executions with pagination
     - Display loading state and handle errors
@@ -210,13 +210,13 @@
     - Update API request with filter parameters
     - _Requirements: 6.5_
   
-  - [ ] 10.4 Implement execution detail view
+  - [x] 10.4 Implement execution detail view
     - Create modal or detail panel for execution details
     - Display per-node results with stdout/stderr
     - Show execution summary (duration, success/failure counts)
     - _Requirements: 6.4_
   
-  - [ ] 10.5 Add summary statistics
+  - [x] 10.5 Add summary statistics
     - Fetch execution counts by status
     - Display summary cards at top of page
     - _Requirements: 6.3_
