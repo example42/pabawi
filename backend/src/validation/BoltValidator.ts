@@ -1,0 +1,133 @@
+import { existsSync, statSync } from 'fs';
+import { join } from 'path';
+
+/**
+ * Validation errors for Bolt configuration
+ */
+export class BoltValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly missingFiles: string[] = [],
+    public readonly details?: string
+  ) {
+    super(message);
+    this.name = 'BoltValidationError';
+  }
+}
+
+/**
+ * Validator for Bolt configuration files and project structure
+ */
+export class BoltValidator {
+  private boltProjectPath: string;
+
+  constructor(boltProjectPath: string) {
+    this.boltProjectPath = boltProjectPath;
+  }
+
+  /**
+   * Validate Bolt configuration on startup
+   * Checks for required files and directory structure
+   */
+  public async validate(): Promise<void> {
+    const missingFiles: string[] = [];
+    const errors: string[] = [];
+
+    // Check if project path exists
+    if (!existsSync(this.boltProjectPath)) {
+      throw new BoltValidationError(
+        `Bolt project path does not exist: ${this.boltProjectPath}`,
+        [],
+        'Ensure BOLT_PROJECT_PATH points to a valid directory'
+      );
+    }
+
+    // Check if path is a directory
+    if (!statSync(this.boltProjectPath).isDirectory()) {
+      throw new BoltValidationError(
+        `Bolt project path is not a directory: ${this.boltProjectPath}`,
+        [],
+        'BOLT_PROJECT_PATH must point to a directory'
+      );
+    }
+
+    // Check for inventory file (inventory.yaml or inventory.yml)
+    const inventoryYaml = join(this.boltProjectPath, 'inventory.yaml');
+    const inventoryYml = join(this.boltProjectPath, 'inventory.yml');
+    
+    if (!existsSync(inventoryYaml) && !existsSync(inventoryYml)) {
+      missingFiles.push('inventory.yaml or inventory.yml');
+      errors.push('Inventory file is required for Bolt operations');
+    }
+
+    // Check for bolt-project.yaml (optional but recommended)
+    const boltProjectYaml = join(this.boltProjectPath, 'bolt-project.yaml');
+    const boltProjectYml = join(this.boltProjectPath, 'bolt-project.yml');
+    
+    if (!existsSync(boltProjectYaml) && !existsSync(boltProjectYml)) {
+      // This is a warning, not an error
+      console.warn('Warning: bolt-project.yaml not found. Using default Bolt configuration.');
+    }
+
+    // Check for modules directory (optional)
+    const modulesDir = join(this.boltProjectPath, 'modules');
+    if (!existsSync(modulesDir)) {
+      console.warn('Warning: modules directory not found. Task execution may be limited.');
+    }
+
+    // If there are missing required files, throw error
+    if (missingFiles.length > 0) {
+      throw new BoltValidationError(
+        'Bolt configuration validation failed',
+        missingFiles,
+        errors.join('; ')
+      );
+    }
+  }
+
+  /**
+   * Get the inventory file path (checks both .yaml and .yml)
+   */
+  public getInventoryPath(): string | null {
+    const inventoryYaml = join(this.boltProjectPath, 'inventory.yaml');
+    const inventoryYml = join(this.boltProjectPath, 'inventory.yml');
+    
+    if (existsSync(inventoryYaml)) {
+      return inventoryYaml;
+    }
+    if (existsSync(inventoryYml)) {
+      return inventoryYml;
+    }
+    return null;
+  }
+
+  /**
+   * Get the bolt-project file path (checks both .yaml and .yml)
+   */
+  public getBoltProjectPath(): string | null {
+    const boltProjectYaml = join(this.boltProjectPath, 'bolt-project.yaml');
+    const boltProjectYml = join(this.boltProjectPath, 'bolt-project.yml');
+    
+    if (existsSync(boltProjectYaml)) {
+      return boltProjectYaml;
+    }
+    if (existsSync(boltProjectYml)) {
+      return boltProjectYml;
+    }
+    return null;
+  }
+
+  /**
+   * Get the modules directory path
+   */
+  public getModulesPath(): string {
+    return join(this.boltProjectPath, 'modules');
+  }
+
+  /**
+   * Check if modules directory exists
+   */
+  public hasModules(): boolean {
+    return existsSync(this.getModulesPath());
+  }
+}

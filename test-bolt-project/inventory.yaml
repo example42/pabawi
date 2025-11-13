@@ -1,0 +1,7 @@
+groups:
+  - name: test-nodes
+    targets:
+      - name: localhost
+        uri: localhost
+        config:
+          transport: local
