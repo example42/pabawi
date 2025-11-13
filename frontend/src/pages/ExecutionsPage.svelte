@@ -3,6 +3,7 @@
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
+  import CommandOutput from '../components/CommandOutput.svelte';
   import { router } from '../lib/router.svelte';
 
   interface ExecutionResult {
@@ -84,6 +85,9 @@
   });
   let nodes = $state<Node[]>([]);
   let showFilters = $state(false);
+  let selectedExecution = $state<ExecutionResult | null>(null);
+  let loadingDetail = $state(false);
+  let detailError = $state<string | null>(null);
 
   // Fetch nodes for target filter
   async function fetchNodes(): Promise<void> {
@@ -215,6 +219,49 @@
   // Navigate to node detail
   function navigateToNode(nodeId: string): void {
     router.navigate(`/nodes/${nodeId}`);
+  }
+
+  // Fetch execution details
+  async function fetchExecutionDetail(executionId: string): Promise<void> {
+    loadingDetail = true;
+    detailError = null;
+
+    try {
+      const response = await fetch(`/api/executions/${executionId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || `Failed to fetch execution details: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      selectedExecution = data.execution || data;
+    } catch (err) {
+      detailError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching execution details:', err);
+    } finally {
+      loadingDetail = false;
+    }
+  }
+
+  // Open execution detail modal
+  function openExecutionDetail(execution: ExecutionResult): void {
+    fetchExecutionDetail(execution.id);
+  }
+
+  // Close execution detail modal
+  function closeExecutionDetail(): void {
+    selectedExecution = null;
+    detailError = null;
+  }
+
+  // Calculate execution summary
+  function getExecutionSummary(execution: ExecutionResult): { successCount: number; failureCount: number; duration: string } {
+    const successCount = execution.results.filter(r => r.status === 'success').length;
+    const failureCount = execution.results.filter(r => r.status === 'failed').length;
+    const duration = formatDuration(execution.startedAt, execution.completedAt);
+    
+    return { successCount, failureCount, duration };
   }
 
   // Fetch executions and nodes on mount
@@ -423,7 +470,10 @@
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
               {#each executions as execution (execution.id)}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr 
+                  class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                  onclick={() => openExecutionDetail(execution)}
+                >
                   <td class="whitespace-nowrap px-6 py-4 text-sm">
                     <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(execution.type)}">
                       {execution.type}
@@ -440,7 +490,10 @@
                         <button
                           type="button"
                           class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                          onclick={() => navigateToNode(nodeId)}
+                          onclick={(e) => {
+                            e.stopPropagation();
+                            navigateToNode(nodeId);
+                          }}
                         >
                           {nodeId}
                         </button>
@@ -482,3 +535,222 @@
     {/if}
   {/if}
 </div>
+
+<!-- Execution Detail Modal -->
+{#if selectedExecution !== null || loadingDetail}
+  <div 
+    class="fixed inset-0 z-50 overflow-y-auto"
+    aria-labelledby="modal-title" 
+    role="dialog" 
+    aria-modal="true"
+  >
+    <!-- Background overlay -->
+    <button
+      type="button"
+      class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+      onclick={closeExecutionDetail}
+      aria-label="Close modal"
+    ></button>
+
+    <!-- Modal panel -->
+    <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+      <div 
+        class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-4xl"
+        role="document"
+      >
+        {#if loadingDetail}
+          <!-- Loading State -->
+          <div class="px-4 py-12 sm:px-6">
+            <LoadingSpinner size="lg" message="Loading execution details..." />
+          </div>
+        {:else if detailError}
+          <!-- Error State -->
+          <div class="px-4 py-6 sm:px-6">
+            <ErrorAlert 
+              message="Failed to load execution details" 
+              details={detailError}
+              onRetry={() => selectedExecution && fetchExecutionDetail(selectedExecution.id)}
+            />
+            <div class="mt-4 flex justify-end">
+              <button
+                type="button"
+                class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                onclick={closeExecutionDetail}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        {:else if selectedExecution}
+          <!-- Header -->
+          <div class="border-b border-gray-200 bg-gray-50 px-4 py-4 dark:border-gray-700 dark:bg-gray-900 sm:px-6">
+            <div class="flex items-start justify-between">
+              <div class="flex-1">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white" id="modal-title">
+                  Execution Details
+                </h3>
+                <div class="mt-2 flex flex-wrap items-center gap-3">
+                  <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(selectedExecution.type)}">
+                    {selectedExecution.type}
+                  </span>
+                  <StatusBadge status={selectedExecution.status} size="sm" />
+                  <span class="text-sm text-gray-600 dark:text-gray-400">
+                    ID: {selectedExecution.id}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="rounded-md text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:hover:text-gray-300"
+                onclick={closeExecutionDetail}
+              >
+                <span class="sr-only">Close</span>
+                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="max-h-[calc(100vh-12rem)] overflow-y-auto px-4 py-6 sm:px-6">
+            <!-- Execution Summary -->
+            <div class="mb-6">
+              <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Summary</h4>
+              <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Duration</div>
+                  <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                    {getExecutionSummary(selectedExecution).duration}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                  <div class="text-xs font-medium text-gray-500 dark:text-gray-400">Total Targets</div>
+                  <div class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                    {selectedExecution.targetNodes.length}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-900/20">
+                  <div class="text-xs font-medium text-green-600 dark:text-green-400">Successful</div>
+                  <div class="mt-1 text-lg font-semibold text-green-900 dark:text-green-100">
+                    {getExecutionSummary(selectedExecution).successCount}
+                  </div>
+                </div>
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                  <div class="text-xs font-medium text-red-600 dark:text-red-400">Failed</div>
+                  <div class="mt-1 text-lg font-semibold text-red-900 dark:text-red-100">
+                    {getExecutionSummary(selectedExecution).failureCount}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Execution Info -->
+            <div class="mb-6">
+              <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Information</h4>
+              <dl class="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Action</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{selectedExecution.action}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Started At</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{formatTimestamp(selectedExecution.startedAt)}</dd>
+                </div>
+                {#if selectedExecution.completedAt}
+                  <div>
+                    <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Completed At</dt>
+                    <dd class="mt-1 text-sm text-gray-900 dark:text-white">{formatTimestamp(selectedExecution.completedAt)}</dd>
+                  </div>
+                {/if}
+                {#if selectedExecution.parameters && Object.keys(selectedExecution.parameters).length > 0}
+                  <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Parameters</dt>
+                    <dd class="mt-1">
+                      <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(selectedExecution.parameters, null, 2)}</pre>
+                    </dd>
+                  </div>
+                {/if}
+                {#if selectedExecution.error}
+                  <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium text-red-600 dark:text-red-400">Error</dt>
+                    <dd class="mt-1 text-sm text-red-900 dark:text-red-100">{selectedExecution.error}</dd>
+                  </div>
+                {/if}
+              </dl>
+            </div>
+
+            <!-- Per-Node Results -->
+            <div>
+              <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
+                Results by Node ({selectedExecution.results.length})
+              </h4>
+              <div class="space-y-4">
+                {#each selectedExecution.results as result}
+                  <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                    <!-- Node Header -->
+                    <div class="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900">
+                      <div class="flex items-center gap-3">
+                        <button
+                          type="button"
+                          class="text-sm font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          onclick={(e) => {
+                            e.stopPropagation();
+                            closeExecutionDetail();
+                            navigateToNode(result.nodeId);
+                          }}
+                        >
+                          {result.nodeId}
+                        </button>
+                        <StatusBadge status={result.status} size="sm" />
+                      </div>
+                      <span class="text-xs text-gray-600 dark:text-gray-400">
+                        {result.duration}ms
+                      </span>
+                    </div>
+
+                    <!-- Node Content -->
+                    <div class="px-4 py-3">
+                      {#if result.error}
+                        <div class="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                          <p class="text-sm font-medium text-red-800 dark:text-red-200">Error:</p>
+                          <p class="mt-1 text-sm text-red-700 dark:text-red-300">{result.error}</p>
+                        </div>
+                      {:else if result.output}
+                        <CommandOutput 
+                          stdout={result.output.stdout}
+                          stderr={result.output.stderr}
+                          exitCode={result.output.exitCode}
+                        />
+                      {:else if result.value !== undefined}
+                        <div>
+                          <h5 class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">Result Value:</h5>
+                          <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
+                        </div>
+                      {:else}
+                        <p class="text-sm text-gray-500 dark:text-gray-400">No output</p>
+                      {/if}
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="border-t border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900 sm:px-6">
+            <div class="flex justify-end">
+              <button
+                type="button"
+                class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                onclick={closeExecutionDetail}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </div>
+  </div>
+{/if}
