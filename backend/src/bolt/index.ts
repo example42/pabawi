@@ -8,8 +8,10 @@ export {
   type BoltExecutionOptions,
   type BoltJsonOutput,
   type Node,
+  type Facts,
   BoltExecutionError,
   BoltTimeoutError,
   BoltParseError,
   BoltInventoryNotFoundError,
+  BoltNodeUnreachableError,
 } from './types';

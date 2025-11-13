@@ -28,7 +28,7 @@
     - Handle inventory file not found errors
     - _Requirements: 1.1, 7.1_
   
-  - [ ] 3.3 Implement facts gathering method
+  - [x] 3.3 Implement facts gathering method
     - Execute `bolt task run facts --targets <node> --format json`
     - Parse facts output and structure as Facts model
     - Handle node unreachable errors

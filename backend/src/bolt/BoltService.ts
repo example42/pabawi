@@ -4,10 +4,12 @@ import {
   type BoltExecutionOptions,
   type BoltJsonOutput,
   type Node,
+  type Facts,
   BoltExecutionError,
   BoltTimeoutError,
   BoltParseError,
   BoltInventoryNotFoundError,
+  BoltNodeUnreachableError,
 } from './types';
 
 /**
@@ -340,6 +342,160 @@ export class BoltService {
       uri,
       transport,
       config,
+    };
+  }
+
+  /**
+   * Gather facts from a target node
+   * 
+   * Executes `bolt task run facts --targets <node> --format json` and
+   * structures the output as a Facts object
+   * 
+   * @param nodeId - The ID/name of the target node
+   * @returns Promise resolving to Facts object
+   * @throws BoltNodeUnreachableError if the node is unreachable
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   */
+  public async gatherFacts(nodeId: string): Promise<Facts> {
+    try {
+      const jsonOutput = await this.executeCommandWithJsonOutput([
+        'task',
+        'run',
+        'facts',
+        '--targets',
+        nodeId,
+        '--format',
+        'json',
+      ]);
+
+      return this.transformFactsOutput(nodeId, jsonOutput);
+    } catch (error) {
+      // Check if error is due to node being unreachable
+      if (error instanceof BoltExecutionError) {
+        const errorMessage = error.stderr.toLowerCase();
+        if (
+          errorMessage.includes('unreachable') ||
+          errorMessage.includes('connection') ||
+          errorMessage.includes('could not connect') ||
+          errorMessage.includes('timed out') ||
+          errorMessage.includes('connection refused') ||
+          errorMessage.includes('no route to host')
+        ) {
+          throw new BoltNodeUnreachableError(
+            `Node ${nodeId} is unreachable`,
+            nodeId,
+            error.stderr
+          );
+        }
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Transform Bolt facts output to Facts object
+   * 
+   * @param nodeId - The ID of the node
+   * @param jsonOutput - Raw JSON output from Bolt facts command
+   * @returns Facts object
+   */
+  private transformFactsOutput(nodeId: string, jsonOutput: BoltJsonOutput): Facts {
+    // Bolt task output structure typically has items array with results per node
+    // Format: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
+    
+    let factsData: Record<string, unknown> = {};
+
+    // Handle items array format
+    if (Array.isArray(jsonOutput.items) && jsonOutput.items.length > 0) {
+      const item = jsonOutput.items[0] as Record<string, unknown>;
+      if (item.status === 'success' && typeof item.value === 'object' && item.value !== null) {
+        factsData = item.value as Record<string, unknown>;
+      }
+    } else if (typeof jsonOutput === 'object' && jsonOutput !== null) {
+      // Handle direct facts format
+      factsData = jsonOutput;
+    }
+
+    // Extract and structure facts according to the Facts interface
+    const facts: Facts['facts'] = {
+      os: this.extractOsFacts(factsData),
+      processors: this.extractProcessorFacts(factsData),
+      memory: this.extractMemoryFacts(factsData),
+      networking: this.extractNetworkingFacts(factsData),
+    };
+
+    // Include any additional facts
+    for (const [key, value] of Object.entries(factsData)) {
+      if (!['os', 'processors', 'memory', 'networking'].includes(key)) {
+        facts[key] = value;
+      }
+    }
+
+    return {
+      nodeId,
+      gatheredAt: new Date().toISOString(),
+      facts,
+    };
+  }
+
+  /**
+   * Extract OS facts from raw facts data
+   */
+  private extractOsFacts(factsData: Record<string, unknown>): Facts['facts']['os'] {
+    const os = factsData.os as Record<string, unknown> | undefined;
+    const release = os?.release as Record<string, unknown> | undefined;
+    
+    return {
+      family: typeof os?.family === 'string' ? os.family : 'unknown',
+      name: typeof os?.name === 'string' ? os.name : 'unknown',
+      release: {
+        full: typeof release?.full === 'string' ? release.full : 'unknown',
+        major: typeof release?.major === 'string' ? release.major : 'unknown',
+      },
+    };
+  }
+
+  /**
+   * Extract processor facts from raw facts data
+   */
+  private extractProcessorFacts(factsData: Record<string, unknown>): Facts['facts']['processors'] {
+    const processors = factsData.processors as Record<string, unknown> | undefined;
+    
+    return {
+      count: typeof processors?.count === 'number' ? processors.count : 0,
+      models: Array.isArray(processors?.models) 
+        ? processors.models.filter((m): m is string => typeof m === 'string')
+        : [],
+    };
+  }
+
+  /**
+   * Extract memory facts from raw facts data
+   */
+  private extractMemoryFacts(factsData: Record<string, unknown>): Facts['facts']['memory'] {
+    const memory = factsData.memory as Record<string, unknown> | undefined;
+    const system = memory?.system as Record<string, unknown> | undefined;
+    
+    return {
+      system: {
+        total: typeof system?.total === 'string' ? system.total : '0',
+        available: typeof system?.available === 'string' ? system.available : '0',
+      },
+    };
+  }
+
+  /**
+   * Extract networking facts from raw facts data
+   */
+  private extractNetworkingFacts(factsData: Record<string, unknown>): Facts['facts']['networking'] {
+    const networking = factsData.networking as Record<string, unknown> | undefined;
+    
+    return {
+      hostname: typeof networking?.hostname === 'string' ? networking.hostname : 'unknown',
+      interfaces: typeof networking?.interfaces === 'object' && networking?.interfaces !== null
+        ? networking.interfaces as Record<string, unknown>
+        : {},
     };
   }
 }

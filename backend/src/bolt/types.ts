@@ -82,6 +82,20 @@ export class BoltInventoryNotFoundError extends Error {
 }
 
 /**
+ * Error thrown when a node is unreachable
+ */
+export class BoltNodeUnreachableError extends Error {
+  constructor(
+    message: string,
+    public readonly nodeId: string,
+    public readonly details?: string,
+  ) {
+    super(message);
+    this.name = "BoltNodeUnreachableError";
+  }
+}
+
+/**
  * Node from Bolt inventory
  */
 export interface Node {
@@ -92,6 +106,39 @@ export interface Node {
   config: {
     user?: string;
     port?: number;
+    [key: string]: unknown;
+  };
+}
+
+/**
+ * Facts gathered from a target node
+ */
+export interface Facts {
+  nodeId: string;
+  gatheredAt: string;
+  facts: {
+    os: {
+      family: string;
+      name: string;
+      release: {
+        full: string;
+        major: string;
+      };
+    };
+    processors: {
+      count: number;
+      models: string[];
+    };
+    memory: {
+      system: {
+        total: string;
+        available: string;
+      };
+    };
+    networking: {
+      hostname: string;
+      interfaces: Record<string, unknown>;
+    };
     [key: string]: unknown;
   };
 }
