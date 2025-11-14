@@ -1,5 +1,7 @@
 # Stage 1: Build frontend with Vite
-FROM node:20-alpine AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS frontend-builder
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 WORKDIR /app/frontend
 
@@ -16,7 +18,9 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build backend TypeScript
-FROM node:20-alpine AS backend-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine AS backend-builder
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 WORKDIR /app/backend
 
@@ -34,6 +38,8 @@ RUN npm run build
 
 # Stage 3: Production image with Node.js and Bolt CLI
 FROM node:20-alpine
+ARG TARGETPLATFORM
+ARG BUILDPLATFORM
 
 # Install Bolt CLI
 RUN apk add --no-cache \
@@ -67,8 +73,34 @@ RUN mkdir -p /data && chown pabawi:pabawi /data
 # Create bolt-project directory
 RUN mkdir -p /bolt-project && chown pabawi:pabawi /bolt-project
 
+# Create entrypoint script to handle permissions
+COPY --chown=pabawi:pabawi <<'EOF' /app/docker-entrypoint.sh
+#!/bin/sh
+set -e
+
+# Ensure data directory is writable
+if [ ! -w /data ]; then
+    echo "Error: /data directory is not writable by user $(id -u)"
+    echo "Please ensure the mounted volume has correct permissions:"
+    echo "  sudo chown -R 1001:1001 /path/to/data"
+    exit 1
+fi
+
+# Create database file if it doesn't exist
+if [ ! -f /data/executions.db ]; then
+    touch /data/executions.db
+fi
+
+# Execute the main command
+exec "$@"
+EOF
+
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Switch to non-root user
 USER pabawi
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Expose port
 EXPOSE 3000

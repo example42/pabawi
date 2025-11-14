@@ -134,6 +134,27 @@ Copy `.env.example` to `.env` and configure as needed. Key variables:
 - `/bolt-project`: Mount your Bolt project directory (read-only)
 - `/data`: Persistent storage for SQLite database
 
+### Troubleshooting
+
+#### Database Permission Errors
+
+If you see `SQLITE_CANTOPEN: unable to open database file`, the container user (UID 1001) doesn't have write access to the `/data` volume.
+
+**On Linux:**
+```bash
+# Set correct ownership on the data directory
+sudo chown -R 1001:1001 ./data
+```
+
+**On macOS/Windows:**
+Docker Desktop handles permissions automatically. Ensure the directory exists:
+```bash
+mkdir -p ./data
+```
+
+**Using the docker-run.sh script:**
+The provided script automatically handles permissions on Linux systems.
+
 ## Documentation
 
 See `docs/` directory for detailed documentation.
