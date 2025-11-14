@@ -1,23 +1,29 @@
-version: '3.8'
 
 services:
-  pabawi:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
     image: pabawi:latest
-    container_name: pabawi
-    user: "1001:1001"
-    ports:
-      - "${PORT:-3000}:3000"
+    container_name: pabawi-dev
     volumes:
+      # Mount entire workspace for development
+      - .:/workspace:cached
       # Mount Bolt project directory (read-only)
       - ./test-bolt-project:/bolt-project:ro
       # Mount data directory for SQLite database (read-write)
       - ./data:/data
+      # Persist node_modules
+      - node_modules:/workspace/node_modules
+      - backend_node_modules:/workspace/backend/node_modules
+      - frontend_node_modules:/workspace/frontend/node_modules
+    ports:
+      - "${PORT:-3000}:3000"
+    command: sleep infinity
+    user: "1001:1001"
     environment:
       # Application configuration
-      - NODE_ENV=production
+      - NODE_ENV=development
       - PORT=3000
       
       # Bolt configuration
@@ -53,6 +59,10 @@ networks:
     driver: bridge
 
 volumes:
+  # Named volumes for node_modules persistence
+  node_modules:
+  backend_node_modules:
+  frontend_node_modules:
   # Named volume for persistent data (alternative to bind mount)
   pabawi-data:
     driver: local

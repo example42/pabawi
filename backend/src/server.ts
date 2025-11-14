@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
+import path from "path";
 import { ConfigService } from "./config/ConfigService";
 import { DatabaseService } from "./database/DatabaseService";
 import { BoltValidator } from "./validation/BoltValidator";
@@ -137,14 +138,14 @@ async function startServer(): Promise<Express> {
     app.use("/api/tasks", createTasksRouter(boltService, executionRepository));
     app.use("/api/executions", createExecutionsRouter(executionRepository));
 
-    // 404 handler for undefined routes
-    app.use((_req: Request, res: Response) => {
-      res.status(404).json({
-        error: {
-          code: "NOT_FOUND",
-          message: "The requested resource was not found",
-        },
-      });
+    // Serve static frontend files in production
+    const publicPath = path.resolve(__dirname, "..", "public");
+    app.use(express.static(publicPath));
+
+    // SPA fallback - serve index.html for non-API routes
+    app.get("*", (_req: Request, res: Response) => {
+      const indexPath = path.join(publicPath, "index.html");
+      res.sendFile(indexPath);
     });
 
     // Global error handling middleware

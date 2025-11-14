@@ -40,6 +40,16 @@ npm run dev:backend
 npm run dev:frontend
 ```
 
+### Accessing the Application
+
+**Development Mode** (when running both servers separately):
+- **Frontend UI**: http://localhost:5173 (Main application interface)
+- **Backend API**: http://localhost:3000/api (API endpoints)
+
+**Production Mode** (Docker or built application):
+- **Application**: http://localhost:3000 (Frontend and API served together)
+- The backend serves the built frontend as static files
+
 ## Build
 
 ```bash
@@ -91,6 +101,8 @@ docker run -d \
   pabawi:latest
 ```
 
+Access the application at http://localhost:3000
+
 ### Running with Docker Compose
 
 ```bash
@@ -103,6 +115,8 @@ docker-compose logs -f
 # Stop the service
 docker-compose down
 ```
+
+Access the application at http://localhost:3000
 
 ### Environment Variables
 

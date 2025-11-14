@@ -16,7 +16,13 @@ export interface BoltExecutionResult {
 /**
  * Parsed JSON output from Bolt CLI
  */
-export type BoltJsonOutput = Record<string, unknown>;
+export type BoltJsonOutput = Record<string, unknown> & {
+  inventory?: {
+    targets?: unknown[];
+    [key: string]: unknown;
+  };
+  targets?: unknown[];
+};
 
 /**
  * Options for executing Bolt commands

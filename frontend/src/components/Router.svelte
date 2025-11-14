@@ -7,13 +7,10 @@
 
   let { routes }: Props = $props();
 
-  const currentRoute = $derived(() => {
-    const route = router.findRoute(routes);
-    return route;
-  });
+  const currentRoute = $derived(router.findRoute(routes));
 
-  const Component = $derived(currentRoute()?.component);
-  const params = $derived(currentRoute()?.params || {});
+  const Component = $derived(currentRoute?.component);
+  const params = $derived(currentRoute?.params || {});
 </script>
 
 {#if Component}

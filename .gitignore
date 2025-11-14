@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+node_modules_mac/
+node_modules_cont/
 package-lock.json
 
 # Build outputs

@@ -582,7 +582,7 @@ docker run -d \
 4. What level of Bolt output verbosity should we capture?
    - **Decision**: Use `--format json` for structured output, capture stderr for errors
 
-## Documents
+## IMPORTANT: Documents and MCP servers
 
 Documentation for final users should always be placed in the docs/ directory.
 
@@ -594,3 +594,7 @@ and be named like YYYYMMDD-HHMM-DESCRIPTION.md. (For example .kiro/summaries/202
 If there are things left to do, like fixing tests or implement features which have not been completed in a session, they should be documented under .kiro/todos/ and named with the format YYYYMMDD-HHMM-DESCRIPTION.md
 
 Scripts useful for testing, troubleshooring, development or maintenance should be placed in appropriate subdirs in the scripts/ directory.
+
+MCP servers are available for SVELTE, use the get-documentation, svelte-autofixer, list-sections and playground-link tools to investigate Svelte related code activities.
+
+For TailWind CSS, use MCP tailwindcss-server and the related tools.

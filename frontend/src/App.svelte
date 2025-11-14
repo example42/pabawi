@@ -3,13 +3,17 @@
   import Navigation from './components/Navigation.svelte';
   import ErrorBoundary from './components/ErrorBoundary.svelte';
   import ToastContainer from './components/ToastContainer.svelte';
+  import TestPage from './pages/TestPage.svelte';
+  import HomePage from './pages/HomePage.svelte';
   import InventoryPage from './pages/InventoryPage.svelte';
   import ExecutionsPage from './pages/ExecutionsPage.svelte';
   import NodeDetailPage from './pages/NodeDetailPage.svelte';
   import { router } from './lib/router.svelte';
 
   const routes = {
-    '/': InventoryPage,
+    '/': TestPage,
+    '/home': HomePage,
+    '/inventory': InventoryPage,
     '/executions': ExecutionsPage,
     '/nodes/:id': NodeDetailPage
   };

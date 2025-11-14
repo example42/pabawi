@@ -84,7 +84,6 @@ groups:
       transport: winrm
       winrm:
         user: Administrator
-        password-prompt: true
         ssl: true
         ssl-verify: false
     vars:

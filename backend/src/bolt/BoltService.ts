@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn, type ChildProcess } from "child_process";
 import {
   type BoltExecutionResult,
   type BoltExecutionOptions,
@@ -16,7 +16,7 @@ import {
   BoltNodeUnreachableError,
   BoltTaskNotFoundError,
   BoltTaskParameterError,
-} from './types';
+} from "./types";
 
 /**
  * Service for executing Bolt CLI commands with timeout handling,
@@ -34,7 +34,7 @@ export class BoltService {
 
   /**
    * Execute a Bolt CLI command with timeout handling
-   * 
+   *
    * @param args - Command line arguments for Bolt CLI
    * @param options - Execution options including timeout and working directory
    * @returns Promise resolving to execution result
@@ -43,14 +43,14 @@ export class BoltService {
    */
   public async executeCommand(
     args: string[],
-    options: BoltExecutionOptions = {}
+    options: BoltExecutionOptions = {},
   ): Promise<BoltExecutionResult> {
     const timeout = options.timeout ?? this.defaultTimeout;
     const cwd = options.cwd ?? this.boltProjectPath;
 
     return new Promise((resolve, reject) => {
-      let stdout = '';
-      let stderr = '';
+      let stdout = "";
+      let stderr = "";
       let timedOut = false;
       let childProcess: ChildProcess | null = null;
 
@@ -58,11 +58,11 @@ export class BoltService {
       const timeoutId = setTimeout(() => {
         timedOut = true;
         if (childProcess) {
-          childProcess.kill('SIGTERM');
+          childProcess.kill("SIGTERM");
           // Force kill after 5 seconds if SIGTERM doesn't work
           setTimeout(() => {
             if (childProcess && !childProcess.killed) {
-              childProcess.kill('SIGKILL');
+              childProcess.kill("SIGKILL");
             }
           }, 5000);
         }
@@ -70,7 +70,7 @@ export class BoltService {
 
       try {
         // Spawn Bolt process
-        childProcess = spawn('bolt', args, {
+        childProcess = spawn("bolt", args, {
           cwd,
           env: process.env,
           shell: false,
@@ -78,28 +78,28 @@ export class BoltService {
 
         // Capture stdout
         if (childProcess.stdout) {
-          childProcess.stdout.on('data', (data: Buffer) => {
+          childProcess.stdout.on("data", (data: Buffer) => {
             stdout += data.toString();
           });
         }
 
         // Capture stderr
         if (childProcess.stderr) {
-          childProcess.stderr.on('data', (data: Buffer) => {
+          childProcess.stderr.on("data", (data: Buffer) => {
             stderr += data.toString();
           });
         }
 
         // Handle process completion
-        childProcess.on('close', (exitCode: number | null) => {
+        childProcess.on("close", (exitCode: number | null) => {
           clearTimeout(timeoutId);
 
           if (timedOut) {
             reject(
               new BoltTimeoutError(
                 `Bolt command execution exceeded timeout of ${String(timeout)}ms`,
-                timeout
-              )
+                timeout,
+              ),
             );
             return;
           }
@@ -112,22 +112,25 @@ export class BoltService {
           };
 
           if (exitCode !== 0) {
-            result.error = stderr.trim() !== '' ? stderr.trim() : `Bolt command failed with exit code ${String(exitCode)}`;
+            result.error =
+              stderr.trim() !== ""
+                ? stderr.trim()
+                : `Bolt command failed with exit code ${String(exitCode)}`;
           }
 
           resolve(result);
         });
 
         // Handle process errors
-        childProcess.on('error', (error: Error) => {
+        childProcess.on("error", (error: Error) => {
           clearTimeout(timeoutId);
           reject(
             new BoltExecutionError(
               `Failed to execute Bolt command: ${error.message}`,
               null,
               stderr.trim(),
-              stdout.trim()
-            )
+              stdout.trim(),
+            ),
           );
         });
       } catch (error) {
@@ -139,7 +142,7 @@ export class BoltService {
 
   /**
    * Execute a Bolt CLI command and parse JSON output
-   * 
+   *
    * @param args - Command line arguments for Bolt CLI (should include --format json)
    * @param options - Execution options
    * @returns Promise resolving to parsed JSON output
@@ -149,21 +152,22 @@ export class BoltService {
    */
   public async executeCommandWithJsonOutput(
     args: string[],
-    options: BoltExecutionOptions = {}
+    options: BoltExecutionOptions = {},
   ): Promise<BoltJsonOutput> {
     // Ensure --format json is included in args
-    const argsToUse = (!args.includes('--format') && !args.includes('json'))
-      ? [...args, '--format', 'json']
-      : args;
+    const argsToUse =
+      !args.includes("--format") && !args.includes("json")
+        ? [...args, "--format", "json"]
+        : args;
 
     const result = await this.executeCommand(argsToUse, options);
 
     if (!result.success) {
       throw new BoltExecutionError(
-        result.error ?? 'Bolt command failed',
+        result.error ?? "Bolt command failed",
         result.exitCode,
         result.stderr,
-        result.stdout
+        result.stdout,
       );
     }
 
@@ -172,7 +176,7 @@ export class BoltService {
 
   /**
    * Parse JSON output from Bolt CLI
-   * 
+   *
    * @param output - Raw stdout from Bolt CLI
    * @returns Parsed JSON object
    * @throws BoltParseError if parsing fails
@@ -180,9 +184,9 @@ export class BoltService {
   public parseJsonOutput(output: string): BoltJsonOutput {
     if (!output || output.trim().length === 0) {
       throw new BoltParseError(
-        'Bolt command returned empty output',
+        "Bolt command returned empty output",
         output,
-        new Error('Empty output')
+        new Error("Empty output"),
       );
     }
 
@@ -190,9 +194,9 @@ export class BoltService {
       return JSON.parse(output) as BoltJsonOutput;
     } catch (error) {
       throw new BoltParseError(
-        'Failed to parse Bolt JSON output',
+        "Failed to parse Bolt JSON output",
         output,
-        error instanceof Error ? error : new Error(String(error))
+        error instanceof Error ? error : new Error(String(error)),
       );
     }
   }
@@ -213,10 +217,10 @@ export class BoltService {
 
   /**
    * Retrieve inventory from Bolt
-   * 
+   *
    * Executes `bolt inventory show --format json` and transforms the output
    * into an array of Node objects
-   * 
+   *
    * @returns Promise resolving to array of nodes
    * @throws BoltInventoryNotFoundError if inventory file is not found
    * @throws BoltExecutionError if Bolt command fails
@@ -225,10 +229,11 @@ export class BoltService {
   public async getInventory(): Promise<Node[]> {
     try {
       const jsonOutput = await this.executeCommandWithJsonOutput([
-        'inventory',
-        'show',
-        '--format',
-        'json',
+        "inventory",
+        "show",
+        "--format",
+        "json",
+        "--detail",
       ]);
 
       return this.transformInventoryToNodes(jsonOutput);
@@ -237,12 +242,12 @@ export class BoltService {
       if (error instanceof BoltExecutionError && error.stderr) {
         const errorMessage = error.stderr.toLowerCase();
         if (
-          errorMessage.includes('inventory file') ||
-          errorMessage.includes('could not find') ||
-          errorMessage.includes('no such file')
+          errorMessage.includes("inventory file") ||
+          errorMessage.includes("could not find") ||
+          errorMessage.includes("no such file")
         ) {
           throw new BoltInventoryNotFoundError(
-            'Bolt inventory file not found. Ensure inventory.yaml exists in the Bolt project directory.'
+            "Bolt inventory file not found. Ensure inventory.yaml exists in the Bolt project directory.",
           );
         }
       }
@@ -252,17 +257,29 @@ export class BoltService {
 
   /**
    * Transform Bolt inventory JSON output to Node array
-   * 
+   *
    * @param jsonOutput - Raw JSON output from Bolt inventory command
    * @returns Array of Node objects
    */
   private transformInventoryToNodes(jsonOutput: BoltJsonOutput): Node[] {
     const nodes: Node[] = [];
 
-    // Bolt inventory output structure: { "targets": [...], "groups": [...] }
-    // or it can be a flat object with node names as keys
-    
-    // Handle targets array format
+    // Bolt inventory output with --detail flag has structure:
+    // { "inventory": { "targets": [...] }, "targets": [...] }
+    // We use inventory.targets for detailed information
+
+    // Check for inventory.targets (detailed format)
+    if (jsonOutput.inventory && Array.isArray(jsonOutput.inventory.targets)) {
+      for (const target of jsonOutput.inventory.targets) {
+        const node = this.parseInventoryTarget(target);
+        if (node) {
+          nodes.push(node);
+        }
+      }
+      return nodes;
+    }
+
+    // Fallback: Handle root targets array format
     const targets = jsonOutput.targets;
     if (Array.isArray(targets)) {
       for (const target of targets) {
@@ -274,9 +291,9 @@ export class BoltService {
       return nodes;
     }
 
-    // Handle flat object format where keys are node names
+    // Fallback: Handle flat object format where keys are node names
     for (const [nodeName, nodeData] of Object.entries(jsonOutput)) {
-      if (typeof nodeData === 'object' && nodeData !== null) {
+      if (typeof nodeData === "object" && nodeData !== null) {
         const node = this.parseInventoryTarget({ name: nodeName, ...nodeData });
         if (node) {
           nodes.push(node);
@@ -289,52 +306,52 @@ export class BoltService {
 
   /**
    * Parse a single inventory target into a Node object
-   * 
+   *
    * @param target - Raw target data from Bolt inventory
    * @returns Node object or null if parsing fails
    */
   private parseInventoryTarget(target: unknown): Node | null {
-    if (typeof target !== 'object' || target === null) {
+    if (typeof target !== "object" || target === null) {
       return null;
     }
 
     const targetObj = target as Record<string, unknown>;
 
     // Extract node name
-    const name = typeof targetObj.name === 'string' ? targetObj.name : null;
+    const name = typeof targetObj.name === "string" ? targetObj.name : null;
     if (!name) {
       return null;
     }
 
     // Extract URI
-    const uri = typeof targetObj.uri === 'string' ? targetObj.uri : name;
+    const uri = typeof targetObj.uri === "string" ? targetObj.uri : name;
 
     // Extract transport (default to 'ssh' if not specified)
-    let transport: 'ssh' | 'winrm' | 'docker' | 'local' = 'ssh';
-    if (typeof targetObj.transport === 'string') {
+    let transport: "ssh" | "winrm" | "docker" | "local" = "ssh";
+    if (typeof targetObj.transport === "string") {
       const transportValue = targetObj.transport.toLowerCase();
       if (
-        transportValue === 'ssh' ||
-        transportValue === 'winrm' ||
-        transportValue === 'docker' ||
-        transportValue === 'local'
+        transportValue === "ssh" ||
+        transportValue === "winrm" ||
+        transportValue === "docker" ||
+        transportValue === "local"
       ) {
         transport = transportValue;
       }
     }
 
     // Extract config
-    const config: Node['config'] = {};
-    if (typeof targetObj.config === 'object' && targetObj.config !== null) {
+    const config: Node["config"] = {};
+    if (typeof targetObj.config === "object" && targetObj.config !== null) {
       const configObj = targetObj.config as Record<string, unknown>;
       Object.assign(config, configObj);
     }
 
     // Extract common config fields from top level if not in config object
-    if (typeof targetObj.user === 'string' && config.user === undefined) {
+    if (typeof targetObj.user === "string" && config.user === undefined) {
       config.user = targetObj.user;
     }
-    if (typeof targetObj.port === 'number' && config.port === undefined) {
+    if (typeof targetObj.port === "number" && config.port === undefined) {
       config.port = targetObj.port;
     }
 
@@ -352,10 +369,10 @@ export class BoltService {
 
   /**
    * Gather facts from a target node
-   * 
+   *
    * Executes `bolt task run facts --targets <node> --format json` and
    * structures the output as a Facts object
-   * 
+   *
    * @param nodeId - The ID/name of the target node
    * @returns Promise resolving to Facts object
    * @throws BoltNodeUnreachableError if the node is unreachable
@@ -365,13 +382,13 @@ export class BoltService {
   public async gatherFacts(nodeId: string): Promise<Facts> {
     try {
       const jsonOutput = await this.executeCommandWithJsonOutput([
-        'task',
-        'run',
-        'facts',
-        '--targets',
+        "task",
+        "run",
+        "facts",
+        "--targets",
         nodeId,
-        '--format',
-        'json',
+        "--format",
+        "json",
       ]);
 
       return this.transformFactsOutput(nodeId, jsonOutput);
@@ -380,17 +397,17 @@ export class BoltService {
       if (error instanceof BoltExecutionError && error.stderr) {
         const errorMessage = error.stderr.toLowerCase();
         if (
-          errorMessage.includes('unreachable') ||
-          errorMessage.includes('connection') ||
-          errorMessage.includes('could not connect') ||
-          errorMessage.includes('timed out') ||
-          errorMessage.includes('connection refused') ||
-          errorMessage.includes('no route to host')
+          errorMessage.includes("unreachable") ||
+          errorMessage.includes("connection") ||
+          errorMessage.includes("could not connect") ||
+          errorMessage.includes("timed out") ||
+          errorMessage.includes("connection refused") ||
+          errorMessage.includes("no route to host")
         ) {
           throw new BoltNodeUnreachableError(
             `Node ${nodeId} is unreachable`,
             nodeId,
-            error.stderr
+            error.stderr,
           );
         }
       }
@@ -400,22 +417,29 @@ export class BoltService {
 
   /**
    * Transform Bolt facts output to Facts object
-   * 
+   *
    * @param nodeId - The ID of the node
    * @param jsonOutput - Raw JSON output from Bolt facts command
    * @returns Facts object
    */
-  private transformFactsOutput(nodeId: string, jsonOutput: BoltJsonOutput): Facts {
+  private transformFactsOutput(
+    nodeId: string,
+    jsonOutput: BoltJsonOutput,
+  ): Facts {
     // Bolt task output structure typically has items array with results per node
     // Format: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
-    
+
     let factsData: Record<string, unknown> = {};
 
     // Handle items array format
     const items = jsonOutput.items;
     if (Array.isArray(items) && items.length > 0) {
       const item = items[0] as Record<string, unknown>;
-      if (item.status === 'success' && typeof item.value === 'object' && item.value !== null) {
+      if (
+        item.status === "success" &&
+        typeof item.value === "object" &&
+        item.value !== null
+      ) {
         factsData = item.value as Record<string, unknown>;
       }
     } else {
@@ -424,7 +448,7 @@ export class BoltService {
     }
 
     // Extract and structure facts according to the Facts interface
-    const facts: Facts['facts'] = {
+    const facts: Facts["facts"] = {
       os: this.extractOsFacts(factsData),
       processors: this.extractProcessorFacts(factsData),
       memory: this.extractMemoryFacts(factsData),
@@ -433,7 +457,7 @@ export class BoltService {
 
     // Include any additional facts
     for (const [key, value] of Object.entries(factsData)) {
-      if (!['os', 'processors', 'memory', 'networking'].includes(key)) {
+      if (!["os", "processors", "memory", "networking"].includes(key)) {
         facts[key] = value;
       }
     }
@@ -448,16 +472,18 @@ export class BoltService {
   /**
    * Extract OS facts from raw facts data
    */
-  private extractOsFacts(factsData: Record<string, unknown>): Facts['facts']['os'] {
+  private extractOsFacts(
+    factsData: Record<string, unknown>,
+  ): Facts["facts"]["os"] {
     const os = factsData.os as Record<string, unknown> | undefined;
     const release = os?.release as Record<string, unknown> | undefined;
-    
+
     return {
-      family: typeof os?.family === 'string' ? os.family : 'unknown',
-      name: typeof os?.name === 'string' ? os.name : 'unknown',
+      family: typeof os?.family === "string" ? os.family : "unknown",
+      name: typeof os?.name === "string" ? os.name : "unknown",
       release: {
-        full: typeof release?.full === 'string' ? release.full : 'unknown',
-        major: typeof release?.major === 'string' ? release.major : 'unknown',
+        full: typeof release?.full === "string" ? release.full : "unknown",
+        major: typeof release?.major === "string" ? release.major : "unknown",
       },
     };
   }
@@ -465,13 +491,17 @@ export class BoltService {
   /**
    * Extract processor facts from raw facts data
    */
-  private extractProcessorFacts(factsData: Record<string, unknown>): Facts['facts']['processors'] {
-    const processors = factsData.processors as Record<string, unknown> | undefined;
-    
+  private extractProcessorFacts(
+    factsData: Record<string, unknown>,
+  ): Facts["facts"]["processors"] {
+    const processors = factsData.processors as
+      | Record<string, unknown>
+      | undefined;
+
     return {
-      count: typeof processors?.count === 'number' ? processors.count : 0,
-      models: Array.isArray(processors?.models) 
-        ? processors.models.filter((m): m is string => typeof m === 'string')
+      count: typeof processors?.count === "number" ? processors.count : 0,
+      models: Array.isArray(processors?.models)
+        ? processors.models.filter((m): m is string => typeof m === "string")
         : [],
     };
   }
@@ -479,14 +509,17 @@ export class BoltService {
   /**
    * Extract memory facts from raw facts data
    */
-  private extractMemoryFacts(factsData: Record<string, unknown>): Facts['facts']['memory'] {
+  private extractMemoryFacts(
+    factsData: Record<string, unknown>,
+  ): Facts["facts"]["memory"] {
     const memory = factsData.memory as Record<string, unknown> | undefined;
     const system = memory?.system as Record<string, unknown> | undefined;
-    
+
     return {
       system: {
-        total: typeof system?.total === 'string' ? system.total : '0',
-        available: typeof system?.available === 'string' ? system.available : '0',
+        total: typeof system?.total === "string" ? system.total : "0",
+        available:
+          typeof system?.available === "string" ? system.available : "0",
       },
     };
   }
@@ -494,17 +527,25 @@ export class BoltService {
   /**
    * Extract networking facts from raw facts data
    */
-  private extractNetworkingFacts(factsData: Record<string, unknown>): Facts['facts']['networking'] {
-    const networking = factsData.networking as Record<string, unknown> | undefined;
-    
-    const hostname = networking !== undefined && typeof networking.hostname === 'string' 
-      ? networking.hostname 
-      : 'unknown';
-    
-    const interfaces = networking !== undefined && typeof networking.interfaces === 'object' && networking.interfaces !== null
-      ? networking.interfaces as Record<string, unknown>
-      : {};
-    
+  private extractNetworkingFacts(
+    factsData: Record<string, unknown>,
+  ): Facts["facts"]["networking"] {
+    const networking = factsData.networking as
+      | Record<string, unknown>
+      | undefined;
+
+    const hostname =
+      networking !== undefined && typeof networking.hostname === "string"
+        ? networking.hostname
+        : "unknown";
+
+    const interfaces =
+      networking !== undefined &&
+      typeof networking.interfaces === "object" &&
+      networking.interfaces !== null
+        ? (networking.interfaces as Record<string, unknown>)
+        : {};
+
     return {
       hostname,
       interfaces,
@@ -513,10 +554,10 @@ export class BoltService {
 
   /**
    * Execute a command on a target node
-   * 
+   *
    * Executes `bolt command run <cmd> --targets <node> --format json` and
    * returns structured execution results including stdout, stderr, and exit code
-   * 
+   *
    * @param nodeId - The ID/name of the target node
    * @param command - The command string to execute
    * @returns Promise resolving to ExecutionResult object
@@ -525,19 +566,22 @@ export class BoltService {
    * @throws BoltParseError if JSON parsing fails
    * @throws BoltTimeoutError if execution exceeds timeout
    */
-  public async runCommand(nodeId: string, command: string): Promise<ExecutionResult> {
+  public async runCommand(
+    nodeId: string,
+    command: string,
+  ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
 
     try {
       const jsonOutput = await this.executeCommandWithJsonOutput([
-        'command',
-        'run',
+        "command",
+        "run",
         command,
-        '--targets',
+        "--targets",
         nodeId,
-        '--format',
-        'json',
+        "--format",
+        "json",
       ]);
 
       const endTime = Date.now();
@@ -547,7 +591,7 @@ export class BoltService {
         command,
         jsonOutput,
         startTime,
-        endTime
+        endTime,
       );
     } catch (error) {
       const endTime = Date.now();
@@ -556,17 +600,17 @@ export class BoltService {
       if (error instanceof BoltExecutionError && error.stderr) {
         const errorMessage = error.stderr.toLowerCase();
         if (
-          errorMessage.includes('unreachable') ||
-          errorMessage.includes('connection') ||
-          errorMessage.includes('could not connect') ||
-          errorMessage.includes('timed out') ||
-          errorMessage.includes('connection refused') ||
-          errorMessage.includes('no route to host')
+          errorMessage.includes("unreachable") ||
+          errorMessage.includes("connection") ||
+          errorMessage.includes("could not connect") ||
+          errorMessage.includes("timed out") ||
+          errorMessage.includes("connection refused") ||
+          errorMessage.includes("no route to host")
         ) {
           throw new BoltNodeUnreachableError(
             `Node ${nodeId} is unreachable`,
             nodeId,
-            error.stderr
+            error.stderr,
           );
         }
       }
@@ -575,16 +619,16 @@ export class BoltService {
       if (error instanceof BoltExecutionError) {
         return {
           id: executionId,
-          type: 'command',
+          type: "command",
           targetNodes: [nodeId],
           action: command,
-          status: 'failed',
+          status: "failed",
           startedAt: new Date(startTime).toISOString(),
           completedAt: new Date(endTime).toISOString(),
           results: [
             {
               nodeId,
-              status: 'failed',
+              status: "failed",
               error: error.message,
               duration: endTime - startTime,
             },
@@ -599,7 +643,7 @@ export class BoltService {
 
   /**
    * Transform Bolt command output to ExecutionResult object
-   * 
+   *
    * @param executionId - Unique execution identifier
    * @param nodeId - The ID of the target node
    * @param command - The command that was executed
@@ -614,21 +658,22 @@ export class BoltService {
     command: string,
     jsonOutput: BoltJsonOutput,
     startTime: number,
-    endTime: number
+    endTime: number,
   ): ExecutionResult {
     // Bolt command output structure: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
     const items = jsonOutput.items;
     const results: NodeResult[] = [];
-    let overallStatus: ExecutionResult['status'] = 'success';
+    let overallStatus: ExecutionResult["status"] = "success";
 
     if (Array.isArray(items)) {
       for (const item of items) {
         const itemObj = item as Record<string, unknown>;
-        const target = typeof itemObj.target === 'string' ? itemObj.target : nodeId;
-        const status = itemObj.status === 'success' ? 'success' : 'failed';
-        
-        if (status === 'failed') {
-          overallStatus = 'failed';
+        const target =
+          typeof itemObj.target === "string" ? itemObj.target : nodeId;
+        const status = itemObj.status === "success" ? "success" : "failed";
+
+        if (status === "failed") {
+          overallStatus = "failed";
         }
 
         const nodeResult: NodeResult = {
@@ -638,23 +683,25 @@ export class BoltService {
         };
 
         // Extract output from value object
-        if (typeof itemObj.value === 'object' && itemObj.value !== null) {
+        if (typeof itemObj.value === "object" && itemObj.value !== null) {
           const value = itemObj.value as Record<string, unknown>;
           nodeResult.output = {
-            stdout: typeof value.stdout === 'string' ? value.stdout : '',
-            stderr: typeof value.stderr === 'string' ? value.stderr : '',
-            exitCode: typeof value.exit_code === 'number' ? value.exit_code : undefined,
+            stdout: typeof value.stdout === "string" ? value.stdout : "",
+            stderr: typeof value.stderr === "string" ? value.stderr : "",
+            exitCode:
+              typeof value.exit_code === "number" ? value.exit_code : undefined,
           };
         }
 
         // Extract error message if present
-        if (typeof itemObj.error === 'object' && itemObj.error !== null) {
+        if (typeof itemObj.error === "object" && itemObj.error !== null) {
           const errorObj = itemObj.error as Record<string, unknown>;
-          nodeResult.error = typeof errorObj.msg === 'string' 
-            ? errorObj.msg 
-            : typeof errorObj.message === 'string'
-            ? errorObj.message
-            : 'Command execution failed';
+          nodeResult.error =
+            typeof errorObj.msg === "string"
+              ? errorObj.msg
+              : typeof errorObj.message === "string"
+                ? errorObj.message
+                : "Command execution failed";
         }
 
         results.push(nodeResult);
@@ -663,7 +710,7 @@ export class BoltService {
 
     return {
       id: executionId,
-      type: 'command',
+      type: "command",
       targetNodes: [nodeId],
       action: command,
       status: overallStatus,
@@ -675,7 +722,7 @@ export class BoltService {
 
   /**
    * Generate a unique execution ID
-   * 
+   *
    * @returns Unique execution identifier
    */
   private generateExecutionId(): string {
@@ -684,10 +731,10 @@ export class BoltService {
 
   /**
    * Execute a task on a target node
-   * 
+   *
    * Executes `bolt task run <task> --targets <node> --params <json> --format json`
    * and returns structured execution results
-   * 
+   *
    * @param nodeId - The ID/name of the target node
    * @param taskName - The name of the task to execute
    * @param parameters - Task parameters as key-value pairs
@@ -702,7 +749,7 @@ export class BoltService {
   public async runTask(
     nodeId: string,
     taskName: string,
-    parameters?: Record<string, unknown>
+    parameters?: Record<string, unknown>,
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
@@ -710,18 +757,18 @@ export class BoltService {
     try {
       // Build command arguments
       const args = [
-        'task',
-        'run',
+        "task",
+        "run",
         taskName,
-        '--targets',
+        "--targets",
         nodeId,
-        '--format',
-        'json',
+        "--format",
+        "json",
       ];
 
       // Add parameters if provided
       if (parameters && Object.keys(parameters).length > 0) {
-        args.push('--params', JSON.stringify(parameters));
+        args.push("--params", JSON.stringify(parameters));
       }
 
       const jsonOutput = await this.executeCommandWithJsonOutput(args);
@@ -734,7 +781,7 @@ export class BoltService {
         parameters,
         jsonOutput,
         startTime,
-        endTime
+        endTime,
       );
     } catch (error) {
       const endTime = Date.now();
@@ -742,47 +789,47 @@ export class BoltService {
       // Check if error is due to task not found
       if (error instanceof BoltExecutionError && error.stderr) {
         const errorMessage = error.stderr.toLowerCase();
-        
+
         if (
-          errorMessage.includes('could not find') ||
-          errorMessage.includes('task not found') ||
-          errorMessage.includes('no such task') ||
-          errorMessage.includes('unknown task')
+          errorMessage.includes("could not find") ||
+          errorMessage.includes("task not found") ||
+          errorMessage.includes("no such task") ||
+          errorMessage.includes("unknown task")
         ) {
           throw new BoltTaskNotFoundError(
             `Task '${taskName}' not found in Bolt modules`,
-            taskName
+            taskName,
           );
         }
 
         // Check for parameter validation errors
         if (
-          errorMessage.includes('parameter') ||
-          errorMessage.includes('invalid') ||
-          errorMessage.includes('required') ||
-          errorMessage.includes('missing')
+          errorMessage.includes("parameter") ||
+          errorMessage.includes("invalid") ||
+          errorMessage.includes("required") ||
+          errorMessage.includes("missing")
         ) {
           const paramErrors = this.extractParameterErrors(error.stderr);
           throw new BoltTaskParameterError(
             `Invalid parameters for task '${taskName}'`,
             taskName,
-            paramErrors
+            paramErrors,
           );
         }
 
         // Check if error is due to node being unreachable
         if (
-          errorMessage.includes('unreachable') ||
-          errorMessage.includes('connection') ||
-          errorMessage.includes('could not connect') ||
-          errorMessage.includes('timed out') ||
-          errorMessage.includes('connection refused') ||
-          errorMessage.includes('no route to host')
+          errorMessage.includes("unreachable") ||
+          errorMessage.includes("connection") ||
+          errorMessage.includes("could not connect") ||
+          errorMessage.includes("timed out") ||
+          errorMessage.includes("connection refused") ||
+          errorMessage.includes("no route to host")
         ) {
           throw new BoltNodeUnreachableError(
             `Node ${nodeId} is unreachable`,
             nodeId,
-            error.stderr
+            error.stderr,
           );
         }
       }
@@ -791,17 +838,17 @@ export class BoltService {
       if (error instanceof BoltExecutionError) {
         return {
           id: executionId,
-          type: 'task',
+          type: "task",
           targetNodes: [nodeId],
           action: taskName,
           parameters,
-          status: 'failed',
+          status: "failed",
           startedAt: new Date(startTime).toISOString(),
           completedAt: new Date(endTime).toISOString(),
           results: [
             {
               nodeId,
-              status: 'failed',
+              status: "failed",
               error: error.message,
               duration: endTime - startTime,
             },
@@ -816,7 +863,7 @@ export class BoltService {
 
   /**
    * Transform Bolt task output to ExecutionResult object
-   * 
+   *
    * @param executionId - Unique execution identifier
    * @param nodeId - The ID of the target node
    * @param taskName - The name of the task that was executed
@@ -833,21 +880,22 @@ export class BoltService {
     parameters: Record<string, unknown> | undefined,
     jsonOutput: BoltJsonOutput,
     startTime: number,
-    endTime: number
+    endTime: number,
   ): ExecutionResult {
     // Bolt task output structure: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
     const items = jsonOutput.items;
     const results: NodeResult[] = [];
-    let overallStatus: ExecutionResult['status'] = 'success';
+    let overallStatus: ExecutionResult["status"] = "success";
 
     if (Array.isArray(items)) {
       for (const item of items) {
         const itemObj = item as Record<string, unknown>;
-        const target = typeof itemObj.target === 'string' ? itemObj.target : nodeId;
-        const status = itemObj.status === 'success' ? 'success' : 'failed';
-        
-        if (status === 'failed') {
-          overallStatus = 'failed';
+        const target =
+          typeof itemObj.target === "string" ? itemObj.target : nodeId;
+        const status = itemObj.status === "success" ? "success" : "failed";
+
+        if (status === "failed") {
+          overallStatus = "failed";
         }
 
         const nodeResult: NodeResult = {
@@ -862,13 +910,14 @@ export class BoltService {
         }
 
         // Extract error message if present
-        if (typeof itemObj.error === 'object' && itemObj.error !== null) {
+        if (typeof itemObj.error === "object" && itemObj.error !== null) {
           const errorObj = itemObj.error as Record<string, unknown>;
-          nodeResult.error = typeof errorObj.msg === 'string' 
-            ? errorObj.msg 
-            : typeof errorObj.message === 'string'
-            ? errorObj.message
-            : 'Task execution failed';
+          nodeResult.error =
+            typeof errorObj.msg === "string"
+              ? errorObj.msg
+              : typeof errorObj.message === "string"
+                ? errorObj.message
+                : "Task execution failed";
         }
 
         results.push(nodeResult);
@@ -877,7 +926,7 @@ export class BoltService {
 
     return {
       id: executionId,
-      type: 'task',
+      type: "task",
       targetNodes: [nodeId],
       action: taskName,
       parameters,
@@ -890,21 +939,21 @@ export class BoltService {
 
   /**
    * Extract parameter error messages from Bolt stderr output
-   * 
+   *
    * @param stderr - Error output from Bolt
    * @returns Array of parameter error messages
    */
   private extractParameterErrors(stderr: string): string[] {
     const errors: string[] = [];
-    const lines = stderr.split('\n');
-    
+    const lines = stderr.split("\n");
+
     for (const line of lines) {
       const trimmed = line.trim();
       if (
-        trimmed.includes('parameter') ||
-        trimmed.includes('required') ||
-        trimmed.includes('invalid') ||
-        trimmed.includes('missing')
+        trimmed.includes("parameter") ||
+        trimmed.includes("required") ||
+        trimmed.includes("invalid") ||
+        trimmed.includes("missing")
       ) {
         errors.push(trimmed);
       }
@@ -920,11 +969,11 @@ export class BoltService {
 
   /**
    * List available Bolt tasks
-   * 
+   *
    * Executes `bolt task show --format json` to retrieve available tasks
    * with their metadata including parameters and descriptions.
    * Results are cached until server restart.
-   * 
+   *
    * @returns Promise resolving to array of Task objects
    * @throws BoltExecutionError if Bolt command fails
    * @throws BoltParseError if JSON parsing fails
@@ -936,23 +985,23 @@ export class BoltService {
     }
 
     const jsonOutput = await this.executeCommandWithJsonOutput([
-      'task',
-      'show',
-      '--format',
-      'json',
+      "task",
+      "show",
+      "--format",
+      "json",
     ]);
 
     const tasks = this.transformTaskListOutput(jsonOutput);
-    
+
     // Cache the result
     this.taskListCache = tasks;
-    
+
     return tasks;
   }
 
   /**
    * Transform Bolt task show output to Task array
-   * 
+   *
    * @param jsonOutput - Raw JSON output from Bolt task show command
    * @returns Array of Task objects
    */
@@ -962,7 +1011,7 @@ export class BoltService {
     // Bolt task show output structure can vary:
     // Format 1: { "tasks": [{ "name": "...", "metadata": {...} }] }
     // Format 2: { "task_name": { "metadata": {...} }, ... }
-    
+
     // Handle tasks array format
     if (Array.isArray(jsonOutput.tasks)) {
       for (const taskData of jsonOutput.tasks) {
@@ -976,7 +1025,7 @@ export class BoltService {
 
     // Handle object format where keys are task names
     for (const [taskName, taskData] of Object.entries(jsonOutput)) {
-      if (typeof taskData === 'object' && taskData !== null) {
+      if (typeof taskData === "object" && taskData !== null) {
         const task = this.parseTaskData({ name: taskName, ...taskData });
         if (task) {
           tasks.push(task);
@@ -989,43 +1038,46 @@ export class BoltService {
 
   /**
    * Parse a single task data object into a Task object
-   * 
+   *
    * @param taskData - Raw task data from Bolt
    * @returns Task object or null if parsing fails
    */
   private parseTaskData(taskData: unknown): Task | null {
-    if (typeof taskData !== 'object' || taskData === null) {
+    if (typeof taskData !== "object" || taskData === null) {
       return null;
     }
 
     const taskObj = taskData as Record<string, unknown>;
 
     // Extract task name
-    const name = typeof taskObj.name === 'string' ? taskObj.name : null;
+    const name = typeof taskObj.name === "string" ? taskObj.name : null;
     if (!name) {
       return null;
     }
 
     // Extract metadata
-    const metadata = typeof taskObj.metadata === 'object' && taskObj.metadata !== null
-      ? taskObj.metadata as Record<string, unknown>
-      : taskObj;
+    const metadata =
+      typeof taskObj.metadata === "object" && taskObj.metadata !== null
+        ? (taskObj.metadata as Record<string, unknown>)
+        : taskObj;
 
     // Extract description
-    const description = typeof metadata.description === 'string' 
-      ? metadata.description 
-      : undefined;
+    const description =
+      typeof metadata.description === "string"
+        ? metadata.description
+        : undefined;
 
     // Extract module path
-    const modulePath = typeof taskObj.module === 'string'
-      ? taskObj.module
-      : typeof metadata.module === 'string'
-      ? metadata.module
-      : typeof taskObj.file === 'string'
-      ? taskObj.file
-      : typeof metadata.file === 'string'
-      ? metadata.file
-      : '';
+    const modulePath =
+      typeof taskObj.module === "string"
+        ? taskObj.module
+        : typeof metadata.module === "string"
+          ? metadata.module
+          : typeof taskObj.file === "string"
+            ? taskObj.file
+            : typeof metadata.file === "string"
+              ? metadata.file
+              : "";
 
     // Extract parameters
     const parameters = this.parseTaskParameters(metadata);
@@ -1040,17 +1092,19 @@ export class BoltService {
 
   /**
    * Parse task parameters from metadata
-   * 
+   *
    * @param metadata - Task metadata object
    * @returns Array of TaskParameter objects
    */
-  private parseTaskParameters(metadata: Record<string, unknown>): TaskParameter[] {
+  private parseTaskParameters(
+    metadata: Record<string, unknown>,
+  ): TaskParameter[] {
     const parameters: TaskParameter[] = [];
 
     // Parameters can be in metadata.parameters or metadata.params
     const paramsData = metadata.parameters ?? metadata.params;
 
-    if (typeof paramsData !== 'object' || paramsData === null) {
+    if (typeof paramsData !== "object" || paramsData === null) {
       return parameters;
     }
 
@@ -1066,8 +1120,11 @@ export class BoltService {
     } else {
       const paramsObj = paramsData as Record<string, unknown>;
       for (const [paramName, paramData] of Object.entries(paramsObj)) {
-        if (typeof paramData === 'object' && paramData !== null) {
-          const param = this.parseTaskParameter({ name: paramName, ...paramData as Record<string, unknown> });
+        if (typeof paramData === "object" && paramData !== null) {
+          const param = this.parseTaskParameter({
+            name: paramName,
+            ...(paramData as Record<string, unknown>),
+          });
           if (param) {
             parameters.push(param);
           }
@@ -1080,42 +1137,43 @@ export class BoltService {
 
   /**
    * Parse a single task parameter
-   * 
+   *
    * @param paramData - Raw parameter data
    * @returns TaskParameter object or null if parsing fails
    */
   private parseTaskParameter(paramData: unknown): TaskParameter | null {
-    if (typeof paramData !== 'object' || paramData === null) {
+    if (typeof paramData !== "object" || paramData === null) {
       return null;
     }
 
     const paramObj = paramData as Record<string, unknown>;
 
     // Extract parameter name
-    const name = typeof paramObj.name === 'string' ? paramObj.name : null;
+    const name = typeof paramObj.name === "string" ? paramObj.name : null;
     if (!name) {
       return null;
     }
 
     // Extract parameter type (default to String if not specified)
-    let type: TaskParameter['type'] = 'String';
-    if (typeof paramObj.type === 'string') {
+    let type: TaskParameter["type"] = "String";
+    if (typeof paramObj.type === "string") {
       const typeValue = paramObj.type;
       if (
-        typeValue === 'String' ||
-        typeValue === 'Integer' ||
-        typeValue === 'Boolean' ||
-        typeValue === 'Array' ||
-        typeValue === 'Hash'
+        typeValue === "String" ||
+        typeValue === "Integer" ||
+        typeValue === "Boolean" ||
+        typeValue === "Array" ||
+        typeValue === "Hash"
       ) {
         type = typeValue;
       }
     }
 
     // Extract description
-    const description = typeof paramObj.description === 'string'
-      ? paramObj.description
-      : undefined;
+    const description =
+      typeof paramObj.description === "string"
+        ? paramObj.description
+        : undefined;
 
     // Extract required flag (default to false)
     const required = paramObj.required === true;
