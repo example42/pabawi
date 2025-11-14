@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { ExecutionRepository, type ExecutionFilters } from '../database/ExecutionRepository';
+import type { ExecutionRepository} from '../database/ExecutionRepository';
+import { type ExecutionFilters } from '../database/ExecutionRepository';
 
 /**
  * Request validation schemas

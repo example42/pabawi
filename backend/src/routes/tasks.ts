@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { BoltService } from '../bolt/BoltService';
-import { ExecutionRepository } from '../database/ExecutionRepository';
+import type { BoltService } from '../bolt/BoltService';
+import type { ExecutionRepository } from '../database/ExecutionRepository';
 import {
   BoltExecutionError,
   BoltParseError,

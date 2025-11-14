@@ -1,8 +1,9 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { BoltService } from '../bolt/BoltService';
-import { ExecutionRepository } from '../database/ExecutionRepository';
-import { CommandWhitelistService, CommandNotAllowedError } from '../validation/CommandWhitelistService';
+import type { BoltService } from '../bolt/BoltService';
+import type { ExecutionRepository } from '../database/ExecutionRepository';
+import type { CommandWhitelistService} from '../validation/CommandWhitelistService';
+import { CommandNotAllowedError } from '../validation/CommandWhitelistService';
 import {
   BoltInventoryNotFoundError,
 } from '../bolt/types';

@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
-import { BoltService } from '../bolt/BoltService';
+import type { BoltService } from '../bolt/BoltService';
 import {
   BoltNodeUnreachableError,
   BoltExecutionError,

@@ -8,7 +8,7 @@ set -e
 IMAGE_NAME="${IMAGE_NAME:-pabawi:latest}"
 CONTAINER_NAME="${CONTAINER_NAME:-pabawi}"
 PORT="${PORT:-3000}"
-BOLT_PROJECT_PATH="${BOLT_PROJECT_PATH:-./test-bolt-project}"
+BOLT_PROJECT_PATH="${BOLT_PROJECT_PATH:-./}"
 DATA_PATH="${DATA_PATH:-./data}"
 
 # Create data directory if it doesn't exist

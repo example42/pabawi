@@ -11,9 +11,11 @@
     "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
+    "dev:fullstack": "npm run build:frontend && npm run copy:frontend && npm run dev:backend",
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
     "build": "npm run build:frontend && npm run build:backend",
+    "copy:frontend": "rm -rf backend/public && cp -r frontend/dist backend/public",
     "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
     "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
     "lint:fix": "npm run lint:fix --workspace=backend && npm run lint:fix --workspace=frontend"
