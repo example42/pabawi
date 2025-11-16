@@ -25,6 +25,7 @@ services:
       # Application configuration
       - NODE_ENV=development
       - PORT=3000
+      - HOST=0.0.0.0
       
       # Bolt configuration
       - BOLT_PROJECT_PATH=/bolt-project

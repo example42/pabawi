@@ -41,11 +41,15 @@ FROM node:20-alpine
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
-# Install Bolt CLI
+# Install Bolt CLI and dependencies
 RUN apk add --no-cache \
     ruby \
     ruby-dev \
     build-base \
+    bash \
+    openssh-client \
+    git \
+    coreutils \
     && gem install bolt --no-document \
     && apk del build-base ruby-dev
 
@@ -73,9 +77,15 @@ RUN mkdir -p /data && chown pabawi:pabawi /data
 # Create bolt-project directory
 RUN mkdir -p /bolt-project && chown pabawi:pabawi /bolt-project
 
+# Create facter configuration to help Puppet detect Alpine
+RUN mkdir -p /etc/puppetlabs/facter && \
+    echo 'facts : {' > /etc/puppetlabs/facter/facter.conf && \
+    echo '  blocklist : [],' >> /etc/puppetlabs/facter/facter.conf && \
+    echo '}' >> /etc/puppetlabs/facter/facter.conf
+
 # Create entrypoint script to handle permissions
 COPY --chown=pabawi:pabawi <<'EOF' /app/docker-entrypoint.sh
-#!/bin/sh
+#!/bin/bash
 set -e
 
 # Ensure data directory is writable
@@ -90,6 +100,12 @@ fi
 if [ ! -f /data/executions.db ]; then
     touch /data/executions.db
 fi
+
+# Set Puppet/Bolt environment variables to work around Alpine detection issues
+export FACTER_operatingsystem=Alpine
+export FACTER_osfamily=Linux
+export FACTER_kernel=Linux
+export FACTER_os='{"name":"Alpine","family":"Linux","release":{"major":"3","minor":"22","full":"3.22"}}'
 
 # Execute the main command
 exec "$@"
@@ -108,6 +124,7 @@ EXPOSE 3000
 # Set environment variables
 ENV NODE_ENV=production \
     PORT=3000 \
+    HOST=0.0.0.0 \
     DATABASE_PATH=/data/executions.db \
     BOLT_PROJECT_PATH=/bolt-project
 
