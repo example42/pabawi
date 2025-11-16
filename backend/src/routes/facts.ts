@@ -7,6 +7,7 @@ import {
   BoltParseError,
   BoltInventoryNotFoundError,
 } from '../bolt/types';
+import { asyncHandler } from './asyncHandler';
 
 /**
  * Request validation schemas
@@ -25,7 +26,7 @@ export function createFactsRouter(boltService: BoltService): Router {
    * POST /api/nodes/:id/facts
    * Trigger facts gathering for a node
    */
-  router.post('/:id/facts', async (req: Request, res: Response) => {
+  router.post('/:id/facts', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters
       const params = NodeIdParamSchema.parse(req.params);
@@ -112,7 +113,7 @@ export function createFactsRouter(boltService: BoltService): Router {
         },
       });
     }
-  });
+  }));
 
   return router;
 }

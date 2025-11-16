@@ -9,6 +9,7 @@ import {
   BoltTaskNotFoundError,
   BoltTaskParameterError,
 } from '../bolt/types';
+import { asyncHandler } from './asyncHandler';
 
 /**
  * Request validation schemas
@@ -35,7 +36,7 @@ export function createTasksRouter(
    * GET /api/tasks
    * Return available Bolt tasks
    */
-  router.get('/', async (_req: Request, res: Response) => {
+  router.get('/', asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     try {
       const tasks = await boltService.listTasks();
       res.json({ tasks });
@@ -70,13 +71,13 @@ export function createTasksRouter(
         },
       });
     }
-  });
+  }));
 
   /**
    * POST /api/nodes/:id/task
    * Execute task on a node
    */
-  router.post('/:id/task', async (req: Request, res: Response) => {
+  router.post('/:id/task', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters and body
       const params = NodeIdParamSchema.parse(req.params);
@@ -112,7 +113,7 @@ export function createTasksRouter(
 
       // Execute task asynchronously
       // We don't await here to return immediately with execution ID
-      void (async () => {
+      void (async (): Promise<void> => {
         try {
           const result = await boltService.runTask(nodeId, taskName, parameters);
           
@@ -188,7 +189,7 @@ export function createTasksRouter(
         },
       });
     }
-  });
+  }));
 
   return router;
 }

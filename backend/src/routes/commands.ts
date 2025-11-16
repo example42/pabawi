@@ -7,6 +7,7 @@ import { CommandNotAllowedError } from '../validation/CommandWhitelistService';
 import {
   BoltInventoryNotFoundError,
 } from '../bolt/types';
+import { asyncHandler } from './asyncHandler';
 
 /**
  * Request validation schemas
@@ -33,7 +34,7 @@ export function createCommandsRouter(
    * POST /api/nodes/:id/command
    * Execute command on a node
    */
-  router.post('/:id/command', async (req: Request, res: Response) => {
+  router.post('/:id/command', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters and body
       const params = NodeIdParamSchema.parse(req.params);
@@ -84,7 +85,7 @@ export function createCommandsRouter(
 
       // Execute command asynchronously
       // We don't await here to return immediately with execution ID
-      void (async () => {
+      void (async (): Promise<void> => {
         try {
           const result = await boltService.runCommand(nodeId, command);
           
@@ -150,7 +151,7 @@ export function createCommandsRouter(
         },
       });
     }
-  });
+  }));
 
   return router;
 }

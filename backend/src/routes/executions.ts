@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { ExecutionRepository} from '../database/ExecutionRepository';
 import { type ExecutionFilters } from '../database/ExecutionRepository';
+import { asyncHandler } from './asyncHandler';
 
 /**
  * Request validation schemas
@@ -30,7 +31,7 @@ export function createExecutionsRouter(executionRepository: ExecutionRepository)
    * GET /api/executions
    * Return paginated execution list with filters
    */
-  router.get('/', async (req: Request, res: Response) => {
+  router.get('/', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate and parse query parameters
       const query = ExecutionFiltersQuerySchema.parse(req.query);
@@ -83,13 +84,13 @@ export function createExecutionsRouter(executionRepository: ExecutionRepository)
         },
       });
     }
-  });
+  }));
 
   /**
    * GET /api/executions/:id
    * Return detailed execution results
    */
-  router.get('/:id', async (req: Request, res: Response) => {
+  router.get('/:id', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters
       const params = ExecutionIdParamSchema.parse(req.params);
@@ -130,7 +131,7 @@ export function createExecutionsRouter(executionRepository: ExecutionRepository)
         },
       });
     }
-  });
+  }));
 
   return router;
 }

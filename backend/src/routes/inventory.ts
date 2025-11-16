@@ -6,6 +6,7 @@ import {
   BoltExecutionError,
   BoltParseError,
 } from '../bolt/types';
+import { asyncHandler } from './asyncHandler';
 
 /**
  * Request validation schemas
@@ -24,7 +25,7 @@ export function createInventoryRouter(boltService: BoltService): Router {
    * GET /api/inventory
    * Return all nodes from Bolt inventory
    */
-  router.get('/', async (_req: Request, res: Response) => {
+  router.get('/', asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     try {
       const nodes = await boltService.getInventory();
       res.json({ nodes });
@@ -69,13 +70,13 @@ export function createInventoryRouter(boltService: BoltService): Router {
         },
       });
     }
-  });
+  }));
 
   /**
    * GET /api/nodes/:id
    * Return specific node details
    */
-  router.get('/:id', async (req: Request, res: Response) => {
+  router.get('/:id', asyncHandler(async (req: Request, res: Response): Promise<void> => {
     try {
       // Validate request parameters
       const params = NodeIdParamSchema.parse(req.params);
@@ -140,7 +141,7 @@ export function createInventoryRouter(boltService: BoltService): Router {
         },
       });
     }
-  });
+  }));
 
   return router;
 }
