@@ -102,7 +102,7 @@ export class ExecutionRepository {
 
   constructor(db: sqlite3.Database) {
     if (!db) {
-      throw new Error('Database connection is required');
+      throw new Error("Database connection is required");
     }
     this.db = db;
   }
@@ -311,11 +311,11 @@ export class ExecutionRepository {
    */
   private get(sql: string, params: unknown[]): Promise<DbRow | undefined> {
     return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
+      this.db.get(sql, params, (err, row: DbRow | undefined) => {
         if (err) {
           reject(err);
         } else {
-          resolve(row as DbRow | undefined);
+          resolve(row);
         }
       });
     });
