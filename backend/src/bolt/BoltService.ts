@@ -1009,15 +1009,32 @@ export class BoltService {
     const tasks: Task[] = [];
 
     // Bolt task show output structure can vary:
-    // Format 1: { "tasks": [{ "name": "...", "metadata": {...} }] }
-    // Format 2: { "task_name": { "metadata": {...} }, ... }
+    // Format 1: { "tasks": [["task_name", "description"], ...] } - array of tuples
+    // Format 2: { "tasks": [{ "name": "...", "metadata": {...} }] } - array of objects
+    // Format 3: { "task_name": { "metadata": {...} }, ... } - object with task names as keys
 
     // Handle tasks array format
     if (Array.isArray(jsonOutput.tasks)) {
       for (const taskData of jsonOutput.tasks) {
-        const task = this.parseTaskData(taskData);
-        if (task) {
-          tasks.push(task);
+        // Check if it's a tuple format [name, description]
+        if (Array.isArray(taskData) && taskData.length >= 2) {
+          const name: unknown = taskData[0];
+          const description: unknown = taskData[1];
+          if (typeof name === "string") {
+            tasks.push({
+              name,
+              description:
+                typeof description === "string" ? description : undefined,
+              parameters: [],
+              modulePath: "",
+            });
+          }
+        } else {
+          // Handle object format
+          const task = this.parseTaskData(taskData);
+          if (task) {
+            tasks.push(task);
+          }
         }
       }
       return tasks;
