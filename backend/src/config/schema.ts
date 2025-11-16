@@ -16,6 +16,7 @@ export type WhitelistConfig = z.infer<typeof WhitelistConfigSchema>;
  */
 export const AppConfigSchema = z.object({
   port: z.number().int().positive().default(3000),
+  host: z.string().default('localhost'),
   boltProjectPath: z.string().default(process.cwd()),
   commandWhitelist: WhitelistConfigSchema,
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes

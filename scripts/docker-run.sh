@@ -32,6 +32,7 @@ fi
 docker run -d \
   --name "$CONTAINER_NAME" \
   --user 1001:1001 \
+  --platform linux/arm64 \
   -p "$PORT:3000" \
   -v "$(pwd)/$BOLT_PROJECT_PATH:/bolt-project:ro" \
   -v "$(pwd)/$DATA_PATH:/data" \

@@ -24,6 +24,7 @@ async function startServer(): Promise<Express> {
     const config = configService.getConfig();
 
     console.warn(`Configuration loaded successfully`);
+    console.warn(`- Host: ${config.host}`);
     console.warn(`- Port: ${String(config.port)}`);
     console.warn(`- Bolt Project Path: ${config.boltProjectPath}`);
     console.warn(`- Database Path: ${config.databasePath}`);
@@ -184,8 +185,8 @@ async function startServer(): Promise<Express> {
     });
 
     // Start server
-    const server = app.listen(config.port, () => {
-      console.warn(`Backend server running on port ${String(config.port)}`);
+    const server = app.listen(config.port, config.host, () => {
+      console.warn(`Backend server running on ${config.host}:${String(config.port)}`);
     });
 
     // Graceful shutdown

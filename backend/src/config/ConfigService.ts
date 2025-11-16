@@ -43,6 +43,7 @@ export class ConfigService {
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
+        host: process.env.HOST,
         boltProjectPath: process.env.BOLT_PROJECT_PATH,
         commandWhitelist,
         executionTimeout: process.env.EXECUTION_TIMEOUT ? parseInt(process.env.EXECUTION_TIMEOUT, 10) : undefined,
@@ -80,6 +81,13 @@ export class ConfigService {
    */
   public getPort(): number {
     return this.config.port;
+  }
+
+  /**
+   * Get host address
+   */
+  public getHost(): string {
+    return this.config.host;
   }
 
   /**
