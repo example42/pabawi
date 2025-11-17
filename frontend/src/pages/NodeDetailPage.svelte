@@ -116,7 +116,7 @@
       const data = await get<{ node: Node }>(`/api/nodes/${nodeId}`, {
         maxRetries: 2,
       });
-      
+
       node = data.node;
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -134,11 +134,11 @@
 
     try {
       showInfo('Gathering facts...');
-      
+
       const data = await post<{ facts: Facts }>(`/api/nodes/${nodeId}/facts`, undefined, {
         maxRetries: 1,
       });
-      
+
       facts = data.facts;
       showSuccess('Facts gathered successfully');
     } catch (err) {
@@ -153,7 +153,7 @@
   // Execute command
   async function executeCommand(event: Event): Promise<void> {
     event.preventDefault();
-    
+
     if (!commandInput.trim()) {
       commandError = 'Command cannot be empty';
       showError('Command cannot be empty');
@@ -166,18 +166,18 @@
 
     try {
       showInfo('Executing command...');
-      
+
       const data = await post<{ executionId: string }>(
         `/api/nodes/${nodeId}/command`,
         { command: commandInput },
         { maxRetries: 0 } // Don't retry command executions
       );
-      
+
       const executionId = data.executionId;
 
       // Poll for execution result
       await pollExecutionResult(executionId, 'command');
-      
+
       showSuccess('Command executed successfully');
     } catch (err) {
       commandError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -196,7 +196,7 @@
       const data = await get<{ tasks: Task[] }>('/api/tasks', {
         maxRetries: 2,
       });
-      
+
       availableTasks = data.tasks || [];
     } catch (err) {
       console.error('Error fetching tasks:', err);
@@ -209,7 +209,7 @@
   // Execute task
   async function executeTask(event: Event): Promise<void> {
     event.preventDefault();
-    
+
     if (!selectedTask) {
       taskError = 'Please select a task';
       showError('Please select a task');
@@ -222,7 +222,7 @@
 
     try {
       showInfo('Executing task...');
-      
+
       const data = await post<{ executionId: string }>(
         `/api/nodes/${nodeId}/task`,
         {
@@ -231,12 +231,12 @@
         },
         { maxRetries: 0 } // Don't retry task executions
       );
-      
+
       const executionId = data.executionId;
 
       // Poll for execution result
       await pollExecutionResult(executionId, 'task');
-      
+
       showSuccess('Task executed successfully');
     } catch (err) {
       taskError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -255,7 +255,7 @@
     while (attempts < maxAttempts) {
       try {
         const response = await fetch(`/api/executions/${executionId}`);
-        
+
         if (response.ok) {
           const data = await response.json();
           const execution = data.execution;
@@ -267,7 +267,7 @@
             } else {
               taskResult = execution;
             }
-            
+
             // Refresh execution history
             fetchExecutions();
             return;
@@ -301,7 +301,7 @@
         `/api/executions?targetNode=${nodeId}&pageSize=10`,
         { maxRetries: 2 }
       );
-      
+
       executions = data.executions || [];
     } catch (err) {
       executionsError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -367,8 +367,8 @@
     </div>
   {:else if error}
     <!-- Error State -->
-    <ErrorAlert 
-      message="Failed to load node details" 
+    <ErrorAlert
+      message="Failed to load node details"
       details={error}
       onRetry={fetchNode}
     />
@@ -452,7 +452,7 @@
     <!-- Command Execution Section -->
     <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Command</h2>
-      
+
       <form onsubmit={executeCommand} class="space-y-4">
         <div>
           <label for="command-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -499,7 +499,7 @@
           {#if commandResult.results.length > 0}
             {#each commandResult.results as result}
               {#if result.output}
-                <CommandOutput 
+                <CommandOutput
                   stdout={result.output.stdout}
                   stderr={result.output.stderr}
                   exitCode={result.output.exitCode}
@@ -519,7 +519,7 @@
     <!-- Task Execution Section -->
     <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Task</h2>
-      
+
       {#if tasksLoading}
         <div class="flex justify-center py-4">
           <LoadingSpinner message="Loading tasks..." />
@@ -560,7 +560,7 @@
                   {#if param.description}
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{param.description}</p>
                   {/if}
-                  
+
                   {#if param.type === 'Boolean'}
                     <select
                       id="param-{param.name}"
@@ -636,7 +636,7 @@
     <!-- Execution History Section -->
     <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Recent Executions</h2>
-      
+
       {#if executionsLoading}
         <div class="flex justify-center py-4">
           <LoadingSpinner message="Loading executions..." />

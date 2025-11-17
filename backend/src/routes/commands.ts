@@ -88,7 +88,7 @@ export function createCommandsRouter(
       void (async (): Promise<void> => {
         try {
           const result = await boltService.runCommand(nodeId, command);
-          
+
           // Update execution record with results
           await executionRepository.update(executionId, {
             status: result.status,
@@ -98,7 +98,7 @@ export function createCommandsRouter(
           });
         } catch (error) {
           console.error('Error executing command:', error);
-          
+
           // Update execution record with error
           await executionRepository.update(executionId, {
             status: 'failed',

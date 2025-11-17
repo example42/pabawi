@@ -118,11 +118,13 @@ docker run -p 3000:3000 \
 ## Security Considerations
 
 ### Development (NPM)
+
 - Use `HOST=localhost` to prevent network access
 - Only your local machine can access the application
 - Recommended for development on untrusted networks
 
 ### Production (Docker)
+
 - Docker containers need `HOST=0.0.0.0` for port mapping to work
 - Use firewall rules to restrict access
 - Consider using a reverse proxy (nginx, traefik) for additional security
@@ -133,11 +135,13 @@ docker run -p 3000:3000 \
 ### Cannot access server from browser
 
 1. Check if server is running:
+
    ```bash
    # Look for "Backend server running on localhost:3000"
    ```
 
 2. Verify the host configuration:
+
    ```bash
    # Check environment variables
    echo $HOST
@@ -145,6 +149,7 @@ docker run -p 3000:3000 \
    ```
 
 3. Test with curl:
+
    ```bash
    # Test localhost
    curl http://localhost:3000/api/health
@@ -156,21 +161,25 @@ docker run -p 3000:3000 \
 ### Docker container not accessible
 
 1. Verify container is running:
+
    ```bash
    docker ps
    ```
 
 2. Check port mapping:
+
    ```bash
    docker port pabawi-dev
    ```
 
 3. Verify HOST is set to 0.0.0.0:
+
    ```bash
    docker exec pabawi-dev env | grep HOST
    ```
 
 4. Check container logs:
+
    ```bash
    docker logs pabawi-dev
    ```
@@ -199,6 +208,7 @@ PORT=3001 npm run dev
 ## Examples
 
 ### Scenario 1: Local development (secure)
+
 ```bash
 # backend/.env
 HOST=localhost
@@ -209,6 +219,7 @@ npm run dev
 ```
 
 ### Scenario 2: Testing from mobile device on same network
+
 ```bash
 # backend/.env
 HOST=0.0.0.0
@@ -219,6 +230,7 @@ npm run dev
 ```
 
 ### Scenario 3: Docker production deployment
+
 ```bash
 # docker-compose.yml already configured
 docker-compose up -d
@@ -226,6 +238,7 @@ docker-compose up -d
 ```
 
 ### Scenario 4: Multiple instances
+
 ```bash
 # Terminal 1
 HOST=localhost PORT=3000 npm run dev

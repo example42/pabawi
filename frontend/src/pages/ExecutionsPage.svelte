@@ -138,7 +138,7 @@
       }>(`/api/executions?${params}`, {
         maxRetries: 2,
       });
-      
+
       executions = data.executions || [];
       pagination = data.pagination || pagination;
       summary = data.summary || summary;
@@ -168,9 +168,9 @@
 
   // Check if any filters are active
   function hasActiveFilters(): boolean {
-    return filters.status !== 'all' || 
-           filters.targetNode !== '' || 
-           filters.startDate !== '' || 
+    return filters.status !== 'all' ||
+           filters.targetNode !== '' ||
+           filters.startDate !== '' ||
            filters.endDate !== '';
   }
 
@@ -232,7 +232,7 @@
         `/api/executions/${executionId}`,
         { maxRetries: 2 }
       );
-      
+
       selectedExecution = data.execution || data;
     } catch (err) {
       detailError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -259,7 +259,7 @@
     const successCount = execution.results.filter(r => r.status === 'success').length;
     const failureCount = execution.results.filter(r => r.status === 'failed').length;
     const duration = formatDuration(execution.startedAt, execution.completedAt);
-    
+
     return { successCount, failureCount, duration };
   }
 
@@ -399,8 +399,8 @@
     </div>
   {:else if error}
     <!-- Error State -->
-    <ErrorAlert 
-      message="Failed to load executions" 
+    <ErrorAlert
+      message="Failed to load executions"
       details={error}
       onRetry={retryFetch}
     />
@@ -469,7 +469,7 @@
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
               {#each executions as execution (execution.id)}
-                <tr 
+                <tr
                   class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
                   onclick={() => openExecutionDetail(execution)}
                 >
@@ -537,10 +537,10 @@
 
 <!-- Execution Detail Modal -->
 {#if selectedExecution !== null || loadingDetail}
-  <div 
+  <div
     class="fixed inset-0 z-50 overflow-y-auto"
-    aria-labelledby="modal-title" 
-    role="dialog" 
+    aria-labelledby="modal-title"
+    role="dialog"
     aria-modal="true"
   >
     <!-- Background overlay -->
@@ -553,7 +553,7 @@
 
     <!-- Modal panel -->
     <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-      <div 
+      <div
         class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-4xl"
         role="document"
       >
@@ -565,8 +565,8 @@
         {:else if detailError}
           <!-- Error State -->
           <div class="px-4 py-6 sm:px-6">
-            <ErrorAlert 
-              message="Failed to load execution details" 
+            <ErrorAlert
+              message="Failed to load execution details"
               details={detailError}
               onRetry={() => selectedExecution && fetchExecutionDetail(selectedExecution.id)}
             />
@@ -716,7 +716,7 @@
                           <p class="mt-1 text-sm text-red-700 dark:text-red-300">{result.error}</p>
                         </div>
                       {:else if result.output}
-                        <CommandOutput 
+                        <CommandOutput
                           stdout={result.output.stdout}
                           stderr={result.output.stderr}
                           exitCode={result.output.exitCode}

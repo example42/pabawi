@@ -4,7 +4,7 @@ Version 0.1.0 - Web interface for Bolt automation tool
 
 ## Project Structure
 
-```
+```text
 pabawi/
 ├── frontend/          # Svelte 5 + Vite frontend
 │   ├── src/
@@ -43,11 +43,13 @@ npm run dev:frontend
 ### Accessing the Application
 
 **Development Mode** (when running both servers separately):
-- **Frontend UI**: http://localhost:5173 (Main application interface)
-- **Backend API**: http://localhost:3000/api (API endpoints)
+
+- **Frontend UI**: <http://localhost:5173> (Main application interface)
+- **Backend API**: <http://localhost:3000/api> (API endpoints)
 
 **Production Mode** (Docker or built application):
-- **Application**: http://localhost:3000 (Frontend and API served together)
+
+- **Application**: <http://localhost:3000> (Frontend and API served together)
 - The backend serves the built frontend as static files
 
 ## Build
@@ -77,6 +79,55 @@ DATABASE_PATH=./data/executions.db
 npm test
 ```
 
+## Pre-commit Hooks
+
+This project uses pre-commit hooks to ensure code quality and security before commits.
+
+### Setup
+
+```bash
+# Install pre-commit (requires Python)
+pip install pre-commit
+
+# Or using homebrew on macOS
+brew install pre-commit
+
+# Install the git hooks
+pre-commit install
+pre-commit install --hook-type commit-msg
+```
+
+### What Gets Checked
+
+- **Code Quality**: ESLint, TypeScript type checking
+- **Security**: Secret detection, private key detection
+- **File Checks**: Trailing whitespace, file size limits, merge conflicts
+- **Docker**: Dockerfile linting with hadolint
+- **Markdown**: Markdown linting and formatting
+- **Shell Scripts**: ShellCheck validation
+- **Commit Messages**: Conventional commit format enforcement
+- **Duplicate Files**: Prevents files with suffixes like `_fixed`, `_backup`, etc.
+
+### Manual Run
+
+```bash
+# Run all hooks on all files
+pre-commit run --all-files
+
+# Run specific hook
+pre-commit run eslint --all-files
+
+# Update hooks to latest versions
+pre-commit autoupdate
+```
+
+### Bypassing Hooks (Use Sparingly)
+
+```bash
+# Skip pre-commit hooks (not recommended)
+git commit --no-verify -m "message"
+```
+
 ## Docker Deployment
 
 ### Building the Docker Image
@@ -91,17 +142,17 @@ docker build -t pabawi:latest .
 # Using the provided script
 ./scripts/docker-run.sh
 
-# Or manually
+# Or manually executing from your Bolt Project dir
 docker run -d \
   --name pabawi \
   -p 3000:3000 \
-  -v $(pwd)/test-bolt-project:/bolt-project:ro \
+  -v $(pwd):/bolt-project:ro \
   -v $(pwd)/data:/data \
   -e COMMAND_WHITELIST_ALLOW_ALL=false \
-  pabawi:latest
+  example42/pabawi:latest
 ```
 
-Access the application at http://localhost:3000
+Access the application at <http://localhost:3000>
 
 ### Running with Docker Compose
 
@@ -116,7 +167,7 @@ docker-compose logs -f
 docker-compose down
 ```
 
-Access the application at http://localhost:3000
+Access the application at <http://localhost:3000>
 
 ### Environment Variables
 
@@ -141,6 +192,7 @@ Copy `.env.example` to `.env` and configure as needed. Key variables:
 If you see `SQLITE_CANTOPEN: unable to open database file`, the container user (UID 1001) doesn't have write access to the `/data` volume.
 
 **On Linux:**
+
 ```bash
 # Set correct ownership on the data directory
 sudo chown -R 1001:1001 ./data
@@ -148,6 +200,7 @@ sudo chown -R 1001:1001 ./data
 
 **On macOS/Windows:**
 Docker Desktop handles permissions automatically. Ensure the directory exists:
+
 ```bash
 mkdir -p ./data
 ```

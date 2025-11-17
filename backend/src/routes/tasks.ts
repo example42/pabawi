@@ -116,7 +116,7 @@ export function createTasksRouter(
       void (async (): Promise<void> => {
         try {
           const result = await boltService.runTask(nodeId, taskName, parameters);
-          
+
           // Update execution record with results
           await executionRepository.update(executionId, {
             status: result.status,
@@ -126,9 +126,9 @@ export function createTasksRouter(
           });
         } catch (error) {
           console.error('Error executing task:', error);
-          
+
           let errorMessage = 'Unknown error';
-          
+
           if (error instanceof BoltTaskNotFoundError) {
             errorMessage = error.message;
           } else if (error instanceof BoltTaskParameterError) {
@@ -136,7 +136,7 @@ export function createTasksRouter(
           } else if (error instanceof Error) {
             errorMessage = error.message;
           }
-          
+
           // Update execution record with error
           await executionRepository.update(executionId, {
             status: 'failed',

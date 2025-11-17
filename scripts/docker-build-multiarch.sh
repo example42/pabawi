@@ -137,7 +137,7 @@ if eval "$BUILD_CMD"; then
     echo -e "${GREEN}=== Build Successful ===${NC}"
     echo "Image: $FULL_IMAGE_NAME"
     echo "Platforms: $PLATFORMS"
-    
+
     if [[ "$PUSH" == "true" ]]; then
         echo -e "${GREEN}Image pushed to registry${NC}"
     elif [[ "$LOAD" == "true" ]]; then

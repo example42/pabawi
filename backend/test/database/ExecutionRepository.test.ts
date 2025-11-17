@@ -9,7 +9,7 @@ describe('ExecutionRepository', () => {
   beforeEach(async () => {
     // Create in-memory database for testing
     db = new sqlite3.Database(':memory:');
-    
+
     // Create executions table
     const schema = `
       CREATE TABLE executions (
@@ -25,14 +25,14 @@ describe('ExecutionRepository', () => {
         error TEXT
       )
     `;
-    
+
     await new Promise<void>((resolve, reject) => {
       db.run(schema, (err) => {
         if (err) reject(err);
         else resolve();
       });
     });
-    
+
     repository = new ExecutionRepository(db);
   });
 
@@ -60,10 +60,10 @@ describe('ExecutionRepository', () => {
       };
 
       const id = await repository.create(execution);
-      
+
       expect(id).toBeDefined();
       expect(typeof id).toBe('string');
-      
+
       const found = await repository.findById(id);
       expect(found).toBeDefined();
       expect(found?.type).toBe('command');
@@ -83,7 +83,7 @@ describe('ExecutionRepository', () => {
 
       const id = await repository.create(execution);
       const found = await repository.findById(id);
-      
+
       expect(found?.parameters).toEqual({ version: '1.0.0', env: 'production' });
     });
   });

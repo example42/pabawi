@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Pre-commit Validation & Commit",
+  "description": "Automatically runs pre-commit hooks to validate changes when files are modified. If validation fails, attempts to fix issues and asks user how to proceed. Once pre-commit tests pass and user confirms, creates a commit with an informative title and description based on the changes.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Files have been modified. Please follow this workflow:\n\n1. Run `pre-commit run --all-files` to validate all changes\n2. If pre-commit fails:\n   - Analyze the failures and attempt to fix them automatically\n   - Run pre-commit again to verify fixes\n   - If fixes cannot be applied automatically, explain the issues to the user and ask how to proceed\n3. Once pre-commit passes successfully:\n   - Review all staged and unstaged changes using `git status` and `git diff`\n   - Ask the user to confirm they want to commit these changes\n   - If confirmed, analyze the changes to create an informative commit message following conventional commit format (type(scope): description)\n   - Stage all changes with `git add .`\n   - Create the commit with `git commit -m \"title\" -m \"detailed description of what changed\"`\n   - Confirm the commit was successful\n\nFollow git best practices for commit messages:\n- Use conventional commit format: type(scope): description\n- Types: feat, fix, docs, style, refactor, test, chore\n- Keep first line under 50 characters\n- Use imperative mood\n- Include detailed body explaining what changed and why"
+  }
+}

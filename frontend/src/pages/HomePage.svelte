@@ -122,8 +122,8 @@
         <LoadingSpinner size="lg" message="Loading inventory..." />
       </div>
     {:else if error}
-      <ErrorAlert 
-        message="Failed to load inventory" 
+      <ErrorAlert
+        message="Failed to load inventory"
         details={error}
         onRetry={fetchInventory}
       />

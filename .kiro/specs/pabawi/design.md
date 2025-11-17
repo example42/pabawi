@@ -36,12 +36,14 @@ graph TB
 ### Technology Stack
 
 **Frontend:**
+
 - Svelte 5 with TypeScript
 - Tailwind CSS for styling
 - Vite for build tooling
 - Fetch API for HTTP requests
 
 **Backend:**
+
 - Node.js 20+ with TypeScript
 - Express.js for REST API
 - SQLite3 for execution history
@@ -49,6 +51,7 @@ graph TB
 - Zod for request validation
 
 **Deployment:**
+
 - Docker container with multi-stage build
 - Alpine Linux base image
 - Single process serving both API and static frontend
@@ -59,9 +62,11 @@ graph TB
 ### Frontend Components
 
 #### 1. Inventory Page Component
+
 **Responsibility:** Display and filter node inventory
 
 **Key Features:**
+
 - Virtual scrolling for large inventories (1000+ nodes)
 - Search/filter by node name, transport type, status
 - Grid or list view toggle
@@ -69,14 +74,17 @@ graph TB
 - View by node group
 
 **State Management:**
+
 - Fetch inventory on mount
 - Local filter state for search
 - Loading and error states
 
 #### 2. Node Detail Page Component
+
 **Responsibility:** Display node information and execution controls
 
 **Key Features:**
+
 - Node metadata display (name, URI, transport)
 - Facts display with collapsible sections
 - Command execution form with validation
@@ -84,15 +92,18 @@ graph TB
 - Execution history for this node
 
 **State Management:**
+
 - Node ID from route parameter
 - Facts loaded on demand
 - Execution forms with local validation
 - Real-time execution status updates
 
 #### 3. Executions Page Component
+
 **Responsibility:** Display execution history and results
 
 **Key Features:**
+
 - Paginated execution list
 - Filter by date range, status, target
 - Summary cards (total, success, failed)
@@ -100,11 +111,13 @@ graph TB
 - Status indicators (running, success, failed)
 
 **State Management:**
+
 - Paginated data fetching
 - Filter state persistence
 - Auto-refresh for running executions
 
 #### 4. Shared Components
+
 - **LoadingSpinner**: Consistent loading indicator
 - **ErrorAlert**: Standardized error display
 - **StatusBadge**: Color-coded status indicators
@@ -114,9 +127,11 @@ graph TB
 ### Backend Components
 
 #### 1. Express API Server
+
 **Responsibility:** HTTP server and routing
 
 **Endpoints:**
+
 ```
 GET  /api/inventory          - List all nodes
 GET  /api/nodes/:id          - Get node details
@@ -130,6 +145,7 @@ GET  /api/config             - Get system configuration
 ```
 
 **Middleware:**
+
 - JSON body parser
 - CORS headers
 - Request logging
@@ -137,9 +153,11 @@ GET  /api/config             - Get system configuration
 - Request validation (Zod schemas)
 
 #### 2. Bolt Service
+
 **Responsibility:** Interface with Bolt CLI
 
 **Methods:**
+
 ```typescript
 class BoltService {
   async getInventory(): Promise<Node[]>
@@ -152,6 +170,7 @@ class BoltService {
 ```
 
 **Implementation Details:**
+
 - Execute Bolt CLI via `child_process.spawn`
 - Parse JSON output from Bolt
 - Handle stderr for error messages
@@ -159,9 +178,11 @@ class BoltService {
 - Timeout handling (configurable, default 5 minutes)
 
 #### 3. Command Whitelist Service
+
 **Responsibility:** Validate commands against security policy
 
 **Methods:**
+
 ```typescript
 class CommandWhitelistService {
   constructor(config: WhitelistConfig)
@@ -172,6 +193,7 @@ class CommandWhitelistService {
 ```
 
 **Configuration:**
+
 ```typescript
 interface WhitelistConfig {
   allowAll: boolean           // Default: false
@@ -181,15 +203,18 @@ interface WhitelistConfig {
 ```
 
 **Validation Logic:**
+
 - If `allowAll` is true, permit all commands
 - If `allowAll` is false and whitelist is empty, reject all
 - Match command against whitelist entries
 - Support exact match or prefix match modes
 
 #### 4. Execution Repository
+
 **Responsibility:** Persist and retrieve execution history
 
 **Schema:**
+
 ```sql
 CREATE TABLE executions (
   id TEXT PRIMARY KEY,
@@ -209,6 +234,7 @@ CREATE INDEX idx_executions_status ON executions(status);
 ```
 
 **Methods:**
+
 ```typescript
 class ExecutionRepository {
   async create(execution: ExecutionRecord): Promise<string>
@@ -220,14 +246,17 @@ class ExecutionRepository {
 ```
 
 #### 5. Configuration Service
+
 **Responsibility:** Load and validate system configuration
 
 **Configuration Sources:**
+
 1. Environment variables
 2. `.env` file in working directory
 3. Default values
 
 **Configuration Schema:**
+
 ```typescript
 interface AppConfig {
   port: number                    // Default: 3000
@@ -242,6 +271,7 @@ interface AppConfig {
 ## Data Models
 
 ### Node
+
 ```typescript
 interface Node {
   id: string              // Unique identifier (derived from name)
@@ -257,6 +287,7 @@ interface Node {
 ```
 
 ### Facts
+
 ```typescript
 interface Facts {
   nodeId: string
@@ -290,6 +321,7 @@ interface Facts {
 ```
 
 ### ExecutionResult
+
 ```typescript
 interface ExecutionResult {
   id: string
@@ -319,6 +351,7 @@ interface NodeResult {
 ```
 
 ### Task
+
 ```typescript
 interface Task {
   name: string
@@ -339,6 +372,7 @@ interface TaskParameter {
 ## Error Handling
 
 ### Error Response Format
+
 ```typescript
 interface ErrorResponse {
   error: {
@@ -352,17 +386,20 @@ interface ErrorResponse {
 ### Error Categories
 
 **Configuration Errors (500):**
+
 - `BOLT_CONFIG_MISSING`: Required Bolt configuration files not found
 - `BOLT_CONFIG_INVALID`: Bolt configuration is malformed
 - `DATABASE_ERROR`: SQLite database operation failed
 
 **Validation Errors (400):**
+
 - `INVALID_REQUEST`: Request body validation failed
 - `COMMAND_NOT_ALLOWED`: Command not in whitelist
 - `INVALID_NODE_ID`: Node not found in inventory
 - `INVALID_TASK_NAME`: Task does not exist
 
 **Execution Errors (500):**
+
 - `BOLT_EXECUTION_FAILED`: Bolt CLI returned non-zero exit code
 - `BOLT_TIMEOUT`: Execution exceeded timeout limit
 - `BOLT_PARSE_ERROR`: Could not parse Bolt output
@@ -380,12 +417,14 @@ interface ErrorResponse {
 ### Unit Tests
 
 **Backend:**
+
 - BoltService: Mock child_process, test output parsing
 - CommandWhitelistService: Test validation logic with various configurations
 - ExecutionRepository: Test CRUD operations with in-memory SQLite
 - Configuration loading and validation
 
 **Frontend:**
+
 - Component rendering with mock data
 - Filter and search logic
 - Form validation
@@ -396,12 +435,14 @@ interface ErrorResponse {
 ### Integration Tests
 
 **API Endpoints:**
+
 - Test each endpoint with valid and invalid inputs
 - Verify response formats match OpenAPI spec
 - Test error handling paths
 - Test pagination and filtering
 
 **Bolt Integration:**
+
 - Test with mock Bolt CLI (scripted responses)
 - Verify command construction
 - Test timeout handling
@@ -412,6 +453,7 @@ interface ErrorResponse {
 ### End-to-End Tests
 
 **Critical User Flows:**
+
 - View inventory → Select node → Execute command → View results
 - View inventory → Select node → Gather facts → View facts
 - View inventory → Select node → Execute task → View results
@@ -489,6 +531,7 @@ interface ErrorResponse {
 ### Docker Container
 
 **Dockerfile Structure:**
+
 ```dockerfile
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder

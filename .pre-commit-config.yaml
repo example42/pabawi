@@ -1,0 +1,98 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.svg$'
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+
+  # Security checks
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: 'package-lock.json|\.env\.example'
+
+  # TypeScript/JavaScript linting
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        entry: npm run lint
+        language: system
+        types: [javascript, jsx, ts, tsx]
+        pass_filenames: false
+
+  # TypeScript type checking
+  - repo: local
+    hooks:
+      - id: tsc-backend
+        name: TypeScript Check (Backend)
+        entry: bash -c 'cd backend && npx tsc --noEmit'
+        language: system
+        types: [ts, tsx]
+        files: ^backend/
+        pass_filenames: false
+
+      - id: tsc-frontend
+        name: TypeScript Check (Frontend)
+        entry: bash -c 'cd frontend && npx tsc --noEmit'
+        language: system
+        types: [ts, tsx]
+        files: ^frontend/
+        pass_filenames: false
+
+  # Prevent duplicate/backup files
+  - repo: local
+    hooks:
+      - id: no-duplicate-files
+        name: Prevent duplicate files
+        entry: bash -c 'if git diff --cached --name-only | grep -E "(_fixed|_clean|_backup|_old|_new|_copy|\.bak)"; then echo "Duplicate/backup files detected"; exit 1; fi'
+        language: system
+        pass_filenames: false
+
+  # Docker file checks
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint-docker
+        args: ['--ignore', 'DL3008', '--ignore', 'DL3009']
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.42.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix']
+
+  # Shell script checks
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        args: ['--severity=warning']
+
+  # Commit message format
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]

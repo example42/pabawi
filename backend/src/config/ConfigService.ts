@@ -27,7 +27,7 @@ export class ConfigService {
       try {
         const whitelistJson = process.env.COMMAND_WHITELIST ?? '[]';
         const parsedWhitelist: unknown = JSON.parse(whitelistJson);
-        const whitelistArray: string[] = Array.isArray(parsedWhitelist) 
+        const whitelistArray: string[] = Array.isArray(parsedWhitelist)
           ? parsedWhitelist.filter((item): item is string => typeof item === 'string')
           : [];
         const matchMode = process.env.COMMAND_WHITELIST_MATCH_MODE;

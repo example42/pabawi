@@ -76,7 +76,7 @@
           <p class="text-sm font-medium">
             {toast.message}
           </p>
-          
+
           {#if toast.details}
             <button
               type="button"

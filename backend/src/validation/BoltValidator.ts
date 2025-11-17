@@ -54,7 +54,7 @@ export class BoltValidator {
     // Check for inventory file (inventory.yaml or inventory.yml)
     const inventoryYaml = join(this.boltProjectPath, 'inventory.yaml');
     const inventoryYml = join(this.boltProjectPath, 'inventory.yml');
-    
+
     if (!existsSync(inventoryYaml) && !existsSync(inventoryYml)) {
       missingFiles.push('inventory.yaml or inventory.yml');
       errors.push('Inventory file is required for Bolt operations');
@@ -63,7 +63,7 @@ export class BoltValidator {
     // Check for bolt-project.yaml (optional but recommended)
     const boltProjectYaml = join(this.boltProjectPath, 'bolt-project.yaml');
     const boltProjectYml = join(this.boltProjectPath, 'bolt-project.yml');
-    
+
     if (!existsSync(boltProjectYaml) && !existsSync(boltProjectYml)) {
       // This is a warning, not an error
       console.warn('Warning: bolt-project.yaml not found. Using default Bolt configuration.');
@@ -91,7 +91,7 @@ export class BoltValidator {
   public getInventoryPath(): string | null {
     const inventoryYaml = join(this.boltProjectPath, 'inventory.yaml');
     const inventoryYml = join(this.boltProjectPath, 'inventory.yml');
-    
+
     if (existsSync(inventoryYaml)) {
       return inventoryYaml;
     }
@@ -107,7 +107,7 @@ export class BoltValidator {
   public getBoltProjectPath(): string | null {
     const boltProjectYaml = join(this.boltProjectPath, 'bolt-project.yaml');
     const boltProjectYml = join(this.boltProjectPath, 'bolt-project.yml');
-    
+
     if (existsSync(boltProjectYaml)) {
       return boltProjectYaml;
     }
