@@ -43,14 +43,14 @@ ARG BUILDPLATFORM
 
 # Install Bolt CLI and dependencies
 RUN apk add --no-cache \
-    ruby \
-    ruby-dev \
-    build-base \
-    bash \
-    openssh-client \
-    git \
-    coreutils \
-    && gem install bolt --no-document \
+    ruby=3.3.5-r0 \
+    ruby-dev=3.3.5-r0 \
+    build-base=0.5-r3 \
+    bash=5.2.26-r0 \
+    openssh-client=9.7_p1-r4 \
+    git=2.45.2-r0 \
+    coreutils=9.5-r1 \
+    && gem install bolt -v 3.27.4 --no-document \
     && apk del build-base ruby-dev
 
 # Create non-root user
@@ -77,8 +77,10 @@ RUN mkdir -p /data && chown pabawi:pabawi /data
 # Create bolt-project directory
 RUN mkdir -p /bolt-project && chown pabawi:pabawi /bolt-project
 
-# Create facter configuration to help Puppet detect Alpine
-RUN mkdir -p /etc/puppetlabs/facter && \
+# Create facter configuration to help Puppet detect Alpine on ARM64
+RUN mkdir -p /etc/puppetlabs/facter/facts.d && \
+    echo '{"os":{"name":"Alpine","family":"Linux","release":{"major":"3","minor":"20","full":"3.20.0"}},"kernel":"Linux","osfamily":"Linux","operatingsystem":"Alpine","architecture":"aarch64","hardwaremodel":"aarch64"}' > /etc/puppetlabs/facter/facts.d/alpine.json && \
+    mkdir -p /etc/puppetlabs/facter && \
     echo 'facts : {' > /etc/puppetlabs/facter/facter.conf && \
     echo '  blocklist : [],' >> /etc/puppetlabs/facter/facter.conf && \
     echo '}' >> /etc/puppetlabs/facter/facter.conf

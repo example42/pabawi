@@ -9,6 +9,7 @@ This directory contains utilities for error handling, API requests, and user fee
 A reactive toast notification system built with Svelte 5 runes.
 
 #### Features
+
 - Multiple toast types: success, error, info, warning
 - Auto-dismiss with configurable duration
 - Manual dismissal
@@ -49,6 +50,7 @@ showWarning('This action cannot be undone');
 HTTP request utilities with automatic retry logic and error handling.
 
 #### Features
+
 - Automatic retry for transient failures
 - Exponential backoff
 - Configurable retry options
@@ -101,6 +103,7 @@ try {
 ```
 
 Recognized error patterns:
+
 - Network errors
 - Timeout errors
 - Authentication errors
@@ -133,6 +136,7 @@ Catches and handles errors gracefully at the component tree level.
 ```
 
 Features:
+
 - Catches JavaScript errors
 - Catches unhandled promise rejections
 - Custom fallback UI
@@ -252,12 +256,14 @@ test('should retry on network error', async () => {
 ### From Direct Fetch to API Utilities
 
 Before:
+
 ```typescript
 const response = await fetch('/api/inventory');
 const data = await response.json();
 ```
 
 After:
+
 ```typescript
 const data = await get('/api/inventory', { maxRetries: 2 });
 ```
@@ -265,11 +271,13 @@ const data = await get('/api/inventory', { maxRetries: 2 });
 ### Adding Toast Notifications
 
 1. Import toast functions:
+
 ```typescript
 import { showSuccess, showError } from '../lib/toast.svelte';
 ```
 
 2. Replace console.log with toasts:
+
 ```typescript
 // Before
 console.log('Operation successful');
@@ -279,6 +287,7 @@ showSuccess('Operation successful');
 ```
 
 3. Add ToastContainer to App.svelte:
+
 ```svelte
 <ToastContainer />
 ```
@@ -286,6 +295,7 @@ showSuccess('Operation successful');
 ### Adding Error Boundary
 
 Wrap your app in ErrorBoundary:
+
 ```svelte
 <ErrorBoundary onError={handleError}>
   <YourApp />

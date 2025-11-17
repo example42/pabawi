@@ -21,7 +21,7 @@
   function handleError(error: Error, errorInfo: { componentStack?: string }): void {
     // Log error to console for debugging
     console.error('Application error:', error, errorInfo);
-    
+
     // In production, you could send this to an error tracking service
     // e.g., Sentry, LogRocket, etc.
   }
@@ -34,7 +34,7 @@
       <Router {routes} />
     </main>
   </div>
-  
+
   <!-- Toast notifications -->
   <ToastContainer />
 </ErrorBoundary>

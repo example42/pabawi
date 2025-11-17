@@ -194,7 +194,7 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(service.isCommandAllowed('')).toBe(false);
   });
 
@@ -205,7 +205,7 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'prefix',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(service.isCommandAllowed('')).toBe(false);
   });
 
@@ -216,7 +216,7 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(service.isCommandAllowed('   ')).toBe(false);
   });
 
@@ -227,7 +227,7 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(service.isCommandAllowed('echo "test"')).toBe(true);
     expect(service.isCommandAllowed('grep -E "^[0-9]+"')).toBe(true);
   });
@@ -239,7 +239,7 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(service.isCommandAllowed('ls')).toBe(true);
     expect(service.isCommandAllowed('LS')).toBe(false);
     expect(service.isCommandAllowed('Echo')).toBe(true);
@@ -253,13 +253,13 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     const whitelist1 = service.getWhitelist();
     const whitelist2 = service.getWhitelist();
-    
+
     expect(whitelist1).toEqual(whitelist2);
     expect(whitelist1).not.toBe(whitelist2);
-    
+
     whitelist1.push('new-command');
     expect(service.getWhitelist()).toEqual(['ls', 'pwd']);
   });
@@ -271,7 +271,7 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(service.isCommandAllowed('echo  test')).toBe(true);
     expect(service.isCommandAllowed('echo test')).toBe(false);
   });
@@ -283,7 +283,7 @@ describe('CommandWhitelistService - edge cases', () => {
       matchMode: 'prefix',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(service.isCommandAllowed('systemctl restart nginx')).toBe(true);
     expect(service.isCommandAllowed('systemctl status nginx')).toBe(true);
   });
@@ -297,7 +297,7 @@ describe('CommandWhitelistService - validateCommand method', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(() => service.validateCommand('ls')).not.toThrow();
     expect(() => service.validateCommand('pwd')).not.toThrow();
   });
@@ -309,7 +309,7 @@ describe('CommandWhitelistService - validateCommand method', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     expect(() => service.validateCommand('rm')).toThrow(CommandNotAllowedError);
   });
 
@@ -320,7 +320,7 @@ describe('CommandWhitelistService - validateCommand method', () => {
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    
+
     try {
       service.validateCommand('dangerous-command');
       expect.fail('Should have thrown error');

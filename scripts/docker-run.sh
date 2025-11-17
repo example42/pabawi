@@ -11,6 +11,24 @@ PORT="${PORT:-3000}"
 BOLT_PROJECT_PATH="${BOLT_PROJECT_PATH:-./}"
 DATA_PATH="${DATA_PATH:-./data}"
 
+# Detect platform architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64|amd64)
+        PLATFORM="linux/amd64"
+        ;;
+    aarch64|arm64)
+        PLATFORM="linux/arm64"
+        ;;
+    *)
+        echo "Warning: Unknown architecture $ARCH, defaulting to linux/amd64"
+        PLATFORM="linux/amd64"
+        ;;
+esac
+
+echo "Detected architecture: $ARCH"
+echo "Using platform: $PLATFORM"
+
 # Create data directory if it doesn't exist
 mkdir -p "$DATA_PATH"
 
@@ -32,7 +50,7 @@ fi
 docker run -d \
   --name "$CONTAINER_NAME" \
   --user 1001:1001 \
-  --platform linux/arm64 \
+  --platform "$PLATFORM" \
   -p "$PORT:3000" \
   -v "$(pwd)/$BOLT_PROJECT_PATH:/bolt-project:ro" \
   -v "$(pwd)/$DATA_PATH:/data" \

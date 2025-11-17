@@ -266,7 +266,7 @@ export class ExecutionRepository {
    */
   public async countByStatus(): Promise<StatusCounts> {
     const sql = `
-      SELECT 
+      SELECT
         COUNT(*) as total,
         SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success,

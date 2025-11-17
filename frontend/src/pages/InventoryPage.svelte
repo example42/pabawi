@@ -33,7 +33,7 @@
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(node => 
+      result = result.filter(node =>
         node.name.toLowerCase().includes(query) ||
         node.uri.toLowerCase().includes(query)
       );
@@ -59,9 +59,9 @@
           console.log(`Retrying inventory fetch (attempt ${attempt})...`);
         },
       });
-      
+
       nodes = data.nodes || [];
-      
+
       // Show success toast only on retry success
       if (error) {
         showSuccess('Inventory loaded successfully');
@@ -141,8 +141,8 @@
     </div>
   {:else if error}
     <!-- Error State -->
-    <ErrorAlert 
-      message="Failed to load inventory" 
+    <ErrorAlert
+      message="Failed to load inventory"
       details={error}
       onRetry={retryFetch}
     />
@@ -277,7 +277,7 @@
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
               {#each filteredNodes as node (node.id)}
-                <tr 
+                <tr
                   class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
                   onclick={() => navigateToNode(node.id)}
                 >

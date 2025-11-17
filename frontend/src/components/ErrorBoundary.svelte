@@ -17,7 +17,7 @@
     const err = event.error || new Error(event.message);
     error = err;
     errorInfo = { componentStack: event.filename ? `at ${event.filename}:${event.lineno}:${event.colno}` : undefined };
-    
+
     // Call custom error handler if provided
     if (onError) {
       onError(err, errorInfo);
@@ -25,7 +25,7 @@
 
     // Log to console
     console.error('ErrorBoundary caught an error:', err, errorInfo);
-    
+
     // Prevent default error handling
     event.preventDefault();
   }
@@ -34,7 +34,7 @@
     const err = event.reason instanceof Error ? event.reason : new Error(String(event.reason));
     error = err;
     errorInfo = { componentStack: 'Unhandled Promise Rejection' };
-    
+
     // Call custom error handler if provided
     if (onError) {
       onError(err, errorInfo);
@@ -42,7 +42,7 @@
 
     // Log to console
     console.error('ErrorBoundary caught an unhandled rejection:', err, errorInfo);
-    
+
     // Prevent default error handling
     event.preventDefault();
   }

@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: pabawi:latest
+    image: example42/pabawi:latest
     container_name: pabawi-dev
     volumes:
       # Mount entire workspace for development
@@ -26,32 +26,32 @@ services:
       - NODE_ENV=development
       - PORT=3000
       - HOST=0.0.0.0
-      
+
       # Bolt configuration
       - BOLT_PROJECT_PATH=/bolt-project
-      
+
       # Database configuration
       - DATABASE_PATH=/data/executions.db
-      
+
       # Command whitelist configuration
       - COMMAND_WHITELIST_ALLOW_ALL=${COMMAND_WHITELIST_ALLOW_ALL:-false}
       - COMMAND_WHITELIST=${COMMAND_WHITELIST:-["ls","pwd","whoami","uptime"]}
-      
+
       # Execution configuration
       - EXECUTION_TIMEOUT=${EXECUTION_TIMEOUT:-300000}
-      
+
       # Logging configuration
       - LOG_LEVEL=${LOG_LEVEL:-info}
-    
+
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 3s
       start_period: 5s
       retries: 3
-    
+
     restart: unless-stopped
-    
+
     networks:
       - pabawi-network
 

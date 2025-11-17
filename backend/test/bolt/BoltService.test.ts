@@ -645,7 +645,7 @@ describe('BoltService - listTasks', () => {
 
     expect(result).toBeDefined();
     expect(result).toHaveLength(2);
-    
+
     expect(result[0].name).toBe('package::install');
     expect(result[0].description).toBe('Install a package');
     expect(result[0].modulePath).toBe('package');
@@ -655,7 +655,7 @@ describe('BoltService - listTasks', () => {
     expect(result[0].parameters[0].required).toBe(true);
     expect(result[0].parameters[1].name).toBe('version');
     expect(result[0].parameters[1].default).toBe('latest');
-    
+
     expect(result[1].name).toBe('service::restart');
     expect(result[1].description).toBe('Restart a service');
     expect(result[1].modulePath).toBe('/modules/service/tasks/restart.sh');
@@ -689,12 +689,12 @@ describe('BoltService - listTasks', () => {
 
     expect(result).toBeDefined();
     expect(result).toHaveLength(2);
-    
+
     const factsTask = result.find((t: any) => t.name === 'facts');
     expect(factsTask).toBeDefined();
     expect(factsTask.description).toBe('Gather system facts');
     expect(factsTask.parameters).toHaveLength(0);
-    
+
     const deployTask = result.find((t: any) => t.name === 'custom::deploy');
     expect(deployTask).toBeDefined();
     expect(deployTask.description).toBe('Deploy application');
