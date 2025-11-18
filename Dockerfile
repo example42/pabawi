@@ -41,15 +41,23 @@ FROM node:20-alpine
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
+# Add metadata labels
+LABEL org.opencontainers.image.title="Pabawi"
+LABEL org.opencontainers.image.description="Web interface for Bolt automation tool"
+LABEL org.opencontainers.image.version="0.1.0"
+LABEL org.opencontainers.image.vendor="example42"
+LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
+
 # Install Bolt CLI and dependencies
+# hadolint ignore=DL3018
 RUN apk add --no-cache \
-    ruby=3.3.5-r0 \
-    ruby-dev=3.3.5-r0 \
-    build-base=0.5-r3 \
-    bash=5.2.26-r0 \
-    openssh-client=9.7_p1-r4 \
-    git=2.45.2-r0 \
-    coreutils=9.5-r1 \
+    ruby \
+    ruby-dev \
+    build-base \
+    bash \
+    openssh-client \
+    git \
+    coreutils \
     && gem install bolt -v 3.27.4 --no-document \
     && apk del build-base ruby-dev
 
