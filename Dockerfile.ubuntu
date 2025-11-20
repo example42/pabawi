@@ -60,6 +60,7 @@ RUN apt-get update && \
     ca-certificates \
     curl \
     gnupg \
+    wget \
     && mkdir -p /etc/apt/keyrings \
     # Add NodeSource repository for Node.js 20
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
@@ -77,9 +78,8 @@ RUN apt-get update && \
     git \
     coreutils \
     ruby \
-    ruby-dev \
-    build-essential \
     && gem install openbolt -v 5.1.0 --no-document \
+    && ln -s /opt/puppetlabs/bin/bolt /usr/local/bin/bolt \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 

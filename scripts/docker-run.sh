@@ -47,19 +47,21 @@ elif [ "$(uname)" = "Darwin" ]; then
 fi
 
 # Run container with proper configuration
+#  -v "$HOME/.ssh:/home/pabawi/.ssh:ro" \ # Mount your .ssh dir if used in inventory.yaml
 docker run -d \
   --name "$CONTAINER_NAME" \
   --user 1001:1001 \
   --platform "$PLATFORM" \
   -p "$PORT:3000" \
-  -v "$(pwd)/$BOLT_PROJECT_PATH:/bolt-project:ro" \
+  -v "$(pwd)/$BOLT_PROJECT_PATH:/bolt-project" \
   -v "$(pwd)/$DATA_PATH:/data" \
   -e NODE_ENV=production \
   -e PORT=3000 \
   -e BOLT_PROJECT_PATH=/bolt-project \
   -e DATABASE_PATH=/data/executions.db \
-  -e COMMAND_WHITELIST_ALLOW_ALL=false \
+  -e COMMAND_WHITELIST_ALLOW_ALL=true \
   -e LOG_LEVEL=info \
+  -e BOLT_GEM=true \
   --restart unless-stopped \
   "$IMAGE_NAME"
 
