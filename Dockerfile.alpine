@@ -1,5 +1,5 @@
 # Stage 1: Build frontend with Vite
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS frontend-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine3.21 AS frontend-builder
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -18,7 +18,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Build backend TypeScript
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS backend-builder
+FROM --platform=$BUILDPLATFORM node:20-alpine3.21 AS backend-builder
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -37,7 +37,7 @@ COPY backend/ ./
 RUN npm run build
 
 # Stage 3: Production image with Node.js and Bolt CLI
-FROM ubuntu:24.04
+FROM node:20-alpine3.21
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -48,44 +48,23 @@ LABEL org.opencontainers.image.version="0.1.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Set shell to bash with pipefail option
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-# Install Node.js, Puppet, and Bolt from upstream packages
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    gnupg \
-    && mkdir -p /etc/apt/keyrings \
-    # Add NodeSource repository for Node.js 20
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
-    # Add Puppet repository
-    && curl -fsSL -o openvox8-release-ubuntu24.04.deb https://apt.voxpupuli.org/openvox8-release-ubuntu24.04.deb \
-    && dpkg -i openvox8-release-ubuntu24.04.deb \
-    && rm openvox8-release-ubuntu24.04.deb \
-    && apt-get update && \
-    apt-get install -y --no-install-recommends \
-    nodejs \
-    openvox-agent \
+# Install Bolt CLI and dependencies
+# hadolint ignore=DL3018
+RUN apk add --no-cache \
+    ruby \
+    ruby-dev \
+    build-base \
     bash \
     openssh-client \
     git \
     coreutils \
-    ruby \
-    ruby-dev \
-    build-essential \
+    linux-headers \
     && gem install openbolt -v 5.1.0 --no-document \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+    && apk del build-base linux-headers
 
 # Create non-root user
-RUN groupadd -g 1001 pabawi && \
-    useradd -u 1001 -g pabawi -m -s /bin/bash pabawi
+RUN addgroup -g 1001 -S pabawi && \
+    adduser -u 1001 -S pabawi -G pabawi
 
 # Create application directory
 WORKDIR /app
@@ -107,6 +86,21 @@ RUN mkdir -p /data && chown pabawi:pabawi /data
 # Create bolt-project directory
 RUN mkdir -p /bolt-project && chown pabawi:pabawi /bolt-project
 
+# Create facter configuration to help Puppet detect Alpine
+RUN mkdir -p /etc/puppetlabs/facter/facts.d && \
+    # Legacy facts (text format)
+    echo 'operatingsystem=Alpine' > /etc/puppetlabs/facter/facts.d/legacy.txt && \
+    echo 'osfamily=Linux' >> /etc/puppetlabs/facter/facts.d/legacy.txt && \
+    echo 'kernel=Linux' >> /etc/puppetlabs/facter/facts.d/legacy.txt && \
+    echo 'operatingsystemmajrelease=3' >> /etc/puppetlabs/facter/facts.d/legacy.txt && \
+    # Modern structured facts (JSON format)
+    echo '{"os":{"name":"Alpine","family":"Linux","release":{"major":"3","minor":"20","full":"3.20"}}}' > /etc/puppetlabs/facter/facts.d/os.json && \
+    # Facter configuration
+    mkdir -p /etc/puppetlabs/facter && \
+    echo 'facts : {' > /etc/puppetlabs/facter/facter.conf && \
+    echo '  blocklist : [],' >> /etc/puppetlabs/facter/facter.conf && \
+    echo '}' >> /etc/puppetlabs/facter/facter.conf
+
 # Create entrypoint script to handle permissions
 COPY --chown=pabawi:pabawi <<'EOF' /app/docker-entrypoint.sh
 #!/bin/bash
@@ -124,6 +118,14 @@ fi
 if [ ! -f /data/executions.db ]; then
     touch /data/executions.db
 fi
+
+# Set Puppet/Bolt environment variables to work around Alpine detection issues
+export FACTER_operatingsystem=Alpine
+export FACTER_osfamily=Linux
+export FACTER_kernel=Linux
+export FACTER_kernelversion=$(uname -r)
+export FACTER_architecture=$(uname -m)
+export PUPPET_SKIP_OS_CHECK=true
 
 # Execute the main command
 exec "$@"
@@ -144,7 +146,11 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0 \
     DATABASE_PATH=/data/executions.db \
-    BOLT_PROJECT_PATH=/bolt-project
+    BOLT_PROJECT_PATH=/bolt-project \
+    FACTER_operatingsystem=Alpine \
+    FACTER_osfamily=Linux \
+    FACTER_kernel=Linux \
+    PUPPET_SKIP_OS_CHECK=true
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
