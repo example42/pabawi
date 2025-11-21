@@ -26,6 +26,7 @@ export function createCommandsRouter(
   boltService: BoltService,
   executionRepository: ExecutionRepository,
   commandWhitelistService: CommandWhitelistService,
+  streamingManager?: import("../services/StreamingExecutionManager").StreamingExecutionManager,
 ): Router {
   const router = Router();
 
@@ -90,7 +91,14 @@ export function createCommandsRouter(
         // We don't await here to return immediately with execution ID
         void (async (): Promise<void> => {
           try {
-            const result = await boltService.runCommand(nodeId, command);
+            // Set up streaming callback if expert mode is enabled and streaming manager is available
+            const streamingCallback = expertMode && streamingManager ? {
+              onCommand: (cmd: string) => streamingManager.emitCommand(executionId, cmd),
+              onStdout: (chunk: string) => streamingManager.emitStdout(executionId, chunk),
+              onStderr: (chunk: string) => streamingManager.emitStderr(executionId, chunk),
+            } : undefined;
+
+            const result = await boltService.runCommand(nodeId, command, streamingCallback);
 
             // Update execution record with results
             await executionRepository.update(executionId, {
@@ -100,8 +108,15 @@ export function createCommandsRouter(
               error: result.error,
               command: result.command,
             });
+
+            // Emit completion event if streaming
+            if (streamingManager) {
+              streamingManager.emitComplete(executionId, result);
+            }
           } catch (error) {
             console.error("Error executing command:", error);
+
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
             // Update execution record with error
             await executionRepository.update(executionId, {
@@ -111,13 +126,17 @@ export function createCommandsRouter(
                 {
                   nodeId,
                   status: "failed",
-                  error:
-                    error instanceof Error ? error.message : "Unknown error",
+                  error: errorMessage,
                   duration: 0,
                 },
               ],
-              error: error instanceof Error ? error.message : "Unknown error",
+              error: errorMessage,
             });
+
+            // Emit error event if streaming
+            if (streamingManager) {
+              streamingManager.emitError(executionId, errorMessage);
+            }
           }
         })();
 
