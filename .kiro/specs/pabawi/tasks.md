@@ -292,14 +292,14 @@
     - Show execution history for each task
     - _Requirements: 1.4, 1.6, 1.7_
 
-- [ ] 15. Implement Puppet run interface in node detail page
-  - [ ] 15.1 Add Puppet run section to NodeDetailPage
+- [x] 15. Implement Puppet run interface in node detail page
+  - [x] 15.1 Add Puppet run section to NodeDetailPage
     - Create PuppetRunInterface component
     - Add "Run Puppet" collapsible section to node detail page
     - Position section prominently in node detail layout
     - _Requirements: 2.1_
   
-  - [ ] 15.2 Implement Puppet run configuration controls
+  - [x] 15.2 Implement Puppet run configuration controls
     - Add tags input with multi-select or comma-separated values
     - Add environment dropdown or text input
     - Add noop mode toggle (dry-run)
@@ -308,14 +308,14 @@
     - Add expandable section for additional options
     - _Requirements: 2.2, 2.4, 2.5, 2.6, 2.7, 2.8_
   
-  - [ ] 15.3 Implement Puppet run execution
+  - [x] 15.3 Implement Puppet run execution
     - Add runPuppetAgent method to BoltService
     - Construct psick::puppet_agent task parameters from configuration
     - Add POST /api/nodes/:id/puppet-run endpoint
     - Execute Bolt task with configured parameters
     - _Requirements: 2.3_
   
-  - [ ] 15.4 Implement Puppet run results display
+  - [x] 15.4 Implement Puppet run results display
     - Parse Puppet output for resource changes
     - Extract metrics (changed, failed, skipped resources)
     - Create PuppetOutputViewer component with syntax highlighting
@@ -323,47 +323,63 @@
     - Show execution time and summary metrics
     - _Requirements: 2.9, 2.10_
 
-- [ ] 16. Implement expert mode for detailed error output
-  - [ ] 16.1 Create expert mode state management
+- [x] 16. Implement expert mode for detailed error output and command visibility
+  - [x] 16.1 Create expert mode state management
     - Add expert mode toggle to navigation or settings
     - Implement localStorage persistence for expert mode preference
     - Create global state accessible to all components
     - Add visual indicator when expert mode is active
     - _Requirements: 3.1, 3.5_
   
-  - [ ] 16.2 Implement ErrorHandlingService in backend
+  - [x] 16.2 Implement ErrorHandlingService in backend
     - Create ErrorHandlingService class for error formatting
     - Implement formatError method with expert mode parameter
     - Add request ID generation for error correlation
     - Capture stack traces and execution context
+    - **CRITICAL: Capture and include the full Bolt CLI command being executed in all responses**
     - _Requirements: 3.2, 3.6_
   
-  - [ ] 16.3 Update API error middleware for expert mode
+  - [x] 16.3 Update API error middleware for expert mode
     - Check X-Expert-Mode header in error middleware
     - Include stack traces in expert mode responses
     - Add request ID, timestamp, and execution context
     - Capture raw Bolt CLI output for expert mode
+    - **CRITICAL: Always include the full Bolt command in error responses when expert mode is enabled**
     - Sanitize sensitive data even in expert mode
     - _Requirements: 3.2, 3.3_
   
-  - [ ] 16.4 Update frontend to send expert mode header
+  - [x] 16.4 Update frontend to send expert mode header
     - Modify API client to include X-Expert-Mode header when enabled
     - Update all API request functions to check expert mode state
     - _Requirements: 3.6_
   
-  - [ ] 16.5 Create DetailedErrorDisplay component
+  - [x] 16.5 Create DetailedErrorDisplay component
     - Create component for expert mode error display
     - Show basic error message always
     - Add expandable sections for stack trace, raw response, context
+    - **CRITICAL: Display the full Bolt CLI command prominently in expert mode**
     - Implement JSON viewer for raw API responses
-    - Add copy-to-clipboard for error details
+    - Add copy-to-clipboard for error details and Bolt commands
     - _Requirements: 3.2, 3.3, 3.4_
   
-  - [ ] 16.6 Update ErrorAlert component for expert mode
+  - [x] 16.6 Update ErrorAlert component for expert mode
     - Modify ErrorAlert to use DetailedErrorDisplay when expert mode enabled
     - Show simplified errors when expert mode disabled
     - Add toggle to expand/collapse detailed information
     - _Requirements: 3.2, 3.4_
+  
+  - [x] 16.7 Display Bolt commands in all execution contexts
+    - **CRITICAL: In expert mode, always show the full Bolt command in ANY place where a command or task is run**
+    - Update CommandOutput component to display Bolt command when expert mode is enabled
+    - Show Bolt command in command execution results on Node Detail page
+    - Show Bolt command in task execution results on Node Detail page
+    - Show Bolt command in facts gathering results on Node Detail page
+    - Show Bolt command in Puppet run results on Node Detail page
+    - Display Bolt command in execution history on Executions page
+    - Display Bolt command in execution detail modal/panel
+    - Format command display with monospace font, syntax highlighting, and copy-to-clipboard button
+    - Position Bolt command prominently at the top of execution results
+    - _Requirements: 2.3, 2.4, 3.1, 4.1, 5.3, 6.4, 9.4_
 
 - [ ] 17. Create comprehensive API documentation
   - [ ] 17.1 Write OpenAPI 3.0 specification document

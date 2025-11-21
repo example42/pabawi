@@ -2,10 +2,19 @@
  * API utility functions with retry logic and error handling
  */
 
+import { expertMode } from './expertMode.svelte';
+
 export interface ApiError {
   code: string;
   message: string;
   details?: unknown;
+  // Expert mode fields
+  stackTrace?: string;
+  requestId?: string;
+  timestamp?: string;
+  rawResponse?: unknown;
+  executionContext?: unknown;
+  boltCommand?: string;
 }
 
 export interface ApiResponse<T> {
@@ -79,7 +88,7 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
 }
 
 /**
- * Fetch with retry logic
+ * Fetch with retry logic and expert mode header support
  */
 export async function fetchWithRetry<T = unknown>(
   url: string,
@@ -89,9 +98,20 @@ export async function fetchWithRetry<T = unknown>(
   const opts = { ...DEFAULT_RETRY_OPTIONS, ...retryOptions };
   let lastError: Error | null = null;
 
+  // Add expert mode header if enabled
+  const headers = new Headers(options?.headers);
+  if (expertMode.enabled) {
+    headers.set('X-Expert-Mode', 'true');
+  }
+
+  const requestOptions = {
+    ...options,
+    headers,
+  };
+
   for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
     try {
-      const response = await fetch(url, options);
+      const response = await fetch(url, requestOptions);
 
       // If response is OK, parse and return data
       if (response.ok) {

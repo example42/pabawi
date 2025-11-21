@@ -1,21 +1,27 @@
 <script lang="ts">
-  import { getErrorGuidance } from '../lib/api';
+  import { getErrorGuidance, type ApiError } from '../lib/api';
+  import { expertMode } from '../lib/expertMode.svelte';
+  import DetailedErrorDisplay from './DetailedErrorDisplay.svelte';
 
   interface Props {
     message: string;
     details?: string;
     guidance?: string;
+    error?: ApiError;
     onRetry?: () => void;
     onDismiss?: () => void;
   }
 
-  let { message, details, guidance, onRetry, onDismiss }: Props = $props();
+  let { message, details, guidance, error, onRetry, onDismiss }: Props = $props();
   let showDetails = $state(false);
 
   // Get actionable guidance if not provided
   const errorGuidance = $derived(
     guidance || (details ? getErrorGuidance(new Error(details)).guidance : undefined)
   );
+
+  // Use DetailedErrorDisplay if expert mode is enabled and we have an ApiError
+  const useDetailedDisplay = $derived(expertMode.enabled && error !== undefined);
 </script>
 
 <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20" role="alert">
@@ -33,24 +39,30 @@
       />
     </svg>
     <div class="flex-1">
-      <h3 class="text-sm font-medium text-red-800 dark:text-red-200">
-        {message}
-      </h3>
-      {#if errorGuidance}
-        <p class="mt-1 text-sm text-red-700 dark:text-red-300">
-          {errorGuidance}
-        </p>
-      {/if}
-      {#if details}
-        <button
-          type="button"
-          class="mt-2 text-sm text-red-700 underline hover:text-red-800 dark:text-red-300 dark:hover:text-red-200"
-          onclick={() => showDetails = !showDetails}
-        >
-          {showDetails ? 'Hide' : 'Show'} details
-        </button>
-        {#if showDetails}
-          <pre class="mt-2 overflow-x-auto rounded bg-red-100 p-2 text-xs text-red-900 dark:bg-red-950 dark:text-red-100">{details}</pre>
+      {#if useDetailedDisplay && error}
+        <!-- Expert mode: Use DetailedErrorDisplay -->
+        <DetailedErrorDisplay {error} />
+      {:else}
+        <!-- Standard mode: Show simplified error -->
+        <h3 class="text-sm font-medium text-red-800 dark:text-red-200">
+          {message}
+        </h3>
+        {#if errorGuidance}
+          <p class="mt-1 text-sm text-red-700 dark:text-red-300">
+            {errorGuidance}
+          </p>
+        {/if}
+        {#if details}
+          <button
+            type="button"
+            class="mt-2 text-sm text-red-700 underline hover:text-red-800 dark:text-red-300 dark:hover:text-red-200"
+            onclick={() => showDetails = !showDetails}
+          >
+            {showDetails ? 'Hide' : 'Show'} details
+          </button>
+          {#if showDetails}
+            <pre class="mt-2 overflow-x-auto rounded bg-red-100 p-2 text-xs text-red-900 dark:bg-red-950 dark:text-red-100">{details}</pre>
+          {/if}
         {/if}
       {/if}
       {#if onRetry || onDismiss}
