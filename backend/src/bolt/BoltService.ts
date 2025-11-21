@@ -1325,6 +1325,74 @@ export class BoltService {
   }
 
   /**
+   * Install a package on a target node using the specified package installation task
+   *
+   * Executes the package installation task with the provided parameters,
+   * mapping them according to the task's parameter mapping configuration.
+   *
+   * @param nodeId - The ID/name of the target node
+   * @param taskName - The name of the package installation task to use
+   * @param packageParams - Package installation parameters
+   * @param parameterMapping - Mapping of generic parameter names to task-specific names
+   * @returns Promise resolving to ExecutionResult object
+   * @throws BoltTaskNotFoundError if the package installation task is not available
+   * @throws BoltNodeUnreachableError if the node is unreachable
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   * @throws BoltTimeoutError if execution exceeds timeout
+   */
+  public async installPackage(
+    nodeId: string,
+    taskName: string,
+    packageParams: {
+      packageName: string;
+      ensure?: string;
+      version?: string;
+      settings?: Record<string, unknown>;
+    },
+    parameterMapping: {
+      packageName: string;
+      ensure?: string;
+      version?: string;
+      settings?: string;
+    },
+  ): Promise<ExecutionResult> {
+    // Build task parameters using the parameter mapping
+    const parameters: Record<string, unknown> = {
+      [parameterMapping.packageName]: packageParams.packageName,
+    };
+
+    // Map ensure parameter (e.g., 'present' -> 'install' for package task)
+    if (packageParams.ensure && parameterMapping.ensure) {
+      let ensureValue = packageParams.ensure;
+
+      // Convert ensure values for the built-in package task
+      if (parameterMapping.ensure === "action") {
+        // Map tp::install ensure values to package task action values
+        const ensureMapping: Record<string, string> = {
+          present: "install",
+          absent: "uninstall",
+          latest: "upgrade",
+        };
+        ensureValue = ensureMapping[packageParams.ensure] || packageParams.ensure;
+      }
+
+      parameters[parameterMapping.ensure] = ensureValue;
+    }
+
+    if (packageParams.version && parameterMapping.version) {
+      parameters[parameterMapping.version] = packageParams.version;
+    }
+
+    if (packageParams.settings && parameterMapping.settings) {
+      parameters[parameterMapping.settings] = packageParams.settings;
+    }
+
+    // Execute the package installation task
+    return this.runTask(nodeId, taskName, parameters);
+  }
+
+  /**
    * Parse a single task parameter
    *
    * @param paramData - Raw parameter data

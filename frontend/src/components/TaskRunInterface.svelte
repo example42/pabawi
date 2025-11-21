@@ -351,27 +351,27 @@
       </p>
     </div>
   {:else}
-    <!-- Tasks by Module -->
-    <div class="space-y-2">
+    <!-- Tasks by Module - Multi-Column Grid Layout -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {#each Object.entries(filteredTasksByModule()) as [moduleName, tasks]}
-        <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-          <!-- Module Header -->
+        <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 hover:shadow-md transition-shadow flex flex-col">
+          <!-- Module Card Header -->
           <button
             type="button"
             onclick={() => toggleModule(moduleName)}
-            class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700"
+            class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 flex-shrink-0"
           >
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 min-w-0">
               <svg
-                class="h-5 w-5 text-gray-400 transition-transform {expandedModules.has(moduleName) ? 'rotate-90' : ''}"
+                class="h-4 w-4 text-gray-400 transition-transform flex-shrink-0 {expandedModules.has(moduleName) ? 'rotate-90' : ''}"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
               >
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
               </svg>
-              <div>
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+              <div class="min-w-0">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white truncate">
                   {moduleName}
                 </h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
@@ -383,48 +383,88 @@
 
           <!-- Module Tasks -->
           {#if expandedModules.has(moduleName)}
-            <div class="border-t border-gray-200 dark:border-gray-700">
+            <div class="border-t border-gray-200 dark:border-gray-700 max-h-80 overflow-y-auto flex-1">
               {#each tasks as task}
-                <button
-                  type="button"
-                  onclick={() => selectTask(task)}
-                  class="flex w-full items-start gap-3 border-b border-gray-100 px-4 py-3 text-left hover:bg-gray-50 last:border-b-0 dark:border-gray-700 dark:hover:bg-gray-700 {selectedTask?.name === task.name ? 'bg-blue-50 dark:bg-blue-900/20' : ''}"
-                >
-                  <div class="flex-1">
-                    <div class="flex items-center gap-2">
-                      <span class="text-sm font-medium text-gray-900 dark:text-white">
-                        {task.name}
-                      </span>
-                      {#if task.parameters.some(p => p.required)}
-                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400">
-                          Required params
+                <div class="relative group">
+                  <button
+                    type="button"
+                    onclick={() => selectTask(task)}
+                    class="flex w-full items-start gap-2 border-b border-gray-100 px-3 py-2 text-left hover:bg-blue-50 last:border-b-0 dark:border-gray-700 dark:hover:bg-blue-900/20 transition-colors {selectedTask?.name === task.name ? 'bg-blue-100 dark:bg-blue-900/30' : ''}"
+                  >
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-1.5">
+                        <span class="text-xs font-medium text-gray-900 dark:text-white truncate">
+                          {task.name.replace(`${moduleName}::`, '')}
                         </span>
-                      {/if}
-                    </div>
-                    {#if task.description}
-                      <p class="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                        {task.description}
-                      </p>
-                    {/if}
-                    {#if task.parameters.length > 0}
-                      <div class="mt-2 flex flex-wrap gap-1">
-                        {#each task.parameters as param}
-                          <span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-mono bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
-                            {param.name}
-                            {#if param.required}
-                              <span class="ml-0.5 text-red-500">*</span>
-                            {/if}
+                        {#if task.parameters.some(p => p.required)}
+                          <span class="inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 flex-shrink-0">
+                            *
                           </span>
-                        {/each}
+                        {/if}
                       </div>
+                    </div>
+                    {#if selectedTask?.name === task.name}
+                      <svg class="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                      </svg>
                     {/if}
+                  </button>
+
+                  <!-- Hover Tooltip with Task Details - CRITICAL: Shows on hover -->
+                  <div class="absolute left-full top-0 ml-2 z-50 hidden group-hover:block w-96 pointer-events-none">
+                    <div class="rounded-lg border border-gray-300 bg-white p-4 shadow-xl dark:border-gray-600 dark:bg-gray-800">
+                      <div class="mb-2">
+                        <span class="text-sm font-semibold text-gray-900 dark:text-white break-words">
+                          {task.name}
+                        </span>
+                      </div>
+                      {#if task.description}
+                        <p class="mb-3 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                          {task.description}
+                        </p>
+                      {/if}
+                      {#if task.parameters.length > 0}
+                        <div class="border-t border-gray-200 pt-2 dark:border-gray-700">
+                          <p class="mb-2 text-xs font-semibold text-gray-700 dark:text-gray-300">Parameters:</p>
+                          <div class="space-y-2 max-h-64 overflow-y-auto">
+                            {#each task.parameters as param}
+                              <div class="text-xs bg-gray-50 dark:bg-gray-900/50 rounded p-2">
+                                <div class="flex items-start gap-1 mb-1">
+                                  <span class="font-mono font-medium text-gray-900 dark:text-white">
+                                    {param.name}
+                                  </span>
+                                  {#if param.required}
+                                    <span class="text-red-500 font-bold">*</span>
+                                  {/if}
+                                  <span class="text-gray-500 dark:text-gray-400">
+                                    ({param.type})
+                                  </span>
+                                </div>
+                                {#if param.description}
+                                  <p class="text-gray-600 dark:text-gray-400 leading-relaxed">
+                                    {param.description}
+                                  </p>
+                                {/if}
+                                {#if param.default !== undefined}
+                                  <p class="text-gray-500 dark:text-gray-500 mt-1">
+                                    Default: <span class="font-mono">{JSON.stringify(param.default)}</span>
+                                  </p>
+                                {/if}
+                              </div>
+                            {/each}
+                          </div>
+                        </div>
+                      {:else}
+                        <p class="text-xs text-gray-500 dark:text-gray-400 italic">No parameters required</p>
+                      {/if}
+                      <div class="mt-3 pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <p class="text-xs text-gray-500 dark:text-gray-400 italic">
+                          Click to select and configure this task
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  {#if selectedTask?.name === task.name}
-                    <svg class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                  {/if}
-                </button>
+                </div>
               {/each}
             </div>
           {/if}

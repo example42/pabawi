@@ -13,6 +13,7 @@ import { createCommandsRouter } from "./routes/commands";
 import { createTasksRouter } from "./routes/tasks";
 import { createExecutionsRouter } from "./routes/executions";
 import { createPuppetRouter } from "./routes/puppet";
+import { createPackagesRouter } from "./routes/packages";
 import { errorHandler, requestIdMiddleware } from "./middleware";
 
 /**
@@ -57,6 +58,22 @@ async function startServer(): Promise<Express> {
       config.executionTimeout,
     );
     console.warn("Bolt service initialized successfully");
+
+    // Validate package installation tasks availability
+    console.warn(`Validating package installation tasks...`);
+    try {
+      const tasks = await boltService.listTasks();
+      for (const packageTask of config.packageTasks) {
+        const task = tasks.find(t => t.name === packageTask.name);
+        if (task) {
+          console.warn(`✓ Package task '${packageTask.name}' (${packageTask.label}) is available`);
+        } else {
+          console.warn(`✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`);
+        }
+      }
+    } catch (error) {
+      console.warn(`WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
 
     // Initialize execution repository
     const executionRepository = new ExecutionRepository(
@@ -142,6 +159,22 @@ async function startServer(): Promise<Express> {
     );
     app.use("/api/nodes", createTasksRouter(boltService, executionRepository));
     app.use("/api/nodes", createPuppetRouter(boltService, executionRepository));
+    app.use(
+      "/api",
+      createPackagesRouter(
+        boltService,
+        executionRepository,
+        config.packageTasks,
+      ),
+    );
+    app.use(
+      "/api/nodes",
+      createPackagesRouter(
+        boltService,
+        executionRepository,
+        config.packageTasks,
+      ),
+    );
     app.use("/api/tasks", createTasksRouter(boltService, executionRepository));
     app.use("/api/executions", createExecutionsRouter(executionRepository));
 

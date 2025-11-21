@@ -8,6 +8,7 @@
   import CommandOutput from '../components/CommandOutput.svelte';
   import TaskRunInterface from '../components/TaskRunInterface.svelte';
   import PuppetRunInterface from '../components/PuppetRunInterface.svelte';
+  import PackageInstallInterface from '../components/PackageInstallInterface.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -64,6 +65,12 @@
     duration: number;
   }
 
+  interface CommandWhitelistConfig {
+    allowAll: boolean;
+    whitelist: string[];
+    matchMode: 'exact' | 'prefix';
+  }
+
   let { params }: Props = $props();
   const nodeId = $derived(params?.id || '');
 
@@ -71,6 +78,9 @@
   let node = $state<Node | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  // Command whitelist state
+  let commandWhitelist = $state<CommandWhitelistConfig | null>(null);
 
   // Facts state
   let facts = $state<Facts | null>(null);
@@ -225,6 +235,20 @@
     }
   }
 
+  // Fetch command whitelist configuration
+  async function fetchCommandWhitelist(): Promise<void> {
+    try {
+      const data = await get<{ commandWhitelist: CommandWhitelistConfig }>(
+        '/api/config',
+        { maxRetries: 2 }
+      );
+
+      commandWhitelist = data.commandWhitelist;
+    } catch (err) {
+      console.error('Error fetching command whitelist:', err);
+    }
+  }
+
 
 
   // Format timestamp
@@ -241,6 +265,7 @@
   onMount(() => {
     fetchNode();
     fetchExecutions();
+    fetchCommandWhitelist();
   });
 </script>
 
@@ -359,9 +384,55 @@
       />
     </div>
 
+    <!-- Package Installation Section -->
+    <div class="mb-8">
+      <PackageInstallInterface
+        nodeId={nodeId}
+        onExecutionComplete={fetchExecutions}
+      />
+    </div>
+
     <!-- Command Execution Section -->
     <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Command</h2>
+
+      <!-- Available Commands Display -->
+      {#if commandWhitelist}
+        <div class="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+            Available Commands
+          </h3>
+          {#if commandWhitelist.allowAll}
+            <p class="text-sm text-gray-600 dark:text-gray-400">
+              All commands are allowed
+            </p>
+          {:else if commandWhitelist.whitelist.length === 0}
+            <p class="text-sm text-red-600 dark:text-red-400">
+              No commands are allowed (whitelist is empty)
+            </p>
+          {:else}
+            <div class="flex flex-wrap gap-2">
+              {#each commandWhitelist.whitelist as cmd}
+                <button
+                  type="button"
+                  onclick={() => commandInput = cmd}
+                  class="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-mono bg-white text-gray-700 border border-gray-300 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                >
+                  {cmd}
+                  {#if commandWhitelist.matchMode === 'prefix'}
+                    <span class="ml-1 text-gray-400">*</span>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+            {#if commandWhitelist.matchMode === 'prefix'}
+              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                * Prefix match mode: commands starting with these prefixes are allowed
+              </p>
+            {/if}
+          {/if}
+        </div>
+      {/if}
 
       <form onsubmit={executeCommand} class="space-y-4">
         <div>

@@ -274,6 +274,8 @@
   
   - [x] 14.2 Create TaskRunInterface component
     - Create component with collapsible module sections
+    - **CRITICAL: Display modules in multiple columns (grid layout) for better space utilization**
+    - **CRITICAL: Show task details on mouseover/hover instead of requiring click**
     - Display tasks organized by module with search/filter
     - Implement task selection to show task details
     - _Requirements: 1.1, 1.3_
@@ -302,9 +304,7 @@
   - [x] 15.2 Implement Puppet run configuration controls
     - Add tags input with multi-select or comma-separated values
     - Add environment dropdown or text input
-    - Add noop mode toggle (dry-run)
-    - Add no-noop mode toggle (override node noop setting)
-    - Add debug mode toggle (verbose output)
+    - **CRITICAL: Move noop mode, no-noop mode, and debug mode toggles inside "Show advanced options" section**
     - Add expandable section for additional options
     - _Requirements: 2.2, 2.4, 2.5, 2.6, 2.7, 2.8_
   
@@ -381,8 +381,59 @@
     - Position Bolt command prominently at the top of execution results
     - _Requirements: 2.3, 2.4, 3.1, 4.1, 5.3, 6.4, 9.4_
 
-- [ ] 17. Create comprehensive API documentation
-  - [ ] 17.1 Write OpenAPI 3.0 specification document
+- [x] 17. Implement package installation interface in node detail page
+  - [x] 17.1 Add package installation section to NodeDetailPage
+    - Create PackageInstallInterface component
+    - Add "Install Packages" collapsible section to node detail page
+    - Position section in node detail layout
+    - _Requirements: 2.1_
+  
+  - [x] 17.2 Implement configurable package installation task
+    - Add PACKAGE_INSTALL_TASK configuration variable (default: "tp::install")
+    - Add PACKAGE_INSTALL_MODULE configuration variable (default: "example42/tp")
+    - Load configuration from environment variables
+    - Validate task availability on startup
+    - _Requirements: 7.4, 10.1_
+  
+  - [x] 17.3 Create package installation form
+    - Add package name input field (required)
+    - Add package version input field (optional)
+    - Add ensure dropdown (present/absent/latest)
+    - Add settings textarea for additional parameters (JSON format)
+    - Add validation for package name format
+    - _Requirements: 1.2, 1.3_
+  
+  - [x] 17.4 Implement package installation execution
+    - Add installPackage method to BoltService
+    - Construct task parameters from form inputs (app, ensure, settings)
+    - Add POST /api/nodes/:id/install-package endpoint
+    - Execute configured Bolt task with parameters
+    - Handle task not found errors gracefully
+    - _Requirements: 2.3, 5.3_
+  
+  - [x] 17.5 Display package installation results
+    - Parse task output for installation status
+    - Show success/failure status with details
+    - Display any warnings or errors from package manager
+    - Show installed package version
+    - Add to execution history
+    - _Requirements: 2.9, 6.1_
+  
+  - [x] 17.6 Add package installation history
+    - Display recent package installations for the node
+    - Show package name, version, status, and timestamp
+    - Link to full execution details
+    - Filter execution history by package installation type
+    - _Requirements: 2.5, 6.3_
+  
+  - [x] 17.7 Implement expert mode for package installations
+    - Display full Bolt command in expert mode
+    - Show raw task output in expert mode
+    - Include task parameters in execution details
+    - _Requirements: 3.1, 3.6_
+
+- [ ] 18. Create comprehensive API documentation
+  - [ ] 18.1 Write OpenAPI 3.0 specification document
     - Document all API endpoints with paths and methods
     - Define request/response schemas for all endpoints
     - Include error response examples for each endpoint
@@ -390,83 +441,83 @@
     - Document query parameters and pagination
     - _Requirements: 10.1, 10.2, 10.3, 10.4_
   
-  - [ ] 17.2 Add API documentation to docs directory
+  - [ ] 18.2 Add API documentation to docs directory
     - Create docs/api.md with endpoint descriptions
     - Include example requests and responses
     - Document error codes and their meanings
     - Add usage examples for common workflows
     - _Requirements: 10.1, 10.2_
 
-- [ ] 18. Implement performance optimizations
-  - [ ] 18.1 Add caching layer for inventory and facts
+- [ ] 19. Implement performance optimizations
+  - [ ] 19.1 Add caching layer for inventory and facts
     - Implement inventory caching with 30-second TTL
     - Implement facts caching per node (5-minute TTL)
     - Add cache invalidation mechanism
     - Use in-memory cache (Map) with timestamp tracking
     - _Requirements: 1.2, 8.1, 8.2, 8.3_
   
-  - [ ] 18.2 Optimize database queries
+  - [ ] 19.2 Optimize database queries
     - Add database indexes for execution queries (status, started_at, target_nodes)
     - Verify indexes are created in schema.sql
     - Test query performance with large datasets
     - _Requirements: 6.3, 6.5_
   
-  - [ ] 18.3 Add concurrent execution limiting
+  - [ ] 19.3 Add concurrent execution limiting
     - Implement execution queue with configurable limit (default: 5)
     - Add queue status endpoint to monitor pending executions
     - Handle queue overflow gracefully
     - _Requirements: 8.1, 8.2_
 
-- [ ]* 19. Write integration tests
-  - [ ]* 19.1 Test API endpoints with Supertest
+- [ ]* 20. Write integration tests
+  - [ ]* 20.1 Test API endpoints with Supertest
     - Test inventory endpoint with mock Bolt CLI
     - Test command execution with whitelist validation
     - Test task execution with parameter validation
     - Test execution history endpoints with pagination
     - _Requirements: 4.6, 4.7, 4.8, 5.3, 6.3_
   
-  - [ ]* 19.2 Test Bolt service integration
+  - [ ]* 20.2 Test Bolt service integration
     - Mock child_process for Bolt CLI execution
     - Test output parsing for various Bolt responses
     - Test error handling for Bolt failures
     - Test timeout handling
     - _Requirements: 3.1, 3.3, 4.3, 5.5_
 
-- [ ]* 20. Write end-to-end tests
-  - [ ]* 20.1 Test critical user flows with Playwright
+- [ ]* 21. Write end-to-end tests
+  - [ ]* 21.1 Test critical user flows with Playwright
     - Test inventory view → node detail → command execution flow
     - Test inventory view → node detail → facts gathering flow
     - Test inventory view → node detail → task execution flow
     - Test executions page filtering and detail view
     - _Requirements: 1.1, 1.5, 2.1, 4.1, 5.3, 6.1_
 
-- [ ] 21. Implement expert mode feature (legacy - superseded by task 16)
-  - [x] 21.1 Add expert mode toggle to main navigation
+- [ ] 22. Implement expert mode feature (legacy - superseded by task 16)
+  - [x] 22.1 Add expert mode toggle to main navigation
     - Create toggle switch component in Navigation component
     - Store expert mode state in localStorage for persistence
     - Add visual indicator when expert mode is active
     - _Requirements: 8.4, 9.4_
   
-  - [x] 21.2 Modify backend to include Bolt command in responses
+  - [x] 22.2 Modify backend to include Bolt command in responses
     - Update BoltService to capture the exact Bolt CLI command being executed
     - Add `boltCommand` field to ExecutionResult interface
     - Include Bolt command in API responses for command, task, and facts operations
     - _Requirements: 4.1, 5.3, 10.2_
   
-  - [x] 21.3 Display Bolt commands in frontend when expert mode is enabled
+  - [x] 22.3 Display Bolt commands in frontend when expert mode is enabled
     - Update CommandOutput component to display Bolt command when available
     - Show Bolt command in execution results on Node Detail page
     - Display Bolt command in execution history on Executions page
     - Format command display with monospace font and copy-to-clipboard button
     - _Requirements: 2.3, 2.4, 6.4, 9.4_
   
-  - [x] 21.4 Add expert mode indicator to execution records
+  - [x] 22.4 Add expert mode indicator to execution records
     - Store whether expert mode was enabled during execution in database
     - Display expert mode badge on execution history items
     - _Requirements: 6.1, 6.3_
 
-- [ ] 22. Enhance project documentation
-  - [ ] 22.1 Expand README with comprehensive setup instructions
+- [ ] 23. Enhance project documentation
+  - [ ] 23.1 Expand README with comprehensive setup instructions
     - Add detailed prerequisites section
     - Document installation steps for all platforms
     - Add quick start guide
@@ -474,25 +525,27 @@
     - Add production deployment instructions
     - _Requirements: 7.1, 7.4, 7.5_
   
-  - [ ] 22.2 Create configuration guide
+  - [ ] 23.2 Create configuration guide
     - Document all environment variables and their defaults
     - Create user guide for command whitelist configuration
     - Document Bolt project requirements (inventory format, bolt-project.yaml)
     - Add examples for different deployment scenarios
+    - Document package installation configuration (PACKAGE_INSTALL_TASK, PACKAGE_INSTALL_MODULE)
     - _Requirements: 7.4, 7.5, 10.1_
   
-  - [ ] 22.3 Create troubleshooting guide
+  - [ ] 23.3 Create troubleshooting guide
     - Add troubleshooting section for common issues
     - Document error messages and their solutions
     - Add debugging tips for Bolt integration issues
     - Include FAQ section
     - _Requirements: 9.1, 9.2, 9.5_
   
-  - [ ] 22.4 Create user guide
+  - [ ] 23.4 Create user guide
     - Document how to use the web interface
     - Add screenshots or diagrams for key features
     - Document command execution workflow
     - Document task execution workflow
     - Document facts gathering workflow
+    - Document package installation workflow
     - Document expert mode feature and its benefits
     - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1_

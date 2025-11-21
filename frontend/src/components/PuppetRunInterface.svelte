@@ -68,6 +68,27 @@
     expanded = !expanded;
   }
 
+  // Handle noop toggle - ensure noop and noNoop are mutually exclusive
+  function handleNoopToggle(): void {
+    noop = !noop;
+    if (noop && noNoop) {
+      noNoop = false;
+    }
+  }
+
+  // Handle no-noop toggle - ensure noop and noNoop are mutually exclusive
+  function handleNoNoopToggle(): void {
+    noNoop = !noNoop;
+    if (noNoop && noop) {
+      noop = false;
+    }
+  }
+
+  // Handle debug toggle
+  function handleDebugToggle(): void {
+    debug = !debug;
+  }
+
   // Execute Puppet run
   async function executePuppetRun(event: Event): Promise<void> {
     event.preventDefault();
@@ -213,24 +234,6 @@
   {#if expanded}
     <div class="border-t border-gray-200 p-6 dark:border-gray-700">
       <form onsubmit={executePuppetRun} class="space-y-4">
-        <!-- Tags Input -->
-        <div>
-          <label for="puppet-tags" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Tags (comma-separated)
-          </label>
-          <input
-            id="puppet-tags"
-            type="text"
-            bind:value={tagsInput}
-            placeholder="e.g., webserver, database"
-            class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
-            disabled={executing}
-          />
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Optional: Limit Puppet run to specific tags
-          </p>
-        </div>
-
         <!-- Environment Input -->
         <div>
           <label for="puppet-environment" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -249,46 +252,79 @@
           </p>
         </div>
 
-        <!-- Mode Toggles -->
-        <div class="space-y-3">
-          <div class="flex items-center">
-            <input
-              id="puppet-noop"
-              type="checkbox"
-              bind:checked={noop}
-              class="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900"
-              disabled={executing}
-            />
-            <label for="puppet-noop" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+        <!-- Noop Mode Toggle -->
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+          <div class="flex-1">
+            <label for="puppet-noop-toggle" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Noop mode (dry-run)
             </label>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              Run Puppet without making changes
+            </p>
           </div>
-
-          <div class="flex items-center">
-            <input
-              id="puppet-no-noop"
-              type="checkbox"
-              bind:checked={noNoop}
-              class="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900"
-              disabled={executing}
+          <button
+            type="button"
+            id="puppet-noop-toggle"
+            role="switch"
+            aria-checked={noop}
+            onclick={handleNoopToggle}
+            disabled={executing}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {noop ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {noop ? 'translate-x-5' : 'translate-x-0'}"
             />
-            <label for="puppet-no-noop" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+          </button>
+        </div>
+
+        <!-- No-noop Mode Toggle -->
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+          <div class="flex-1">
+            <label for="puppet-no-noop-toggle" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               No-noop mode (override node noop setting)
             </label>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              Force Puppet to make changes even if node is in noop mode
+            </p>
           </div>
-
-          <div class="flex items-center">
-            <input
-              id="puppet-debug"
-              type="checkbox"
-              bind:checked={debug}
-              class="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900"
-              disabled={executing}
+          <button
+            type="button"
+            id="puppet-no-noop-toggle"
+            role="switch"
+            aria-checked={noNoop}
+            onclick={handleNoNoopToggle}
+            disabled={executing}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {noNoop ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {noNoop ? 'translate-x-5' : 'translate-x-0'}"
             />
-            <label for="puppet-debug" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+          </button>
+        </div>
+
+        <!-- Debug Mode Toggle -->
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+          <div class="flex-1">
+            <label for="puppet-debug-toggle" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Debug mode (verbose output)
             </label>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              Enable detailed logging for troubleshooting
+            </p>
           </div>
+          <button
+            type="button"
+            id="puppet-debug-toggle"
+            role="switch"
+            aria-checked={debug}
+            onclick={handleDebugToggle}
+            disabled={executing}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {debug ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {debug ? 'translate-x-5' : 'translate-x-0'}"
+            />
+          </button>
         </div>
 
         <!-- Advanced Options Toggle -->
@@ -301,10 +337,24 @@
         </button>
 
         {#if showAdvanced}
-          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/50">
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              Additional Puppet options can be added here in future versions.
-            </p>
+          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3 dark:border-gray-700 dark:bg-gray-900/50">
+            <!-- Tags Input -->
+            <div>
+              <label for="puppet-tags" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Tags (comma-separated)
+              </label>
+              <input
+                id="puppet-tags"
+                type="text"
+                bind:value={tagsInput}
+                placeholder="e.g., webserver, database"
+                class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                disabled={executing}
+              />
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Optional: Limit Puppet run to specific tags
+              </p>
+            </div>
           </div>
         {/if}
 
