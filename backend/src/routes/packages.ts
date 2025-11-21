@@ -47,6 +47,7 @@ export function createPackagesRouter(
   boltService: BoltService,
   executionRepository: ExecutionRepository,
   packageTasks: PackageTaskConfig[],
+  streamingManager?: import("../services/StreamingExecutionManager").StreamingExecutionManager,
 ): Router {
   const router = Router();
 
@@ -98,41 +99,104 @@ export function createPackagesRouter(
         return;
       }
 
-      try {
-        // Execute package installation task with parameter mapping
-        const result = await boltService.installPackage(
-          nodeId,
-          taskName,
-          {
-            packageName,
-            ensure,
-            version,
-            settings,
+      // Create initial execution record
+      const executionId = await executionRepository.create({
+        type: "task",
+        targetNodes: [nodeId],
+        action: taskName,
+        parameters: { packageName, ensure, version, settings },
+        status: "running",
+        startedAt: new Date().toISOString(),
+        results: [],
+        expertMode,
+      });
+
+      // Execute package installation asynchronously
+      void (async (): Promise<void> => {
+        try {
+          // Set up streaming callback if expert mode is enabled and streaming manager is available
+          const streamingCallback = expertMode && streamingManager ? {
+            onCommand: (cmd: string) => streamingManager.emitCommand(executionId, cmd),
+            onStdout: (chunk: string) => streamingManager.emitStdout(executionId, chunk),
+            onStderr: (chunk: string) => streamingManager.emitStderr(executionId, chunk),
+          } : undefined;
+
+          // Execute package installation task with parameter mapping
+          const result = await boltService.installPackage(
+            nodeId,
+            taskName,
+            {
+              packageName,
+              ensure,
+              version,
+              settings,
+            },
+            taskConfig.parameterMapping,
+            streamingCallback,
+          );
+
+          // Update execution record with results
+          await executionRepository.update(executionId, {
+            status: result.status,
+            completedAt: result.completedAt,
+            results: result.results,
+            error: result.error,
+            command: result.command,
+          });
+
+          // Emit completion event if streaming
+          if (streamingManager) {
+            streamingManager.emitComplete(executionId, result);
+          }
+        } catch (error) {
+          console.error("Error installing package:", error);
+
+          let errorMessage = "Unknown error";
+          if (error instanceof Error) {
+            errorMessage = error.message;
+          }
+
+          // Update execution record with error
+          await executionRepository.update(executionId, {
+            status: "failed",
+            completedAt: new Date().toISOString(),
+            results: [
+              {
+                nodeId,
+                status: "failed",
+                error: errorMessage,
+                duration: 0,
+              },
+            ],
+            error: errorMessage,
+          });
+
+          // Emit error event if streaming
+          if (streamingManager) {
+            streamingManager.emitError(executionId, errorMessage);
+          }
+        }
+      })();
+
+      // Return execution ID and initial status immediately
+      res.status(202).json({
+        executionId,
+        status: "running",
+        message: "Package installation started",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({
+          error: {
+            code: "INVALID_REQUEST",
+            message: "Request validation failed",
+            details: error.errors,
           },
-          taskConfig.parameterMapping,
-        );
-
-        // Store execution in database
-        await executionRepository.create({
-          type: result.type,
-          targetNodes: result.targetNodes,
-          action: result.action,
-          parameters: result.parameters,
-          status: result.status,
-          startedAt: result.startedAt,
-          completedAt: result.completedAt,
-          results: result.results,
-          error: result.error,
-          command: result.command,
-          expertMode: expertMode,
         });
+        return;
+      }
 
-        // Return execution ID
-        res.status(202).json({
-          executionId: result.id,
-          status: result.status,
-        });
-      } catch (error) {
+      try {
         // Handle specific Bolt errors
         if (error instanceof BoltTaskNotFoundError) {
           res.status(404).json({

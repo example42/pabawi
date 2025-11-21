@@ -549,3 +549,83 @@
     - Document package installation workflow
     - Document expert mode feature and its benefits
     - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1_
+
+- [ ] 24. Implement realtime streaming of command/task output in expert mode
+  - [ ] 24.1 Add Server-Sent Events (SSE) support to backend
+    - Create SSE middleware for streaming responses
+    - Add SSE endpoint for execution streaming: GET /api/executions/:id/stream
+    - Implement connection management and cleanup
+    - Add heartbeat mechanism to keep connections alive
+    - _Requirements: 3.1, 8.1_
+  
+  - [ ] 24.2 Modify BoltService to support streaming output
+    - **CRITICAL: Modify executeCommand to accept optional callback for streaming stdout/stderr**
+    - Add streamingCallback parameter to executeCommand method
+    - Emit stdout/stderr chunks in real-time as they arrive from child process
+    - Maintain backward compatibility with non-streaming executions
+    - Include command string in streaming events
+    - _Requirements: 3.1, 4.1, 5.3_
+  
+  - [ ] 24.3 Update command and task execution routes for streaming
+    - Modify command execution to support streaming when expert mode is enabled
+    - Modify task execution to support streaming when expert mode is enabled
+    - Store execution ID before starting execution for stream subscription
+    - Emit streaming events during execution (stdout, stderr, status updates)
+    - Emit completion event when execution finishes
+    - _Requirements: 2.3, 2.4, 4.1, 5.3_
+  
+  - [ ] 24.4 Create StreamingExecutionManager service
+    - Implement in-memory execution stream registry
+    - Track active streaming connections per execution ID
+    - Provide methods to emit events to all subscribers of an execution
+    - Handle connection cleanup when clients disconnect
+    - Implement event types: 'start', 'stdout', 'stderr', 'status', 'complete', 'error'
+    - _Requirements: 8.1, 8.2_
+  
+  - [ ] 24.5 Create frontend SSE client utility
+    - Create useExecutionStream Svelte 5 hook/utility
+    - Implement EventSource connection management
+    - Parse SSE events and update reactive state
+    - Handle reconnection on connection loss
+    - Provide cleanup on component unmount
+    - _Requirements: 9.4_
+  
+  - [ ] 24.6 Create RealtimeOutputViewer component
+    - Create Svelte component for displaying streaming output
+    - **CRITICAL: Display Bolt command at the top when expert mode is enabled**
+    - Show stdout and stderr in separate sections with syntax highlighting
+    - Auto-scroll to bottom as new output arrives
+    - Add toggle to pause auto-scrolling
+    - Display execution status (running, success, failed)
+    - Show elapsed time during execution
+    - Add copy-to-clipboard for full output
+    - _Requirements: 3.1, 3.4, 9.4_
+  
+  - [ ] 24.7 Integrate RealtimeOutputViewer in Node Detail page
+    - Replace static CommandOutput with RealtimeOutputViewer when expert mode is enabled
+    - Show RealtimeOutputViewer for command execution results
+    - Show RealtimeOutputViewer for task execution results
+    - Show RealtimeOutputViewer for Puppet run results
+    - Show RealtimeOutputViewer for package installation results
+    - Fall back to static output when expert mode is disabled
+    - _Requirements: 2.3, 2.4, 3.1, 9.4_
+  
+  - [ ] 24.8 Add streaming support to Executions page
+    - Show realtime indicator for running executions
+    - Allow viewing streaming output from execution history
+    - Display RealtimeOutputViewer in execution detail modal when expert mode is enabled
+    - _Requirements: 6.4, 9.4_
+  
+  - [ ] 24.9 Implement error handling for streaming
+    - Handle SSE connection errors gracefully
+    - Show connection status indicator (connected, disconnected, reconnecting)
+    - Display error messages when streaming fails
+    - Fall back to polling execution status if streaming is unavailable
+    - _Requirements: 9.1, 9.2_
+  
+  - [ ] 24.10 Add streaming performance optimizations
+    - Implement output buffering to reduce event frequency (100ms buffer)
+    - Limit maximum output size per execution (configurable, default 10MB)
+    - Truncate very long lines in streaming output
+    - Add configuration for streaming buffer size and limits
+    - _Requirements: 8.1, 8.2, 8.3_

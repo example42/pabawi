@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { BoltService } from "../bolt/BoltService";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
+import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import {
   BoltExecutionError,
   BoltParseError,
@@ -30,6 +31,7 @@ const TaskExecutionBodySchema = z.object({
 export function createTasksRouter(
   boltService: BoltService,
   executionRepository: ExecutionRepository,
+  streamingManager?: StreamingExecutionManager,
 ): Router {
   const router = Router();
 
@@ -167,10 +169,27 @@ export function createTasksRouter(
         // We don't await here to return immediately with execution ID
         void (async (): Promise<void> => {
           try {
+            // Set up streaming callback if expert mode is enabled and streaming manager is available
+            const streamingCallback =
+              expertMode && streamingManager
+                ? {
+                    onCommand: (cmd: string): void => {
+                      streamingManager.emitCommand(executionId, cmd);
+                    },
+                    onStdout: (chunk: string): void => {
+                      streamingManager.emitStdout(executionId, chunk);
+                    },
+                    onStderr: (chunk: string): void => {
+                      streamingManager.emitStderr(executionId, chunk);
+                    },
+                  }
+                : undefined;
+
             const result = await boltService.runTask(
               nodeId,
               taskName,
               parameters,
+              streamingCallback,
             );
 
             // Update execution record with results
@@ -181,6 +200,11 @@ export function createTasksRouter(
               error: result.error,
               command: result.command,
             });
+
+            // Emit completion event if streaming
+            if (streamingManager) {
+              streamingManager.emitComplete(executionId, result);
+            }
           } catch (error) {
             console.error("Error executing task:", error);
 
@@ -208,6 +232,11 @@ export function createTasksRouter(
               ],
               error: errorMessage,
             });
+
+            // Emit error event if streaming
+            if (streamingManager) {
+              streamingManager.emitError(executionId, errorMessage);
+            }
           }
         })();
 

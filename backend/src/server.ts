@@ -14,6 +14,8 @@ import { createTasksRouter } from "./routes/tasks";
 import { createExecutionsRouter } from "./routes/executions";
 import { createPuppetRouter } from "./routes/puppet";
 import { createPackagesRouter } from "./routes/packages";
+import { createStreamingRouter } from "./routes/streaming";
+import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { errorHandler, requestIdMiddleware } from "./middleware";
 
 /**
@@ -64,15 +66,21 @@ async function startServer(): Promise<Express> {
     try {
       const tasks = await boltService.listTasks();
       for (const packageTask of config.packageTasks) {
-        const task = tasks.find(t => t.name === packageTask.name);
+        const task = tasks.find((t) => t.name === packageTask.name);
         if (task) {
-          console.warn(`✓ Package task '${packageTask.name}' (${packageTask.label}) is available`);
+          console.warn(
+            `✓ Package task '${packageTask.name}' (${packageTask.label}) is available`,
+          );
         } else {
-          console.warn(`✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`);
+          console.warn(
+            `✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`,
+          );
         }
       }
     } catch (error) {
-      console.warn(`WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.warn(
+        `WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
 
     // Initialize execution repository
@@ -84,6 +92,10 @@ async function startServer(): Promise<Express> {
     const commandWhitelistService = new CommandWhitelistService(
       config.commandWhitelist,
     );
+
+    // Initialize streaming execution manager
+    const streamingManager = new StreamingExecutionManager();
+    console.warn("Streaming execution manager initialized successfully");
 
     // Create Express app
     const app: Express = express();
@@ -105,7 +117,9 @@ async function startServer(): Promise<Express> {
       const timestamp = new Date().toISOString();
       const startTime = Date.now();
 
-      console.warn(`[${timestamp}] [${req.id ?? "unknown"}] ${req.method} ${req.path}`);
+      console.warn(
+        `[${timestamp}] [${req.id ?? "unknown"}] ${req.method} ${req.path}`,
+      );
 
       // Log response when finished
       res.on("finish", () => {
@@ -155,16 +169,24 @@ async function startServer(): Promise<Express> {
         boltService,
         executionRepository,
         commandWhitelistService,
+        streamingManager,
       ),
     );
-    app.use("/api/nodes", createTasksRouter(boltService, executionRepository));
-    app.use("/api/nodes", createPuppetRouter(boltService, executionRepository));
+    app.use(
+      "/api/nodes",
+      createTasksRouter(boltService, executionRepository, streamingManager),
+    );
+    app.use(
+      "/api/nodes",
+      createPuppetRouter(boltService, executionRepository, streamingManager),
+    );
     app.use(
       "/api",
       createPackagesRouter(
         boltService,
         executionRepository,
         config.packageTasks,
+        streamingManager,
       ),
     );
     app.use(
@@ -173,10 +195,22 @@ async function startServer(): Promise<Express> {
         boltService,
         executionRepository,
         config.packageTasks,
+        streamingManager,
       ),
     );
-    app.use("/api/tasks", createTasksRouter(boltService, executionRepository));
+    app.use(
+      "/api/tasks",
+      createTasksRouter(boltService, executionRepository, streamingManager),
+    );
     app.use("/api/executions", createExecutionsRouter(executionRepository));
+    app.use(
+      "/api/executions",
+      createStreamingRouter(streamingManager, executionRepository),
+    );
+    app.use(
+      "/api/streaming",
+      createStreamingRouter(streamingManager, executionRepository),
+    );
 
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");
@@ -193,12 +227,15 @@ async function startServer(): Promise<Express> {
 
     // Start server
     const server = app.listen(config.port, config.host, () => {
-      console.warn(`Backend server running on ${config.host}:${String(config.port)}`);
+      console.warn(
+        `Backend server running on ${config.host}:${String(config.port)}`,
+      );
     });
 
     // Graceful shutdown
     process.on("SIGTERM", () => {
       console.warn("SIGTERM received, shutting down gracefully...");
+      streamingManager.cleanup();
       server.close(() => {
         void databaseService.close().then(() => {
           console.warn("Server closed");

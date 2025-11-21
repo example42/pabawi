@@ -19,6 +19,15 @@ import {
 } from "./types";
 
 /**
+ * Streaming callback for real-time output
+ */
+export interface StreamingCallback {
+  onStdout?: (chunk: string) => void;
+  onStderr?: (chunk: string) => void;
+  onCommand?: (command: string) => void;
+}
+
+/**
  * Service for executing Bolt CLI commands with timeout handling,
  * JSON output parsing, and error capture
  */
@@ -51,10 +60,11 @@ export class BoltService {
   }
 
   /**
-   * Execute a Bolt CLI command with timeout handling
+   * Execute a Bolt CLI command with timeout handling and optional streaming
    *
    * @param args - Command line arguments for Bolt CLI
    * @param options - Execution options including timeout and working directory
+   * @param streamingCallback - Optional callback for real-time output streaming
    * @returns Promise resolving to execution result
    * @throws BoltTimeoutError if execution exceeds timeout
    * @throws BoltExecutionError if Bolt returns non-zero exit code
@@ -62,9 +72,16 @@ export class BoltService {
   public async executeCommand(
     args: string[],
     options: BoltExecutionOptions = {},
+    streamingCallback?: StreamingCallback,
   ): Promise<BoltExecutionResult> {
     const timeout = options.timeout ?? this.defaultTimeout;
     const cwd = options.cwd ?? this.boltProjectPath;
+
+    // Emit command string if callback provided
+    if (streamingCallback?.onCommand) {
+      const commandString = this.buildCommandString(args);
+      streamingCallback.onCommand(commandString);
+    }
 
     return new Promise((resolve, reject) => {
       let stdout = "";
@@ -94,17 +111,29 @@ export class BoltService {
           shell: false,
         });
 
-        // Capture stdout
+        // Capture stdout with streaming support
         if (childProcess.stdout) {
           childProcess.stdout.on("data", (data: Buffer) => {
-            stdout += data.toString();
+            const chunk = data.toString();
+            stdout += chunk;
+
+            // Stream stdout chunk if callback provided
+            if (streamingCallback?.onStdout) {
+              streamingCallback.onStdout(chunk);
+            }
           });
         }
 
-        // Capture stderr
+        // Capture stderr with streaming support
         if (childProcess.stderr) {
           childProcess.stderr.on("data", (data: Buffer) => {
-            stderr += data.toString();
+            const chunk = data.toString();
+            stderr += chunk;
+
+            // Stream stderr chunk if callback provided
+            if (streamingCallback?.onStderr) {
+              streamingCallback.onStderr(chunk);
+            }
           });
         }
 
@@ -163,6 +192,7 @@ export class BoltService {
    *
    * @param args - Command line arguments for Bolt CLI (should include --format json)
    * @param options - Execution options
+   * @param streamingCallback - Optional callback for real-time output streaming
    * @returns Promise resolving to parsed JSON output
    * @throws BoltParseError if JSON parsing fails
    * @throws BoltExecutionError if Bolt returns non-zero exit code
@@ -171,6 +201,7 @@ export class BoltService {
   public async executeCommandWithJsonOutput(
     args: string[],
     options: BoltExecutionOptions = {},
+    streamingCallback?: StreamingCallback,
   ): Promise<BoltJsonOutput> {
     // Ensure --format json is included in args
     const argsToUse =
@@ -178,7 +209,7 @@ export class BoltService {
         ? [...args, "--format", "json"]
         : args;
 
-    const result = await this.executeCommand(argsToUse, options);
+    const result = await this.executeCommand(argsToUse, options, streamingCallback);
 
     if (!result.success) {
       throw new BoltExecutionError(
@@ -583,6 +614,7 @@ export class BoltService {
    *
    * @param nodeId - The ID/name of the target node
    * @param command - The command string to execute
+   * @param streamingCallback - Optional callback for real-time output streaming
    * @returns Promise resolving to ExecutionResult object
    * @throws BoltNodeUnreachableError if the node is unreachable
    * @throws BoltExecutionError if Bolt command fails
@@ -592,6 +624,7 @@ export class BoltService {
   public async runCommand(
     nodeId: string,
     command: string,
+    streamingCallback?: StreamingCallback,
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
@@ -607,7 +640,7 @@ export class BoltService {
     const commandString = this.buildCommandString(args);
 
     try {
-      const jsonOutput = await this.executeCommandWithJsonOutput(args);
+      const jsonOutput = await this.executeCommandWithJsonOutput(args, {}, streamingCallback);
 
       const endTime = Date.now();
       const result = this.transformCommandOutput(
@@ -766,6 +799,7 @@ export class BoltService {
    * @param nodeId - The ID/name of the target node
    * @param taskName - The name of the task to execute
    * @param parameters - Task parameters as key-value pairs
+   * @param streamingCallback - Optional callback for real-time output streaming
    * @returns Promise resolving to ExecutionResult object
    * @throws BoltTaskNotFoundError if the task does not exist
    * @throws BoltTaskParameterError if parameters are invalid
@@ -778,6 +812,7 @@ export class BoltService {
     nodeId: string,
     taskName: string,
     parameters?: Record<string, unknown>,
+    streamingCallback?: StreamingCallback,
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
@@ -801,7 +836,7 @@ export class BoltService {
     const commandString = this.buildCommandString(args);
 
     try {
-      const jsonOutput = await this.executeCommandWithJsonOutput(args);
+      const jsonOutput = await this.executeCommandWithJsonOutput(args, {}, streamingCallback);
 
       const endTime = Date.now();
       const result = this.transformTaskOutput(
@@ -1279,6 +1314,7 @@ export class BoltService {
    *
    * @param nodeId - The ID/name of the target node
    * @param config - Puppet run configuration options
+   * @param streamingCallback - Optional callback for real-time output streaming
    * @returns Promise resolving to ExecutionResult object
    * @throws BoltTaskNotFoundError if psick::puppet_agent task is not available
    * @throws BoltNodeUnreachableError if the node is unreachable
@@ -1295,6 +1331,7 @@ export class BoltService {
       noNoop?: boolean;
       debug?: boolean;
     } = {},
+    streamingCallback?: StreamingCallback,
   ): Promise<ExecutionResult> {
     // Build task parameters from configuration
     const parameters: Record<string, unknown> = {};
@@ -1321,7 +1358,7 @@ export class BoltService {
     }
 
     // Execute the psick::puppet_agent task
-    return this.runTask(nodeId, "psick::puppet_agent", parameters);
+    return this.runTask(nodeId, "psick::puppet_agent", parameters, streamingCallback);
   }
 
   /**
@@ -1334,6 +1371,7 @@ export class BoltService {
    * @param taskName - The name of the package installation task to use
    * @param packageParams - Package installation parameters
    * @param parameterMapping - Mapping of generic parameter names to task-specific names
+   * @param streamingCallback - Optional callback for real-time output streaming
    * @returns Promise resolving to ExecutionResult object
    * @throws BoltTaskNotFoundError if the package installation task is not available
    * @throws BoltNodeUnreachableError if the node is unreachable
@@ -1356,6 +1394,7 @@ export class BoltService {
       version?: string;
       settings?: string;
     },
+    streamingCallback?: StreamingCallback,
   ): Promise<ExecutionResult> {
     // Build task parameters using the parameter mapping
     const parameters: Record<string, unknown> = {
@@ -1389,7 +1428,7 @@ export class BoltService {
     }
 
     // Execute the package installation task
-    return this.runTask(nodeId, taskName, parameters);
+    return this.runTask(nodeId, taskName, parameters, streamingCallback);
   }
 
   /**
