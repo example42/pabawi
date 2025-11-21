@@ -18,7 +18,51 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 
 ## Requirements
 
-### Requirement 1: Node Inventory Display
+### Requirement 1: Bolt Task Run Interface with Module Organization
+
+**User Story:** As an infrastructure operator, I want to execute Bolt tasks through a web interface with tasks organized by module and configurable parameters, so that I can efficiently run automation workflows with proper context and configuration.
+
+#### Acceptance Criteria
+
+1. THE Web Interface SHALL display available Bolt tasks organized by module name
+2. WHEN the operator selects a task, THE Web Interface SHALL display all parameters for that task including required and optional parameters
+3. THE Web Interface SHALL provide input fields for each task parameter with appropriate input types based on parameter schema
+4. WHEN the operator submits a task for execution, THE API Server SHALL invoke Bolt task execution with the operator-provided parameter values
+5. THE Web Interface SHALL validate required parameters before submission and display validation errors
+6. THE Web Interface SHALL display task execution results including success status, output, and any error messages
+7. THE Web Interface SHALL persist task execution history for audit and troubleshooting purposes
+
+### Requirement 2: Puppet Run Interface in Node Detail Page
+
+**User Story:** As an infrastructure operator, I want to trigger Puppet runs from the node detail page with configurable options, so that I can apply configuration changes to specific nodes with precise control over execution parameters.
+
+#### Acceptance Criteria
+
+1. WHEN the operator views a node detail page, THE Web Interface SHALL display a Run Puppet section
+2. THE Web Interface SHALL provide controls to configure Puppet run options including tags, environment, noop mode, no-noop mode, and debug mode
+3. WHEN the operator triggers a Puppet run, THE API Server SHALL execute the psick::puppet_agent task with the operator-specified options
+4. THE Web Interface SHALL allow the operator to specify one or more Puppet tags to limit the scope of the run
+5. THE Web Interface SHALL allow the operator to specify the Puppet environment for the run
+6. THE Web Interface SHALL provide a toggle for noop mode to perform dry-run executions
+7. THE Web Interface SHALL provide a no-noop mode option to override noop settings configured on the target node
+8. THE Web Interface SHALL provide a toggle for debug mode to enable verbose Puppet output
+9. WHEN a Puppet run completes, THE Web Interface SHALL display execution results including changed resources, failed resources, and execution time
+10. THE Web Interface SHALL display Puppet run output in a readable format with syntax highlighting for resource changes
+
+### Requirement 3: Expert Mode Detailed Error Output
+
+**User Story:** As an infrastructure operator with advanced troubleshooting needs, I want to see detailed error output when expert mode is enabled, so that I can diagnose and resolve complex issues efficiently.
+
+#### Acceptance Criteria
+
+1. THE Web Interface SHALL provide an expert mode toggle accessible to operators
+2. WHERE expert mode is enabled, THE Web Interface SHALL display complete error messages including stack traces and technical details
+3. WHERE expert mode is enabled, THE Web Interface SHALL display raw API responses for failed operations
+4. WHERE expert mode is disabled, THE Web Interface SHALL display simplified error messages suitable for general operators
+5. THE Web Interface SHALL persist the expert mode preference across browser sessions
+6. WHERE expert mode is enabled, THE Web Interface SHALL display additional diagnostic information including request IDs, timestamps, and execution context
+
+### Requirement 4: Node Inventory Display
 
 **User Story:** As an infrastructure operator, I want to view all nodes in my Bolt inventory through a web interface, so that I can quickly see what systems are under management.
 
@@ -30,7 +74,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. THE Web Interface SHALL provide search and filter capabilities to locate specific nodes
 5. WHEN the operator clicks on a node, THE Web Interface SHALL navigate to the node detail page
 
-### Requirement 2: Node Detail Information
+### Requirement 5: Node Detail Information
 
 **User Story:** As an infrastructure operator, I want to view detailed information about a specific node, so that I can understand its configuration and current state.
 
@@ -42,7 +86,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. THE Web Interface SHALL provide controls to execute commands against the selected node
 5. THE Web Interface SHALL provide controls to execute tasks against the selected node
 
-### Requirement 3: Facts Collection
+### Requirement 6: Facts Collection
 
 **User Story:** As an infrastructure operator, I want to gather system facts from target nodes, so that I can understand their current configuration and state.
 
@@ -54,7 +98,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. IF fact gathering fails, THEN THE API Server SHALL return error details including the failure reason
 5. THE Web Interface SHALL display gathered facts in a readable, organized format
 
-### Requirement 4: Command Execution
+### Requirement 7: Command Execution
 
 **User Story:** As an infrastructure operator, I want to execute arbitrary commands on target nodes through the web interface, so that I can perform ad-hoc operations without using the command line.
 
@@ -70,7 +114,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 8. WHERE the allow-all-commands option is disabled, THE API Server SHALL reject commands not present in the whitelist with an authorization error
 9. WHEN the API Server starts with allow-all-commands disabled and no whitelist configured, THE API Server SHALL reject all command execution requests
 
-### Requirement 5: Task Execution
+### Requirement 8: Task Execution
 
 **User Story:** As an infrastructure operator, I want to execute Bolt tasks on target nodes through the web interface, so that I can run predefined automation workflows without command line access.
 
@@ -82,7 +126,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. THE API Server SHALL execute tasks using credentials and modules from the local Bolt working directory
 5. WHEN task execution completes, THE API Server SHALL return structured execution results to the Web Interface
 
-### Requirement 6: Execution Results Tracking
+### Requirement 9: Execution Results Tracking
 
 **User Story:** As an infrastructure operator, I want to view a history of all executions performed through the system, so that I can audit operations and troubleshoot issues.
 
@@ -94,7 +138,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. WHEN the operator clicks on an execution, THE Web Interface SHALL display detailed results for each target node
 5. THE Web Interface SHALL provide filtering capabilities to locate executions by date, target, or status
 
-### Requirement 7: Local Bolt Configuration Integration
+### Requirement 10: Local Bolt Configuration Integration
 
 **User Story:** As an infrastructure operator, I want the system to use my existing Bolt configuration, so that I don't need to duplicate inventory and credential setup.
 
@@ -106,7 +150,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. IF required Bolt configuration files are missing, THEN THE API Server SHALL return an error indicating which files are required
 5. THE API Server SHALL validate Bolt configuration on startup and report any configuration errors
 
-### Requirement 8: Web Interface Responsiveness
+### Requirement 11: Web Interface Responsiveness
 
 **User Story:** As an infrastructure operator, I want the web interface to be responsive and performant, so that I can efficiently manage my infrastructure.
 
@@ -118,7 +162,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. THE Web Interface SHALL provide loading indicators during API operations that exceed 500 milliseconds
 5. THE Web Interface SHALL be responsive and functional on desktop browsers with viewport widths from 1024 pixels to 2560 pixels
 
-### Requirement 9: Error Handling and User Feedback
+### Requirement 12: Error Handling and User Feedback
 
 **User Story:** As an infrastructure operator, I want clear error messages when operations fail, so that I can understand and resolve issues quickly.
 
@@ -130,7 +174,7 @@ This document specifies the requirements for version 0.1.0 of Pabawi, a Unified 
 4. THE Web Interface SHALL provide actionable guidance in error messages when possible
 5. THE API Server SHALL log all errors with sufficient detail for troubleshooting
 
-### Requirement 10: API Design and Documentation
+### Requirement 13: API Design and Documentation
 
 **User Story:** As a developer, I want a well-designed REST API with clear documentation, so that I can integrate with the system or extend its functionality.
 

@@ -1,0 +1,120 @@
+groups:
+  # Local development and testing
+  - name: local-dev
+    targets:
+      - name: localhost
+        uri: localhost
+        config:
+          transport: local
+
+  # Production web servers
+  - name: web-servers
+    targets:
+      - name: web-01
+        uri: web-01.example.com
+        alias: prod-web-01
+      - name: web-02
+        uri: web-02.example.com
+        alias: prod-web-02
+    config:
+      ssh:
+        user: deploy
+        private-key: ~/.ssh/id_rsa
+    vars:
+      environment: production
+      app_port: 3000
+      log_level: info
+
+  # Staging environment
+  - name: staging
+    targets:
+      - name: staging-web
+        uri: staging.example.com
+      - name: staging-db
+        uri: staging-db.example.com
+    config:
+      ssh:
+        user: deploy
+        private-key: ~/.ssh/staging_key
+        host-key-check: false
+    vars:
+      environment: staging
+      debug_mode: true
+      log_level: debug
+
+  # Windows servers
+  - name: windows-servers
+    targets:
+      - name: win-app-01
+        uri: win-app-01.example.com
+      - name: win-app-02
+        uri: win-app-02.example.com
+    config:
+      transport: winrm
+      winrm:
+        user: Administrator
+        ssl: true
+        ssl-verify: false
+    vars:
+      environment: production
+      os_type: windows
+
+  # Docker hosts
+  - name: docker-hosts
+    targets:
+      - name: docker-01
+        uri: docker-01.example.com
+      - name: docker-02
+        uri: docker-02.example.com
+    config:
+      ssh:
+        user: docker
+        private-key: ~/.ssh/docker_key
+    vars:
+      environment: production
+      docker_version: "24.0"
+      swarm_enabled: true
+
+  # Monitoring and logging
+  - name: monitoring
+    targets:
+      - name: prometheus
+        uri: prometheus.example.com
+      - name: grafana
+        uri: grafana.example.com
+      - name: elk-stack
+        uri: elk.example.com
+    config:
+      ssh:
+        user: monitoring
+        private-key: ~/.ssh/monitoring_key
+    vars:
+      environment: production
+      retention_days: 30
+
+  # Kubernetes nodes
+  - name: k8s-cluster
+    targets:
+      - name: k8s-master-01
+        uri: k8s-master-01.example.com
+      - name: k8s-worker-01
+        uri: k8s-worker-01.example.com
+      - name: k8s-worker-02
+        uri: k8s-worker-02.example.com
+    config:
+      ssh:
+        user: kubernetes
+        private-key: ~/.ssh/k8s_key
+    vars:
+      environment: production
+      k8s_version: "1.28"
+      cni: calico
+
+# Global configuration applied to all targets
+config:
+  transport: ssh
+  ssh:
+    port: 22
+    host-key-check: true
+    connect-timeout: 10
+    disconnect-timeout: 5

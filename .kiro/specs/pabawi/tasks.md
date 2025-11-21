@@ -265,8 +265,108 @@
     - Add healthcheck configuration
     - _Requirements: 7.1_
 
-- [ ] 14. Create comprehensive API documentation
-  - [ ] 14.1 Write OpenAPI 3.0 specification document
+- [x] 14. Implement task organization by module
+  - [x] 14.1 Add module extraction to BoltService
+    - Implement extractModuleName function to parse module from task name (e.g., "psick::puppet_agent" → "psick")
+    - Implement groupTasksByModule function to organize tasks by module
+    - Add GET /api/tasks/by-module endpoint to return tasks grouped by module
+    - _Requirements: 1.1, 1.2_
+  
+  - [x] 14.2 Create TaskRunInterface component
+    - Create component with collapsible module sections
+    - Display tasks organized by module with search/filter
+    - Implement task selection to show task details
+    - _Requirements: 1.1, 1.3_
+  
+  - [x] 14.3 Implement dynamic task parameter form
+    - Create TaskParameterForm component for dynamic form generation
+    - Generate appropriate input types based on parameter schema (String, Integer, Boolean, Array, Hash)
+    - Implement parameter validation (required fields, type checking)
+    - Add JSON editor for Array and Hash parameters
+    - _Requirements: 1.2, 1.3, 1.5_
+  
+  - [x] 14.4 Implement task execution from TaskRunInterface
+    - Add execute button with loading state
+    - POST to /api/nodes/:id/task with selected task and parameters
+    - Display execution results with success/error status
+    - Show execution history for each task
+    - _Requirements: 1.4, 1.6, 1.7_
+
+- [ ] 15. Implement Puppet run interface in node detail page
+  - [ ] 15.1 Add Puppet run section to NodeDetailPage
+    - Create PuppetRunInterface component
+    - Add "Run Puppet" collapsible section to node detail page
+    - Position section prominently in node detail layout
+    - _Requirements: 2.1_
+  
+  - [ ] 15.2 Implement Puppet run configuration controls
+    - Add tags input with multi-select or comma-separated values
+    - Add environment dropdown or text input
+    - Add noop mode toggle (dry-run)
+    - Add no-noop mode toggle (override node noop setting)
+    - Add debug mode toggle (verbose output)
+    - Add expandable section for additional options
+    - _Requirements: 2.2, 2.4, 2.5, 2.6, 2.7, 2.8_
+  
+  - [ ] 15.3 Implement Puppet run execution
+    - Add runPuppetAgent method to BoltService
+    - Construct psick::puppet_agent task parameters from configuration
+    - Add POST /api/nodes/:id/puppet-run endpoint
+    - Execute Bolt task with configured parameters
+    - _Requirements: 2.3_
+  
+  - [ ] 15.4 Implement Puppet run results display
+    - Parse Puppet output for resource changes
+    - Extract metrics (changed, failed, skipped resources)
+    - Create PuppetOutputViewer component with syntax highlighting
+    - Display resource changes with status indicators
+    - Show execution time and summary metrics
+    - _Requirements: 2.9, 2.10_
+
+- [ ] 16. Implement expert mode for detailed error output
+  - [ ] 16.1 Create expert mode state management
+    - Add expert mode toggle to navigation or settings
+    - Implement localStorage persistence for expert mode preference
+    - Create global state accessible to all components
+    - Add visual indicator when expert mode is active
+    - _Requirements: 3.1, 3.5_
+  
+  - [ ] 16.2 Implement ErrorHandlingService in backend
+    - Create ErrorHandlingService class for error formatting
+    - Implement formatError method with expert mode parameter
+    - Add request ID generation for error correlation
+    - Capture stack traces and execution context
+    - _Requirements: 3.2, 3.6_
+  
+  - [ ] 16.3 Update API error middleware for expert mode
+    - Check X-Expert-Mode header in error middleware
+    - Include stack traces in expert mode responses
+    - Add request ID, timestamp, and execution context
+    - Capture raw Bolt CLI output for expert mode
+    - Sanitize sensitive data even in expert mode
+    - _Requirements: 3.2, 3.3_
+  
+  - [ ] 16.4 Update frontend to send expert mode header
+    - Modify API client to include X-Expert-Mode header when enabled
+    - Update all API request functions to check expert mode state
+    - _Requirements: 3.6_
+  
+  - [ ] 16.5 Create DetailedErrorDisplay component
+    - Create component for expert mode error display
+    - Show basic error message always
+    - Add expandable sections for stack trace, raw response, context
+    - Implement JSON viewer for raw API responses
+    - Add copy-to-clipboard for error details
+    - _Requirements: 3.2, 3.3, 3.4_
+  
+  - [ ] 16.6 Update ErrorAlert component for expert mode
+    - Modify ErrorAlert to use DetailedErrorDisplay when expert mode enabled
+    - Show simplified errors when expert mode disabled
+    - Add toggle to expand/collapse detailed information
+    - _Requirements: 3.2, 3.4_
+
+- [ ] 17. Create comprehensive API documentation
+  - [ ] 17.1 Write OpenAPI 3.0 specification document
     - Document all API endpoints with paths and methods
     - Define request/response schemas for all endpoints
     - Include error response examples for each endpoint
@@ -274,83 +374,83 @@
     - Document query parameters and pagination
     - _Requirements: 10.1, 10.2, 10.3, 10.4_
   
-  - [ ] 14.2 Add API documentation to docs directory
+  - [ ] 17.2 Add API documentation to docs directory
     - Create docs/api.md with endpoint descriptions
     - Include example requests and responses
     - Document error codes and their meanings
     - Add usage examples for common workflows
     - _Requirements: 10.1, 10.2_
 
-- [ ] 15. Implement performance optimizations
-  - [ ] 15.1 Add caching layer for inventory and facts
+- [ ] 18. Implement performance optimizations
+  - [ ] 18.1 Add caching layer for inventory and facts
     - Implement inventory caching with 30-second TTL
     - Implement facts caching per node (5-minute TTL)
     - Add cache invalidation mechanism
     - Use in-memory cache (Map) with timestamp tracking
     - _Requirements: 1.2, 8.1, 8.2, 8.3_
   
-  - [ ] 15.2 Optimize database queries
+  - [ ] 18.2 Optimize database queries
     - Add database indexes for execution queries (status, started_at, target_nodes)
     - Verify indexes are created in schema.sql
     - Test query performance with large datasets
     - _Requirements: 6.3, 6.5_
   
-  - [ ] 15.3 Add concurrent execution limiting
+  - [ ] 18.3 Add concurrent execution limiting
     - Implement execution queue with configurable limit (default: 5)
     - Add queue status endpoint to monitor pending executions
     - Handle queue overflow gracefully
     - _Requirements: 8.1, 8.2_
 
-- [ ]* 16. Write integration tests
-  - [ ]* 16.1 Test API endpoints with Supertest
+- [ ]* 19. Write integration tests
+  - [ ]* 19.1 Test API endpoints with Supertest
     - Test inventory endpoint with mock Bolt CLI
     - Test command execution with whitelist validation
     - Test task execution with parameter validation
     - Test execution history endpoints with pagination
     - _Requirements: 4.6, 4.7, 4.8, 5.3, 6.3_
   
-  - [ ]* 16.2 Test Bolt service integration
+  - [ ]* 19.2 Test Bolt service integration
     - Mock child_process for Bolt CLI execution
     - Test output parsing for various Bolt responses
     - Test error handling for Bolt failures
     - Test timeout handling
     - _Requirements: 3.1, 3.3, 4.3, 5.5_
 
-- [ ]* 17. Write end-to-end tests
-  - [ ]* 17.1 Test critical user flows with Playwright
+- [ ]* 20. Write end-to-end tests
+  - [ ]* 20.1 Test critical user flows with Playwright
     - Test inventory view → node detail → command execution flow
     - Test inventory view → node detail → facts gathering flow
     - Test inventory view → node detail → task execution flow
     - Test executions page filtering and detail view
     - _Requirements: 1.1, 1.5, 2.1, 4.1, 5.3, 6.1_
 
-- [ ] 18. Implement expert mode feature
-  - [x] 18.1 Add expert mode toggle to main navigation
+- [ ] 21. Implement expert mode feature (legacy - superseded by task 16)
+  - [x] 21.1 Add expert mode toggle to main navigation
     - Create toggle switch component in Navigation component
     - Store expert mode state in localStorage for persistence
     - Add visual indicator when expert mode is active
     - _Requirements: 8.4, 9.4_
   
-  - [x] 18.2 Modify backend to include Bolt command in responses
+  - [x] 21.2 Modify backend to include Bolt command in responses
     - Update BoltService to capture the exact Bolt CLI command being executed
     - Add `boltCommand` field to ExecutionResult interface
     - Include Bolt command in API responses for command, task, and facts operations
     - _Requirements: 4.1, 5.3, 10.2_
   
-  - [x] 18.3 Display Bolt commands in frontend when expert mode is enabled
+  - [x] 21.3 Display Bolt commands in frontend when expert mode is enabled
     - Update CommandOutput component to display Bolt command when available
     - Show Bolt command in execution results on Node Detail page
     - Display Bolt command in execution history on Executions page
     - Format command display with monospace font and copy-to-clipboard button
     - _Requirements: 2.3, 2.4, 6.4, 9.4_
   
-  - [x] 18.4 Add expert mode indicator to execution records
+  - [x] 21.4 Add expert mode indicator to execution records
     - Store whether expert mode was enabled during execution in database
     - Display expert mode badge on execution history items
     - _Requirements: 6.1, 6.3_
 
-- [ ] 19. Enhance project documentation
-  - [ ] 19.1 Expand README with comprehensive setup instructions
+- [ ] 22. Enhance project documentation
+  - [ ] 22.1 Expand README with comprehensive setup instructions
     - Add detailed prerequisites section
     - Document installation steps for all platforms
     - Add quick start guide
@@ -358,21 +458,21 @@
     - Add production deployment instructions
     - _Requirements: 7.1, 7.4, 7.5_
   
-  - [ ] 19.2 Create configuration guide
+  - [ ] 22.2 Create configuration guide
     - Document all environment variables and their defaults
     - Create user guide for command whitelist configuration
     - Document Bolt project requirements (inventory format, bolt-project.yaml)
     - Add examples for different deployment scenarios
     - _Requirements: 7.4, 7.5, 10.1_
   
-  - [ ] 19.3 Create troubleshooting guide
+  - [ ] 22.3 Create troubleshooting guide
     - Add troubleshooting section for common issues
     - Document error messages and their solutions
     - Add debugging tips for Bolt integration issues
     - Include FAQ section
     - _Requirements: 9.1, 9.2, 9.5_
   
-  - [ ] 19.4 Create user guide
+  - [ ] 22.4 Create user guide
     - Document how to use the web interface
     - Add screenshots or diagrams for key features
     - Document command execution workflow

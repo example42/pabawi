@@ -78,6 +78,50 @@ export function createTasksRouter(
   );
 
   /**
+   * GET /api/tasks/by-module
+   * Return available Bolt tasks grouped by module
+   */
+  router.get(
+    "/by-module",
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+      try {
+        const tasksByModule = await boltService.listTasksByModule();
+        res.json({ tasksByModule });
+      } catch (error) {
+        if (error instanceof BoltExecutionError) {
+          res.status(500).json({
+            error: {
+              code: "BOLT_EXECUTION_FAILED",
+              message: error.message,
+              details: error.stderr,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof BoltParseError) {
+          res.status(500).json({
+            error: {
+              code: "BOLT_PARSE_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error listing tasks by module:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to list tasks by module",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
    * POST /api/nodes/:id/task
    * Execute task on a node
    */
