@@ -41,3 +41,12 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Bolt Project
+bolt-project/.modules/
+bolt-project/.plan_cache.json
+bolt-project/.rerun.json
+bolt-project/.task_cache.json
+bolt-project/.resource_types/
+bolt-project/bolt-debug.log
+bolt-project/data/

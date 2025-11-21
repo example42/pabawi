@@ -6,6 +6,7 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import FactsViewer from '../components/FactsViewer.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
+  import TaskRunInterface from '../components/TaskRunInterface.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -31,20 +32,7 @@
     facts: Record<string, unknown>;
   }
 
-  interface Task {
-    name: string;
-    description?: string;
-    parameters: TaskParameter[];
-    modulePath: string;
-  }
 
-  interface TaskParameter {
-    name: string;
-    type: 'String' | 'Integer' | 'Boolean' | 'Array' | 'Hash';
-    description?: string;
-    required: boolean;
-    default?: unknown;
-  }
 
   interface ExecutionResult {
     id: string;
@@ -91,22 +79,10 @@
   let commandError = $state<string | null>(null);
   let commandResult = $state<ExecutionResult | null>(null);
 
-  // Task execution state
-  let availableTasks = $state<Task[]>([]);
-  let tasksLoading = $state(false);
-  let selectedTask = $state<string>('');
-  let taskParameters = $state<Record<string, unknown>>({});
-  let taskExecuting = $state(false);
-  let taskError = $state<string | null>(null);
-  let taskResult = $state<ExecutionResult | null>(null);
-
   // Execution history state
   let executions = $state<ExecutionResult[]>([]);
   let executionsLoading = $state(false);
   let executionsError = $state<string | null>(null);
-
-  // Computed
-  const selectedTaskDef = $derived(availableTasks.find(t => t.name === selectedTask));
 
   // Fetch node details
   async function fetchNode(): Promise<void> {
@@ -177,7 +153,7 @@
       const executionId = data.executionId;
 
       // Poll for execution result
-      await pollExecutionResult(executionId, 'command');
+      await pollExecutionResult(executionId);
 
       showSuccess('Command executed successfully');
     } catch (err) {
@@ -189,68 +165,8 @@
     }
   }
 
-  // Fetch available tasks
-  async function fetchTasks(): Promise<void> {
-    tasksLoading = true;
-
-    try {
-      const data = await get<{ tasks: Task[] }>('/api/tasks', {
-        maxRetries: 2,
-      });
-
-      availableTasks = data.tasks || [];
-    } catch (err) {
-      console.error('Error fetching tasks:', err);
-      showError('Failed to load available tasks');
-    } finally {
-      tasksLoading = false;
-    }
-  }
-
-  // Execute task
-  async function executeTask(event: Event): Promise<void> {
-    event.preventDefault();
-
-    if (!selectedTask) {
-      taskError = 'Please select a task';
-      showError('Please select a task');
-      return;
-    }
-
-    taskExecuting = true;
-    taskError = null;
-    taskResult = null;
-
-    try {
-      showInfo('Executing task...');
-
-      const data = await post<{ executionId: string }>(
-        `/api/nodes/${nodeId}/task`,
-        {
-          taskName: selectedTask,
-          parameters: taskParameters,
-          expertMode: expertMode.enabled,
-        },
-        { maxRetries: 0 } // Don't retry task executions
-      );
-
-      const executionId = data.executionId;
-
-      // Poll for execution result
-      await pollExecutionResult(executionId, 'task');
-
-      showSuccess('Task executed successfully');
-    } catch (err) {
-      taskError = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error executing task:', err);
-      showError('Task execution failed', taskError);
-    } finally {
-      taskExecuting = false;
-    }
-  }
-
-  // Poll for execution result
-  async function pollExecutionResult(executionId: string, type: 'command' | 'task'): Promise<void> {
+  // Poll for execution result (for command execution)
+  async function pollExecutionResult(executionId: string): Promise<void> {
     const maxAttempts = 60; // 60 seconds max
     let attempts = 0;
 
@@ -264,11 +180,7 @@
 
           if (execution.status !== 'running') {
             // Execution completed
-            if (type === 'command') {
-              commandResult = execution;
-            } else {
-              taskResult = execution;
-            }
+            commandResult = execution;
 
             // Refresh execution history
             fetchExecutions();
@@ -286,11 +198,7 @@
     }
 
     // Timeout
-    if (type === 'command') {
-      commandError = 'Execution timed out';
-    } else {
-      taskError = 'Execution timed out';
-    }
+    commandError = 'Execution timed out';
   }
 
   // Fetch execution history
@@ -313,23 +221,7 @@
     }
   }
 
-  // Handle task selection change
-  function handleTaskSelection(): void {
-    taskParameters = {};
-    taskError = null;
-    taskResult = null;
-  }
 
-  // Handle parameter input change
-  function handleParameterChange(paramName: string, value: string, type: string): void {
-    if (type === 'Integer') {
-      taskParameters[paramName] = parseInt(value, 10);
-    } else if (type === 'Boolean') {
-      taskParameters[paramName] = value === 'true';
-    } else {
-      taskParameters[paramName] = value;
-    }
-  }
 
   // Format timestamp
   function formatTimestamp(timestamp: string): string {
@@ -344,7 +236,6 @@
   // On mount
   onMount(() => {
     fetchNode();
-    fetchTasks();
     fetchExecutions();
   });
 </script>
@@ -528,120 +419,10 @@
     <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Task</h2>
 
-      {#if tasksLoading}
-        <div class="flex justify-center py-4">
-          <LoadingSpinner message="Loading tasks..." />
-        </div>
-      {:else}
-        <form onsubmit={executeTask} class="space-y-4">
-          <div>
-            <label for="task-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Select Task
-            </label>
-            <select
-              id="task-select"
-              bind:value={selectedTask}
-              onchange={handleTaskSelection}
-              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-              disabled={taskExecuting}
-            >
-              <option value="">-- Select a task --</option>
-              {#each availableTasks as task}
-                <option value={task.name}>
-                  {task.name}{task.description ? ` - ${task.description}` : ''}
-                </option>
-              {/each}
-            </select>
-          </div>
-
-          {#if selectedTaskDef && selectedTaskDef.parameters.length > 0}
-            <div class="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900">
-              <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Parameters</h3>
-              {#each selectedTaskDef.parameters as param}
-                <div>
-                  <label for="param-{param.name}" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {param.name}
-                    {#if param.required}
-                      <span class="text-red-500">*</span>
-                    {/if}
-                  </label>
-                  {#if param.description}
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{param.description}</p>
-                  {/if}
-
-                  {#if param.type === 'Boolean'}
-                    <select
-                      id="param-{param.name}"
-                      onchange={(e) => handleParameterChange(param.name, (e.target as HTMLSelectElement).value, param.type)}
-                      class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-                      disabled={taskExecuting}
-                    >
-                      <option value="true">true</option>
-                      <option value="false">false</option>
-                    </select>
-                  {:else}
-                    <input
-                      id="param-{param.name}"
-                      type={param.type === 'Integer' ? 'number' : 'text'}
-                      placeholder={param.default !== undefined ? `Default: ${param.default}` : ''}
-                      oninput={(e) => handleParameterChange(param.name, (e.target as HTMLInputElement).value, param.type)}
-                      class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-                      disabled={taskExecuting}
-                    />
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {/if}
-
-          <button
-            type="submit"
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={taskExecuting || !selectedTask}
-          >
-            {taskExecuting ? 'Executing...' : 'Execute Task'}
-          </button>
-        </form>
-
-        {#if taskExecuting}
-          <div class="mt-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-            <LoadingSpinner size="sm" />
-            <span>Executing task...</span>
-          </div>
-        {/if}
-
-        {#if taskError}
-          <div class="mt-4">
-            <ErrorAlert message="Task execution failed" details={taskError} />
-          </div>
-        {/if}
-
-        {#if taskResult}
-          <div class="mt-4">
-            <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Result:</h3>
-            <div class="mb-2">
-              <StatusBadge status={taskResult.status} />
-            </div>
-            {#if taskResult.command}
-              <CommandOutput boltCommand={taskResult.command} />
-            {/if}
-            {#if taskResult.results.length > 0}
-              {#each taskResult.results as result}
-                {#if result.value}
-                  <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
-                    <pre class="text-sm text-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
-                  </div>
-                {/if}
-                {#if result.error}
-                  <div class="mt-2">
-                    <ErrorAlert message="Execution error" details={result.error} />
-                  </div>
-                {/if}
-              {/each}
-            {/if}
-          </div>
-        {/if}
-      {/if}
+      <TaskRunInterface
+        nodeId={nodeId}
+        onExecutionComplete={fetchExecutions}
+      />
     </div>
 
     <!-- Execution History Section -->

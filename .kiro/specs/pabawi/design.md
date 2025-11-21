@@ -61,7 +61,117 @@ graph TB
 
 ### Frontend Components
 
-#### 1. Inventory Page Component
+#### 1. Task Run Interface Component
+
+**Responsibility:** Display and execute Bolt tasks with module organization and parameter configuration
+
+**Key Features:**
+
+- Task list organized by module name with collapsible sections
+- Task search and filter by module or task name
+- Task detail view showing description and parameters
+- Dynamic form generation based on task parameter schema
+- Parameter validation (required fields, type checking)
+- Task execution with real-time status updates
+- Execution history for each task
+
+**State Management:**
+
+- Tasks grouped by module (derived from task name prefix)
+- Selected task and parameter values
+- Form validation state
+- Execution status (idle, running, success, failed)
+
+**Component Structure:**
+
+```typescript
+interface TaskRunInterface {
+  modules: Map<string, Task[]>  // Tasks grouped by module
+  selectedTask: Task | null
+  parameters: Record<string, any>
+  validationErrors: Record<string, string>
+  executionStatus: ExecutionStatus
+}
+```
+
+#### 2. Puppet Run Interface Component
+
+**Responsibility:** Provide Puppet run controls in node detail page
+
+**Key Features:**
+
+- Integrated section in node detail page
+- Tag input with multi-select or comma-separated values
+- Environment dropdown or text input
+- Noop mode toggle (dry-run)
+- No-noop mode toggle (override node noop setting)
+- Debug mode toggle (verbose output)
+- Additional options expandable section
+- Execution results with resource change highlighting
+- Syntax highlighting for Puppet output
+
+**State Management:**
+
+- Puppet run configuration (tags, environment, modes)
+- Execution status and results
+- Output formatting preferences
+
+**Component Structure:**
+
+```typescript
+interface PuppetRunConfig {
+  tags: string[]
+  environment: string
+  noop: boolean
+  noNoop: boolean
+  debug: boolean
+  additionalOptions: Record<string, any>
+}
+
+interface PuppetRunResult {
+  changedResources: number
+  failedResources: number
+  executionTime: number
+  output: string
+  status: 'success' | 'failed' | 'noop'
+}
+```
+
+#### 3. Expert Mode Component
+
+**Responsibility:** Toggle and manage expert mode for detailed error output
+
+**Key Features:**
+
+- Expert mode toggle in navigation or settings
+- Persistent preference (localStorage)
+- Conditional rendering of detailed error information
+- Expandable error details sections
+- Raw API response viewer
+- Stack trace display with syntax highlighting
+- Request/response metadata display
+
+**State Management:**
+
+- Expert mode enabled/disabled state
+- Persisted to localStorage
+- Global state accessible to all error displays
+
+**Enhanced Error Display:**
+
+```typescript
+interface ExpertErrorDisplay {
+  basicMessage: string           // Always shown
+  detailedMessage?: string       // Expert mode only
+  stackTrace?: string            // Expert mode only
+  requestId?: string             // Expert mode only
+  timestamp?: string             // Expert mode only
+  rawResponse?: any              // Expert mode only
+  executionContext?: any         // Expert mode only
+}
+```
+
+#### 4. Inventory Page Component
 
 **Responsibility:** Display and filter node inventory
 
@@ -79,7 +189,7 @@ graph TB
 - Local filter state for search
 - Loading and error states
 
-#### 2. Node Detail Page Component
+#### 5. Node Detail Page Component
 
 **Responsibility:** Display node information and execution controls
 
@@ -89,6 +199,7 @@ graph TB
 - Facts display with collapsible sections
 - Command execution form with validation
 - Task execution form with parameter inputs
+- **Puppet Run Interface section** (new)
 - Execution history for this node
 
 **State Management:**
@@ -96,9 +207,27 @@ graph TB
 - Node ID from route parameter
 - Facts loaded on demand
 - Execution forms with local validation
+- Puppet run configuration state
 - Real-time execution status updates
 
-#### 3. Executions Page Component
+**Layout Structure:**
+
+```
+Node Detail Page
+├── Node Metadata Section
+├── Facts Section (collapsible)
+├── Run Puppet Section (new)
+│   ├── Tags Input
+│   ├── Environment Input
+│   ├── Mode Toggles (noop, no-noop, debug)
+│   ├── Additional Options (expandable)
+│   └── Execute Button
+├── Command Execution Section
+├── Task Execution Section
+└── Execution History Section
+```
+
+#### 6. Executions Page Component
 
 **Responsibility:** Display execution history and results
 
@@ -116,13 +245,17 @@ graph TB
 - Filter state persistence
 - Auto-refresh for running executions
 
-#### 4. Shared Components
+#### 7. Shared Components
 
 - **LoadingSpinner**: Consistent loading indicator
-- **ErrorAlert**: Standardized error display
+- **ErrorAlert**: Standardized error display with expert mode support
 - **StatusBadge**: Color-coded status indicators
 - **CommandOutput**: Formatted stdout/stderr display
 - **FactsViewer**: Collapsible JSON tree for facts
+- **ExpertModeToggle**: Global toggle for expert mode (new)
+- **DetailedErrorDisplay**: Expandable error details for expert mode (new)
+- **PuppetOutputViewer**: Syntax-highlighted Puppet output (new)
+- **TaskParameterForm**: Dynamic form generator for task parameters (new)
 
 ### Backend Components
 
@@ -133,15 +266,18 @@ graph TB
 **Endpoints:**
 
 ```
-GET  /api/inventory          - List all nodes
-GET  /api/nodes/:id          - Get node details
-GET  /api/nodes/:id/facts    - Gather facts for node
-POST /api/nodes/:id/command  - Execute command on node
-POST /api/nodes/:id/task     - Execute task on node
-GET  /api/tasks              - List available tasks
-GET  /api/executions         - List execution history
-GET  /api/executions/:id     - Get execution details
-GET  /api/config             - Get system configuration
+GET  /api/inventory                - List all nodes
+GET  /api/nodes/:id                - Get node details
+GET  /api/nodes/:id/facts          - Gather facts for node
+POST /api/nodes/:id/command        - Execute command on node
+POST /api/nodes/:id/task           - Execute task on node
+POST /api/nodes/:id/puppet-run     - Execute Puppet run on node (new)
+GET  /api/tasks                    - List available tasks
+GET  /api/tasks/by-module          - List tasks grouped by module (new)
+GET  /api/tasks/:name              - Get task details with parameters (new)
+GET  /api/executions               - List execution history
+GET  /api/executions/:id           - Get execution details
+GET  /api/config                   - Get system configuration
 ```
 
 **Middleware:**
@@ -149,7 +285,7 @@ GET  /api/config             - Get system configuration
 - JSON body parser
 - CORS headers
 - Request logging
-- Error handling
+- Error handling with expert mode support (new)
 - Request validation (Zod schemas)
 
 #### 2. Bolt Service
@@ -164,7 +300,10 @@ class BoltService {
   async gatherFacts(nodeId: string): Promise<Facts>
   async runCommand(nodeId: string, command: string): Promise<ExecutionResult>
   async runTask(nodeId: string, taskName: string, params: object): Promise<ExecutionResult>
+  async runPuppetAgent(nodeId: string, config: PuppetRunConfig): Promise<ExecutionResult>  // new
   async listTasks(): Promise<Task[]>
+  async listTasksByModule(): Promise<Map<string, Task[]>>  // new
+  async getTaskDetails(taskName: string): Promise<Task>  // new
   validateBoltConfig(): Promise<void>
 }
 ```
@@ -245,7 +384,59 @@ class ExecutionRepository {
 }
 ```
 
-#### 5. Configuration Service
+#### 5. Error Handling Service
+
+**Responsibility:** Format errors based on expert mode and provide detailed diagnostics
+
+**Methods:**
+
+```typescript
+class ErrorHandlingService {
+  formatError(error: Error, expertMode: boolean, context?: ExecutionContext): ErrorResponse
+  captureStackTrace(error: Error): string
+  generateRequestId(): string
+  logError(error: Error, context: ExecutionContext): void
+}
+
+interface ExecutionContext {
+  requestId: string
+  timestamp: string
+  endpoint: string
+  method: string
+  userId?: string
+  nodeId?: string
+  additionalData?: Record<string, any>
+}
+```
+
+**Error Response Format:**
+
+```typescript
+interface ErrorResponse {
+  error: {
+    code: string
+    message: string
+    details?: any
+    // Expert mode fields
+    stackTrace?: string
+    requestId?: string
+    timestamp?: string
+    rawResponse?: any
+    executionContext?: ExecutionContext
+  }
+}
+```
+
+**Implementation Details:**
+
+- Check `X-Expert-Mode` header or query parameter
+- Include full stack traces in expert mode
+- Capture raw Bolt CLI output in expert mode
+- Generate unique request IDs for correlation
+- Log all errors with full context
+- Sanitize sensitive data even in expert mode
+
+#### 6. Configuration Service
 
 **Responsibility:** Load and validate system configuration
 
@@ -265,6 +456,7 @@ interface AppConfig {
   executionTimeout: number        // Default: 300000 (5 min)
   logLevel: string               // Default: 'info'
   databasePath: string           // Default: './data/executions.db'
+  expertModeEnabled: boolean     // Default: false (new)
 }
 ```
 
@@ -355,6 +547,7 @@ interface NodeResult {
 ```typescript
 interface Task {
   name: string
+  module: string              // Extracted from task name (new)
   description?: string
   parameters: TaskParameter[]
   modulePath: string
@@ -366,6 +559,45 @@ interface TaskParameter {
   description?: string
   required: boolean
   default?: any
+}
+
+interface TasksByModule {
+  [moduleName: string]: Task[]
+}
+```
+
+### PuppetRunConfig
+
+```typescript
+interface PuppetRunConfig {
+  tags?: string[]             // Puppet tags to apply
+  environment?: string        // Puppet environment
+  noop?: boolean             // Dry-run mode
+  noNoop?: boolean           // Override noop setting
+  debug?: boolean            // Verbose output
+  additionalOptions?: Record<string, any>  // Other Puppet options
+}
+```
+
+### PuppetRunResult
+
+```typescript
+interface PuppetRunResult extends ExecutionResult {
+  puppetMetrics: {
+    changedResources: number
+    failedResources: number
+    skippedResources: number
+    totalResources: number
+    executionTime: number
+  }
+  resourceChanges: ResourceChange[]
+}
+
+interface ResourceChange {
+  resourceType: string
+  resourceTitle: string
+  status: 'changed' | 'failed' | 'skipped' | 'unchanged'
+  message?: string
 }
 ```
 
@@ -379,6 +611,12 @@ interface ErrorResponse {
     code: string          // Machine-readable error code
     message: string       // Human-readable message
     details?: any         // Additional context
+    // Expert mode fields (included when X-Expert-Mode: true)
+    stackTrace?: string
+    requestId?: string
+    timestamp?: string
+    rawResponse?: any
+    executionContext?: ExecutionContext
   }
 }
 ```
@@ -411,6 +649,13 @@ interface ErrorResponse {
 - Show detailed error information in expandable sections
 - Log errors to console for debugging
 - Graceful degradation (show partial data if available)
+- **Expert Mode Support (new):**
+  - Send `X-Expert-Mode: true` header when expert mode enabled
+  - Display stack traces in collapsible sections
+  - Show raw API responses in formatted JSON viewer
+  - Display request IDs for support correlation
+  - Show execution context and timestamps
+  - Persist expert mode preference in localStorage
 
 ## Testing Strategy
 
@@ -419,7 +664,10 @@ interface ErrorResponse {
 **Backend:**
 
 - BoltService: Mock child_process, test output parsing
+- BoltService: Test Puppet run parameter construction (new)
+- BoltService: Test task grouping by module (new)
 - CommandWhitelistService: Test validation logic with various configurations
+- ErrorHandlingService: Test expert mode error formatting (new)
 - ExecutionRepository: Test CRUD operations with in-memory SQLite
 - Configuration loading and validation
 
@@ -429,6 +677,9 @@ interface ErrorResponse {
 - Filter and search logic
 - Form validation
 - State management
+- TaskRunInterface: Test module grouping and parameter forms (new)
+- PuppetRunInterface: Test configuration state management (new)
+- ExpertMode: Test toggle persistence and error display (new)
 
 **Tools:** Vitest for both frontend and backend
 
@@ -458,6 +709,9 @@ interface ErrorResponse {
 - View inventory → Select node → Gather facts → View facts
 - View inventory → Select node → Execute task → View results
 - View executions → Filter by status → View execution details
+- Browse tasks by module → Select task → Configure parameters → Execute (new)
+- View node detail → Configure Puppet run → Execute → View results (new)
+- Enable expert mode → Trigger error → Verify detailed error display (new)
 
 **Tools:** Playwright for browser automation
 
@@ -470,6 +724,153 @@ interface ErrorResponse {
 - [ ] Verify responsive layout at different screen sizes
 - [ ] Test concurrent executions
 - [ ] Verify execution history persistence across restarts
+- [ ] Test task organization by module with 20+ tasks (new)
+- [ ] Test Puppet run with various tag combinations (new)
+- [ ] Test Puppet noop and no-noop modes (new)
+- [ ] Verify expert mode error details display (new)
+- [ ] Test expert mode preference persistence (new)
+
+## Implementation Details for New Features
+
+### Task Organization by Module
+
+**Module Extraction Logic:**
+
+```typescript
+function extractModuleName(taskName: string): string {
+  // Task names follow pattern: module::task_name
+  const parts = taskName.split('::');
+  return parts.length > 1 ? parts[0] : 'core';
+}
+
+function groupTasksByModule(tasks: Task[]): TasksByModule {
+  return tasks.reduce((acc, task) => {
+    const module = extractModuleName(task.name);
+    if (!acc[module]) {
+      acc[module] = [];
+    }
+    acc[module].push({ ...task, module });
+    return acc;
+  }, {} as TasksByModule);
+}
+```
+
+**Task Parameter Form Generation:**
+
+- String parameters: Text input
+- Integer parameters: Number input with validation
+- Boolean parameters: Checkbox or toggle
+- Array parameters: Multi-line textarea with JSON validation
+- Hash parameters: JSON editor with syntax highlighting
+
+### Puppet Run Implementation
+
+**psick::puppet_agent Task Parameters:**
+
+```typescript
+interface PsickPuppetAgentParams {
+  tags?: string              // Comma-separated tags
+  environment?: string       // Puppet environment
+  noop?: boolean            // Enable noop mode
+  no_noop?: boolean         // Disable noop mode
+  debug?: boolean           // Enable debug output
+  verbose?: boolean         // Enable verbose output
+  trace?: boolean           // Enable trace output
+  evaltrace?: boolean       // Enable eval trace
+  logdest?: string          // Log destination
+  [key: string]: any        // Additional options
+}
+```
+
+**Bolt Command Construction:**
+
+```bash
+bolt task run psick::puppet_agent \
+  --targets <node-id> \
+  tags=<tags> \
+  environment=<environment> \
+  noop=<true|false> \
+  no_noop=<true|false> \
+  debug=<true|false> \
+  --format json
+```
+
+**Output Parsing:**
+
+- Parse Puppet run output for resource changes
+- Extract metrics (changed, failed, skipped resources)
+- Identify resource types and titles
+- Format output with syntax highlighting
+
+### Expert Mode Implementation
+
+**Frontend State Management:**
+
+```typescript
+// Global expert mode state (Svelte 5 runes)
+let expertMode = $state(false);
+
+// Load from localStorage on mount
+$effect(() => {
+  const stored = localStorage.getItem('expertMode');
+  expertMode = stored === 'true';
+});
+
+// Persist to localStorage on change
+$effect(() => {
+  localStorage.setItem('expertMode', String(expertMode));
+});
+```
+
+**API Request Interceptor:**
+
+```typescript
+async function apiRequest(url: string, options: RequestInit = {}) {
+  const headers = new Headers(options.headers);
+  
+  if (expertMode) {
+    headers.set('X-Expert-Mode', 'true');
+  }
+  
+  return fetch(url, { ...options, headers });
+}
+```
+
+**Backend Error Middleware:**
+
+```typescript
+function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
+  const expertMode = req.headers['x-expert-mode'] === 'true';
+  const requestId = req.id || generateRequestId();
+  
+  const errorResponse: ErrorResponse = {
+    error: {
+      code: err.code || 'INTERNAL_ERROR',
+      message: err.message,
+      details: err.details
+    }
+  };
+  
+  if (expertMode) {
+    errorResponse.error.stackTrace = err.stack;
+    errorResponse.error.requestId = requestId;
+    errorResponse.error.timestamp = new Date().toISOString();
+    errorResponse.error.executionContext = {
+      endpoint: req.path,
+      method: req.method,
+      requestId
+    };
+    
+    // Include raw Bolt output if available
+    if (err.rawOutput) {
+      errorResponse.error.rawResponse = err.rawOutput;
+    }
+  }
+  
+  logger.error('Request failed', { requestId, error: err, expertMode });
+  res.status(err.statusCode || 500).json(errorResponse);
+}
+```
 
 ## Security Considerations
 

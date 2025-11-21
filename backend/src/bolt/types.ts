@@ -186,10 +186,16 @@ export interface NodeResult {
  */
 export interface Task {
   name: string;
+  module: string;
   description?: string;
   parameters: TaskParameter[];
   modulePath: string;
 }
+
+/**
+ * Tasks grouped by module
+ */
+export type TasksByModule = Record<string, Task[]>;
 
 /**
  * Task parameter definition
@@ -200,6 +206,8 @@ export interface TaskParameter {
   description?: string;
   required: boolean;
   default?: unknown;
+  enum?: string[]; // For Enum types, list of allowed values
+  puppetType?: string; // Original Puppet type string for reference
 }
 
 /**

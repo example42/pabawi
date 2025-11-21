@@ -1001,6 +1001,36 @@ export class BoltService {
   }
 
   /**
+   * Get detailed information for a specific task
+   *
+   * Executes `bolt task show <taskname> --format json` to retrieve
+   * full task metadata including parameters
+   *
+   * @param taskName - Name of the task to get details for
+   * @returns Promise resolving to Task object with full metadata
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   */
+  public async getTaskDetails(taskName: string): Promise<Task | null> {
+    try {
+      const jsonOutput = await this.executeCommandWithJsonOutput([
+        "task",
+        "show",
+        taskName,
+        "--format",
+        "json",
+      ]);
+
+      // Parse the detailed task output
+      const task = this.parseTaskData(jsonOutput);
+      return task;
+    } catch (error) {
+      console.error(`Error fetching details for task ${taskName}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * List available Bolt tasks
    *
    * Executes `bolt task show --format json` to retrieve available tasks
@@ -1026,10 +1056,19 @@ export class BoltService {
 
     const tasks = this.transformTaskListOutput(jsonOutput);
 
-    // Cache the result
-    this.taskListCache = tasks;
+    // Fetch detailed information for each task to get parameters
+    // Do this in parallel for better performance
+    const detailedTasks = await Promise.all(
+      tasks.map(async (task) => {
+        const detailedTask = await this.getTaskDetails(task.name);
+        return detailedTask ?? task; // Fall back to basic task if details fetch fails
+      })
+    );
 
-    return tasks;
+    // Cache the result
+    this.taskListCache = detailedTasks;
+
+    return detailedTasks;
   }
 
   /**
@@ -1056,6 +1095,7 @@ export class BoltService {
           if (typeof name === "string") {
             tasks.push({
               name,
+              module: this.extractModuleName(name),
               description:
                 typeof description === "string" ? description : undefined,
               parameters: [],
@@ -1105,6 +1145,9 @@ export class BoltService {
       return null;
     }
 
+    // Extract module from task name
+    const module = this.extractModuleName(name);
+
     // Extract metadata
     const metadata =
       typeof taskObj.metadata === "object" && taskObj.metadata !== null
@@ -1134,10 +1177,53 @@ export class BoltService {
 
     return {
       name,
+      module,
       description,
       parameters,
       modulePath,
     };
+  }
+
+  /**
+   * Extract module name from task name
+   * Task names follow pattern: module::task_name
+   *
+   * @param taskName - Full task name (e.g., "psick::puppet_agent")
+   * @returns Module name (e.g., "psick") or "core" for tasks without module prefix
+   */
+  private extractModuleName(taskName: string): string {
+    const parts = taskName.split("::");
+    return parts.length > 1 ? parts[0] : "core";
+  }
+
+  /**
+   * Group tasks by module name
+   *
+   * @param tasks - Array of tasks to group
+   * @returns Object with module names as keys and arrays of tasks as values
+   */
+  private groupTasksByModule(tasks: Task[]): Record<string, Task[]> {
+    return tasks.reduce<Record<string, Task[]>>((acc, task) => {
+      const module = task.module;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      if (!acc[module]) {
+        acc[module] = [];
+      }
+      acc[module].push(task);
+      return acc;
+    }, {});
+  }
+
+  /**
+   * List available Bolt tasks grouped by module
+   *
+   * @returns Promise resolving to object with tasks grouped by module
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   */
+  public async listTasksByModule(): Promise<Record<string, Task[]>> {
+    const tasks = await this.listTasks();
+    return this.groupTasksByModule(tasks);
   }
 
   /**
@@ -1206,16 +1292,61 @@ export class BoltService {
 
     // Extract parameter type (default to String if not specified)
     let type: TaskParameter["type"] = "String";
+    let required = false;
+    let enumValues: string[] | undefined;
+    const puppetType =
+      typeof paramObj.type === "string" ? paramObj.type : undefined;
+
     if (typeof paramObj.type === "string") {
       const typeValue = paramObj.type;
-      if (
-        typeValue === "String" ||
-        typeValue === "Integer" ||
-        typeValue === "Boolean" ||
-        typeValue === "Array" ||
-        typeValue === "Hash"
-      ) {
-        type = typeValue;
+
+      // Check if type is wrapped in Optional[] - if not, it's required
+      if (!typeValue.startsWith("Optional[")) {
+        required = true;
+      }
+
+      // Parse Puppet type syntax to extract base type
+      // Examples:
+      // - "String[1]" -> "String"
+      // - "Optional[String[1]]" -> "String"
+      // - "Enum[start, stop, restart]" -> "String" with enum values
+      // - "Integer" -> "Integer"
+      // - "Boolean" -> "Boolean"
+      // - "Array" -> "Array"
+      // - "Hash" -> "Hash"
+
+      // Remove Optional[] wrapper if present
+      const baseType = typeValue.replace(/^Optional\[(.+)\]$/, "$1");
+
+      // Check for Enum type and extract values
+      const enumMatch = /^Enum\[(.+)\]$/.exec(baseType);
+      if (enumMatch) {
+        // Extract enum values from "Enum[value1, value2, value3]"
+        const enumString = enumMatch[1];
+        enumValues = enumString.split(",").map((v) => v.trim());
+        type = "String"; // Enums are treated as strings with restricted values
+      } else {
+        // Extract the base type name (before any brackets)
+        const typeMatch = /^([A-Za-z]+)/.exec(baseType);
+        if (typeMatch) {
+          const extractedType = typeMatch[1];
+
+          // Map Puppet types to our simplified types
+          if (extractedType === "String") {
+            type = "String";
+          } else if (
+            extractedType === "Integer" ||
+            extractedType === "Numeric"
+          ) {
+            type = "Integer";
+          } else if (extractedType === "Boolean") {
+            type = "Boolean";
+          } else if (extractedType === "Array") {
+            type = "Array";
+          } else if (extractedType === "Hash" || extractedType === "Struct") {
+            type = "Hash";
+          }
+        }
       }
     }
 
@@ -1225,8 +1356,12 @@ export class BoltService {
         ? paramObj.description
         : undefined;
 
-    // Extract required flag (default to false)
-    const required = paramObj.required === true;
+    // Allow explicit required flag to override type-based detection
+    if (paramObj.required === true) {
+      required = true;
+    } else if (paramObj.required === false) {
+      required = false;
+    }
 
     // Extract default value
     const defaultValue = paramObj.default;
@@ -1237,6 +1372,8 @@ export class BoltService {
       description,
       required,
       default: defaultValue,
+      enum: enumValues,
+      puppetType,
     };
   }
 }
