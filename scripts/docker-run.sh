@@ -8,8 +8,43 @@ set -e
 IMAGE_NAME="${IMAGE_NAME:-example42/pabawi:latest}"
 CONTAINER_NAME="${CONTAINER_NAME:-pabawi}"
 PORT="${PORT:-3000}"
-BOLT_PROJECT_PATH="${BOLT_PROJECT_PATH:-./}"
 DATA_PATH="${DATA_PATH:-./data}"
+
+# Auto-discover Bolt project directory
+discover_bolt_project() {
+    # Check current directory first
+    if [ -f "./bolt-project.yaml" ]; then
+        echo "./"
+        return 0
+    fi
+
+    # Search in subdirectories (max depth 3)
+    local found_path
+    found_path=$(find . -maxdepth 3 -name "bolt-project.yaml" -type f 2>/dev/null | head -n 1)
+
+    if [ -n "$found_path" ]; then
+        # Extract directory path
+        dirname "$found_path"
+        return 0
+    fi
+
+    # Not found
+    return 1
+}
+
+# Set BOLT_PROJECT_PATH with auto-discovery
+if [ -z "$BOLT_PROJECT_PATH" ]; then
+    DISCOVERED_PATH=$(discover_bolt_project)
+    if [ $? -eq 0 ]; then
+        BOLT_PROJECT_PATH="$DISCOVERED_PATH"
+        echo "Auto-discovered Bolt project at: $BOLT_PROJECT_PATH"
+    else
+        echo "Warning: No bolt-project.yaml found. Using default path: ./"
+        BOLT_PROJECT_PATH="./"
+    fi
+else
+    echo "Using provided BOLT_PROJECT_PATH: $BOLT_PROJECT_PATH"
+fi
 
 # Detect platform architecture
 ARCH=$(uname -m)

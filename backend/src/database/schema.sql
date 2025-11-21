@@ -9,7 +9,9 @@ CREATE TABLE IF NOT EXISTS executions (
   started_at TEXT NOT NULL,
   completed_at TEXT,
   results TEXT NOT NULL,
-  error TEXT
+  error TEXT,
+  command TEXT,
+  expert_mode INTEGER DEFAULT 0
 );
 
 -- Indexes for efficient querying

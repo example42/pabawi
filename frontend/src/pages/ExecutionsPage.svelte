@@ -19,6 +19,7 @@
     completedAt?: string;
     results: NodeResult[];
     error?: string;
+    expertMode?: boolean;
   }
 
   interface NodeResult {
@@ -474,9 +475,19 @@
                   onclick={() => openExecutionDetail(execution)}
                 >
                   <td class="whitespace-nowrap px-6 py-4 text-sm">
-                    <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(execution.type)}">
-                      {execution.type}
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(execution.type)}">
+                        {execution.type}
+                      </span>
+                      {#if execution.expertMode}
+                        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/20 dark:text-amber-400" title="Expert mode was enabled">
+                          <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          Expert
+                        </span>
+                      {/if}
+                    </div>
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
                     <div class="max-w-xs truncate" title={execution.action}>
@@ -593,6 +604,14 @@
                     {selectedExecution.type}
                   </span>
                   <StatusBadge status={selectedExecution.status} size="sm" />
+                  {#if selectedExecution.expertMode}
+                    <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/20 dark:text-amber-400" title="Expert mode was enabled">
+                      <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Expert
+                    </span>
+                  {/if}
                   <span class="text-sm text-gray-600 dark:text-gray-400">
                     ID: {selectedExecution.id}
                   </span>
@@ -647,6 +666,11 @@
             <!-- Execution Info -->
             <div class="mb-6">
               <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Information</h4>
+              {#if selectedExecution.command}
+                <div class="mb-4">
+                  <CommandOutput boltCommand={selectedExecution.command} />
+                </div>
+              {/if}
               <dl class="grid gap-3 sm:grid-cols-2">
                 <div>
                   <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Action</dt>

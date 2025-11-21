@@ -15,6 +15,8 @@ interface DbRow {
   completed_at: string | null;
   results: string;
   error: string | null;
+  command: string | null;
+  expert_mode: number;
   total?: number;
   running?: number;
   success?: number;
@@ -62,6 +64,8 @@ export interface ExecutionRecord {
   completedAt?: string;
   results: NodeResult[];
   error?: string;
+  command?: string;
+  expertMode?: boolean;
 }
 
 /**
@@ -101,9 +105,6 @@ export class ExecutionRepository {
   private db: sqlite3.Database;
 
   constructor(db: sqlite3.Database) {
-    if (!db) {
-      throw new Error("Database connection is required");
-    }
     this.db = db;
   }
 
@@ -120,8 +121,8 @@ export class ExecutionRepository {
     const sql = `
       INSERT INTO executions (
         id, type, target_nodes, action, parameters, status,
-        started_at, completed_at, results, error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        started_at, completed_at, results, error, command, expert_mode
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -135,6 +136,8 @@ export class ExecutionRepository {
       record.completedAt ?? null,
       JSON.stringify(record.results),
       record.error ?? null,
+      record.command ?? null,
+      record.expertMode ? 1 : 0,
     ];
 
     try {
@@ -154,7 +157,14 @@ export class ExecutionRepository {
     id: string,
     updates: Partial<ExecutionRecord>,
   ): Promise<void> {
-    const allowedFields = ["status", "completedAt", "results", "error"];
+    const allowedFields = [
+      "status",
+      "completedAt",
+      "results",
+      "error",
+      "command",
+      "expertMode",
+    ];
     const updateFields: string[] = [];
     const params: unknown[] = [];
 
@@ -165,6 +175,8 @@ export class ExecutionRepository {
 
         if (key === "results" && value) {
           params.push(JSON.stringify(value));
+        } else if (key === "expertMode") {
+          params.push(value ? 1 : 0);
         } else {
           params.push(value || null);
         }
@@ -353,6 +365,8 @@ export class ExecutionRepository {
       completedAt: row.completed_at ?? undefined,
       results: JSON.parse(row.results) as NodeResult[],
       error: row.error ?? undefined,
+      command: row.command ?? undefined,
+      expertMode: row.expert_mode === 1,
     };
   }
 

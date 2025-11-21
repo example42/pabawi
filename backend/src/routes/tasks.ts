@@ -1,26 +1,27 @@
-import { Router, type Request, type Response } from 'express';
-import { z } from 'zod';
-import type { BoltService } from '../bolt/BoltService';
-import type { ExecutionRepository } from '../database/ExecutionRepository';
+import { Router, type Request, type Response } from "express";
+import { z } from "zod";
+import type { BoltService } from "../bolt/BoltService";
+import type { ExecutionRepository } from "../database/ExecutionRepository";
 import {
   BoltExecutionError,
   BoltParseError,
   BoltInventoryNotFoundError,
   BoltTaskNotFoundError,
   BoltTaskParameterError,
-} from '../bolt/types';
-import { asyncHandler } from './asyncHandler';
+} from "../bolt/types";
+import { asyncHandler } from "./asyncHandler";
 
 /**
  * Request validation schemas
  */
 const NodeIdParamSchema = z.object({
-  id: z.string().min(1, 'Node ID is required'),
+  id: z.string().min(1, "Node ID is required"),
 });
 
 const TaskExecutionBodySchema = z.object({
-  taskName: z.string().min(1, 'Task name is required'),
+  taskName: z.string().min(1, "Task name is required"),
   parameters: z.record(z.unknown()).optional(),
+  expertMode: z.boolean().optional(),
 });
 
 /**
@@ -28,7 +29,7 @@ const TaskExecutionBodySchema = z.object({
  */
 export function createTasksRouter(
   boltService: BoltService,
-  executionRepository: ExecutionRepository
+  executionRepository: ExecutionRepository,
 ): Router {
   const router = Router();
 
@@ -36,160 +37,175 @@ export function createTasksRouter(
    * GET /api/tasks
    * Return available Bolt tasks
    */
-  router.get('/', asyncHandler(async (_req: Request, res: Response): Promise<void> => {
-    try {
-      const tasks = await boltService.listTasks();
-      res.json({ tasks });
-    } catch (error) {
-      if (error instanceof BoltExecutionError) {
+  router.get(
+    "/",
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+      try {
+        const tasks = await boltService.listTasks();
+        res.json({ tasks });
+      } catch (error) {
+        if (error instanceof BoltExecutionError) {
+          res.status(500).json({
+            error: {
+              code: "BOLT_EXECUTION_FAILED",
+              message: error.message,
+              details: error.stderr,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof BoltParseError) {
+          res.status(500).json({
+            error: {
+              code: "BOLT_PARSE_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error listing tasks:", error);
         res.status(500).json({
           error: {
-            code: 'BOLT_EXECUTION_FAILED',
-            message: error.message,
-            details: error.stderr,
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to list tasks",
           },
         });
-        return;
       }
-
-      if (error instanceof BoltParseError) {
-        res.status(500).json({
-          error: {
-            code: 'BOLT_PARSE_ERROR',
-            message: error.message,
-          },
-        });
-        return;
-      }
-
-      // Unknown error
-      console.error('Error listing tasks:', error);
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to list tasks',
-        },
-      });
-    }
-  }));
+    }),
+  );
 
   /**
    * POST /api/nodes/:id/task
    * Execute task on a node
    */
-  router.post('/:id/task', asyncHandler(async (req: Request, res: Response): Promise<void> => {
-    try {
-      // Validate request parameters and body
-      const params = NodeIdParamSchema.parse(req.params);
-      const body = TaskExecutionBodySchema.parse(req.body);
-      const nodeId = params.id;
-      const taskName = body.taskName;
-      const parameters = body.parameters;
+  router.post(
+    "/:id/task",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      try {
+        // Validate request parameters and body
+        const params = NodeIdParamSchema.parse(req.params);
+        const body = TaskExecutionBodySchema.parse(req.body);
+        const nodeId = params.id;
+        const taskName = body.taskName;
+        const parameters = body.parameters;
+        const expertMode = body.expertMode ?? false;
 
-      // Verify node exists in inventory
-      const nodes = await boltService.getInventory();
-      const node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
+        // Verify node exists in inventory
+        const nodes = await boltService.getInventory();
+        const node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
 
-      if (!node) {
-        res.status(404).json({
-          error: {
-            code: 'INVALID_NODE_ID',
-            message: `Node '${nodeId}' not found in inventory`,
-          },
-        });
-        return;
-      }
-
-      // Create initial execution record
-      const executionId = await executionRepository.create({
-        type: 'task',
-        targetNodes: [nodeId],
-        action: taskName,
-        parameters,
-        status: 'running',
-        startedAt: new Date().toISOString(),
-        results: [],
-      });
-
-      // Execute task asynchronously
-      // We don't await here to return immediately with execution ID
-      void (async (): Promise<void> => {
-        try {
-          const result = await boltService.runTask(nodeId, taskName, parameters);
-
-          // Update execution record with results
-          await executionRepository.update(executionId, {
-            status: result.status,
-            completedAt: result.completedAt,
-            results: result.results,
-            error: result.error,
+        if (!node) {
+          res.status(404).json({
+            error: {
+              code: "INVALID_NODE_ID",
+              message: `Node '${nodeId}' not found in inventory`,
+            },
           });
-        } catch (error) {
-          console.error('Error executing task:', error);
-
-          let errorMessage = 'Unknown error';
-
-          if (error instanceof BoltTaskNotFoundError) {
-            errorMessage = error.message;
-          } else if (error instanceof BoltTaskParameterError) {
-            errorMessage = error.message;
-          } else if (error instanceof Error) {
-            errorMessage = error.message;
-          }
-
-          // Update execution record with error
-          await executionRepository.update(executionId, {
-            status: 'failed',
-            completedAt: new Date().toISOString(),
-            results: [{
-              nodeId,
-              status: 'failed',
-              error: errorMessage,
-              duration: 0,
-            }],
-            error: errorMessage,
-          });
+          return;
         }
-      })();
 
-      // Return execution ID and initial status immediately
-      res.status(202).json({
-        executionId,
-        status: 'running',
-        message: 'Task execution started',
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
+        // Create initial execution record
+        const executionId = await executionRepository.create({
+          type: "task",
+          targetNodes: [nodeId],
+          action: taskName,
+          parameters,
+          status: "running",
+          startedAt: new Date().toISOString(),
+          results: [],
+          expertMode,
+        });
+
+        // Execute task asynchronously
+        // We don't await here to return immediately with execution ID
+        void (async (): Promise<void> => {
+          try {
+            const result = await boltService.runTask(
+              nodeId,
+              taskName,
+              parameters,
+            );
+
+            // Update execution record with results
+            await executionRepository.update(executionId, {
+              status: result.status,
+              completedAt: result.completedAt,
+              results: result.results,
+              error: result.error,
+              command: result.command,
+            });
+          } catch (error) {
+            console.error("Error executing task:", error);
+
+            let errorMessage = "Unknown error";
+
+            if (error instanceof BoltTaskNotFoundError) {
+              errorMessage = error.message;
+            } else if (error instanceof BoltTaskParameterError) {
+              errorMessage = error.message;
+            } else if (error instanceof Error) {
+              errorMessage = error.message;
+            }
+
+            // Update execution record with error
+            await executionRepository.update(executionId, {
+              status: "failed",
+              completedAt: new Date().toISOString(),
+              results: [
+                {
+                  nodeId,
+                  status: "failed",
+                  error: errorMessage,
+                  duration: 0,
+                },
+              ],
+              error: errorMessage,
+            });
+          }
+        })();
+
+        // Return execution ID and initial status immediately
+        res.status(202).json({
+          executionId,
+          status: "running",
+          message: "Task execution started",
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Request validation failed",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof BoltInventoryNotFoundError) {
+          res.status(404).json({
+            error: {
+              code: "BOLT_CONFIG_MISSING",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error processing task execution request:", error);
+        res.status(500).json({
           error: {
-            code: 'INVALID_REQUEST',
-            message: 'Request validation failed',
-            details: error.errors,
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to process task execution request",
           },
         });
-        return;
       }
-
-      if (error instanceof BoltInventoryNotFoundError) {
-        res.status(404).json({
-          error: {
-            code: 'BOLT_CONFIG_MISSING',
-            message: error.message,
-          },
-        });
-        return;
-      }
-
-      // Unknown error
-      console.error('Error processing task execution request:', error);
-      res.status(500).json({
-        error: {
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to process task execution request',
-        },
-      });
-    }
-  }));
+    }),
+  );
 
   return router;
 }

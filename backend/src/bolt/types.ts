@@ -144,6 +144,7 @@ export interface Facts {
     };
     [key: string]: unknown;
   };
+  command?: string;
 }
 
 /**
@@ -160,6 +161,8 @@ export interface ExecutionResult {
   completedAt?: string;
   results: NodeResult[];
   error?: string;
+  command?: string;
+  expertMode?: boolean;
 }
 
 /**

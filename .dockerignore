@@ -59,4 +59,4 @@ temp/
 *.sqlite3
 
 # Bolt project files (will be mounted as volume)
-test-bolt-project/
+bolt-project/
