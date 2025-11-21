@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { ErrorHandlingService, ExecutionContext } from "../../src/errors/ErrorHandlingService";
+import {
+  ErrorHandlingService,
+  ExecutionContext,
+} from "../../src/errors/ErrorHandlingService";
 
 describe("ErrorHandlingService", () => {
   let service: ErrorHandlingService;
@@ -86,7 +89,9 @@ describe("ErrorHandlingService", () => {
 
       const result = service.formatError(error, true, context);
 
-      expect(result.error.boltCommand).toBe("bolt command run 'ls -la' --targets node1");
+      expect(result.error.boltCommand).toBe(
+        "bolt command run 'ls -la' --targets node1",
+      );
     });
 
     it("should include raw Bolt output in expert mode", () => {
@@ -141,7 +146,10 @@ describe("ErrorHandlingService", () => {
 
       const result = service.formatError(error, false);
 
-      expect(result.error.details).toEqual({ field: "value", reason: "invalid" });
+      expect(result.error.details).toEqual({
+        field: "value",
+        reason: "invalid",
+      });
     });
   });
 

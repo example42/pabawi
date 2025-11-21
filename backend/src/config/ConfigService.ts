@@ -40,6 +40,16 @@ export class ConfigService {
         throw new Error(`Failed to parse COMMAND_WHITELIST: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
 
+      // Parse package tasks from JSON string if provided
+      let packageTasks;
+      if (process.env.PACKAGE_TASKS) {
+        try {
+          packageTasks = JSON.parse(process.env.PACKAGE_TASKS);
+        } catch (error) {
+          throw new Error(`Failed to parse PACKAGE_TASKS: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+      }
+
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
@@ -49,6 +59,7 @@ export class ConfigService {
         executionTimeout: process.env.EXECUTION_TIMEOUT ? parseInt(process.env.EXECUTION_TIMEOUT, 10) : undefined,
         logLevel: process.env.LOG_LEVEL,
         databasePath: process.env.DATABASE_PATH,
+        packageTasks,
       };
 
       // Validate with Zod schema
@@ -123,5 +134,12 @@ export class ConfigService {
    */
   public getDatabasePath(): string {
     return this.config.databasePath;
+  }
+
+  /**
+   * Get package installation tasks configuration
+   */
+  public getPackageTasks(): typeof this.config.packageTasks {
+    return this.config.packageTasks;
   }
 }

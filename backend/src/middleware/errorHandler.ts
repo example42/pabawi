@@ -19,7 +19,6 @@ export function errorHandler(
   err: Error,
   req: Request,
   res: Response,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _next: NextFunction,
 ): void {
   const errorService = new ErrorHandlingService();
@@ -36,7 +35,7 @@ export function errorHandler(
     timestamp: new Date().toISOString(),
     endpoint: req.path,
     method: req.method,
-    nodeId: req.params.id ?? req.params.nodeId,
+    nodeId: req.params.id || req.params.nodeId,
     boltCommand: req.boltCommand,
   };
 
@@ -65,7 +64,10 @@ export function errorHandler(
  */
 function getStatusCode(error: Error): number {
   // Check for custom statusCode property
-  if ("statusCode" in error && typeof (error as Error & { statusCode?: number }).statusCode === "number") {
+  if (
+    "statusCode" in error &&
+    typeof (error as Error & { statusCode?: number }).statusCode === "number"
+  ) {
     return (error as Error & { statusCode: number }).statusCode;
   }
 
