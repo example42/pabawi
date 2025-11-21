@@ -12,6 +12,8 @@ import { createFactsRouter } from "./routes/facts";
 import { createCommandsRouter } from "./routes/commands";
 import { createTasksRouter } from "./routes/tasks";
 import { createExecutionsRouter } from "./routes/executions";
+import { createPuppetRouter } from "./routes/puppet";
+import { errorHandler, requestIdMiddleware } from "./middleware";
 
 /**
  * Initialize and start the application
@@ -78,18 +80,21 @@ async function startServer(): Promise<Express> {
     );
     app.use(express.json());
 
+    // Request ID middleware - adds unique ID to each request
+    app.use(requestIdMiddleware);
+
     // Request logging middleware
     app.use((req: Request, res: Response, next) => {
       const timestamp = new Date().toISOString();
       const startTime = Date.now();
 
-      console.warn(`[${timestamp}] ${req.method} ${req.path}`);
+      console.warn(`[${timestamp}] [${req.id ?? "unknown"}] ${req.method} ${req.path}`);
 
       // Log response when finished
       res.on("finish", () => {
         const duration = Date.now() - startTime;
         console.warn(
-          `[${timestamp}] ${req.method} ${req.path} - ${String(res.statusCode)} (${String(duration)}ms)`,
+          `[${timestamp}] [${req.id ?? "unknown"}] ${req.method} ${req.path} - ${String(res.statusCode)} (${String(duration)}ms)`,
         );
       });
 
@@ -136,6 +141,7 @@ async function startServer(): Promise<Express> {
       ),
     );
     app.use("/api/nodes", createTasksRouter(boltService, executionRepository));
+    app.use("/api/nodes", createPuppetRouter(boltService, executionRepository));
     app.use("/api/tasks", createTasksRouter(boltService, executionRepository));
     app.use("/api/executions", createExecutionsRouter(executionRepository));
 
@@ -149,40 +155,8 @@ async function startServer(): Promise<Express> {
       res.sendFile(indexPath);
     });
 
-    // Global error handling middleware
-    app.use((err: Error, _req: Request, res: Response, _next: unknown) => {
-      console.error("Error:", err);
-
-      // Handle different error types
-      if (err.name === "ValidationError") {
-        res.status(400).json({
-          error: {
-            code: "VALIDATION_ERROR",
-            message: err.message || "Request validation failed",
-          },
-        });
-        return;
-      }
-
-      if (err.name === "ZodError") {
-        res.status(400).json({
-          error: {
-            code: "INVALID_REQUEST",
-            message: "Request validation failed",
-            details: err.message,
-          },
-        });
-        return;
-      }
-
-      // Default to 500 Internal Server Error
-      res.status(500).json({
-        error: {
-          code: "INTERNAL_SERVER_ERROR",
-          message: err.message || "An unexpected error occurred",
-        },
-      });
-    });
+    // Global error handling middleware with expert mode support
+    app.use(errorHandler);
 
     // Start server
     const server = app.listen(config.port, config.host, () => {

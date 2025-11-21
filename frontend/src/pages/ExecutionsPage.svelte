@@ -7,6 +7,7 @@
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
+  import { ansiToHtml } from '../lib/ansiToHtml';
 
   interface ExecutionResult {
     id: string;
@@ -19,6 +20,7 @@
     completedAt?: string;
     results: NodeResult[];
     error?: string;
+    command?: string;
     expertMode?: boolean;
   }
 
@@ -747,8 +749,29 @@
                         />
                       {:else if result.value !== undefined}
                         <div>
-                          <h5 class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">Result Value:</h5>
-                          <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
+                          <div class="mb-2 flex items-center justify-between">
+                            <h5 class="text-xs font-medium text-gray-700 dark:text-gray-300">Result Value:</h5>
+                            <button
+                              type="button"
+                              onclick={() => {
+                                if (!result.showFullResult) {
+                                  result.showFullResult = true;
+                                } else {
+                                  result.showFullResult = false;
+                                }
+                              }}
+                              class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                            >
+                              {result.showFullResult ? 'Show Output' : 'Show Full Result'}
+                            </button>
+                          </div>
+                          {#if result.showFullResult}
+                            <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
+                          {:else if result.value._output}
+                            <pre class="overflow-x-auto whitespace-pre-wrap rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-700 dark:bg-gray-900">{@html ansiToHtml(result.value._output)}</pre>
+                          {:else}
+                            <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
+                          {/if}
                         </div>
                       {:else}
                         <p class="text-sm text-gray-500 dark:text-gray-400">No output</p>

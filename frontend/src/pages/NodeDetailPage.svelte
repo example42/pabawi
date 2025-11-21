@@ -7,6 +7,7 @@
   import FactsViewer from '../components/FactsViewer.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
   import TaskRunInterface from '../components/TaskRunInterface.svelte';
+  import PuppetRunInterface from '../components/PuppetRunInterface.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -30,6 +31,7 @@
     nodeId: string;
     gatheredAt: string;
     facts: Record<string, unknown>;
+    command?: string;
   }
 
 
@@ -45,6 +47,8 @@
     completedAt?: string;
     results: NodeResult[];
     error?: string;
+    command?: string;
+    expertMode?: boolean;
   }
 
   interface NodeResult {
@@ -345,6 +349,14 @@
           Click "Gather Facts" to collect system information from this node.
         </p>
       {/if}
+    </div>
+
+    <!-- Puppet Run Section -->
+    <div class="mb-8">
+      <PuppetRunInterface
+        nodeId={nodeId}
+        onExecutionComplete={fetchExecutions}
+      />
     </div>
 
     <!-- Command Execution Section -->

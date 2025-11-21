@@ -1062,7 +1062,7 @@ export class BoltService {
       tasks.map(async (task) => {
         const detailedTask = await this.getTaskDetails(task.name);
         return detailedTask ?? task; // Fall back to basic task if details fetch fails
-      })
+      }),
     );
 
     // Cache the result
@@ -1269,6 +1269,59 @@ export class BoltService {
     }
 
     return parameters;
+  }
+
+  /**
+   * Run Puppet agent on a target node using psick::puppet_agent task
+   *
+   * Executes the psick::puppet_agent task with the provided configuration
+   * options including tags, environment, noop mode, etc.
+   *
+   * @param nodeId - The ID/name of the target node
+   * @param config - Puppet run configuration options
+   * @returns Promise resolving to ExecutionResult object
+   * @throws BoltTaskNotFoundError if psick::puppet_agent task is not available
+   * @throws BoltNodeUnreachableError if the node is unreachable
+   * @throws BoltExecutionError if Bolt command fails
+   * @throws BoltParseError if JSON parsing fails
+   * @throws BoltTimeoutError if execution exceeds timeout
+   */
+  public async runPuppetAgent(
+    nodeId: string,
+    config: {
+      tags?: string[];
+      environment?: string;
+      noop?: boolean;
+      noNoop?: boolean;
+      debug?: boolean;
+    } = {},
+  ): Promise<ExecutionResult> {
+    // Build task parameters from configuration
+    const parameters: Record<string, unknown> = {};
+
+    if (config.tags && config.tags.length > 0) {
+      // Join tags with comma for psick::puppet_agent
+      parameters.tags = config.tags.join(",");
+    }
+
+    if (config.environment) {
+      parameters.environment = config.environment;
+    }
+
+    if (config.noop) {
+      parameters.noop = true;
+    }
+
+    if (config.noNoop) {
+      parameters.no_noop = true;
+    }
+
+    if (config.debug) {
+      parameters.debug = true;
+    }
+
+    // Execute the psick::puppet_agent task
+    return this.runTask(nodeId, "psick::puppet_agent", parameters);
   }
 
   /**
