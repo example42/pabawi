@@ -1,5 +1,6 @@
 <script lang="ts">
   import { link } from '../lib/router.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
 
   interface Props {
     currentPath?: string;
@@ -18,6 +19,10 @@
       return currentPath === '/' || currentPath === '';
     }
     return currentPath.startsWith(path);
+  }
+
+  function handleToggle(): void {
+    expertMode.toggle();
   }
 </script>
 
@@ -46,6 +51,40 @@
             </a>
           {/each}
         </div>
+      </div>
+
+      <!-- Expert Mode Toggle -->
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 cursor-pointer group">
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
+            Expert Mode
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={expertMode.enabled}
+            aria-label="Toggle expert mode"
+            onclick={handleToggle}
+            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 {expertMode.enabled
+              ? 'bg-primary-600'
+              : 'bg-gray-200 dark:bg-gray-700'}"
+          >
+            <span
+              class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {expertMode.enabled
+                ? 'translate-x-6'
+                : 'translate-x-1'}"
+            ></span>
+          </button>
+        </label>
+
+        {#if expertMode.enabled}
+          <div class="flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-900/30 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span>Expert</span>
+          </div>
+        {/if}
       </div>
     </div>
   </div>

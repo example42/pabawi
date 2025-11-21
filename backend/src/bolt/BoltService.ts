@@ -33,6 +33,24 @@ export class BoltService {
   }
 
   /**
+   * Build a Bolt CLI command string from arguments
+   *
+   * @param args - Command line arguments for Bolt CLI
+   * @returns Full command string
+   */
+  private buildCommandString(args: string[]): string {
+    // Escape arguments that contain spaces or special characters
+    const escapedArgs = args.map((arg) => {
+      if (arg.includes(" ") || arg.includes('"') || arg.includes("'")) {
+        // Escape double quotes and wrap in double quotes
+        return `"${arg.replace(/"/g, '\\"')}"`;
+      }
+      return arg;
+    });
+    return `bolt ${escapedArgs.join(" ")}`;
+  }
+
+  /**
    * Execute a Bolt CLI command with timeout handling
    *
    * @param args - Command line arguments for Bolt CLI
@@ -380,18 +398,23 @@ export class BoltService {
    * @throws BoltParseError if JSON parsing fails
    */
   public async gatherFacts(nodeId: string): Promise<Facts> {
-    try {
-      const jsonOutput = await this.executeCommandWithJsonOutput([
-        "task",
-        "run",
-        "facts",
-        "--targets",
-        nodeId,
-        "--format",
-        "json",
-      ]);
+    const args = [
+      "task",
+      "run",
+      "facts",
+      "--targets",
+      nodeId,
+      "--format",
+      "json",
+    ];
+    const command = this.buildCommandString(args);
 
-      return this.transformFactsOutput(nodeId, jsonOutput);
+    try {
+      const jsonOutput = await this.executeCommandWithJsonOutput(args);
+
+      const facts = this.transformFactsOutput(nodeId, jsonOutput);
+      facts.command = command;
+      return facts;
     } catch (error) {
       // Check if error is due to node being unreachable
       if (error instanceof BoltExecutionError && error.stderr) {
@@ -572,20 +595,22 @@ export class BoltService {
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
+    const args = [
+      "command",
+      "run",
+      command,
+      "--targets",
+      nodeId,
+      "--format",
+      "json",
+    ];
+    const commandString = this.buildCommandString(args);
 
     try {
-      const jsonOutput = await this.executeCommandWithJsonOutput([
-        "command",
-        "run",
-        command,
-        "--targets",
-        nodeId,
-        "--format",
-        "json",
-      ]);
+      const jsonOutput = await this.executeCommandWithJsonOutput(args);
 
       const endTime = Date.now();
-      return this.transformCommandOutput(
+      const result = this.transformCommandOutput(
         executionId,
         nodeId,
         command,
@@ -593,6 +618,8 @@ export class BoltService {
         startTime,
         endTime,
       );
+      result.command = commandString;
+      return result;
     } catch (error) {
       const endTime = Date.now();
 
@@ -634,6 +661,7 @@ export class BoltService {
             },
           ],
           error: error.message,
+          command: commandString,
         };
       }
 
@@ -754,27 +782,29 @@ export class BoltService {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
 
+    // Build command arguments
+    const args = [
+      "task",
+      "run",
+      taskName,
+      "--targets",
+      nodeId,
+      "--format",
+      "json",
+    ];
+
+    // Add parameters if provided
+    if (parameters && Object.keys(parameters).length > 0) {
+      args.push("--params", JSON.stringify(parameters));
+    }
+
+    const commandString = this.buildCommandString(args);
+
     try {
-      // Build command arguments
-      const args = [
-        "task",
-        "run",
-        taskName,
-        "--targets",
-        nodeId,
-        "--format",
-        "json",
-      ];
-
-      // Add parameters if provided
-      if (parameters && Object.keys(parameters).length > 0) {
-        args.push("--params", JSON.stringify(parameters));
-      }
-
       const jsonOutput = await this.executeCommandWithJsonOutput(args);
 
       const endTime = Date.now();
-      return this.transformTaskOutput(
+      const result = this.transformTaskOutput(
         executionId,
         nodeId,
         taskName,
@@ -783,6 +813,8 @@ export class BoltService {
         startTime,
         endTime,
       );
+      result.command = commandString;
+      return result;
     } catch (error) {
       const endTime = Date.now();
 
@@ -854,6 +886,7 @@ export class BoltService {
             },
           ],
           error: error.message,
+          command: commandString,
         };
       }
 

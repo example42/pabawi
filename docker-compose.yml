@@ -10,7 +10,7 @@ services:
       # Mount entire workspace for development
       - .:/workspace:cached
       # Mount Bolt project directory (read-only)
-      - ./test-bolt-project:/bolt-project:ro
+      - ./bolt-project:/bolt-project:ro
       # Mount data directory for SQLite database (read-write)
       - ./data:/data
       # Persist node_modules

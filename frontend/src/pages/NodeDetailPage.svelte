@@ -8,6 +8,7 @@
   import CommandOutput from '../components/CommandOutput.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
 
   interface Props {
     params?: { id: string };
@@ -169,7 +170,7 @@
 
       const data = await post<{ executionId: string }>(
         `/api/nodes/${nodeId}/command`,
-        { command: commandInput },
+        { command: commandInput, expertMode: expertMode.enabled },
         { maxRetries: 0 } // Don't retry command executions
       );
 
@@ -228,6 +229,7 @@
         {
           taskName: selectedTask,
           parameters: taskParameters,
+          expertMode: expertMode.enabled,
         },
         { maxRetries: 0 } // Don't retry task executions
       );
@@ -441,6 +443,11 @@
         <div class="mb-2 text-sm text-gray-500 dark:text-gray-400">
           Gathered at: {formatTimestamp(facts.gatheredAt)}
         </div>
+        {#if facts.command}
+          <div class="mb-3">
+            <CommandOutput boltCommand={facts.command} />
+          </div>
+        {/if}
         <FactsViewer facts={facts.facts} />
       {:else}
         <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -503,6 +510,7 @@
                   stdout={result.output.stdout}
                   stderr={result.output.stderr}
                   exitCode={result.output.exitCode}
+                  boltCommand={commandResult.command}
                 />
               {/if}
               {#if result.error}
@@ -614,6 +622,9 @@
             <div class="mb-2">
               <StatusBadge status={taskResult.status} />
             </div>
+            {#if taskResult.command}
+              <CommandOutput boltCommand={taskResult.command} />
+            {/if}
             {#if taskResult.results.length > 0}
               {#each taskResult.results as result}
                 {#if result.value}

@@ -324,8 +324,33 @@
     - Test executions page filtering and detail view
     - _Requirements: 1.1, 1.5, 2.1, 4.1, 5.3, 6.1_
 
-- [ ] 18. Enhance project documentation
-  - [ ] 18.1 Expand README with comprehensive setup instructions
+- [ ] 18. Implement expert mode feature
+  - [x] 18.1 Add expert mode toggle to main navigation
+    - Create toggle switch component in Navigation component
+    - Store expert mode state in localStorage for persistence
+    - Add visual indicator when expert mode is active
+    - _Requirements: 8.4, 9.4_
+  
+  - [x] 18.2 Modify backend to include Bolt command in responses
+    - Update BoltService to capture the exact Bolt CLI command being executed
+    - Add `boltCommand` field to ExecutionResult interface
+    - Include Bolt command in API responses for command, task, and facts operations
+    - _Requirements: 4.1, 5.3, 10.2_
+  
+  - [x] 18.3 Display Bolt commands in frontend when expert mode is enabled
+    - Update CommandOutput component to display Bolt command when available
+    - Show Bolt command in execution results on Node Detail page
+    - Display Bolt command in execution history on Executions page
+    - Format command display with monospace font and copy-to-clipboard button
+    - _Requirements: 2.3, 2.4, 6.4, 9.4_
+  
+  - [x] 18.4 Add expert mode indicator to execution records
+    - Store whether expert mode was enabled during execution in database
+    - Display expert mode badge on execution history items
+    - _Requirements: 6.1, 6.3_
+
+- [ ] 19. Enhance project documentation
+  - [ ] 19.1 Expand README with comprehensive setup instructions
     - Add detailed prerequisites section
     - Document installation steps for all platforms
     - Add quick start guide
@@ -333,24 +358,25 @@
     - Add production deployment instructions
     - _Requirements: 7.1, 7.4, 7.5_
   
-  - [ ] 18.2 Create configuration guide
+  - [ ] 19.2 Create configuration guide
     - Document all environment variables and their defaults
     - Create user guide for command whitelist configuration
     - Document Bolt project requirements (inventory format, bolt-project.yaml)
     - Add examples for different deployment scenarios
     - _Requirements: 7.4, 7.5, 10.1_
   
-  - [ ] 18.3 Create troubleshooting guide
+  - [ ] 19.3 Create troubleshooting guide
     - Add troubleshooting section for common issues
     - Document error messages and their solutions
     - Add debugging tips for Bolt integration issues
     - Include FAQ section
     - _Requirements: 9.1, 9.2, 9.5_
   
-  - [ ] 18.4 Create user guide
+  - [ ] 19.4 Create user guide
     - Document how to use the web interface
     - Add screenshots or diagrams for key features
     - Document command execution workflow
     - Document task execution workflow
     - Document facts gathering workflow
+    - Document expert mode feature and its benefits
     - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1_
