@@ -434,39 +434,46 @@
 
 - [ ] 18. Create comprehensive API documentation
   - [ ] 18.1 Write OpenAPI 3.0 specification document
-    - Document all API endpoints with paths and methods
+    - Document all API endpoints with paths and methods (inventory, nodes, facts, commands, tasks, puppet-run, install-package, executions, streaming)
     - Define request/response schemas for all endpoints
-    - Include error response examples for each endpoint
+    - Include error response examples for each endpoint with expert mode fields
     - Add authentication placeholders for future versions
     - Document query parameters and pagination
-    - _Requirements: 10.1, 10.2, 10.3, 10.4_
+    - Document expert mode header (X-Expert-Mode) and its effects
+    - Document streaming endpoints and SSE event types
+    - _Requirements: 10.1, 10.2, 10.3, 10.4, 13.1_
   
   - [ ] 18.2 Add API documentation to docs directory
     - Create docs/api.md with endpoint descriptions
-    - Include example requests and responses
+    - Include example requests and responses for all endpoints
     - Document error codes and their meanings
-    - Add usage examples for common workflows
-    - _Requirements: 10.1, 10.2_
+    - Add usage examples for common workflows (command execution, task execution, Puppet runs, package installation)
+    - Document expert mode feature and how to enable it
+    - Document streaming execution output via SSE
+    - _Requirements: 10.1, 10.2, 13.1_
 
 - [ ] 19. Implement performance optimizations
   - [ ] 19.1 Add caching layer for inventory and facts
-    - Implement inventory caching with 30-second TTL
-    - Implement facts caching per node (5-minute TTL)
+    - Implement inventory caching with 30-second TTL in BoltService
+    - Implement facts caching per node (5-minute TTL) in BoltService
     - Add cache invalidation mechanism
     - Use in-memory cache (Map) with timestamp tracking
-    - _Requirements: 1.2, 8.1, 8.2, 8.3_
+    - Add configuration options for cache TTL values
+    - _Requirements: 1.2, 11.1, 11.2, 11.3_
   
   - [ ] 19.2 Optimize database queries
-    - Add database indexes for execution queries (status, started_at, target_nodes)
-    - Verify indexes are created in schema.sql
-    - Test query performance with large datasets
-    - _Requirements: 6.3, 6.5_
+    - Verify database indexes exist for execution queries (status, started_at, target_nodes) in schema.sql
+    - Add any missing indexes
+    - Test query performance with large datasets (1000+ executions)
+    - Document index strategy in schema.sql comments
+    - _Requirements: 9.3, 9.5_
   
   - [ ] 19.3 Add concurrent execution limiting
-    - Implement execution queue with configurable limit (default: 5)
-    - Add queue status endpoint to monitor pending executions
-    - Handle queue overflow gracefully
-    - _Requirements: 8.1, 8.2_
+    - Implement execution queue with configurable limit (default: 5) in backend
+    - Add queue status endpoint GET /api/executions/queue to monitor pending executions
+    - Handle queue overflow gracefully with appropriate error messages
+    - Add configuration option CONCURRENT_EXECUTION_LIMIT
+    - _Requirements: 11.1, 11.2_
 
 - [ ]* 20. Write integration tests
   - [ ]* 20.1 Test API endpoints with Supertest
@@ -491,107 +498,115 @@
     - Test executions page filtering and detail view
     - _Requirements: 1.1, 1.5, 2.1, 4.1, 5.3, 6.1_
 
-- [ ] 22. Implement expert mode feature (legacy - superseded by task 16)
+- [x] 22. Implement expert mode feature (legacy - superseded by task 16)
   - [x] 22.1 Add expert mode toggle to main navigation
     - Create toggle switch component in Navigation component
     - Store expert mode state in localStorage for persistence
     - Add visual indicator when expert mode is active
-    - _Requirements: 8.4, 9.4_
+    - _Requirements: 11.4_
   
   - [x] 22.2 Modify backend to include Bolt command in responses
     - Update BoltService to capture the exact Bolt CLI command being executed
     - Add `boltCommand` field to ExecutionResult interface
     - Include Bolt command in API responses for command, task, and facts operations
-    - _Requirements: 4.1, 5.3, 10.2_
+    - _Requirements: 7.1, 8.1, 13.2_
   
   - [x] 22.3 Display Bolt commands in frontend when expert mode is enabled
     - Update CommandOutput component to display Bolt command when available
     - Show Bolt command in execution results on Node Detail page
     - Display Bolt command in execution history on Executions page
     - Format command display with monospace font and copy-to-clipboard button
-    - _Requirements: 2.3, 2.4, 6.4, 9.4_
+    - _Requirements: 5.1, 5.3, 9.4, 12.3_
   
   - [x] 22.4 Add expert mode indicator to execution records
     - Store whether expert mode was enabled during execution in database
     - Display expert mode badge on execution history items
-    - _Requirements: 6.1, 6.3_
+    - _Requirements: 9.1, 9.3_
 
 - [ ] 23. Enhance project documentation
   - [ ] 23.1 Expand README with comprehensive setup instructions
-    - Add detailed prerequisites section
-    - Document installation steps for all platforms
-    - Add quick start guide
-    - Document development workflow
-    - Add production deployment instructions
-    - _Requirements: 7.1, 7.4, 7.5_
+    - Add detailed prerequisites section (Node.js, Bolt CLI, Docker optional)
+    - Document installation steps for all platforms (macOS, Linux, Windows)
+    - Add quick start guide with minimal steps to get running
+    - Document development workflow (running frontend and backend separately)
+    - Add production deployment instructions (Docker, standalone)
+    - Document how to configure Bolt project path
+    - _Requirements: 10.1, 10.5_
   
-  - [ ] 23.2 Create configuration guide
-    - Document all environment variables and their defaults
-    - Create user guide for command whitelist configuration
-    - Document Bolt project requirements (inventory format, bolt-project.yaml)
-    - Add examples for different deployment scenarios
-    - Document package installation configuration (PACKAGE_INSTALL_TASK, PACKAGE_INSTALL_MODULE)
-    - _Requirements: 7.4, 7.5, 10.1_
+  - [ ] 23.2 Create configuration guide in docs/configuration.md
+    - Document all environment variables and their defaults (PORT, BOLT_PROJECT_PATH, COMMAND_WHITELIST_*, EXECUTION_TIMEOUT, DATABASE_PATH, PACKAGE_INSTALL_*)
+    - Create user guide for command whitelist configuration with examples
+    - Document Bolt project requirements (inventory.yaml format, bolt-project.yaml structure)
+    - Add examples for different deployment scenarios (development, production, Docker)
+    - Document package installation configuration (PACKAGE_INSTALL_TASK, PACKAGE_INSTALL_MODULE, PACKAGE_INSTALL_PARAMETER_MAPPING)
+    - Document expert mode configuration and usage
+    - _Requirements: 10.1, 10.2_
   
-  - [ ] 23.3 Create troubleshooting guide
-    - Add troubleshooting section for common issues
-    - Document error messages and their solutions
+  - [ ] 23.3 Create troubleshooting guide in docs/troubleshooting.md
+    - Add troubleshooting section for common issues (Bolt not found, inventory errors, connection failures)
+    - Document error messages and their solutions with examples
     - Add debugging tips for Bolt integration issues
-    - Include FAQ section
-    - _Requirements: 9.1, 9.2, 9.5_
+    - Include FAQ section covering common questions
+    - Document how to use expert mode for debugging
+    - Add section on interpreting Bolt command output
+    - _Requirements: 12.1, 12.2, 12.5_
   
-  - [ ] 23.4 Create user guide
-    - Document how to use the web interface
-    - Add screenshots or diagrams for key features
-    - Document command execution workflow
-    - Document task execution workflow
+  - [ ] 23.4 Create user guide in docs/user-guide.md
+    - Document how to use the web interface with step-by-step instructions
+    - Add screenshots or diagrams for key features (inventory view, node detail, task execution)
+    - Document command execution workflow with examples
+    - Document task execution workflow with parameter configuration
     - Document facts gathering workflow
+    - Document Puppet run workflow with configuration options
     - Document package installation workflow
-    - Document expert mode feature and its benefits
-    - _Requirements: 1.1, 2.1, 3.1, 4.1, 5.1_
+    - Document expert mode feature and its benefits for troubleshooting
+    - Document execution history and filtering
+    - _Requirements: 4.1, 5.1, 1.1, 2.1, 3.1_
 
 - [ ] 24. Implement realtime streaming of command/task output in expert mode
-  - [ ] 24.1 Add Server-Sent Events (SSE) support to backend
+  - [x] 24.1 Add Server-Sent Events (SSE) support to backend
     - Create SSE middleware for streaming responses
     - Add SSE endpoint for execution streaming: GET /api/executions/:id/stream
     - Implement connection management and cleanup
     - Add heartbeat mechanism to keep connections alive
-    - _Requirements: 3.1, 8.1_
+    - _Requirements: 3.1, 11.1_
   
-  - [ ] 24.2 Modify BoltService to support streaming output
+  - [x] 24.2 Modify BoltService to support streaming output
     - **CRITICAL: Modify executeCommand to accept optional callback for streaming stdout/stderr**
     - Add streamingCallback parameter to executeCommand method
     - Emit stdout/stderr chunks in real-time as they arrive from child process
     - Maintain backward compatibility with non-streaming executions
     - Include command string in streaming events
-    - _Requirements: 3.1, 4.1, 5.3_
+    - _Requirements: 3.1, 7.1, 8.1_
   
-  - [ ] 24.3 Update command and task execution routes for streaming
-    - Modify command execution to support streaming when expert mode is enabled
-    - Modify task execution to support streaming when expert mode is enabled
+  - [x] 24.3 Update command and task execution routes for streaming
+    - Modify command execution route to support streaming when expert mode is enabled
+    - Modify task execution route to support streaming when expert mode is enabled
+    - Modify Puppet run route to support streaming when expert mode is enabled
+    - Modify package installation route to support streaming when expert mode is enabled
     - Store execution ID before starting execution for stream subscription
-    - Emit streaming events during execution (stdout, stderr, status updates)
+    - Emit streaming events during execution (stdout, stderr, status updates, command)
     - Emit completion event when execution finishes
-    - _Requirements: 2.3, 2.4, 4.1, 5.3_
+    - _Requirements: 5.1, 5.3, 7.1, 8.1_
   
-  - [ ] 24.4 Create StreamingExecutionManager service
+  - [x] 24.4 Create StreamingExecutionManager service
     - Implement in-memory execution stream registry
     - Track active streaming connections per execution ID
     - Provide methods to emit events to all subscribers of an execution
     - Handle connection cleanup when clients disconnect
-    - Implement event types: 'start', 'stdout', 'stderr', 'status', 'complete', 'error'
-    - _Requirements: 8.1, 8.2_
+    - Implement event types: 'start', 'stdout', 'stderr', 'status', 'complete', 'error', 'command'
+    - _Requirements: 11.1, 11.2_
   
-  - [ ] 24.5 Create frontend SSE client utility
-    - Create useExecutionStream Svelte 5 hook/utility
+  - [x] 24.5 Create frontend SSE client utility
+    - Create useExecutionStream Svelte 5 utility in frontend/src/lib/
     - Implement EventSource connection management
     - Parse SSE events and update reactive state
     - Handle reconnection on connection loss
     - Provide cleanup on component unmount
-    - _Requirements: 9.4_
+    - _Requirements: 11.4_
   
-  - [ ] 24.6 Create RealtimeOutputViewer component
-    - Create Svelte component for displaying streaming output
+  - [x] 24.6 Create RealtimeOutputViewer component
+    - Create Svelte component for displaying streaming output in frontend/src/components/
     - **CRITICAL: Display Bolt command at the top when expert mode is enabled**
     - Show stdout and stderr in separate sections with syntax highlighting
     - Auto-scroll to bottom as new output arrives
@@ -599,33 +614,33 @@
     - Display execution status (running, success, failed)
     - Show elapsed time during execution
     - Add copy-to-clipboard for full output
-    - _Requirements: 3.1, 3.4, 9.4_
+    - _Requirements: 3.1, 3.4, 11.4_
   
   - [ ] 24.7 Integrate RealtimeOutputViewer in Node Detail page
-    - Replace static CommandOutput with RealtimeOutputViewer when expert mode is enabled
+    - Replace static CommandOutput with RealtimeOutputViewer when expert mode is enabled and execution is running
     - Show RealtimeOutputViewer for command execution results
     - Show RealtimeOutputViewer for task execution results
     - Show RealtimeOutputViewer for Puppet run results
     - Show RealtimeOutputViewer for package installation results
-    - Fall back to static output when expert mode is disabled
-    - _Requirements: 2.3, 2.4, 3.1, 9.4_
+    - Fall back to static output when expert mode is disabled or execution is complete
+    - _Requirements: 5.1, 5.3, 3.1, 11.4_
   
   - [ ] 24.8 Add streaming support to Executions page
-    - Show realtime indicator for running executions
+    - Show realtime indicator for running executions in execution list
     - Allow viewing streaming output from execution history
-    - Display RealtimeOutputViewer in execution detail modal when expert mode is enabled
-    - _Requirements: 6.4, 9.4_
+    - Display RealtimeOutputViewer in execution detail modal when expert mode is enabled and execution is running
+    - _Requirements: 9.4, 11.4_
   
   - [ ] 24.9 Implement error handling for streaming
-    - Handle SSE connection errors gracefully
+    - Handle SSE connection errors gracefully in frontend
     - Show connection status indicator (connected, disconnected, reconnecting)
     - Display error messages when streaming fails
     - Fall back to polling execution status if streaming is unavailable
-    - _Requirements: 9.1, 9.2_
+    - _Requirements: 12.1, 12.2_
   
   - [ ] 24.10 Add streaming performance optimizations
-    - Implement output buffering to reduce event frequency (100ms buffer)
+    - Implement output buffering to reduce event frequency (100ms buffer) in StreamingExecutionManager
     - Limit maximum output size per execution (configurable, default 10MB)
     - Truncate very long lines in streaming output
-    - Add configuration for streaming buffer size and limits
-    - _Requirements: 8.1, 8.2, 8.3_
+    - Add configuration for streaming buffer size and limits (STREAMING_BUFFER_MS, STREAMING_MAX_OUTPUT_SIZE)
+    - _Requirements: 11.1, 11.2, 11.3_
