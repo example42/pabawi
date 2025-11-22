@@ -7,6 +7,7 @@ export { default as LoadingSpinner } from "./LoadingSpinner.svelte";
 export { default as Navigation } from "./Navigation.svelte";
 export { default as PuppetOutputViewer } from "./PuppetOutputViewer.svelte";
 export { default as PuppetRunInterface } from "./PuppetRunInterface.svelte";
+export { default as RealtimeOutputViewer } from "./RealtimeOutputViewer.svelte";
 export { default as Router } from "./Router.svelte";
 export { default as StatusBadge } from "./StatusBadge.svelte";
 export { default as TaskParameterForm } from "./TaskParameterForm.svelte";

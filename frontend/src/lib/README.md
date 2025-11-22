@@ -157,6 +157,112 @@ Enhanced error alert component with actionable guidance.
 />
 ```
 
+### Execution Stream (`executionStream.svelte.ts`)
+
+A Svelte 5 reactive utility for subscribing to real-time execution output via Server-Sent Events (SSE).
+
+#### Features
+
+- Real-time streaming of command/task execution output
+- Automatic reconnection on connection loss
+- Configurable retry logic with exponential backoff
+- Reactive state management with Svelte 5 runes
+- Expert mode integration
+- Proper cleanup on component unmount
+- Event history tracking
+
+#### Usage
+
+```typescript
+import { useExecutionStream } from '../lib/executionStream.svelte';
+import { onMount, onDestroy } from 'svelte';
+
+// Create execution stream
+const stream = useExecutionStream(executionId, {
+  maxReconnectAttempts: 3,
+  reconnectDelay: 1000,
+  autoReconnect: true,
+  onStatusChange: (status) => console.log('Status:', status),
+  onEvent: (event) => console.log('Event:', event),
+  onComplete: (result) => console.log('Complete:', result),
+  onError: (error) => console.error('Error:', error),
+});
+
+// Connect on mount
+onMount(() => {
+  stream.connect();
+});
+
+// Cleanup on unmount
+onDestroy(() => {
+  stream.disconnect();
+});
+
+// Access reactive state in template
+{#if stream.isConnected}
+  <div>Status: {stream.status}</div>
+  <div>Command: {stream.command}</div>
+  <pre>{stream.stdout}</pre>
+  {#if stream.stderr}
+    <pre class="error">{stream.stderr}</pre>
+  {/if}
+{/if}
+```
+
+#### Stream Options
+
+```typescript
+interface ExecutionStreamOptions {
+  maxReconnectAttempts?: number;  // Default: 3
+  reconnectDelay?: number;        // Default: 1000ms
+  autoReconnect?: boolean;        // Default: true
+  onStatusChange?: (status: ConnectionStatus) => void;
+  onEvent?: (event: StreamingEvent) => void;
+  onComplete?: (result: unknown) => void;
+  onError?: (error: string) => void;
+}
+```
+
+#### Reactive State
+
+The stream provides reactive state that automatically updates:
+
+- `status` - Connection status (disconnected, connecting, connected, reconnecting, error)
+- `command` - Bolt command being executed
+- `stdout` - Accumulated standard output
+- `stderr` - Accumulated standard error
+- `executionStatus` - Execution status (running, success, failed)
+- `result` - Final execution result
+- `error` - Error message if any
+- `events` - Array of all received events
+- `isConnected` - Boolean indicating if connected
+- `isConnecting` - Boolean indicating if connecting/reconnecting
+- `hasError` - Boolean indicating if there's an error
+
+#### Control Methods
+
+- `connect()` - Establish SSE connection
+- `disconnect()` - Close SSE connection
+- `reconnect()` - Disconnect and reconnect
+- `clearOutput()` - Clear stdout, stderr, and events
+- `reset()` - Reset all state to initial values
+
+#### Event Types
+
+The stream handles the following SSE event types:
+
+- `start` - Connection established
+- `command` - Bolt command being executed
+- `stdout` - Standard output chunk
+- `stderr` - Standard error chunk
+- `status` - Execution status update
+- `complete` - Execution completed successfully
+- `error` - Execution failed with error
+
+#### Expert Mode Integration
+
+When expert mode is enabled, the stream automatically includes the `expertMode` query parameter in the SSE URL, allowing the backend to provide additional diagnostic information.
+
 ## Best Practices
 
 ### 1. Use Toast Notifications for User Feedback
@@ -216,6 +322,35 @@ try {
 onDestroy(() => {
   clearAllToasts();
 });
+
+// Good: Disconnect streams on unmount
+onDestroy(() => {
+  stream.disconnect();
+});
+```
+
+### 6. Use Execution Streams for Real-Time Output
+
+```typescript
+// Good: Stream output in expert mode
+const stream = useExecutionStream(executionId, {
+  onComplete: (result) => {
+    showSuccess('Execution completed');
+  },
+  onError: (error) => {
+    showError('Execution failed', error);
+  },
+});
+
+// Good: Connect when needed
+if (expertMode.enabled) {
+  stream.connect();
+}
+
+// Good: Provide user feedback on connection status
+{#if stream.isConnecting}
+  <LoadingSpinner message="Connecting to stream..." />
+{/if}
 ```
 
 ## Testing

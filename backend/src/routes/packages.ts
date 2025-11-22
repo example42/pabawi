@@ -3,11 +3,6 @@ import { z } from "zod";
 import { BoltService } from "../bolt/BoltService";
 import { ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
-import {
-  BoltTaskNotFoundError,
-  BoltNodeUnreachableError,
-  BoltExecutionError,
-} from "../bolt/types";
 
 /**
  * Request body schema for package installation
@@ -184,57 +179,6 @@ export function createPackagesRouter(
         status: "running",
         message: "Package installation started",
       });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        res.status(400).json({
-          error: {
-            code: "INVALID_REQUEST",
-            message: "Request validation failed",
-            details: error.errors,
-          },
-        });
-        return;
-      }
-
-      try {
-        // Handle specific Bolt errors
-        if (error instanceof BoltTaskNotFoundError) {
-          res.status(404).json({
-            error: {
-              code: "TASK_NOT_FOUND",
-              message: `Package installation task '${taskName}' not found`,
-              details: error.message,
-            },
-          });
-          return;
-        }
-
-        if (error instanceof BoltNodeUnreachableError) {
-          res.status(503).json({
-            error: {
-              code: "NODE_UNREACHABLE",
-              message: `Node ${nodeId} is unreachable`,
-              details: error.details,
-            },
-          });
-          return;
-        }
-
-        if (error instanceof BoltExecutionError) {
-          res.status(500).json({
-            error: {
-              code: "EXECUTION_FAILED",
-              message: "Package installation failed",
-              details: error.message,
-              stderr: error.stderr,
-            },
-          });
-          return;
-        }
-
-        // Re-throw other errors to be handled by global error handler
-        throw error;
-      }
     }),
   );
 
