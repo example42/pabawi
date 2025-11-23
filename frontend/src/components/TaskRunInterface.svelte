@@ -4,10 +4,12 @@
   import ErrorAlert from './ErrorAlert.svelte';
   import StatusBadge from './StatusBadge.svelte';
   import CommandOutput from './CommandOutput.svelte';
+  import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
   import TaskParameterForm from './TaskParameterForm.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Task {
     name: string;
@@ -78,6 +80,7 @@
   let executionError = $state<string | null>(null);
   let executionResult = $state<ExecutionResult | null>(null);
   let parameterFormRef = $state<TaskParameterForm | null>(null);
+  let executionStream = $state<ExecutionStream | null>(null);
 
   // Execution history state
   let executionHistory = $state<ExecutionResult[]>([]);
@@ -192,6 +195,7 @@
     executing = true;
     executionError = null;
     executionResult = null;
+    executionStream = null;
 
     try {
       showInfo('Executing task...');
@@ -208,13 +212,29 @@
 
       const executionId = data.executionId;
 
-      // Poll for execution result
-      await pollExecutionResult(executionId);
-
-      showSuccess('Task executed successfully');
-
-      // Refresh execution history
-      fetchExecutionHistory();
+      // If expert mode is enabled, create a stream for real-time output
+      if (expertMode.enabled) {
+        executionStream = useExecutionStream(executionId, {
+          onComplete: (result) => {
+            // Fetch final execution result
+            pollExecutionResult(executionId);
+            showSuccess('Task executed successfully');
+            // Refresh execution history
+            fetchExecutionHistory();
+          },
+          onError: (error) => {
+            executionError = error;
+            showError('Task execution failed', error);
+          },
+        });
+        executionStream.connect();
+      } else {
+        // Poll for execution result (non-streaming)
+        await pollExecutionResult(executionId);
+        showSuccess('Task executed successfully');
+        // Refresh execution history
+        fetchExecutionHistory();
+      }
     } catch (err) {
       executionError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error executing task:', err);
@@ -525,8 +545,14 @@
           </div>
         {/if}
 
-        <!-- Execution Result -->
-        {#if executionResult}
+        <!-- Real-time Output (Expert Mode + Running) -->
+        {#if executionStream && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
+          <div class="mt-4">
+            <h5 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h5>
+            <RealtimeOutputViewer stream={executionStream} autoConnect={false} />
+          </div>
+        {:else if executionResult}
+          <!-- Static Execution Result -->
           <div class="mt-4 space-y-3">
             <div class="flex items-center justify-between">
               <h5 class="text-sm font-medium text-gray-700 dark:text-gray-300">Result:</h5>

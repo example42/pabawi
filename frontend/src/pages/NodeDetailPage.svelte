@@ -6,12 +6,14 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import FactsViewer from '../components/FactsViewer.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
+  import RealtimeOutputViewer from '../components/RealtimeOutputViewer.svelte';
   import TaskRunInterface from '../components/TaskRunInterface.svelte';
   import PuppetRunInterface from '../components/PuppetRunInterface.svelte';
   import PackageInstallInterface from '../components/PackageInstallInterface.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
     params?: { id: string };
@@ -92,6 +94,8 @@
   let commandExecuting = $state(false);
   let commandError = $state<string | null>(null);
   let commandResult = $state<ExecutionResult | null>(null);
+  let commandExecutionId = $state<string | null>(null);
+  let commandStream = $state<ExecutionStream | null>(null);
 
   // Execution history state
   let executions = $state<ExecutionResult[]>([]);
@@ -154,6 +158,8 @@
     commandExecuting = true;
     commandError = null;
     commandResult = null;
+    commandExecutionId = null;
+    commandStream = null;
 
     try {
       showInfo('Executing command...');
@@ -165,11 +171,27 @@
       );
 
       const executionId = data.executionId;
+      commandExecutionId = executionId;
 
-      // Poll for execution result
-      await pollExecutionResult(executionId);
-
-      showSuccess('Command executed successfully');
+      // If expert mode is enabled, create a stream for real-time output
+      if (expertMode.enabled) {
+        commandStream = useExecutionStream(executionId, {
+          onComplete: (result) => {
+            // Fetch final execution result
+            pollExecutionResult(executionId);
+            showSuccess('Command executed successfully');
+          },
+          onError: (error) => {
+            commandError = error;
+            showError('Command execution failed', error);
+          },
+        });
+        commandStream.connect();
+      } else {
+        // Poll for execution result (non-streaming)
+        await pollExecutionResult(executionId);
+        showSuccess('Command executed successfully');
+      }
     } catch (err) {
       commandError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error executing command:', err);
@@ -471,7 +493,14 @@
         </div>
       {/if}
 
-      {#if commandResult}
+      {#if commandStream && expertMode.enabled && (commandStream.executionStatus === 'running' || commandStream.isConnecting)}
+        <!-- Real-time output viewer for running executions in expert mode -->
+        <div class="mt-4">
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
+          <RealtimeOutputViewer stream={commandStream} autoConnect={false} />
+        </div>
+      {:else if commandResult}
+        <!-- Static output for completed executions or when expert mode is disabled -->
         <div class="mt-4">
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Result:</h3>
           <div class="mb-2">
@@ -543,7 +572,7 @@
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
               {#each executions as execution}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick={() => router.navigate('/executions')}>
                   <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-900 dark:text-white">
                     {execution.type}
                   </td>
@@ -554,7 +583,22 @@
                     <StatusBadge status={execution.status} size="sm" />
                   </td>
                   <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                    {formatTimestamp(execution.startedAt)}
+                    <div class="flex items-center justify-between gap-2">
+                      <span>{formatTimestamp(execution.startedAt)}</span>
+                      <button
+                        type="button"
+                        class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                        onclick={(e) => {
+                          e.stopPropagation();
+                          router.navigate('/executions');
+                        }}
+                        title="View execution details"
+                      >
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               {/each}

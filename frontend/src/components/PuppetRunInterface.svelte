@@ -3,9 +3,12 @@
   import ErrorAlert from './ErrorAlert.svelte';
   import StatusBadge from './StatusBadge.svelte';
   import CommandOutput from './CommandOutput.svelte';
+  import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
   import PuppetOutputViewer from './PuppetOutputViewer.svelte';
   import { post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
+  import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
     nodeId: string;
@@ -54,6 +57,7 @@
   let executing = $state(false);
   let error = $state<string | null>(null);
   let result = $state<ExecutionResult | null>(null);
+  let executionStream = $state<ExecutionStream | null>(null);
 
   // Configuration state
   let tagsInput = $state('');
@@ -96,6 +100,7 @@
     executing = true;
     error = null;
     result = null;
+    executionStream = null;
 
     try {
       showInfo('Running Puppet agent...');
@@ -132,14 +137,32 @@
 
       const executionId = data.executionId;
 
-      // Poll for execution result
-      await pollExecutionResult(executionId);
-
-      showSuccess('Puppet run completed');
-
-      // Notify parent component
-      if (onExecutionComplete) {
-        onExecutionComplete();
+      // If expert mode is enabled, create a stream for real-time output
+      if (expertMode.enabled) {
+        executionStream = useExecutionStream(executionId, {
+          onComplete: (result) => {
+            // Fetch final execution result
+            pollExecutionResult(executionId);
+            showSuccess('Puppet run completed');
+            // Notify parent component
+            if (onExecutionComplete) {
+              onExecutionComplete();
+            }
+          },
+          onError: (error) => {
+            error = error;
+            showError('Puppet run failed', error);
+          },
+        });
+        executionStream.connect();
+      } else {
+        // Poll for execution result (non-streaming)
+        await pollExecutionResult(executionId);
+        showSuccess('Puppet run completed');
+        // Notify parent component
+        if (onExecutionComplete) {
+          onExecutionComplete();
+        }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -383,8 +406,14 @@
         </div>
       {/if}
 
-      <!-- Result State -->
-      {#if result}
+      <!-- Real-time Output (Expert Mode + Running) -->
+      {#if executionStream && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
+        <div class="mt-4">
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
+          <RealtimeOutputViewer stream={executionStream} autoConnect={false} />
+        </div>
+      {:else if result}
+        <!-- Static Result State -->
         <div class="mt-4 space-y-3">
           <div class="flex items-center justify-between">
             <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Result:</h3>

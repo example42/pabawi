@@ -1,5 +1,5 @@
 import { config as loadDotenv } from 'dotenv';
-import { AppConfigSchema, type AppConfig, type WhitelistConfig } from './schema';
+import { AppConfigSchema, type AppConfig, type WhitelistConfig, type StreamingConfig } from './schema';
 import { z } from 'zod';
 
 /**
@@ -50,6 +50,13 @@ export class ConfigService {
         }
       }
 
+      // Parse streaming configuration
+      const streaming = {
+        bufferMs: process.env.STREAMING_BUFFER_MS ? parseInt(process.env.STREAMING_BUFFER_MS, 10) : undefined,
+        maxOutputSize: process.env.STREAMING_MAX_OUTPUT_SIZE ? parseInt(process.env.STREAMING_MAX_OUTPUT_SIZE, 10) : undefined,
+        maxLineLength: process.env.STREAMING_MAX_LINE_LENGTH ? parseInt(process.env.STREAMING_MAX_LINE_LENGTH, 10) : undefined,
+      };
+
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
@@ -60,6 +67,7 @@ export class ConfigService {
         logLevel: process.env.LOG_LEVEL,
         databasePath: process.env.DATABASE_PATH,
         packageTasks,
+        streaming,
       };
 
       // Validate with Zod schema
@@ -141,5 +149,12 @@ export class ConfigService {
    */
   public getPackageTasks(): typeof this.config.packageTasks {
     return this.config.packageTasks;
+  }
+
+  /**
+   * Get streaming configuration
+   */
+  public getStreamingConfig(): typeof this.config.streaming {
+    return this.config.streaming;
   }
 }

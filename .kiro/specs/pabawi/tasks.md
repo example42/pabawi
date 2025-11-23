@@ -432,7 +432,7 @@
     - Include task parameters in execution details
     - _Requirements: 3.1, 3.6_
 
-- [ ] 18. Create comprehensive API documentation
+- [-] 18. Create comprehensive API documentation
   - [ ] 18.1 Write OpenAPI 3.0 specification document
     - Document all API endpoints with paths and methods (inventory, nodes, facts, commands, tasks, puppet-run, install-package, executions, streaming)
     - Define request/response schemas for all endpoints
@@ -616,7 +616,7 @@
     - Add copy-to-clipboard for full output
     - _Requirements: 3.1, 3.4, 11.4_
   
-  - [ ] 24.7 Integrate RealtimeOutputViewer in Node Detail page
+  - [x] 24.7 Integrate RealtimeOutputViewer in Node Detail page
     - Replace static CommandOutput with RealtimeOutputViewer when expert mode is enabled and execution is running
     - Show RealtimeOutputViewer for command execution results
     - Show RealtimeOutputViewer for task execution results
@@ -625,20 +625,20 @@
     - Fall back to static output when expert mode is disabled or execution is complete
     - _Requirements: 5.1, 5.3, 3.1, 11.4_
   
-  - [ ] 24.8 Add streaming support to Executions page
+  - [x] 24.8 Add streaming support to Executions page
     - Show realtime indicator for running executions in execution list
     - Allow viewing streaming output from execution history
     - Display RealtimeOutputViewer in execution detail modal when expert mode is enabled and execution is running
     - _Requirements: 9.4, 11.4_
   
-  - [ ] 24.9 Implement error handling for streaming
+  - [x] 24.9 Implement error handling for streaming
     - Handle SSE connection errors gracefully in frontend
     - Show connection status indicator (connected, disconnected, reconnecting)
     - Display error messages when streaming fails
     - Fall back to polling execution status if streaming is unavailable
     - _Requirements: 12.1, 12.2_
   
-  - [ ] 24.10 Add streaming performance optimizations
+  - [x] 24.10 Add streaming performance optimizations
     - Implement output buffering to reduce event frequency (100ms buffer) in StreamingExecutionManager
     - Limit maximum output size per execution (configurable, default 10MB)
     - Truncate very long lines in streaming output

@@ -207,7 +207,7 @@
         Full Output
       </h4>
       <div class="rounded-lg border border-gray-200 bg-gray-900 p-4 dark:border-gray-700">
-        <pre class="whitespace-pre-wrap text-xs text-gray-100 font-mono overflow-x-auto">{output}</pre>
+        <pre class="whitespace-pre-wrap text-xs text-white font-mono overflow-x-auto">{output}</pre>
       </div>
     </div>
   {/if}
