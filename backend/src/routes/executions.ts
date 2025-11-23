@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { ExecutionRepository} from '../database/ExecutionRepository';
 import { type ExecutionFilters } from '../database/ExecutionRepository';
+import type { ExecutionQueue } from '../services/ExecutionQueue';
 import { asyncHandler } from './asyncHandler';
 
 /**
@@ -24,7 +25,10 @@ const ExecutionFiltersQuerySchema = z.object({
 /**
  * Create executions router
  */
-export function createExecutionsRouter(executionRepository: ExecutionRepository): Router {
+export function createExecutionsRouter(
+  executionRepository: ExecutionRepository,
+  executionQueue?: ExecutionQueue
+): Router {
   const router = Router();
 
   /**
@@ -128,6 +132,50 @@ export function createExecutionsRouter(executionRepository: ExecutionRepository)
         error: {
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Failed to fetch execution details',
+        },
+      });
+    }
+  }));
+
+  /**
+   * GET /api/executions/queue/status
+   * Return current execution queue status
+   */
+  router.get('/queue/status', asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    if (!executionQueue) {
+      res.status(503).json({
+        error: {
+          code: 'QUEUE_NOT_AVAILABLE',
+          message: 'Execution queue is not configured',
+        },
+      });
+      return;
+    }
+
+    try {
+      const status = executionQueue.getStatus();
+      res.json({
+        queue: {
+          running: status.running,
+          queued: status.queued,
+          limit: status.limit,
+          available: status.limit - status.running,
+          queuedExecutions: status.queue.map(exec => ({
+            id: exec.id,
+            type: exec.type,
+            nodeId: exec.nodeId,
+            action: exec.action,
+            enqueuedAt: exec.enqueuedAt.toISOString(),
+            waitTime: Date.now() - exec.enqueuedAt.getTime(),
+          })),
+        },
+      });
+    } catch (error) {
+      console.error('Error fetching queue status:', error);
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to fetch queue status',
         },
       });
     }

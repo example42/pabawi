@@ -28,6 +28,14 @@ export interface StreamingCallback {
 }
 
 /**
+ * Cache entry with timestamp for TTL tracking
+ */
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+/**
  * Service for executing Bolt CLI commands with timeout handling,
  * JSON output parsing, and error capture
  */
@@ -36,9 +44,23 @@ export class BoltService {
   private readonly boltProjectPath: string;
   private taskListCache: Task[] | null = null;
 
-  constructor(boltProjectPath: string, defaultTimeout = 300000) {
+  // Cache configuration
+  private readonly inventoryTtl: number;
+  private readonly factsTtl: number;
+
+  // Cache storage
+  private inventoryCache: CacheEntry<Node[]> | null = null;
+  private factsCache: Map<string, CacheEntry<Facts>> = new Map();
+
+  constructor(
+    boltProjectPath: string,
+    defaultTimeout = 300000,
+    cacheConfig?: { inventoryTtl?: number; factsTtl?: number }
+  ) {
     this.boltProjectPath = boltProjectPath;
     this.defaultTimeout = defaultTimeout;
+    this.inventoryTtl = cacheConfig?.inventoryTtl ?? 30000; // 30 seconds default
+    this.factsTtl = cacheConfig?.factsTtl ?? 300000; // 5 minutes default
   }
 
   /**
@@ -265,10 +287,54 @@ export class BoltService {
   }
 
   /**
+   * Check if a cache entry is still valid based on TTL
+   *
+   * @param entry - Cache entry to check
+   * @param ttl - Time-to-live in milliseconds
+   * @returns true if cache entry is still valid, false otherwise
+   */
+  private isCacheValid<T>(entry: CacheEntry<T> | null, ttl: number): boolean {
+    if (!entry) {
+      return false;
+    }
+    const now = Date.now();
+    return (now - entry.timestamp) < ttl;
+  }
+
+  /**
+   * Invalidate the inventory cache
+   */
+  public invalidateInventoryCache(): void {
+    this.inventoryCache = null;
+  }
+
+  /**
+   * Invalidate facts cache for a specific node or all nodes
+   *
+   * @param nodeId - Optional node ID to invalidate. If not provided, clears all facts cache
+   */
+  public invalidateFactsCache(nodeId?: string): void {
+    if (nodeId) {
+      this.factsCache.delete(nodeId);
+    } else {
+      this.factsCache.clear();
+    }
+  }
+
+  /**
+   * Invalidate all caches
+   */
+  public invalidateAllCaches(): void {
+    this.invalidateInventoryCache();
+    this.invalidateFactsCache();
+    this.taskListCache = null;
+  }
+
+  /**
    * Retrieve inventory from Bolt
    *
    * Executes `bolt inventory show --format json` and transforms the output
-   * into an array of Node objects
+   * into an array of Node objects. Results are cached based on inventoryTtl.
    *
    * @returns Promise resolving to array of nodes
    * @throws BoltInventoryNotFoundError if inventory file is not found
@@ -276,6 +342,11 @@ export class BoltService {
    * @throws BoltParseError if JSON parsing fails
    */
   public async getInventory(): Promise<Node[]> {
+    // Check cache first
+    if (this.isCacheValid(this.inventoryCache, this.inventoryTtl)) {
+      return this.inventoryCache!.data;
+    }
+
     try {
       const jsonOutput = await this.executeCommandWithJsonOutput([
         "inventory",
@@ -285,7 +356,15 @@ export class BoltService {
         "--detail",
       ]);
 
-      return this.transformInventoryToNodes(jsonOutput);
+      const nodes = this.transformInventoryToNodes(jsonOutput);
+
+      // Update cache
+      this.inventoryCache = {
+        data: nodes,
+        timestamp: Date.now(),
+      };
+
+      return nodes;
     } catch (error) {
       // Check if error is due to missing inventory file
       if (error instanceof BoltExecutionError && error.stderr) {
@@ -420,7 +499,7 @@ export class BoltService {
    * Gather facts from a target node
    *
    * Executes `bolt task run facts --targets <node> --format json` and
-   * structures the output as a Facts object
+   * structures the output as a Facts object. Results are cached per node based on factsTtl.
    *
    * @param nodeId - The ID/name of the target node
    * @returns Promise resolving to Facts object
@@ -429,6 +508,12 @@ export class BoltService {
    * @throws BoltParseError if JSON parsing fails
    */
   public async gatherFacts(nodeId: string): Promise<Facts> {
+    // Check cache first
+    const cachedFacts = this.factsCache.get(nodeId);
+    if (this.isCacheValid(cachedFacts ?? null, this.factsTtl)) {
+      return cachedFacts!.data;
+    }
+
     const args = [
       "task",
       "run",
@@ -445,6 +530,13 @@ export class BoltService {
 
       const facts = this.transformFactsOutput(nodeId, jsonOutput);
       facts.command = command;
+
+      // Update cache
+      this.factsCache.set(nodeId, {
+        data: facts,
+        timestamp: Date.now(),
+      });
+
       return facts;
     } catch (error) {
       // Check if error is due to node being unreachable

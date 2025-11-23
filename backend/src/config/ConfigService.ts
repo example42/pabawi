@@ -57,6 +57,18 @@ export class ConfigService {
         maxLineLength: process.env.STREAMING_MAX_LINE_LENGTH ? parseInt(process.env.STREAMING_MAX_LINE_LENGTH, 10) : undefined,
       };
 
+      // Parse cache configuration
+      const cache = {
+        inventoryTtl: process.env.CACHE_INVENTORY_TTL ? parseInt(process.env.CACHE_INVENTORY_TTL, 10) : undefined,
+        factsTtl: process.env.CACHE_FACTS_TTL ? parseInt(process.env.CACHE_FACTS_TTL, 10) : undefined,
+      };
+
+      // Parse execution queue configuration
+      const executionQueue = {
+        concurrentLimit: process.env.CONCURRENT_EXECUTION_LIMIT ? parseInt(process.env.CONCURRENT_EXECUTION_LIMIT, 10) : undefined,
+        maxQueueSize: process.env.MAX_QUEUE_SIZE ? parseInt(process.env.MAX_QUEUE_SIZE, 10) : undefined,
+      };
+
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
@@ -68,6 +80,8 @@ export class ConfigService {
         databasePath: process.env.DATABASE_PATH,
         packageTasks,
         streaming,
+        cache,
+        executionQueue,
       };
 
       // Validate with Zod schema
@@ -156,5 +170,19 @@ export class ConfigService {
    */
   public getStreamingConfig(): typeof this.config.streaming {
     return this.config.streaming;
+  }
+
+  /**
+   * Get cache configuration
+   */
+  public getCacheConfig(): typeof this.config.cache {
+    return this.config.cache;
+  }
+
+  /**
+   * Get execution queue configuration
+   */
+  public getExecutionQueueConfig(): typeof this.config.executionQueue {
+    return this.config.executionQueue;
   }
 }

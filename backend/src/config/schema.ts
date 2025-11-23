@@ -39,6 +39,26 @@ export const StreamingConfigSchema = z.object({
 export type StreamingConfig = z.infer<typeof StreamingConfigSchema>;
 
 /**
+ * Cache configuration schema
+ */
+export const CacheConfigSchema = z.object({
+  inventoryTtl: z.number().int().positive().default(30000), // 30 seconds default
+  factsTtl: z.number().int().positive().default(300000), // 5 minutes default
+});
+
+export type CacheConfig = z.infer<typeof CacheConfigSchema>;
+
+/**
+ * Execution queue configuration schema
+ */
+export const ExecutionQueueConfigSchema = z.object({
+  concurrentLimit: z.number().int().positive().default(5), // 5 concurrent executions default
+  maxQueueSize: z.number().int().positive().default(50), // 50 queued executions max
+});
+
+export type ExecutionQueueConfig = z.infer<typeof ExecutionQueueConfigSchema>;
+
+/**
  * Application configuration schema with Zod validation
  */
 export const AppConfigSchema = z.object({
@@ -61,6 +81,8 @@ export const AppConfigSchema = z.object({
     },
   ]),
   streaming: StreamingConfigSchema,
+  cache: CacheConfigSchema,
+  executionQueue: ExecutionQueueConfigSchema,
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

@@ -454,8 +454,8 @@
     - Document streaming execution output via SSE
     - _Requirements: 10.1, 10.2, 13.1_
 
-- [ ] 19. Implement performance optimizations
-  - [ ] 19.1 Add caching layer for inventory and facts
+- [x] 19. Implement performance optimizations
+  - [x] 19.1 Add caching layer for inventory and facts
     - Implement inventory caching with 30-second TTL in BoltService
     - Implement facts caching per node (5-minute TTL) in BoltService
     - Add cache invalidation mechanism
@@ -463,14 +463,14 @@
     - Add configuration options for cache TTL values
     - _Requirements: 1.2, 11.1, 11.2, 11.3_
   
-  - [ ] 19.2 Optimize database queries
+  - [x] 19.2 Optimize database queries
     - Verify database indexes exist for execution queries (status, started_at, target_nodes) in schema.sql
     - Add any missing indexes
     - Test query performance with large datasets (1000+ executions)
     - Document index strategy in schema.sql comments
     - _Requirements: 9.3, 9.5_
   
-  - [ ] 19.3 Add concurrent execution limiting
+  - [x] 19.3 Add concurrent execution limiting
     - Implement execution queue with configurable limit (default: 5) in backend
     - Add queue status endpoint GET /api/executions/queue to monitor pending executions
     - Handle queue overflow gracefully with appropriate error messages
