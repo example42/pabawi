@@ -15,11 +15,11 @@
 
   // Auto-scroll state
   let autoScroll = $state(true);
-  let stdoutContainer: HTMLElement | null = null;
-  let stderrContainer: HTMLElement | null = null;
+  let stdoutContainer = $state<HTMLElement | null>(null);
+  let stderrContainer = $state<HTMLElement | null>(null);
 
   // Elapsed time tracking
-  let startTime: number | null = null;
+  let startTime = $state<number | null>(null);
   let elapsedTime = $state(0);
   let elapsedInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -557,11 +557,11 @@
   }
 
   /* Dark mode scrollbar */
-  .dark .realtime-output-viewer ::-webkit-scrollbar-thumb {
+  :global(.dark) .realtime-output-viewer ::-webkit-scrollbar-thumb {
     background: rgba(75, 85, 99, 0.5);
   }
 
-  .dark .realtime-output-viewer ::-webkit-scrollbar-thumb:hover {
+  :global(.dark) .realtime-output-viewer ::-webkit-scrollbar-thumb:hover {
     background: rgba(75, 85, 99, 0.7);
   }
 </style>

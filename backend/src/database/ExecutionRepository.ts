@@ -27,7 +27,7 @@ interface DbRow {
 /**
  * Execution types
  */
-export type ExecutionType = "command" | "task" | "facts";
+export type ExecutionType = "command" | "task" | "facts" | "puppet" | "package";
 
 /**
  * Execution status

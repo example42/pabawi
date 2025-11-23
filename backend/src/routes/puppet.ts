@@ -70,7 +70,7 @@ export function createPuppetRouter(
 
         // Create initial execution record
         const executionId = await executionRepository.create({
-          type: "task",
+          type: "puppet",
           targetNodes: [nodeId],
           action: "psick::puppet_agent",
           parameters: config,
