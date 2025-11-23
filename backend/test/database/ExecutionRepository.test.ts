@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import sqlite3 from "sqlite3";
 import {
   ExecutionRepository,
-  ExecutionRecord,
   ExecutionType,
   ExecutionStatus,
 } from "../../src/database/ExecutionRepository";
