@@ -94,8 +94,11 @@ async function startServer(): Promise<Express> {
     );
 
     // Initialize streaming execution manager
-    const streamingManager = new StreamingExecutionManager();
+    const streamingManager = new StreamingExecutionManager(config.streaming);
     console.warn("Streaming execution manager initialized successfully");
+    console.warn(`- Buffer interval: ${String(config.streaming.bufferMs)}ms`);
+    console.warn(`- Max output size: ${String(config.streaming.maxOutputSize)} bytes`);
+    console.warn(`- Max line length: ${String(config.streaming.maxLineLength)} characters`);
 
     // Create Express app
     const app: Express = express();

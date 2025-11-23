@@ -28,6 +28,17 @@ export const PackageTaskConfigSchema = z.object({
 export type PackageTaskConfig = z.infer<typeof PackageTaskConfigSchema>;
 
 /**
+ * Streaming configuration schema
+ */
+export const StreamingConfigSchema = z.object({
+  bufferMs: z.number().int().positive().default(100), // 100ms buffer
+  maxOutputSize: z.number().int().positive().default(10485760), // 10MB default
+  maxLineLength: z.number().int().positive().default(10000), // 10k characters per line
+});
+
+export type StreamingConfig = z.infer<typeof StreamingConfigSchema>;
+
+/**
  * Application configuration schema with Zod validation
  */
 export const AppConfigSchema = z.object({
@@ -49,6 +60,7 @@ export const AppConfigSchema = z.object({
       },
     },
   ]),
+  streaming: StreamingConfigSchema,
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

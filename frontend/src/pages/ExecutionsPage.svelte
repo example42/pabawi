@@ -4,10 +4,13 @@
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
+  import RealtimeOutputViewer from '../components/RealtimeOutputViewer.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import { ansiToHtml } from '../lib/ansiToHtml';
+  import { expertMode } from '../lib/expertMode.svelte';
+  import { useExecutionStream } from '../lib/executionStream.svelte';
 
   interface ExecutionResult {
     id: string;
@@ -93,6 +96,7 @@
   let selectedExecution = $state<ExecutionResult | null>(null);
   let loadingDetail = $state(false);
   let detailError = $state<string | null>(null);
+  let executionStream = $state<ReturnType<typeof useExecutionStream> | null>(null);
 
   // Fetch nodes for target filter
   async function fetchNodes(): Promise<void> {
@@ -249,10 +253,29 @@
   // Open execution detail modal
   function openExecutionDetail(execution: ExecutionResult): void {
     fetchExecutionDetail(execution.id);
+
+    // Create streaming connection if execution is running and expert mode is enabled
+    if (execution.status === 'running' && expertMode.enabled) {
+      executionStream = useExecutionStream(execution.id, {
+        onComplete: () => {
+          // Refresh execution details when streaming completes
+          fetchExecutionDetail(execution.id);
+        },
+        onError: (error) => {
+          console.error('Streaming error:', error);
+        },
+      });
+    }
   }
 
   // Close execution detail modal
   function closeExecutionDetail(): void {
+    // Disconnect streaming if active
+    if (executionStream) {
+      executionStream.disconnect();
+      executionStream = null;
+    }
+
     selectedExecution = null;
     detailError = null;
   }
@@ -481,6 +504,15 @@
                       <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(execution.type)}">
                         {execution.type}
                       </span>
+                      {#if execution.status === 'running'}
+                        <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900/20 dark:text-blue-400" title="Execution is running">
+                          <span class="relative flex h-2 w-2">
+                            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
+                            <span class="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+                          </span>
+                          Live
+                        </span>
+                      {/if}
                       {#if execution.expertMode}
                         <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/20 dark:text-amber-400" title="Expert mode was enabled">
                           <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -705,6 +737,16 @@
               </dl>
             </div>
 
+            <!-- Realtime Output (Expert Mode + Running) -->
+            {#if expertMode.enabled && selectedExecution.status === 'running' && executionStream}
+              <div class="mb-6">
+                <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
+                  Live Output
+                </h4>
+                <RealtimeOutputViewer stream={executionStream} autoConnect={true} />
+              </div>
+            {/if}
+
             <!-- Per-Node Results -->
             <div>
               <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
@@ -800,3 +842,17 @@
     </div>
   </div>
 {/if}
+
+<style>
+  /* Pulsing animation for live indicator */
+  @keyframes ping {
+    75%, 100% {
+      transform: scale(2);
+      opacity: 0;
+    }
+  }
+
+  .animate-ping {
+    animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+</style>

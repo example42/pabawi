@@ -5,7 +5,9 @@
   import ErrorAlert from './ErrorAlert.svelte';
   import StatusBadge from './StatusBadge.svelte';
   import CommandOutput from './CommandOutput.svelte';
+  import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
     nodeId: string;
@@ -65,6 +67,7 @@
   let result = $state<ExecutionResult | null>(null);
   let tasksLoading = $state(false);
   let tasksFetched = $state(false);
+  let executionStream = $state<ExecutionStream | null>(null);
 
   // Validation
   let validationError = $state<string | null>(null);
@@ -141,6 +144,7 @@
     executing = true;
     error = null;
     result = null;
+    executionStream = null;
 
     try {
       showInfo('Installing package...');
@@ -169,14 +173,32 @@
 
       const executionId = data.executionId;
 
-      // Poll for execution result
-      await pollExecutionResult(executionId);
-
-      showSuccess('Package installation completed');
-
-      // Call completion callback
-      if (onExecutionComplete) {
-        onExecutionComplete();
+      // If expert mode is enabled, create a stream for real-time output
+      if (expertMode.enabled) {
+        executionStream = useExecutionStream(executionId, {
+          onComplete: (result) => {
+            // Fetch final execution result
+            pollExecutionResult(executionId);
+            showSuccess('Package installation completed');
+            // Call completion callback
+            if (onExecutionComplete) {
+              onExecutionComplete();
+            }
+          },
+          onError: (error) => {
+            error = error;
+            showError('Package installation failed', error);
+          },
+        });
+        executionStream.connect();
+      } else {
+        // Poll for execution result (non-streaming)
+        await pollExecutionResult(executionId);
+        showSuccess('Package installation completed');
+        // Call completion callback
+        if (onExecutionComplete) {
+          onExecutionComplete();
+        }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -405,7 +427,14 @@
         <ErrorAlert message="Package installation failed" details={error} />
       {/if}
 
-      {#if result}
+      <!-- Real-time Output (Expert Mode + Running) -->
+      {#if executionStream && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
+        <div class="mt-4">
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
+          <RealtimeOutputViewer stream={executionStream} autoConnect={false} />
+        </div>
+      {:else if result}
+        <!-- Static Installation Result -->
         <div class="mt-4 space-y-2">
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Installation Result:</h3>
