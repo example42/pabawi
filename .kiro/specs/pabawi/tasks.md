@@ -432,9 +432,10 @@
     - Include task parameters in execution details
     - _Requirements: 3.1, 3.6_
 
-- [-] 18. Create comprehensive API documentation
-  - [ ] 18.1 Write OpenAPI 3.0 specification document
-    - Document all API endpoints with paths and methods (inventory, nodes, facts, commands, tasks, puppet-run, install-package, executions, streaming)
+- [x] 18. Create comprehensive API documentation
+  - [x] 18.1 Write OpenAPI 3.0 specification document
+    - Document all API endpoints with paths and methods (inventory, nodes, facts, commands, tasks, puppet-run,
+      install-package, executions, streaming)
     - Define request/response schemas for all endpoints
     - Include error response examples for each endpoint with expert mode fields
     - Add authentication placeholders for future versions
@@ -443,11 +444,12 @@
     - Document streaming endpoints and SSE event types
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 13.1_
   
-  - [ ] 18.2 Add API documentation to docs directory
+  - [x] 18.2 Add API documentation to docs directory
     - Create docs/api.md with endpoint descriptions
     - Include example requests and responses for all endpoints
     - Document error codes and their meanings
-    - Add usage examples for common workflows (command execution, task execution, Puppet runs, package installation)
+    - Add usage examples for common workflows (command execution, task execution, Puppet runs,
+      package installation)
     - Document expert mode feature and how to enable it
     - Document streaming execution output via SSE
     - _Requirements: 10.1, 10.2, 13.1_
@@ -534,7 +536,8 @@
     - _Requirements: 10.1, 10.5_
   
   - [ ] 23.2 Create configuration guide in docs/configuration.md
-    - Document all environment variables and their defaults (PORT, BOLT_PROJECT_PATH, COMMAND_WHITELIST_*, EXECUTION_TIMEOUT, DATABASE_PATH, PACKAGE_INSTALL_*)
+    - Document all environment variables and their defaults (PORT, BOLT_PROJECT_PATH, COMMAND_WHITELIST_*,
+      EXECUTION_TIMEOUT, DATABASE_PATH, PACKAGE_INSTALL_*)
     - Create user guide for command whitelist configuration with examples
     - Document Bolt project requirements (inventory.yaml format, bolt-project.yaml structure)
     - Add examples for different deployment scenarios (development, production, Docker)

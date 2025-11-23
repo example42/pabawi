@@ -1,0 +1,1165 @@
+openapi: 3.0.3
+info:
+  title: Pabawi - Unified Remote Execution Interface API
+  description: |
+    REST API for Pabawi, a web-based interface for managing Bolt automation.
+    This API provides endpoints for managing inventory, executing commands and tasks,
+    gathering facts, running Puppet, installing packages, and viewing execution history.
+
+    ## Expert Mode
+
+    Many endpoints support an "expert mode" that provides additional diagnostic information
+    when errors occur. To enable expert mode, include the `X-Expert-Mode: true` header in your
+    request. When enabled, error responses will include:
+    - Full stack traces
+    - Request IDs for correlation
+    - Execution context
+    - Raw Bolt CLI output
+
+    ## Streaming Execution Output
+
+    For long-running operations, you can subscribe to real-time execution output via
+    Server-Sent Events (SSE). After starting an execution, connect to the streaming
+    endpoint to receive stdout, stderr, and status updates as they occur.
+
+  version: 0.1.0
+  contact:
+    name: Pabawi Support
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+  - url: http://localhost:3000/api
+    description: Production server
+
+tags:
+  - name: Inventory
+    description: Node inventory management
+  - name: Facts
+    description: System facts gathering
+  - name: Commands
+    description: Command execution
+  - name: Tasks
+    description: Bolt task execution
+  - name: Puppet
+    description: Puppet run management
+  - name: Packages
+    description: Package installation
+  - name: Executions
+    description: Execution history and results
+  - name: Streaming
+    description: Real-time execution output via SSE
+  - name: System
+    description: System configuration and health
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Check if the API server is running and properly configured
+      tags:
+        - System
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  message:
+                    type: string
+                    example: Backend API is running
+                  config:
+                    type: object
+                    properties:
+                      boltProjectPath:
+                        type: string
+                      commandWhitelistEnabled:
+                        type: boolean
+                      databaseInitialized:
+                        type: boolean
+
+  /config:
+    get:
+      summary: Get system configuration
+      description: Retrieve system configuration (excluding sensitive values)
+      tags:
+        - System
+      responses:
+        '200':
+          description: Configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  commandWhitelist:
+                    type: object
+                    properties:
+                      allowAll:
+                        type: boolean
+                        description: Whether all commands are allowed
+                      whitelist:
+                        type: array
+                        items:
+                          type: string
+                        description: List of allowed commands (empty if allowAll is true)
+                      matchMode:
+                        type: string
+                        enum: [exact, prefix]
+                        description: How commands are matched against whitelist
+                  executionTimeout:
+                    type: integer
+                    description: Execution timeout in milliseconds
+
+  /inventory:
+    get:
+      summary: List all nodes
+      description: Retrieve all nodes from the Bolt inventory
+      tags:
+        - Inventory
+      responses:
+        '200':
+          description: Inventory retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+        '404':
+          description: Bolt inventory not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: BOLT_CONFIG_MISSING
+                  message: Bolt inventory file not found
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /nodes/{id}:
+    get:
+      summary: Get node details
+      description: Retrieve detailed information about a specific node
+      tags:
+        - Inventory
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      responses:
+        '200':
+          description: Node details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node:
+                    $ref: '#/components/schemas/Node'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: INVALID_NODE_ID
+                  message: Node 'example-node' not found in inventory
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /nodes/{id}/facts:
+    post:
+      summary: Gather facts from node
+      description: Trigger facts gathering for a specific node
+      tags:
+        - Facts
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - $ref: '#/components/parameters/ExpertModeHeader'
+      responses:
+        '200':
+          description: Facts gathered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  facts:
+                    $ref: '#/components/schemas/Facts'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Node unreachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: NODE_UNREACHABLE
+                  message: Failed to connect to node
+                  details: Connection timeout
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorWithExpertMode'
+
+  /nodes/{id}/command:
+    post:
+      summary: Execute command on node
+      description: |
+        Execute an arbitrary command on a target node. Commands are validated against
+        a configurable whitelist unless allow-all mode is enabled.
+
+        Returns immediately with an execution ID. Use the executions endpoint to
+        retrieve results, or subscribe to the streaming endpoint for real-time output.
+      tags:
+        - Commands
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - $ref: '#/components/parameters/ExpertModeHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - command
+              properties:
+                command:
+                  type: string
+                  description: Command to execute
+                  example: ls -la /tmp
+                expertMode:
+                  type: boolean
+                  description: Enable expert mode for detailed output
+                  default: false
+      responses:
+        '202':
+          description: Command execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionStarted'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Command not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: COMMAND_NOT_ALLOWED
+                  message: Command 'rm -rf /' is not in the whitelist
+                  details: Whitelist contains 10 allowed commands
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorWithExpertMode'
+
+  /nodes/{id}/task:
+    post:
+      summary: Execute task on node
+      description: |
+        Execute a Bolt task on a target node with optional parameters.
+
+        Returns immediately with an execution ID. Use the executions endpoint to
+        retrieve results, or subscribe to the streaming endpoint for real-time output.
+      tags:
+        - Tasks
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - $ref: '#/components/parameters/ExpertModeHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - taskName
+              properties:
+                taskName:
+                  type: string
+                  description: Name of the task to execute
+                  example: psick::puppet_agent
+                parameters:
+                  type: object
+                  description: Task parameters as key-value pairs
+                  additionalProperties: true
+                  example:
+                    noop: true
+                    tags: webserver,database
+                expertMode:
+                  type: boolean
+                  description: Enable expert mode for detailed output
+                  default: false
+      responses:
+        '202':
+          description: Task execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionStarted'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Node or task not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorWithExpertMode'
+
+  /nodes/{id}/puppet-run:
+    post:
+      summary: Execute Puppet run on node
+      description: |
+        Trigger a Puppet agent run on a target node with configurable options.
+        This executes the psick::puppet_agent task with the specified configuration.
+
+        Returns immediately with an execution ID. Use the executions endpoint to
+        retrieve results, or subscribe to the streaming endpoint for real-time output.
+      tags:
+        - Puppet
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - $ref: '#/components/parameters/ExpertModeHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  description: Puppet tags to limit scope
+                  example: [webserver, database]
+                environment:
+                  type: string
+                  description: Puppet environment
+                  example: production
+                noop:
+                  type: boolean
+                  description: Enable noop (dry-run) mode
+                  default: false
+                noNoop:
+                  type: boolean
+                  description: Override noop setting on node
+                  default: false
+                debug:
+                  type: boolean
+                  description: Enable debug output
+                  default: false
+                expertMode:
+                  type: boolean
+                  description: Enable expert mode for detailed output
+                  default: false
+      responses:
+        '202':
+          description: Puppet run started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionStarted'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorWithExpertMode'
+
+  /nodes/{id}/install-package:
+    post:
+      summary: Install package on node
+      description: |
+        Install a package on a target node using a configured package installation task.
+
+        Returns immediately with an execution ID. Use the executions endpoint to
+        retrieve results, or subscribe to the streaming endpoint for real-time output.
+      tags:
+        - Packages
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - $ref: '#/components/parameters/ExpertModeHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - taskName
+                - packageName
+              properties:
+                taskName:
+                  type: string
+                  description: Name of the package installation task
+                  example: tp::install
+                packageName:
+                  type: string
+                  description: Name of the package to install
+                  example: nginx
+                ensure:
+                  type: string
+                  enum: [present, absent, latest]
+                  description: Desired package state
+                  default: present
+                version:
+                  type: string
+                  description: Specific package version (optional)
+                  example: 1.18.0
+                settings:
+                  type: object
+                  description: Additional package settings
+                  additionalProperties: true
+                expertMode:
+                  type: boolean
+                  description: Enable expert mode for detailed output
+                  default: false
+      responses:
+        '202':
+          description: Package installation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionStarted'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorWithExpertMode'
+
+  /tasks:
+    get:
+      summary: List available tasks
+      description: Retrieve all available Bolt tasks from the modules directory
+      tags:
+        - Tasks
+      responses:
+        '200':
+          description: Tasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /tasks/by-module:
+    get:
+      summary: List tasks grouped by module
+      description: Retrieve all available Bolt tasks organized by module name
+      tags:
+        - Tasks
+      responses:
+        '200':
+          description: Tasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasksByModule:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        $ref: '#/components/schemas/Task'
+                    example:
+                      psick:
+                        - name: psick::puppet_agent
+                          module: psick
+                          description: Run Puppet agent
+                      tp:
+                        - name: tp::install
+                          module: tp
+                          description: Install package via Tiny Puppet
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /package-tasks:
+    get:
+      summary: Get available package installation tasks
+      description: Retrieve configured package installation tasks
+      tags:
+        - Packages
+      responses:
+        '200':
+          description: Package tasks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: tp::install
+                        label:
+                          type: string
+                          example: Tiny Puppet
+                        parameterMapping:
+                          type: object
+                          properties:
+                            packageName:
+                              type: string
+                            ensure:
+                              type: string
+                            version:
+                              type: string
+                            settings:
+                              type: string
+
+  /executions:
+    get:
+      summary: List execution history
+      description: |
+        Retrieve paginated list of executions with optional filtering.
+        Includes summary statistics by status.
+      tags:
+        - Executions
+      parameters:
+        - name: type
+          in: query
+          description: Filter by execution type
+          schema:
+            type: string
+            enum: [command, task, facts]
+        - name: status
+          in: query
+          description: Filter by execution status
+          schema:
+            type: string
+            enum: [running, success, failed, partial]
+        - name: targetNode
+          in: query
+          description: Filter by target node ID
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: Filter by start date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: Filter by end date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          description: Page number (1-indexed)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Executions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExecutionRecord'
+                  pagination:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      pageSize:
+                        type: integer
+                      hasMore:
+                        type: boolean
+                  summary:
+                    type: object
+                    properties:
+                      running:
+                        type: integer
+                      success:
+                        type: integer
+                      failed:
+                        type: integer
+                      partial:
+                        type: integer
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /executions/{id}:
+    get:
+      summary: Get execution details
+      description: Retrieve detailed results for a specific execution
+      tags:
+        - Executions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Execution ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Execution details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution:
+                    $ref: '#/components/schemas/ExecutionRecord'
+        '404':
+          description: Execution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: EXECUTION_NOT_FOUND
+                  message: Execution 'abc123' not found
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /executions/{id}/stream:
+    get:
+      summary: Stream execution output
+      description: |
+        Subscribe to real-time execution output via Server-Sent Events (SSE).
+
+        This endpoint establishes a persistent connection and streams execution
+        events as they occur. Events include:
+        - `start`: Execution started
+        - `command`: Bolt command being executed
+        - `stdout`: Standard output chunk
+        - `stderr`: Standard error chunk
+        - `status`: Status update
+        - `complete`: Execution completed
+        - `error`: Execution error
+
+        The connection remains open until the execution completes or the client
+        disconnects.
+      tags:
+        - Streaming
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Execution ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events stream
+              examples:
+                start:
+                  value: |
+                    event: start
+                    data: {"executionId":"abc123","timestamp":"2024-01-01T00:00:00.000Z"}
+
+                command:
+                  value: |
+                    event: command
+                    data: {"command":"bolt command run 'ls -la' --targets node1 --format json"}
+
+                stdout:
+                  value: |
+                    event: stdout
+                    data: {"chunk":"total 48\ndrwxr-xr-x  12 user  staff   384 Jan  1 00:00 .\n"}
+
+                stderr:
+                  value: |
+                    event: stderr
+                    data: {"chunk":"Warning: some warning message\n"}
+
+                complete:
+                  value: |
+                    event: complete
+                    data: {"status":"success","results":[{"nodeId":"node1","status":"success","duration":1234}]}
+
+        '404':
+          description: Execution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /streaming/stats:
+    get:
+      summary: Get streaming statistics
+      description: Retrieve statistics about active streaming connections
+      tags:
+        - Streaming
+      responses:
+        '200':
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  activeExecutions:
+                    type: integer
+                    description: Number of executions with active streaming connections
+
+components:
+  parameters:
+    NodeId:
+      name: id
+      in: path
+      required: true
+      description: Node identifier (name or ID)
+      schema:
+        type: string
+        example: node1
+
+    ExpertModeHeader:
+      name: X-Expert-Mode
+      in: header
+      description: Enable expert mode for detailed error output
+      schema:
+        type: boolean
+        default: false
+
+  schemas:
+    Node:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique node identifier
+        name:
+          type: string
+          description: Node name
+        uri:
+          type: string
+          description: Connection URI
+        transport:
+          type: string
+          enum: [ssh, winrm, docker, local]
+          description: Transport protocol
+        config:
+          type: object
+          description: Node configuration
+          properties:
+            user:
+              type: string
+            port:
+              type: integer
+          additionalProperties: true
+      example:
+        id: node1
+        name: node1
+        uri: ssh://node1.example.com
+        transport: ssh
+        config:
+          user: admin
+          port: 22
+
+    Facts:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        gatheredAt:
+          type: string
+          format: date-time
+        facts:
+          type: object
+          properties:
+            os:
+              type: object
+              properties:
+                family:
+                  type: string
+                name:
+                  type: string
+                release:
+                  type: object
+                  properties:
+                    full:
+                      type: string
+                    major:
+                      type: string
+            processors:
+              type: object
+              properties:
+                count:
+                  type: integer
+                models:
+                  type: array
+                  items:
+                    type: string
+            memory:
+              type: object
+              properties:
+                system:
+                  type: object
+                  properties:
+                    total:
+                      type: string
+                    available:
+                      type: string
+            networking:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                interfaces:
+                  type: object
+                  additionalProperties: true
+          additionalProperties: true
+        command:
+          type: string
+          description: Bolt command used to gather facts (expert mode)
+
+    Task:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Task name
+        module:
+          type: string
+          description: Module name
+        description:
+          type: string
+          description: Task description
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskParameter'
+        modulePath:
+          type: string
+          description: Path to module
+      example:
+        name: psick::puppet_agent
+        module: psick
+        description: Run Puppet agent
+        parameters:
+          - name: noop
+            type: Boolean
+            description: Enable noop mode
+            required: false
+            default: false
+        modulePath: /path/to/modules/psick
+
+    TaskParameter:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [String, Integer, Boolean, Array, Hash]
+        description:
+          type: string
+        required:
+          type: boolean
+        default:
+          description: Default value
+        enum:
+          type: array
+          items:
+            type: string
+          description: Allowed values for enum types
+        puppetType:
+          type: string
+          description: Original Puppet type string
+
+    ExecutionStarted:
+      type: object
+      properties:
+        executionId:
+          type: string
+          description: Unique execution identifier
+        status:
+          type: string
+          enum: [running]
+        message:
+          type: string
+      example:
+        executionId: abc123def456  # pragma: allowlist secret
+        status: running
+        message: Command execution started
+
+    ExecutionRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [command, task, facts]
+        targetNodes:
+          type: array
+          items:
+            type: string
+        action:
+          type: string
+          description: Command string or task name
+        parameters:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [running, success, failed, partial]
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeResult'
+        error:
+          type: string
+        command:
+          type: string
+          description: Bolt CLI command executed (expert mode)
+        expertMode:
+          type: boolean
+          description: Whether expert mode was enabled
+
+    NodeResult:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        status:
+          type: string
+          enum: [success, failed]
+        output:
+          type: object
+          properties:
+            stdout:
+              type: string
+            stderr:
+              type: string
+            exitCode:
+              type: integer
+        value:
+          description: Task result value
+        error:
+          type: string
+        duration:
+          type: integer
+          description: Execution duration in milliseconds
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable error message
+            details:
+              description: Additional error details
+      example:
+        error:
+          code: INVALID_REQUEST
+          message: Request validation failed
+          details: Command is required
+
+    ErrorWithExpertMode:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable error message
+            details:
+              description: Additional error details
+            stackTrace:
+              type: string
+              description: Full stack trace (expert mode only)
+            requestId:
+              type: string
+              description: Request correlation ID (expert mode only)
+            timestamp:
+              type: string
+              format: date-time
+              description: Error timestamp (expert mode only)
+            rawResponse:
+              description: Raw Bolt CLI output (expert mode only)
+            executionContext:
+              type: object
+              description: Execution context (expert mode only)
+              properties:
+                endpoint:
+                  type: string
+                method:
+                  type: string
+                requestId:
+                  type: string
+      example:
+        error:
+          code: BOLT_EXECUTION_FAILED
+          message: Bolt command failed
+          details: Connection timeout
+          stackTrace: "Error: Bolt command failed\n    at BoltService.runCommand..."
+          requestId: req-abc123
+          timestamp: "2024-01-01T00:00:00.000Z"
+          rawResponse: "Error: Connection timeout after 30s"
+          executionContext:
+            endpoint: /api/nodes/node1/command
+            method: POST
+            requestId: req-abc123
+
+  securitySchemes:
+    # Placeholder for future authentication
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT authentication (not implemented in v0.1.0)
+
+# Security is not enforced in v0.1.0
+security: []
