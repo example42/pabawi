@@ -17,6 +17,10 @@
     "build": "npm run build:frontend && npm run build:backend",
     "copy:frontend": "rm -rf backend/public && cp -r frontend/dist backend/public",
     "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
     "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
     "lint:fix": "npm run lint:fix --workspace=backend && npm run lint:fix --workspace=frontend",
     "precommit": "pre-commit run --all-files",
@@ -34,7 +38,9 @@
   "type": "module",
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.56.1",
     "eslint": "^9.39.1",
+    "playwright": "^1.56.1",
     "typescript-eslint": "^8.18.2"
   }
 }
