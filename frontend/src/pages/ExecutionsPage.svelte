@@ -191,23 +191,18 @@
     return new Date(timestamp).toLocaleString();
   }
 
-  // Format duration
+  // Format duration - always in seconds
   function formatDuration(startedAt: string, completedAt?: string): string {
     if (!completedAt) {
-      return 'In progress';
+      return '-';
     }
 
     const start = new Date(startedAt).getTime();
     const end = new Date(completedAt).getTime();
     const durationMs = end - start;
+    const durationSeconds = (durationMs / 1000).toFixed(1);
 
-    if (durationMs < 1000) {
-      return `${durationMs}ms`;
-    } else if (durationMs < 60000) {
-      return `${(durationMs / 1000).toFixed(1)}s`;
-    } else {
-      return `${(durationMs / 60000).toFixed(1)}m`;
-    }
+    return `${durationSeconds}s`;
   }
 
   // Get type badge color
@@ -504,7 +499,7 @@
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Started
                 </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Duration
                 </th>
               </tr>
@@ -527,14 +522,6 @@
                             <span class="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
                           </span>
                           Live
-                        </span>
-                      {/if}
-                      {#if execution.expertMode}
-                        <span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-900/20 dark:text-amber-400" title="Expert mode was enabled">
-                          <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          Expert
                         </span>
                       {/if}
                     </div>
@@ -571,7 +558,7 @@
                   <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                     {formatTimestamp(execution.startedAt)}
                   </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                  <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-600 dark:text-gray-400">
                     {formatDuration(execution.startedAt, execution.completedAt)}
                   </td>
                 </tr>
