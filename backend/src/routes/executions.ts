@@ -141,7 +141,7 @@ export function createExecutionsRouter(
    * GET /api/executions/queue/status
    * Return current execution queue status
    */
-  router.get('/queue/status', asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  router.get('/queue/status', asyncHandler(async (_req: Request, res: Response): Promise<void> => {
     if (!executionQueue) {
       res.status(503).json({
         error: {

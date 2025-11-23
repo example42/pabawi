@@ -119,7 +119,7 @@ export class ExecutionQueue {
     // Sort by enqueued time (oldest first)
     entries.sort((a, b) => a[1].enqueuedAt.getTime() - b[1].enqueuedAt.getTime());
 
-    const [executionId, execution] = entries[0];
+    const [executionId] = entries[0];
 
     // Move from queue to running
     this.queuedExecutions.delete(executionId);
@@ -140,8 +140,7 @@ export class ExecutionQueue {
    * @returns true if execution was cancelled, false if not found or already running
    */
   public cancel(executionId: string): boolean {
-    const execution = this.queuedExecutions.get(executionId);
-    if (!execution) {
+    if (!this.queuedExecutions.has(executionId)) {
       return false;
     }
 
@@ -216,7 +215,7 @@ export class ExecutionQueue {
    */
   public clearQueue(): void {
     // Reject all waiting promises
-    for (const [executionId, promise] of this.waitingPromises.entries()) {
+    for (const promise of this.waitingPromises.values()) {
       promise.reject(new Error('Queue cleared'));
     }
 
