@@ -25,7 +25,7 @@
 
   interface ExecutionResult {
     id: string;
-    type: 'command' | 'task' | 'facts';
+    type: 'command' | 'task' | 'facts' | 'puppet' | 'package';
     targetNodes: string[];
     action: string;
     parameters?: Record<string, unknown>;
@@ -296,7 +296,7 @@
           >
             <span
               class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {noop ? 'translate-x-5' : 'translate-x-0'}"
-            />
+            ></span>
           </button>
         </div>
 
@@ -321,7 +321,7 @@
           >
             <span
               class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {noNoop ? 'translate-x-5' : 'translate-x-0'}"
-            />
+            ></span>
           </button>
         </div>
 
@@ -346,7 +346,7 @@
           >
             <span
               class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {debug ? 'translate-x-5' : 'translate-x-0'}"
-            />
+            ></span>
           </button>
         </div>
 
@@ -355,6 +355,7 @@
           type="button"
           class="text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
           onclick={() => showAdvanced = !showAdvanced}
+          aria-label={showAdvanced ? 'Hide advanced options' : 'Show advanced options'}
         >
           {showAdvanced ? 'Hide' : 'Show'} advanced options
         </button>

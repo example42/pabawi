@@ -96,7 +96,7 @@ export function createPackagesRouter(
 
       // Create initial execution record
       const executionId = await executionRepository.create({
-        type: "task",
+        type: "package",
         targetNodes: [nodeId],
         action: taskName,
         parameters: { packageName, ensure, version, settings },

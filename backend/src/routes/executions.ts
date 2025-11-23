@@ -13,7 +13,7 @@ const ExecutionIdParamSchema = z.object({
 });
 
 const ExecutionFiltersQuerySchema = z.object({
-  type: z.enum(['command', 'task', 'facts']).optional(),
+  type: z.enum(['command', 'task', 'facts', 'puppet', 'package']).optional(),
   status: z.enum(['running', 'success', 'failed', 'partial']).optional(),
   targetNode: z.string().optional(),
   startDate: z.string().datetime().optional(),

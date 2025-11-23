@@ -14,7 +14,7 @@
 
   interface ExecutionResult {
     id: string;
-    type: 'command' | 'task' | 'facts';
+    type: 'command' | 'task' | 'facts' | 'puppet' | 'package';
     targetNodes: string[];
     action: string;
     parameters?: Record<string, unknown>;
@@ -219,8 +219,24 @@
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
       case 'facts':
         return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/20 dark:text-cyan-400';
+      case 'puppet':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400';
+      case 'package':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
+    }
+  }
+
+  // Get type display label
+  function getTypeLabel(type: string): string {
+    switch (type) {
+      case 'puppet':
+        return 'puppet run';
+      case 'package':
+        return 'package';
+      default:
+        return type;
     }
   }
 
@@ -502,7 +518,7 @@
                   <td class="whitespace-nowrap px-6 py-4 text-sm">
                     <div class="flex items-center gap-2">
                       <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(execution.type)}">
-                        {execution.type}
+                        {getTypeLabel(execution.type)}
                       </span>
                       {#if execution.status === 'running'}
                         <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900/20 dark:text-blue-400" title="Execution is running">
@@ -635,7 +651,7 @@
                 </h3>
                 <div class="mt-2 flex flex-wrap items-center gap-3">
                   <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(selectedExecution.type)}">
-                    {selectedExecution.type}
+                    {getTypeLabel(selectedExecution.type)}
                   </span>
                   <StatusBadge status={selectedExecution.status} size="sm" />
                   {#if selectedExecution.expertMode}

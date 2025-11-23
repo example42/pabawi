@@ -41,7 +41,7 @@
 
   interface ExecutionResult {
     id: string;
-    type: 'command' | 'task' | 'facts';
+    type: 'command' | 'task' | 'facts' | 'puppet' | 'package';
     targetNodes: string[];
     action: string;
     parameters?: Record<string, unknown>;

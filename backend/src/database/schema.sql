@@ -1,7 +1,7 @@
 -- Executions table for storing command and task execution history
 CREATE TABLE IF NOT EXISTS executions (
   id TEXT PRIMARY KEY,
-  type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts')),
+  type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts', 'puppet', 'package')),
   target_nodes TEXT NOT NULL,  -- JSON array of target node IDs
   action TEXT NOT NULL,
   parameters TEXT,  -- JSON object of parameters
