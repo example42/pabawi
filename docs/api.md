@@ -1048,19 +1048,19 @@ curl http://localhost:3000/api/executions/jkl012
 curl "http://localhost:3000/api/executions?page=1&pageSize=20"
 ```
 
-1. **Filter by status:**
+2. **Filter by status:**
 
 ```bash
 curl "http://localhost:3000/api/executions?status=failed&page=1"
 ```
 
-1. **Filter by node:**
+3. **Filter by node:**
 
 ```bash
 curl "http://localhost:3000/api/executions?targetNode=node1"
 ```
 
-1. **Filter by date range:**
+4. **Filter by date range:**
 
 ```bash
 curl "http://localhost:3000/api/executions?startDate=2024-01-01T00:00:00Z&endDate=2024-01-31T23:59:59Z"

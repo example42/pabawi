@@ -16,6 +16,7 @@ import { createPuppetRouter } from "./routes/puppet";
 import { createPackagesRouter } from "./routes/packages";
 import { createStreamingRouter } from "./routes/streaming";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
+import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware } from "./middleware";
 
 /**
@@ -58,6 +59,7 @@ async function startServer(): Promise<Express> {
     const boltService = new BoltService(
       config.boltProjectPath,
       config.executionTimeout,
+      config.cache,
     );
     console.warn("Bolt service initialized successfully");
 
@@ -99,6 +101,15 @@ async function startServer(): Promise<Express> {
     console.warn(`- Buffer interval: ${String(config.streaming.bufferMs)}ms`);
     console.warn(`- Max output size: ${String(config.streaming.maxOutputSize)} bytes`);
     console.warn(`- Max line length: ${String(config.streaming.maxLineLength)} characters`);
+
+    // Initialize execution queue
+    const executionQueue = new ExecutionQueue(
+      config.executionQueue.concurrentLimit,
+      config.executionQueue.maxQueueSize,
+    );
+    console.warn("Execution queue initialized successfully");
+    console.warn(`- Concurrent execution limit: ${String(config.executionQueue.concurrentLimit)}`);
+    console.warn(`- Maximum queue size: ${String(config.executionQueue.maxQueueSize)}`);
 
     // Create Express app
     const app: Express = express();
@@ -205,7 +216,7 @@ async function startServer(): Promise<Express> {
       "/api/tasks",
       createTasksRouter(boltService, executionRepository, streamingManager),
     );
-    app.use("/api/executions", createExecutionsRouter(executionRepository));
+    app.use("/api/executions", createExecutionsRouter(executionRepository, executionQueue));
     app.use(
       "/api/executions",
       createStreamingRouter(streamingManager, executionRepository),
