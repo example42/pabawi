@@ -75,9 +75,33 @@ DATABASE_PATH=./data/executions.db
 
 ## Testing
 
+### Unit and Integration Tests
+
 ```bash
+# Run all unit and integration tests
 npm test
+
+# Run backend tests only
+npm test --workspace=backend
+
+# Run frontend tests only
+npm test --workspace=frontend
 ```
+
+### End-to-End Tests
+
+```bash
+# Run all E2E tests
+npm run test:e2e
+
+# Run E2E tests with UI (interactive)
+npm run test:e2e:ui
+
+# Run E2E tests in headed mode (visible browser)
+npm run test:e2e:headed
+```
+
+See [E2E Testing Guide](docs/e2e-testing.md) for detailed information about end-to-end testing.
 
 ## Pre-commit Hooks
 
