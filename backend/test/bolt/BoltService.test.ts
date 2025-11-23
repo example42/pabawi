@@ -1,7 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { BoltService } from "../../src/bolt/BoltService";
-import { BoltNodeUnreachableError } from "../../src/bolt/types";
-import type { Facts, ExecutionResult } from "../../src/bolt/types";
 
 describe("BoltService - gatherFacts", () => {
   let boltService: BoltService;
