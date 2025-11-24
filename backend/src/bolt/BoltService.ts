@@ -50,7 +50,7 @@ export class BoltService {
 
   // Cache storage
   private inventoryCache: CacheEntry<Node[]> | null = null;
-  private factsCache: Map<string, CacheEntry<Facts>> = new Map();
+  private factsCache = new Map<string, CacheEntry<Facts>>();
 
   constructor(
     boltProjectPath: string,
