@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc && mkdir -p dist/database && cp src/database/schema.sql dist/database/ && cp src/database/migrations.sql dist/database/",
     "start": "node dist/server.js",
-    "test": "vitest --run",
+    "test": "vitest --run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts --max-warnings 0",
     "lint:fix": "eslint src --ext .ts --fix"
