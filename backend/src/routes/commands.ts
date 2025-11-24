@@ -93,9 +93,9 @@ export function createCommandsRouter(
           try {
             // Set up streaming callback if expert mode is enabled and streaming manager is available
             const streamingCallback = expertMode && streamingManager ? {
-              onCommand: (cmd: string) => streamingManager.emitCommand(executionId, cmd),
-              onStdout: (chunk: string) => streamingManager.emitStdout(executionId, chunk),
-              onStderr: (chunk: string) => streamingManager.emitStderr(executionId, chunk),
+              onCommand: (cmd: string) => { streamingManager.emitCommand(executionId, cmd); },
+              onStdout: (chunk: string) => { streamingManager.emitStdout(executionId, chunk); },
+              onStderr: (chunk: string) => { streamingManager.emitStderr(executionId, chunk); },
             } : undefined;
 
             const result = await boltService.runCommand(nodeId, command, streamingCallback);

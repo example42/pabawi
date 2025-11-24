@@ -40,9 +40,9 @@ export class ExecutionQueueFullError extends Error {
 export class ExecutionQueue {
   private readonly limit: number;
   private readonly maxQueueSize: number;
-  private runningExecutions: Set<string> = new Set();
-  private queuedExecutions: Map<string, QueuedExecution> = new Map();
-  private waitingPromises: Map<string, { resolve: () => void; reject: (error: Error) => void }> = new Map();
+  private runningExecutions = new Set<string>();
+  private queuedExecutions = new Map<string, QueuedExecution>();
+  private waitingPromises = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
 
   constructor(limit = 5, maxQueueSize = 50) {
     this.limit = limit;

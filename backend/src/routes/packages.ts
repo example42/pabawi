@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { BoltService } from "../bolt/BoltService";
-import { ExecutionRepository } from "../database/ExecutionRepository";
+import type { BoltService } from "../bolt/BoltService";
+import type { ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
 
 /**
@@ -111,9 +111,9 @@ export function createPackagesRouter(
         try {
           // Set up streaming callback if expert mode is enabled and streaming manager is available
           const streamingCallback = expertMode && streamingManager ? {
-            onCommand: (cmd: string) => streamingManager.emitCommand(executionId, cmd),
-            onStdout: (chunk: string) => streamingManager.emitStdout(executionId, chunk),
-            onStderr: (chunk: string) => streamingManager.emitStderr(executionId, chunk),
+            onCommand: (cmd: string) => { streamingManager.emitCommand(executionId, cmd); },
+            onStdout: (chunk: string) => { streamingManager.emitStdout(executionId, chunk); },
+            onStderr: (chunk: string) => { streamingManager.emitStderr(executionId, chunk); },
           } : undefined;
 
           // Execute package installation task with parameter mapping
