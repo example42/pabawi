@@ -135,7 +135,7 @@ export class StreamingExecutionManager {
     if (executionSubscribers) {
       executionSubscribers.add(subscriber);
       console.error(
-        `New subscriber for execution ${executionId}. Total subscribers: ${String(executionSubscribers.size)}`,
+        `New subscriber for execution ${executionId}. Total subscribers: ${executionSubscribers.size.toString()}`,
       );
     }
 
@@ -170,7 +170,7 @@ export class StreamingExecutionManager {
       if (subscriber.response === response) {
         subscribers.delete(subscriber);
         console.error(
-          `Subscriber disconnected from execution ${executionId}. Remaining subscribers: ${String(subscribers.size)}`,
+          `Subscriber disconnected from execution ${executionId}. Remaining subscribers: ${subscribers.size.toString()}`,
         );
         break;
       }
@@ -253,7 +253,7 @@ export class StreamingExecutionManager {
 
     const truncated = line.substring(0, this.config.maxLineLength);
     const remaining = line.length - this.config.maxLineLength;
-    return `${truncated}... [truncated ${remaining} characters]`;
+    return `${truncated}... [truncated ${remaining.toString()} characters]`;
   }
 
   /**
@@ -389,7 +389,7 @@ export class StreamingExecutionManager {
         this.emit(executionId, {
           type: "stdout",
           data: {
-            output: `\n[Output limit of ${this.config.maxOutputSize} bytes reached. Further output will be truncated.]\n`
+            output: `\n[Output limit of ${this.config.maxOutputSize.toString()} bytes reached. Further output will be truncated.]\n`
           },
         });
       }
@@ -428,7 +428,7 @@ export class StreamingExecutionManager {
         this.emit(executionId, {
           type: "stderr",
           data: {
-            output: `\n[Output limit of ${this.config.maxOutputSize} bytes reached. Further output will be truncated.]\n`
+            output: `\n[Output limit of ${this.config.maxOutputSize.toString()} bytes reached. Further output will be truncated.]\n`
           },
         });
       }

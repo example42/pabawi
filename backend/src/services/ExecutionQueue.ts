@@ -71,7 +71,7 @@ export class ExecutionQueue {
     // Check if queue is full
     if (this.queuedExecutions.size >= this.maxQueueSize) {
       throw new ExecutionQueueFullError(
-        `Execution queue is full. Maximum queue size: ${this.maxQueueSize}. Please wait for running executions to complete.`,
+        `Execution queue is full. Maximum queue size: ${this.maxQueueSize.toString()}. Please wait for running executions to complete.`,
         this.queuedExecutions.size,
         this.maxQueueSize,
       );
@@ -169,7 +169,13 @@ export class ExecutionQueue {
       limit: this.limit,
       queue: Array.from(this.queuedExecutions.values()).sort(
         (a, b) => a.enqueuedAt.getTime() - b.enqueuedAt.getTime()
-      ),
+      ).map(exec => ({
+        id: exec.id,
+        type: exec.type,
+        nodeId: exec.nodeId,
+        action: exec.action,
+        enqueuedAt: exec.enqueuedAt,
+      })),
     };
   }
 

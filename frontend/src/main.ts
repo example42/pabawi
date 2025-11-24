@@ -7,13 +7,8 @@ if (!appElement) {
   throw new Error("App element not found");
 }
 
-console.log("Starting Pabawi app...");
-console.log("App element:", appElement);
-
 const app = mount(App, {
   target: appElement,
 });
-
-console.log("App mounted successfully");
 
 export default app;

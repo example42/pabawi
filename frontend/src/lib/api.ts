@@ -77,13 +77,14 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
         details: data.error.details,
       };
     }
+    // If no error field, fall through to default error
   } catch {
     // Failed to parse JSON, use status text
   }
 
   return {
     code: `HTTP_${String(response.status)}`,
-    message: response.statusText ?? 'Request failed',
+    message: response.statusText !== '' ? response.statusText : 'Request failed',
   };
 }
 
@@ -145,7 +146,7 @@ export async function fetchWithRetry<T = unknown>(
   }
 
   // Max retries reached
-  throw lastError || new Error('Request failed after maximum retries');
+  throw lastError ?? new Error('Request failed after maximum retries');
 }
 
 /**

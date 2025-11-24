@@ -6,6 +6,7 @@ import type { CommandWhitelistService } from "../validation/CommandWhitelistServ
 import { CommandNotAllowedError } from "../validation/CommandWhitelistService";
 import { BoltInventoryNotFoundError } from "../bolt/types";
 import { asyncHandler } from "./asyncHandler";
+import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 
 /**
  * Request validation schemas
@@ -26,7 +27,7 @@ export function createCommandsRouter(
   boltService: BoltService,
   executionRepository: ExecutionRepository,
   commandWhitelistService: CommandWhitelistService,
-  streamingManager?: import("../services/StreamingExecutionManager").StreamingExecutionManager,
+  streamingManager?: StreamingExecutionManager,
 ): Router {
   const router = Router();
 
@@ -92,13 +93,26 @@ export function createCommandsRouter(
         void (async (): Promise<void> => {
           try {
             // Set up streaming callback if expert mode is enabled and streaming manager is available
-            const streamingCallback = expertMode && streamingManager ? {
-              onCommand: (cmd: string) => { streamingManager.emitCommand(executionId, cmd); },
-              onStdout: (chunk: string) => { streamingManager.emitStdout(executionId, chunk); },
-              onStderr: (chunk: string) => { streamingManager.emitStderr(executionId, chunk); },
-            } : undefined;
+            const streamingCallback =
+              expertMode && streamingManager
+                ? {
+                    onCommand: (cmd: string): void => {
+                      streamingManager.emitCommand(executionId, cmd);
+                    },
+                    onStdout: (chunk: string): void => {
+                      streamingManager.emitStdout(executionId, chunk);
+                    },
+                    onStderr: (chunk: string): void => {
+                      streamingManager.emitStderr(executionId, chunk);
+                    },
+                  }
+                : undefined;
 
-            const result = await boltService.runCommand(nodeId, command, streamingCallback);
+            const result = await boltService.runCommand(
+              nodeId,
+              command,
+              streamingCallback,
+            );
 
             // Update execution record with results
             await executionRepository.update(executionId, {
@@ -116,7 +130,8 @@ export function createCommandsRouter(
           } catch (error) {
             console.error("Error executing command:", error);
 
-            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
 
             // Update execution record with error
             await executionRepository.update(executionId, {
