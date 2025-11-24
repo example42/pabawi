@@ -59,6 +59,58 @@ export const ExecutionQueueConfigSchema = z.object({
 export type ExecutionQueueConfig = z.infer<typeof ExecutionQueueConfigSchema>;
 
 /**
+ * SSL configuration schema for secure connections
+ */
+export const SSLConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  ca: z.string().optional(),
+  cert: z.string().optional(),
+  key: z.string().optional(),
+  rejectUnauthorized: z.boolean().default(true),
+});
+
+export type SSLConfig = z.infer<typeof SSLConfigSchema>;
+
+/**
+ * PuppetDB integration configuration schema
+ */
+export const PuppetDBConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  serverUrl: z.string().url(),
+  port: z.number().int().positive().optional(),
+  token: z.string().optional(),
+  ssl: SSLConfigSchema.optional(),
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  retryAttempts: z.number().int().nonnegative().default(3),
+  retryDelay: z.number().int().positive().default(1000), // 1 second
+});
+
+export type PuppetDBConfig = z.infer<typeof PuppetDBConfigSchema>;
+
+/**
+ * Integration configuration schema
+ */
+export const IntegrationConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  name: z.string(),
+  type: z.enum(["execution", "information", "both"]),
+  config: z.record(z.unknown()),
+  priority: z.number().int().nonnegative().optional(),
+});
+
+export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
+
+/**
+ * Integrations configuration schema
+ */
+export const IntegrationsConfigSchema = z.object({
+  puppetdb: PuppetDBConfigSchema.optional(),
+  // Future integrations: ansible, terraform, etc.
+});
+
+export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
+
+/**
  * Application configuration schema with Zod validation
  */
 export const AppConfigSchema = z.object({
@@ -83,6 +135,7 @@ export const AppConfigSchema = z.object({
   streaming: StreamingConfigSchema,
   cache: CacheConfigSchema,
   executionQueue: ExecutionQueueConfigSchema,
+  integrations: IntegrationsConfigSchema.default({}),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

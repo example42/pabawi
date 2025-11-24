@@ -22,6 +22,78 @@ export class ConfigService {
   }
 
   /**
+   * Parse integrations configuration from environment variables
+   */
+  private parseIntegrationsConfig(): {
+    puppetdb?: {
+      enabled: boolean;
+      serverUrl: string;
+      port?: number;
+      token?: string;
+      ssl?: {
+        enabled: boolean;
+        ca?: string;
+        cert?: string;
+        key?: string;
+        rejectUnauthorized?: boolean;
+      };
+      timeout?: number;
+      retryAttempts?: number;
+      retryDelay?: number;
+    };
+  } {
+    const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
+
+    // Parse PuppetDB configuration
+    if (process.env.PUPPETDB_ENABLED === "true") {
+      const serverUrl = process.env.PUPPETDB_SERVER_URL;
+      if (!serverUrl) {
+        throw new Error(
+          "PUPPETDB_SERVER_URL is required when PUPPETDB_ENABLED is true",
+        );
+      }
+
+      integrations.puppetdb = {
+        enabled: true,
+        serverUrl,
+        port: process.env.PUPPETDB_PORT
+          ? parseInt(process.env.PUPPETDB_PORT, 10)
+          : undefined,
+        token: process.env.PUPPETDB_TOKEN,
+        timeout: process.env.PUPPETDB_TIMEOUT
+          ? parseInt(process.env.PUPPETDB_TIMEOUT, 10)
+          : undefined,
+        retryAttempts: process.env.PUPPETDB_RETRY_ATTEMPTS
+          ? parseInt(process.env.PUPPETDB_RETRY_ATTEMPTS, 10)
+          : undefined,
+        retryDelay: process.env.PUPPETDB_RETRY_DELAY
+          ? parseInt(process.env.PUPPETDB_RETRY_DELAY, 10)
+          : undefined,
+      };
+
+      // Parse SSL configuration if any SSL-related env vars are set
+      if (
+        process.env.PUPPETDB_SSL_ENABLED !== undefined ||
+        process.env.PUPPETDB_SSL_CA ||
+        process.env.PUPPETDB_SSL_CERT ||
+        process.env.PUPPETDB_SSL_KEY ||
+        process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED !== undefined
+      ) {
+        integrations.puppetdb.ssl = {
+          enabled: process.env.PUPPETDB_SSL_ENABLED !== "false",
+          ca: process.env.PUPPETDB_SSL_CA,
+          cert: process.env.PUPPETDB_SSL_CERT,
+          key: process.env.PUPPETDB_SSL_KEY,
+          rejectUnauthorized:
+            process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED !== "false",
+        };
+      }
+    }
+
+    return integrations;
+  }
+
+  /**
    * Load configuration from environment variables with validation
    */
   private loadConfiguration(): AppConfig {
@@ -96,6 +168,9 @@ export class ConfigService {
           : undefined,
       };
 
+      // Parse integrations configuration
+      const integrations = this.parseIntegrationsConfig();
+
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
@@ -111,6 +186,7 @@ export class ConfigService {
         streaming,
         cache,
         executionQueue,
+        integrations,
       };
 
       // Validate with Zod schema
@@ -215,5 +291,25 @@ export class ConfigService {
    */
   public getExecutionQueueConfig(): typeof this.config.executionQueue {
     return this.config.executionQueue;
+  }
+
+  /**
+   * Get integrations configuration
+   */
+  public getIntegrationsConfig(): typeof this.config.integrations {
+    return this.config.integrations;
+  }
+
+  /**
+   * Get PuppetDB configuration if enabled
+   */
+  public getPuppetDBConfig():
+    | (typeof this.config.integrations.puppetdb & { enabled: true })
+    | null {
+    const puppetdb = this.config.integrations.puppetdb;
+    if (puppetdb?.enabled) {
+      return puppetdb as typeof puppetdb & { enabled: true };
+    }
+    return null;
   }
 }
