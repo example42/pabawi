@@ -47,7 +47,7 @@ export function addToast(
   state.toasts = [...state.toasts, toast];
 
   // Auto-dismiss after duration
-  if (toast.duration > 0) {
+  if (toast.duration && toast.duration > 0) {
     setTimeout(() => {
       removeToast(id);
     }, toast.duration);

@@ -70,10 +70,6 @@ class Router {
   get params(): Record<string, string> {
     return this.currentParams;
   }
-
-  private updateParams(params: Record<string, string>): void {
-    this.currentParams = params;
-  }
 }
 
 export const router = new Router();
