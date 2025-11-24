@@ -5,10 +5,12 @@
 This design document outlines the architecture for version 0.2.0 of Padawi, transforming it from a Bolt-specific web interface into a general-purpose remote execution platform. The core architectural shift introduces a plugin-based integration system where PuppetDB serves as the first additional integration beyond Puppet Bolt. This establishes patterns and abstractions that will support future integrations with Ansible, Terraform, AWS CLI, Azure CLI, Kubernetes, and other infrastructure management tools.
 
 The design introduces two key concepts:
+
 - **Execution Tools**: Backend systems that perform actions (Bolt, Ansible, etc.)
 - **Information Sources**: Backend systems that provide node data (PuppetDB, cloud APIs, etc.)
 
 PuppetDB integration provides:
+
 - Dynamic inventory discovery
 - Node facts from Puppet agent runs
 - Puppet run reports with detailed resource changes
@@ -118,7 +120,6 @@ class PuppetDBService implements InformationSourcePlugin {
   async queryEvents(pqlQuery: string): Promise<Event[]>;
 }
 ```
-
 
 #### 2. PuppetDBClient
 
@@ -403,7 +404,6 @@ interface EventFilters {
   limit?: number;
 }
 ```
-
 
 ### Configuration Types
 
@@ -716,6 +716,7 @@ Testable: yes - property
 After reviewing all properties, the following consolidations and eliminations are recommended:
 
 **Redundancies identified:**
+
 - Properties 2.1, 3.1, 4.1, 5.1, and 6.1 are all "example" properties about ensuring queries happen - these are integration points that should be tested once
 - Properties 7.1 and 8.1 are similar (re-execute button display) - can be combined
 - Properties 7.2 and 8.2 are similar (navigation with pre-filled parameters) - can be combined
@@ -723,12 +724,12 @@ After reviewing all properties, the following consolidations and eliminations ar
 - Properties 3.5 and 5.4 are similar (error highlighting) - can be combined into one comprehensive property
 
 **Consolidated properties:**
+
 - Combine query initiation examples into one integration test
 - Combine re-execute button properties into context-aware properties
 - Combine error highlighting properties
 
 This reduces redundancy while maintaining comprehensive coverage.
-
 
 ### Correctness Properties
 
@@ -924,6 +925,7 @@ class CircuitBreaker {
 ### Unit Testing
 
 Unit tests will cover:
+
 - PuppetDBClient HTTP request/response handling
 - PuppetDBService data transformation logic
 - IntegrationManager plugin registration and routing
@@ -938,6 +940,7 @@ Unit tests will cover:
 Property-based tests will use **fast-check** (JavaScript/TypeScript property testing library) to verify the correctness properties defined above. Each property will be implemented as a separate test with a minimum of 100 iterations.
 
 **Configuration:**
+
 ```typescript
 import fc from 'fast-check';
 
@@ -950,12 +953,14 @@ const propertyTestConfig = {
 ```
 
 **Test Organization:**
+
 - Property tests will be in `backend/test/properties/` directory
 - Each property will have its own test file: `property-{number}.test.ts`
 - Each test will be tagged with: `**Feature: puppetdb-integration, Property {number}: {description}**`
 - Generators will be in `backend/test/generators/` for reuse
 
 **Example Property Test Structure:**
+
 ```typescript
 // backend/test/properties/property-02.test.ts
 /**
@@ -995,6 +1000,7 @@ describe('Property 2: Node data transformation consistency', () => {
 ### Integration Testing
 
 Integration tests will verify:
+
 - End-to-end PuppetDB API communication
 - Multi-source inventory aggregation
 - Re-execution workflow from UI to database
@@ -1004,6 +1010,7 @@ Integration tests will verify:
 ### UI Component Testing
 
 UI tests will verify:
+
 - Component rendering with various data states
 - Tab switching and state preservation
 - Re-execution button behavior
@@ -1110,30 +1117,35 @@ PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 ## Migration Strategy
 
 ### Phase 1: Foundation (Week 1)
+
 - Implement plugin architecture and IntegrationManager
 - Create PuppetDBClient and PuppetDBService
 - Add configuration support
 - Implement basic error handling
 
 ### Phase 2: Core Integration (Week 2)
+
 - Implement inventory integration
 - Implement facts integration
 - Add caching and retry logic
 - Implement circuit breaker pattern
 
 ### Phase 3: Extended Features (Week 3)
+
 - Implement reports integration
 - Implement catalog integration
 - Implement events integration
 - Add PQL query support
 
 ### Phase 4: Re-execution (Week 4)
+
 - Enhance ExecutionRepository
 - Add re-execution API endpoints
 - Implement re-execution UI components
 - Add execution linkage
 
 ### Phase 5: UI Enhancements (Week 5)
+
 - Implement tabbed node detail page
 - Add PuppetDB data viewers
 - Enhance home page dashboard
@@ -1141,6 +1153,7 @@ PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 - Apply consistent styling
 
 ### Phase 6: Testing & Polish (Week 6)
+
 - Write property-based tests
 - Write integration tests
 - Performance optimization
