@@ -55,7 +55,7 @@ export class BoltService {
   constructor(
     boltProjectPath: string,
     defaultTimeout = 300000,
-    cacheConfig?: { inventoryTtl?: number; factsTtl?: number }
+    cacheConfig?: { inventoryTtl?: number; factsTtl?: number },
   ) {
     this.boltProjectPath = boltProjectPath;
     this.defaultTimeout = defaultTimeout;
@@ -231,7 +231,11 @@ export class BoltService {
         ? [...args, "--format", "json"]
         : args;
 
-    const result = await this.executeCommand(argsToUse, options, streamingCallback);
+    const result = await this.executeCommand(
+      argsToUse,
+      options,
+      streamingCallback,
+    );
 
     if (!result.success) {
       throw new BoltExecutionError(
@@ -298,7 +302,7 @@ export class BoltService {
       return false;
     }
     const now = Date.now();
-    return (now - entry.timestamp) < ttl;
+    return now - entry.timestamp < ttl;
   }
 
   /**
@@ -344,6 +348,7 @@ export class BoltService {
   public async getInventory(): Promise<Node[]> {
     // Check cache first
     if (this.isCacheValid(this.inventoryCache, this.inventoryTtl)) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       return this.inventoryCache!.data;
     }
 
@@ -511,6 +516,7 @@ export class BoltService {
     // Check cache first
     const cachedFacts = this.factsCache.get(nodeId);
     if (this.isCacheValid(cachedFacts ?? null, this.factsTtl)) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       return cachedFacts!.data;
     }
 
@@ -732,7 +738,11 @@ export class BoltService {
     const commandString = this.buildCommandString(args);
 
     try {
-      const jsonOutput = await this.executeCommandWithJsonOutput(args, {}, streamingCallback);
+      const jsonOutput = await this.executeCommandWithJsonOutput(
+        args,
+        {},
+        streamingCallback,
+      );
 
       const endTime = Date.now();
       const result = this.transformCommandOutput(
@@ -928,7 +938,11 @@ export class BoltService {
     const commandString = this.buildCommandString(args);
 
     try {
-      const jsonOutput = await this.executeCommandWithJsonOutput(args, {}, streamingCallback);
+      const jsonOutput = await this.executeCommandWithJsonOutput(
+        args,
+        {},
+        streamingCallback,
+      );
 
       const endTime = Date.now();
       const result = this.transformTaskOutput(
@@ -1450,7 +1464,12 @@ export class BoltService {
     }
 
     // Execute the psick::puppet_agent task
-    return this.runTask(nodeId, "psick::puppet_agent", parameters, streamingCallback);
+    return this.runTask(
+      nodeId,
+      "psick::puppet_agent",
+      parameters,
+      streamingCallback,
+    );
   }
 
   /**
@@ -1505,7 +1524,8 @@ export class BoltService {
           absent: "uninstall",
           latest: "upgrade",
         };
-        ensureValue = ensureMapping[packageParams.ensure] || packageParams.ensure;
+        ensureValue =
+          ensureMapping[packageParams.ensure] || packageParams.ensure;
       }
 
       parameters[parameterMapping.ensure] = ensureValue;

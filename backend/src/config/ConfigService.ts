@@ -30,7 +30,7 @@ export class ConfigService {
       let commandWhitelist: WhitelistConfig;
       try {
         const whitelistJson = process.env.COMMAND_WHITELIST ?? "[]";
-        const parsedWhitelist: unknown = JSON.parse(whitelistJson);
+        const parsedWhitelist = JSON.parse(whitelistJson) as unknown;
         const whitelistArray: string[] = Array.isArray(parsedWhitelist)
           ? parsedWhitelist.filter(
               (item): item is string => typeof item === "string",
@@ -52,10 +52,10 @@ export class ConfigService {
       }
 
       // Parse package tasks from JSON string if provided
-      let packageTasks;
+      let packageTasks: unknown;
       if (process.env.PACKAGE_TASKS) {
         try {
-          packageTasks = JSON.parse(process.env.PACKAGE_TASKS);
+          packageTasks = JSON.parse(process.env.PACKAGE_TASKS) as unknown;
         } catch (error) {
           throw new Error(
             `Failed to parse PACKAGE_TASKS: ${error instanceof Error ? error.message : "Unknown error"}`,

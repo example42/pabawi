@@ -86,10 +86,11 @@ export function createStreamingRouter(
    */
   router.get(
     "/stats",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler((_req: Request, res: Response): Promise<void> => {
       res.json({
         activeExecutions: streamingManager.getActiveExecutionCount(),
       });
+      return Promise.resolve();
     }),
   );
 
