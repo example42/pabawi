@@ -1,19 +1,66 @@
-# Pabawi
+# Padawi
 
-Version 0.1.0 - Web interface for Bolt automation tool
+Version 0.2.0 - Unified Remote Execution Interface
+
+Padawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt and PuppetDB. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
+
+## Features
+
+### Core Capabilities
+
+- **Multi-Source Inventory**: View and manage nodes from Bolt inventory and PuppetDB
+- **Command Execution**: Run ad-hoc commands on remote nodes with whitelist security
+- **Task Execution**: Execute Bolt tasks with parameter support
+- **Puppet Integration**: Trigger Puppet agent runs with full configuration control
+- **Package Management**: Install and manage packages across your infrastructure
+- **Execution History**: Track all operations with detailed results and re-execution capability
+
+### PuppetDB Integration (v0.2.0)
+
+- **Dynamic Inventory**: Automatically discover nodes from PuppetDB
+- **Node Facts**: View comprehensive system information from Puppet agents
+- **Puppet Reports**: Browse detailed Puppet run reports with metrics and resource changes
+- **Catalog Inspection**: Examine compiled Puppet catalogs and resource relationships
+- **Event Tracking**: Monitor individual resource changes and failures over time
+- **PQL Queries**: Filter nodes using PuppetDB Query Language
+
+### Advanced Features
+
+- **Re-execution**: Quickly repeat previous operations with preserved or modified parameters
+- **Expert Mode**: View complete command lines and full output for debugging and auditing
+- **Real-time Streaming**: Monitor command and task execution with live output
+- **Multi-Source Architecture**: Seamlessly integrate data from multiple backend systems
+- **Graceful Degradation**: Continue operating when individual integrations are unavailable
 
 ## Project Structure
 
 ```text
-pabawi/
+padawi/
 ├── frontend/          # Svelte 5 + Vite frontend
 │   ├── src/
+│   │   ├── components/    # UI components
+│   │   ├── pages/         # Page components
+│   │   └── lib/           # Utilities and stores
 │   ├── package.json
 │   └── vite.config.ts
 ├── backend/           # Node.js + TypeScript API server
 │   ├── src/
+│   │   ├── bolt/          # Bolt integration
+│   │   ├── integrations/  # Plugin architecture
+│   │   │   └── puppetdb/  # PuppetDB integration
+│   │   ├── database/      # SQLite database
+│   │   ├── routes/        # API endpoints
+│   │   └── services/      # Business logic
+│   ├── test/              # Unit and integration tests
 │   ├── package.json
 │   └── tsconfig.json
+├── docs/              # Documentation
+│   ├── configuration.md
+│   ├── api.md
+│   ├── user-guide.md
+│   ├── puppetdb-integration-setup.md
+│   ├── puppetdb-api.md
+│   └── v0.2-features-guide.md
 └── package.json       # Root workspace configuration
 ```
 
@@ -61,17 +108,50 @@ npm run build
 
 ## Configuration
 
+### Basic Configuration
+
 Copy `backend/.env.example` to `backend/.env` and configure:
 
 ```env
+# Server Configuration
 PORT=3000
 BOLT_PROJECT_PATH=.
+LOG_LEVEL=info
+DATABASE_PATH=./data/executions.db
+
+# Security
 COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST=["ls","pwd","whoami"]
 EXECUTION_TIMEOUT=300000
-LOG_LEVEL=info
-DATABASE_PATH=./data/executions.db
 ```
+
+### PuppetDB Integration (Optional)
+
+To enable PuppetDB integration, add to `backend/.env`:
+
+```env
+# Enable PuppetDB
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=https://puppetdb.example.com
+PUPPETDB_PORT=8081
+
+# Authentication (choose one)
+PUPPETDB_TOKEN=your-token-here
+
+# SSL Configuration
+PUPPETDB_SSL_ENABLED=true
+PUPPETDB_SSL_CA=/path/to/ca.pem
+PUPPETDB_SSL_CERT=/path/to/cert.pem
+PUPPETDB_SSL_KEY=/path/to/key.pem
+PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
+
+# Connection Settings
+PUPPETDB_TIMEOUT=30000
+PUPPETDB_RETRY_ATTEMPTS=3
+PUPPETDB_CACHE_TTL=300000
+```
+
+See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md) for detailed configuration instructions.
 
 ## Testing
 
@@ -152,12 +232,50 @@ pre-commit autoupdate
 git commit --no-verify -m "message"
 ```
 
+## What's New in v0.2.0
+
+### Major Enhancements
+
+**PuppetDB Integration**
+- Dynamic inventory discovery from PuppetDB
+- View node facts, reports, catalogs, and events
+- PQL query support for advanced filtering
+- Seamless integration with existing Bolt functionality
+
+**Re-execution Capabilities**
+- One-click re-execution of previous operations
+- Parameter preservation and modification
+- Execution history tracking and relationships
+- Context-aware re-execution from node pages
+
+**Expert Mode Enhancements**
+- Complete command line visibility
+- Full stdout/stderr without truncation
+- Search functionality for long output
+- Syntax highlighting for commands and output
+
+**Enhanced UI**
+- Tabbed node detail page for better organization
+- Integration status dashboard
+- Multi-source inventory with source attribution
+- Improved loading states and error handling
+
+### Backward Compatibility
+
+Version 0.2.0 is fully backward compatible with v0.1.0:
+- All existing features continue to work
+- No configuration changes required
+- Existing data automatically migrated
+- New features are optional enhancements
+
+See [v0.2.0 Features Guide](docs/v0.2-features-guide.md) for detailed information.
+
 ## Docker Deployment
 
 ### Building the Docker Image
 
 ```bash
-docker build -t pabawi:latest .
+docker build -t padawi:0.2.0 .
 ```
 
 ### Running with Docker
@@ -168,12 +286,29 @@ docker build -t pabawi:latest .
 
 # Or manually executing from your Bolt Project dir
 docker run -d \
-  --name pabawi \
+  --name padawi \
   -p 3000:3000 \
   -v $(pwd):/bolt-project:ro \
   -v $(pwd)/data:/data \
   -e COMMAND_WHITELIST_ALLOW_ALL=false \
-  example42/pabawi:latest
+  example42/padawi:0.2.0
+```
+
+### Running with PuppetDB Integration
+
+```bash
+docker run -d \
+  --name padawi \
+  -p 3000:3000 \
+  -v $(pwd):/bolt-project:ro \
+  -v $(pwd)/data:/data \
+  -e COMMAND_WHITELIST_ALLOW_ALL=false \
+  -e PUPPETDB_ENABLED=true \
+  -e PUPPETDB_SERVER_URL=https://puppetdb.example.com \
+  -e PUPPETDB_PORT=8081 \
+  -e PUPPETDB_TOKEN=your-token-here \
+  -e PUPPETDB_SSL_ENABLED=true \
+  example42/padawi:0.2.0
 ```
 
 Access the application at <http://localhost:3000>
@@ -193,10 +328,53 @@ docker-compose down
 
 Access the application at <http://localhost:3000>
 
+## Screenshots
+
+### Multi-Source Inventory
+
+View nodes from Bolt and PuppetDB with clear source attribution:
+
+```
+[Screenshot: Inventory page showing nodes from multiple sources with source badges]
+```
+
+### PuppetDB Integration
+
+Access comprehensive Puppet data including facts, reports, catalogs, and events:
+
+```
+[Screenshot: Node detail page with PuppetDB tabs showing reports and catalog]
+```
+
+### Re-execution
+
+Quickly repeat operations with preserved parameters:
+
+```
+[Screenshot: Executions page with re-execute buttons]
+```
+
+### Expert Mode
+
+View complete command lines and full output for debugging:
+
+```
+[Screenshot: Expert mode showing full command line and output with search]
+```
+
+### Integration Status
+
+Monitor health of all configured integrations:
+
+```
+[Screenshot: Home page with integration status dashboard]
+```
+
 ### Environment Variables
 
 Copy `.env.example` to `.env` and configure as needed. Key variables:
 
+**Core Settings:**
 - `PORT`: Application port (default: 3000)
 - `BOLT_PROJECT_PATH`: Path to Bolt project directory
 - `COMMAND_WHITELIST_ALLOW_ALL`: Allow all commands (default: false)
@@ -204,12 +382,25 @@ Copy `.env.example` to `.env` and configure as needed. Key variables:
 - `EXECUTION_TIMEOUT`: Timeout in milliseconds (default: 300000)
 - `LOG_LEVEL`: Logging level (default: info)
 
+**PuppetDB Integration (Optional):**
+- `PUPPETDB_ENABLED`: Enable PuppetDB integration (default: false)
+- `PUPPETDB_SERVER_URL`: PuppetDB server URL
+- `PUPPETDB_PORT`: PuppetDB port (default: 8081)
+- `PUPPETDB_TOKEN`: Authentication token
+- `PUPPETDB_SSL_ENABLED`: Enable SSL (default: true)
+- `PUPPETDB_SSL_CA`: Path to CA certificate
+- `PUPPETDB_CACHE_TTL`: Cache duration in ms (default: 300000)
+
+See [Configuration Guide](docs/configuration.md) for complete reference.
+
 ### Volume Mounts
 
 - `/bolt-project`: Mount your Bolt project directory (read-only)
 - `/data`: Persistent storage for SQLite database
 
 ### Troubleshooting
+
+### Common Issues
 
 #### Database Permission Errors
 
@@ -232,6 +423,238 @@ mkdir -p ./data
 **Using the docker-run.sh script:**
 The provided script automatically handles permissions on Linux systems.
 
+#### PuppetDB Connection Issues
+
+If PuppetDB integration shows "Disconnected":
+
+1. Verify PuppetDB is running and accessible
+2. Check configuration in `backend/.env`
+3. Test connectivity: `curl https://puppetdb.example.com:8081/pdb/meta/v1/version`
+4. Review logs with `LOG_LEVEL=debug`
+5. See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md)
+
+#### Expert Mode Not Showing Full Output
+
+If expert mode doesn't show complete output:
+
+1. Ensure expert mode is enabled (toggle in navigation)
+2. Check execution was run with expert mode enabled
+3. Verify database has `stdout` and `stderr` columns
+4. For historical executions, only those run in v0.2.0+ have full output
+
+See [Troubleshooting Guide](docs/troubleshooting.md) for more solutions.
+
+## Contributing
+
+We welcome contributions! Here's how you can help:
+
+### Reporting Issues
+
+- Use GitHub Issues for bug reports and feature requests
+- Include version information and configuration (sanitized)
+- Provide steps to reproduce issues
+- Enable expert mode and include relevant error details
+
+### Development
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Write tests for new functionality
+5. Ensure all tests pass
+6. Submit a pull request
+
+### Code Style
+
+- Follow TypeScript best practices
+- Use ESLint and Prettier configurations
+- Write meaningful commit messages
+- Add documentation for new features
+
+### Testing
+
+```bash
+# Run unit and integration tests
+npm test
+
+# Run E2E tests
+npm run test:e2e
+
+# Run specific test suite
+npm test --workspace=backend
+```
+
+## Roadmap
+
+### Planned Features
+
+- **Additional Integrations**: Ansible, Terraform, AWS CLI, Azure CLI, Kubernetes
+- **Advanced Querying**: Visual query builder for PQL
+- **Scheduled Executions**: Cron-like scheduling for recurring tasks
+- **Webhooks**: Trigger actions based on external events
+- **Custom Dashboards**: User-configurable dashboard widgets
+- **Multi-tenancy**: Support for multiple organizations
+- **RBAC**: Role-based access control
+- **Audit Logging**: Comprehensive audit trail
+
+### Version History
+
+- **v0.2.0** (Current): PuppetDB integration, re-execution, expert mode enhancements
+- **v0.1.0**: Initial release with Bolt integration
+
+## License
+
+[Add your license information here]
+
+## Support
+
+### Documentation
+
+- [Configuration Guide](docs/configuration.md)
+- [User Guide](docs/user-guide.md)
+- [API Documentation](docs/api.md)
+- [PuppetDB Integration Setup](docs/puppetdb-integration-setup.md)
+- [v0.2.0 Features Guide](docs/v0.2-features-guide.md)
+
+### Getting Help
+
+1. Check the documentation
+2. Review [Troubleshooting Guide](docs/troubleshooting.md)
+3. Enable expert mode for detailed diagnostics
+4. Search existing GitHub Issues
+5. Create a new issue with:
+   - Version information
+   - Configuration (sanitized)
+   - Steps to reproduce
+   - Error messages and logs
+
+### Community
+
+- GitHub Issues: Bug reports and feature requests
+- GitHub Discussions: Questions and community support
+- Documentation: Comprehensive guides and references
+
+## Acknowledgments
+
+Padawi builds on excellent open-source projects:
+
+- **Puppet Bolt**: Remote task execution engine
+- **PuppetDB**: Centralized Puppet data storage
+- **Svelte 5**: Reactive UI framework
+- **Node.js**: Backend runtime
+- **TypeScript**: Type-safe development
+- **SQLite**: Embedded database
+
+Special thanks to all contributors and the Puppet community.
+
 ## Documentation
 
-See `docs/` directory for detailed documentation.
+### Getting Started
+
+- [Configuration Guide](docs/configuration.md) - Complete configuration reference
+- [User Guide](docs/user-guide.md) - Comprehensive user documentation
+- [API Documentation](docs/api.md) - REST API reference
+
+### Version 0.2.0 Features
+
+- [v0.2.0 Features Guide](docs/v0.2-features-guide.md) - Overview of new features
+- [PuppetDB Integration Setup](docs/puppetdb-integration-setup.md) - PuppetDB configuration guide
+- [PuppetDB API Documentation](docs/puppetdb-api.md) - PuppetDB-specific API endpoints
+
+### Additional Resources
+
+- [E2E Testing Guide](docs/e2e-testing.md) - End-to-end testing documentation
+- [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
+
+## Quick Start Guide
+
+### 1. Install Dependencies
+
+```bash
+npm run install:all
+```
+
+### 2. Configure Bolt Project
+
+Ensure you have a valid Bolt project with `inventory.yaml`:
+
+```yaml
+# bolt-project/inventory.yaml
+groups:
+  - name: linux-servers
+    targets:
+      - name: server-01
+        uri: server-01.example.com
+    config:
+      transport: ssh
+      ssh:
+        user: admin
+        private-key: ~/.ssh/id_rsa
+```
+
+### 3. Start Development Servers
+
+```bash
+# Terminal 1: Start backend
+npm run dev:backend
+
+# Terminal 2: Start frontend
+npm run dev:frontend
+```
+
+### 4. Access the Application
+
+- **Frontend**: http://localhost:5173
+- **Backend API**: http://localhost:3000/api
+
+### 5. (Optional) Configure PuppetDB
+
+To enable PuppetDB integration:
+
+1. Add PuppetDB configuration to `backend/.env`
+2. Restart backend server
+3. Verify integration status on home page
+
+See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md) for details.
+
+## Key Features Walkthrough
+
+### Multi-Source Inventory
+
+View nodes from both Bolt and PuppetDB:
+
+1. Navigate to **Inventory** page
+2. See nodes from all sources with source badges
+3. Filter by source using dropdown
+4. Search across all sources
+
+### PuppetDB Data Viewing
+
+Access comprehensive Puppet data:
+
+1. Click on any PuppetDB node
+2. Navigate through tabs:
+   - **Facts**: System information
+   - **Puppet Reports**: Run history and metrics
+   - **Catalog**: Desired state configuration
+   - **Events**: Resource changes over time
+
+### Re-execution
+
+Quickly repeat operations:
+
+1. Go to **Executions** page
+2. Find execution to repeat
+3. Click **Re-execute** button
+4. Modify parameters if needed
+5. Execute
+
+### Expert Mode
+
+Enable detailed diagnostics:
+
+1. Toggle **Expert Mode** in navigation
+2. View complete command lines
+3. Access full stdout/stderr output
+4. Search through long output
+5. Copy commands for manual testing

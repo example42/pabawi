@@ -7,37 +7,23 @@ ALTER TABLE executions ADD COLUMN command TEXT;
 -- Add expert_mode column if it doesn't exist
 ALTER TABLE executions ADD COLUMN expert_mode INTEGER DEFAULT 0;
 
--- Migration: Update execution type constraint to include 'puppet' and 'package' types
--- This migration recreates the executions table with the updated type constraint
+-- Migration: Add re-execution tracking fields
+-- These columns support linking re-executed actions to their original executions
 
--- Step 1: Create new table with updated constraint
-CREATE TABLE IF NOT EXISTS executions_new (
-  id TEXT PRIMARY KEY,
-  type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts', 'puppet', 'package')),
-  target_nodes TEXT NOT NULL,
-  action TEXT NOT NULL,
-  parameters TEXT,
-  status TEXT NOT NULL CHECK(status IN ('running', 'success', 'failed', 'partial')),
-  started_at TEXT NOT NULL,
-  completed_at TEXT,
-  results TEXT NOT NULL,
-  error TEXT,
-  command TEXT,
-  expert_mode INTEGER DEFAULT 0
-);
+-- Add original_execution_id column if it doesn't exist
+ALTER TABLE executions ADD COLUMN original_execution_id TEXT;
 
--- Step 2: Copy data from old table to new table
-INSERT INTO executions_new SELECT * FROM executions;
+-- Add re_execution_count column if it doesn't exist
+ALTER TABLE executions ADD COLUMN re_execution_count INTEGER DEFAULT 0;
 
--- Step 3: Drop old table
-DROP TABLE executions;
+-- Create index for finding re-executions by original execution ID
+CREATE INDEX IF NOT EXISTS idx_executions_original_id ON executions(original_execution_id);
 
--- Step 4: Rename new table to original name
-ALTER TABLE executions_new RENAME TO executions;
+-- Migration: Add stdout and stderr columns for expert mode complete output capture
+-- These columns store the full command output when expert mode is enabled
 
--- Step 5: Recreate indexes
-CREATE INDEX IF NOT EXISTS idx_executions_started ON executions(started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
-CREATE INDEX IF NOT EXISTS idx_executions_type ON executions(type);
-CREATE INDEX IF NOT EXISTS idx_executions_status_started ON executions(status, started_at DESC);
-CREATE INDEX IF NOT EXISTS idx_executions_type_started ON executions(type, started_at DESC);
+-- Add stdout column if it doesn't exist
+ALTER TABLE executions ADD COLUMN stdout TEXT;
+
+-- Add stderr column if it doesn't exist
+ALTER TABLE executions ADD COLUMN stderr TEXT;

@@ -6,6 +6,10 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
+import {
+  PuppetDBConnectionError,
+  PuppetDBQueryError,
+} from '../../src/integrations/puppetdb';
 import type { IntegrationConfig } from '../../src/integrations/types';
 
 describe('PuppetDBService', () => {
@@ -26,7 +30,8 @@ describe('PuppetDBService', () => {
       expect(service.isInitialized()).toBe(false);
     });
 
-    it('should throw error when trying to get inventory before initialization', async () => {
+    it('should throw PuppetDBConnectionError when trying to get inventory before initialization', async () => {
+      await expect(service.getInventory()).rejects.toThrow(PuppetDBConnectionError);
       await expect(service.getInventory()).rejects.toThrow('PuppetDB service is not initialized');
     });
   });
@@ -42,6 +47,7 @@ describe('PuppetDBService', () => {
         },
       };
 
+      await expect(service.initialize(config)).rejects.toThrow(PuppetDBConnectionError);
       await expect(service.initialize(config)).rejects.toThrow('PuppetDB serverUrl is required');
     });
 
@@ -76,13 +82,12 @@ describe('PuppetDBService', () => {
 
       await service.initialize(config);
 
-      // Invalid PQL queries should be rejected
-      // Note: Errors are wrapped by executeWithResilience, so we just check that they throw
-      await expect(service.queryInventory('')).rejects.toThrow();
-      await expect(service.queryInventory('invalid json')).rejects.toThrow();
-      await expect(service.queryInventory('{}')).rejects.toThrow();
-      await expect(service.queryInventory('[]')).rejects.toThrow();
-      await expect(service.queryInventory('[123]')).rejects.toThrow();
+      // Invalid PQL queries should be rejected with PuppetDBQueryError
+      await expect(service.queryInventory('')).rejects.toThrow(PuppetDBQueryError);
+      await expect(service.queryInventory('invalid json')).rejects.toThrow(PuppetDBQueryError);
+      await expect(service.queryInventory('{}')).rejects.toThrow(PuppetDBQueryError);
+      await expect(service.queryInventory('[]')).rejects.toThrow(PuppetDBQueryError);
+      await expect(service.queryInventory('[123]')).rejects.toThrow(PuppetDBQueryError);
     });
   });
 
@@ -128,6 +133,67 @@ describe('PuppetDBService', () => {
       // We can't test the actual transformation without mocking the client,
       // but we can verify the service is set up correctly
       expect(service.isInitialized()).toBe(true);
+    });
+  });
+
+  describe('events functionality', () => {
+    it('should have getNodeEvents method', async () => {
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: 'puppetdb',
+        type: 'information',
+        config: {
+          serverUrl: 'https://puppetdb.example.com',
+        },
+      };
+
+      await service.initialize(config);
+
+      // Verify the method exists
+      expect(service.getNodeEvents).toBeDefined();
+      expect(typeof service.getNodeEvents).toBe('function');
+    });
+
+    it('should have queryEvents method for filtering', async () => {
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: 'puppetdb',
+        type: 'information',
+        config: {
+          serverUrl: 'https://puppetdb.example.com',
+        },
+      };
+
+      await service.initialize(config);
+
+      // Verify the method exists
+      expect(service.queryEvents).toBeDefined();
+      expect(typeof service.queryEvents).toBe('function');
+    });
+
+    it('should support getNodeData with events type', async () => {
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: 'puppetdb',
+        type: 'information',
+        config: {
+          serverUrl: 'https://puppetdb.example.com',
+        },
+      };
+
+      await service.initialize(config);
+
+      // Verify getNodeData supports 'events' type
+      // This will fail to connect, but should not throw a "unsupported type" error
+      try {
+        await service.getNodeData('test-node', 'events');
+      } catch (error) {
+        // Should fail with connection error, not unsupported type error
+        expect(error).toBeDefined();
+        if (error instanceof Error) {
+          expect(error.message).not.toContain('Unsupported data type');
+        }
+      }
     });
   });
 });

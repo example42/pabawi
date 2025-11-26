@@ -15,16 +15,33 @@
       user?: string;
       port?: number;
     };
+    source?: string;
+  }
+
+  interface SourceInfo {
+    nodeCount: number;
+    lastSync: string;
+    status: 'healthy' | 'degraded' | 'unavailable';
+  }
+
+  interface InventoryResponse {
+    nodes: Node[];
+    sources?: Record<string, SourceInfo>;
   }
 
   // State
   let nodes = $state<Node[]>([]);
+  let sources = $state<Record<string, SourceInfo>>({});
   let loading = $state(true);
   let error = $state<string | null>(null);
   let searchQuery = $state('');
   let transportFilter = $state<string>('all');
+  let sourceFilter = $state<string>('all');
   let viewMode = $state<'grid' | 'list'>('grid');
   let searchTimeout: number | undefined;
+  let pqlQuery = $state('');
+  let pqlError = $state<string | null>(null);
+  let showPqlInput = $state(false);
 
   // Computed filtered nodes
   let filteredNodes = $derived.by(() => {
@@ -44,16 +61,40 @@
       result = result.filter(node => node.transport === transportFilter);
     }
 
+    // Filter by source
+    if (sourceFilter !== 'all') {
+      result = result.filter(node => (node.source || 'bolt') === sourceFilter);
+    }
+
     return result;
   });
 
+  // Computed node counts by source
+  let nodeCountsBySource = $derived.by(() => {
+    const counts: Record<string, number> = {};
+    for (const node of nodes) {
+      const source = node.source || 'bolt';
+      counts[source] = (counts[source] || 0) + 1;
+    }
+    return counts;
+  });
+
   // Fetch inventory from API
-  async function fetchInventory(): Promise<void> {
+  async function fetchInventory(pql?: string): Promise<void> {
     loading = true;
     error = null;
+    pqlError = null;
 
     try {
-      const data = await get<{ nodes: Node[] }>('/api/inventory', {
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (pql) {
+        params.append('pql', pql);
+      }
+
+      const url = `/api/inventory${params.toString() ? `?${params.toString()}` : ''}`;
+
+      const data = await get<InventoryResponse>(url, {
         maxRetries: 2,
         onRetry: (attempt) => {
           console.log(`Retrying inventory fetch (attempt ${attempt})...`);
@@ -61,6 +102,7 @@
       });
 
       nodes = data.nodes || [];
+      sources = data.sources || {};
 
       // Show success toast only on retry success
       if (error) {
@@ -73,6 +115,41 @@
     } finally {
       loading = false;
     }
+  }
+
+  // Apply PQL query
+  async function applyPqlQuery(): Promise<void> {
+    if (!pqlQuery.trim()) {
+      // Clear PQL filter
+      await fetchInventory();
+      return;
+    }
+
+    // Validate PQL query format (basic check)
+    try {
+      JSON.parse(pqlQuery);
+    } catch (err) {
+      pqlError = 'Invalid PQL query: must be valid JSON';
+      showError('Invalid PQL query', pqlError);
+      return;
+    }
+
+    // Fetch with PQL filter
+    try {
+      await fetchInventory(pqlQuery);
+      pqlError = null;
+      showSuccess('PQL query applied successfully');
+    } catch (err) {
+      pqlError = err instanceof Error ? err.message : 'Failed to apply PQL query';
+      showError('PQL query failed', pqlError);
+    }
+  }
+
+  // Clear PQL query
+  async function clearPqlQuery(): Promise<void> {
+    pqlQuery = '';
+    pqlError = null;
+    await fetchInventory();
   }
 
   // Handle search with debouncing
@@ -117,6 +194,30 @@
     }
   }
 
+  // Get source badge color
+  function getSourceColor(source: string): string {
+    switch (source) {
+      case 'bolt':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
+      case 'puppetdb':
+        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+    }
+  }
+
+  // Get source display name
+  function getSourceDisplayName(source: string): string {
+    switch (source) {
+      case 'bolt':
+        return 'Bolt';
+      case 'puppetdb':
+        return 'PuppetDB';
+      default:
+        return source.charAt(0).toUpperCase() + source.slice(1);
+    }
+  }
+
   // Fetch inventory on mount
   onMount(() => {
     fetchInventory();
@@ -126,13 +227,83 @@
 <div class="container mx-auto px-4 py-8">
   <!-- Header -->
   <div class="mb-6">
-    <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-      Inventory
-    </h1>
-    <p class="mt-2 text-gray-600 dark:text-gray-400">
-      Manage and monitor your infrastructure nodes
-    </p>
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+          Inventory
+        </h1>
+        <p class="mt-2 text-gray-600 dark:text-gray-400">
+          Manage and monitor your infrastructure nodes
+        </p>
+      </div>
+      {#if Object.keys(sources).includes('puppetdb')}
+        <button
+          type="button"
+          onclick={() => showPqlInput = !showPqlInput}
+          class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          {showPqlInput ? 'Hide' : 'Show'} PQL Query
+        </button>
+      {/if}
+    </div>
   </div>
+
+  <!-- PQL Query Input -->
+  {#if showPqlInput && Object.keys(sources).includes('puppetdb')}
+    <div class="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div class="mb-2 flex items-center justify-between">
+        <label for="pql-query" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          PuppetDB PQL Query
+        </label>
+        <a
+          href="https://puppet.com/docs/puppetdb/latest/api/query/v4/pql.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          PQL Documentation ↗
+        </a>
+      </div>
+      <div class="flex gap-2">
+        <textarea
+          id="pql-query"
+          bind:value={pqlQuery}
+          placeholder='Example: ["=", "certname", "node1.example.com"]'
+          rows="3"
+          class="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+        ></textarea>
+        <div class="flex flex-col gap-2">
+          <button
+            type="button"
+            onclick={applyPqlQuery}
+            disabled={loading}
+            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Apply
+          </button>
+          <button
+            type="button"
+            onclick={clearPqlQuery}
+            disabled={loading || !pqlQuery}
+            class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+      {#if pqlError}
+        <p class="mt-2 text-sm text-red-600 dark:text-red-400">
+          {pqlError}
+        </p>
+      {/if}
+      <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        Enter a PQL query to filter PuppetDB nodes. The query must be valid JSON array format.
+      </p>
+    </div>
+  {/if}
 
   <!-- Loading State -->
   {#if loading}
@@ -168,22 +339,44 @@
         </div>
       </div>
 
-      <!-- Transport Filter -->
-      <div class="flex items-center gap-3">
-        <label for="transport-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Transport:
-        </label>
-        <select
-          id="transport-filter"
-          bind:value={transportFilter}
-          class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-        >
-          <option value="all">All</option>
-          <option value="ssh">SSH</option>
-          <option value="winrm">WinRM</option>
-          <option value="docker">Docker</option>
-          <option value="local">Local</option>
-        </select>
+      <!-- Filters -->
+      <div class="flex items-center gap-4">
+        <!-- Source Filter -->
+        <div class="flex items-center gap-2">
+          <label for="source-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Source:
+          </label>
+          <select
+            id="source-filter"
+            bind:value={sourceFilter}
+            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+          >
+            <option value="all">All ({nodes.length})</option>
+            {#each Object.keys(nodeCountsBySource).sort() as source}
+              <option value={source}>
+                {getSourceDisplayName(source)} ({nodeCountsBySource[source]})
+              </option>
+            {/each}
+          </select>
+        </div>
+
+        <!-- Transport Filter -->
+        <div class="flex items-center gap-2">
+          <label for="transport-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Transport:
+          </label>
+          <select
+            id="transport-filter"
+            bind:value={transportFilter}
+            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+          >
+            <option value="all">All</option>
+            <option value="ssh">SSH</option>
+            <option value="winrm">WinRM</option>
+            <option value="docker">Docker</option>
+            <option value="local">Local</option>
+          </select>
+        </div>
       </div>
 
       <!-- View Toggle -->
@@ -237,13 +430,18 @@
               class="group relative rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-500 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-400"
               onclick={() => navigateToNode(node.id)}
             >
-              <div class="mb-3 flex items-start justify-between">
-                <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400">
+              <div class="mb-3 flex items-start justify-between gap-2">
+                <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400 flex-1 min-w-0">
                   {node.name}
                 </h3>
-                <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">
-                  {node.transport}
-                </span>
+                <div class="flex flex-col gap-1 items-end">
+                  <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">
+                    {node.transport}
+                  </span>
+                  <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
+                    {getSourceDisplayName(node.source || 'bolt')}
+                  </span>
+                </div>
               </div>
               <p class="text-sm text-gray-600 dark:text-gray-400 truncate">
                 {node.uri}
@@ -265,6 +463,9 @@
                   Name
                 </th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Source
+                </th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Transport
                 </th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -283,6 +484,11 @@
                 >
                   <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                     {node.name}
+                  </td>
+                  <td class="whitespace-nowrap px-6 py-4 text-sm">
+                    <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
+                      {getSourceDisplayName(node.source || 'bolt')}
+                    </span>
                   </td>
                   <td class="whitespace-nowrap px-6 py-4 text-sm">
                     <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">

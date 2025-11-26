@@ -157,6 +157,12 @@ async function startServer(): Promise<Express> {
 
     console.warn("Integration manager initialized successfully");
 
+    // Start health check scheduler for integrations
+    if (integrationManager.getPluginCount() > 0) {
+      integrationManager.startHealthCheckScheduler();
+      console.warn("Integration health check scheduler started");
+    }
+
     // Create Express app
     const app: Express = express();
 
@@ -220,8 +226,8 @@ async function startServer(): Promise<Express> {
     });
 
     // API Routes
-    app.use("/api/inventory", createInventoryRouter(boltService));
-    app.use("/api/nodes", createInventoryRouter(boltService));
+    app.use("/api/inventory", createInventoryRouter(boltService, integrationManager));
+    app.use("/api/nodes", createInventoryRouter(boltService, integrationManager));
     app.use("/api/nodes", createFactsRouter(boltService));
     app.use(
       "/api/nodes",
@@ -271,7 +277,7 @@ async function startServer(): Promise<Express> {
       "/api/streaming",
       createStreamingRouter(streamingManager, executionRepository),
     );
-    app.use("/api/integrations", createIntegrationsRouter(puppetDBService));
+    app.use("/api/integrations", createIntegrationsRouter(integrationManager, puppetDBService));
 
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");
@@ -297,6 +303,7 @@ async function startServer(): Promise<Express> {
     process.on("SIGTERM", () => {
       console.warn("SIGTERM received, shutting down gracefully...");
       streamingManager.cleanup();
+      integrationManager.stopHealthCheckScheduler();
       server.close(() => {
         void databaseService.close().then(() => {
           console.warn("Server closed");

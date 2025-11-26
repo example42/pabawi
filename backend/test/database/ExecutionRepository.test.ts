@@ -28,7 +28,11 @@ describe("ExecutionRepository", () => {
         results TEXT NOT NULL,
         error TEXT,
         command TEXT,
-        expert_mode INTEGER DEFAULT 0
+        expert_mode INTEGER DEFAULT 0,
+        original_execution_id TEXT,
+        re_execution_count INTEGER DEFAULT 0,
+        stdout TEXT,
+        stderr TEXT
       )
     `;
 

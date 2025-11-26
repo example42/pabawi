@@ -738,12 +738,23 @@ export class BoltService {
     const commandString = this.buildCommandString(args);
 
     try {
-      const jsonOutput = await this.executeCommandWithJsonOutput(
+      // Execute command and capture raw output
+      const boltResult = await this.executeCommand(
         args,
         {},
         streamingCallback,
       );
 
+      if (!boltResult.success) {
+        throw new BoltExecutionError(
+          boltResult.error ?? "Bolt command failed",
+          boltResult.exitCode,
+          boltResult.stderr,
+          boltResult.stdout,
+        );
+      }
+
+      const jsonOutput = this.parseJsonOutput(boltResult.stdout);
       const endTime = Date.now();
       const result = this.transformCommandOutput(
         executionId,
@@ -752,6 +763,7 @@ export class BoltService {
         jsonOutput,
         startTime,
         endTime,
+        { stdout: boltResult.stdout, stderr: boltResult.stderr },
       );
       result.command = commandString;
       return result;
@@ -813,6 +825,7 @@ export class BoltService {
    * @param jsonOutput - Raw JSON output from Bolt command
    * @param startTime - Execution start timestamp
    * @param endTime - Execution end timestamp
+   * @param rawOutput - Optional raw stdout/stderr from Bolt execution
    * @returns ExecutionResult object
    */
   private transformCommandOutput(
@@ -822,6 +835,7 @@ export class BoltService {
     jsonOutput: BoltJsonOutput,
     startTime: number,
     endTime: number,
+    rawOutput?: { stdout: string; stderr: string },
   ): ExecutionResult {
     // Bolt command output structure: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
     const items = jsonOutput.items;
@@ -871,7 +885,7 @@ export class BoltService {
       }
     }
 
-    return {
+    const result: ExecutionResult = {
       id: executionId,
       type: "command",
       targetNodes: [nodeId],
@@ -881,6 +895,14 @@ export class BoltService {
       completedAt: new Date(endTime).toISOString(),
       results,
     };
+
+    // Include raw stdout/stderr if provided (for expert mode)
+    if (rawOutput) {
+      result.stdout = rawOutput.stdout;
+      result.stderr = rawOutput.stderr;
+    }
+
+    return result;
   }
 
   /**
@@ -938,12 +960,23 @@ export class BoltService {
     const commandString = this.buildCommandString(args);
 
     try {
-      const jsonOutput = await this.executeCommandWithJsonOutput(
+      // Execute task and capture raw output
+      const boltResult = await this.executeCommand(
         args,
         {},
         streamingCallback,
       );
 
+      if (!boltResult.success) {
+        throw new BoltExecutionError(
+          boltResult.error ?? "Bolt task failed",
+          boltResult.exitCode,
+          boltResult.stderr,
+          boltResult.stdout,
+        );
+      }
+
+      const jsonOutput = this.parseJsonOutput(boltResult.stdout);
       const endTime = Date.now();
       const result = this.transformTaskOutput(
         executionId,
@@ -953,6 +986,7 @@ export class BoltService {
         jsonOutput,
         startTime,
         endTime,
+        { stdout: boltResult.stdout, stderr: boltResult.stderr },
       );
       result.command = commandString;
       return result;
@@ -1045,6 +1079,7 @@ export class BoltService {
    * @param jsonOutput - Raw JSON output from Bolt task command
    * @param startTime - Execution start timestamp
    * @param endTime - Execution end timestamp
+   * @param rawOutput - Optional raw stdout/stderr from Bolt execution
    * @returns ExecutionResult object
    */
   private transformTaskOutput(
@@ -1055,6 +1090,7 @@ export class BoltService {
     jsonOutput: BoltJsonOutput,
     startTime: number,
     endTime: number,
+    rawOutput?: { stdout: string; stderr: string },
   ): ExecutionResult {
     // Bolt task output structure: { "items": [{ "target": "node1", "status": "success", "value": {...} }] }
     const items = jsonOutput.items;
@@ -1098,7 +1134,7 @@ export class BoltService {
       }
     }
 
-    return {
+    const result: ExecutionResult = {
       id: executionId,
       type: "task",
       targetNodes: [nodeId],
@@ -1109,6 +1145,14 @@ export class BoltService {
       completedAt: new Date(endTime).toISOString(),
       results,
     };
+
+    // Include raw stdout/stderr if provided (for expert mode)
+    if (rawOutput) {
+      result.stdout = rawOutput.stdout;
+      result.stderr = rawOutput.stderr;
+    }
+
+    return result;
   }
 
   /**

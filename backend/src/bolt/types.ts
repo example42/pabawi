@@ -120,6 +120,7 @@ export interface Node {
 export interface Facts {
   nodeId: string;
   gatheredAt: string;
+  source?: string; // Source of facts (e.g., 'bolt', 'puppetdb')
   facts: {
     os: {
       family: string;
@@ -143,6 +144,13 @@ export interface Facts {
       hostname: string;
       interfaces: Record<string, unknown>;
     };
+    // Categories for organized fact display (requirement 2.3)
+    categories?: {
+      system: Record<string, unknown>;
+      network: Record<string, unknown>;
+      hardware: Record<string, unknown>;
+      custom: Record<string, unknown>;
+    };
     [key: string]: unknown;
   };
   command?: string;
@@ -164,6 +172,8 @@ export interface ExecutionResult {
   error?: string;
   command?: string;
   expertMode?: boolean;
+  stdout?: string; // Complete stdout output (captured when expert mode enabled)
+  stderr?: string; // Complete stderr output (captured when expert mode enabled)
 }
 
 /**

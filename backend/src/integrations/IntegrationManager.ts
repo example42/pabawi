@@ -18,6 +18,14 @@ import type {
 import type { Node, Facts, ExecutionResult } from "../bolt/types";
 
 /**
+ * Health check cache entry
+ */
+export interface HealthCheckCacheEntry {
+  status: HealthStatus;
+  cachedAt: string;
+}
+
+/**
  * Aggregated inventory from multiple sources
  */
 export interface AggregatedInventory {
@@ -50,6 +58,7 @@ export interface AggregatedNodeData {
  * - Plugin routing (finding the right plugin for a task)
  * - Health check aggregation across all plugins
  * - Multi-source data aggregation (inventory, facts, etc.)
+ * - Periodic health check scheduling with caching
  */
 export class IntegrationManager {
   private plugins = new Map<string, PluginRegistration>();
@@ -57,7 +66,18 @@ export class IntegrationManager {
   private informationSources = new Map<string, InformationSourcePlugin>();
   private initialized = false;
 
-  constructor() {
+  // Health check scheduling
+  private healthCheckCache = new Map<string, HealthCheckCacheEntry>();
+  private healthCheckInterval?: NodeJS.Timeout;
+  private healthCheckIntervalMs: number;
+  private healthCheckCacheTTL: number;
+
+  constructor(options?: {
+    healthCheckIntervalMs?: number;
+    healthCheckCacheTTL?: number;
+  }) {
+    this.healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 60000; // Default: 1 minute
+    this.healthCheckCacheTTL = options?.healthCheckCacheTTL ?? 300000; // Default: 5 minutes
     this.log("IntegrationManager created");
   }
 
@@ -329,9 +349,31 @@ export class IntegrationManager {
   /**
    * Perform health checks on all plugins
    *
+   * @param useCache - If true, return cached results if available and not expired
    * @returns Map of plugin names to health status
    */
-  async healthCheckAll(): Promise<Map<string, HealthStatus>> {
+  async healthCheckAll(useCache = false): Promise<Map<string, HealthStatus>> {
+    // If cache is requested, check for valid cached results
+    if (useCache && this.healthCheckCache.size > 0) {
+      const now = Date.now();
+      const allCached = Array.from(this.plugins.keys()).every((name) => {
+        const cached = this.healthCheckCache.get(name);
+        if (!cached) return false;
+
+        const cacheAge = now - new Date(cached.cachedAt).getTime();
+        return cacheAge < this.healthCheckCacheTTL;
+      });
+
+      if (allCached) {
+        this.log("Returning cached health check results");
+        const cachedResults = new Map<string, HealthStatus>();
+        for (const [name, entry] of this.healthCheckCache) {
+          cachedResults.set(name, entry.status);
+        }
+        return cachedResults;
+      }
+    }
+
     const healthStatuses = new Map<string, HealthStatus>();
 
     const healthCheckPromises = Array.from(this.plugins.entries()).map(
@@ -339,13 +381,26 @@ export class IntegrationManager {
         try {
           const status = await registration.plugin.healthCheck();
           healthStatuses.set(name, status);
+
+          // Update cache
+          this.healthCheckCache.set(name, {
+            status,
+            cachedAt: new Date().toISOString(),
+          });
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : String(error);
-          healthStatuses.set(name, {
+          const status: HealthStatus = {
             healthy: false,
             message: `Health check failed: ${errorMessage}`,
             lastCheck: new Date().toISOString(),
+          };
+          healthStatuses.set(name, status);
+
+          // Update cache with error status
+          this.healthCheckCache.set(name, {
+            status,
+            cachedAt: new Date().toISOString(),
           });
         }
       },
@@ -354,6 +409,61 @@ export class IntegrationManager {
     await Promise.all(healthCheckPromises);
 
     return healthStatuses;
+  }
+
+  /**
+   * Start periodic health check scheduling
+   *
+   * Health checks will run at the configured interval and results will be cached.
+   * Subsequent calls to healthCheckAll(true) will return cached results if not expired.
+   */
+  startHealthCheckScheduler(): void {
+    if (this.healthCheckInterval) {
+      this.log("Health check scheduler already running");
+      return;
+    }
+
+    this.log(
+      `Starting health check scheduler (interval: ${String(this.healthCheckIntervalMs)}ms, TTL: ${String(this.healthCheckCacheTTL)}ms)`,
+    );
+
+    // Run initial health check
+    void this.healthCheckAll(false);
+
+    // Schedule periodic health checks
+    this.healthCheckInterval = setInterval(() => {
+      void this.healthCheckAll(false);
+    }, this.healthCheckIntervalMs);
+
+    this.log("Health check scheduler started");
+  }
+
+  /**
+   * Stop periodic health check scheduling
+   */
+  stopHealthCheckScheduler(): void {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = undefined;
+      this.log("Health check scheduler stopped");
+    }
+  }
+
+  /**
+   * Clear the health check cache
+   */
+  clearHealthCheckCache(): void {
+    this.healthCheckCache.clear();
+    this.log("Health check cache cleared");
+  }
+
+  /**
+   * Get the current health check cache
+   *
+   * @returns Map of plugin names to cached health check entries
+   */
+  getHealthCheckCache(): Map<string, HealthCheckCacheEntry> {
+    return new Map(this.healthCheckCache);
   }
 
   /**

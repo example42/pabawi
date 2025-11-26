@@ -62,9 +62,11 @@
     nodeId: string;
     onTaskSelect?: (task: Task) => void;
     onExecutionComplete?: (result: ExecutionResult) => void;
+    initialTaskName?: string;
+    initialParameters?: Record<string, unknown>;
   }
 
-  let { nodeId, onTaskSelect, onExecutionComplete }: Props = $props();
+  let { nodeId, onTaskSelect, onExecutionComplete, initialTaskName, initialParameters }: Props = $props();
 
   // State
   let tasksByModule = $state<TasksByModule>({});
@@ -313,6 +315,33 @@
       fetchExecutionHistory();
     } else {
       executionHistory = [];
+    }
+  });
+
+  // Pre-select task if initial task name is provided
+  function preselectTask(): void {
+    if (!initialTaskName) return;
+
+    // Find the task by name
+    for (const tasks of Object.values(tasksByModule)) {
+      const task = tasks.find(t => t.name === initialTaskName);
+      if (task) {
+        selectTask(task);
+
+        // Pre-fill parameters if provided
+        if (initialParameters) {
+          taskParameters = { ...initialParameters };
+        }
+
+        break;
+      }
+    }
+  }
+
+  // Watch for tasksByModule changes to pre-select task
+  $effect(() => {
+    if (Object.keys(tasksByModule).length > 0 && initialTaskName) {
+      preselectTask();
     }
   });
 
