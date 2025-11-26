@@ -111,6 +111,7 @@ export interface Node {
     user?: string;
     port?: number;
   };
+  source?: string; // Source of the node data (e.g., 'bolt', 'puppetdb')
 }
 
 /**

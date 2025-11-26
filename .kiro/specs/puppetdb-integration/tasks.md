@@ -57,14 +57,14 @@
   - Test error handling
   - _Requirements: 6.2, 6.3_
 
-- [ ] 3. Implement PuppetDB inventory integration
-- [ ] 3.1 Implement getInventory method in PuppetDBService
+- [x] 3. Implement PuppetDB inventory integration
+- [x] 3.1 Implement getInventory method in PuppetDBService
   - Query PuppetDB nodes endpoint
   - Transform PuppetDB node data to normalized format
   - Add source attribution
   - _Requirements: 1.1, 1.2, 1.3_
 
-- [ ] 3.2 Add PQL query support for inventory filtering
+- [x] 3.2 Add PQL query support for inventory filtering
   - Implement PQL query builder
   - Add query validation
   - _Requirements: 1.4, 12.2_
@@ -77,7 +77,7 @@
   - **Property 4: PQL query filtering**
   - **Validates: Requirements 1.4**
 
-- [ ] 3.5 Add inventory caching with TTL
+- [x] 3.5 Add inventory caching with TTL
   - Implement cache storage and retrieval
   - Add TTL-based expiration
   - _Requirements: 12.5_
@@ -86,7 +86,7 @@
   - **Property 24: Cache expiration by source**
   - **Validates: Requirements 12.5**
 
-- [ ] 3.7 Create API endpoint for PuppetDB inventory
+- [x] 3.7 Create API endpoint for PuppetDB inventory
   - Add GET /api/integrations/puppetdb/nodes
   - Add GET /api/integrations/puppetdb/nodes/:certname
   - _Requirements: 1.1_
