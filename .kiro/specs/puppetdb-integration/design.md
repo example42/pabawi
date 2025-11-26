@@ -19,6 +19,8 @@ PuppetDB integration provides:
 
 Additionally, this version introduces action re-execution capabilities, allowing users to quickly repeat operations with preserved parameters, and comprehensive UI enhancements to support the multi-tool architecture.
 
+**Expert Mode Enhancement**: A critical priority for this version is enhancing the expert mode experience to provide complete transparency into command execution. When expert mode is enabled, users will see the full command line being executed and complete, untruncated output (stdout/stderr). This visibility is essential for debugging, auditing, and understanding exactly what operations are being performed on managed infrastructure.
+
 ## Architecture
 
 ### High-Level Architecture
@@ -183,10 +185,12 @@ interface ExecutionRecord {
   completedAt?: string;
   results: NodeResult[];
   error?: string;
-  command?: string;
+  command?: string;              // Full command line executed
+  stdout?: string;               // NEW: Complete stdout output
+  stderr?: string;               // NEW: Complete stderr output
   expertMode?: boolean;
   originalExecutionId?: string;  // NEW: Reference to original execution if re-executed
-  reExecutionCount?: number;      // NEW: Number of times this has been re-executed
+  reExecutionCount?: number;     // NEW: Number of times this has been re-executed
 }
 
 class ExecutionRepository {
@@ -285,6 +289,28 @@ interface EventsViewerProps {
   filters?: EventFilters;
   onFilterChange?: (filters: EventFilters) => void;
 }
+```
+
+#### 5. Expert Mode Command Display Component
+
+Enhanced component for displaying command execution details when expert mode is enabled.
+
+```typescript
+interface CommandDisplayProps {
+  command: string;
+  output?: string;
+  stderr?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  expertMode: boolean;
+}
+
+// Features:
+// - Display full command line with syntax highlighting
+// - Show complete stdout/stderr without truncation
+// - Preserve formatting, line breaks, and special characters
+// - Provide scrolling and search capabilities for long output
+// - Use monospace font for technical content
+// - Toggle between expert and simplified views
 ```
 
 ## Data Models
@@ -711,6 +737,46 @@ Testable: yes - property
 Thoughts: This is about caching. We can verify cache expiration works correctly.
 Testable: yes - property
 
+13.1 WHEN expert mode is enabled AND a user initiates an execution THEN the system SHALL display the complete command line that will be executed before the execution starts, allowing the user to review it
+Thoughts: This is about UI display before execution. We can verify that the command line is shown in the UI when expert mode is enabled.
+Testable: yes - property
+
+13.2 WHEN expert mode is enabled AND an execution is in progress THEN the system SHALL keep the command line visible alongside the streaming output
+Thoughts: This is about persistent UI display during execution. We can verify the command line remains visible.
+Testable: yes - property
+
+13.3 WHEN expert mode is enabled AND an execution completes THEN the system SHALL display the complete command line that was executed including all arguments and options
+Thoughts: This is about post-execution display. We can verify the command line is shown after completion.
+Testable: yes - property
+
+13.4 WHEN expert mode is enabled AND viewing execution results THEN the system SHALL display the full stdout and stderr output without truncation or summarization
+Thoughts: This is about output completeness. We can verify that no truncation occurs by comparing stored output with displayed output.
+Testable: yes - property
+
+13.5 WHEN expert mode is enabled AND viewing execution history THEN the system SHALL show the executed command line for each execution record
+Thoughts: This is about historical display. We can verify command lines are shown in history views.
+Testable: yes - property
+
+13.6 WHEN expert mode is enabled AND viewing node detail execution history THEN the system SHALL display the command line alongside execution results
+Thoughts: This is similar to 13.5 but in a different context. Can be combined.
+Testable: yes - property
+
+13.7 WHEN expert mode is disabled THEN the system SHALL display summarized output and hide technical command details to maintain a simplified user interface
+Thoughts: This is about conditional display. We can verify that command details are hidden when expert mode is off.
+Testable: yes - property
+
+13.8 WHEN displaying command output in expert mode THEN the system SHALL preserve formatting, line breaks, and special characters exactly as received
+Thoughts: This is about output fidelity. We can verify that formatting is preserved by comparing raw output with displayed output.
+Testable: yes - property
+
+13.9 WHEN displaying command lines THEN the system SHALL use monospace font and syntax highlighting to improve readability
+Thoughts: This is about styling. We can verify the CSS classes or styles applied to command displays.
+Testable: yes - property
+
+13.10 WHEN command output is very long THEN the system SHALL provide scrolling and search capabilities while maintaining the complete output visible
+Thoughts: This is about UI functionality for long output. We can verify scrolling and search features are present.
+Testable: yes - property
+
 ### Property Reflection
 
 After reviewing all properties, the following consolidations and eliminations are recommended:
@@ -728,6 +794,8 @@ After reviewing all properties, the following consolidations and eliminations ar
 - Combine query initiation examples into one integration test
 - Combine re-execute button properties into context-aware properties
 - Combine error highlighting properties
+- Properties 13.1, 13.2, 13.3 are similar (command line display at different stages) - can be combined into one property about command line visibility throughout execution lifecycle
+- Properties 13.5 and 13.6 are similar (command line in history views) - can be combined
 
 This reduces redundancy while maintaining comprehensive coverage.
 
@@ -828,6 +896,131 @@ Property 23: Response validation and transformation
 Property 24: Cache expiration by source
 *For any* cached integration data, it should expire according to the configured TTL for that specific source
 **Validates: Requirements 12.5**
+
+Property 25: Command line visibility in expert mode
+*For any* execution when expert mode is enabled, the complete command line should be visible before, during, and after execution
+**Validates: Requirements 13.1, 13.2, 13.3, 13.5, 13.6**
+
+Property 26: Complete output display in expert mode
+*For any* execution when expert mode is enabled, the full stdout and stderr output should be displayed without truncation or summarization
+**Validates: Requirements 13.4**
+
+Property 27: Simplified display when expert mode disabled
+*For any* execution when expert mode is disabled, command details should be hidden and output should be summarized
+**Validates: Requirements 13.7**
+
+Property 28: Output formatting preservation
+*For any* command output displayed in expert mode, formatting, line breaks, and special characters should be preserved exactly as received
+**Validates: Requirements 13.8**
+
+Property 29: Command display styling
+*For any* command line display, monospace font and syntax highlighting should be applied
+**Validates: Requirements 13.9**
+
+Property 30: Long output handling
+*For any* command output exceeding viewport size, scrolling and search capabilities should be provided while maintaining complete output visibility
+**Validates: Requirements 13.10**
+
+## Expert Mode Implementation
+
+### Backend Changes
+
+The backend will be enhanced to capture and store complete execution details:
+
+```typescript
+interface ExecutionOutput {
+  stdout: string;      // Complete stdout, no truncation
+  stderr: string;      // Complete stderr, no truncation
+  exitCode: number;
+  command: string;     // Full command line with all arguments
+}
+
+class BoltService {
+  async executeCommand(
+    nodes: string[],
+    command: string,
+    expertMode: boolean
+  ): Promise<ExecutionResult> {
+    // Capture full command line
+    const fullCommand = this.buildBoltCommand(nodes, command);
+    
+    // Execute and capture all output
+    const output = await this.captureFullOutput(fullCommand);
+    
+    // Store complete output in database
+    await this.executionRepository.saveExecution({
+      command: fullCommand,
+      stdout: output.stdout,  // No truncation
+      stderr: output.stderr,  // No truncation
+      expertMode,
+      // ... other fields
+    });
+    
+    return output;
+  }
+  
+  private async captureFullOutput(command: string): Promise<ExecutionOutput> {
+    // Use streaming to capture all output without memory limits
+    // Store in database as execution progresses
+    // Return complete output
+  }
+}
+```
+
+### Frontend Changes
+
+The frontend will conditionally display execution details based on expert mode:
+
+```typescript
+// Expert mode state management
+interface ExpertModeState {
+  enabled: boolean;
+  showCommandLine: boolean;
+  showFullOutput: boolean;
+  syntaxHighlighting: boolean;
+}
+
+// Command display component
+function CommandDisplay({ execution, expertMode }: CommandDisplayProps) {
+  if (!expertMode) {
+    return <SummaryView execution={execution} />;
+  }
+  
+  return (
+    <div className="expert-mode-display">
+      {/* Command line with syntax highlighting */}
+      <CommandLine 
+        command={execution.command}
+        highlight={true}
+        monospace={true}
+      />
+      
+      {/* Full output with search and scroll */}
+      <OutputViewer
+        stdout={execution.stdout}
+        stderr={execution.stderr}
+        preserveFormatting={true}
+        searchable={true}
+        scrollable={true}
+      />
+    </div>
+  );
+}
+```
+
+### Design Decisions
+
+1. **Storage Strategy**: Store complete stdout/stderr in database without truncation. For very large outputs (>10MB), consider storing in separate blob storage with reference in database.
+
+2. **Streaming Display**: Use streaming to display output as it arrives, maintaining complete history in scrollable buffer.
+
+3. **Search Implementation**: Implement client-side search for command output using browser's native search or custom implementation with highlighting.
+
+4. **Syntax Highlighting**: Use a lightweight syntax highlighting library (e.g., Prism.js or highlight.js) for command lines and shell output.
+
+5. **Performance**: Use virtual scrolling for very long output to maintain UI responsiveness while keeping complete output accessible.
+
+6. **Persistence**: Expert mode preference should be stored per-user and persist across sessions.
 
 ## Error Handling
 
@@ -934,6 +1127,9 @@ Unit tests will cover:
 - Error handling and retry logic
 - Circuit breaker state transitions
 - Cache expiration logic
+- Expert mode command capture and storage
+- Output formatting preservation
+- Command line display with syntax highlighting
 
 ### Property-Based Testing
 
@@ -1040,7 +1236,11 @@ POST   /api/integrations/puppetdb/query
 GET    /api/executions/:id/original          # Get original execution for re-execution
 GET    /api/executions/:id/re-executions     # Get all re-executions of an execution
 POST   /api/executions/:id/re-execute        # Trigger re-execution
+GET    /api/executions/:id/output            # Get complete stdout/stderr for execution
+GET    /api/executions/:id/command           # Get full command line for execution
 ```
+
+**Note**: When expert mode is enabled, execution responses will include `command`, `stdout`, and `stderr` fields. When disabled, these fields will be omitted or summarized.
 
 ### Enhanced Inventory Endpoints
 
@@ -1079,6 +1279,11 @@ PUPPETDB_CACHE_TTL=300000  # 5 minutes
 PUPPETDB_CIRCUIT_BREAKER_THRESHOLD=5
 PUPPETDB_CIRCUIT_BREAKER_TIMEOUT=60000
 PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
+
+# Expert Mode Configuration
+EXPERT_MODE_DEFAULT=false                    # Default expert mode state for new users
+EXPERT_MODE_MAX_OUTPUT_SIZE=104857600       # Max output size to store (100MB)
+EXPERT_MODE_SYNTAX_HIGHLIGHTING=true        # Enable syntax highlighting for commands
 ```
 
 ### Configuration File
@@ -1110,6 +1315,12 @@ PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
         "resetTimeout": 30000
       }
     }
+  },
+  "expertMode": {
+    "default": false,
+    "maxOutputSize": 104857600,
+    "syntaxHighlighting": true,
+    "preserveFormatting": true
   }
 }
 ```
@@ -1151,6 +1362,8 @@ PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 - Enhance home page dashboard
 - Add integration status display
 - Apply consistent styling
+- Implement expert mode command display
+- Add output search and scrolling capabilities
 
 ### Phase 6: Testing & Polish (Week 6)
 
@@ -1170,6 +1383,9 @@ PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 6. **Parallel Requests**: Fetch data from multiple sources in parallel
 7. **Debouncing**: Debounce search and filter operations
 8. **Virtual Scrolling**: Use virtual scrolling for large lists
+9. **Expert Mode Output**: Use streaming and virtual scrolling for large command outputs to prevent memory issues
+10. **Output Storage**: For very large outputs (>100MB), consider storing in blob storage with database reference
+11. **Syntax Highlighting**: Lazy-load syntax highlighting library only when expert mode is enabled
 
 ## Security Considerations
 
@@ -1181,6 +1397,9 @@ PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 6. **Rate Limiting**: Implement rate limiting for PuppetDB API calls
 7. **Access Control**: Respect PuppetDB's access control policies
 8. **Audit Logging**: Log all PuppetDB queries and configuration changes
+9. **Expert Mode Access**: Consider role-based access control for expert mode to restrict visibility of sensitive command details
+10. **Output Sanitization**: Sanitize command output in expert mode to prevent XSS attacks when displaying in browser
+11. **Command Logging**: Ensure full command lines are logged securely for audit purposes when expert mode is used
 
 ## Monitoring and Observability
 

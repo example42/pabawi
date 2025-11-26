@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
+  import IntegrationStatus from '../components/IntegrationStatus.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
 
@@ -12,9 +13,28 @@
     transport: 'ssh' | 'winrm' | 'docker' | 'local';
   }
 
+  interface IntegrationStatusData {
+    name: string;
+    type: 'execution' | 'information' | 'both';
+    status: 'connected' | 'disconnected' | 'error';
+    lastCheck: string;
+    message?: string;
+    details?: unknown;
+  }
+
+  interface IntegrationStatusResponse {
+    integrations: IntegrationStatusData[];
+    timestamp: string;
+    cached: boolean;
+  }
+
   let nodes = $state<Node[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  let integrations = $state<IntegrationStatusData[]>([]);
+  let integrationsLoading = $state(true);
+  let integrationsError = $state<string | null>(null);
 
   async function fetchInventory(): Promise<void> {
     loading = true;
@@ -33,9 +53,32 @@
     }
   }
 
+  async function fetchIntegrationStatus(refresh = false): Promise<void> {
+    integrationsLoading = true;
+    integrationsError = null;
+
+    try {
+      const url = refresh ? '/api/integrations/status?refresh=true' : '/api/integrations/status';
+      const data = await get<IntegrationStatusResponse>(url);
+      integrations = data.integrations || [];
+    } catch (err) {
+      integrationsError = err instanceof Error ? err.message : 'Failed to load integration status';
+      console.error('Error fetching integration status:', err);
+      // Set empty array on error so the page still renders
+      integrations = [];
+    } finally {
+      integrationsLoading = false;
+    }
+  }
+
+  function handleRefreshIntegrations(): void {
+    void fetchIntegrationStatus(true);
+  }
+
   onMount(() => {
-    // Fetch inventory but don't block rendering
+    // Fetch inventory and integration status but don't block rendering
     void fetchInventory();
+    void fetchIntegrationStatus();
   });
 </script>
 
@@ -76,9 +119,9 @@
           </svg>
         </div>
         <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Status</p>
+          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Integrations</p>
           <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {loading ? '...' : error ? 'Error' : 'Ready'}
+            {integrationsLoading ? '...' : integrations.filter(i => i.status === 'connected').length} / {integrations.length}
           </p>
         </div>
       </div>
@@ -97,6 +140,23 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Integration Status Section -->
+  <div class="mb-12">
+    {#if integrationsError}
+      <ErrorAlert
+        message="Failed to load integration status"
+        details={integrationsError}
+        onRetry={() => fetchIntegrationStatus(true)}
+      />
+    {:else}
+      <IntegrationStatus
+        {integrations}
+        loading={integrationsLoading}
+        onRefresh={handleRefreshIntegrations}
+      />
+    {/if}
   </div>
 
   <!-- Inventory Preview -->

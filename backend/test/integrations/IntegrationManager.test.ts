@@ -628,5 +628,104 @@ describe("IntegrationManager", () => {
         "Health check failed",
       );
     });
+
+    it("should cache health check results when requested", async () => {
+      const source = new MockInformationSource("source");
+      let healthCheckCount = 0;
+
+      // Override performHealthCheck to count calls
+      const originalHealthCheck = source.performHealthCheck.bind(source);
+      source.performHealthCheck = async () => {
+        healthCheckCount++;
+        return originalHealthCheck();
+      };
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // First call should perform health check
+      await manager.healthCheckAll(false);
+      expect(healthCheckCount).toBe(1);
+
+      // Second call with cache should not perform health check
+      await manager.healthCheckAll(true);
+      expect(healthCheckCount).toBe(1);
+
+      // Third call without cache should perform health check
+      await manager.healthCheckAll(false);
+      expect(healthCheckCount).toBe(2);
+    });
+
+    it("should clear health check cache", async () => {
+      const source = new MockInformationSource("source");
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // Perform health check to populate cache
+      await manager.healthCheckAll(false);
+      expect(manager.getHealthCheckCache().size).toBe(1);
+
+      // Clear cache
+      manager.clearHealthCheckCache();
+      expect(manager.getHealthCheckCache().size).toBe(0);
+    });
+  });
+
+  describe("health check scheduler", () => {
+    it("should start and stop health check scheduler", () => {
+      const source = new MockInformationSource("source");
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "source",
+        type: "information",
+        config: {},
+      });
+
+      // Start scheduler
+      manager.startHealthCheckScheduler();
+
+      // Stop scheduler
+      manager.stopHealthCheckScheduler();
+
+      // Should not throw
+      expect(true).toBe(true);
+    });
+
+    it("should not start scheduler twice", () => {
+      const source = new MockInformationSource("source");
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "source",
+        type: "information",
+        config: {},
+      });
+
+      // Start scheduler
+      manager.startHealthCheckScheduler();
+
+      // Try to start again
+      manager.startHealthCheckScheduler();
+
+      // Stop scheduler
+      manager.stopHealthCheckScheduler();
+
+      // Should not throw
+      expect(true).toBe(true);
+    });
   });
 });

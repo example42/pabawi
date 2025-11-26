@@ -10,6 +10,10 @@
   import TaskRunInterface from '../components/TaskRunInterface.svelte';
   import PuppetRunInterface from '../components/PuppetRunInterface.svelte';
   import PackageInstallInterface from '../components/PackageInstallInterface.svelte';
+  import ReportViewer from '../components/ReportViewer.svelte';
+  import CatalogViewer from '../components/CatalogViewer.svelte';
+  import EventsViewer from '../components/EventsViewer.svelte';
+  import ReExecutionButton from '../components/ReExecutionButton.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -76,10 +80,19 @@
   let { params }: Props = $props();
   const nodeId = $derived(params?.id || '');
 
+  // Tab types
+  type TabId = 'overview' | 'facts' | 'execution-history' | 'puppet-reports' | 'catalog' | 'events';
+
   // State
   let node = $state<Node | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  // Tab state with URL sync
+  let activeTab = $state<TabId>('overview');
+
+  // Track which tabs have been loaded (for lazy loading)
+  let loadedTabs = $state<Set<TabId>>(new Set(['overview']));
 
   // Command whitelist state
   let commandWhitelist = $state<CommandWhitelistConfig | null>(null);
@@ -97,10 +110,30 @@
   let commandExecutionId = $state<string | null>(null);
   let commandStream = $state<ExecutionStream | null>(null);
 
+  // Re-execution state
+  let initialTaskName = $state<string | undefined>(undefined);
+  let initialTaskParameters = $state<Record<string, unknown> | undefined>(undefined);
+
   // Execution history state
   let executions = $state<ExecutionResult[]>([]);
   let executionsLoading = $state(false);
   let executionsError = $state<string | null>(null);
+
+  // PuppetDB data state (for lazy loading)
+  let puppetReports = $state<any[]>([]);
+  let puppetReportsLoading = $state(false);
+  let puppetReportsError = $state<string | null>(null);
+
+  let catalog = $state<any | null>(null);
+  let catalogLoading = $state(false);
+  let catalogError = $state<string | null>(null);
+
+  let events = $state<any[]>([]);
+  let eventsLoading = $state(false);
+  let eventsError = $state<string | null>(null);
+
+  // Cache for loaded data
+  let dataCache = $state<Record<TabId, any>>({});
 
   // Fetch node details
   async function fetchNode(): Promise<void> {
@@ -271,6 +304,90 @@
     }
   }
 
+  // Lazy load Puppet Reports
+  async function fetchPuppetReports(): Promise<void> {
+    // Check cache first
+    if (dataCache['puppet-reports']) {
+      puppetReports = dataCache['puppet-reports'];
+      return;
+    }
+
+    puppetReportsLoading = true;
+    puppetReportsError = null;
+
+    try {
+      const data = await get<{ reports: any[] }>(
+        `/api/integrations/puppetdb/nodes/${nodeId}/reports`,
+        { maxRetries: 2 }
+      );
+
+      puppetReports = data.reports || [];
+      dataCache['puppet-reports'] = puppetReports;
+    } catch (err) {
+      puppetReportsError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching Puppet reports:', err);
+      showError('Failed to load Puppet reports', puppetReportsError);
+    } finally {
+      puppetReportsLoading = false;
+    }
+  }
+
+  // Lazy load Catalog
+  async function fetchCatalog(): Promise<void> {
+    // Check cache first
+    if (dataCache['catalog']) {
+      catalog = dataCache['catalog'];
+      return;
+    }
+
+    catalogLoading = true;
+    catalogError = null;
+
+    try {
+      const data = await get<{ catalog: any }>(
+        `/api/integrations/puppetdb/nodes/${nodeId}/catalog`,
+        { maxRetries: 2 }
+      );
+
+      catalog = data.catalog;
+      dataCache['catalog'] = catalog;
+    } catch (err) {
+      catalogError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching catalog:', err);
+      showError('Failed to load catalog', catalogError);
+    } finally {
+      catalogLoading = false;
+    }
+  }
+
+  // Lazy load Events
+  async function fetchEvents(): Promise<void> {
+    // Check cache first
+    if (dataCache['events']) {
+      events = dataCache['events'];
+      return;
+    }
+
+    eventsLoading = true;
+    eventsError = null;
+
+    try {
+      const data = await get<{ events: any[] }>(
+        `/api/integrations/puppetdb/nodes/${nodeId}/events`,
+        { maxRetries: 2 }
+      );
+
+      events = data.events || [];
+      dataCache['events'] = events;
+    } catch (err) {
+      eventsError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching events:', err);
+      showError('Failed to load events', eventsError);
+    } finally {
+      eventsLoading = false;
+    }
+  }
+
 
 
   // Format timestamp
@@ -283,11 +400,142 @@
     router.navigate('/');
   }
 
+  // Switch tab and update URL
+  function switchTab(tabId: TabId): void {
+    activeTab = tabId;
+
+    // Update URL with tab parameter (preserves browser history)
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', tabId);
+    window.history.pushState({}, '', url.toString());
+
+    // Lazy load data for the tab if not already loaded
+    if (!loadedTabs.has(tabId)) {
+      loadedTabs.add(tabId);
+      loadTabData(tabId);
+    }
+  }
+
+  // Load data for a specific tab
+  async function loadTabData(tabId: TabId): Promise<void> {
+    switch (tabId) {
+      case 'puppet-reports':
+        await fetchPuppetReports();
+        break;
+      case 'catalog':
+        await fetchCatalog();
+        break;
+      case 'events':
+        await fetchEvents();
+        break;
+      case 'execution-history':
+        if (executions.length === 0) {
+          await fetchExecutions();
+        }
+        break;
+      // 'overview' and 'facts' are loaded on mount or on-demand
+    }
+  }
+
+  // Read tab from URL on mount
+  function readTabFromURL(): void {
+    const url = new URL(window.location.href);
+    const tabParam = url.searchParams.get('tab') as TabId | null;
+
+    if (tabParam && ['overview', 'facts', 'execution-history', 'puppet-reports', 'catalog', 'events'].includes(tabParam)) {
+      activeTab = tabParam;
+
+      // Load data for the tab if not already loaded
+      if (!loadedTabs.has(tabParam)) {
+        loadedTabs.add(tabParam);
+        loadTabData(tabParam);
+      }
+    }
+  }
+
+  // Handle browser back/forward buttons
+  function handlePopState(): void {
+    readTabFromURL();
+  }
+
+  // Helper function to render source badge
+  function getSourceBadge(source: 'bolt' | 'puppetdb'): string {
+    return source === 'bolt' ? 'Bolt' : 'PuppetDB';
+  }
+
+  function getSourceBadgeClass(source: 'bolt' | 'puppetdb'): string {
+    return source === 'bolt'
+      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+      : 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
+  }
+
+  // Check for re-execution parameters in sessionStorage
+  function checkReExecutionParams(): void {
+    // Check for command re-execution
+    const reExecuteCommand = sessionStorage.getItem('reExecuteCommand');
+    if (reExecuteCommand) {
+      commandInput = reExecuteCommand;
+      sessionStorage.removeItem('reExecuteCommand');
+      showInfo('Command pre-filled from previous execution');
+    }
+
+    // Check for task re-execution
+    const reExecuteTask = sessionStorage.getItem('reExecuteTask');
+    if (reExecuteTask) {
+      try {
+        const taskData = JSON.parse(reExecuteTask);
+        initialTaskName = taskData.taskName;
+        initialTaskParameters = taskData.parameters;
+        sessionStorage.removeItem('reExecuteTask');
+        showInfo('Task pre-filled from previous execution');
+      } catch (err) {
+        console.error('Error parsing re-execute task data:', err);
+      }
+    }
+
+    // Check for puppet re-execution
+    const reExecutePuppet = sessionStorage.getItem('reExecutePuppet');
+    if (reExecutePuppet) {
+      try {
+        const puppetData = JSON.parse(reExecutePuppet);
+        // The puppet parameters will be handled by PuppetRunInterface
+        // For now, we'll just clear it and show a message
+        sessionStorage.removeItem('reExecutePuppet');
+        showInfo('Puppet run parameters pre-filled from previous execution');
+      } catch (err) {
+        console.error('Error parsing re-execute puppet data:', err);
+      }
+    }
+
+    // Check for package re-execution
+    const reExecutePackage = sessionStorage.getItem('reExecutePackage');
+    if (reExecutePackage) {
+      try {
+        const packageData = JSON.parse(reExecutePackage);
+        // The package parameters will be handled by PackageInstallInterface
+        // For now, we'll just clear it and show a message
+        sessionStorage.removeItem('reExecutePackage');
+        showInfo('Package installation parameters pre-filled from previous execution');
+      } catch (err) {
+        console.error('Error parsing re-execute package data:', err);
+      }
+    }
+  }
+
   // On mount
   onMount(() => {
     fetchNode();
     fetchExecutions();
     fetchCommandWhitelist();
+    readTabFromURL();
+    checkReExecutionParams();
+
+    // Listen for browser back/forward
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
   });
 </script>
 
@@ -330,91 +578,112 @@
       </div>
     </div>
 
-    <!-- Node Metadata -->
-    <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Configuration</h2>
-      <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Node ID</dt>
-          <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.id}</dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Transport</dt>
-          <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.transport}</dd>
-        </div>
-        <div>
-          <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">URI</dt>
-          <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.uri}</dd>
-        </div>
-        {#if node.config.user}
-          <div>
-            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">User</dt>
-            <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.config.user}</dd>
-          </div>
-        {/if}
-        {#if node.config.port}
-          <div>
-            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Port</dt>
-            <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.config.port}</dd>
-          </div>
-        {/if}
-      </dl>
-    </div>
-
-    <!-- Facts Section -->
-    <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
+    <!-- Tab Navigation -->
+    <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
+      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
         <button
           type="button"
-          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={gatherFacts}
-          disabled={factsLoading}
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'overview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('overview')}
         >
-          {factsLoading ? 'Gathering...' : 'Gather Facts'}
+          Overview
         </button>
-      </div>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'facts' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('facts')}
+        >
+          Facts
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'execution-history' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('execution-history')}
+        >
+          Execution History
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'puppet-reports' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('puppet-reports')}
+        >
+          Puppet Reports
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'catalog' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('catalog')}
+        >
+          Catalog
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'events' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('events')}
+        >
+          Events
+        </button>
+      </nav>
+    </div>
 
-      {#if factsLoading}
-        <div class="flex justify-center py-8">
-          <LoadingSpinner message="Gathering facts..." />
-        </div>
-      {:else if factsError}
-        <ErrorAlert message="Failed to gather facts" details={factsError} onRetry={gatherFacts} />
-      {:else if facts}
-        <div class="mb-2 text-sm text-gray-500 dark:text-gray-400">
-          Gathered at: {formatTimestamp(facts.gatheredAt)}
-        </div>
-        {#if facts.command}
-          <div class="mb-3">
-            <CommandOutput boltCommand={facts.command} />
+    <!-- Tab Content -->
+    <div class="tab-content">
+      <!-- Overview Tab -->
+      {#if activeTab === 'overview'}
+        <div class="space-y-6">
+          <!-- Node Metadata -->
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Configuration</h2>
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
+                {getSourceBadge('bolt')}
+              </span>
+            </div>
+            <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Node ID</dt>
+                <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.id}</dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Transport</dt>
+                <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.transport}</dd>
+              </div>
+              <div>
+                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">URI</dt>
+                <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.uri}</dd>
+              </div>
+              {#if node.config.user}
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">User</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.config.user}</dd>
+                </div>
+              {/if}
+              {#if node.config.port}
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Port</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.config.port}</dd>
+                </div>
+              {/if}
+            </dl>
           </div>
-        {/if}
-        <FactsViewer facts={facts.facts} />
-      {:else}
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          Click "Gather Facts" to collect system information from this node.
-        </p>
-      {/if}
-    </div>
 
-    <!-- Puppet Run Section -->
-    <div class="mb-8">
-      <PuppetRunInterface
-        nodeId={nodeId}
-        onExecutionComplete={fetchExecutions}
-      />
-    </div>
+          <!-- Puppet Run Section -->
+          <div>
+            <PuppetRunInterface
+              nodeId={nodeId}
+              onExecutionComplete={fetchExecutions}
+            />
+          </div>
 
-    <!-- Package Installation Section -->
-    <div class="mb-8">
-      <PackageInstallInterface
-        nodeId={nodeId}
-        onExecutionComplete={fetchExecutions}
-      />
-    </div>
+          <!-- Package Installation Section -->
+          <div>
+            <PackageInstallInterface
+              nodeId={nodeId}
+              onExecutionComplete={fetchExecutions}
+            />
+          </div>
 
-    <!-- Command Execution Section -->
+          <!-- Command Execution Section -->
     <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Command</h2>
 
@@ -527,84 +796,259 @@
       {/if}
     </div>
 
-    <!-- Task Execution Section -->
-    <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Task</h2>
+          <!-- Task Execution Section -->
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Task</h2>
 
-      <TaskRunInterface
-        nodeId={nodeId}
-        onExecutionComplete={fetchExecutions}
-      />
-    </div>
-
-    <!-- Execution History Section -->
-    <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Recent Executions</h2>
-
-      {#if executionsLoading}
-        <div class="flex justify-center py-4">
-          <LoadingSpinner message="Loading executions..." />
+            <TaskRunInterface
+              nodeId={nodeId}
+              onExecutionComplete={fetchExecutions}
+              initialTaskName={initialTaskName}
+              initialParameters={initialTaskParameters}
+            />
+          </div>
         </div>
-      {:else if executionsError}
-        <ErrorAlert message="Failed to load executions" details={executionsError} onRetry={fetchExecutions} />
-      {:else if executions.length === 0}
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          No executions found for this node.
-        </p>
-      {:else}
-        <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead class="bg-gray-50 dark:bg-gray-900">
-              <tr>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Type
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Action
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Status
-                </th>
-                <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Started
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-              {#each executions as execution}
-                <tr class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700" onclick={() => router.navigate('/executions')}>
-                  <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-900 dark:text-white">
-                    {execution.type}
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-900 dark:text-white">
-                    <div class="max-w-xs truncate">{execution.action}</div>
-                  </td>
-                  <td class="whitespace-nowrap px-4 py-3 text-sm">
-                    <StatusBadge status={execution.status} size="sm" />
-                  </td>
-                  <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                    <div class="flex items-center justify-between gap-2">
-                      <span>{formatTimestamp(execution.startedAt)}</span>
-                      <button
-                        type="button"
-                        class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                        onclick={(e) => {
-                          e.stopPropagation();
-                          router.navigate('/executions');
-                        }}
-                        title="View execution details"
-                      >
-                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+      {/if}
+
+      <!-- Facts Tab -->
+      {#if activeTab === 'facts'}
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
+                {getSourceBadge('bolt')}
+              </span>
+            </div>
+            <button
+              type="button"
+              class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={gatherFacts}
+              disabled={factsLoading}
+            >
+              {factsLoading ? 'Gathering...' : 'Gather Facts'}
+            </button>
+          </div>
+
+          {#if factsLoading}
+            <div class="flex justify-center py-8">
+              <LoadingSpinner message="Gathering facts..." />
+            </div>
+          {:else if factsError}
+            <ErrorAlert message="Failed to gather facts" details={factsError} onRetry={gatherFacts} />
+          {:else if facts}
+            <div class="mb-2 text-sm text-gray-500 dark:text-gray-400">
+              Gathered at: {formatTimestamp(facts.gatheredAt)}
+            </div>
+            {#if facts.command}
+              <div class="mb-3">
+                <CommandOutput boltCommand={facts.command} />
+              </div>
+            {/if}
+            <FactsViewer facts={facts.facts} />
+          {:else}
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              Click "Gather Facts" to collect system information from this node.
+            </p>
+          {/if}
         </div>
+      {/if}
+
+      <!-- Execution History Tab -->
+      {#if activeTab === 'execution-history'}
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Recent Executions</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
+              {getSourceBadge('bolt')}
+            </span>
+          </div>
+
+          {#if executionsLoading}
+            <div class="flex justify-center py-4">
+              <LoadingSpinner message="Loading executions..." />
+            </div>
+          {:else if executionsError}
+            <ErrorAlert message="Failed to load executions" details={executionsError} onRetry={fetchExecutions} />
+          {:else if executions.length === 0}
+            <p class="text-sm text-gray-500 dark:text-gray-400">
+              No executions found for this node.
+            </p>
+          {:else}
+            <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-900">
+                  <tr>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Type
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Action
+                    </th>
+                    {#if expertMode.enabled}
+                      <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Command
+                      </th>
+                    {/if}
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Status
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Started
+                    </th>
+                    <th scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                      Actions
+                    </th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                  {#each executions as execution}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-900 dark:text-white cursor-pointer" onclick={() => router.navigate('/executions')}>
+                        {execution.type}
+                      </td>
+                      <td class="px-4 py-3 text-sm text-gray-900 dark:text-white cursor-pointer" onclick={() => router.navigate('/executions')}>
+                        <div class="max-w-xs truncate">{execution.action}</div>
+                      </td>
+                      {#if expertMode.enabled}
+                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => router.navigate('/executions')}>
+                          {#if execution.command}
+                            <div class="max-w-md truncate font-mono text-xs" title={execution.command}>
+                              {execution.command}
+                            </div>
+                          {:else}
+                            <span class="text-gray-400 dark:text-gray-600">-</span>
+                          {/if}
+                        </td>
+                      {/if}
+                      <td class="whitespace-nowrap px-4 py-3 text-sm cursor-pointer" onclick={() => router.navigate('/executions')}>
+                        <StatusBadge status={execution.status} size="sm" />
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => router.navigate('/executions')}>
+                        <span>{formatTimestamp(execution.startedAt)}</span>
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
+                        <div class="flex items-center justify-end gap-2" onclick={(e) => e.stopPropagation()}>
+                          <ReExecutionButton execution={execution} currentNodeId={nodeId} size="sm" variant="icon" />
+                          <button
+                            type="button"
+                            class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                            onclick={(e) => {
+                              e.stopPropagation();
+                              router.navigate('/executions');
+                            }}
+                            title="View execution details"
+                          >
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Puppet Reports Tab -->
+      {#if activeTab === 'puppet-reports'}
+        <div class="space-y-4">
+          <!-- Source Badge Header -->
+          <div class="flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
+              {getSourceBadge('puppetdb')}
+            </span>
+          </div>
+
+          {#if puppetReportsLoading}
+            <div class="flex justify-center py-12">
+              <LoadingSpinner size="lg" message="Loading Puppet reports..." />
+            </div>
+          {:else if puppetReportsError}
+            <ErrorAlert
+              message="Failed to load Puppet reports"
+              details={puppetReportsError}
+              onRetry={fetchPuppetReports}
+            />
+          {:else if puppetReports.length === 0}
+            <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
+              <p class="text-gray-500 dark:text-gray-400">
+                No Puppet reports found for this node.
+              </p>
+            </div>
+          {:else}
+            {#each puppetReports as report}
+              <ReportViewer {report} />
+            {/each}
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Catalog Tab -->
+      {#if activeTab === 'catalog'}
+        <!-- Source Badge Header -->
+        <div class="mb-4 flex items-center gap-3">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog</h2>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
+            {getSourceBadge('puppetdb')}
+          </span>
+        </div>
+
+        {#if catalogLoading}
+          <div class="flex justify-center py-12">
+            <LoadingSpinner size="lg" message="Loading catalog..." />
+          </div>
+        {:else if catalogError}
+          <ErrorAlert
+            message="Failed to load catalog"
+            details={catalogError}
+            onRetry={fetchCatalog}
+          />
+        {:else if !catalog}
+          <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
+            <p class="text-gray-500 dark:text-gray-400">
+              No catalog found for this node.
+            </p>
+          </div>
+        {:else}
+          <CatalogViewer catalog={catalog} />
+        {/if}
+      {/if}
+
+      <!-- Events Tab -->
+      {#if activeTab === 'events'}
+        <!-- Source Badge Header -->
+        <div class="mb-4 flex items-center gap-3">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Events</h2>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
+            {getSourceBadge('puppetdb')}
+          </span>
+        </div>
+
+        {#if eventsLoading}
+          <div class="flex justify-center py-12">
+            <LoadingSpinner size="lg" message="Loading events..." />
+          </div>
+        {:else if eventsError}
+          <ErrorAlert
+            message="Failed to load events"
+            details={eventsError}
+            onRetry={fetchEvents}
+          />
+        {:else if events.length === 0}
+          <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
+            <p class="text-gray-500 dark:text-gray-400">
+              No events found for this node.
+            </p>
+          </div>
+        {:else}
+          <EventsViewer events={events} />
+        {/if}
       {/if}
     </div>
   {/if}

@@ -17,6 +17,10 @@ interface DbRow {
   error: string | null;
   command: string | null;
   expert_mode: number;
+  original_execution_id: string | null;
+  re_execution_count: number | null;
+  stdout: string | null;
+  stderr: string | null;
   total?: number;
   running?: number;
   success?: number;
@@ -66,6 +70,10 @@ export interface ExecutionRecord {
   error?: string;
   command?: string;
   expertMode?: boolean;
+  originalExecutionId?: string;
+  reExecutionCount?: number;
+  stdout?: string;
+  stderr?: string;
 }
 
 /**
@@ -121,8 +129,9 @@ export class ExecutionRepository {
     const sql = `
       INSERT INTO executions (
         id, type, target_nodes, action, parameters, status,
-        started_at, completed_at, results, error, command, expert_mode
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        started_at, completed_at, results, error, command, expert_mode,
+        original_execution_id, re_execution_count, stdout, stderr
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -138,6 +147,10 @@ export class ExecutionRepository {
       record.error ?? null,
       record.command ?? null,
       record.expertMode ? 1 : 0,
+      record.originalExecutionId ?? null,
+      record.reExecutionCount ?? 0,
+      record.stdout ?? null,
+      record.stderr ?? null,
     ];
 
     try {
@@ -164,6 +177,10 @@ export class ExecutionRepository {
       "error",
       "command",
       "expertMode",
+      "originalExecutionId",
+      "reExecutionCount",
+      "stdout",
+      "stderr",
     ];
     const updateFields: string[] = [];
     const params: unknown[] = [];
@@ -177,6 +194,8 @@ export class ExecutionRepository {
           params.push(JSON.stringify(value));
         } else if (key === "expertMode") {
           params.push(value ? 1 : 0);
+        } else if (key === "reExecutionCount") {
+          params.push(value);
         } else {
           params.push(value || null);
         }
@@ -274,6 +293,81 @@ export class ExecutionRepository {
   }
 
   /**
+   * Find original execution for a re-execution
+   * Returns the original execution if this execution has an originalExecutionId
+   */
+  public async findOriginalExecution(
+    executionId: string,
+  ): Promise<ExecutionRecord | null> {
+    const sql = `
+      SELECT original.* FROM executions original
+      INNER JOIN executions reexec ON original.id = reexec.original_execution_id
+      WHERE reexec.id = ?
+    `;
+
+    try {
+      const row = await this.get(sql, [executionId]);
+      return row ? this.mapRowToRecord(row) : null;
+    } catch (error) {
+      throw new Error(
+        `Failed to find original execution: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  /**
+   * Find all re-executions of an execution
+   * Returns all executions that have this execution as their originalExecutionId
+   */
+  public async findReExecutions(
+    originalExecutionId: string,
+  ): Promise<ExecutionRecord[]> {
+    const sql = `
+      SELECT * FROM executions
+      WHERE original_execution_id = ?
+      ORDER BY started_at DESC
+    `;
+
+    try {
+      const rows = await this.all(sql, [originalExecutionId]);
+      return rows.map((row) => this.mapRowToRecord(row));
+    } catch (error) {
+      throw new Error(
+        `Failed to find re-executions: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  /**
+   * Create a re-execution with reference to original execution
+   * Increments the re-execution count on the original execution
+   */
+  public async createReExecution(
+    originalExecutionId: string,
+    execution: Omit<ExecutionRecord, "id" | "originalExecutionId">,
+  ): Promise<string> {
+    // First, verify the original execution exists
+    const original = await this.findById(originalExecutionId);
+    if (!original) {
+      throw new Error(`Original execution not found: ${originalExecutionId}`);
+    }
+
+    // Create the new execution with reference to original
+    const newExecutionId = await this.create({
+      ...execution,
+      originalExecutionId,
+    });
+
+    // Increment the re-execution count on the original
+    const newCount = (original.reExecutionCount ?? 0) + 1;
+    await this.update(originalExecutionId, {
+      reExecutionCount: newCount,
+    });
+
+    return newExecutionId;
+  }
+
+  /**
    * Count executions by status
    */
   public async countByStatus(): Promise<StatusCounts> {
@@ -367,6 +461,10 @@ export class ExecutionRepository {
       error: row.error ?? undefined,
       command: row.command ?? undefined,
       expertMode: row.expert_mode === 1,
+      originalExecutionId: row.original_execution_id ?? undefined,
+      reExecutionCount: row.re_execution_count ?? 0,
+      stdout: row.stdout ?? undefined,
+      stderr: row.stderr ?? undefined,
     };
   }
 

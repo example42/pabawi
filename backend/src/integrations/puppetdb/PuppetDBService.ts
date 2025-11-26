@@ -13,7 +13,11 @@ import type { InformationSourcePlugin, HealthStatus } from "../types";
 import type { Node, Facts } from "../../bolt/types";
 import type { PuppetDBConfig } from "../../config/schema";
 import type { PuppetDBClient } from "./PuppetDBClient";
-import { createPuppetDBClient } from "./PuppetDBClient";
+import {
+  createPuppetDBClient,
+  PuppetDBConnectionError,
+  PuppetDBQueryError,
+} from "./PuppetDBClient";
 import type { CircuitBreaker } from "./CircuitBreaker";
 import { createPuppetDBCircuitBreaker } from "./CircuitBreaker";
 import {
@@ -21,6 +25,14 @@ import {
   createPuppetDBRetryConfig,
   type RetryConfig,
 } from "./RetryLogic";
+import type {
+  Report,
+  Catalog,
+  Resource,
+  Edge,
+  Event,
+  EventFilters,
+} from "./types";
 
 /**
  * PuppetDB Service
@@ -143,7 +155,10 @@ export class PuppetDBService
     this.puppetDBConfig = this.config.config as PuppetDBConfig;
 
     if (!this.puppetDBConfig.serverUrl) {
-      throw new Error("PuppetDB serverUrl is required");
+      throw new PuppetDBConnectionError(
+        "PuppetDB serverUrl is required in configuration",
+        { config: this.puppetDBConfig },
+      );
     }
 
     // Create client
@@ -236,8 +251,8 @@ export class PuppetDBService
     this.ensureInitialized();
 
     try {
-      // Validate PQL query if provided
-      if (pqlQuery) {
+      // Validate PQL query if provided (including empty strings)
+      if (pqlQuery !== undefined) {
         this.validatePQLQuery(pqlQuery);
       }
 
@@ -254,7 +269,9 @@ export class PuppetDBService
       // Query PuppetDB
       const client = this.client;
       if (!client) {
-        throw new Error("PuppetDB client not initialized");
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
       }
 
       const result = await this.executeWithResilience(async () => {
@@ -327,7 +344,9 @@ export class PuppetDBService
       // Query node to verify it exists
       const client = this.client;
       if (!client) {
-        throw new Error("PuppetDB client not initialized");
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
       }
 
       const result = await this.executeWithResilience(async () => {
@@ -338,7 +357,11 @@ export class PuppetDBService
       });
 
       if (!Array.isArray(result) || result.length === 0) {
-        throw new Error(`Node '${nodeId}' not found in PuppetDB`);
+        throw new PuppetDBQueryError(
+          `Node '${nodeId}' not found in PuppetDB`,
+          `["=", "certname", "${nodeId}"]`,
+          { nodeId, resultType: typeof result },
+        );
       }
 
       // Get detailed facts
@@ -384,44 +407,384 @@ export class PuppetDBService
       case "events":
         return await this.getNodeEvents(nodeId);
       default:
-        throw new Error(`Unsupported data type: ${dataType}`);
+        throw new PuppetDBQueryError(
+          `Unsupported data type: ${dataType}. Supported types are: reports, catalog, events`,
+          "",
+          {
+            nodeId,
+            dataType,
+            supportedTypes: ["reports", "catalog", "events"],
+          },
+        );
     }
   }
 
   /**
-   * Get reports for a node (placeholder for future implementation)
+   * Query events with filters
    *
-   * @param nodeId - Node identifier
-   * @returns Reports array
+   * Provides a more explicit method for querying events with filters.
+   * Implements requirement 5.5: Support filtering by status, resource type, and time range.
+   *
+   * @param nodeId - Node identifier (certname)
+   * @param filters - Event filters
+   * @returns Array of events matching the filters
    */
-  private getNodeReports(nodeId: string): Promise<unknown[]> {
-    // Placeholder - will be implemented in task 5
-    this.log(`getNodeReports not yet implemented for ${nodeId}`, "warn");
-    return Promise.resolve([]);
+  async queryEvents(
+    nodeId: string,
+    filters: import("./types").EventFilters,
+  ): Promise<import("./types").Event[]> {
+    return await this.getNodeEvents(nodeId, filters);
   }
 
   /**
-   * Get catalog for a node (placeholder for future implementation)
+   * Get a specific report by hash
    *
-   * @param nodeId - Node identifier
-   * @returns Catalog or null
+   * Queries PuppetDB for a specific report and includes full details.
+   * Implements requirement 3.4.
+   *
+   * @param reportHash - Report hash identifier
+   * @returns Report with full details or null if not found
    */
-  private getNodeCatalog(nodeId: string): Promise<unknown> {
-    // Placeholder - will be implemented in task 6
-    this.log(`getNodeCatalog not yet implemented for ${nodeId}`, "warn");
-    return Promise.resolve(null);
+  async getReport(reportHash: string): Promise<Report | null> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `report:${reportHash}`;
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined && cached !== null) {
+        this.log(`Returning cached report '${reportHash}'`);
+        return cached as Report;
+      }
+
+      // Query PuppetDB for specific report
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      // Build PQL query to get report by hash
+      const pqlQuery = `["=", "hash", "${reportHash}"]`;
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/reports", pqlQuery);
+      });
+
+      if (!Array.isArray(result) || result.length === 0) {
+        this.log(`Report '${reportHash}' not found in PuppetDB`, "warn");
+        return null;
+      }
+
+      // Transform the report
+      const report = this.transformReport(result[0]);
+
+      // Cache the result
+      this.cache.set(cacheKey, report, this.cacheTTL);
+      this.log(`Cached report '${reportHash}' for ${String(this.cacheTTL)}ms`);
+
+      return report;
+    } catch (error) {
+      this.logError(`Failed to get report '${reportHash}'`, error);
+      throw error;
+    }
   }
 
   /**
-   * Get events for a node (placeholder for future implementation)
+   * Get reports for a node
    *
-   * @param nodeId - Node identifier
-   * @returns Events array
+   * Queries PuppetDB reports endpoint and returns reports in reverse chronological order.
+   * Implements requirements 3.1, 3.2, 3.3.
+   *
+   * @param nodeId - Node identifier (certname)
+   * @param limit - Maximum number of reports to return (default: 10)
+   * @returns Array of reports sorted by timestamp (newest first)
    */
-  private getNodeEvents(nodeId: string): Promise<unknown[]> {
-    // Placeholder - will be implemented in task 7
-    this.log(`getNodeEvents not yet implemented for ${nodeId}`, "warn");
-    return Promise.resolve([]);
+  async getNodeReports(nodeId: string, limit = 10): Promise<Report[]> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `reports:${nodeId}:${String(limit)}`;
+      const cached = this.cache.get(cacheKey);
+      if (Array.isArray(cached)) {
+        this.log(`Returning cached reports for node '${nodeId}'`);
+        return cached as Report[];
+      }
+
+      // Query PuppetDB for reports
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      // Build PQL query to get reports for this node
+      // Order by producer_timestamp descending to get newest first
+      const pqlQuery = `["=", "certname", "${nodeId}"]`;
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/reports", pqlQuery, {
+          limit: limit,
+          order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
+        });
+      });
+
+      if (!Array.isArray(result)) {
+        this.log(
+          `Unexpected response format from PuppetDB reports endpoint for node '${nodeId}'`,
+          "warn",
+        );
+        return [];
+      }
+
+      // Transform reports
+      const reports = result.map((report) => this.transformReport(report));
+
+      // Sort by producer_timestamp in reverse chronological order (requirement 3.2)
+      // This ensures newest reports are first
+      reports.sort((a, b) => {
+        const timeA = new Date(a.producer_timestamp).getTime();
+        const timeB = new Date(b.producer_timestamp).getTime();
+        return timeB - timeA; // Descending order (newest first)
+      });
+
+      // Cache the result
+      this.cache.set(cacheKey, reports, this.cacheTTL);
+      this.log(
+        `Cached ${String(reports.length)} reports for node '${nodeId}' for ${String(this.cacheTTL)}ms`,
+      );
+
+      return reports;
+    } catch (error) {
+      this.logError(`Failed to get reports for node '${nodeId}'`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get catalog for a node
+   *
+   * Queries PuppetDB catalog endpoint and returns the latest catalog.
+   * Implements requirements 4.1, 4.2, 4.5.
+   *
+   * @param nodeId - Node identifier (certname)
+   * @returns Catalog with resources and metadata, or null if not found
+   */
+  async getNodeCatalog(nodeId: string): Promise<Catalog | null> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `catalog:${nodeId}`;
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined && cached !== null) {
+        this.log(`Returning cached catalog for node '${nodeId}'`);
+        return cached as Catalog;
+      }
+
+      // Query PuppetDB for catalog
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      // Build PQL query to get catalog for this node
+      const pqlQuery = `["=", "certname", "${nodeId}"]`;
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/catalogs", pqlQuery);
+      });
+
+      if (!Array.isArray(result) || result.length === 0) {
+        this.log(`Catalog not found for node '${nodeId}'`, "warn");
+        return null;
+      }
+
+      // Transform the catalog
+      const catalog = this.transformCatalog(result[0]);
+
+      // Cache the result
+      this.cache.set(cacheKey, catalog, this.cacheTTL);
+      this.log(
+        `Cached catalog for node '${nodeId}' for ${String(this.cacheTTL)}ms`,
+      );
+
+      return catalog;
+    } catch (error) {
+      this.logError(`Failed to get catalog for node '${nodeId}'`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get catalog resources organized by type with filtering
+   *
+   * Extracts resources from catalog and organizes them by type.
+   * Implements requirement 4.3.
+   *
+   * @param nodeId - Node identifier (certname)
+   * @param resourceType - Optional filter by resource type
+   * @returns Resources organized by type
+   */
+  async getCatalogResources(
+    nodeId: string,
+    resourceType?: string,
+  ): Promise<Record<string, Resource[]>> {
+    this.ensureInitialized();
+
+    try {
+      // Get the catalog first
+      const catalog = await this.getNodeCatalog(nodeId);
+
+      if (!catalog) {
+        this.log(`No catalog found for node '${nodeId}'`, "warn");
+        return {};
+      }
+
+      // Organize resources by type
+      const resourcesByType: Record<string, Resource[]> = {};
+
+      for (const resource of catalog.resources) {
+        // Apply filter if specified
+        if (resourceType && resource.type !== resourceType) {
+          continue;
+        }
+
+        // Initialize array for this type if not exists
+        if (!resourcesByType[resource.type]) {
+          resourcesByType[resource.type] = [];
+        }
+
+        // Add resource to its type group
+        resourcesByType[resource.type].push(resource);
+      }
+
+      this.log(
+        `Organized ${String(catalog.resources.length)} resources into ${String(Object.keys(resourcesByType).length)} types for node '${nodeId}'`,
+      );
+
+      return resourcesByType;
+    } catch (error) {
+      this.logError(
+        `Failed to get catalog resources for node '${nodeId}'`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get events for a node
+   *
+   * Queries PuppetDB events endpoint and returns events in reverse chronological order.
+   * Implements requirements 5.1, 5.2, 5.3.
+   *
+   * @param nodeId - Node identifier (certname)
+   * @param filters - Optional filters for status, resource type, time range
+   * @returns Array of events sorted by timestamp (newest first)
+   */
+  async getNodeEvents(
+    nodeId: string,
+    filters?: EventFilters,
+  ): Promise<Event[]> {
+    this.ensureInitialized();
+
+    try {
+      // Build cache key based on node and filters
+      const filterKey = filters
+        ? `${filters.status ?? "all"}:${filters.resourceType ?? "all"}:${filters.startTime ?? ""}:${filters.endTime ?? ""}:${String(filters.limit ?? 100)}`
+        : "all";
+      const cacheKey = `events:${nodeId}:${filterKey}`;
+
+      // Check cache first
+      const cached = this.cache.get(cacheKey);
+      if (Array.isArray(cached)) {
+        this.log(`Returning cached events for node '${nodeId}'`);
+        return cached as Event[];
+      }
+
+      // Query PuppetDB for events
+      if (!this.client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      // Build PQL query to get events for this node
+      // Start with certname filter
+      const queryParts: string[] = [`["=", "certname", "${nodeId}"]`];
+
+      // Add status filter if specified (requirement 5.5)
+      if (filters?.status) {
+        queryParts.push(`["=", "status", "${filters.status}"]`);
+      }
+
+      // Add resource type filter if specified (requirement 5.5)
+      if (filters?.resourceType) {
+        queryParts.push(`["=", "resource_type", "${filters.resourceType}"]`);
+      }
+
+      // Add time range filters if specified (requirement 5.5)
+      if (filters?.startTime) {
+        queryParts.push(`[">=", "timestamp", "${filters.startTime}"]`);
+      }
+
+      if (filters?.endTime) {
+        queryParts.push(`["<=", "timestamp", "${filters.endTime}"]`);
+      }
+
+      // Combine query parts with AND operator
+      const pqlQuery =
+        queryParts.length > 1
+          ? `["and", ${queryParts.join(", ")}]`
+          : queryParts[0];
+
+      // Set limit (default to 100 if not specified)
+      const limit = filters?.limit ?? 100;
+
+      const client = this.client;
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/events", pqlQuery, {
+          limit: limit,
+          order_by: '[{"field": "timestamp", "order": "desc"}]',
+        });
+      });
+
+      if (!Array.isArray(result)) {
+        this.log(
+          `Unexpected response format from PuppetDB events endpoint for node '${nodeId}'`,
+          "warn",
+        );
+        return [];
+      }
+
+      // Transform events
+      const events = result.map((event) => this.transformEvent(event));
+
+      // Sort by timestamp in reverse chronological order (requirement 5.2)
+      // This ensures newest events are first
+      events.sort((a, b) => {
+        const timeA = new Date(a.timestamp).getTime();
+        const timeB = new Date(b.timestamp).getTime();
+        return timeB - timeA; // Descending order (newest first)
+      });
+
+      // Cache the result
+      this.cache.set(cacheKey, events, this.cacheTTL);
+      this.log(
+        `Cached ${String(events.length)} events for node '${nodeId}' for ${String(this.cacheTTL)}ms`,
+      );
+
+      return events;
+    } catch (error) {
+      this.logError(`Failed to get events for node '${nodeId}'`, error);
+      throw error;
+    }
   }
 
   /**
@@ -437,7 +800,13 @@ export class PuppetDBService
     const retryConfig = this.retryConfig;
 
     if (!circuitBreaker || !retryConfig) {
-      throw new Error("PuppetDB service not properly initialized");
+      throw new PuppetDBConnectionError(
+        "PuppetDB service not properly initialized. Circuit breaker or retry config missing.",
+        {
+          hasCircuitBreaker: !!circuitBreaker,
+          hasRetryConfig: !!retryConfig,
+        },
+      );
     }
 
     // Wrap operation with circuit breaker
@@ -487,11 +856,279 @@ export class PuppetDBService
   }
 
   /**
-   * Transform PuppetDB facts to normalized format
+   * Transform PuppetDB catalog to application format
+   *
+   * Ensures all required fields are present as per requirements 4.1, 4.2, 4.5:
+   * - Catalog resources in structured format
+   * - Metadata (timestamp, environment)
+   *
+   * @param catalogData - Raw catalog from PuppetDB
+   * @returns Transformed catalog
+   */
+  private transformCatalog(catalogData: unknown): Catalog {
+    // Type assertion - PuppetDB returns catalogs with these fields
+    const raw = catalogData as Record<string, unknown>;
+
+    // Transform resources
+    const resources: Resource[] = [];
+    if (Array.isArray(raw.resources)) {
+      for (const resourceData of raw.resources) {
+        const res = resourceData as Record<string, unknown>;
+        resources.push({
+          type: String(res.type || ""),
+          title: String(res.title || ""),
+          tags: Array.isArray(res.tags) ? res.tags.map(String) : [],
+          exported: Boolean(res.exported),
+          file: res.file ? String(res.file) : undefined,
+          line: typeof res.line === "number" ? res.line : undefined,
+          parameters:
+            typeof res.parameters === "object" && res.parameters !== null
+              ? (res.parameters as Record<string, unknown>)
+              : {},
+        });
+      }
+    }
+
+    // Transform edges
+    const edges: Edge[] = [];
+    if (Array.isArray(raw.edges)) {
+      for (const edgeData of raw.edges) {
+        const edge = edgeData as Record<string, unknown>;
+        const source = edge.source as Record<string, unknown> | undefined;
+        const target = edge.target as Record<string, unknown> | undefined;
+
+        if (source && target) {
+          edges.push({
+            source: {
+              type: String(source.type || ""),
+              title: String(source.title || ""),
+            },
+            target: {
+              type: String(target.type || ""),
+              title: String(target.title || ""),
+            },
+            relationship: this.normalizeRelationship(
+              String(edge.relationship || "contains"),
+            ),
+          });
+        }
+      }
+    }
+
+    // Return catalog with all required fields (requirements 4.1, 4.2, 4.5)
+    return {
+      certname: String(raw.certname || ""),
+      version: String(raw.version || ""),
+      transaction_uuid: String(raw.transaction_uuid || ""),
+      environment: String(raw.environment || "production"),
+      producer_timestamp: String(raw.producer_timestamp || ""),
+      hash: String(raw.hash || ""),
+      resources,
+      edges,
+    };
+  }
+
+  /**
+   * Normalize relationship type to expected values
+   *
+   * @param relationship - Raw relationship from PuppetDB
+   * @returns Normalized relationship
+   */
+  private normalizeRelationship(
+    relationship: string,
+  ): "contains" | "before" | "require" | "subscribe" | "notify" {
+    const normalized = relationship.toLowerCase();
+    if (normalized === "before") return "before";
+    if (normalized === "require") return "require";
+    if (normalized === "subscribe") return "subscribe";
+    if (normalized === "notify") return "notify";
+    return "contains";
+  }
+
+  /**
+   * Transform PuppetDB report to application format
+   *
+   * Ensures all required fields are present as per requirement 3.3:
+   * - Run timestamp
+   * - Status (success, failure, unchanged)
+   * - Resource change summary
+   *
+   * @param reportData - Raw report from PuppetDB
+   * @returns Transformed report
+   */
+  private transformReport(reportData: unknown): Report {
+    // Type assertion - PuppetDB returns reports with these fields
+    const raw = reportData as Record<string, unknown>;
+
+    // Extract metrics with safe defaults
+    const metrics = (raw.metrics as Record<string, unknown>) || {};
+    const resourceMetrics =
+      (metrics.resources as Record<string, unknown>) || {};
+    const timeMetrics = (metrics.time as Record<string, unknown>) || {};
+    const changeMetrics = (metrics.changes as Record<string, unknown>) || {};
+    const eventMetrics = (metrics.events as Record<string, unknown>) || {};
+
+    // Helper to safely get number
+    const getNumber = (
+      obj: Record<string, unknown>,
+      key: string,
+      fallback = 0,
+    ): number => {
+      const value = obj[key];
+      return typeof value === "number" ? value : fallback;
+    };
+
+    // Transform to Report type with all required fields (requirement 3.3)
+    return {
+      certname: String(raw.certname || ""),
+      hash: String(raw.hash || ""),
+      environment: String(raw.environment || "production"),
+      status: this.normalizeReportStatus(String(raw.status || "unchanged")),
+      noop: Boolean(raw.noop),
+      puppet_version: String(raw.puppet_version || ""),
+      report_format: Number(raw.report_format || 0),
+      configuration_version: String(raw.configuration_version || ""),
+      start_time: String(raw.start_time || ""),
+      end_time: String(raw.end_time || ""),
+      producer_timestamp: String(raw.producer_timestamp || ""),
+      receive_time: String(raw.receive_time || ""),
+      transaction_uuid: String(raw.transaction_uuid || ""),
+      metrics: {
+        resources: {
+          total: getNumber(resourceMetrics, "total"),
+          skipped: getNumber(resourceMetrics, "skipped"),
+          failed: getNumber(resourceMetrics, "failed"),
+          failed_to_restart: getNumber(resourceMetrics, "failed_to_restart"),
+          restarted: getNumber(resourceMetrics, "restarted"),
+          changed: getNumber(resourceMetrics, "changed"),
+          out_of_sync: getNumber(resourceMetrics, "out_of_sync"),
+          scheduled: getNumber(resourceMetrics, "scheduled"),
+        },
+        time: timeMetrics as Record<string, number>,
+        changes: {
+          total: getNumber(changeMetrics, "total"),
+        },
+        events: {
+          success: getNumber(eventMetrics, "success"),
+          failure: getNumber(eventMetrics, "failure"),
+          total: getNumber(eventMetrics, "total"),
+        },
+      },
+      logs: Array.isArray(raw.logs)
+        ? (raw.logs as {
+            level: string;
+            message: string;
+            source: string;
+            tags: string[];
+            time: string;
+            file?: string;
+            line?: number;
+          }[])
+        : [],
+      resource_events: Array.isArray(raw.resource_events)
+        ? (raw.resource_events as {
+            resource_type: string;
+            resource_title: string;
+            property: string;
+            timestamp: string;
+            status: "success" | "failure" | "noop" | "skipped";
+            old_value?: unknown;
+            new_value?: unknown;
+            message?: string;
+            file?: string;
+            line?: number;
+            containment_path: string[];
+          }[])
+        : [],
+    };
+  }
+
+  /**
+   * Normalize report status to expected values
+   *
+   * @param status - Raw status from PuppetDB
+   * @returns Normalized status
+   */
+  private normalizeReportStatus(
+    status: string,
+  ): "unchanged" | "changed" | "failed" {
+    const normalized = status.toLowerCase();
+    if (normalized === "changed" || normalized === "success") {
+      return "changed";
+    }
+    if (normalized === "failed" || normalized === "failure") {
+      return "failed";
+    }
+    return "unchanged";
+  }
+
+  /**
+   * Transform PuppetDB event to application format
+   *
+   * Ensures all required fields are present as per requirement 5.3:
+   * - Event timestamp
+   * - Resource
+   * - Status (success, failure, noop)
+   * - Message
+   *
+   * @param eventData - Raw event from PuppetDB
+   * @returns Transformed event
+   */
+  private transformEvent(eventData: unknown): Event {
+    // Type assertion - PuppetDB returns events with these fields
+    const raw = eventData as Record<string, unknown>;
+
+    // Return event with all required fields (requirement 5.3)
+    return {
+      certname: String(raw.certname || ""),
+      timestamp: String(raw.timestamp || ""),
+      report: String(raw.report || ""),
+      resource_type: String(raw.resource_type || ""),
+      resource_title: String(raw.resource_title || ""),
+      property: String(raw.property || ""),
+      status: this.normalizeEventStatus(String(raw.status || "success")),
+      old_value: raw.old_value,
+      new_value: raw.new_value,
+      message: raw.message ? String(raw.message) : undefined,
+      file: raw.file ? String(raw.file) : undefined,
+      line: typeof raw.line === "number" ? raw.line : undefined,
+    };
+  }
+
+  /**
+   * Normalize event status to expected values
+   *
+   * @param status - Raw status from PuppetDB
+   * @returns Normalized status
+   */
+  private normalizeEventStatus(
+    status: string,
+  ): "success" | "failure" | "noop" | "skipped" {
+    const normalized = status.toLowerCase();
+    if (normalized === "failure" || normalized === "failed") {
+      return "failure";
+    }
+    if (normalized === "noop") {
+      return "noop";
+    }
+    if (normalized === "skipped") {
+      return "skipped";
+    }
+    return "success";
+  }
+
+  /**
+   * Transform PuppetDB facts to normalized format with categorization
+   *
+   * Organizes facts into categories as per requirement 2.3:
+   * - system: OS, kernel, architecture
+   * - network: hostname, interfaces, IP addresses
+   * - hardware: processors, memory, disks
+   * - custom: all other facts
    *
    * @param nodeId - Node identifier
    * @param factsResult - Raw facts from PuppetDB
-   * @returns Normalized facts
+   * @returns Normalized facts with categorization, timestamp, and source
    */
   private transformFacts(nodeId: string, factsResult: unknown): Facts {
     const factsMap: Record<string, unknown> = {};
@@ -516,11 +1153,113 @@ export class PuppetDBService
       return typeof value === "number" ? value : fallback;
     };
 
-    // Build structured facts object
+    // Categorize facts as per requirement 2.3
+    const systemFacts: Record<string, unknown> = {};
+    const networkFacts: Record<string, unknown> = {};
+    const hardwareFacts: Record<string, unknown> = {};
+    const customFacts: Record<string, unknown> = {};
+
+    // System category: OS, kernel, architecture
+    const systemKeys = [
+      "os",
+      "osfamily",
+      "operatingsystem",
+      "operatingsystemrelease",
+      "operatingsystemmajrelease",
+      "kernel",
+      "kernelversion",
+      "kernelrelease",
+      "kernelmajversion",
+      "architecture",
+      "hardwaremodel",
+      "platform",
+      "virtual",
+      "is_virtual",
+      "timezone",
+      "uptime",
+      "uptime_seconds",
+      "uptime_days",
+      "uptime_hours",
+    ];
+
+    // Network category: hostname, interfaces, IPs
+    const networkKeys = [
+      "networking",
+      "hostname",
+      "fqdn",
+      "domain",
+      "interfaces",
+      "ipaddress",
+      "ipaddress6",
+      "macaddress",
+      "netmask",
+      "network",
+    ];
+
+    // Hardware category: processors, memory, disks
+    const hardwareKeys = [
+      "processors",
+      "processorcount",
+      "physicalprocessorcount",
+      "processor",
+      "memory",
+      "memorysize",
+      "memoryfree",
+      "memorysize_mb",
+      "memoryfree_mb",
+      "swapsize",
+      "swapfree",
+      "swapsize_mb",
+      "swapfree_mb",
+      "blockdevices",
+      "disks",
+      "partitions",
+      "manufacturer",
+      "productname",
+      "serialnumber",
+      "uuid",
+      "boardmanufacturer",
+      "boardproductname",
+      "boardserialnumber",
+      "bios_vendor",
+      "bios_version",
+      "bios_release_date",
+    ];
+
+    // Categorize each fact
+    for (const [key, value] of Object.entries(factsMap)) {
+      // Check if key starts with any system prefix
+      if (
+        systemKeys.some(
+          (prefix) => key === prefix || key.startsWith(`${prefix}.`),
+        )
+      ) {
+        systemFacts[key] = value;
+      } else if (
+        networkKeys.some(
+          (prefix) => key === prefix || key.startsWith(`${prefix}.`),
+        )
+      ) {
+        networkFacts[key] = value;
+      } else if (
+        hardwareKeys.some(
+          (prefix) => key === prefix || key.startsWith(`${prefix}.`),
+        )
+      ) {
+        hardwareFacts[key] = value;
+      } else {
+        customFacts[key] = value;
+      }
+    }
+
+    // Build structured facts object with categories
+    // Also maintain backward compatibility with existing structure
     return {
       nodeId,
       gatheredAt: new Date().toISOString(),
+      source: "puppetdb", // Add source attribution as per requirement 2.2
       facts: {
+        // Maintain existing structure for backward compatibility
         os: {
           family: getString("os.family", getString("osfamily", "unknown")),
           name: getString("os.name", getString("operatingsystem", "unknown")),
@@ -557,7 +1296,14 @@ export class PuppetDBService
           ),
           interfaces: this.getInterfaces(factsMap["networking.interfaces"]),
         },
-        // Include all other facts
+        // Add categorized facts as per requirement 2.3
+        categories: {
+          system: systemFacts,
+          network: networkFacts,
+          hardware: hardwareFacts,
+          custom: customFacts,
+        },
+        // Include all other facts for backward compatibility
         ...factsMap,
       },
     };
@@ -574,7 +1320,9 @@ export class PuppetDBService
    */
   private validatePQLQuery(pqlQuery: string): void {
     if (!pqlQuery || pqlQuery.trim().length === 0) {
-      throw new Error("PQL query cannot be empty");
+      throw new PuppetDBQueryError("PQL query cannot be empty", pqlQuery, {
+        reason: "empty_query",
+      });
     }
 
     // Basic syntax validation
@@ -584,16 +1332,28 @@ export class PuppetDBService
 
       // PQL queries are arrays with operator as first element
       if (!Array.isArray(parsed)) {
-        throw new Error("PQL query must be a JSON array");
+        throw new PuppetDBQueryError(
+          "PQL query must be a JSON array",
+          pqlQuery,
+          { reason: "not_array", parsedType: typeof parsed },
+        );
       }
 
       if (parsed.length === 0) {
-        throw new Error("PQL query array cannot be empty");
+        throw new PuppetDBQueryError(
+          "PQL query array cannot be empty",
+          pqlQuery,
+          { reason: "empty_array" },
+        );
       }
 
       // First element should be an operator (string)
       if (typeof parsed[0] !== "string") {
-        throw new Error("PQL query must start with an operator");
+        throw new PuppetDBQueryError(
+          "PQL query must start with an operator",
+          pqlQuery,
+          { reason: "invalid_operator", firstElement: parsed[0] },
+        );
       }
 
       // Common PQL operators
@@ -618,8 +1378,15 @@ export class PuppetDBService
         this.log(`Warning: Unknown PQL operator '${parsed[0]}'`, "warn");
       }
     } catch (error) {
+      if (error instanceof PuppetDBQueryError) {
+        throw error;
+      }
       if (error instanceof SyntaxError) {
-        throw new Error(`Invalid PQL query syntax: ${error.message}`);
+        throw new PuppetDBQueryError(
+          `Invalid PQL query syntax: ${error.message}`,
+          pqlQuery,
+          { reason: "syntax_error", originalError: error.message },
+        );
       }
       throw error;
     }
@@ -632,7 +1399,14 @@ export class PuppetDBService
    */
   private ensureInitialized(): void {
     if (!this.initialized || !this.client || !this.circuitBreaker) {
-      throw new Error("PuppetDB service is not initialized");
+      throw new PuppetDBConnectionError(
+        "PuppetDB service is not initialized. Call initialize() before using the service.",
+        {
+          initialized: this.initialized,
+          hasClient: !!this.client,
+          hasCircuitBreaker: !!this.circuitBreaker,
+        },
+      );
     }
   }
 

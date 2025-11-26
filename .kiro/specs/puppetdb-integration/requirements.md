@@ -4,6 +4,8 @@
 
 This document specifies the requirements for version 0.2.0 of Padawi, a general-purpose remote execution interface that integrates multiple infrastructure management tools. This version adds PuppetDB as the first additional integration beyond Puppet Bolt, establishing patterns for future integrations with tools like Ansible, Terraform, AWS CLI, Azure CLI, and Kubernetes. PuppetDB will serve as both a dynamic inventory source for discovering nodes and as a rich data source for displaying node facts, Puppet run reports, catalogs, and events. This version also introduces task re-execution capabilities and UI enhancements to support the multi-tool architecture.
 
+**Priority Focus:** A key priority for this version is enhancing the expert mode experience by ensuring full visibility of command execution details. When expert mode is enabled, users must be able to see the complete command line that was executed and the full, untruncated output (stdout/stderr). This transparency is critical for debugging, auditing, and understanding exactly what operations are being performed on managed infrastructure.
+
 ## Glossary
 
 - **Padawi**: A general-purpose remote execution interface that integrates multiple infrastructure management tools (Bolt, PuppetDB, Ansible, Terraform, etc.)
@@ -162,3 +164,20 @@ This document specifies the requirements for version 0.2.0 of Padawi, a general-
 3. WHEN integration queries fail THEN the system SHALL implement retry logic with exponential backoff and circuit breaker patterns
 4. WHEN processing integration responses THEN the system SHALL validate and transform data into normalized application formats
 5. WHEN integration data is cached THEN the system SHALL implement appropriate cache expiration policies with per-source TTL configuration
+
+### Requirement 13
+
+**User Story:** As an infrastructure administrator, I want to see the full command output and the exact command line used when expert mode is enabled, so that I can debug issues, understand what commands are being executed, and have complete visibility into system operations.
+
+#### Acceptance Criteria
+
+1. WHEN expert mode is enabled AND a user initiates an execution THEN the system SHALL display the complete command line that will be executed before the execution starts, allowing the user to review it
+2. WHEN expert mode is enabled AND an execution is in progress THEN the system SHALL keep the command line visible alongside the streaming output
+3. WHEN expert mode is enabled AND an execution completes THEN the system SHALL display the complete command line that was executed including all arguments and options
+4. WHEN expert mode is enabled AND viewing execution results THEN the system SHALL display the full stdout and stderr output without truncation or summarization
+5. WHEN expert mode is enabled AND viewing execution history THEN the system SHALL show the executed command line for each execution record
+6. WHEN expert mode is enabled AND viewing node detail execution history THEN the system SHALL display the command line alongside execution results
+7. WHEN expert mode is disabled THEN the system SHALL display summarized output and hide technical command details to maintain a simplified user interface
+8. WHEN displaying command output in expert mode THEN the system SHALL preserve formatting, line breaks, and special characters exactly as received
+9. WHEN displaying command lines THEN the system SHALL use monospace font and syntax highlighting to improve readability
+10. WHEN command output is very long THEN the system SHALL provide scrolling and search capabilities while maintaining the complete output visible

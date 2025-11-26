@@ -33,3 +33,16 @@ export {
   createPuppetDBRetryConfig,
 } from "./RetryLogic";
 export type { RetryConfig } from "./RetryLogic";
+
+export type {
+  Report,
+  ReportMetrics,
+  ResourceEvent,
+  LogEntry,
+  Catalog,
+  Resource,
+  Edge,
+  ResourceRef,
+  Event,
+  EventFilters,
+} from "./types";

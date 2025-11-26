@@ -132,12 +132,15 @@ export function createPackagesRouter(
           );
 
           // Update execution record with results
+          // Include stdout/stderr when expert mode is enabled
           await executionRepository.update(executionId, {
             status: result.status,
             completedAt: result.completedAt,
             results: result.results,
             error: result.error,
             command: result.command,
+            stdout: expertMode ? result.stdout : undefined,
+            stderr: expertMode ? result.stderr : undefined,
           });
 
           // Emit completion event if streaming

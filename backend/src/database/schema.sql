@@ -11,7 +11,11 @@ CREATE TABLE IF NOT EXISTS executions (
   results TEXT NOT NULL,  -- JSON array of node results
   error TEXT,
   command TEXT,  -- Full Bolt CLI command executed
-  expert_mode INTEGER DEFAULT 0  -- Boolean flag (0 or 1)
+  expert_mode INTEGER DEFAULT 0,  -- Boolean flag (0 or 1)
+  original_execution_id TEXT,  -- Reference to original execution if this is a re-execution
+  re_execution_count INTEGER DEFAULT 0,  -- Number of times this execution has been re-executed
+  stdout TEXT,  -- Complete stdout output (stored when expert mode enabled)
+  stderr TEXT  -- Complete stderr output (stored when expert mode enabled)
 );
 
 -- Index Strategy:

@@ -5,6 +5,7 @@
   import StatusBadge from '../components/StatusBadge.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
   import RealtimeOutputViewer from '../components/RealtimeOutputViewer.svelte';
+  import ReExecutionButton from '../components/ReExecutionButton.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
@@ -490,6 +491,11 @@
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Action
                 </th>
+                {#if expertMode.enabled}
+                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Command
+                  </th>
+                {/if}
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Targets
                 </th>
@@ -502,15 +508,17 @@
                 <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Duration
                 </th>
+                <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
               {#each executions as execution (execution.id)}
                 <tr
-                  class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
-                  onclick={() => openExecutionDetail(execution)}
+                  class="hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
-                  <td class="whitespace-nowrap px-6 py-4 text-sm">
+                  <td class="whitespace-nowrap px-6 py-4 text-sm cursor-pointer" onclick={() => openExecutionDetail(execution)}>
                     <div class="flex items-center gap-2">
                       <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(execution.type)}">
                         {getTypeLabel(execution.type)}
@@ -526,12 +534,23 @@
                       {/if}
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                  <td class="px-6 py-4 text-sm text-gray-900 dark:text-white cursor-pointer" onclick={() => openExecutionDetail(execution)}>
                     <div class="max-w-xs truncate" title={execution.action}>
                       {execution.action}
                     </div>
                   </td>
-                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                  {#if expertMode.enabled}
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => openExecutionDetail(execution)}>
+                      {#if execution.command}
+                        <div class="max-w-md truncate font-mono text-xs" title={execution.command}>
+                          {execution.command}
+                        </div>
+                      {:else}
+                        <span class="text-gray-400 dark:text-gray-600">-</span>
+                      {/if}
+                    </td>
+                  {/if}
+                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => openExecutionDetail(execution)}>
                     <div class="flex flex-wrap gap-1">
                       {#each execution.targetNodes.slice(0, 2) as nodeId}
                         <button
@@ -552,14 +571,19 @@
                       {/if}
                     </div>
                   </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm">
+                  <td class="whitespace-nowrap px-6 py-4 text-sm cursor-pointer" onclick={() => openExecutionDetail(execution)}>
                     <StatusBadge status={execution.status} size="sm" />
                   </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                  <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => openExecutionDetail(execution)}>
                     {formatTimestamp(execution.startedAt)}
                   </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-600 dark:text-gray-400">
+                  <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => openExecutionDetail(execution)}>
                     {formatDuration(execution.startedAt, execution.completedAt)}
+                  </td>
+                  <td class="whitespace-nowrap px-6 py-4 text-right text-sm">
+                    <div class="flex items-center justify-end gap-2" onclick={(e) => e.stopPropagation()}>
+                      <ReExecutionButton execution={execution} size="sm" variant="icon" />
+                    </div>
                   </td>
                 </tr>
               {/each}
@@ -830,7 +854,8 @@
 
           <!-- Footer -->
           <div class="border-t border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900 sm:px-6">
-            <div class="flex justify-end">
+            <div class="flex justify-between">
+              <ReExecutionButton execution={selectedExecution} size="md" variant="button" />
               <button
                 type="button"
                 class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
