@@ -15,9 +15,13 @@ import { createExecutionsRouter } from "./routes/executions";
 import { createPuppetRouter } from "./routes/puppet";
 import { createPackagesRouter } from "./routes/packages";
 import { createStreamingRouter } from "./routes/streaming";
+import { createIntegrationsRouter } from "./routes/integrations";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware } from "./middleware";
+import { IntegrationManager } from "./integrations/IntegrationManager";
+import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
+import type { IntegrationConfig } from "./integrations/types";
 
 /**
  * Initialize and start the application
@@ -110,6 +114,48 @@ async function startServer(): Promise<Express> {
     console.warn("Execution queue initialized successfully");
     console.warn(`- Concurrent execution limit: ${String(config.executionQueue.concurrentLimit)}`);
     console.warn(`- Maximum queue size: ${String(config.executionQueue.maxQueueSize)}`);
+
+    // Initialize integration manager
+    console.warn("Initializing integration manager...");
+    const integrationManager = new IntegrationManager();
+
+    // Initialize PuppetDB integration if configured
+    let puppetDBService: PuppetDBService | undefined;
+    if (config.integrations.puppetdb?.enabled) {
+      console.warn("Initializing PuppetDB integration...");
+      try {
+        puppetDBService = new PuppetDBService();
+        const puppetDBConfig: IntegrationConfig = {
+          enabled: true,
+          name: "puppetdb",
+          type: "information",
+          config: config.integrations.puppetdb,
+          priority: 10, // Higher priority than Bolt
+        };
+
+        integrationManager.registerPlugin(puppetDBService, puppetDBConfig);
+        const errors = await integrationManager.initializePlugins();
+
+        if (errors.length > 0) {
+          console.warn(`PuppetDB initialization completed with ${String(errors.length)} error(s):`);
+          for (const { plugin, error } of errors) {
+            console.warn(`  - ${plugin}: ${error.message}`);
+          }
+        } else {
+          console.warn("PuppetDB integration initialized successfully");
+          console.warn(`- Server URL: ${config.integrations.puppetdb.serverUrl}`);
+          console.warn(`- SSL enabled: ${String(config.integrations.puppetdb.ssl?.enabled ?? false)}`);
+          console.warn(`- Authentication: ${config.integrations.puppetdb.token ? "configured" : "not configured"}`);
+        }
+      } catch (error) {
+        console.warn(`WARNING: Failed to initialize PuppetDB integration: ${error instanceof Error ? error.message : "Unknown error"}`);
+        puppetDBService = undefined;
+      }
+    } else {
+      console.warn("PuppetDB integration is not enabled");
+    }
+
+    console.warn("Integration manager initialized successfully");
 
     // Create Express app
     const app: Express = express();
@@ -225,6 +271,7 @@ async function startServer(): Promise<Express> {
       "/api/streaming",
       createStreamingRouter(streamingManager, executionRepository),
     );
+    app.use("/api/integrations", createIntegrationsRouter(puppetDBService));
 
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");

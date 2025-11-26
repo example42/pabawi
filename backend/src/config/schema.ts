@@ -72,6 +72,15 @@ export const SSLConfigSchema = z.object({
 export type SSLConfig = z.infer<typeof SSLConfigSchema>;
 
 /**
+ * PuppetDB cache configuration schema
+ */
+export const PuppetDBCacheConfigSchema = z.object({
+  ttl: z.number().int().positive().default(300000), // 5 minutes default
+});
+
+export type PuppetDBCacheConfig = z.infer<typeof PuppetDBCacheConfigSchema>;
+
+/**
  * PuppetDB integration configuration schema
  */
 export const PuppetDBConfigSchema = z.object({
@@ -83,6 +92,7 @@ export const PuppetDBConfigSchema = z.object({
   timeout: z.number().int().positive().default(30000), // 30 seconds
   retryAttempts: z.number().int().nonnegative().default(3),
   retryDelay: z.number().int().positive().default(1000), // 1 second
+  cache: PuppetDBCacheConfigSchema.optional(),
 });
 
 export type PuppetDBConfig = z.infer<typeof PuppetDBConfigSchema>;
