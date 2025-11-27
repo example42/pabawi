@@ -43,13 +43,14 @@ export function createIntegrationsRouter(
 
   /**
    * GET /api/integrations/status
-   * Return status for all configured integrations
+   * Return status for all configured and available integrations
    *
    * Implements requirement 9.5: Display connection status for each integration source
    * Returns:
    * - Connection status for each integration
    * - Last health check time
    * - Error details if unhealthy
+   * - Configuration status for available but unconfigured integrations
    *
    * Query parameters:
    * - refresh: If 'true', force a fresh health check instead of using cache
@@ -83,6 +84,21 @@ export function createIntegrationsRouter(
             };
           },
         );
+
+        // Add unconfigured integrations (like PuppetDB if not configured)
+        const configuredNames = new Set(integrations.map((i) => i.name));
+
+        // Check if PuppetDB is not configured
+        if (!puppetDBService && !configuredNames.has("puppetdb")) {
+          integrations.push({
+            name: "puppetdb",
+            type: "information",
+            status: "not_configured",
+            lastCheck: new Date().toISOString(),
+            message: "PuppetDB integration is not configured",
+            details: undefined,
+          });
+        }
 
         res.json({
           integrations,

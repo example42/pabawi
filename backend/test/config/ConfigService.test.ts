@@ -7,6 +7,19 @@ describe("ConfigService - Integration Configuration", () => {
   beforeEach(() => {
     // Reset environment before each test
     process.env = { ...originalEnv };
+    // Clear PuppetDB-related environment variables to ensure test isolation
+    delete process.env.PUPPETDB_ENABLED;
+    delete process.env.PUPPETDB_SERVER_URL;
+    delete process.env.PUPPETDB_PORT;
+    delete process.env.PUPPETDB_TOKEN;
+    delete process.env.PUPPETDB_TIMEOUT;
+    delete process.env.PUPPETDB_RETRY_ATTEMPTS;
+    delete process.env.PUPPETDB_RETRY_DELAY;
+    delete process.env.PUPPETDB_SSL_ENABLED;
+    delete process.env.PUPPETDB_SSL_CA;
+    delete process.env.PUPPETDB_SSL_CERT;
+    delete process.env.PUPPETDB_SSL_KEY;
+    delete process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED;
   });
 
   afterEach(() => {

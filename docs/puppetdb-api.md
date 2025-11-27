@@ -73,7 +73,6 @@ GET /api/integrations/status
 }
 ```
 
-
 ## PuppetDB Inventory
 
 ### List All Nodes from PuppetDB
@@ -167,7 +166,6 @@ GET /api/integrations/puppetdb/nodes/:certname
 - `404 NOT_FOUND`: Node not found in PuppetDB
 - `503 SERVICE_UNAVAILABLE`: PuppetDB connection failed
 
-
 ## PuppetDB Facts
 
 ### Get Node Facts from PuppetDB
@@ -245,7 +243,6 @@ GET /api/integrations/puppetdb/nodes/:certname/facts
 - `404 NOT_FOUND`: Node not found or no facts available
 - `503 SERVICE_UNAVAILABLE`: PuppetDB connection failed
 
-
 ## PuppetDB Reports
 
 ### Get Node Reports from PuppetDB
@@ -274,7 +271,7 @@ GET /api/integrations/puppetdb/nodes/:certname/reports
   "certname": "web-01.example.com",
   "reports": [
     {
-      "hash": "abc123def456",
+      "hash": "abc123def456",  # pragma: allowlist secret
       "certname": "web-01.example.com",
       "puppet_version": "7.12.0",
       "report_format": 12,
@@ -349,7 +346,7 @@ GET /api/integrations/puppetdb/nodes/:certname/reports/:hash
 
 ```json
 {
-  "hash": "abc123def456",
+  "hash": "abc123def456",  # pragma: allowlist secret
   "certname": "web-01.example.com",
   "puppet_version": "7.12.0",
   "report_format": 12,
@@ -395,7 +392,6 @@ GET /api/integrations/puppetdb/nodes/:certname/reports/:hash
 
 - `404 NOT_FOUND`: Report not found
 - `503 SERVICE_UNAVAILABLE`: PuppetDB connection failed
-
 
 ## PuppetDB Catalogs
 
@@ -477,7 +473,6 @@ GET /api/integrations/puppetdb/nodes/:certname/catalog
 - `404 NOT_FOUND`: Node not found or no catalog available
 - `503 SERVICE_UNAVAILABLE`: PuppetDB connection failed
 
-
 ## PuppetDB Events
 
 ### Get Node Events from PuppetDB
@@ -512,7 +507,7 @@ GET /api/integrations/puppetdb/nodes/:certname/events
     {
       "certname": "web-01.example.com",
       "timestamp": "2024-01-15T10:01:15.000Z",
-      "report": "abc123def456",
+      "report": "abc123def456",  # pragma: allowlist secret
       "resource_type": "File",
       "resource_title": "/etc/nginx/nginx.conf",
       "property": "content",
@@ -526,7 +521,7 @@ GET /api/integrations/puppetdb/nodes/:certname/events
     {
       "certname": "web-01.example.com",
       "timestamp": "2024-01-15T10:01:20.000Z",
-      "report": "abc123def456",
+      "report": "abc123def456",  # pragma: allowlist secret
       "resource_type": "Service",
       "resource_title": "nginx",
       "property": "ensure",
@@ -564,7 +559,6 @@ GET /api/integrations/puppetdb/nodes/web-01.example.com/events?status=failure&re
 - `404 NOT_FOUND`: Node not found or no events available
 - `400 INVALID_REQUEST`: Invalid filter parameters
 - `503 SERVICE_UNAVAILABLE`: PuppetDB connection failed
-
 
 ## Re-execution
 
@@ -737,7 +731,6 @@ curl -X POST http://localhost:3000/api/executions/original-exec-123/re-execute \
   }'
 ```
 
-
 ## Enhanced Inventory
 
 ### Get Multi-Source Inventory
@@ -838,7 +831,6 @@ GET /api/inventory/sources
   ]
 }
 ```
-
 
 ## Expert Mode
 

@@ -14,8 +14,10 @@ export class ConfigService {
   private config: AppConfig;
 
   constructor() {
-    // Load .env file
-    loadDotenv();
+    // Load .env file only if not in test environment
+    if (process.env.NODE_ENV !== 'test') {
+      loadDotenv();
+    }
 
     // Parse and validate configuration
     this.config = this.loadConfiguration();

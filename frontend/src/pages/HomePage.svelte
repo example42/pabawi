@@ -3,6 +3,7 @@
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import IntegrationStatus from '../components/IntegrationStatus.svelte';
+  import StatusBadge from '../components/StatusBadge.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
 
@@ -16,7 +17,7 @@
   interface IntegrationStatusData {
     name: string;
     type: 'execution' | 'information' | 'both';
-    status: 'connected' | 'disconnected' | 'error';
+    status: 'connected' | 'disconnected' | 'error' | 'not_configured';
     lastCheck: string;
     message?: string;
     details?: unknown;
@@ -28,6 +29,32 @@
     cached: boolean;
   }
 
+  interface ExecutionRecord {
+    id: string;
+    type: 'command' | 'task' | 'facts' | 'puppet' | 'package';
+    targetNodes: string[];
+    action: string;
+    status: 'running' | 'success' | 'failed' | 'partial';
+    startedAt: string;
+    completedAt?: string;
+  }
+
+  interface ExecutionsResponse {
+    executions: ExecutionRecord[];
+    pagination: {
+      page: number;
+      pageSize: number;
+      hasMore: boolean;
+    };
+    summary: {
+      total: number;
+      running: number;
+      success: number;
+      failed: number;
+      partial: number;
+    };
+  }
+
   let nodes = $state<Node[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -36,16 +63,23 @@
   let integrationsLoading = $state(true);
   let integrationsError = $state<string | null>(null);
 
+  let executions = $state<ExecutionRecord[]>([]);
+  let executionsLoading = $state(true);
+  let executionsError = $state<string | null>(null);
+  let executionsSummary = $state<ExecutionsResponse['summary'] | null>(null);
+
   async function fetchInventory(): Promise<void> {
     loading = true;
     error = null;
 
     try {
+      console.log('[HomePage] Fetching inventory...');
       const data = await get<{ nodes: Node[] }>('/api/inventory');
+      console.log('[HomePage] Inventory loaded:', data.nodes?.length, 'nodes');
       nodes = data.nodes || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load inventory';
-      console.error('Error fetching inventory:', err);
+      console.error('[HomePage] Error fetching inventory:', err);
       // Set empty array on error so the page still renders
       nodes = [];
     } finally {
@@ -59,11 +93,13 @@
 
     try {
       const url = refresh ? '/api/integrations/status?refresh=true' : '/api/integrations/status';
+      console.log('[HomePage] Fetching integration status...');
       const data = await get<IntegrationStatusResponse>(url);
+      console.log('[HomePage] Integration status loaded:', data.integrations?.length, 'integrations');
       integrations = data.integrations || [];
     } catch (err) {
       integrationsError = err instanceof Error ? err.message : 'Failed to load integration status';
-      console.error('Error fetching integration status:', err);
+      console.error('[HomePage] Error fetching integration status:', err);
       // Set empty array on error so the page still renders
       integrations = [];
     } finally {
@@ -71,14 +107,60 @@
     }
   }
 
+  async function fetchRecentExecutions(): Promise<void> {
+    executionsLoading = true;
+    executionsError = null;
+
+    try {
+      console.log('[HomePage] Fetching recent executions...');
+      const data = await get<ExecutionsResponse>('/api/executions?pageSize=10&page=1');
+      console.log('[HomePage] Executions loaded:', data.executions?.length, 'executions, summary:', data.summary);
+      executions = data.executions || [];
+      executionsSummary = data.summary;
+    } catch (err) {
+      executionsError = err instanceof Error ? err.message : 'Failed to load recent executions';
+      console.error('[HomePage] Error fetching recent executions:', err);
+      executions = [];
+    } finally {
+      executionsLoading = false;
+    }
+  }
+
   function handleRefreshIntegrations(): void {
     void fetchIntegrationStatus(true);
   }
 
+  function formatTimestamp(timestamp: string): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  }
+
+  function getExecutionTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      command: 'Command',
+      task: 'Task',
+      facts: 'Facts',
+      puppet: 'Puppet Run',
+      package: 'Package Install'
+    };
+    return labels[type] || type;
+  }
+
   onMount(() => {
-    // Fetch inventory and integration status but don't block rendering
+    // Fetch inventory, integration status, and recent executions
     void fetchInventory();
     void fetchIntegrationStatus();
+    void fetchRecentExecutions();
   });
 </script>
 
@@ -89,12 +171,12 @@
       Welcome to Pabawi
     </h1>
     <p class="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-      A powerful web interface for managing and executing Puppet Bolt tasks across your infrastructure
+      Puppet And Bolt Awesome Web Interface
     </p>
   </div>
 
   <!-- Quick Stats -->
-  <div class="grid gap-6 mb-12 md:grid-cols-3">
+  <div class="grid gap-6 mb-12 md:grid-cols-4">
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
       <div class="flex items-center">
         <div class="flex-shrink-0">
@@ -131,12 +213,36 @@
       <div class="flex items-center">
         <div class="flex-shrink-0">
           <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
         </div>
         <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Quick Actions</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">Available</p>
+          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Executions</p>
+          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+            {executionsLoading ? '...' : executionsSummary?.total ?? 0}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
+      <div class="flex items-center">
+        <div class="flex-shrink-0">
+          <svg class="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <div class="ml-4">
+          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Success Rate</p>
+          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+            {#if executionsLoading}
+              ...
+            {:else if executionsSummary && executionsSummary.total > 0}
+              {Math.round((executionsSummary.success / executionsSummary.total) * 100)}%
+            {:else}
+              N/A
+            {/if}
+          </p>
         </div>
       </div>
     </div>
@@ -144,18 +250,19 @@
 
   <!-- Integration Status Section -->
   <div class="mb-12">
+    <IntegrationStatus
+      {integrations}
+      loading={integrationsLoading}
+      onRefresh={handleRefreshIntegrations}
+    />
     {#if integrationsError}
-      <ErrorAlert
-        message="Failed to load integration status"
-        details={integrationsError}
-        onRetry={() => fetchIntegrationStatus(true)}
-      />
-    {:else}
-      <IntegrationStatus
-        {integrations}
-        loading={integrationsLoading}
-        onRefresh={handleRefreshIntegrations}
-      />
+      <div class="mt-4">
+        <ErrorAlert
+          message="Failed to load integration status"
+          details={integrationsError}
+          onRetry={() => fetchIntegrationStatus(true)}
+        />
+      </div>
     {/if}
   </div>
 
@@ -227,6 +334,108 @@
           </p>
         </div>
       {/if}
+    {/if}
+  </div>
+
+  <!-- Recent Executions -->
+  <div class="mb-12">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+        Recent Executions
+      </h2>
+      <button
+        type="button"
+        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        onclick={() => router.navigate('/executions')}
+      >
+        View All
+        <svg class="ml-2 -mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+
+    {#if executionsLoading}
+      <div class="flex justify-center py-12">
+        <LoadingSpinner size="lg" message="Loading recent executions..." />
+      </div>
+    {:else if executionsError}
+      <ErrorAlert
+        message="Failed to load recent executions"
+        details={executionsError}
+        onRetry={fetchRecentExecutions}
+      />
+    {:else if executions.length === 0}
+      <div class="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No executions yet</h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Start by running a command or task on your nodes
+        </p>
+      </div>
+    {:else}
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-900">
+              <tr>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Type
+                </th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Action
+                </th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Targets
+                </th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Status
+                </th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Time
+                </th>
+                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {#each executions as execution (execution.id)}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
+                    {getExecutionTypeLabel(execution.type)}
+                  </td>
+                  <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
+                    <div class="max-w-xs truncate" title={execution.action}>
+                      {execution.action}
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {execution.targetNodes.length} {execution.targetNodes.length === 1 ? 'node' : 'nodes'}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <StatusBadge status={execution.status} />
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {formatTimestamp(execution.startedAt)}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      type="button"
+                      class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                      onclick={() => router.navigate(`/executions?id=${execution.id}`)}
+                    >
+                      View Details
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      </div>
     {/if}
   </div>
 

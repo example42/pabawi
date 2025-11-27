@@ -11,6 +11,7 @@ The re-execution feature allows users to quickly repeat previous executions with
 A reusable button component that handles navigation to the appropriate execution interface with pre-filled parameters.
 
 **Props:**
+
 - `execution`: ExecutionResult - The execution to re-execute
 - `currentNodeId?`: string - If provided, sets this as the target node (used in NodeDetailPage)
 - `disabled?`: boolean - Whether the button is disabled
@@ -18,6 +19,7 @@ A reusable button component that handles navigation to the appropriate execution
 - `variant?`: 'button' | 'icon' - Display as full button or icon-only
 
 **Features:**
+
 - Handles different execution types (command, task, puppet, package)
 - Stores execution parameters in sessionStorage for pre-filling
 - Shows loading state during navigation

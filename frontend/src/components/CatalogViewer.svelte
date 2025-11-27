@@ -170,6 +170,7 @@
             type="button"
             class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             onclick={() => searchQuery = ''}
+            aria-label="Clear search"
           >
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -201,6 +202,8 @@
             type="button"
             class="flex w-full items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
             onclick={() => toggleType(type)}
+            aria-expanded={!collapsedTypes[type]}
+            aria-label={`Toggle ${type} resources`}
           >
             <div class="flex items-center gap-3">
               <svg
@@ -228,6 +231,7 @@
                       type="button"
                       class="w-full text-left"
                       onclick={() => selectResource(resource)}
+                      aria-label={`View details for ${resource.type} ${resource.title}`}
                     >
                       <div class="flex items-start justify-between">
                         <div class="flex-1">
@@ -271,10 +275,12 @@
     <div class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true">
       <div class="flex min-h-screen items-center justify-center p-4">
         <!-- Backdrop -->
-        <div
+        <button
+          type="button"
           class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
           onclick={() => selectedResource = null}
-        ></div>
+          aria-label="Close resource details"
+        ></button>
 
         <!-- Panel -->
         <div class="relative z-10 w-full max-w-3xl rounded-lg bg-white shadow-xl dark:bg-gray-800">
@@ -290,6 +296,7 @@
               type="button"
               class="rounded-lg p-1 hover:bg-gray-100 dark:hover:bg-gray-700"
               onclick={() => selectedResource = null}
+              aria-label="Close resource details"
             >
               <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

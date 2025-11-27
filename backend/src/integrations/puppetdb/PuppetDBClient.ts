@@ -66,7 +66,11 @@ export class PuppetDBConnectionError extends PuppetDBError {
  * PuppetDB query error
  */
 export class PuppetDBQueryError extends PuppetDBError {
-  constructor(message: string, public query: string, details?: unknown) {
+  constructor(
+    message: string,
+    public query: string,
+    details?: unknown,
+  ) {
     super(message, "PUPPETDB_QUERY_ERROR", details);
     this.name = "PuppetDBQueryError";
   }
@@ -123,7 +127,9 @@ export class PuppetDBClient {
    * @param sslConfig - SSL configuration
    * @returns Configured HTTPS agent
    */
-  private createHttpsAgent(sslConfig: NonNullable<PuppetDBClientConfig["ssl"]>): https.Agent {
+  private createHttpsAgent(
+    sslConfig: NonNullable<PuppetDBClientConfig["ssl"]>,
+  ): https.Agent {
     const agentOptions: https.AgentOptions = {
       rejectUnauthorized: sslConfig.rejectUnauthorized ?? true,
     };
@@ -199,7 +205,10 @@ export class PuppetDBClient {
           );
         }
 
-        if (error.message.includes("ETIMEDOUT") || error.message.includes("timeout")) {
+        if (
+          error.message.includes("ETIMEDOUT") ||
+          error.message.includes("timeout")
+        ) {
           throw new PuppetDBConnectionError(
             `Connection to PuppetDB timed out after ${String(this.timeout)}ms`,
             error,
@@ -214,10 +223,7 @@ export class PuppetDBClient {
         }
       }
 
-      throw new PuppetDBConnectionError(
-        "Failed to query PuppetDB",
-        error,
-      );
+      throw new PuppetDBConnectionError("Failed to query PuppetDB", error);
     }
   }
 
@@ -238,10 +244,7 @@ export class PuppetDBClient {
         throw error;
       }
 
-      throw new PuppetDBConnectionError(
-        `Failed to GET ${path}`,
-        error,
-      );
+      throw new PuppetDBConnectionError(`Failed to GET ${path}`, error);
     }
   }
 
@@ -284,12 +287,11 @@ export class PuppetDBClient {
    * @returns Response
    */
   private async fetchWithTimeout(url: string): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => { controller.abort(); }, this.timeout);
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
 
-    try {
       const headers: Record<string, string> = {
-        "Accept": "application/json",
+        Accept: "application/json",
       };
 
       // Add authentication token if provided
@@ -297,18 +299,52 @@ export class PuppetDBClient {
         headers["X-Authentication"] = this.token;
       }
 
-      const response = await fetch(url, {
+      const options: https.RequestOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port,
+        path: parsedUrl.pathname + parsedUrl.search,
         method: "GET",
         headers,
-        signal: controller.signal,
-        // @ts-expect-error - Node.js fetch supports agent option
         agent: this.httpsAgent,
+      };
+
+      const timeoutId = setTimeout(() => {
+        req.destroy();
+        reject(new Error(`Request timeout after ${String(this.timeout)}ms`));
+      }, this.timeout);
+
+      const req = https.request(options, (res) => {
+        clearTimeout(timeoutId);
+
+        let data = "";
+        res.on("data", (chunk: Buffer) => {
+          data += chunk.toString();
+        });
+
+        res.on("end", () => {
+          // Create a Response-like object
+          const response = {
+            ok: res.statusCode
+              ? res.statusCode >= 200 && res.statusCode < 300
+              : false,
+            status: res.statusCode ?? 500,
+            statusText: res.statusMessage ?? "Unknown",
+            headers: res.headers,
+            text: () => Promise.resolve(data),
+            json: () => Promise.resolve(JSON.parse(data) as unknown),
+          } as unknown as Response;
+
+          resolve(response);
+        });
       });
 
-      return response;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+      req.on("error", (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+
+      req.end();
+    });
   }
 
   /**
