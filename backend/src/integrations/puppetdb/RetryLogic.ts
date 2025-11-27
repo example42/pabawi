@@ -40,7 +40,7 @@ export const DEFAULT_RETRY_CONFIG: Required<Omit<RetryConfig, "onRetry">> = {
   maxDelay: 30000,
   backoffMultiplier: 2,
   jitter: true,
-  shouldRetry: () => true,
+  shouldRetry: (): boolean => true,
 };
 
 /**
@@ -187,8 +187,8 @@ export function isRetryableError(error: unknown): boolean {
  * @returns Retry configuration
  */
 export function createPuppetDBRetryConfig(
-  maxAttempts: number = 3,
-  initialDelay: number = 1000,
+  maxAttempts = 3,
+  initialDelay = 1000,
 ): RetryConfig {
   return {
     maxAttempts,
@@ -197,7 +197,7 @@ export function createPuppetDBRetryConfig(
     backoffMultiplier: 2,
     jitter: true,
     shouldRetry: isRetryableError,
-    onRetry: (attempt, delay, error) => {
+    onRetry: (attempt, delay, error): void => {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.warn(
         `[PuppetDB] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`,

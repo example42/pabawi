@@ -18,7 +18,7 @@ import type { IntegrationPlugin, IntegrationConfig, HealthStatus } from './types
  */
 export abstract class BasePlugin implements IntegrationPlugin {
   protected config: IntegrationConfig;
-  protected initialized: boolean = false;
+  protected initialized = false;
   protected lastHealthCheck?: HealthStatus;
 
   /**
@@ -81,10 +81,6 @@ export abstract class BasePlugin implements IntegrationPlugin {
   protected validateConfig(config: IntegrationConfig): void {
     if (!config.name) {
       throw new Error('Plugin configuration must include a name');
-    }
-
-    if (!config.type) {
-      throw new Error('Plugin configuration must include a type');
     }
 
     if (config.name !== this.name) {
@@ -196,6 +192,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
         console.warn(prefix, message);
         break;
       default:
+        // eslint-disable-next-line no-console
         console.log(prefix, message);
     }
   }

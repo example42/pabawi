@@ -435,8 +435,8 @@ export class PuppetDBService
    */
   async queryEvents(
     nodeId: string,
-    filters: import("./types").EventFilters,
-  ): Promise<import("./types").Event[]> {
+    filters: EventFilters,
+  ): Promise<Event[]> {
     return await this.getNodeEvents(nodeId, filters);
   }
 
@@ -481,7 +481,9 @@ export class PuppetDBService
         return null;
       }
 
-      this.log(`Fetched report '${reportHash}', has metrics: ${!!result[0].metrics}`);
+      const firstResult = result[0] as Record<string, unknown>;
+      const hasMetrics = Boolean(firstResult.metrics);
+      this.log(`Fetched report '${reportHash}', has metrics: ${String(hasMetrics)}`);
 
       // Transform the report
       const report = this.transformReport(result[0]);
@@ -546,7 +548,8 @@ export class PuppetDBService
         return [];
       }
 
-      this.log(`Fetched ${result.length} reports for node '${nodeId}'`);
+      const reportCount = result.length;
+      this.log(`Fetched ${String(reportCount)} reports for node '${nodeId}'`);
 
       // Transform reports
       const reports = result.map((report) => this.transformReport(report));
@@ -664,7 +667,7 @@ export class PuppetDBService
         }
 
         // Initialize array for this type if not exists
-        if (!resourcesByType[resource.type]) {
+        if (!(resource.type in resourcesByType)) {
           resourcesByType[resource.type] = [];
         }
 
@@ -672,8 +675,10 @@ export class PuppetDBService
         resourcesByType[resource.type].push(resource);
       }
 
+      const resourceCount = catalog.resources.length;
+      const typeCount = Object.keys(resourcesByType).length;
       this.log(
-        `Organized ${String(catalog.resources.length)} resources into ${String(Object.keys(resourcesByType).length)} types for node '${nodeId}'`,
+        `Organized ${String(resourceCount)} resources into ${String(typeCount)} types for node '${nodeId}'`,
       );
 
       return resourcesByType;
@@ -882,12 +887,16 @@ export class PuppetDBService
     if (Array.isArray(raw.resources)) {
       for (const resourceData of raw.resources) {
         const res = resourceData as Record<string, unknown>;
+        const resType = typeof res.type === "string" ? res.type : "";
+        const resTitle = typeof res.title === "string" ? res.title : "";
+        const resFile = typeof res.file === "string" ? res.file : undefined;
+
         resources.push({
-          type: String(res.type || ""),
-          title: String(res.title || ""),
+          type: resType,
+          title: resTitle,
           tags: Array.isArray(res.tags) ? res.tags.map(String) : [],
           exported: Boolean(res.exported),
-          file: res.file ? String(res.file) : undefined,
+          file: resFile,
           line: typeof res.line === "number" ? res.line : undefined,
           parameters:
             typeof res.parameters === "object" && res.parameters !== null
@@ -906,31 +915,42 @@ export class PuppetDBService
         const target = edge.target as Record<string, unknown> | undefined;
 
         if (source && target) {
+          const sourceType = typeof source.type === "string" ? source.type : "";
+          const sourceTitle = typeof source.title === "string" ? source.title : "";
+          const targetType = typeof target.type === "string" ? target.type : "";
+          const targetTitle = typeof target.title === "string" ? target.title : "";
+          const edgeRel = typeof edge.relationship === "string" ? edge.relationship : "contains";
+
           edges.push({
             source: {
-              type: String(source.type || ""),
-              title: String(source.title || ""),
+              type: sourceType,
+              title: sourceTitle,
             },
             target: {
-              type: String(target.type || ""),
-              title: String(target.title || ""),
+              type: targetType,
+              title: targetTitle,
             },
-            relationship: this.normalizeRelationship(
-              String(edge.relationship || "contains"),
-            ),
+            relationship: this.normalizeRelationship(edgeRel),
           });
         }
       }
     }
 
     // Return catalog with all required fields (requirements 4.1, 4.2, 4.5)
+    const certname = typeof raw.certname === "string" ? raw.certname : "";
+    const version = typeof raw.version === "string" ? raw.version : "";
+    const transactionUuid = typeof raw.transaction_uuid === "string" ? raw.transaction_uuid : "";
+    const environment = typeof raw.environment === "string" ? raw.environment : "production";
+    const producerTimestamp = typeof raw.producer_timestamp === "string" ? raw.producer_timestamp : "";
+    const hash = typeof raw.hash === "string" ? raw.hash : "";
+
     return {
-      certname: String(raw.certname || ""),
-      version: String(raw.version || ""),
-      transaction_uuid: String(raw.transaction_uuid || ""),
-      environment: String(raw.environment || "production"),
-      producer_timestamp: String(raw.producer_timestamp || ""),
-      hash: String(raw.hash || ""),
+      certname,
+      version,
+      transaction_uuid: transactionUuid,
+      environment,
+      producer_timestamp: producerTimestamp,
+      hash,
       resources,
       edges,
     };
@@ -984,7 +1004,8 @@ export class PuppetDBService
     // Debug logging to understand the metrics structure
     if (metricsArray.length > 0) {
       this.log(`First metric sample: ${JSON.stringify(metricsArray[0])}`);
-      this.log(`Total metrics count: ${metricsArray.length}`);
+      const metricsCount = metricsArray.length;
+      this.log(`Total metrics count: ${String(metricsCount)}`);
     } else {
       this.log(
         `No metrics array found. Raw metrics type: ${typeof raw.metrics}`,
@@ -1008,8 +1029,9 @@ export class PuppetDBService
       const value =
         metric && typeof metric.value === "number" ? metric.value : fallback;
       if (category === "resources" && value === 0 && metricsArray.length > 0) {
+        const metricFound = Boolean(metric);
         this.log(
-          `Warning: ${category}.${name} returned 0, metric found: ${!!metric}`,
+          `Warning: ${category}.${name} returned 0, metric found: ${String(metricFound)}`,
         );
       }
       return value;
@@ -1026,20 +1048,33 @@ export class PuppetDBService
       });
 
     // Transform to Report type with all required fields (requirement 3.3)
+    const certname = typeof raw.certname === "string" ? raw.certname : "";
+    const hash = typeof raw.hash === "string" ? raw.hash : "";
+    const environment = typeof raw.environment === "string" ? raw.environment : "production";
+    const statusStr = typeof raw.status === "string" ? raw.status : "unchanged";
+    const puppetVersion = typeof raw.puppet_version === "string" ? raw.puppet_version : "";
+    const reportFormat = typeof raw.report_format === "number" ? raw.report_format : 0;
+    const configVersion = typeof raw.configuration_version === "string" ? raw.configuration_version : "";
+    const startTime = typeof raw.start_time === "string" ? raw.start_time : "";
+    const endTime = typeof raw.end_time === "string" ? raw.end_time : "";
+    const producerTimestamp = typeof raw.producer_timestamp === "string" ? raw.producer_timestamp : "";
+    const receiveTime = typeof raw.receive_time === "string" ? raw.receive_time : "";
+    const transactionUuid = typeof raw.transaction_uuid === "string" ? raw.transaction_uuid : "";
+
     return {
-      certname: String(raw.certname || ""),
-      hash: String(raw.hash || ""),
-      environment: String(raw.environment || "production"),
-      status: this.normalizeReportStatus(String(raw.status || "unchanged")),
+      certname,
+      hash,
+      environment,
+      status: this.normalizeReportStatus(statusStr),
       noop: Boolean(raw.noop),
-      puppet_version: String(raw.puppet_version || ""),
-      report_format: Number(raw.report_format || 0),
-      configuration_version: String(raw.configuration_version || ""),
-      start_time: String(raw.start_time || ""),
-      end_time: String(raw.end_time || ""),
-      producer_timestamp: String(raw.producer_timestamp || ""),
-      receive_time: String(raw.receive_time || ""),
-      transaction_uuid: String(raw.transaction_uuid || ""),
+      puppet_version: puppetVersion,
+      report_format: reportFormat,
+      configuration_version: configVersion,
+      start_time: startTime,
+      end_time: endTime,
+      producer_timestamp: producerTimestamp,
+      receive_time: receiveTime,
+      transaction_uuid: transactionUuid,
       metrics: {
         resources: {
           total: getMetricValue("resources", "total"),
@@ -1126,18 +1161,28 @@ export class PuppetDBService
     const raw = eventData as Record<string, unknown>;
 
     // Return event with all required fields (requirement 5.3)
+    const certname = typeof raw.certname === "string" ? raw.certname : "";
+    const timestamp = typeof raw.timestamp === "string" ? raw.timestamp : "";
+    const report = typeof raw.report === "string" ? raw.report : "";
+    const resourceType = typeof raw.resource_type === "string" ? raw.resource_type : "";
+    const resourceTitle = typeof raw.resource_title === "string" ? raw.resource_title : "";
+    const property = typeof raw.property === "string" ? raw.property : "";
+    const statusStr = typeof raw.status === "string" ? raw.status : "success";
+    const message = typeof raw.message === "string" ? raw.message : undefined;
+    const file = typeof raw.file === "string" ? raw.file : undefined;
+
     return {
-      certname: String(raw.certname || ""),
-      timestamp: String(raw.timestamp || ""),
-      report: String(raw.report || ""),
-      resource_type: String(raw.resource_type || ""),
-      resource_title: String(raw.resource_title || ""),
-      property: String(raw.property || ""),
-      status: this.normalizeEventStatus(String(raw.status || "success")),
+      certname,
+      timestamp,
+      report,
+      resource_type: resourceType,
+      resource_title: resourceTitle,
+      property,
+      status: this.normalizeEventStatus(statusStr),
       old_value: raw.old_value,
       new_value: raw.new_value,
-      message: raw.message ? String(raw.message) : undefined,
-      file: raw.file ? String(raw.file) : undefined,
+      message,
+      file,
       line: typeof raw.line === "number" ? raw.line : undefined,
     };
   }
@@ -1379,10 +1424,11 @@ export class PuppetDBService
 
       // PQL queries are arrays with operator as first element
       if (!Array.isArray(parsed)) {
+        const parsedType = typeof parsed;
         throw new PuppetDBQueryError(
           "PQL query must be a JSON array",
           pqlQuery,
-          { reason: "not_array", parsedType: typeof parsed },
+          { reason: "not_array", parsedType },
         );
       }
 
@@ -1396,10 +1442,11 @@ export class PuppetDBService
 
       // First element should be an operator (string)
       if (typeof parsed[0] !== "string") {
+        const firstElement = parsed[0] as unknown;
         throw new PuppetDBQueryError(
           "PQL query must start with an operator",
           pqlQuery,
-          { reason: "invalid_operator", firstElement: parsed[0] },
+          { reason: "invalid_operator", firstElement },
         );
       }
 
