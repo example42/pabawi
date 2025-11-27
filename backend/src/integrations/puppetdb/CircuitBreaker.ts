@@ -42,7 +42,7 @@ export interface CircuitBreakerConfig {
  * Circuit breaker error
  */
 export class CircuitBreakerOpenError extends Error {
-  constructor(message: string = "Circuit breaker is open") {
+  constructor(message = "Circuit breaker is open") {
     super(message);
     this.name = "CircuitBreakerOpenError";
   }
@@ -139,9 +139,11 @@ export class CircuitBreaker {
   ): Promise<T> {
     return Promise.race([
       operation(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Operation timed out")), timeout),
-      ),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("Operation timed out"));
+        }, timeout);
+      }),
     ]);
   }
 
@@ -227,6 +229,7 @@ export class CircuitBreaker {
     this.state = newState;
 
     // Log state transition
+    // eslint-disable-next-line no-console
     console.log(`[CircuitBreaker] State transition: ${oldState} -> ${newState}`);
 
     // Invoke callback
@@ -333,23 +336,25 @@ export class CircuitBreaker {
  * @returns Configured circuit breaker
  */
 export function createPuppetDBCircuitBreaker(
-  failureThreshold: number = 5,
-  resetTimeout: number = 60000,
+  failureThreshold = 5,
+  resetTimeout = 60000,
   timeout?: number,
 ): CircuitBreaker {
   return new CircuitBreaker({
     failureThreshold,
     resetTimeout,
     timeout,
-    onStateChange: (oldState, newState) => {
+    onStateChange: (oldState, newState): void => {
+      // eslint-disable-next-line no-console
       console.log(`[PuppetDB] Circuit breaker: ${oldState} -> ${newState}`);
     },
-    onOpen: (failureCount) => {
+    onOpen: (failureCount): void => {
       console.error(
         `[PuppetDB] Circuit breaker opened after ${String(failureCount)} failures`,
       );
     },
-    onClose: () => {
+    onClose: (): void => {
+      // eslint-disable-next-line no-console
       console.log("[PuppetDB] Circuit breaker closed - service recovered");
     },
   });

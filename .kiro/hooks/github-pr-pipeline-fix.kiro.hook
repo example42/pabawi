@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "GitHub PR Pipeline Fixer",
+  "description": "Manually triggered hook that checks the latest pull requests on https://github.com/example42/pabawi/pulls for pipeline errors and attempts to fix them automatically",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Check the latest pull requests at https://github.com/example42/pabawi/pulls. For each PR with pipeline/CI errors:\n1. Identify the specific error(s) in the pipeline\n2. Analyze the root cause of the failure\n3. Propose and implement fixes for the errors\n4. Verify the fixes would resolve the pipeline issues\n5. Provide a summary of what was fixed and why\n\nFocus on common pipeline issues like:\n- Test failures\n- Linting errors\n- Build failures\n- Dependency issues\n- Configuration problems\n\nMake the necessary code changes to fix the identified issues."
+  }
+}

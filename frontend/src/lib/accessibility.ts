@@ -46,7 +46,7 @@ export const keyboardHandlers = {
   /**
    * Handle Enter and Space key presses for custom interactive elements
    */
-  activateOnEnterOrSpace: (callback: () => void) => (event: KeyboardEvent) => {
+  activateOnEnterOrSpace: (callback: () => void) => (event: KeyboardEvent): void => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       callback();
@@ -56,7 +56,7 @@ export const keyboardHandlers = {
   /**
    * Handle Escape key press
    */
-  closeOnEscape: (callback: () => void) => (event: KeyboardEvent) => {
+  closeOnEscape: (callback: () => void) => (event: KeyboardEvent): void => {
     if (event.key === 'Escape') {
       event.preventDefault();
       callback();
@@ -70,7 +70,7 @@ export const keyboardHandlers = {
     currentIndex: number,
     listLength: number,
     onNavigate: (newIndex: number) => void
-  ) => (event: KeyboardEvent) => {
+  ) => (event: KeyboardEvent): void => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       onNavigate(Math.min(currentIndex + 1, listLength - 1));
@@ -94,7 +94,7 @@ export const ariaHelpers = {
   /**
    * Get ARIA attributes for a button that controls a disclosure (e.g., dropdown, modal)
    */
-  disclosure: (isExpanded: boolean, controlsId: string) => ({
+  disclosure: (isExpanded: boolean, controlsId: string): Record<string, boolean | string> => ({
     'aria-expanded': isExpanded,
     'aria-controls': controlsId,
   }),
@@ -102,7 +102,7 @@ export const ariaHelpers = {
   /**
    * Get ARIA attributes for a tab
    */
-  tab: (isSelected: boolean, controlsId: string) => ({
+  tab: (isSelected: boolean, controlsId: string): Record<string, string | boolean | number> => ({
     role: 'tab',
     'aria-selected': isSelected,
     'aria-controls': controlsId,
@@ -112,7 +112,7 @@ export const ariaHelpers = {
   /**
    * Get ARIA attributes for a tab panel
    */
-  tabPanel: (labelledById: string) => ({
+  tabPanel: (labelledById: string): Record<string, string | number> => ({
     role: 'tabpanel',
     'aria-labelledby': labelledById,
     tabindex: 0,
@@ -126,25 +126,25 @@ export const focusManagement = {
   /**
    * Trap focus within a container (useful for modals)
    */
-  trapFocus: (container: HTMLElement) => {
+  trapFocus: (container: HTMLElement): ((event: KeyboardEvent) => void) => {
     const focusableElements = container.querySelectorAll<HTMLElement>(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
     );
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
 
-    return (event: KeyboardEvent) => {
+    return (event: KeyboardEvent): void => {
       if (event.key !== 'Tab') return;
 
       if (event.shiftKey) {
         if (document.activeElement === firstElement) {
           event.preventDefault();
-          lastElement?.focus();
+          lastElement.focus();
         }
       } else {
         if (document.activeElement === lastElement) {
           event.preventDefault();
-          firstElement?.focus();
+          firstElement.focus();
         }
       }
     };
@@ -153,7 +153,7 @@ export const focusManagement = {
   /**
    * Return focus to a previously focused element
    */
-  returnFocus: (element: HTMLElement | null) => {
+  returnFocus: (element: HTMLElement | null): void => {
     if (element && typeof element.focus === 'function') {
       element.focus();
     }
