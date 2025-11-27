@@ -4,7 +4,7 @@ Version: 0.2.0
 
 ## Overview
 
-This guide walks you through configuring Padawi to integrate with PuppetDB, enabling dynamic inventory discovery, node facts retrieval, Puppet run reports viewing, catalog inspection, and event tracking. PuppetDB integration provides a comprehensive view of your Puppet-managed infrastructure directly within Padawi.
+This guide walks you through configuring Pabawi to integrate with PuppetDB, enabling dynamic inventory discovery, node facts retrieval, Puppet run reports viewing, catalog inspection, and event tracking. PuppetDB integration provides a comprehensive view of your Puppet-managed infrastructure directly within Pabawi.
 
 ## Table of Contents
 
@@ -23,13 +23,13 @@ This guide walks you through configuring Padawi to integrate with PuppetDB, enab
 Before configuring PuppetDB integration, ensure you have:
 
 1. **PuppetDB Server**: A running PuppetDB instance (version 6.0 or later recommended)
-2. **Network Access**: Padawi server can reach PuppetDB server (default port: 8081)
+2. **Network Access**: Pabawi server can reach PuppetDB server (default port: 8081)
 3. **Credentials**: Authentication token or SSL certificates for PuppetDB access
 4. **Permissions**: Appropriate permissions to query PuppetDB data
 
 ### Verifying PuppetDB Availability
 
-Test PuppetDB connectivity from the Padawi server:
+Test PuppetDB connectivity from the Pabawi server:
 
 ```bash
 # Test HTTP connection (if not using SSL)
@@ -73,10 +73,10 @@ PUPPETDB_SERVER_URL=https://puppetdb.example.com
 PUPPETDB_PORT=8081
 ```
 
-### Starting Padawi
+### Starting Pabawi
 
 ```bash
-# Restart Padawi to apply configuration
+# Restart Pabawi to apply configuration
 npm run dev:backend
 
 # Or if using Docker
@@ -85,7 +85,7 @@ docker-compose restart
 
 ### Verifying Integration
 
-1. Open Padawi in your browser: `http://localhost:3000`
+1. Open Pabawi in your browser: `http://localhost:3000`
 2. Navigate to the **Home** page
 3. Look for **Integration Status** section
 4. Verify PuppetDB shows as "Connected"
@@ -197,7 +197,7 @@ The circuit breaker prevents cascading failures by temporarily disabling PuppetD
 
 ## SSL/TLS Setup
 
-PuppetDB typically uses HTTPS with SSL/TLS certificates. Padawi supports various SSL configurations.
+PuppetDB typically uses HTTPS with SSL/TLS certificates. Pabawi supports various SSL configurations.
 
 ### Option 1: System CA Certificates (Recommended)
 
@@ -228,8 +228,8 @@ PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
 
 **CA Certificate Path:**
 
-- Must be absolute path or relative to Padawi working directory
-- File must be readable by Padawi process
+- Must be absolute path or relative to Pabawi working directory
+- File must be readable by Pabawi process
 - PEM format required
 
 **Example CA Certificate Location:**
@@ -261,7 +261,7 @@ PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
 
 - All certificates must be in PEM format
 - Private key must be unencrypted (no passphrase)
-- Certificates must be readable by Padawi process
+- Certificates must be readable by Pabawi process
 - Client certificate must be signed by PuppetDB's trusted CA
 
 **Generating Client Certificates:**
@@ -363,7 +363,7 @@ curl -X POST https://puppetdb.example.com:8081/pdb/admin/v1/token \
 
 1. Log in to Puppet Enterprise Console
 2. Navigate to **Access Control** > **Users**
-3. Select or create user for Padawi
+3. Select or create user for Pabawi
 4. Generate API token
 5. Copy token for configuration
 
@@ -381,12 +381,12 @@ PUPPETDB_TOKEN=your-token-here
 - Store token in environment variable, not in code
 - Use `.env` file with restricted permissions (600)
 - Rotate tokens regularly (recommended: every 90 days)
-- Use dedicated service account for Padawi
+- Use dedicated service account for Pabawi
 - Grant minimum required permissions
 
 **Token Permissions:**
 
-Padawi requires read-only access to:
+Pabawi requires read-only access to:
 
 - `/pdb/query/v4/nodes`
 - `/pdb/query/v4/facts`
@@ -421,9 +421,9 @@ PUPPETDB_CACHE_TTL=300000
 
 ## Testing the Connection
 
-### Using Padawi UI
+### Using Pabawi UI
 
-1. **Start Padawi:**
+1. **Start Pabawi:**
 
    ```bash
    npm run dev:backend
@@ -483,7 +483,7 @@ curl http://localhost:3000/api/integrations/puppetdb/nodes/node1.example.com/rep
 
 ### Using Logs
 
-Check Padawi logs for connection details:
+Check Pabawi logs for connection details:
 
 ```bash
 # View logs (development)
@@ -527,7 +527,7 @@ sudo journalctl -u padawi -f
 2. **Test connectivity:**
 
    ```bash
-   # From Padawi server
+   # From Pabawi server
    curl -v https://puppetdb.example.com:8081/pdb/meta/v1/version
    ```
 
@@ -634,7 +634,7 @@ sudo journalctl -u padawi -f
    - Verify PuppetDB is receiving reports
 
 3. **Check cache:**
-   - Clear cache by restarting Padawi
+   - Clear cache by restarting Pabawi
    - Or set `PUPPETDB_CACHE_TTL=0` temporarily
 
 4. **Enable debug logging:**
@@ -697,7 +697,7 @@ sudo journalctl -u padawi -f
    - Consider PuppetDB tuning
 
 4. **Use pagination:**
-   - Padawi automatically paginates large result sets
+   - Pabawi automatically paginates large result sets
    - Adjust page size if needed
 
 #### Problem: "Circuit breaker open"
@@ -725,7 +725,7 @@ sudo journalctl -u padawi -f
    PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=60000  # Longer reset time
    ```
 
-4. **Restart Padawi:**
+4. **Restart Pabawi:**
    - Resets circuit breaker state
 
 ### Configuration Issues
@@ -739,7 +739,7 @@ sudo journalctl -u padawi -f
 
 **Solutions:**
 
-1. **Restart Padawi:**
+1. **Restart Pabawi:**
 
    ```bash
    # Development
@@ -768,14 +768,14 @@ sudo journalctl -u padawi -f
 
    ```bash
    ls -la backend/.env
-   # Should be readable by Padawi process
+   # Should be readable by Pabawi process
    ```
 
 ## Advanced Configuration
 
 ### Multiple PuppetDB Instances
 
-Currently, Padawi supports one PuppetDB instance. For multiple instances, consider:
+Currently, Pabawi supports one PuppetDB instance. For multiple instances, consider:
 
 1. **PuppetDB Federation:** Configure PuppetDB instances to federate
 2. **Load Balancer:** Use load balancer in front of multiple PuppetDB instances
@@ -807,7 +807,7 @@ Nodes from higher priority sources appear first in inventory.
 
 ### Health Check Interval
 
-Configure how often Padawi checks PuppetDB health:
+Configure how often Pabawi checks PuppetDB health:
 
 ```bash
 # Health check interval (milliseconds)
@@ -834,7 +834,7 @@ PUPPETDB_HEALTH_CHECK_INTERVAL=60000  # 1 minute
    - Use short-lived tokens when possible
 
 4. **Use Dedicated Service Account:**
-   - Create dedicated user for Padawi
+   - Create dedicated user for Pabawi
    - Grant minimum required permissions
    - Monitor access logs
 
@@ -850,22 +850,22 @@ PUPPETDB_HEALTH_CHECK_INTERVAL=60000  # 1 minute
 
 3. **Firewall Rules:**
    - Restrict access to PuppetDB port
-   - Allow only Padawi server IP
+   - Allow only Pabawi server IP
 
 4. **Network Segmentation:**
-   - Place PuppetDB and Padawi in secure network segment
+   - Place PuppetDB and Pabawi in secure network segment
    - Use VPN or private network
 
 ### Access Control
 
 1. **RBAC in PuppetDB:**
    - Configure role-based access control
-   - Grant read-only access to Padawi
+   - Grant read-only access to Pabawi
    - Restrict sensitive data access
 
 2. **Audit Logging:**
    - Enable audit logging in PuppetDB
-   - Monitor Padawi access patterns
+   - Monitor Pabawi access patterns
    - Review logs regularly
 
 3. **Principle of Least Privilege:**
@@ -880,7 +880,7 @@ PUPPETDB_HEALTH_CHECK_INTERVAL=60000  # 1 minute
    - Monitor error rates
 
 2. **Log Analysis:**
-   - Regularly review Padawi logs
+   - Regularly review Pabawi logs
    - Check for authentication failures
    - Monitor for unusual query patterns
 
@@ -917,9 +917,9 @@ Before deploying to production:
 - [PuppetDB API Documentation](https://puppet.com/docs/puppetdb/latest/api/index.html)
 - [PuppetDB Query Tutorial](https://puppet.com/docs/puppetdb/latest/api/query/tutorial.html)
 - [Puppet SSL Configuration](https://puppet.com/docs/puppet/latest/ssl_certificates.html)
-- [Padawi Configuration Guide](./configuration.md)
-- [Padawi API Documentation](./api.md)
-- [Padawi User Guide](./user-guide.md)
+- [Pabawi Configuration Guide](./configuration.md)
+- [Pabawi API Documentation](./api.md)
+- [Pabawi User Guide](./user-guide.md)
 
 ## Support
 
@@ -927,7 +927,7 @@ For PuppetDB integration issues:
 
 1. Check this setup guide and troubleshooting section
 2. Enable expert mode for detailed error information
-3. Review Padawi logs with `LOG_LEVEL=debug`
+3. Review Pabawi logs with `LOG_LEVEL=debug`
 4. Test PuppetDB connectivity directly
 5. Consult PuppetDB documentation
 6. Contact your administrator or support team

@@ -1,8 +1,8 @@
-# Padawi
+# Pabawi
 
 Version 0.2.0 - Unified Remote Execution Interface
 
-Padawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt and PuppetDB. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
+Pabawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt and PuppetDB. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
 
 ## Features
 
@@ -543,7 +543,7 @@ npm test --workspace=backend
 
 ## Acknowledgments
 
-Padawi builds on excellent open-source projects:
+Pabawi builds on excellent open-source projects:
 
 - **Puppet Bolt**: Remote task execution engine
 - **PuppetDB**: Centralized Puppet data storage
