@@ -2,7 +2,7 @@
  * Integration Plugin Types and Interfaces
  *
  * This module defines the core plugin architecture for integrating multiple
- * backend systems (execution tools and information sources) into Padawi.
+ * backend systems (execution tools and information sources) into Pabawi.
  */
 
 import type { Node, Facts, ExecutionResult } from "../bolt/types";

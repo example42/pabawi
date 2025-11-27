@@ -2,7 +2,7 @@
  * Integration Plugin System
  *
  * This module provides the plugin architecture for integrating multiple
- * backend systems into Padawi. It exports the core interfaces, base classes,
+ * backend systems into Pabawi. It exports the core interfaces, base classes,
  * and types needed to create and manage integration plugins.
  *
  * @module integrations

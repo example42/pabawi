@@ -2,7 +2,12 @@
 
 ## Overview
 
-This design document outlines the architecture for version 0.2.0 of Padawi, transforming it from a Bolt-specific web interface into a general-purpose remote execution platform. The core architectural shift introduces a plugin-based integration system where PuppetDB serves as the first additional integration beyond Puppet Bolt. This establishes patterns and abstractions that will support future integrations with Ansible, Terraform, AWS CLI, Azure CLI, Kubernetes, and other infrastructure management tools.
+This design document outlines the architecture for version 0.2.0 of Pabawi, transforming it from a
+Bolt-specific web interface into a general-purpose remote execution platform. The core architectural
+shift introduces a plugin-based integration system where PuppetDB serves as the first additional
+integration beyond Puppet Bolt. This establishes patterns and abstractions that will support future
+integrations with Ansible, Terraform, AWS CLI, Azure CLI, Kubernetes, and other infrastructure
+management tools.
 
 The design introduces two key concepts:
 
@@ -19,13 +24,17 @@ PuppetDB integration provides:
 
 Additionally, this version introduces action re-execution capabilities, allowing users to quickly repeat operations with preserved parameters, and comprehensive UI enhancements to support the multi-tool architecture.
 
-**Expert Mode Enhancement**: A critical priority for this version is enhancing the expert mode experience to provide complete transparency into command execution. When expert mode is enabled, users will see the full command line being executed and complete, untruncated output (stdout/stderr). This visibility is essential for debugging, auditing, and understanding exactly what operations are being performed on managed infrastructure.
+**Expert Mode Enhancement**: A critical priority for this version is enhancing the expert mode
+experience to provide complete transparency into command execution. When expert mode is enabled,
+users will see the full command line being executed and complete, untruncated output (stdout/stderr).
+This visibility is essential for debugging, auditing, and understanding exactly what operations are
+being performed on managed infrastructure.
 
 ## Architecture
 
 ### High-Level Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                        Frontend (Svelte)                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
@@ -501,7 +510,7 @@ interface AggregatedNodeData {
 
 ### Prework Analysis
 
-1.1 WHEN the system is configured with PuppetDB connection details THEN Padawi SHALL retrieve the list of active nodes from PuppetDB
+1.1 WHEN the system is configured with PuppetDB connection details THEN Pabawi SHALL retrieve the list of active nodes from PuppetDB
 Thoughts: This is about the system's ability to connect to PuppetDB and retrieve data. We can test this by generating random PuppetDB configurations (valid and invalid), attempting connections, and verifying that valid configs return node lists while invalid ones fail appropriately.
 Testable: yes - property
 
@@ -601,7 +610,7 @@ Testable: yes - property
 Thoughts: This is about filter functionality. We can verify all filter types work correctly.
 Testable: yes - property
 
-6.1 WHEN the system starts THEN Padawi SHALL read PuppetDB connection configuration from environment variables or configuration files
+6.1 WHEN the system starts THEN Pabawi SHALL read PuppetDB connection configuration from environment variables or configuration files
 Thoughts: This is about configuration loading. We can verify the system reads config from expected sources.
 Testable: yes - example
 
@@ -1218,7 +1227,7 @@ UI tests will verify:
 
 ### New PuppetDB Endpoints
 
-```
+```http
 GET    /api/integrations/status
 GET    /api/integrations/puppetdb/nodes
 GET    /api/integrations/puppetdb/nodes/:certname
@@ -1232,7 +1241,7 @@ POST   /api/integrations/puppetdb/query
 
 ### Enhanced Execution Endpoints
 
-```
+```http
 GET    /api/executions/:id/original          # Get original execution for re-execution
 GET    /api/executions/:id/re-executions     # Get all re-executions of an execution
 POST   /api/executions/:id/re-execute        # Trigger re-execution
@@ -1244,7 +1253,7 @@ GET    /api/executions/:id/command           # Get full command line for executi
 
 ### Enhanced Inventory Endpoints
 
-```
+```http
 GET    /api/inventory?sources=bolt,puppetdb  # Get inventory from specific sources
 GET    /api/inventory/sources                # Get available inventory sources and status
 ```

@@ -4,7 +4,7 @@ Version: 0.2.0
 
 ## Overview
 
-This document describes the API endpoints added in version 0.2.0 for PuppetDB integration, re-execution capabilities, and expert mode enhancements. These endpoints extend the base Padawi API to support multi-source infrastructure management.
+This document describes the API endpoints added in version 0.2.0 for PuppetDB integration, re-execution capabilities, and expert mode enhancements. These endpoints extend the base Pabawi API to support multi-source infrastructure management.
 
 ## Table of Contents
 
@@ -1004,7 +1004,7 @@ curl -H "X-Expert-Mode: true" \
 
 ## Error Handling
 
-All endpoints follow the standard Padawi error response format:
+All endpoints follow the standard Pabawi error response format:
 
 ```json
 {
@@ -1114,6 +1114,6 @@ List endpoints support pagination:
 ## Additional Resources
 
 - [PuppetDB Integration Setup Guide](./puppetdb-integration-setup.md)
-- [Padawi Configuration Guide](./configuration.md)
-- [Padawi User Guide](./user-guide.md)
+- [Pabawi Configuration Guide](./configuration.md)
+- [Pabawi User Guide](./user-guide.md)
 - [PuppetDB API Documentation](https://puppet.com/docs/puppetdb/latest/api/index.html)
