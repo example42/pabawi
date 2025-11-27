@@ -40,17 +40,32 @@
     }
   }
 
-  // Highlight search matches in text
-  function highlightMatches(text: string, query: string): string {
-    if (!query) return text;
+  // Escape HTML entities to prevent XSS attacks
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
 
-    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Highlight search matches in text with HTML sanitization
+  function highlightMatches(text: string, query: string): string {
+    if (!query) return escapeHtml(text);
+
+    // First escape HTML entities in the original text to prevent XSS
+    const sanitizedText = escapeHtml(text);
+
+    // Also escape the query for regex, but also escape HTML entities
+    // so we can match against the sanitized text
+    const escapedQuery = escapeHtml(query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escapedQuery, 'gi');
-    const matches = text.match(regex);
+    const matches = sanitizedText.match(regex);
     totalMatches = matches ? matches.length : 0;
 
     let matchCount = 0;
-    return text.replace(regex, (match) => {
+    return sanitizedText.replace(regex, (match) => {
       matchCount++;
       const isCurrent = matchCount === currentMatchIndex + 1;
       const className = isCurrent ? 'search-match-current' : 'search-match';
