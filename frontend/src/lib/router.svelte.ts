@@ -6,21 +6,28 @@ type ComponentType = any;
 class Router {
   currentPath = $state("/");
   currentParams = $state<Record<string, string>>({});
+  currentQuery = $state<URLSearchParams>(new URLSearchParams());
 
   constructor() {
-    // Initialize with current path
+    // Initialize with current path and query
     this.currentPath = window.location.pathname;
+    this.currentQuery = new URLSearchParams(window.location.search);
 
     // Listen for popstate (back/forward buttons)
     window.addEventListener("popstate", () => {
       this.currentPath = window.location.pathname;
+      this.currentQuery = new URLSearchParams(window.location.search);
     });
   }
 
   navigate(path: string): void {
-    if (path !== this.currentPath) {
+    const [pathname, search] = path.split("?");
+    const fullPath = window.location.pathname + window.location.search;
+
+    if (path !== fullPath) {
       window.history.pushState({}, "", path);
-      this.currentPath = path;
+      this.currentPath = pathname;
+      this.currentQuery = new URLSearchParams(search || "");
     }
   }
 
@@ -69,6 +76,10 @@ class Router {
 
   get params(): Record<string, string> {
     return this.currentParams;
+  }
+
+  get query(): URLSearchParams {
+    return this.currentQuery;
   }
 }
 

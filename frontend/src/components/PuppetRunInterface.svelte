@@ -290,6 +290,7 @@
             id="puppet-noop-toggle"
             role="switch"
             aria-checked={noop}
+            aria-label="Toggle noop mode (dry-run)"
             onclick={handleNoopToggle}
             disabled={executing}
             class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {noop ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
@@ -315,6 +316,7 @@
             id="puppet-no-noop-toggle"
             role="switch"
             aria-checked={noNoop}
+            aria-label="Toggle no-noop mode (override node noop setting)"
             onclick={handleNoNoopToggle}
             disabled={executing}
             class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {noNoop ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
@@ -340,6 +342,7 @@
             id="puppet-debug-toggle"
             role="switch"
             aria-checked={debug}
+            aria-label="Toggle debug mode (verbose output)"
             onclick={handleDebugToggle}
             disabled={executing}
             class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {debug ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
@@ -356,6 +359,7 @@
           class="text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
           onclick={() => showAdvanced = !showAdvanced}
           aria-label={showAdvanced ? 'Hide advanced options' : 'Show advanced options'}
+          aria-expanded={showAdvanced}
         >
           {showAdvanced ? 'Hide' : 'Show'} advanced options
         </button>

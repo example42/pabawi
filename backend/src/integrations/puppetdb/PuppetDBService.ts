@@ -154,16 +154,20 @@ export class PuppetDBService
     // Extract PuppetDB config from integration config
     this.puppetDBConfig = this.config.config as PuppetDBConfig;
 
-    if (!this.puppetDBConfig.serverUrl) {
-      throw new PuppetDBConnectionError(
-        "PuppetDB serverUrl is required in configuration",
-        { config: this.puppetDBConfig },
-      );
+    // Check if integration is disabled
+    if (!this.config.enabled) {
+      this.log("PuppetDB integration is disabled");
+      return Promise.resolve();
     }
 
-    // Create client
+    // Check if configuration is missing
+    if (!this.puppetDBConfig.serverUrl) {
+      this.log("PuppetDB integration is not configured (missing serverUrl)");
+      return Promise.resolve();
+    }
+
+    // Create PuppetDB client
     this.client = createPuppetDBClient(this.puppetDBConfig);
-    this.log(`Created PuppetDB client for ${this.client.getBaseUrl()}`);
 
     // Create circuit breaker
     this.circuitBreaker = createPuppetDBCircuitBreaker(
@@ -477,6 +481,8 @@ export class PuppetDBService
         return null;
       }
 
+      this.log(`Fetched report '${reportHash}', has metrics: ${!!result[0].metrics}`);
+
       // Transform the report
       const report = this.transformReport(result[0]);
 
@@ -539,6 +545,8 @@ export class PuppetDBService
         );
         return [];
       }
+
+      this.log(`Fetched ${result.length} reports for node '${nodeId}'`);
 
       // Transform reports
       const reports = result.map((report) => this.transformReport(report));
@@ -960,23 +968,62 @@ export class PuppetDBService
     // Type assertion - PuppetDB returns reports with these fields
     const raw = reportData as Record<string, unknown>;
 
-    // Extract metrics with safe defaults
-    const metrics = (raw.metrics as Record<string, unknown>) || {};
-    const resourceMetrics =
-      (metrics.resources as Record<string, unknown>) || {};
-    const timeMetrics = (metrics.time as Record<string, unknown>) || {};
-    const changeMetrics = (metrics.changes as Record<string, unknown>) || {};
-    const eventMetrics = (metrics.events as Record<string, unknown>) || {};
+    // Define interface for PuppetDB metric structure
+    interface PuppetDBMetric {
+      category: unknown;
+      name: unknown;
+      value: unknown;
+    }
 
-    // Helper to safely get number
-    const getNumber = (
-      obj: Record<string, unknown>,
-      key: string,
+    // PuppetDB returns metrics as an array of objects with category, name, and value
+    // Example: [{"category": "resources", "name": "total", "value": 2153}, ...]
+    const metricsArray = Array.isArray(raw.metrics)
+      ? (raw.metrics as PuppetDBMetric[])
+      : [];
+
+    // Debug logging to understand the metrics structure
+    if (metricsArray.length > 0) {
+      this.log(`First metric sample: ${JSON.stringify(metricsArray[0])}`);
+      this.log(`Total metrics count: ${metricsArray.length}`);
+    } else {
+      this.log(
+        `No metrics array found. Raw metrics type: ${typeof raw.metrics}`,
+      );
+      if (raw.metrics) {
+        this.log(
+          `Raw metrics sample: ${JSON.stringify(raw.metrics).substring(0, 200)}`,
+        );
+      }
+    }
+
+    // Helper to extract metric value from array
+    const getMetricValue = (
+      category: string,
+      name: string,
       fallback = 0,
     ): number => {
-      const value = obj[key];
-      return typeof value === "number" ? value : fallback;
+      const metric = metricsArray.find(
+        (m) => m.category === category && m.name === name,
+      );
+      const value =
+        metric && typeof metric.value === "number" ? metric.value : fallback;
+      if (category === "resources" && value === 0 && metricsArray.length > 0) {
+        this.log(
+          `Warning: ${category}.${name} returned 0, metric found: ${!!metric}`,
+        );
+      }
+      return value;
     };
+
+    // Build time metrics object
+    const timeMetrics: Record<string, number> = {};
+    metricsArray
+      .filter((m) => m.category === "time")
+      .forEach((m) => {
+        if (typeof m.name === "string" && typeof m.value === "number") {
+          timeMetrics[m.name] = m.value;
+        }
+      });
 
     // Transform to Report type with all required fields (requirement 3.3)
     return {
@@ -995,23 +1042,23 @@ export class PuppetDBService
       transaction_uuid: String(raw.transaction_uuid || ""),
       metrics: {
         resources: {
-          total: getNumber(resourceMetrics, "total"),
-          skipped: getNumber(resourceMetrics, "skipped"),
-          failed: getNumber(resourceMetrics, "failed"),
-          failed_to_restart: getNumber(resourceMetrics, "failed_to_restart"),
-          restarted: getNumber(resourceMetrics, "restarted"),
-          changed: getNumber(resourceMetrics, "changed"),
-          out_of_sync: getNumber(resourceMetrics, "out_of_sync"),
-          scheduled: getNumber(resourceMetrics, "scheduled"),
+          total: getMetricValue("resources", "total"),
+          skipped: getMetricValue("resources", "skipped"),
+          failed: getMetricValue("resources", "failed"),
+          failed_to_restart: getMetricValue("resources", "failed_to_restart"),
+          restarted: getMetricValue("resources", "restarted"),
+          changed: getMetricValue("resources", "changed"),
+          out_of_sync: getMetricValue("resources", "out_of_sync"),
+          scheduled: getMetricValue("resources", "scheduled"),
         },
-        time: timeMetrics as Record<string, number>,
+        time: timeMetrics,
         changes: {
-          total: getNumber(changeMetrics, "total"),
+          total: getMetricValue("changes", "total"),
         },
         events: {
-          success: getNumber(eventMetrics, "success"),
-          failure: getNumber(eventMetrics, "failure"),
-          total: getNumber(eventMetrics, "total"),
+          success: getMetricValue("events", "success"),
+          failure: getMetricValue("events", "failure"),
+          total: getMetricValue("events", "total"),
         },
       },
       logs: Array.isArray(raw.logs)

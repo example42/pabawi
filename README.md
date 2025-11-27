@@ -237,24 +237,28 @@ git commit --no-verify -m "message"
 ### Major Enhancements
 
 **PuppetDB Integration**
+
 - Dynamic inventory discovery from PuppetDB
 - View node facts, reports, catalogs, and events
 - PQL query support for advanced filtering
 - Seamless integration with existing Bolt functionality
 
 **Re-execution Capabilities**
+
 - One-click re-execution of previous operations
 - Parameter preservation and modification
 - Execution history tracking and relationships
 - Context-aware re-execution from node pages
 
 **Expert Mode Enhancements**
+
 - Complete command line visibility
 - Full stdout/stderr without truncation
 - Search functionality for long output
 - Syntax highlighting for commands and output
 
 **Enhanced UI**
+
 - Tabbed node detail page for better organization
 - Integration status dashboard
 - Multi-source inventory with source attribution
@@ -263,6 +267,7 @@ git commit --no-verify -m "message"
 ### Backward Compatibility
 
 Version 0.2.0 is fully backward compatible with v0.1.0:
+
 - All existing features continue to work
 - No configuration changes required
 - Existing data automatically migrated
@@ -375,6 +380,7 @@ Monitor health of all configured integrations:
 Copy `.env.example` to `.env` and configure as needed. Key variables:
 
 **Core Settings:**
+
 - `PORT`: Application port (default: 3000)
 - `BOLT_PROJECT_PATH`: Path to Bolt project directory
 - `COMMAND_WHITELIST_ALLOW_ALL`: Allow all commands (default: false)
@@ -383,6 +389,7 @@ Copy `.env.example` to `.env` and configure as needed. Key variables:
 - `LOG_LEVEL`: Logging level (default: info)
 
 **PuppetDB Integration (Optional):**
+
 - `PUPPETDB_ENABLED`: Enable PuppetDB integration (default: false)
 - `PUPPETDB_SERVER_URL`: PuppetDB server URL
 - `PUPPETDB_PORT`: PuppetDB port (default: 8081)
@@ -604,8 +611,8 @@ npm run dev:frontend
 
 ### 4. Access the Application
 
-- **Frontend**: http://localhost:5173
-- **Backend API**: http://localhost:3000/api
+- **Frontend**: <http://localhost:5173>
+- **Backend API**: <http://localhost:3000/api>
 
 ### 5. (Optional) Configure PuppetDB
 

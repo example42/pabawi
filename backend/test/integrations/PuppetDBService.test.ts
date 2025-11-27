@@ -37,18 +37,22 @@ describe('PuppetDBService', () => {
   });
 
   describe('configuration', () => {
-    it('should validate configuration on initialization', async () => {
+    it('should allow initialization without serverUrl (not configured)', async () => {
       const config: IntegrationConfig = {
         enabled: true,
         name: 'puppetdb',
         type: 'information',
         config: {
-          // Missing serverUrl
+          // Missing serverUrl - should initialize but not be functional
         },
       };
 
-      await expect(service.initialize(config)).rejects.toThrow(PuppetDBConnectionError);
-      await expect(service.initialize(config)).rejects.toThrow('PuppetDB serverUrl is required');
+      // Should initialize successfully but not create client
+      await expect(service.initialize(config)).resolves.not.toThrow();
+      expect(service.isInitialized()).toBe(true);
+
+      // But should throw when trying to use it
+      await expect(service.getInventory()).rejects.toThrow(PuppetDBConnectionError);
     });
 
     it('should accept valid configuration', async () => {

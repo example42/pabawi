@@ -1,5 +1,5 @@
 <script lang="ts">
-  type Status = 'success' | 'failed' | 'running' | 'partial' | 'unchanged' | 'changed' | 'connected' | 'disconnected' | 'error';
+  type Status = 'success' | 'failed' | 'running' | 'partial' | 'unchanged' | 'changed' | 'connected' | 'disconnected' | 'error' | 'pending';
 
   interface Props {
     status: Status;
@@ -44,6 +44,10 @@
     error: {
       label: 'Error',
       classes: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+    },
+    pending: {
+      label: 'Not Configured',
+      classes: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
     }
   };
 

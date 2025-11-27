@@ -197,6 +197,7 @@
             type="button"
             class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             onclick={() => searchQuery = ''}
+            aria-label="Clear search"
           >
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -207,9 +208,10 @@
 
       <!-- Status Filter -->
       <div>
-        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label for="status-filter-group" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
           Filter by Status
         </label>
+        <div id="status-filter-group" role="group" aria-label="Filter by status">
         <div class="flex flex-wrap gap-2">
           <button
             type="button"
@@ -247,14 +249,16 @@
             Skipped ({eventCounts.skipped})
           </button>
         </div>
+        </div>
       </div>
 
       <!-- Resource Type Filter -->
       <div>
-        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label for="resource-type-filter" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
           Filter by Resource Type
         </label>
         <select
+          id="resource-type-filter"
           bind:value={resourceTypeFilter}
           onchange={applyFilters}
           class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"

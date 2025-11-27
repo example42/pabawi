@@ -27,3 +27,6 @@ export { BasePlugin } from './BasePlugin';
 // Export integration manager
 export { IntegrationManager } from './IntegrationManager';
 export type { AggregatedInventory, AggregatedNodeData } from './IntegrationManager';
+
+// Export integration plugins
+export { BoltPlugin } from './bolt';

@@ -21,6 +21,7 @@ import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware } from "./middleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
+import { BoltPlugin } from "./integrations/bolt";
 import type { IntegrationConfig } from "./integrations/types";
 
 /**
@@ -103,8 +104,12 @@ async function startServer(): Promise<Express> {
     const streamingManager = new StreamingExecutionManager(config.streaming);
     console.warn("Streaming execution manager initialized successfully");
     console.warn(`- Buffer interval: ${String(config.streaming.bufferMs)}ms`);
-    console.warn(`- Max output size: ${String(config.streaming.maxOutputSize)} bytes`);
-    console.warn(`- Max line length: ${String(config.streaming.maxLineLength)} characters`);
+    console.warn(
+      `- Max output size: ${String(config.streaming.maxOutputSize)} bytes`,
+    );
+    console.warn(
+      `- Max line length: ${String(config.streaming.maxLineLength)} characters`,
+    );
 
     // Initialize execution queue
     const executionQueue = new ExecutionQueue(
@@ -112,47 +117,81 @@ async function startServer(): Promise<Express> {
       config.executionQueue.maxQueueSize,
     );
     console.warn("Execution queue initialized successfully");
-    console.warn(`- Concurrent execution limit: ${String(config.executionQueue.concurrentLimit)}`);
-    console.warn(`- Maximum queue size: ${String(config.executionQueue.maxQueueSize)}`);
+    console.warn(
+      `- Concurrent execution limit: ${String(config.executionQueue.concurrentLimit)}`,
+    );
+    console.warn(
+      `- Maximum queue size: ${String(config.executionQueue.maxQueueSize)}`,
+    );
 
     // Initialize integration manager
     console.warn("Initializing integration manager...");
     const integrationManager = new IntegrationManager();
 
-    // Initialize PuppetDB integration if configured
+    // Register Bolt as an integration plugin
+    console.warn("Registering Bolt integration...");
+    const boltPlugin = new BoltPlugin(boltService);
+    const boltConfig: IntegrationConfig = {
+      enabled: true,
+      name: "bolt",
+      type: "both",
+      config: {
+        projectPath: config.boltProjectPath,
+      },
+      priority: 5, // Lower priority than PuppetDB
+    };
+    integrationManager.registerPlugin(boltPlugin, boltConfig);
+
+    // Initialize PuppetDB integration only if configured
     let puppetDBService: PuppetDBService | undefined;
-    if (config.integrations.puppetdb?.enabled) {
+    const puppetDBConfig = config.integrations.puppetdb;
+    const puppetDBConfigured = !!puppetDBConfig?.serverUrl;
+
+    if (puppetDBConfigured) {
       console.warn("Initializing PuppetDB integration...");
       try {
         puppetDBService = new PuppetDBService();
-        const puppetDBConfig: IntegrationConfig = {
-          enabled: true,
+        const integrationConfig: IntegrationConfig = {
+          enabled: puppetDBConfig.enabled,
           name: "puppetdb",
           type: "information",
-          config: config.integrations.puppetdb,
+          config: puppetDBConfig,
           priority: 10, // Higher priority than Bolt
         };
 
-        integrationManager.registerPlugin(puppetDBService, puppetDBConfig);
-        const errors = await integrationManager.initializePlugins();
+        integrationManager.registerPlugin(puppetDBService, integrationConfig);
 
-        if (errors.length > 0) {
-          console.warn(`PuppetDB initialization completed with ${String(errors.length)} error(s):`);
-          for (const { plugin, error } of errors) {
-            console.warn(`  - ${plugin}: ${error.message}`);
-          }
-        } else {
-          console.warn("PuppetDB integration initialized successfully");
-          console.warn(`- Server URL: ${config.integrations.puppetdb.serverUrl}`);
-          console.warn(`- SSL enabled: ${String(config.integrations.puppetdb.ssl?.enabled ?? false)}`);
-          console.warn(`- Authentication: ${config.integrations.puppetdb.token ? "configured" : "not configured"}`);
-        }
+        console.warn("PuppetDB integration registered and enabled");
+        console.warn(`- Server URL: ${puppetDBConfig.serverUrl}`);
+        console.warn(
+          `- SSL enabled: ${String(puppetDBConfig.ssl?.enabled ?? false)}`,
+        );
+        console.warn(
+          `- Authentication: ${puppetDBConfig.token ? "configured" : "not configured"}`,
+        );
       } catch (error) {
-        console.warn(`WARNING: Failed to initialize PuppetDB integration: ${error instanceof Error ? error.message : "Unknown error"}`);
+        console.warn(
+          `WARNING: Failed to initialize PuppetDB integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
         puppetDBService = undefined;
       }
     } else {
-      console.warn("PuppetDB integration is not enabled");
+      console.warn("PuppetDB integration not configured - skipping registration");
+    }
+
+    // Initialize all registered plugins
+    console.warn("Initializing all integration plugins...");
+    const initErrors = await integrationManager.initializePlugins();
+
+    if (initErrors.length > 0) {
+      console.warn(
+        `Integration initialization completed with ${String(initErrors.length)} error(s):`,
+      );
+      for (const { plugin, error } of initErrors) {
+        console.warn(`  - ${plugin}: ${error.message}`);
+      }
+    } else {
+      console.warn("All integrations initialized successfully");
     }
 
     console.warn("Integration manager initialized successfully");
@@ -226,8 +265,14 @@ async function startServer(): Promise<Express> {
     });
 
     // API Routes
-    app.use("/api/inventory", createInventoryRouter(boltService, integrationManager));
-    app.use("/api/nodes", createInventoryRouter(boltService, integrationManager));
+    app.use(
+      "/api/inventory",
+      createInventoryRouter(boltService, integrationManager),
+    );
+    app.use(
+      "/api/nodes",
+      createInventoryRouter(boltService, integrationManager),
+    );
     app.use("/api/nodes", createFactsRouter(boltService));
     app.use(
       "/api/nodes",
@@ -268,7 +313,10 @@ async function startServer(): Promise<Express> {
       "/api/tasks",
       createTasksRouter(boltService, executionRepository, streamingManager),
     );
-    app.use("/api/executions", createExecutionsRouter(executionRepository, executionQueue));
+    app.use(
+      "/api/executions",
+      createExecutionsRouter(executionRepository, executionQueue),
+    );
     app.use(
       "/api/executions",
       createStreamingRouter(streamingManager, executionRepository),
@@ -277,7 +325,10 @@ async function startServer(): Promise<Express> {
       "/api/streaming",
       createStreamingRouter(streamingManager, executionRepository),
     );
-    app.use("/api/integrations", createIntegrationsRouter(integrationManager, puppetDBService));
+    app.use(
+      "/api/integrations",
+      createIntegrationsRouter(integrationManager, puppetDBService),
+    );
 
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");

@@ -11,6 +11,7 @@
   import PuppetRunInterface from '../components/PuppetRunInterface.svelte';
   import PackageInstallInterface from '../components/PackageInstallInterface.svelte';
   import ReportViewer from '../components/ReportViewer.svelte';
+  import PuppetReportsListView from '../components/PuppetReportsListView.svelte';
   import CatalogViewer from '../components/CatalogViewer.svelte';
   import EventsViewer from '../components/EventsViewer.svelte';
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
@@ -123,6 +124,7 @@
   let puppetReports = $state<any[]>([]);
   let puppetReportsLoading = $state(false);
   let puppetReportsError = $state<string | null>(null);
+  let selectedReport = $state<any | null>(null);
 
   let catalog = $state<any | null>(null);
   let catalogLoading = $state(false);
@@ -924,11 +926,17 @@
                       <td class="whitespace-nowrap px-4 py-3 text-sm cursor-pointer" onclick={() => router.navigate('/executions')}>
                         <StatusBadge status={execution.status} size="sm" />
                       </td>
-                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => router.navigate('/executions')}>
-                        <span>{formatTimestamp(execution.startedAt)}</span>
-                      </td>
                       <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        <div class="flex items-center justify-end gap-2" onclick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          class="text-left hover:text-blue-600 dark:hover:text-blue-400"
+                          onclick={() => router.navigate('/executions')}
+                        >
+                          {formatTimestamp(execution.startedAt)}
+                        </button>
+                      </td>
+                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400" onclick={(e) => e.stopPropagation()}>
+                        <div class="flex items-center justify-end gap-2">
                           <ReExecutionButton execution={execution} currentNodeId={nodeId} size="sm" variant="icon" />
                           <button
                             type="button"
@@ -958,11 +966,22 @@
       {#if activeTab === 'puppet-reports'}
         <div class="space-y-4">
           <!-- Source Badge Header -->
-          <div class="flex items-center gap-3">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
-            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-              {getSourceBadge('puppetdb')}
-            </span>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
+                {getSourceBadge('puppetdb')}
+              </span>
+            </div>
+            {#if selectedReport}
+              <button
+                type="button"
+                class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                onclick={() => selectedReport = null}
+              >
+                ← Back to list
+              </button>
+            {/if}
           </div>
 
           {#if puppetReportsLoading}
@@ -981,10 +1000,15 @@
                 No Puppet reports found for this node.
               </p>
             </div>
+          {:else if selectedReport}
+            <!-- Detailed view of selected report -->
+            <ReportViewer report={selectedReport} />
           {:else}
-            {#each puppetReports as report}
-              <ReportViewer {report} />
-            {/each}
+            <!-- Compact list view -->
+            <PuppetReportsListView
+              reports={puppetReports}
+              onReportClick={(report) => selectedReport = report}
+            />
           {/if}
         </div>
       {/if}
