@@ -111,10 +111,50 @@ export const IntegrationConfigSchema = z.object({
 export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
 
 /**
+ * Puppetserver cache configuration schema
+ */
+export const PuppetserverCacheConfigSchema = z.object({
+  ttl: z.number().int().positive().default(300000), // 5 minutes default
+});
+
+export type PuppetserverCacheConfig = z.infer<typeof PuppetserverCacheConfigSchema>;
+
+/**
+ * Puppetserver circuit breaker configuration schema
+ */
+export const PuppetserverCircuitBreakerConfigSchema = z.object({
+  threshold: z.number().int().positive().default(5),
+  timeout: z.number().int().positive().default(60000), // 60 seconds
+  resetTimeout: z.number().int().positive().default(30000), // 30 seconds
+});
+
+export type PuppetserverCircuitBreakerConfig = z.infer<typeof PuppetserverCircuitBreakerConfigSchema>;
+
+/**
+ * Puppetserver integration configuration schema
+ */
+export const PuppetserverConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  serverUrl: z.string().url(),
+  port: z.number().int().positive().max(65535).optional(),
+  token: z.string().optional(),
+  ssl: SSLConfigSchema.optional(),
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  retryAttempts: z.number().int().nonnegative().default(3),
+  retryDelay: z.number().int().positive().default(1000), // 1 second
+  inactivityThreshold: z.number().int().positive().default(3600), // 1 hour in seconds
+  cache: PuppetserverCacheConfigSchema.optional(),
+  circuitBreaker: PuppetserverCircuitBreakerConfigSchema.optional(),
+});
+
+export type PuppetserverConfig = z.infer<typeof PuppetserverConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
+  puppetserver: PuppetserverConfigSchema.optional(),
   // Future integrations: ansible, terraform, etc.
 });
 
