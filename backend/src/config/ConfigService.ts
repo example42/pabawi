@@ -140,11 +140,18 @@ export class ConfigService {
         nodeExporterJobName: process.env.PROMETHEUS_NODE_EXPORTER_JOB,
       };
 
-      // Parse basic auth if configured
-      if (process.env.PROMETHEUS_BASIC_AUTH_USER && process.env.PROMETHEUS_BASIC_AUTH_PASSWORD) {
+      // Validate and parse basic auth if configured
+      const basicAuthUser = process.env.PROMETHEUS_BASIC_AUTH_USER;
+      const basicAuthPassword = process.env.PROMETHEUS_BASIC_AUTH_PASSWORD;
+      if ((basicAuthUser && !basicAuthPassword) || (!basicAuthUser && basicAuthPassword)) {
+        throw new Error(
+          "Both PROMETHEUS_BASIC_AUTH_USER and PROMETHEUS_BASIC_AUTH_PASSWORD must be set for Prometheus basic auth."
+        );
+      }
+      if (basicAuthUser && basicAuthPassword) {
         integrations.prometheus.basicAuth = {
-          username: process.env.PROMETHEUS_BASIC_AUTH_USER,
-          password: process.env.PROMETHEUS_BASIC_AUTH_PASSWORD,
+          username: basicAuthUser,
+          password: basicAuthPassword,
         };
       }
 
