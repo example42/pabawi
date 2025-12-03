@@ -37,7 +37,7 @@ export class AnsiblePlugin
    */
   protected performInitialization(): Promise<void> {
     // Extract Ansible config from integration config
-    this.ansibleConfig = this.config.config as AnsibleConfig;
+    this.ansibleConfig = this.config.config as unknown as AnsibleConfig;
 
     if (!this.config.enabled) {
       this.log('Ansible integration is disabled');

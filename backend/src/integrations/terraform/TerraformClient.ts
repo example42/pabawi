@@ -21,6 +21,9 @@ import type {
 
 // Declare require for Node.js modules
 declare const require: any;
+// Node.js globals
+declare const URL: any;
+declare const URLSearchParams: any;
 
 export class TerraformClient {
   private config: TerraformConfig;

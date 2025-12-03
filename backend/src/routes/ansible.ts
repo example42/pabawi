@@ -16,7 +16,7 @@ export function createAnsibleRouter(integrationManager: IntegrationManager): Rou
 
   // Helper to get Ansible plugin
   function getAnsiblePlugin(): AnsiblePlugin | null {
-    const plugin = integrationManager.getPlugin('ansible');
+    const plugin = integrationManager.getInformationSource('ansible');
     if (plugin && plugin instanceof AnsiblePlugin) {
       return plugin;
     }

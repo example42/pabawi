@@ -16,7 +16,7 @@ export function createTerraformRouter(integrationManager: IntegrationManager): R
 
   // Helper to get Terraform plugin
   function getTerraformPlugin(): TerraformPlugin | null {
-    const plugin = integrationManager.getPlugin('terraform');
+    const plugin = integrationManager.getInformationSource('terraform');
     if (plugin && plugin instanceof TerraformPlugin) {
       return plugin;
     }

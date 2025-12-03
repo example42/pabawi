@@ -24,6 +24,9 @@ import type {
 
 // Declare require for Node.js modules
 declare const require: any;
+// Node.js globals
+declare const Buffer: any;
+declare const URL: any;
 
 export class AnsibleClient {
   private config: AnsibleConfig;

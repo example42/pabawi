@@ -37,7 +37,7 @@ export class TerraformPlugin
    * Perform plugin-specific initialization
    */
   protected performInitialization(): Promise<void> {
-    this.terraformConfig = this.config.config as TerraformConfig;
+    this.terraformConfig = this.config.config as unknown as TerraformConfig;
 
     if (!this.config.enabled) {
       this.log('Terraform integration is disabled');
@@ -118,7 +118,7 @@ export class TerraformPlugin
     return emptyFacts;
   }
 
-  async getNodeData(nodeId: string, dataType: string): Promise<unknown> {
+  async getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
     if (!this.isEnabled() || !this.client) return null;
 
     // Could map resources to nodes
