@@ -15,6 +15,7 @@
   import CatalogViewer from '../components/CatalogViewer.svelte';
   import EventsViewer from '../components/EventsViewer.svelte';
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
+  import MetricsTab from '../components/MetricsTab.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -82,10 +83,13 @@
   const nodeId = $derived(params?.id || '');
 
   // Tab types
-  type TabId = 'overview' | 'facts' | 'execution-history' | 'puppet-reports' | 'catalog' | 'events';
+  type TabId = 'overview' | 'facts' | 'execution-history' | 'puppet-reports' | 'catalog' | 'events' | 'metrics';
 
   // State
   let node = $state<Node | null>(null);
+  
+  // Prometheus metrics state
+  let prometheusAvailable = $state(false);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -444,7 +448,7 @@
     const url = new URL(window.location.href);
     const tabParam = url.searchParams.get('tab') as TabId | null;
 
-    if (tabParam && ['overview', 'facts', 'execution-history', 'puppet-reports', 'catalog', 'events'].includes(tabParam)) {
+    if (tabParam && ['overview', 'facts', 'execution-history', 'puppet-reports', 'catalog', 'events', 'metrics'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -524,11 +528,22 @@
     }
   }
 
+  // Check if Prometheus integration is available
+  async function checkPrometheusAvailability(): Promise<void> {
+    try {
+      const response = await fetch('/api/prometheus/health');
+      prometheusAvailable = response.ok;
+    } catch (err) {
+      prometheusAvailable = false;
+    }
+  }
+
   // On mount
   onMount(() => {
     fetchNode();
     fetchExecutions();
     fetchCommandWhitelist();
+    checkPrometheusAvailability();
     readTabFromURL();
     checkReExecutionParams();
 
@@ -625,6 +640,20 @@
         >
           Events
         </button>
+        {#if prometheusAvailable}
+          <button
+            type="button"
+            class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'metrics' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+            onclick={() => switchTab('metrics')}
+          >
+            <span class="flex items-center gap-1.5">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+              Metrics
+            </span>
+          </button>
+        {/if}
       </nav>
     </div>
 
@@ -1073,6 +1102,11 @@
         {:else}
           <EventsViewer events={events} />
         {/if}
+      {/if}
+
+      <!-- Metrics Tab (Prometheus) -->
+      {#if activeTab === 'metrics' && prometheusAvailable}
+        <MetricsTab nodeId={nodeId} nodeName={node?.name || nodeId} />
       {/if}
     </div>
   {/if}

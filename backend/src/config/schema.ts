@@ -98,6 +98,20 @@ export const PuppetDBConfigSchema = z.object({
 export type PuppetDBConfig = z.infer<typeof PuppetDBConfigSchema>;
 
 /**
+ * Prometheus integration configuration schema
+ */
+export const PrometheusConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  serverUrl: z.string().url(),
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  username: z.string().optional(),
+  password: z.string().optional(),
+  grafanaUrl: z.string().url().optional(),
+});
+
+export type PrometheusConfig = z.infer<typeof PrometheusConfigSchema>;
+
+/**
  * Integration configuration schema
  */
 export const IntegrationConfigSchema = z.object({
@@ -115,6 +129,7 @@ export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
  */
 export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
+  prometheus: PrometheusConfigSchema.optional(),
   // Future integrations: ansible, terraform, etc.
 });
 

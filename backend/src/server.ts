@@ -22,6 +22,8 @@ import { errorHandler, requestIdMiddleware } from "./middleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { BoltPlugin } from "./integrations/bolt";
+import { PrometheusPlugin } from "./integrations/prometheus";
+import { createPrometheusRouter } from "./routes/prometheus";
 import type { IntegrationConfig } from "./integrations/types";
 
 /**
@@ -179,6 +181,38 @@ async function startServer(): Promise<Express> {
       console.warn("PuppetDB integration not configured - skipping registration");
     }
 
+    // Initialize Prometheus integration if configured
+    const prometheusConfig = config.integrations.prometheus;
+    const prometheusConfigured = !!prometheusConfig?.serverUrl;
+
+    if (prometheusConfigured) {
+      console.warn("Initializing Prometheus integration...");
+      try {
+        const prometheusPlugin = new PrometheusPlugin();
+        const prometheusIntegrationConfig: IntegrationConfig = {
+          enabled: prometheusConfig.enabled,
+          name: "prometheus",
+          type: "information",
+          config: prometheusConfig,
+          priority: 8, // Between Bolt and PuppetDB
+        };
+
+        integrationManager.registerPlugin(prometheusPlugin, prometheusIntegrationConfig);
+
+        console.warn("Prometheus integration registered and enabled");
+        console.warn(`- Server URL: ${prometheusConfig.serverUrl}`);
+        console.warn(
+          `- Grafana URL: ${prometheusConfig.grafanaUrl ?? "not configured"}`,
+        );
+      } catch (error) {
+        console.warn(
+          `WARNING: Failed to initialize Prometheus integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    } else {
+      console.warn("Prometheus integration not configured - skipping registration");
+    }
+
     // Initialize all registered plugins
     console.warn("Initializing all integration plugins...");
     const initErrors = await integrationManager.initializePlugins();
@@ -328,6 +362,10 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api/integrations",
       createIntegrationsRouter(integrationManager, puppetDBService),
+    );
+    app.use(
+      "/api/prometheus",
+      createPrometheusRouter(integrationManager),
     );
 
     // Serve static frontend files in production

@@ -7,6 +7,8 @@ export { default as EventsViewer } from "./EventsViewer.svelte";
 export { default as FactsViewer } from "./FactsViewer.svelte";
 export { default as IntegrationStatus } from "./IntegrationStatus.svelte";
 export { default as LoadingSpinner } from "./LoadingSpinner.svelte";
+export { default as MetricsBadge } from "./MetricsBadge.svelte";
+export { default as MetricsTab } from "./MetricsTab.svelte";
 export { default as Navigation } from "./Navigation.svelte";
 export { default as PuppetOutputViewer } from "./PuppetOutputViewer.svelte";
 export { default as PuppetRunInterface } from "./PuppetRunInterface.svelte";
