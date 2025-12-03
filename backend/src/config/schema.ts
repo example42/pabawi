@@ -112,6 +112,22 @@ export const PrometheusConfigSchema = z.object({
 export type PrometheusConfig = z.infer<typeof PrometheusConfigSchema>;
 
 /**
+ * Ansible AWX/Tower integration configuration schema
+ */
+export const AnsibleConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  url: z.string().url(), // AWX/Tower base URL
+  token: z.string().optional(), // API token
+  username: z.string().optional(), // Basic auth username
+  password: z.string().optional(), // Basic auth password
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  verifySsl: z.boolean().default(true),
+  organizationId: z.number().int().positive().optional(), // Default organization
+});
+
+export type AnsibleConfig = z.infer<typeof AnsibleConfigSchema>;
+
+/**
  * Integration configuration schema
  */
 export const IntegrationConfigSchema = z.object({
@@ -130,7 +146,8 @@ export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
 export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
   prometheus: PrometheusConfigSchema.optional(),
-  // Future integrations: ansible, terraform, etc.
+  ansible: AnsibleConfigSchema.optional(),
+  // Future integrations: terraform, etc.
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
