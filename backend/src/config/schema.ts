@@ -128,6 +128,19 @@ export const AnsibleConfigSchema = z.object({
 export type AnsibleConfig = z.infer<typeof AnsibleConfigSchema>;
 
 /**
+ * Terraform Cloud/Enterprise integration configuration schema
+ */
+export const TerraformConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  url: z.string().url().default('https://app.terraform.io'), // TFC/TFE URL
+  token: z.string(), // API token
+  organization: z.string().optional(), // Default organization
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+});
+
+export type TerraformConfig = z.infer<typeof TerraformConfigSchema>;
+
+/**
  * Integration configuration schema
  */
 export const IntegrationConfigSchema = z.object({
@@ -147,7 +160,7 @@ export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
   prometheus: PrometheusConfigSchema.optional(),
   ansible: AnsibleConfigSchema.optional(),
-  // Future integrations: terraform, etc.
+  terraform: TerraformConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;

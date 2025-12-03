@@ -43,6 +43,35 @@ export class ConfigService {
       retryAttempts?: number;
       retryDelay?: number;
     };
+    prometheus?: {
+      enabled: boolean;
+      serverUrl: string;
+      timeout?: number;
+      basicAuth?: {
+        username: string;
+        password: string;
+      };
+      bearerToken?: string;
+      grafanaUrl?: string;
+      nodeExporterJobName?: string;
+    };
+    ansible?: {
+      enabled: boolean;
+      url: string;
+      token?: string;
+      username?: string;
+      password?: string;
+      timeout?: number;
+      verifySsl?: boolean;
+      organizationId?: number;
+    };
+    terraform?: {
+      enabled: boolean;
+      url: string;
+      token: string;
+      organization?: string;
+      timeout?: number;
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -90,6 +119,85 @@ export class ConfigService {
             process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED !== "false",
         };
       }
+    }
+
+    // Parse Prometheus configuration
+    if (process.env.PROMETHEUS_ENABLED === "true") {
+      const serverUrl = process.env.PROMETHEUS_URL;
+      if (!serverUrl) {
+        throw new Error(
+          "PROMETHEUS_URL is required when PROMETHEUS_ENABLED is true",
+        );
+      }
+
+      integrations.prometheus = {
+        enabled: true,
+        serverUrl,
+        timeout: process.env.PROMETHEUS_TIMEOUT
+          ? parseInt(process.env.PROMETHEUS_TIMEOUT, 10)
+          : undefined,
+        grafanaUrl: process.env.PROMETHEUS_GRAFANA_URL,
+        nodeExporterJobName: process.env.PROMETHEUS_NODE_EXPORTER_JOB,
+      };
+
+      // Parse basic auth if configured
+      if (process.env.PROMETHEUS_BASIC_AUTH_USER && process.env.PROMETHEUS_BASIC_AUTH_PASSWORD) {
+        integrations.prometheus.basicAuth = {
+          username: process.env.PROMETHEUS_BASIC_AUTH_USER,
+          password: process.env.PROMETHEUS_BASIC_AUTH_PASSWORD,
+        };
+      }
+
+      // Parse bearer token if configured
+      if (process.env.PROMETHEUS_BEARER_TOKEN) {
+        integrations.prometheus.bearerToken = process.env.PROMETHEUS_BEARER_TOKEN;
+      }
+    }
+
+    // Parse Ansible AWX/Tower configuration
+    if (process.env.ANSIBLE_ENABLED === "true") {
+      const url = process.env.ANSIBLE_URL;
+      if (!url) {
+        throw new Error(
+          "ANSIBLE_URL is required when ANSIBLE_ENABLED is true",
+        );
+      }
+
+      integrations.ansible = {
+        enabled: true,
+        url,
+        token: process.env.ANSIBLE_TOKEN,
+        username: process.env.ANSIBLE_USERNAME,
+        password: process.env.ANSIBLE_PASSWORD,
+        timeout: process.env.ANSIBLE_TIMEOUT
+          ? parseInt(process.env.ANSIBLE_TIMEOUT, 10)
+          : undefined,
+        verifySsl: process.env.ANSIBLE_VERIFY_SSL !== "false",
+        organizationId: process.env.ANSIBLE_ORGANIZATION_ID
+          ? parseInt(process.env.ANSIBLE_ORGANIZATION_ID, 10)
+          : undefined,
+      };
+    }
+
+    // Parse Terraform Cloud/Enterprise configuration
+    if (process.env.TERRAFORM_ENABLED === "true") {
+      const url = process.env.TERRAFORM_URL || "https://app.terraform.io";
+      const token = process.env.TERRAFORM_TOKEN;
+      if (!token) {
+        throw new Error(
+          "TERRAFORM_TOKEN is required when TERRAFORM_ENABLED is true",
+        );
+      }
+
+      integrations.terraform = {
+        enabled: true,
+        url,
+        token,
+        organization: process.env.TERRAFORM_ORGANIZATION,
+        timeout: process.env.TERRAFORM_TIMEOUT
+          ? parseInt(process.env.TERRAFORM_TIMEOUT, 10)
+          : undefined,
+      };
     }
 
     return integrations;
