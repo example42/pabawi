@@ -36,6 +36,13 @@ COPY backend/ ./
 # Build backend
 RUN npm run build
 
+# Stage 2.5: Install backend production dependencies
+# This runs on the target platform to ensure native modules (like sqlite3) are built correctly
+FROM node:20-bookworm-slim AS backend-deps
+WORKDIR /app/backend
+COPY backend/package*.json ./
+RUN npm install --omit=dev --no-audit
+
 # Stage 3: Production image with Node.js and Bolt CLI
 FROM ubuntu:24.04
 ARG TARGETPLATFORM
@@ -44,7 +51,7 @@ ARG BUILDPLATFORM
 # Add metadata labels
 LABEL org.opencontainers.image.title="Pabawi"
 LABEL org.opencontainers.image.description="Web interface for Bolt automation tool"
-LABEL org.opencontainers.image.version="0.1.0"
+LABEL org.opencontainers.image.version="0.2.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
@@ -92,7 +99,8 @@ WORKDIR /app
 
 # Copy built backend
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/dist ./dist
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/node_modules ./node_modules
+
+COPY --from=backend-deps --chown=pabawi:pabawi /app/backend/node_modules ./node_modules
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
 
 # Copy SQL schema file (not copied by TypeScript compiler)
@@ -108,28 +116,11 @@ RUN mkdir -p /data && chown pabawi:pabawi /data
 RUN mkdir -p /bolt-project && chown pabawi:pabawi /bolt-project
 
 # Create entrypoint script to handle permissions
-COPY --chown=pabawi:pabawi <<'EOF' /app/docker-entrypoint.sh
-#!/bin/bash
-set -e
+# Copy entrypoint script
+COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
 
-# Ensure data directory is writable
-if [ ! -w /data ]; then
-    echo "Error: /data directory is not writable by user $(id -u)"
-    echo "Please ensure the mounted volume has correct permissions:"
-    echo "  sudo chown -R 1001:1001 /path/to/data"
-    exit 1
-fi
 
-# Create database file if it doesn't exist
-if [ ! -f /data/executions.db ]; then
-    touch /data/executions.db
-fi
-
-# Execute the main command
-exec "$@"
-EOF
-
-RUN chmod +x /app/docker-entrypoint.sh
 
 # Switch to non-root user
 USER pabawi
