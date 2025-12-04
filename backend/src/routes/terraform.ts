@@ -200,6 +200,12 @@ export function createTerraformRouter(integrationManager: IntegrationManager): R
         res.status(400).json({ error: 'key is required' });
         return;
       }
+      // Validate key format: alphanumeric and underscores, 1-64 chars
+      const keyRegex = /^[A-Za-z0-9_]{1,64}$/;
+      if (typeof key !== 'string' || !keyRegex.test(key)) {
+        res.status(400).json({ error: 'key must be alphanumeric (letters, numbers, underscores) and 1-64 characters long' });
+        return;
+      }
 
       const variable = await plugin.createVariable(req.params.id, key, value || '', {
         category,
