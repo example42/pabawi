@@ -142,9 +142,16 @@ export function createPrometheusRouter(
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const { query } = req.body;
 
-      if (!query) {
+      // Validate query: must be a non-empty string and match allowed PromQL pattern
+      const promqlSafePattern = /^[a-zA-Z0-9_:{}\[\]\(\)\s\+\-\*\/\.,<>=!~"']+$/;
+      if (
+        typeof query !== 'string' ||
+        query.trim().length === 0 ||
+        !promqlSafePattern.test(query)
+      ) {
         res.status(400).json({
-          error: 'Query is required',
+          error:
+            'Invalid query. Only standard PromQL expressions are allowed (alphanumeric, _, :, {}, [], (), spaces, operators).',
         });
         return;
       }
