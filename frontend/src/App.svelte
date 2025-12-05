@@ -8,12 +8,14 @@
   import ExecutionsPage from './pages/ExecutionsPage.svelte';
   import NodeDetailPage from './pages/NodeDetailPage.svelte';
   import IntegrationSetupPage from './pages/IntegrationSetupPage.svelte';
+  import CertificatesPage from './pages/CertificatesPage.svelte';
   import { router } from './lib/router.svelte';
 
   const routes = {
     '/': HomePage,
     '/inventory': InventoryPage,
     '/executions': ExecutionsPage,
+    '/certificates': CertificatesPage,
     '/nodes/:id': NodeDetailPage,
     '/integrations/:integration/setup': IntegrationSetupPage
   };

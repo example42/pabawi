@@ -1,21 +1,31 @@
-# Design Document: Puppetserver Integration
+# Design Document: Version 0.3.0 - Bug Fixes and Plugin Architecture Completion
 
 ## Overview
 
-This design document outlines the architecture for version 0.3.0 of Pabawi, which adds Puppetserver as an additional integration to complement the existing PuppetDB integration. Puppetserver provides critical infrastructure management capabilities including certificate authority (CA) management, environment deployment, catalog compilation, and node status tracking.
+This design document outlines the fixes and architectural improvements for version 0.3.0 of Pabawi. This is a **stabilization release** focused on fixing critical bugs and completing the plugin architecture migration for all integrations.
 
-The Puppetserver integration follows the plugin-based architecture established in version 0.2.0, implementing the `InformationSourcePlugin` interface. This integration serves as both an inventory source (via the CA) and a rich data source for node management, certificate operations, and environment management.
+### Current State Problems
 
-Key capabilities provided by this integration:
+The current implementation has several critical issues:
 
-- **Certificate Authority Management**: View, sign, and revoke node certificates
-- **Inventory Discovery**: Use CA as an additional inventory source with automatic node linking to PuppetDB
-- **Node Status Tracking**: Monitor last check-in times and run status
-- **Catalog Compilation**: Retrieve and compare catalogs across environments
-- **Facts Retrieval**: Get current node facts directly from Puppetserver
-- **Environment Management**: View and manage Puppet environments
+1. **Inconsistent Architecture**: Bolt uses legacy 0.1.0 patterns while PuppetDB and Puppetserver use the plugin architecture
+2. **Broken API Implementations**: Multiple API calls fail due to incorrect endpoints, authentication, or response parsing
+3. **UI Integration Issues**: Frontend components don't properly handle backend responses
+4. **Missing Data**: Inventory, certificates, facts, reports, catalogs, and events don't display correctly
 
-The design emphasizes extensibility and follows established patterns to facilitate future integrations such as Ansible in version 0.4.0.
+### Version 0.3.0 Goals
+
+1. **Complete Plugin Migration**: Migrate Bolt to use the plugin architecture consistently
+2. **Fix API Implementations**: Correct all PuppetDB and Puppetserver API calls
+3. **Fix UI Integration**: Ensure UI components properly call and handle backend responses
+4. **Improve Observability**: Add comprehensive logging for debugging
+
+### Key Principles
+
+- **Fix First, Feature Later**: Focus on making existing functionality work before adding new features
+- **Consistent Architecture**: All integrations follow the same plugin pattern
+- **Comprehensive Logging**: Every API call is logged for debugging
+- **Graceful Degradation**: Failures in one integration don't break others
 
 ## Architecture
 
