@@ -1,398 +1,274 @@
-# Implementation Plan
+# Implementation Plan for Version 0.3.0
 
-- [x] 1. Set up Puppetserver integration foundation
-  - Create directory structure for Puppetserver integration
-  - Define TypeScript types for Puppetserver data models (Certificate, NodeStatus, Environment, etc.)
-  - Implement PuppetserverConfig interface and configuration loading
-  - Set up error classes (PuppetserverError, CertificateOperationError, CatalogCompilationError, etc.)
-  - _Requirements: 8.1, 9.1_
+## Overview
 
-- [x] 1.1 Write property test for configuration validation
-  - **Property 18: Configuration error handling**
-  - **Validates: Requirements 8.4, 8.5**
+Version 0.3.0 focuses on **fixing critical implementation issues** and **completing the plugin architecture migration**. This is a stabilization release that addresses bugs preventing core functionality from working.
 
-- [x] 2. Implement PuppetserverClient for API communication
-  - Create PuppetserverClient class with HTTP request methods (get, post, put, delete)
-  - Implement SSL/TLS support with custom CA certificates
-  - Add support for token-based and certificate-based authentication
-  - Implement request/response handling with proper error transformation
-  - Add timeout and connection management
-  - _Requirements: 8.2, 8.3, 9.2_
+## Phase 1: Complete Bolt Plugin Migration (CRITICAL)
 
-- [x] 2.1 Write property test for SSL and authentication
-  - **Property 17: SSL and authentication support**
-  - **Validates: Requirements 8.2, 8.3**
+- [ ] 1. Create BoltPlugin wrapper implementing ExecutionToolPlugin and InformationSourcePlugin
+  - Wrap existing BoltService with plugin interfaces
+  - Implement initialize(), healthCheck(), getInventory(), executeAction()
+  - Ensure backward compatibility with existing BoltService functionality
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [x] 2.2 Write property test for REST API usage
-  - **Property 19: REST API usage**
-  - **Validates: Requirements 9.2**
+- [ ] 2. Update server initialization to register Bolt as plugin
+  - Remove direct BoltService instantiation from routes
+  - Register BoltPlugin through IntegrationManager
+  - Configure appropriate priority for Bolt
+  - _Requirements: 1.1_
 
-- [x] 3. Implement retry logic and circuit breaker
-  - Add retry logic with exponential backoff to PuppetserverClient
-  - Integrate circuit breaker pattern (reuse from PuppetDB integration)
-  - Implement error categorization (connection, timeout, authentication)
-  - Add detailed error logging with endpoint, status code, and response body
-  - _Requirements: 9.3, 14.1, 14.4, 14.5_
+- [ ] 3. Update routes to access Bolt through IntegrationManager
+  - Modify inventory routes to use IntegrationManager.getAggregatedInventory()
+  - Modify execution routes to use IntegrationManager.executeAction()
+  - Remove direct BoltService dependencies from route handlers
+  - _Requirements: 1.3, 1.4, 1.5_
 
-- [ ]* 3.1 Write property test for retry logic
-  - **Property 20: Retry logic with exponential backoff**
-  - **Validates: Requirements 9.3, 14.5**
+- [ ] 4. Test Bolt plugin integration
+  - Verify inventory retrieval works through plugin interface
+  - Verify command execution works through plugin interface
+  - Verify task execution works through plugin interface
+  - Verify facts gathering works through plugin interface
+  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [ ]* 3.2 Write property test for network error categorization
-  - **Property 36: Network error categorization**
-  - **Validates: Requirements 14.4**
+## Phase 2: Fix Puppetserver API Implementations (CRITICAL)
 
-- [ ]* 3.3 Write property test for error logging
-  - **Property 33: Detailed error logging**
-  - **Validates: Requirements 14.1**
+- [ ] 5. Debug and fix Puppetserver certificate API
+  - Add detailed logging to PuppetserverClient.getCertificates()
+  - Verify correct API endpoint (/puppet-ca/v1/certificate_statuses)
+  - Verify authentication headers are correct
+  - Test with actual Puppetserver instance
+  - Fix response parsing if needed
+  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-- [x] 4. Implement certificate API methods
-  - Add getCertificates() method to retrieve certificate list with optional status filter
-  - Add getCertificate() method to retrieve single certificate details
-  - Add signCertificate() method to sign certificate requests
-  - Add revokeCertificate() method to revoke certificates
-  - Implement response validation and transformation
-  - _Requirements: 1.1, 3.2, 3.4_
+- [ ] 6. Debug and fix Puppetserver facts API
+  - Add detailed logging to PuppetserverClient.getFacts()
+  - Verify correct API endpoint (/puppet/v3/facts/{certname})
+  - Test response parsing with actual data
+  - Handle missing facts gracefully
+  - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ]* 4.1 Write property test for certificate data transformation
-  - **Property 2: Certificate data transformation**
-  - **Validates: Requirements 2.1**
-
-- [ ]* 4.2 Write property test for response validation
-  - **Property 21: Response validation and transformation**
-  - **Validates: Requirements 9.4**
-
-- [x] 5. Implement PuppetserverService plugin
-  - Create PuppetserverService class extending BasePlugin
-  - Implement InformationSourcePlugin interface methods
-  - Add initialize() method with configuration validation
-  - Implement healthCheck() method to verify Puppetserver connectivity
-  - Add cache manager integration with TTL configuration
-  - _Requirements: 9.1, 9.5_
-
-- [ ]* 5.1 Write property test for cache expiration
-  - **Property 22: Cache expiration by source**
-  - **Validates: Requirements 9.5**
-
-- [x] 6. Implement certificate management operations
-  - Add listCertificates() method with status filtering
-  - Add getCertificate() method for single certificate retrieval
-  - Add signCertificate() method with error handling
-  - Add revokeCertificate() method with error handling
-  - Implement specific error messages for certificate operations
-  - _Requirements: 1.1, 1.2, 3.1, 3.2, 3.3, 3.4, 14.3_
-
-- [ ]* 6.1 Write property test for Puppetserver connection
-  - **Property 1: Puppetserver connection and certificate retrieval**
-  - **Validates: Requirements 1.1**
-
-- [ ]* 6.2 Write property test for filtering
-  - **Property 4: Multi-source filtering**
-  - **Validates: Requirements 1.4, 2.5, 11.4, 13.3**
-
-- [ ]* 6.3 Write property test for specific error messages
-  - **Property 35: Specific error messages**
-  - **Validates: Requirements 14.3**
-
-- [x] 7. Implement bulk certificate operations
-  - Add bulkSignCertificates() method to sign multiple certificates
-  - Add bulkRevokeCertificates() method to revoke multiple certificates
-  - Implement sequential processing with progress tracking
-  - Return BulkOperationResult with success/failure details
-  - _Requirements: 12.2, 12.4, 12.5_
-
-- [ ]* 7.1 Write property test for bulk operation execution
-  - **Property 29: Bulk operation execution**
-  - **Validates: Requirements 12.4, 12.5**
-
-- [x] 8. Implement inventory integration
-  - Add getInventory() method to retrieve nodes from CA
-  - Transform certificates to normalized Node format with source attribution
-  - Add certificate status to node metadata
-  - Implement getNode() method for single node retrieval
-  - _Requirements: 2.1, 2.2_
-
-- [ ]* 8.1 Write property test for source attribution
-  - **Property 6: Source attribution consistency**
-  - **Validates: Requirements 2.2, 6.2, 10.2**
-
-- [-] 9. Implement NodeLinkingService
-  - Create NodeLinkingService class for cross-source node linking
-  - Implement linkNodes() method to match nodes by certname/hostname
-  - Add getLinkedNodeData() method to aggregate data from all sources
-  - Implement findMatchingNodes() method for identifier-based search
-  - Add node matching logic with multiple identifier types
-  - _Requirements: 2.3, 2.4, 10.3_
-
-- [ ]* 9.1 Write property test for node linking
-  - **Property 7: Node linking by identifier**
-  - **Validates: Requirements 2.3**
-
-- [ ]* 9.2 Write property test for multi-source indicator
-  - **Property 8: Multi-source indicator display**
-  - **Validates: Requirements 2.4**
-
-- [ ]* 9.3 Write property test for unified view
-  - **Property 23: Unified multi-source view**
-  - **Validates: Requirements 10.3**
-
-- [ ] 10. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
-
-- [ ] 11. Implement node status operations
-  - Add getNodeStatus() method to retrieve node status from Puppetserver
-  - Add listNodeStatuses() method to retrieve all node statuses
-  - Implement node status categorization (active, inactive, never checked in)
-  - Add inactivity threshold configuration and highlighting logic
-  - _Requirements: 4.1, 4.2, 4.3, 4.4_
-
-- [ ]* 11.1 Write property test for node status categorization
-  - **Property 11: Node status categorization**
-  - **Validates: Requirements 4.3, 4.4**
-
-- [ ] 12. Implement facts retrieval
-  - Add getNodeFacts() method to retrieve facts from Puppetserver
-  - Implement fact categorization (system, network, hardware, custom)
-  - Add timestamp tracking for fact freshness
-  - Implement multi-source fact display logic
-  - _Requirements: 6.1, 6.2, 6.3, 6.4_
-
-- [ ]* 12.1 Write property test for multi-source fact display
-  - **Property 14: Multi-source fact display**
-  - **Validates: Requirements 6.3**
-
-- [ ]* 12.2 Write property test for fact categorization
-  - **Property 15: Fact categorization**
-  - **Validates: Requirements 6.4**
-
-- [ ] 13. Implement catalog compilation
-  - Add compileCatalog() method to compile catalogs for specific environments
-  - Implement catalog resource parsing and transformation
-  - Add catalog metadata extraction (environment, timestamp, version)
-  - Implement detailed compilation error handling with line numbers
+- [ ] 7. Debug and fix Puppetserver node status API
+  - Add detailed logging to PuppetserverClient.getStatus()
+  - Verify correct API endpoint (/puppet/v3/status/{certname})
+  - Fix "node not found" errors
+  - Handle missing status gracefully
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ]* 13.1 Write property test for catalog display
-  - **Property 12: Catalog display structure**
-  - **Validates: Requirements 5.3, 5.4**
-
-- [ ]* 13.2 Write property test for compilation errors
-  - **Property 13: Compilation error detail**
-  - **Validates: Requirements 5.5**
-
-- [ ] 14. Implement catalog comparison (within PuppetserverService)
-  - Implement compareCatalogs() method to generate diffs
-  - Add compareResources() method to identify added, removed, and modified resources
-  - Implement compareParameters() method to show parameter changes
-  - Add catalog comparison error handling
-  - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
-
-- [ ]* 14.1 Write property test for catalog diff
-  - **Property 37: Catalog diff display**
-  - **Validates: Requirements 15.3, 15.4**
-
-- [ ]* 14.2 Write property test for comparison errors
-  - **Property 38: Comparison error display**
-  - **Validates: Requirements 15.5**
-
-- [ ] 15. Implement environment management
-  - Add listEnvironments() method to retrieve available environments
-  - Add getEnvironment() method for single environment details
-  - Add deployEnvironment() method for environment deployment
-  - Implement environment metadata display (name, last deployed, status)
+- [ ] 8. Debug and fix Puppetserver environments API
+  - Add detailed logging to PuppetserverClient.getEnvironments()
+  - Verify correct API endpoint (/puppet/v3/environments)
+  - Test response parsing
+  - Handle empty environments list
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ]* 15.1 Write property test for environment metadata
-  - **Property 16: Environment metadata display**
-  - **Validates: Requirements 7.2, 7.5**
+- [ ] 9. Debug and fix Puppetserver catalog compilation API
+  - Add detailed logging to PuppetserverClient.compileCatalog()
+  - Verify correct API endpoint (/puppet/v3/catalog/{certname})
+  - Fix fake "environment 1" and "environment 2" issue
+  - Use real environments from environments API
+  - Test catalog resource parsing
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 16. Register Puppetserver plugin with IntegrationManager
-  - Update server initialization to register PuppetserverService
-  - Configure plugin priority relative to PuppetDB
-  - Add Puppetserver to health check scheduler
-  - Update integration status endpoint to include Puppetserver
-  - _Requirements: 9.1_
+## Phase 3: Fix PuppetDB API Implementations (CRITICAL)
 
-- [ ] 17. Implement API endpoints for certificates
-  - Add GET /api/integrations/puppetserver/certificates endpoint
-  - Add GET /api/integrations/puppetserver/certificates/:certname endpoint
-  - Add POST /api/integrations/puppetserver/certificates/:certname/sign endpoint
-  - Add DELETE /api/integrations/puppetserver/certificates/:certname endpoint
-  - Add POST /api/integrations/puppetserver/certificates/bulk-sign endpoint
-  - Add POST /api/integrations/puppetserver/certificates/bulk-revoke endpoint
-  - _Requirements: 1.1, 1.2, 3.2, 3.4, 12.4_
+- [ ] 10. Debug and fix PuppetDB reports metrics parsing
+  - Add detailed logging to PuppetDBService.getNodeReports()
+  - Examine actual PuppetDB response structure for metrics
+  - Fix metrics parsing to show correct values instead of "0 0 0"
+  - Handle missing metrics gracefully
+  - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
 
-- [ ] 18. Implement API endpoints for node data
-  - Add GET /api/integrations/puppetserver/nodes endpoint
-  - Add GET /api/integrations/puppetserver/nodes/:certname endpoint
-  - Add GET /api/integrations/puppetserver/nodes/:certname/status endpoint
-  - Add GET /api/integrations/puppetserver/nodes/:certname/facts endpoint
-  - _Requirements: 2.1, 4.1, 6.1_
+- [ ] 11. Debug and fix PuppetDB catalog resources parsing
+  - Add detailed logging to PuppetDBService.getNodeCatalog()
+  - Examine actual PuppetDB response structure for resources
+  - Fix resource parsing to show all resources
+  - Handle empty catalogs gracefully
+  - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 19. Implement API endpoints for catalogs and environments
-  - Add GET /api/integrations/puppetserver/catalog/:certname/:environment endpoint
-  - Add POST /api/integrations/puppetserver/catalog/compare endpoint
-  - Add GET /api/integrations/puppetserver/environments endpoint
-  - Add GET /api/integrations/puppetserver/environments/:name endpoint
-  - Add POST /api/integrations/puppetserver/environments/:name/deploy endpoint
-  - _Requirements: 5.2, 7.1, 7.4, 15.2_
-
-- [ ] 20. Implement enhanced inventory endpoints
-  - Add GET /api/inventory/linked endpoint for linked inventory
-  - Add GET /api/inventory/nodes/:id/linked-data endpoint for aggregated node data
-  - Update existing inventory endpoint to support Puppetserver source
-  - _Requirements: 2.2, 2.3, 10.3_
-
-- [ ] 21. Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
-
-- [ ] 22. Create Certificate Management UI component
-  - Create CertificateManagement.svelte component
-  - Implement certificate list display with status, fingerprint, and expiration
-  - Add search interface with partial matching and case-insensitive search
-  - Implement filtering by status, expiration date, and fingerprint
-  - Add real-time filter updates without page reload
-  - Display active filters with clear buttons
-  - _Requirements: 1.2, 1.3, 1.4, 13.1, 13.2, 13.3, 13.4, 13.5_
-
-- [ ]* 22.1 Write property test for required field display
-  - **Property 3: Required field display completeness**
-  - **Validates: Requirements 1.3, 4.2, 5.4**
-
-- [ ]* 22.2 Write property test for search functionality
-  - **Property 30: Search functionality**
-  - **Validates: Requirements 13.2**
-
-- [ ]* 22.3 Write property test for real-time filter updates
-  - **Property 31: Real-time filter updates**
-  - **Validates: Requirements 13.4**
-
-- [ ]* 22.4 Write property test for active filter display
-  - **Property 32: Active filter display**
-  - **Validates: Requirements 13.5**
-
-- [ ] 23. Add certificate operation buttons
-  - Add sign button for certificates with "requested" status
-  - Add revoke button for signed certificates
-  - Implement confirmation dialog for revoke operations
-  - Add post-operation refresh and success/error messages
-  - Display actionable error messages with troubleshooting guidance
-  - _Requirements: 3.1, 3.3, 3.4, 3.5, 14.2_
-
-- [ ]* 23.1 Write property test for conditional button display
-  - **Property 9: Conditional button display**
-  - **Validates: Requirements 3.1, 3.3**
-
-- [ ]* 23.2 Write property test for post-operation refresh
-  - **Property 10: Post-operation refresh and feedback**
-  - **Validates: Requirements 3.5**
-
-- [ ]* 23.3 Write property test for actionable error messages
-  - **Property 34: Actionable error messages**
-  - **Validates: Requirements 14.2**
-
-- [ ] 24. Implement bulk certificate operations UI
-  - Add checkboxes for certificate selection
-  - Display bulk action buttons when multiple certificates are selected
-  - Implement confirmation dialog showing affected certificates
-  - Add progress display during bulk operations
-  - Display summary with successful and failed operations
-  - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
-
-- [ ]* 24.1 Write property test for bulk operation conditional display
-  - **Property 28: Bulk operation conditional display**
-  - **Validates: Requirements 12.2**
-
-- [ ] 25. Update Inventory Page with Puppetserver integration
-  - Add certificate status indicators (badges, icons, colors) for Puppetserver nodes
-  - Display visual indicator for pending certificate requests
-  - Display prominent warning for revoked certificates
-  - Add filtering by certificate status
-  - Add sorting by certificate status and last check-in time
-  - Show multi-source indicators for linked nodes
-  - _Requirements: 2.2, 2.4, 11.1, 11.2, 11.3, 11.4, 11.5_
-
-- [ ]* 25.1 Write property test for certificate status indicators
-  - **Property 26: Certificate status indicators**
-  - **Validates: Requirements 11.1, 11.2, 11.3**
-
-- [ ]* 25.2 Write property test for inventory sorting
-  - **Property 27: Inventory sorting**
-  - **Validates: Requirements 11.5**
-
-- [ ] 26. Create Node Status component
-  - Create NodeStatus.svelte component
-  - Display last run timestamp, catalog version, and run status
-  - Show node activity status (active, inactive, never checked in)
-  - Highlight inactive nodes based on configurable threshold
-  - Display error messages while preserving other functionality
-  - _Requirements: 4.2, 4.3, 4.4, 4.5_
-
-- [ ] 27. Create Environment Selector component
-  - Create EnvironmentSelector.svelte component
-  - Display environment list with names and metadata
-  - Add environment selection interface
-  - Implement environment deployment trigger (if supported)
-  - Display deployment timestamp and status
-  - _Requirements: 7.2, 7.3, 7.4, 7.5_
-
-- [ ] 28. Create Catalog Comparison component
-  - Create CatalogComparison.svelte component
-  - Add interface to select two environments for comparison
-  - Display diff view with added, removed, and modified resources
-  - Highlight resource parameter changes
-  - Display detailed error messages for failed compilations
-  - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
-
-- [ ] 29. Update Node Detail Page with Puppetserver tabs
-  - Add Certificate Status tab showing certificate info and operations
-  - Add Node Status tab showing last check-in and run status
-  - Add Catalog Compilation tab with environment selector and comparison
-  - Add Environments tab for environment management
-  - Ensure source attribution for all data types
-  - Display unified view for nodes in multiple sources
-  - Show conflict resolution with timestamps for conflicting data
-  - Implement independent section loading without blocking
+- [ ] 12. Debug and fix PuppetDB events API
+  - Add detailed logging to PuppetDBService.getNodeEvents()
+  - Identify why events page hangs
+  - Implement pagination or limit results
+  - Add timeout handling
+  - Test with large event datasets
   - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
 
-- [ ]* 29.1 Write property test for conflict resolution display
-  - **Property 24: Conflict resolution display**
-  - **Validates: Requirements 10.4**
+## Phase 4: Fix Inventory Integration (CRITICAL)
 
-- [ ]* 29.2 Write property test for independent section loading
-  - **Property 25: Independent section loading**
-  - **Validates: Requirements 10.5**
+- [ ] 13. Debug why Puppetserver nodes don't appear in inventory
+  - Add logging to IntegrationManager.getAggregatedInventory()
+  - Verify Puppetserver plugin is registered and initialized
+  - Verify getInventory() is called on Puppetserver plugin
+  - Verify node transformation from certificates to Node format
+  - Test inventory aggregation with multiple sources
+  - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 30. Implement multi-source facts display
-  - Update Facts tab to show facts from both Puppetserver and PuppetDB
-  - Display timestamps for each fact source
-  - Organize facts by category (system, network, hardware, custom)
-  - Show error messages while preserving facts from other sources
-  - _Requirements: 6.2, 6.3, 6.4, 6.5_
+- [ ] 14. Implement node linking across sources
+  - Verify nodes with matching certnames are linked
+  - Display source attribution for each node
+  - Show multi-source indicators in UI
+  - _Requirements: 3.3, 3.4_
 
-- [ ] 31. Implement graceful degradation
-  - Add error handling to continue showing data from other sources on Puppetserver failure
-  - Display error messages for failed Puppetserver operations
-  - Ensure system operates normally when Puppetserver is not configured
-  - _Requirements: 1.5, 4.5, 6.5, 8.5_
+## Phase 5: Fix UI Integration (CRITICAL)
 
-- [ ]* 31.1 Write property test for graceful degradation
-  - **Property 5: Graceful degradation on source failure**
-  - **Validates: Requirements 1.5, 4.5, 6.5**
+- [ ] 15. Fix certificates page
+  - Debug why no certificates are displayed
+  - Verify API endpoint is called correctly
+  - Verify response is parsed correctly
+  - Add error handling and display
+  - Test with actual Puppetserver
+  - _Requirements: 2.4, 2.5_
 
-- [ ] 32. Add integration status display
-  - Update integration status component to include Puppetserver
-  - Display Puppetserver connection status on home page
-  - Show last health check timestamp and status
-  - _Requirements: 9.1_
+- [ ] 16. Fix node detail page - Facts tab
+  - Debug why Puppetserver facts don't show
+  - Verify API endpoint is called
+  - Verify response parsing
+  - Display facts from all sources
+  - Show source attribution
+  - _Requirements: 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 33. Update documentation
-  - Add Puppetserver configuration guide
-  - Document certificate management workflows
-  - Document catalog comparison workflows
-  - Add API endpoint documentation
-  - Update architecture diagrams
-  - _Requirements: All_
+- [ ] 17. Fix node detail page - Certificate Status tab
+  - Debug certificate status errors
+  - Verify API endpoint is called correctly
+  - Handle missing certificates gracefully
+  - Display clear error messages
+  - _Requirements: 2.4, 2.5_
 
-- [ ] 34. Final Checkpoint - Ensure all tests pass
-  - Ensure all tests pass, ask the user if questions arise.
+- [ ] 18. Fix node detail page - Node Status tab
+  - Debug "node not found" errors
+  - Verify API endpoint is called correctly
+  - Handle missing status gracefully
+  - Display clear error messages
+  - _Requirements: 5.2, 5.3, 5.4, 5.5_
+
+- [ ] 19. Fix node detail page - Environments tab
+  - Debug why no environments show
+  - Verify API endpoint is called
+  - Display environments correctly
+  - Handle empty environments list
+  - _Requirements: 7.2, 7.3, 7.4, 7.5_
+
+- [ ] 20. Fix node detail page - Reports tab
+  - Debug "0 0 0" metrics display
+  - Verify metrics are parsed correctly from backend
+  - Display correct changed/unchanged/failed counts
+  - Handle missing metrics gracefully
+  - _Requirements: 8.2, 8.3, 8.4, 8.5_
+
+- [ ] 21. Merge and fix Catalog tabs
+  - Combine "Catalog" and "Catalog Compilation" into single tab
+  - Provide toggle between PuppetDB (current) and Puppetserver (compile)
+  - Fix resource display for both sources
+  - Use real environments, not fake ones
+  - Allow environment selection for compilation
+  - _Requirements: 6.2, 6.3, 6.4, 9.2, 9.3, 9.4, 11.1, 11.2, 11.3, 11.4, 11.5_
+
+- [ ] 22. Fix events page hanging
+  - Implement loading indicator
+  - Add timeout handling
+  - Implement pagination or lazy loading
+  - Add cancel button for long-running queries
+  - Test with large datasets
+  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+
+## Phase 6: Improve Error Handling and Logging (HIGH PRIORITY)
+
+- [ ] 23. Add comprehensive API logging
+  - Log all API requests (method, endpoint, parameters)
+  - Log all API responses (status, headers, body)
+  - Log authentication details (without sensitive data)
+  - Add request/response correlation IDs
+  - _Requirements: 12.1, 12.2_
+
+- [ ] 24. Improve error messages
+  - Display actionable error messages in UI
+  - Include troubleshooting guidance
+  - Distinguish between error types (connection, auth, timeout)
+  - Show error details in developer console
+  - _Requirements: 12.3, 12.4_
+
+- [ ] 25. Implement retry logic
+  - Add exponential backoff for transient errors
+  - Configure retry attempts per integration
+  - Log retry attempts
+  - Display retry status in UI
+  - _Requirements: 12.5_
+
+## Phase 7: Testing and Validation (HIGH PRIORITY)
+
+- [ ] 26. Create integration test suite
+  - Test Bolt plugin integration
+  - Test PuppetDB API calls with mock responses
+  - Test Puppetserver API calls with mock responses
+  - Test inventory aggregation
+  - Test node linking
+
+- [ ] 27. Manual testing with real instances
+  - Test with real Puppetserver instance
+  - Test with real PuppetDB instance
+  - Test with real Bolt inventory
+  - Verify all UI pages work correctly
+  - Document any remaining issues
+
+- [ ] 28. Performance testing
+  - Test with large inventories (100+ nodes)
+  - Test with large event datasets
+  - Test with large catalogs
+  - Identify and fix performance bottlenecks
+
+## Phase 8: Documentation (MEDIUM PRIORITY)
+
+- [ ] 29. Update API documentation
+  - Document correct API endpoints for each integration
+  - Document authentication requirements
+  - Document response formats
+  - Document error codes
+
+- [ ] 30. Update troubleshooting guide
+  - Document common errors and solutions
+  - Document how to enable debug logging
+  - Document how to test API connectivity
+  - Document configuration requirements
+
+- [ ] 31. Update architecture documentation
+  - Document plugin architecture
+  - Document how integrations are registered
+  - Document data flow through the system
+  - Update diagrams
+
+## Success Criteria
+
+Version 0.3.0 is complete when:
+
+1. ✅ Bolt is fully migrated to plugin architecture
+2. ✅ All three integrations (Bolt, PuppetDB, Puppetserver) are registered as plugins
+3. ✅ Inventory view shows nodes from all configured sources
+4. ✅ Certificates page displays certificates without errors
+5. ✅ Node detail page displays all tabs without errors:
+   - Facts from all sources
+   - Certificate status
+   - Node status
+   - Environments (real, not fake)
+   - Reports with correct metrics
+   - Catalog from both PuppetDB and Puppetserver
+6. ✅ Events page loads without hanging
+7. ✅ All API calls have comprehensive logging
+8. ✅ Error messages are actionable and helpful
+9. ✅ Integration tests pass
+10. ✅ Manual testing with real instances succeeds
+
+## Out of Scope for 0.3.0
+
+The following features are deferred to future versions:
+
+- Certificate signing/revocation operations
+- Bulk certificate operations
+- Certificate search and filtering
+- Catalog comparison between environments
+- Environment deployment
+- Advanced node linking features
+- Multi-Puppetserver support
+- Property-based testing
+
+These will be addressed in version 0.4.0 after the foundation is stable.
