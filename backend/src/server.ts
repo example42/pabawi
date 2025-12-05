@@ -21,6 +21,7 @@ import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware } from "./middleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
+import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import { BoltPlugin } from "./integrations/bolt";
 import type { IntegrationConfig } from "./integrations/types";
 
@@ -176,7 +177,51 @@ async function startServer(): Promise<Express> {
         puppetDBService = undefined;
       }
     } else {
-      console.warn("PuppetDB integration not configured - skipping registration");
+      console.warn(
+        "PuppetDB integration not configured - skipping registration",
+      );
+    }
+
+    // Initialize Puppetserver integration only if configured
+    let puppetserverService: PuppetserverService | undefined;
+    const puppetserverConfig = config.integrations.puppetserver;
+    const puppetserverConfigured = !!puppetserverConfig?.serverUrl;
+
+    if (puppetserverConfigured) {
+      console.warn("Initializing Puppetserver integration...");
+      try {
+        puppetserverService = new PuppetserverService();
+        const integrationConfig: IntegrationConfig = {
+          enabled: puppetserverConfig.enabled,
+          name: "puppetserver",
+          type: "information",
+          config: puppetserverConfig,
+          priority: 8, // Lower priority than PuppetDB (10), higher than Bolt (5)
+        };
+
+        integrationManager.registerPlugin(
+          puppetserverService,
+          integrationConfig,
+        );
+
+        console.warn("Puppetserver integration registered and enabled");
+        console.warn(`- Server URL: ${puppetserverConfig.serverUrl}`);
+        console.warn(
+          `- SSL enabled: ${String(puppetserverConfig.ssl?.enabled ?? false)}`,
+        );
+        console.warn(
+          `- Authentication: ${puppetserverConfig.token ? "configured" : "not configured"}`,
+        );
+      } catch (error) {
+        console.warn(
+          `WARNING: Failed to initialize Puppetserver integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+        puppetserverService = undefined;
+      }
+    } else {
+      console.warn(
+        "Puppetserver integration not configured - skipping registration",
+      );
     }
 
     // Initialize all registered plugins
@@ -327,7 +372,11 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/integrations",
-      createIntegrationsRouter(integrationManager, puppetDBService),
+      createIntegrationsRouter(
+        integrationManager,
+        puppetDBService,
+        puppetserverService,
+      ),
     );
 
     // Serve static frontend files in production
