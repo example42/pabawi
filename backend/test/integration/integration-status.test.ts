@@ -114,7 +114,8 @@ describe("Integration Status API", () => {
       expect(response.body).toHaveProperty("integrations");
       expect(response.body).toHaveProperty("timestamp");
       expect(Array.isArray(response.body.integrations)).toBe(true);
-      expect(response.body.integrations).toHaveLength(2);
+      // Now includes unconfigured Puppetserver
+      expect(response.body.integrations).toHaveLength(3);
 
       // Check first integration
       const puppetdb = response.body.integrations.find(
@@ -135,6 +136,14 @@ describe("Integration Status API", () => {
       expect(bolt.status).toBe("connected");
       expect(bolt.lastCheck).toBeDefined();
       expect(bolt.message).toBe("bolt is healthy");
+
+      // Check unconfigured Puppetserver
+      const puppetserver = response.body.integrations.find(
+        (i: { name: string }) => i.name === "puppetserver",
+      );
+      expect(puppetserver).toBeDefined();
+      expect(puppetserver.type).toBe("information");
+      expect(puppetserver.status).toBe("not_configured");
     });
 
     it("should return error status for unhealthy integrations", async () => {
@@ -175,7 +184,7 @@ describe("Integration Status API", () => {
       expect(unhealthy.message).toContain("Health check failed");
     });
 
-    it("should include unconfigured PuppetDB when no integrations configured", async () => {
+    it("should include unconfigured PuppetDB and Puppetserver when no integrations configured", async () => {
       // Create new manager with no plugins
       const emptyManager = new IntegrationManager();
       await emptyManager.initializePlugins();
@@ -192,14 +201,23 @@ describe("Integration Status API", () => {
         .get("/api/integrations/status")
         .expect(200);
 
-      // Should have unconfigured puppetdb entry
-      expect(response.body.integrations).toHaveLength(1);
+      // Should have unconfigured puppetdb and puppetserver entries
+      expect(response.body.integrations).toHaveLength(2);
       expect(response.body.timestamp).toBeDefined();
 
-      const puppetdb = response.body.integrations[0];
-      expect(puppetdb.name).toBe("puppetdb");
+      const puppetdb = response.body.integrations.find(
+        (i: { name: string }) => i.name === "puppetdb",
+      );
+      expect(puppetdb).toBeDefined();
       expect(puppetdb.status).toBe("not_configured");
       expect(puppetdb.message).toBe("PuppetDB integration is not configured");
+
+      const puppetserver = response.body.integrations.find(
+        (i: { name: string }) => i.name === "puppetserver",
+      );
+      expect(puppetserver).toBeDefined();
+      expect(puppetserver.status).toBe("not_configured");
+      expect(puppetserver.message).toBe("Puppetserver integration is not configured");
     });
 
     it("should use cached results by default", async () => {
@@ -208,7 +226,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(true);
-      expect(response.body.integrations).toHaveLength(2);
+      // Now includes unconfigured Puppetserver
+      expect(response.body.integrations).toHaveLength(3);
     });
 
     it("should refresh health checks when requested", async () => {
@@ -217,7 +236,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(false);
-      expect(response.body.integrations).toHaveLength(2);
+      // Now includes unconfigured Puppetserver
+      expect(response.body.integrations).toHaveLength(3);
     });
   });
 });

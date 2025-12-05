@@ -43,6 +43,31 @@ export class ConfigService {
       retryAttempts?: number;
       retryDelay?: number;
     };
+    puppetserver?: {
+      enabled: boolean;
+      serverUrl: string;
+      port?: number;
+      token?: string;
+      ssl?: {
+        enabled: boolean;
+        ca?: string;
+        cert?: string;
+        key?: string;
+        rejectUnauthorized?: boolean;
+      };
+      timeout?: number;
+      retryAttempts?: number;
+      retryDelay?: number;
+      inactivityThreshold?: number;
+      cache?: {
+        ttl?: number;
+      };
+      circuitBreaker?: {
+        threshold?: number;
+        timeout?: number;
+        resetTimeout?: number;
+      };
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -88,6 +113,81 @@ export class ConfigService {
           key: process.env.PUPPETDB_SSL_KEY,
           rejectUnauthorized:
             process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED !== "false",
+        };
+      }
+    }
+
+    // Parse Puppetserver configuration
+    if (process.env.PUPPETSERVER_ENABLED === "true") {
+      const serverUrl = process.env.PUPPETSERVER_SERVER_URL;
+      if (!serverUrl) {
+        throw new Error(
+          "PUPPETSERVER_SERVER_URL is required when PUPPETSERVER_ENABLED is true",
+        );
+      }
+
+      integrations.puppetserver = {
+        enabled: true,
+        serverUrl,
+        port: process.env.PUPPETSERVER_PORT
+          ? parseInt(process.env.PUPPETSERVER_PORT, 10)
+          : undefined,
+        token: process.env.PUPPETSERVER_TOKEN,
+        timeout: process.env.PUPPETSERVER_TIMEOUT
+          ? parseInt(process.env.PUPPETSERVER_TIMEOUT, 10)
+          : undefined,
+        retryAttempts: process.env.PUPPETSERVER_RETRY_ATTEMPTS
+          ? parseInt(process.env.PUPPETSERVER_RETRY_ATTEMPTS, 10)
+          : undefined,
+        retryDelay: process.env.PUPPETSERVER_RETRY_DELAY
+          ? parseInt(process.env.PUPPETSERVER_RETRY_DELAY, 10)
+          : undefined,
+        inactivityThreshold: process.env.PUPPETSERVER_INACTIVITY_THRESHOLD
+          ? parseInt(process.env.PUPPETSERVER_INACTIVITY_THRESHOLD, 10)
+          : undefined,
+      };
+
+      // Parse SSL configuration if any SSL-related env vars are set
+      if (
+        process.env.PUPPETSERVER_SSL_ENABLED !== undefined ||
+        process.env.PUPPETSERVER_SSL_CA ||
+        process.env.PUPPETSERVER_SSL_CERT ||
+        process.env.PUPPETSERVER_SSL_KEY ||
+        process.env.PUPPETSERVER_SSL_REJECT_UNAUTHORIZED !== undefined
+      ) {
+        integrations.puppetserver.ssl = {
+          enabled: process.env.PUPPETSERVER_SSL_ENABLED !== "false",
+          ca: process.env.PUPPETSERVER_SSL_CA,
+          cert: process.env.PUPPETSERVER_SSL_CERT,
+          key: process.env.PUPPETSERVER_SSL_KEY,
+          rejectUnauthorized:
+            process.env.PUPPETSERVER_SSL_REJECT_UNAUTHORIZED !== "false",
+        };
+      }
+
+      // Parse cache configuration
+      if (process.env.PUPPETSERVER_CACHE_TTL) {
+        integrations.puppetserver.cache = {
+          ttl: parseInt(process.env.PUPPETSERVER_CACHE_TTL, 10),
+        };
+      }
+
+      // Parse circuit breaker configuration
+      if (
+        process.env.PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD ||
+        process.env.PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT ||
+        process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT
+      ) {
+        integrations.puppetserver.circuitBreaker = {
+          threshold: process.env.PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD
+            ? parseInt(process.env.PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD, 10)
+            : undefined,
+          timeout: process.env.PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT
+            ? parseInt(process.env.PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT, 10)
+            : undefined,
+          resetTimeout: process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT
+            ? parseInt(process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT, 10)
+            : undefined,
         };
       }
     }
@@ -311,6 +411,19 @@ export class ConfigService {
     const puppetdb = this.config.integrations.puppetdb;
     if (puppetdb?.enabled) {
       return puppetdb as typeof puppetdb & { enabled: true };
+    }
+    return null;
+  }
+
+  /**
+   * Get Puppetserver configuration if enabled
+   */
+  public getPuppetserverConfig():
+    | (typeof this.config.integrations.puppetserver & { enabled: true })
+    | null {
+    const puppetserver = this.config.integrations.puppetserver;
+    if (puppetserver?.enabled) {
+      return puppetserver as typeof puppetserver & { enabled: true };
     }
     return null;
   }

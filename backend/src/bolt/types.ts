@@ -111,7 +111,8 @@ export interface Node {
     user?: string;
     port?: number;
   };
-  source?: string; // Source of the node data (e.g., 'bolt', 'puppetdb')
+  source?: string; // Source of the node data (e.g., 'bolt', 'puppetdb', 'puppetserver')
+  certificateStatus?: "signed" | "requested" | "revoked"; // Certificate status for Puppetserver nodes
 }
 
 /**

@@ -7,3 +7,4 @@
 export * from './types';
 export * from './errors';
 export * from './PuppetserverClient';
+export * from './PuppetserverService';

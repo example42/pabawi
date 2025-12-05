@@ -3,6 +3,7 @@
  *
  * Low-level HTTP client for Puppetserver API communication.
  * Handles SSL configuration, authentication, and request/response processing.
+ * Includes retry logic with exponential backoff and circuit breaker pattern.
  */
 
 import https from "https";
@@ -14,11 +15,24 @@ import {
   PuppetserverError,
   PuppetserverTimeoutError,
 } from "./errors";
+import { CircuitBreaker } from "../puppetdb/CircuitBreaker";
+import { withRetry, type RetryConfig } from "../puppetdb/RetryLogic";
 
 /**
  * Query parameters for Puppetserver API requests
  */
 export type QueryParams = Record<string, string | number | boolean | undefined>;
+
+/**
+ * Error type categorization
+ */
+export type ErrorCategory =
+  | "connection"
+  | "timeout"
+  | "authentication"
+  | "server"
+  | "client"
+  | "unknown";
 
 /**
  * Low-level HTTP client for Puppetserver API
@@ -29,12 +43,16 @@ export type QueryParams = Record<string, string | number | boolean | undefined>;
  * - Request/response handling
  * - Error handling and logging
  * - Timeout and connection management
+ * - Retry logic with exponential backoff
+ * - Circuit breaker pattern for fault tolerance
  */
 export class PuppetserverClient {
   private baseUrl: string;
   private token?: string;
   private httpsAgent?: https.Agent;
   private timeout: number;
+  private circuitBreaker: CircuitBreaker;
+  private retryConfig: RetryConfig;
 
   /**
    * Create a new Puppetserver client
@@ -54,6 +72,46 @@ export class PuppetserverClient {
     if (url.protocol === "https:") {
       this.httpsAgent = this.createHttpsAgent(config);
     }
+
+    // Initialize circuit breaker
+    this.circuitBreaker = new CircuitBreaker({
+      failureThreshold: 5,
+      resetTimeout: 60000,
+      timeout: this.timeout,
+      onStateChange: (oldState, newState): void => {
+        console.warn(
+          `[Puppetserver] Circuit breaker: ${oldState} -> ${newState}`,
+        );
+      },
+      onOpen: (failureCount): void => {
+        console.error(
+          `[Puppetserver] Circuit breaker opened after ${String(failureCount)} failures`,
+        );
+      },
+      onClose: (): void => {
+        console.warn(
+          "[Puppetserver] Circuit breaker closed - service recovered",
+        );
+      },
+    });
+
+    // Initialize retry configuration
+    this.retryConfig = {
+      maxAttempts: 3,
+      initialDelay: 1000,
+      maxDelay: 30000,
+      backoffMultiplier: 2,
+      jitter: true,
+      shouldRetry: (error: unknown): boolean => this.isRetryableError(error),
+      onRetry: (attempt, delay, error): void => {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        const category = this.categorizeError(error);
+        console.warn(
+          `[Puppetserver] Retry attempt ${String(attempt)} after ${String(delay)}ms due to ${category} error: ${errorMessage}`,
+        );
+      },
+    };
   }
 
   /**
@@ -129,6 +187,13 @@ export class PuppetserverClient {
    * @returns Certificate details
    */
   async getCertificate(certname: string): Promise<unknown> {
+    if (!certname || certname.trim() === "") {
+      throw new PuppetserverError(
+        "Certificate name is required",
+        "INVALID_CERTNAME",
+        { certname },
+      );
+    }
     return this.get(`/puppet-ca/v1/certificate_status/${certname}`);
   }
 
@@ -139,6 +204,13 @@ export class PuppetserverClient {
    * @returns Sign operation result
    */
   async signCertificate(certname: string): Promise<unknown> {
+    if (!certname || certname.trim() === "") {
+      throw new PuppetserverError(
+        "Certificate name is required",
+        "INVALID_CERTNAME",
+        { certname },
+      );
+    }
     return this.put(`/puppet-ca/v1/certificate_status/${certname}`, {
       desired_state: "signed",
     });
@@ -151,6 +223,13 @@ export class PuppetserverClient {
    * @returns Revoke operation result
    */
   async revokeCertificate(certname: string): Promise<unknown> {
+    if (!certname || certname.trim() === "") {
+      throw new PuppetserverError(
+        "Certificate name is required",
+        "INVALID_CERTNAME",
+        { certname },
+      );
+    }
     return this.put(`/puppet-ca/v1/certificate_status/${certname}`, {
       desired_state: "revoked",
     });
@@ -292,7 +371,7 @@ export class PuppetserverClient {
   }
 
   /**
-   * Execute HTTP request with timeout and error handling
+   * Execute HTTP request with timeout, retry logic, and circuit breaker
    *
    * @param method - HTTP method
    * @param url - Full URL
@@ -304,46 +383,239 @@ export class PuppetserverClient {
     url: string,
     body?: unknown,
   ): Promise<unknown> {
-    try {
-      const response = await this.fetchWithTimeout(method, url, body);
-      return await this.handleResponse(response, url, method);
-    } catch (error) {
-      if (error instanceof PuppetserverError) {
-        throw error;
-      }
+    // Wrap the request in circuit breaker and retry logic
+    return this.circuitBreaker.execute(async () => {
+      return withRetry(async () => {
+        try {
+          const response = await this.fetchWithTimeout(method, url, body);
+          return await this.handleResponse(response, url, method);
+        } catch (error) {
+          // Log detailed error information
+          this.logError(error, method, url);
 
-      // Handle network errors
-      if (error instanceof Error) {
-        if (error.message.includes("ECONNREFUSED")) {
-          throw new PuppetserverConnectionError(
-            `Cannot connect to Puppetserver at ${this.baseUrl}. Is Puppetserver running?`,
-            error,
-          );
+          // Transform and categorize error
+          const transformedError = this.transformError(error, url, method);
+          throw transformedError;
         }
+      }, this.retryConfig);
+    });
+  }
 
-        if (
-          error.message.includes("ETIMEDOUT") ||
-          error.message.includes("timeout")
-        ) {
-          throw new PuppetserverTimeoutError(
-            `Connection to Puppetserver timed out after ${String(this.timeout)}ms`,
-            error,
-          );
-        }
-
-        if (error.message.includes("certificate")) {
-          throw new PuppetserverConnectionError(
-            "SSL certificate validation failed. Check your SSL configuration.",
-            error,
-          );
-        }
-      }
-
-      throw new PuppetserverConnectionError(
-        "Failed to connect to Puppetserver",
-        error,
-      );
+  /**
+   * Transform raw errors into typed Puppetserver errors
+   *
+   * @param error - Raw error
+   * @param url - Request URL
+   * @param method - HTTP method
+   * @returns Typed Puppetserver error
+   */
+  private transformError(
+    error: unknown,
+    url: string,
+    method: string,
+  ): PuppetserverError {
+    // If already a PuppetserverError, return as-is
+    if (error instanceof PuppetserverError) {
+      return error;
     }
+
+    // Handle network errors
+    if (error instanceof Error) {
+      if (error.message.includes("ECONNREFUSED")) {
+        return new PuppetserverConnectionError(
+          `Cannot connect to Puppetserver at ${this.baseUrl}. Is Puppetserver running?`,
+          { error, url, method },
+        );
+      }
+
+      if (
+        error.message.includes("ETIMEDOUT") ||
+        error.message.includes("timeout")
+      ) {
+        return new PuppetserverTimeoutError(
+          `Connection to Puppetserver timed out after ${String(this.timeout)}ms`,
+          { error, url, method },
+        );
+      }
+
+      if (error.message.includes("certificate")) {
+        return new PuppetserverConnectionError(
+          "SSL certificate validation failed. Check your SSL configuration.",
+          { error, url, method },
+        );
+      }
+
+      if (
+        error.message.includes("ECONNRESET") ||
+        error.message.includes("socket")
+      ) {
+        return new PuppetserverConnectionError(
+          "Connection to Puppetserver was reset. The server may be overloaded or restarting.",
+          { error, url, method },
+        );
+      }
+    }
+
+    return new PuppetserverConnectionError(
+      "Failed to connect to Puppetserver",
+      { error, url, method },
+    );
+  }
+
+  /**
+   * Categorize error type for logging and retry decisions
+   *
+   * @param error - Error to categorize
+   * @returns Error category
+   */
+  private categorizeError(error: unknown): ErrorCategory {
+    if (error instanceof PuppetserverAuthenticationError) {
+      return "authentication";
+    }
+
+    if (error instanceof PuppetserverTimeoutError) {
+      return "timeout";
+    }
+
+    if (error instanceof PuppetserverConnectionError) {
+      return "connection";
+    }
+
+    if (error instanceof PuppetserverError) {
+      // Check HTTP status code in details
+      const details = error.details as { status?: number } | undefined;
+      if (details?.status) {
+        if (details.status >= 500) {
+          return "server";
+        }
+        if (details.status >= 400) {
+          return "client";
+        }
+      }
+    }
+
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+
+      if (
+        message.includes("econnrefused") ||
+        message.includes("econnreset") ||
+        message.includes("socket")
+      ) {
+        return "connection";
+      }
+
+      if (message.includes("timeout") || message.includes("etimedout")) {
+        return "timeout";
+      }
+
+      if (
+        message.includes("unauthorized") ||
+        message.includes("forbidden") ||
+        message.includes("authentication")
+      ) {
+        return "authentication";
+      }
+    }
+
+    return "unknown";
+  }
+
+  /**
+   * Check if an error should trigger a retry
+   *
+   * @param error - Error to check
+   * @returns true if error is retryable
+   */
+  private isRetryableError(error: unknown): boolean {
+    // Don't retry authentication errors
+    if (error instanceof PuppetserverAuthenticationError) {
+      return false;
+    }
+
+    // Retry connection errors
+    if (error instanceof PuppetserverConnectionError) {
+      return true;
+    }
+
+    // Retry timeout errors
+    if (error instanceof PuppetserverTimeoutError) {
+      return true;
+    }
+
+    // Check for retryable HTTP status codes
+    if (error instanceof PuppetserverError) {
+      const details = error.details as { status?: number } | undefined;
+      if (details?.status) {
+        // Retry 5xx server errors
+        if (details.status >= 500) {
+          return true;
+        }
+        // Retry 429 rate limit
+        if (details.status === 429) {
+          return true;
+        }
+        // Don't retry 4xx client errors (except 429)
+        if (details.status >= 400) {
+          return false;
+        }
+      }
+    }
+
+    // Check error message for retryable patterns
+    if (error instanceof Error) {
+      const message = error.message.toLowerCase();
+
+      if (
+        message.includes("econnrefused") ||
+        message.includes("econnreset") ||
+        message.includes("etimedout") ||
+        message.includes("timeout") ||
+        message.includes("network") ||
+        message.includes("socket")
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Log detailed error information
+   *
+   * @param error - Error to log
+   * @param method - HTTP method
+   * @param url - Request URL
+   */
+  private logError(error: unknown, method: string, url: string): void {
+    const category = this.categorizeError(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Extract additional details
+    let statusCode: number | undefined;
+    let responseBody: string | undefined;
+
+    if (error instanceof PuppetserverError) {
+      const details = error.details as
+        | {
+            status?: number;
+            body?: string;
+          }
+        | undefined;
+      statusCode = details?.status;
+      responseBody = details?.body;
+    }
+
+    // Log error with all available information
+    console.error(`[Puppetserver] ${category} error during ${method} ${url}:`, {
+      message: errorMessage,
+      category,
+      statusCode,
+      responseBody: responseBody ? responseBody.substring(0, 500) : undefined,
+      endpoint: url,
+      method,
+    });
   }
 
   /**
@@ -440,11 +712,21 @@ export class PuppetserverClient {
   ): Promise<unknown> {
     // Handle authentication errors
     if (response.status === 401 || response.status === 403) {
+      const errorText = await response.text();
+      console.error(
+        `[Puppetserver] Authentication error (${String(response.status)}) for ${method} ${url}:`,
+        {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText.substring(0, 500),
+        },
+      );
       throw new PuppetserverAuthenticationError(
         "Authentication failed. Check your Puppetserver token or certificate configuration.",
         {
           status: response.status,
           statusText: response.statusText,
+          body: errorText,
           url,
           method,
         },
@@ -459,6 +741,14 @@ export class PuppetserverClient {
     // Handle other errors
     if (!response.ok) {
       const errorText = await response.text();
+      console.error(
+        `[Puppetserver] HTTP error (${String(response.status)}) for ${method} ${url}:`,
+        {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText.substring(0, 500),
+        },
+      );
       throw new PuppetserverError(
         `Puppetserver API error: ${response.statusText}`,
         `HTTP_${String(response.status)}`,
@@ -482,10 +772,17 @@ export class PuppetserverClient {
       if (!text || text.trim() === "") {
         return null;
       }
+      console.error(
+        `[Puppetserver] Failed to parse response for ${method} ${url}:`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          responseText: text.substring(0, 500),
+        },
+      );
       throw new PuppetserverError(
         "Failed to parse Puppetserver response as JSON",
         "PARSE_ERROR",
-        { error, responseText: text },
+        { error, responseText: text, url, method },
       );
     }
   }
@@ -524,5 +821,35 @@ export class PuppetserverClient {
    */
   hasSSL(): boolean {
     return !!this.httpsAgent;
+  }
+
+  /**
+   * Get circuit breaker instance
+   *
+   * @returns Circuit breaker
+   */
+  getCircuitBreaker(): CircuitBreaker {
+    return this.circuitBreaker;
+  }
+
+  /**
+   * Get retry configuration
+   *
+   * @returns Retry configuration
+   */
+  getRetryConfig(): RetryConfig {
+    return this.retryConfig;
+  }
+
+  /**
+   * Update retry configuration
+   *
+   * @param config - New retry configuration
+   */
+  setRetryConfig(config: Partial<RetryConfig>): void {
+    this.retryConfig = {
+      ...this.retryConfig,
+      ...config,
+    };
   }
 }
