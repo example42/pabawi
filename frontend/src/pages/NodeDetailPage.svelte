@@ -5,6 +5,7 @@
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
   import FactsViewer from '../components/FactsViewer.svelte';
+  import MultiSourceFactsViewer from '../components/MultiSourceFactsViewer.svelte';
   import CommandOutput from '../components/CommandOutput.svelte';
   import RealtimeOutputViewer from '../components/RealtimeOutputViewer.svelte';
   import TaskRunInterface from '../components/TaskRunInterface.svelte';
@@ -15,6 +16,9 @@
   import CatalogViewer from '../components/CatalogViewer.svelte';
   import EventsViewer from '../components/EventsViewer.svelte';
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
+  import NodeStatus from '../components/NodeStatus.svelte';
+  import EnvironmentSelector from '../components/EnvironmentSelector.svelte';
+  import CatalogComparison from '../components/CatalogComparison.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -82,7 +86,7 @@
   const nodeId = $derived(params?.id || '');
 
   // Tab types
-  type TabId = 'overview' | 'facts' | 'execution-history' | 'puppet-reports' | 'catalog' | 'events';
+  type TabId = 'overview' | 'facts' | 'execution-history' | 'puppet-reports' | 'catalog' | 'events' | 'certificate-status' | 'node-status' | 'catalog-compilation' | 'environments';
 
   // State
   let node = $state<Node | null>(null);
@@ -133,6 +137,27 @@
   let events = $state<any[]>([]);
   let eventsLoading = $state(false);
   let eventsError = $state<string | null>(null);
+
+  // Puppetserver data state (for lazy loading)
+  let certificateStatus = $state<any | null>(null);
+  let certificateLoading = $state(false);
+  let certificateError = $state<string | null>(null);
+
+  let nodeStatus = $state<any | null>(null);
+  let nodeStatusLoading = $state(false);
+  let nodeStatusError = $state<string | null>(null);
+
+  let puppetserverFacts = $state<any | null>(null);
+  let puppetserverFactsLoading = $state(false);
+  let puppetserverFactsError = $state<string | null>(null);
+
+  let puppetdbFacts = $state<any | null>(null);
+  let puppetdbFactsLoading = $state(false);
+  let puppetdbFactsError = $state<string | null>(null);
+
+  let environments = $state<any[]>([]);
+  let environmentsLoading = $state(false);
+  let environmentsError = $state<string | null>(null);
 
   // Cache for loaded data
   let dataCache = $state<Record<TabId, any>>({});
@@ -390,6 +415,188 @@
     }
   }
 
+  // Lazy load Certificate Status
+  async function fetchCertificateStatus(): Promise<void> {
+    // Check cache first
+    if (dataCache['certificate-status']) {
+      certificateStatus = dataCache['certificate-status'];
+      return;
+    }
+
+    certificateLoading = true;
+    certificateError = null;
+
+    try {
+      const data = await get<{ certificate: any }>(
+        `/api/integrations/puppetserver/certificates/${nodeId}`,
+        { maxRetries: 2 }
+      );
+
+      certificateStatus = data.certificate;
+      dataCache['certificate-status'] = certificateStatus;
+    } catch (err) {
+      certificateError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching certificate status:', err);
+      // Don't show error toast - display inline error instead
+    } finally {
+      certificateLoading = false;
+    }
+  }
+
+  // Lazy load Node Status
+  async function fetchNodeStatus(): Promise<void> {
+    // Check cache first
+    if (dataCache['node-status']) {
+      nodeStatus = dataCache['node-status'];
+      return;
+    }
+
+    nodeStatusLoading = true;
+    nodeStatusError = null;
+
+    try {
+      const data = await get<{ status: any }>(
+        `/api/integrations/puppetserver/nodes/${nodeId}/status`,
+        { maxRetries: 2 }
+      );
+
+      nodeStatus = data.status;
+      dataCache['node-status'] = nodeStatus;
+    } catch (err) {
+      nodeStatusError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching node status:', err);
+      // Don't show error toast - display inline error instead
+    } finally {
+      nodeStatusLoading = false;
+    }
+  }
+
+  // Lazy load Puppetserver Facts
+  async function fetchPuppetserverFacts(): Promise<void> {
+    // Check cache first
+    if (dataCache['puppetserver-facts']) {
+      puppetserverFacts = dataCache['puppetserver-facts'];
+      return;
+    }
+
+    puppetserverFactsLoading = true;
+    puppetserverFactsError = null;
+
+    try {
+      const data = await get<{ facts: any }>(
+        `/api/integrations/puppetserver/nodes/${nodeId}/facts`,
+        { maxRetries: 2 }
+      );
+
+      puppetserverFacts = data.facts;
+      dataCache['puppetserver-facts'] = puppetserverFacts;
+    } catch (err) {
+      puppetserverFactsError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching Puppetserver facts:', err);
+      // Don't show error toast - display inline error instead
+    } finally {
+      puppetserverFactsLoading = false;
+    }
+  }
+
+  // Lazy load PuppetDB Facts
+  async function fetchPuppetDBFacts(): Promise<void> {
+    // Check cache first
+    if (dataCache['puppetdb-facts']) {
+      puppetdbFacts = dataCache['puppetdb-facts'];
+      return;
+    }
+
+    puppetdbFactsLoading = true;
+    puppetdbFactsError = null;
+
+    try {
+      const data = await get<{ facts: any }>(
+        `/api/integrations/puppetdb/nodes/${nodeId}/facts`,
+        { maxRetries: 2 }
+      );
+
+      puppetdbFacts = data.facts;
+      dataCache['puppetdb-facts'] = puppetdbFacts;
+    } catch (err) {
+      puppetdbFactsError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching PuppetDB facts:', err);
+      // Don't show error toast - display inline error instead
+    } finally {
+      puppetdbFactsLoading = false;
+    }
+  }
+
+  // Lazy load Environments
+  async function fetchEnvironments(): Promise<void> {
+    // Check cache first
+    if (dataCache['environments']) {
+      environments = dataCache['environments'];
+      return;
+    }
+
+    environmentsLoading = true;
+    environmentsError = null;
+
+    try {
+      const data = await get<{ environments: any[] }>(
+        `/api/integrations/puppetserver/environments`,
+        { maxRetries: 2 }
+      );
+
+      environments = data.environments || [];
+      dataCache['environments'] = environments;
+    } catch (err) {
+      environmentsError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching environments:', err);
+      // Don't show error toast - display inline error instead
+    } finally {
+      environmentsLoading = false;
+    }
+  }
+
+  // Sign certificate
+  async function signCertificate(): Promise<void> {
+    try {
+      showInfo('Signing certificate...');
+      await post(`/api/integrations/puppetserver/certificates/${nodeId}/sign`, undefined, {
+        maxRetries: 0,
+      });
+      showSuccess('Certificate signed successfully');
+
+      // Refresh certificate status
+      delete dataCache['certificate-status'];
+      await fetchCertificateStatus();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error signing certificate:', err);
+      showError('Failed to sign certificate', errorMsg);
+    }
+  }
+
+  // Revoke certificate
+  async function revokeCertificate(): Promise<void> {
+    if (!confirm('Are you sure you want to revoke this certificate? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      showInfo('Revoking certificate...');
+      await fetch(`/api/integrations/puppetserver/certificates/${nodeId}`, {
+        method: 'DELETE',
+      });
+      showSuccess('Certificate revoked successfully');
+
+      // Refresh certificate status
+      delete dataCache['certificate-status'];
+      await fetchCertificateStatus();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error revoking certificate:', err);
+      showError('Failed to revoke certificate', errorMsg);
+    }
+  }
+
 
 
   // Format timestamp
@@ -421,6 +628,13 @@
   // Load data for a specific tab
   async function loadTabData(tabId: TabId): Promise<void> {
     switch (tabId) {
+      case 'facts':
+        // Load facts from all sources in parallel
+        await Promise.all([
+          fetchPuppetDBFacts(),
+          fetchPuppetserverFacts(),
+        ]);
+        break;
       case 'puppet-reports':
         await fetchPuppetReports();
         break;
@@ -435,7 +649,19 @@
           await fetchExecutions();
         }
         break;
-      // 'overview' and 'facts' are loaded on mount or on-demand
+      case 'certificate-status':
+        await fetchCertificateStatus();
+        break;
+      case 'node-status':
+        await fetchNodeStatus();
+        break;
+      case 'catalog-compilation':
+        await fetchEnvironments();
+        break;
+      case 'environments':
+        await fetchEnvironments();
+        break;
+      // 'overview' is loaded on mount
     }
   }
 
@@ -444,7 +670,7 @@
     const url = new URL(window.location.href);
     const tabParam = url.searchParams.get('tab') as TabId | null;
 
-    if (tabParam && ['overview', 'facts', 'execution-history', 'puppet-reports', 'catalog', 'events'].includes(tabParam)) {
+    if (tabParam && ['overview', 'facts', 'execution-history', 'puppet-reports', 'catalog', 'events', 'certificate-status', 'node-status', 'catalog-compilation', 'environments'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -582,7 +808,7 @@
 
     <!-- Tab Navigation -->
     <div class="mb-6 border-b border-gray-200 dark:border-gray-700">
-      <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+      <nav class="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
         <button
           type="button"
           class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'overview' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
@@ -603,6 +829,34 @@
           onclick={() => switchTab('execution-history')}
         >
           Execution History
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'certificate-status' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('certificate-status')}
+        >
+          Certificate Status
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'node-status' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('node-status')}
+        >
+          Node Status
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'catalog-compilation' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('catalog-compilation')}
+        >
+          Catalog Compilation
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'environments' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('environments')}
+        >
+          Environments
         </button>
         <button
           type="button"
@@ -815,44 +1069,25 @@
       <!-- Facts Tab -->
       {#if activeTab === 'facts'}
         <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <div class="mb-4 flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
-                {getSourceBadge('bolt')}
-              </span>
-            </div>
-            <button
-              type="button"
-              class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={gatherFacts}
-              disabled={factsLoading}
-            >
-              {factsLoading ? 'Gathering...' : 'Gather Facts'}
-            </button>
+          <div class="mb-4">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              View facts from multiple sources with timestamps and categorization
+            </p>
           </div>
 
-          {#if factsLoading}
-            <div class="flex justify-center py-8">
-              <LoadingSpinner message="Gathering facts..." />
-            </div>
-          {:else if factsError}
-            <ErrorAlert message="Failed to gather facts" details={factsError} onRetry={gatherFacts} />
-          {:else if facts}
-            <div class="mb-2 text-sm text-gray-500 dark:text-gray-400">
-              Gathered at: {formatTimestamp(facts.gatheredAt)}
-            </div>
-            {#if facts.command}
-              <div class="mb-3">
-                <CommandOutput boltCommand={facts.command} />
-              </div>
-            {/if}
-            <FactsViewer facts={facts.facts} />
-          {:else}
-            <p class="text-sm text-gray-500 dark:text-gray-400">
-              Click "Gather Facts" to collect system information from this node.
-            </p>
-          {/if}
+          <MultiSourceFactsViewer
+            boltFacts={facts}
+            boltLoading={factsLoading}
+            boltError={factsError}
+            onGatherBoltFacts={gatherFacts}
+            puppetdbFacts={puppetdbFacts}
+            puppetdbLoading={puppetdbFactsLoading}
+            puppetdbError={puppetdbFactsError}
+            puppetserverFacts={puppetserverFacts}
+            puppetserverLoading={puppetserverFactsLoading}
+            puppetserverError={puppetserverFactsError}
+          />
         </div>
       {/if}
 
@@ -1073,6 +1308,173 @@
         {:else}
           <EventsViewer events={events} />
         {/if}
+      {/if}
+
+      <!-- Certificate Status Tab -->
+      {#if activeTab === 'certificate-status'}
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Certificate Status</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+              Puppetserver
+            </span>
+          </div>
+
+          {#if certificateLoading}
+            <div class="flex justify-center py-12">
+              <LoadingSpinner size="lg" message="Loading certificate status..." />
+            </div>
+          {:else if certificateError}
+            <ErrorAlert
+              message="Failed to load certificate status"
+              details={certificateError}
+              onRetry={fetchCertificateStatus}
+            />
+          {:else if !certificateStatus}
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
+              <p class="text-gray-500 dark:text-gray-400">
+                No certificate found for this node.
+              </p>
+            </div>
+          {:else}
+            <div class="space-y-6">
+              <!-- Certificate Details -->
+              <div>
+                <h3 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Certificate Details</h3>
+                <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Certname</dt>
+                    <dd class="mt-1 text-sm text-gray-900 dark:text-white">{certificateStatus.certname}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
+                    <dd class="mt-1">
+                      <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {
+                        certificateStatus.status === 'signed' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
+                        certificateStatus.status === 'requested' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                        'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
+                      }">
+                        {certificateStatus.status}
+                      </span>
+                    </dd>
+                  </div>
+                  {#if certificateStatus.fingerprint}
+                    <div class="sm:col-span-2">
+                      <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Fingerprint</dt>
+                      <dd class="mt-1 font-mono text-xs text-gray-900 dark:text-white break-all">{certificateStatus.fingerprint}</dd>
+                    </div>
+                  {/if}
+                  {#if certificateStatus.not_before}
+                    <div>
+                      <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Valid From</dt>
+                      <dd class="mt-1 text-sm text-gray-900 dark:text-white">{formatTimestamp(certificateStatus.not_before)}</dd>
+                    </div>
+                  {/if}
+                  {#if certificateStatus.not_after}
+                    <div>
+                      <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Valid Until</dt>
+                      <dd class="mt-1 text-sm text-gray-900 dark:text-white">{formatTimestamp(certificateStatus.not_after)}</dd>
+                    </div>
+                  {/if}
+                  {#if certificateStatus.dns_alt_names && certificateStatus.dns_alt_names.length > 0}
+                    <div class="sm:col-span-2">
+                      <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">DNS Alt Names</dt>
+                      <dd class="mt-1 text-sm text-gray-900 dark:text-white">
+                        {certificateStatus.dns_alt_names.join(', ')}
+                      </dd>
+                    </div>
+                  {/if}
+                </dl>
+              </div>
+
+              <!-- Certificate Operations -->
+              <div class="flex gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+                {#if certificateStatus.status === 'requested'}
+                  <button
+                    type="button"
+                    class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                    onclick={signCertificate}
+                  >
+                    Sign Certificate
+                  </button>
+                {/if}
+                {#if certificateStatus.status === 'signed'}
+                  <button
+                    type="button"
+                    class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    onclick={revokeCertificate}
+                  >
+                    Revoke Certificate
+                  </button>
+                {/if}
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
+      <!-- Node Status Tab -->
+      {#if activeTab === 'node-status'}
+        <NodeStatus
+          status={nodeStatus}
+          loading={nodeStatusLoading}
+          error={nodeStatusError}
+          onRefresh={fetchNodeStatus}
+        />
+      {/if}
+
+      <!-- Catalog Compilation Tab -->
+      {#if activeTab === 'catalog-compilation'}
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog Compilation</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+              Puppetserver
+            </span>
+          </div>
+
+          <CatalogComparison certname={nodeId} />
+        </div>
+      {/if}
+
+      <!-- Environments Tab -->
+      {#if activeTab === 'environments'}
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Environments</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+              Puppetserver
+            </span>
+          </div>
+
+          {#if environmentsLoading}
+            <div class="flex justify-center py-12">
+              <LoadingSpinner size="lg" message="Loading environments..." />
+            </div>
+          {:else if environmentsError}
+            <ErrorAlert
+              message="Failed to load environments"
+              details={environmentsError}
+              onRetry={fetchEnvironments}
+            />
+          {:else if environments.length === 0}
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
+              <p class="text-gray-500 dark:text-gray-400">
+                No environments found.
+              </p>
+            </div>
+          {:else}
+            <div class="space-y-4">
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                Available Puppet environments for this node:
+              </p>
+              <EnvironmentSelector
+                environments={environments}
+                showDeployButton={true}
+              />
+            </div>
+          {/if}
+        </div>
       {/if}
     </div>
   {/if}
