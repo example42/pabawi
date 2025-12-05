@@ -27,7 +27,7 @@
   - **Property 19: REST API usage**
   - **Validates: Requirements 9.2**
 
-- [ ] 3. Implement retry logic and circuit breaker
+- [x] 3. Implement retry logic and circuit breaker
   - Add retry logic with exponential backoff to PuppetserverClient
   - Integrate circuit breaker pattern (reuse from PuppetDB integration)
   - Implement error categorization (connection, timeout, authentication)
@@ -46,7 +46,7 @@
   - **Property 33: Detailed error logging**
   - **Validates: Requirements 14.1**
 
-- [ ] 4. Implement certificate API methods
+- [x] 4. Implement certificate API methods
   - Add getCertificates() method to retrieve certificate list with optional status filter
   - Add getCertificate() method to retrieve single certificate details
   - Add signCertificate() method to sign certificate requests
@@ -62,7 +62,7 @@
   - **Property 21: Response validation and transformation**
   - **Validates: Requirements 9.4**
 
-- [ ] 5. Implement PuppetserverService plugin
+- [x] 5. Implement PuppetserverService plugin
   - Create PuppetserverService class extending BasePlugin
   - Implement InformationSourcePlugin interface methods
   - Add initialize() method with configuration validation
@@ -74,7 +74,7 @@
   - **Property 22: Cache expiration by source**
   - **Validates: Requirements 9.5**
 
-- [ ] 6. Implement certificate management operations
+- [x] 6. Implement certificate management operations
   - Add listCertificates() method with status filtering
   - Add getCertificate() method for single certificate retrieval
   - Add signCertificate() method with error handling
@@ -94,7 +94,7 @@
   - **Property 35: Specific error messages**
   - **Validates: Requirements 14.3**
 
-- [ ] 7. Implement bulk certificate operations
+- [x] 7. Implement bulk certificate operations
   - Add bulkSignCertificates() method to sign multiple certificates
   - Add bulkRevokeCertificates() method to revoke multiple certificates
   - Implement sequential processing with progress tracking
@@ -105,7 +105,7 @@
   - **Property 29: Bulk operation execution**
   - **Validates: Requirements 12.4, 12.5**
 
-- [ ] 8. Implement inventory integration
+- [x] 8. Implement inventory integration
   - Add getInventory() method to retrieve nodes from CA
   - Transform certificates to normalized Node format with source attribution
   - Add certificate status to node metadata
@@ -116,7 +116,7 @@
   - **Property 6: Source attribution consistency**
   - **Validates: Requirements 2.2, 6.2, 10.2**
 
-- [ ] 9. Implement NodeLinkingService
+- [-] 9. Implement NodeLinkingService
   - Create NodeLinkingService class for cross-source node linking
   - Implement linkNodes() method to match nodes by certname/hostname
   - Add getLinkedNodeData() method to aggregate data from all sources
@@ -180,8 +180,7 @@
   - **Property 13: Compilation error detail**
   - **Validates: Requirements 5.5**
 
-- [ ] 14. Implement CatalogDiffService
-  - Create CatalogDiffService class for catalog comparison
+- [ ] 14. Implement catalog comparison (within PuppetserverService)
   - Implement compareCatalogs() method to generate diffs
   - Add compareResources() method to identify added, removed, and modified resources
   - Implement compareParameters() method to show parameter changes

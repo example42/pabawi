@@ -7,7 +7,7 @@
 /**
  * Certificate status in Puppetserver CA
  */
-export type CertificateStatus = 'signed' | 'requested' | 'revoked';
+export type CertificateStatus = "signed" | "requested" | "revoked";
 
 /**
  * Certificate from Puppetserver CA
@@ -23,12 +23,17 @@ export interface Certificate {
 }
 
 /**
+ * Node activity category based on last check-in time
+ */
+export type NodeActivityCategory = "active" | "inactive" | "never_checked_in";
+
+/**
  * Node status from Puppetserver
  */
 export interface NodeStatus {
   certname: string;
   latest_report_hash?: string;
-  latest_report_status?: 'unchanged' | 'changed' | 'failed';
+  latest_report_status?: "unchanged" | "changed" | "failed";
   latest_report_noop?: boolean;
   latest_report_noop_pending?: boolean;
   cached_catalog_status?: string;
@@ -45,7 +50,7 @@ export interface NodeStatus {
 export interface Environment {
   name: string;
   last_deployed?: string;
-  status?: 'deployed' | 'deploying' | 'failed';
+  status?: "deployed" | "deploying" | "failed";
 }
 
 /**
@@ -53,7 +58,7 @@ export interface Environment {
  */
 export interface DeploymentResult {
   environment: string;
-  status: 'success' | 'failed';
+  status: "success" | "failed";
   message?: string;
   timestamp: string;
 }
@@ -96,7 +101,7 @@ export interface CatalogEdge {
     type: string;
     title: string;
   };
-  relationship: 'contains' | 'before' | 'require' | 'subscribe' | 'notify';
+  relationship: "contains" | "before" | "require" | "subscribe" | "notify";
 }
 
 /**
@@ -134,10 +139,10 @@ export interface CatalogDiff {
  */
 export interface BulkOperationResult {
   successful: string[];
-  failed: Array<{
+  failed: {
     certname: string;
     error: string;
-  }>;
+  }[];
   total: number;
   successCount: number;
   failureCount: number;
