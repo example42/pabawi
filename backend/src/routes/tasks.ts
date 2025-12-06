@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../bolt/BoltService";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
+import type { IntegrationManager } from "../integrations/IntegrationManager";
 import {
   BoltExecutionError,
   BoltParseError,
@@ -11,6 +11,7 @@ import {
   BoltTaskParameterError,
 } from "../bolt/types";
 import { asyncHandler } from "./asyncHandler";
+import type { BoltPlugin } from "../integrations/bolt/BoltPlugin";
 
 /**
  * Request validation schemas
@@ -29,7 +30,7 @@ const TaskExecutionBodySchema = z.object({
  * Create tasks router
  */
 export function createTasksRouter(
-  boltService: BoltService,
+  integrationManager: IntegrationManager,
   executionRepository: ExecutionRepository,
   streamingManager?: StreamingExecutionManager,
 ): Router {
@@ -43,6 +44,21 @@ export function createTasksRouter(
     "/",
     asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       try {
+        // Get Bolt plugin from IntegrationManager
+        const boltPlugin = integrationManager.getExecutionTool(
+          "bolt",
+        ) as BoltPlugin | null;
+        if (!boltPlugin) {
+          res.status(503).json({
+            error: {
+              code: "BOLT_NOT_AVAILABLE",
+              message: "Bolt integration is not available",
+            },
+          });
+          return;
+        }
+
+        const boltService = boltPlugin.getBoltService();
         const tasks = await boltService.listTasks();
         res.json({ tasks });
       } catch (error) {
@@ -87,6 +103,21 @@ export function createTasksRouter(
     "/by-module",
     asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       try {
+        // Get Bolt plugin from IntegrationManager
+        const boltPlugin = integrationManager.getExecutionTool(
+          "bolt",
+        ) as BoltPlugin | null;
+        if (!boltPlugin) {
+          res.status(503).json({
+            error: {
+              code: "BOLT_NOT_AVAILABLE",
+              message: "Bolt integration is not available",
+            },
+          });
+          return;
+        }
+
+        const boltService = boltPlugin.getBoltService();
         const tasksByModule = await boltService.listTasksByModule();
         res.json({ tasksByModule });
       } catch (error) {
@@ -139,9 +170,12 @@ export function createTasksRouter(
         const parameters = body.parameters;
         const expertMode = body.expertMode ?? false;
 
-        // Verify node exists in inventory
-        const nodes = await boltService.getInventory();
-        const node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
+        // Verify node exists in inventory using IntegrationManager
+        const aggregatedInventory =
+          await integrationManager.getAggregatedInventory();
+        const node = aggregatedInventory.nodes.find(
+          (n) => n.id === nodeId || n.name === nodeId,
+        );
 
         if (!node) {
           res.status(404).json({
@@ -165,7 +199,7 @@ export function createTasksRouter(
           expertMode,
         });
 
-        // Execute task asynchronously
+        // Execute task asynchronously using IntegrationManager
         // We don't await here to return immediately with execution ID
         void (async (): Promise<void> => {
           try {
@@ -185,12 +219,16 @@ export function createTasksRouter(
                   }
                 : undefined;
 
-            const result = await boltService.runTask(
-              nodeId,
-              taskName,
+            // Execute action through IntegrationManager
+            const result = await integrationManager.executeAction("bolt", {
+              type: "task",
+              target: nodeId,
+              action: taskName,
               parameters,
-              streamingCallback,
-            );
+              metadata: {
+                streamingCallback,
+              },
+            });
 
             // Update execution record with results
             // Include stdout/stderr when expert mode is enabled

@@ -61,8 +61,8 @@ export function createInventoryRouter(
           (requestedSources.includes("all") ||
             requestedSources.some((s) => s !== "bolt"))
         ) {
-          // Get aggregated inventory from all sources
-          const aggregated = await integrationManager.getAggregatedInventory();
+          // Get linked inventory from all sources (Requirement 3.3)
+          const aggregated = await integrationManager.getLinkedInventory();
 
           // Filter by requested sources if specified
           let filteredNodes = aggregated.nodes;

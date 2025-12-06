@@ -29,7 +29,10 @@ export interface CircuitBreakerConfig {
   timeout?: number;
 
   /** Callback invoked when circuit state changes */
-  onStateChange?: (oldState: CircuitBreakerState, newState: CircuitBreakerState) => void;
+  onStateChange?: (
+    oldState: CircuitBreakerState,
+    newState: CircuitBreakerState,
+  ) => void;
 
   /** Callback invoked when circuit opens */
   onOpen?: (failureCount: number) => void;
@@ -230,7 +233,9 @@ export class CircuitBreaker {
 
     // Log state transition
     // eslint-disable-next-line no-console
-    console.log(`[CircuitBreaker] State transition: ${oldState} -> ${newState}`);
+    console.log(
+      `[CircuitBreaker] State transition: ${oldState} -> ${newState}`,
+    );
 
     // Invoke callback
     if (this.config.onStateChange) {

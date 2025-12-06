@@ -5,7 +5,11 @@
  * Handles initialization state, configuration management, and basic health checking.
  */
 
-import type { IntegrationPlugin, IntegrationConfig, HealthStatus } from './types';
+import type {
+  IntegrationPlugin,
+  IntegrationConfig,
+  HealthStatus,
+} from "./types";
 
 /**
  * Abstract base class for integration plugins
@@ -28,7 +32,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
    */
   constructor(
     public readonly name: string,
-    public readonly type: 'execution' | 'information' | 'both'
+    public readonly type: "execution" | "information" | "both",
   ) {
     // Initialize with default config
     this.config = {
@@ -53,13 +57,13 @@ export abstract class BasePlugin implements IntegrationPlugin {
     this.config = config;
 
     if (!config.enabled) {
-      this.log('Plugin is disabled in configuration');
+      this.log("Plugin is disabled in configuration");
       return;
     }
 
     await this.performInitialization();
     this.initialized = true;
-    this.log('Plugin initialized successfully');
+    this.log("Plugin initialized successfully");
   }
 
   /**
@@ -80,15 +84,19 @@ export abstract class BasePlugin implements IntegrationPlugin {
    */
   protected validateConfig(config: IntegrationConfig): void {
     if (!config.name) {
-      throw new Error('Plugin configuration must include a name');
+      throw new Error("Plugin configuration must include a name");
     }
 
     if (config.name !== this.name) {
-      throw new Error(`Configuration name '${config.name}' does not match plugin name '${this.name}'`);
+      throw new Error(
+        `Configuration name '${config.name}' does not match plugin name '${this.name}'`,
+      );
     }
 
     if (config.type !== this.type) {
-      throw new Error(`Configuration type '${config.type}' does not match plugin type '${this.type}'`);
+      throw new Error(
+        `Configuration type '${config.type}' does not match plugin type '${this.type}'`,
+      );
     }
   }
 
@@ -106,7 +114,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
     if (!this.initialized) {
       this.lastHealthCheck = {
         healthy: false,
-        message: 'Plugin is not initialized',
+        message: "Plugin is not initialized",
         lastCheck: now,
       };
       return this.lastHealthCheck;
@@ -115,7 +123,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
     if (!this.config.enabled) {
       this.lastHealthCheck = {
         healthy: false,
-        message: 'Plugin is disabled',
+        message: "Plugin is disabled",
         lastCheck: now,
       };
       return this.lastHealthCheck;
@@ -131,7 +139,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
     } catch (error) {
       this.lastHealthCheck = {
         healthy: false,
-        message: error instanceof Error ? error.message : 'Health check failed',
+        message: error instanceof Error ? error.message : "Health check failed",
         lastCheck: now,
         details: {
           error: error instanceof Error ? error.stack : String(error),
@@ -149,7 +157,9 @@ export abstract class BasePlugin implements IntegrationPlugin {
    *
    * @returns Health status (without lastCheck timestamp)
    */
-  protected abstract performHealthCheck(): Promise<Omit<HealthStatus, 'lastCheck'>>;
+  protected abstract performHealthCheck(): Promise<
+    Omit<HealthStatus, "lastCheck">
+  >;
 
   /**
    * Get the current configuration
@@ -181,14 +191,17 @@ export abstract class BasePlugin implements IntegrationPlugin {
    * @param message - Message to log
    * @param level - Log level
    */
-  protected log(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
+  protected log(
+    message: string,
+    level: "info" | "warn" | "error" = "info",
+  ): void {
     const prefix = `[${this.name}]`;
 
     switch (level) {
-      case 'error':
+      case "error":
         console.error(prefix, message);
         break;
-      case 'warn':
+      case "warn":
         console.warn(prefix, message);
         break;
       default:
@@ -207,7 +220,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
 
-    this.log(`${message}: ${errorMessage}`, 'error');
+    this.log(`${message}: ${errorMessage}`, "error");
 
     if (errorStack) {
       console.error(errorStack);

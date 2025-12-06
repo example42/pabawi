@@ -117,7 +117,9 @@ export const PuppetserverCacheConfigSchema = z.object({
   ttl: z.number().int().positive().default(300000), // 5 minutes default
 });
 
-export type PuppetserverCacheConfig = z.infer<typeof PuppetserverCacheConfigSchema>;
+export type PuppetserverCacheConfig = z.infer<
+  typeof PuppetserverCacheConfigSchema
+>;
 
 /**
  * Puppetserver circuit breaker configuration schema
@@ -128,7 +130,9 @@ export const PuppetserverCircuitBreakerConfigSchema = z.object({
   resetTimeout: z.number().int().positive().default(30000), // 30 seconds
 });
 
-export type PuppetserverCircuitBreakerConfig = z.infer<typeof PuppetserverCircuitBreakerConfigSchema>;
+export type PuppetserverCircuitBreakerConfig = z.infer<
+  typeof PuppetserverCircuitBreakerConfigSchema
+>;
 
 /**
  * Puppetserver integration configuration schema

@@ -69,27 +69,29 @@ async function startServer(): Promise<Express> {
     );
     console.warn("Bolt service initialized successfully");
 
-    // Validate package installation tasks availability
-    console.warn(`Validating package installation tasks...`);
-    try {
-      const tasks = await boltService.listTasks();
-      for (const packageTask of config.packageTasks) {
-        const task = tasks.find((t) => t.name === packageTask.name);
-        if (task) {
-          console.warn(
-            `✓ Package task '${packageTask.name}' (${packageTask.label}) is available`,
-          );
-        } else {
-          console.warn(
-            `✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`,
-          );
+    // Defer package task validation to avoid blocking startup
+    // Validation will occur on-demand when package operations are requested
+    void (async (): Promise<void> => {
+      try {
+        const tasks = await boltService.listTasks();
+        for (const packageTask of config.packageTasks) {
+          const task = tasks.find((t) => t.name === packageTask.name);
+          if (task) {
+            console.warn(
+              `✓ Package task '${packageTask.name}' (${packageTask.label}) is available`,
+            );
+          } else {
+            console.warn(
+              `✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`,
+            );
+          }
         }
+      } catch (error) {
+        console.warn(
+          `WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
       }
-    } catch (error) {
-      console.warn(
-        `WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : "Unknown error"}`,
-      );
-    }
+    })();
 
     // Initialize execution repository
     const executionRepository = new ExecutionRepository(
@@ -187,10 +189,18 @@ async function startServer(): Promise<Express> {
     const puppetserverConfig = config.integrations.puppetserver;
     const puppetserverConfigured = !!puppetserverConfig?.serverUrl;
 
+    console.warn("=== Puppetserver Integration Setup ===");
+    console.warn(`Puppetserver configured: ${String(puppetserverConfigured)}`);
+    console.warn(
+      `Puppetserver config: ${JSON.stringify(puppetserverConfig, null, 2)}`,
+    );
+
     if (puppetserverConfigured) {
       console.warn("Initializing Puppetserver integration...");
       try {
         puppetserverService = new PuppetserverService();
+        console.warn("PuppetserverService instance created");
+
         const integrationConfig: IntegrationConfig = {
           enabled: puppetserverConfig.enabled,
           name: "puppetserver",
@@ -199,23 +209,32 @@ async function startServer(): Promise<Express> {
           priority: 8, // Lower priority than PuppetDB (10), higher than Bolt (5)
         };
 
+        console.warn(
+          `Registering Puppetserver plugin with config: ${JSON.stringify(integrationConfig, null, 2)}`,
+        );
         integrationManager.registerPlugin(
           puppetserverService,
           integrationConfig,
         );
 
-        console.warn("Puppetserver integration registered and enabled");
+        console.warn("Puppetserver integration registered successfully");
+        console.warn(`- Enabled: ${String(puppetserverConfig.enabled)}`);
         console.warn(`- Server URL: ${puppetserverConfig.serverUrl}`);
+        console.warn(`- Port: ${String(puppetserverConfig.port)}`);
         console.warn(
           `- SSL enabled: ${String(puppetserverConfig.ssl?.enabled ?? false)}`,
         );
         console.warn(
-          `- Authentication: ${puppetserverConfig.token ? "configured" : "not configured"}`,
+          `- Authentication: ${puppetserverConfig.token ? "token configured" : "no token"}`,
         );
+        console.warn(`- Priority: 8`);
       } catch (error) {
         console.warn(
           `WARNING: Failed to initialize Puppetserver integration: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
+        if (error instanceof Error && error.stack) {
+          console.warn(error.stack);
+        }
         puppetserverService = undefined;
       }
     } else {
@@ -223,9 +242,25 @@ async function startServer(): Promise<Express> {
         "Puppetserver integration not configured - skipping registration",
       );
     }
+    console.warn("=== End Puppetserver Integration Setup ===");
 
     // Initialize all registered plugins
-    console.warn("Initializing all integration plugins...");
+    console.warn("=== Initializing All Integration Plugins ===");
+    console.warn(
+      `Total plugins registered: ${String(integrationManager.getPluginCount())}`,
+    );
+
+    // Log all registered plugins before initialization
+    const allPlugins = integrationManager.getAllPlugins();
+    console.warn("Registered plugins:");
+    for (const registration of allPlugins) {
+      console.warn(
+        `  - ${registration.plugin.name} (${registration.plugin.type})`,
+      );
+      console.warn(`    Enabled: ${String(registration.config.enabled)}`);
+      console.warn(`    Priority: ${String(registration.config.priority)}`);
+    }
+
     const initErrors = await integrationManager.initializePlugins();
 
     if (initErrors.length > 0) {
@@ -234,12 +269,25 @@ async function startServer(): Promise<Express> {
       );
       for (const { plugin, error } of initErrors) {
         console.warn(`  - ${plugin}: ${error.message}`);
+        if (error.stack) {
+          console.warn(error.stack);
+        }
       }
     } else {
       console.warn("All integrations initialized successfully");
     }
 
+    // Log information sources after initialization
+    console.warn("Information sources after initialization:");
+    const infoSources = integrationManager.getAllInformationSources();
+    for (const source of infoSources) {
+      console.warn(
+        `  - ${source.name}: initialized=${String(source.isInitialized())}`,
+      );
+    }
+
     console.warn("Integration manager initialized successfully");
+    console.warn("=== End Integration Plugin Initialization ===");
 
     // Start health check scheduler for integrations
     if (integrationManager.getPluginCount() > 0) {
@@ -318,11 +366,11 @@ async function startServer(): Promise<Express> {
       "/api/nodes",
       createInventoryRouter(boltService, integrationManager),
     );
-    app.use("/api/nodes", createFactsRouter(boltService));
+    app.use("/api/nodes", createFactsRouter(integrationManager));
     app.use(
       "/api/nodes",
       createCommandsRouter(
-        boltService,
+        integrationManager,
         executionRepository,
         commandWhitelistService,
         streamingManager,
@@ -330,7 +378,11 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/nodes",
-      createTasksRouter(boltService, executionRepository, streamingManager),
+      createTasksRouter(
+        integrationManager,
+        executionRepository,
+        streamingManager,
+      ),
     );
     app.use(
       "/api/nodes",
@@ -356,7 +408,11 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/tasks",
-      createTasksRouter(boltService, executionRepository, streamingManager),
+      createTasksRouter(
+        integrationManager,
+        executionRepository,
+        streamingManager,
+      ),
     );
     app.use(
       "/api/executions",

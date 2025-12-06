@@ -204,7 +204,42 @@ class MockPuppetserverService extends PuppetserverService {
   async getNodeFacts(nodeId: string): Promise<Facts> {
     const facts = this.mockFacts[nodeId];
     if (!facts) {
-      throw new Error(`Node '${nodeId}' not found in Puppetserver`);
+      // Return empty facts structure instead of throwing error (requirement 4.4, 4.5)
+      return {
+        nodeId,
+        gatheredAt: new Date().toISOString(),
+        source: "puppetserver",
+        facts: {
+          os: {
+            family: "unknown",
+            name: "unknown",
+            release: {
+              full: "unknown",
+              major: "unknown",
+            },
+          },
+          processors: {
+            count: 0,
+            models: [],
+          },
+          memory: {
+            system: {
+              total: "0 MB",
+              available: "0 MB",
+            },
+          },
+          networking: {
+            hostname: nodeId,
+            interfaces: {},
+          },
+          categories: {
+            system: {},
+            network: {},
+            hardware: {},
+            custom: {},
+          },
+        },
+      };
     }
     return facts;
   }
@@ -371,12 +406,18 @@ describe("Puppetserver Node API", () => {
       expect(categories).toHaveProperty("custom");
     });
 
-    it("should return 404 for non-existent node facts", async () => {
+    it("should return empty facts structure for non-existent node (graceful handling)", async () => {
+      // Requirement 4.4, 4.5: Handle missing facts gracefully
       const response = await request(app)
         .get("/api/integrations/puppetserver/nodes/nonexistent.example.com/facts")
-        .expect(404);
+        .expect(200);
 
-      expect(response.body.error.code).toBe("NODE_NOT_FOUND");
+      expect(response.body.facts).toBeDefined();
+      expect(response.body.facts.nodeId).toBe("nonexistent.example.com");
+      expect(response.body.facts.source).toBe("puppetserver");
+      expect(response.body.facts.facts.os.family).toBe("unknown");
+      expect(response.body.facts.facts.os.name).toBe("unknown");
+      expect(response.body.source).toBe("puppetserver");
     });
 
     it("should include timestamp for freshness comparison", async () => {

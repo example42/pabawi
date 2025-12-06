@@ -108,13 +108,25 @@ export function createIntegrationsRouter(
             const plugins = integrationManager.getAllPlugins();
             const plugin = plugins.find((p) => p.plugin.name === name);
 
+            // Determine status: degraded takes precedence over error
+            let integrationStatus: string;
+            if (status.healthy) {
+              integrationStatus = "connected";
+            } else if (status.degraded) {
+              integrationStatus = "degraded";
+            } else {
+              integrationStatus = "error";
+            }
+
             return {
               name,
               type: plugin?.plugin.type ?? "unknown",
-              status: status.healthy ? "connected" : "error",
+              status: integrationStatus,
               lastCheck: status.lastCheck,
               message: status.message,
               details: status.details,
+              workingCapabilities: status.workingCapabilities,
+              failingCapabilities: status.failingCapabilities,
             };
           },
         );
@@ -131,6 +143,8 @@ export function createIntegrationsRouter(
             lastCheck: new Date().toISOString(),
             message: "PuppetDB integration is not configured",
             details: undefined,
+            workingCapabilities: undefined,
+            failingCapabilities: undefined,
           });
         }
 
@@ -143,6 +157,8 @@ export function createIntegrationsRouter(
             lastCheck: new Date().toISOString(),
             message: "Puppetserver integration is not configured",
             details: undefined,
+            workingCapabilities: undefined,
+            failingCapabilities: undefined,
           });
         }
 
@@ -1582,7 +1598,7 @@ export function createIntegrationsRouter(
    */
   router.get(
     "/puppetserver/nodes",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       if (!puppetserverService) {
         res.status(503).json({
           error: {
@@ -2105,8 +2121,10 @@ export function createIntegrationsRouter(
 
       try {
         // Validate request body
+        console.log("[Catalog Compare] Request body:", JSON.stringify(req.body));
         const body = CatalogCompareSchema.parse(req.body);
         const { certname, environment1, environment2 } = body;
+        console.log("[Catalog Compare] Parsed values:", { certname, environment1, environment2 });
 
         // Compare catalogs from Puppetserver
         const diff = await puppetserverService.compareCatalogs(
@@ -2190,7 +2208,7 @@ export function createIntegrationsRouter(
    */
   router.get(
     "/puppetserver/environments",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       if (!puppetserverService) {
         res.status(503).json({
           error: {

@@ -15,6 +15,19 @@ export interface HealthStatus {
   message?: string;
   lastCheck: string;
   details?: Record<string, unknown>;
+  /**
+   * Degraded indicates partial functionality
+   * When true, some features work but others fail (e.g., auth issues)
+   */
+  degraded?: boolean;
+  /**
+   * List of working capabilities when degraded
+   */
+  workingCapabilities?: string[];
+  /**
+   * List of failing capabilities when degraded
+   */
+  failingCapabilities?: string[];
 }
 
 /**
@@ -57,6 +70,7 @@ export interface Action {
   action: string;
   parameters?: Record<string, unknown>;
   timeout?: number;
+  metadata?: Record<string, unknown>;
 }
 
 /**

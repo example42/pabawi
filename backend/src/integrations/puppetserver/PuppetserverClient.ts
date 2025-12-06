@@ -123,6 +123,12 @@ export class PuppetserverClient {
   private createHttpsAgent(config: PuppetserverClientConfig): https.Agent {
     const agentOptions: https.AgentOptions = {
       rejectUnauthorized: config.rejectUnauthorized ?? true,
+      // Fix for ERR_OSSL_UNSUPPORTED with OpenSSL 3.0+
+      // Allow legacy TLS versions and cipher suites for compatibility with older Puppetserver versions
+      minVersion: "TLSv1.2", // Support TLS 1.2 and above
+      maxVersion: "TLSv1.3", // Support up to TLS 1.3
+      // Enable legacy cipher suites for compatibility
+      secureOptions: 0, // Disable all secure options to allow legacy algorithms
     };
 
     // Load CA certificate if provided
@@ -173,11 +179,45 @@ export class PuppetserverClient {
   async getCertificates(
     state?: "signed" | "requested" | "revoked",
   ): Promise<unknown> {
+    console.warn("[Puppetserver] getCertificates() called", {
+      state,
+      endpoint: "/puppet-ca/v1/certificate_statuses",
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+    });
+
     const params: QueryParams = {};
     if (state) {
       params.state = state;
     }
-    return this.get("/puppet-ca/v1/certificate_statuses", params);
+
+    try {
+      const result = await this.get(
+        "/puppet-ca/v1/certificate_statuses",
+        params,
+      );
+
+      console.warn("[Puppetserver] getCertificates() response received", {
+        state,
+        resultType: Array.isArray(result) ? "array" : typeof result,
+        resultLength: Array.isArray(result) ? result.length : undefined,
+        sampleData:
+          Array.isArray(result) && result.length > 0
+            ? JSON.stringify(result[0]).substring(0, 200)
+            : undefined,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("[Puppetserver] getCertificates() failed", {
+        state,
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -238,15 +278,134 @@ export class PuppetserverClient {
   /**
    * Status API: Get node status
    *
+   * Implements requirements 5.1, 5.2, 5.3, 5.4, 5.5:
+   * - Queries Puppetserver status API using correct endpoint
+   * - Parses and returns node status data
+   * - Handles missing status gracefully
+   * - Provides detailed logging for debugging
+   *
    * @param certname - Node certname
-   * @returns Node status
+   * @returns Node status or null if not found
    */
   async getStatus(certname: string): Promise<unknown> {
-    return this.get(`/puppet/v3/status/${certname}`);
+    // Debug logging for status retrieval
+    if (process.env.LOG_LEVEL === "debug") {
+      console.warn("[Puppetserver] getStatus() called", {
+        certname,
+        endpoint: `/puppet/v3/status/${certname}`,
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Validate certname (requirement 5.2)
+    if (!certname || certname.trim() === "") {
+      const error = new PuppetserverError(
+        "Certificate name is required for status retrieval",
+        "INVALID_CERTNAME",
+        { certname },
+      );
+      console.error("[Puppetserver] getStatus() validation failed", {
+        error: error.message,
+        certname,
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
+    }
+
+    try {
+      // Call Puppetserver API (requirement 5.1, 5.2)
+      const result = await this.get(`/puppet/v3/status/${certname}`);
+
+      // Log successful response (requirement 5.5)
+      if (result === null) {
+        console.warn(
+          "[Puppetserver] getStatus() returned null - node not found (requirement 5.4)",
+          {
+            certname,
+            endpoint: `/puppet/v3/status/${certname}`,
+            message:
+              "Node has not checked in with Puppetserver yet or status data is not available",
+            timestamp: new Date().toISOString(),
+          },
+        );
+      } else if (process.env.LOG_LEVEL === "debug") {
+        console.warn(
+          "[Puppetserver] getStatus() response received successfully (requirement 5.3)",
+          {
+            certname,
+            resultType: typeof result,
+            hasReportTimestamp:
+              result &&
+              typeof result === "object" &&
+              "report_timestamp" in result,
+            hasLatestReportHash:
+              result &&
+              typeof result === "object" &&
+              "latest_report_hash" in result,
+            hasCatalogEnvironment:
+              result &&
+              typeof result === "object" &&
+              "catalog_environment" in result,
+            sampleKeys:
+              result && typeof result === "object"
+                ? Object.keys(result).slice(0, 10)
+                : undefined,
+            timestamp: new Date().toISOString(),
+          },
+        );
+      }
+
+      return result;
+    } catch (error) {
+      // Log detailed error information (requirement 5.5)
+      console.error("[Puppetserver] getStatus() failed", {
+        certname,
+        endpoint: `/puppet/v3/status/${certname}`,
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+        errorDetails:
+          error instanceof PuppetserverError ? error.details : undefined,
+        statusCode:
+          error instanceof PuppetserverError
+            ? (error.details as { status?: number }).status
+            : undefined,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Handle 404 gracefully - node may not have status yet (requirement 5.4)
+      if (
+        error instanceof PuppetserverError &&
+        (error.details as { status?: number }).status === 404
+      ) {
+        console.warn(
+          `[Puppetserver] Status not found for node '${certname}' (404) - node may not have checked in yet (requirement 5.4)`,
+          {
+            certname,
+            suggestion:
+              "The node needs to run 'puppet agent -t' at least once to generate status data",
+            timestamp: new Date().toISOString(),
+          },
+        );
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   /**
    * Catalog API: Compile a catalog for a node in a specific environment
+   *
+   * Implements requirements 6.1, 6.2, 6.3, 6.4, 6.5:
+   * - Uses correct API endpoint (/puppet/v3/catalog/{certname})
+   * - Compiles catalogs for real environments (not fake ones)
+   * - Parses and returns catalog resources
+   * - Provides detailed logging for debugging
+   * - Handles compilation errors with detailed messages
    *
    * @param certname - Node certname
    * @param environment - Environment name
@@ -255,29 +414,344 @@ export class PuppetserverClient {
   async compileCatalog(
     certname: string,
     environment: string,
+    facts?: Record<string, unknown>,
   ): Promise<unknown> {
-    return this.post(`/puppet/v3/catalog/${certname}`, {
+    console.warn("[Puppetserver] compileCatalog() called", {
+      certname,
       environment,
+      hasFacts: !!facts,
+      factCount: facts ? Object.keys(facts).length : 0,
+      endpoint: `/puppet/v3/catalog/${certname}`,
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
     });
+
+    // Validate inputs
+    if (!certname || certname.trim() === "") {
+      const error = new PuppetserverError(
+        "Certificate name is required for catalog compilation",
+        "INVALID_CERTNAME",
+        { certname, environment },
+      );
+      console.error("[Puppetserver] compileCatalog() validation failed", {
+        error: error.message,
+        certname,
+        environment,
+      });
+      throw error;
+    }
+
+    if (!environment || environment.trim() === "") {
+      const error = new PuppetserverError(
+        "Environment name is required for catalog compilation",
+        "INVALID_ENVIRONMENT",
+        { certname, environment },
+      );
+      console.error("[Puppetserver] compileCatalog() validation failed", {
+        error: error.message,
+        certname,
+        environment,
+      });
+      throw error;
+    }
+
+    try {
+      // Environment must be passed as a query parameter
+      // Facts must be sent in the request body in the format Puppet expects
+      const requestBody = facts ? {
+        certname,
+        facts: {
+          name: certname,
+          values: facts,
+        },
+        trusted_facts: {
+          authenticated: "remote",
+          certname,
+        },
+      } : undefined;
+
+      const result = await this.post(
+        `/puppet/v3/catalog/${certname}?environment=${encodeURIComponent(environment)}`,
+        requestBody,
+      );
+
+      // Log successful response
+      if (result === null) {
+        console.warn(
+          "[Puppetserver] compileCatalog() returned null - catalog compilation may have failed",
+          {
+            certname,
+            environment,
+            endpoint: `/puppet/v3/catalog/${certname}`,
+          },
+        );
+      } else {
+        console.warn("[Puppetserver] compileCatalog() response received", {
+          certname,
+          environment,
+          resultType: typeof result,
+          hasResources:
+            result &&
+            typeof result === "object" &&
+            "resources" in result &&
+            Array.isArray((result as { resources?: unknown[] }).resources),
+          resourceCount:
+            result &&
+            typeof result === "object" &&
+            "resources" in result &&
+            Array.isArray((result as { resources?: unknown[] }).resources)
+              ? (result as { resources: unknown[] }).resources.length
+              : undefined,
+          hasEdges:
+            result &&
+            typeof result === "object" &&
+            "edges" in result &&
+            Array.isArray((result as { edges?: unknown[] }).edges),
+          edgeCount:
+            result &&
+            typeof result === "object" &&
+            "edges" in result &&
+            Array.isArray((result as { edges?: unknown[] }).edges)
+              ? (result as { edges: unknown[] }).edges.length
+              : undefined,
+          catalogVersion:
+            result && typeof result === "object" && "version" in result
+              ? (result as { version?: string }).version
+              : undefined,
+          catalogEnvironment:
+            result && typeof result === "object" && "environment" in result
+              ? (result as { environment?: string }).environment
+              : undefined,
+          sampleKeys:
+            result && typeof result === "object" && !Array.isArray(result)
+              ? Object.keys(result).slice(0, 10)
+              : undefined,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      // Log detailed error information
+      console.error("[Puppetserver] compileCatalog() failed", {
+        certname,
+        environment,
+        endpoint: `/puppet/v3/catalog/${certname}`,
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+        errorDetails:
+          error instanceof PuppetserverError ? error.details : undefined,
+      });
+
+      // Handle 404 gracefully - node may not exist
+      if (
+        error instanceof PuppetserverError &&
+        (error.details as { status?: number }).status === 404
+      ) {
+        console.warn(
+          `[Puppetserver] Catalog compilation failed for node '${certname}' in environment '${environment}' (404) - node may not exist or environment may not be configured`,
+        );
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   /**
    * Facts API: Get facts for a node
    *
+   * Implements requirements 4.1, 4.2, 4.3, 4.4, 4.5:
+   * - Queries Puppetserver facts API using correct endpoint
+   * - Parses and returns facts data
+   * - Handles missing facts gracefully
+   * - Provides detailed logging for debugging
+   *
    * @param certname - Node certname
-   * @returns Node facts
+   * @returns Node facts or null if not found
    */
   async getFacts(certname: string): Promise<unknown> {
-    return this.get(`/puppet/v3/facts/${certname}`);
+    console.warn("[Puppetserver] getFacts() called", {
+      certname,
+      endpoint: `/puppet/v3/facts/${certname}`,
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+    });
+
+    // Validate certname
+    if (!certname || certname.trim() === "") {
+      const error = new PuppetserverError(
+        "Certificate name is required for facts retrieval",
+        "INVALID_CERTNAME",
+        { certname },
+      );
+      console.error("[Puppetserver] getFacts() validation failed", {
+        error: error.message,
+        certname,
+      });
+      throw error;
+    }
+
+    try {
+      const result = await this.get(`/puppet/v3/facts/${certname}`);
+
+      // Log successful response
+      if (result === null) {
+        console.warn(
+          "[Puppetserver] getFacts() returned null - node not found",
+          {
+            certname,
+            endpoint: `/puppet/v3/facts/${certname}`,
+          },
+        );
+      } else {
+        console.warn("[Puppetserver] getFacts() response received", {
+          certname,
+          resultType: typeof result,
+          hasValues: result && typeof result === "object" && "values" in result,
+          valuesCount:
+            result &&
+            typeof result === "object" &&
+            "values" in result &&
+            typeof (result as { values?: unknown }).values === "object" &&
+            (result as { values?: unknown }).values !== null
+              ? Object.keys(
+                  (result as { values: Record<string, unknown> }).values,
+                ).length
+              : undefined,
+          sampleKeys:
+            result &&
+            typeof result === "object" &&
+            "values" in result &&
+            typeof (result as { values?: unknown }).values === "object" &&
+            (result as { values?: unknown }).values !== null
+              ? Object.keys(
+                  (result as { values: Record<string, unknown> }).values,
+                ).slice(0, 10)
+              : undefined,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      // Log detailed error information
+      console.error("[Puppetserver] getFacts() failed", {
+        certname,
+        endpoint: `/puppet/v3/facts/${certname}`,
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+        errorDetails:
+          error instanceof PuppetserverError ? error.details : undefined,
+      });
+
+      // Handle 404 gracefully - node may not have facts yet
+      if (
+        error instanceof PuppetserverError &&
+        (error.details as { status?: number }).status === 404
+      ) {
+        console.warn(
+          `[Puppetserver] Facts not found for node '${certname}' (404) - node may not have checked in yet`,
+        );
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   /**
    * Environment API: Get all environments
    *
+   * Implements requirements 7.1, 7.2, 7.3, 7.4, 7.5:
+   * - Queries Puppetserver environments API using correct endpoint
+   * - Parses and returns environments data
+   * - Handles empty environments list gracefully
+   * - Provides detailed logging for debugging
+   *
    * @returns List of environments
    */
   async getEnvironments(): Promise<unknown> {
-    return this.get("/puppet/v3/environments");
+    console.warn("[Puppetserver] getEnvironments() called", {
+      endpoint: "/puppet/v3/environments",
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+    });
+
+    try {
+      const result = await this.get("/puppet/v3/environments");
+
+      // Log successful response
+      if (result === null) {
+        console.warn(
+          "[Puppetserver] getEnvironments() returned null - no environments configured",
+          {
+            endpoint: "/puppet/v3/environments",
+          },
+        );
+      } else {
+        console.warn("[Puppetserver] getEnvironments() response received", {
+          resultType: Array.isArray(result) ? "array" : typeof result,
+          arrayLength: Array.isArray(result) ? result.length : undefined,
+          hasEnvironmentsProperty:
+            result && typeof result === "object" && "environments" in result,
+          environmentsCount:
+            result &&
+            typeof result === "object" &&
+            "environments" in result &&
+            Array.isArray((result as { environments?: unknown[] }).environments)
+              ? (result as { environments: unknown[] }).environments.length
+              : undefined,
+          sampleKeys:
+            result && typeof result === "object" && !Array.isArray(result)
+              ? Object.keys(result).slice(0, 10)
+              : undefined,
+          sampleData:
+            Array.isArray(result) && result.length > 0
+              ? JSON.stringify(result[0]).substring(0, 200)
+              : result &&
+                  typeof result === "object" &&
+                  "environments" in result &&
+                  Array.isArray(
+                    (result as { environments?: unknown[] }).environments,
+                  ) &&
+                  (result as { environments: unknown[] }).environments.length >
+                    0
+                ? JSON.stringify(
+                    (result as { environments: unknown[] }).environments[0],
+                  ).substring(0, 200)
+                : undefined,
+        });
+      }
+
+      return result;
+    } catch (error) {
+      // Log detailed error information
+      console.error("[Puppetserver] getEnvironments() failed", {
+        endpoint: "/puppet/v3/environments",
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+        errorDetails:
+          error instanceof PuppetserverError ? error.details : undefined,
+      });
+
+      // Handle 404 gracefully - no environments configured
+      if (
+        error instanceof PuppetserverError &&
+        (error.details as { status?: number }).status === 404
+      ) {
+        console.warn(
+          "[Puppetserver] Environments endpoint not found (404) - Puppetserver may not have environments configured or endpoint may not be available",
+        );
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -383,6 +857,17 @@ export class PuppetserverClient {
     url: string,
     body?: unknown,
   ): Promise<unknown> {
+    // Log request details
+    console.warn(`[Puppetserver] ${method} ${url}`, {
+      method,
+      url,
+      hasBody: !!body,
+      bodyPreview: body ? JSON.stringify(body).substring(0, 200) : undefined,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+      timeout: this.timeout,
+    });
+
     // Wrap the request in circuit breaker and retry logic
     return this.circuitBreaker.execute(async () => {
       return withRetry(async () => {
@@ -644,6 +1129,16 @@ export class PuppetserverClient {
         headers["X-Authentication"] = this.token;
       }
 
+      // Log request headers (without sensitive data)
+      console.warn(`[Puppetserver] Request headers for ${method} ${url}`, {
+        Accept: headers.Accept,
+        "Content-Type": headers["Content-Type"],
+        hasAuthToken: !!headers["X-Authentication"],
+        authTokenLength: headers["X-Authentication"]
+          ? headers["X-Authentication"].length
+          : undefined,
+      });
+
       const options: https.RequestOptions = {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port,
@@ -653,13 +1148,13 @@ export class PuppetserverClient {
         agent: this.httpsAgent,
       };
 
-      const timeoutId = setTimeout(() => {
-        req.destroy();
-        reject(new Error(`Request timeout after ${String(this.timeout)}ms`));
-      }, this.timeout);
+      // eslint-disable-next-line prefer-const
+      let timeoutId: NodeJS.Timeout | undefined;
 
       const req = https.request(options, (res) => {
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
 
         let data = "";
         res.on("data", (chunk: Buffer) => {
@@ -667,14 +1162,32 @@ export class PuppetserverClient {
         });
 
         res.on("end", () => {
-          // Create a Response-like object
+          // Create a Response-like object with proper headers interface
+          const headersMap = new Map<string, string>();
+          for (const [key, value] of Object.entries(res.headers)) {
+            if (value !== undefined) {
+              headersMap.set(
+                key.toLowerCase(),
+                Array.isArray(value) ? value[0] : value,
+              );
+            }
+          }
+
           const response = {
             ok: res.statusCode
               ? res.statusCode >= 200 && res.statusCode < 300
               : false,
             status: res.statusCode ?? 500,
             statusText: res.statusMessage ?? "Unknown",
-            headers: res.headers,
+            headers: {
+              get: (name: string) => headersMap.get(name.toLowerCase()) ?? null,
+              has: (name: string) => headersMap.has(name.toLowerCase()),
+              forEach: (callback: (value: string, key: string) => void) => {
+                headersMap.forEach((value, key) => {
+                  callback(value, key);
+                });
+              },
+            },
             text: () => Promise.resolve(data),
             json: () => Promise.resolve(JSON.parse(data) as unknown),
           } as unknown as Response;
@@ -684,9 +1197,17 @@ export class PuppetserverClient {
       });
 
       req.on("error", (error) => {
-        clearTimeout(timeoutId);
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         reject(error);
       });
+
+      // Set up timeout after request is created
+      timeoutId = setTimeout(() => {
+        req.destroy();
+        reject(new Error(`Request timeout after ${String(this.timeout)}ms`));
+      }, this.timeout);
 
       // Write request body if provided
       if (body) {
@@ -710,6 +1231,17 @@ export class PuppetserverClient {
     url: string,
     method: string,
   ): Promise<unknown> {
+    // Log response status
+    console.warn(`[Puppetserver] Response ${method} ${url}`, {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: {
+        contentType: response.headers.get("content-type"),
+        contentLength: response.headers.get("content-length"),
+      },
+    });
+
     // Handle authentication errors
     if (response.status === 401 || response.status === 403) {
       const errorText = await response.text();
@@ -735,6 +1267,9 @@ export class PuppetserverClient {
 
     // Handle not found
     if (response.status === 404) {
+      console.warn(
+        `[Puppetserver] Resource not found (404) for ${method} ${url}`,
+      );
       return null;
     }
 
@@ -765,11 +1300,28 @@ export class PuppetserverClient {
     // Parse JSON response
     try {
       const data = await response.json();
+
+      // Log successful response data summary
+      console.warn(
+        `[Puppetserver] Successfully parsed response for ${method} ${url}`,
+        {
+          dataType: Array.isArray(data) ? "array" : typeof data,
+          arrayLength: Array.isArray(data) ? data.length : undefined,
+          objectKeys:
+            data && typeof data === "object" && !Array.isArray(data)
+              ? Object.keys(data).slice(0, 10)
+              : undefined,
+        },
+      );
+
       return data;
     } catch (error) {
       // If response is empty or not JSON, return null
       const text = await response.text();
       if (!text || text.trim() === "") {
+        console.warn(
+          `[Puppetserver] Empty response for ${method} ${url}, returning null`,
+        );
         return null;
       }
       console.error(

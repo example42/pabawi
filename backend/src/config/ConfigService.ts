@@ -15,7 +15,7 @@ export class ConfigService {
 
   constructor() {
     // Load .env file only if not in test environment
-    if (process.env.NODE_ENV !== 'test') {
+    if (process.env.NODE_ENV !== "test") {
       loadDotenv();
     }
 
@@ -186,7 +186,10 @@ export class ConfigService {
             ? parseInt(process.env.PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT, 10)
             : undefined,
           resetTimeout: process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT
-            ? parseInt(process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT, 10)
+            ? parseInt(
+                process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT,
+                10,
+              )
             : undefined,
         };
       }

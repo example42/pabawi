@@ -389,7 +389,7 @@ export class StreamingExecutionManager {
         this.emit(executionId, {
           type: "stdout",
           data: {
-            output: `\n[Output limit of ${this.config.maxOutputSize.toString()} bytes reached. Further output will be truncated.]\n`
+            output: `\n[Output limit of ${this.config.maxOutputSize.toString()} bytes reached. Further output will be truncated.]\n`,
           },
         });
       }
@@ -428,7 +428,7 @@ export class StreamingExecutionManager {
         this.emit(executionId, {
           type: "stderr",
           data: {
-            output: `\n[Output limit of ${this.config.maxOutputSize.toString()} bytes reached. Further output will be truncated.]\n`
+            output: `\n[Output limit of ${this.config.maxOutputSize.toString()} bytes reached. Further output will be truncated.]\n`,
           },
         });
       }

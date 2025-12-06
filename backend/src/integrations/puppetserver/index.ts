@@ -4,7 +4,7 @@
  * Exports all Puppetserver integration components.
  */
 
-export * from './types';
-export * from './errors';
-export * from './PuppetserverClient';
-export * from './PuppetserverService';
+export * from "./types";
+export * from "./errors";
+export * from "./PuppetserverClient";
+export * from "./PuppetserverService";

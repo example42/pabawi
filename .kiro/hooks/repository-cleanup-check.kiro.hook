@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Repository Cleanup Check",
+  "description": "Monitors the repository for stale, obsolete, inconsistent or duplicated files and code parts. When detected, creates a todo file in .kiro directory for items requiring user clarification, and suggests cleanup actions for clear cases.",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Analyze the repository for:\n1. Stale files (not modified in a long time, potentially obsolete)\n2. Duplicate files (same or very similar content, files with suffixes like _backup, _old, _fixed, etc.)\n3. Inconsistent files (conflicting versions, outdated patterns)\n4. Obsolete dependencies or configurations\n5. Unused code or imports\n6. Redundant documentation files\n\nFor each issue found:\n- If the cleanup action is clear and safe, implement the specific changes needed\n- If there's any doubt or user clarification is needed, create or append to a todo file at .kiro/cleanup-todo.md with:\n  * Description of the issue\n  * Location of the files/code\n  * Questions for the user\n  * Potential impact of changes\n\nFocus on:\n- Multiple Dockerfile variants (Dockerfile, Dockerfile.alpine, Dockerfile.ubuntu)\n- Duplicate .env files in different locations\n- Multiple database files (backend/data/executions.db, bolt-project/data/executions.db, data/executions.db)\n- Test result artifacts that should be in .gitignore\n- Backup or temporary files\n- Unused dependencies in package.json files\n- Duplicate documentation\n\nDo NOT make changes directly in case of doubt, document findings and recommendations."
+  }
+}

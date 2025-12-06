@@ -180,7 +180,7 @@
       <LoadingSpinner size="md" message="Loading node status..." />
     </div>
   {:else if error}
-    <!-- Error State with Graceful Degradation Message -->
+    <!-- Error State with Graceful Degradation Message (Requirement 5.4, 5.5) -->
     <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/50 dark:bg-yellow-900/20">
       <div class="flex items-start gap-3">
         <svg class="h-5 w-5 flex-shrink-0 text-yellow-600 dark:text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -188,12 +188,26 @@
         </svg>
         <div class="flex-1">
           <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-            Puppetserver Status Unavailable
+            Node Status Unavailable
           </h3>
           <p class="mt-1 text-sm text-yellow-700 dark:text-yellow-300">
             {error}
           </p>
-          <p class="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+
+          <!-- Troubleshooting guidance (Requirement 5.5) -->
+          <div class="mt-3 rounded-md bg-yellow-100 dark:bg-yellow-900/30 p-3">
+            <h4 class="text-xs font-semibold text-yellow-900 dark:text-yellow-200 mb-2">
+              Common Causes:
+            </h4>
+            <ul class="text-xs text-yellow-800 dark:text-yellow-300 space-y-1 list-disc list-inside">
+              <li>Node has not run Puppet agent yet - run <code class="px-1 py-0.5 bg-yellow-200 dark:bg-yellow-800 rounded font-mono">puppet agent -t</code> on the node</li>
+              <li>Node certificate is not signed in Puppetserver - check the Certificate Status tab</li>
+              <li>Puppetserver is not reachable - verify network connectivity and Puppetserver configuration</li>
+              <li>Node certname doesn't match - ensure the node's certname matches this node ID</li>
+            </ul>
+          </div>
+
+          <p class="mt-3 text-sm text-yellow-700 dark:text-yellow-300">
             The system continues to operate normally. Other node information is still available.
           </p>
           {#if onRefresh}
@@ -212,27 +226,48 @@
       </div>
     </div>
   {:else if !status}
-    <!-- No Data State -->
-    <div class="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
-      <svg
-        class="mx-auto h-12 w-12 text-gray-400"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-        />
-      </svg>
-      <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">
-        No status information available
-      </h3>
-      <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-        This node has not reported to Puppetserver yet.
-      </p>
+    <!-- No Data State (Requirement 5.4) -->
+    <div class="space-y-4">
+      <div class="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center dark:border-gray-700">
+        <svg
+          class="mx-auto h-12 w-12 text-gray-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">
+          No status information available
+        </h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          This node has not reported to Puppetserver yet.
+        </p>
+      </div>
+
+      <!-- Help information (Requirement 5.5) -->
+      <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+        <div class="flex items-start gap-3">
+          <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div class="flex-1">
+            <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">How to get node status</h4>
+            <ol class="text-sm text-blue-800 dark:text-blue-400 space-y-1 list-decimal list-inside">
+              <li>Ensure the Puppet agent is installed on the node</li>
+              <li>Configure the agent to point to your Puppetserver</li>
+              <li>Ensure the node's certificate is signed (check the Certificate Status tab)</li>
+              <li>Run <code class="px-1 py-0.5 bg-blue-100 dark:bg-blue-900 rounded font-mono text-xs">puppet agent -t</code> on the node to generate a report</li>
+              <li>Refresh this page to see the updated status</li>
+            </ol>
+          </div>
+        </div>
+      </div>
     </div>
   {:else}
     <!-- Status Content -->

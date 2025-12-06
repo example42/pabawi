@@ -27,15 +27,19 @@ export interface RetryOptions {
   retryDelay?: number;
   retryableStatuses?: number[];
   onRetry?: (attempt: number, error: Error) => void;
+  timeout?: number;
+  signal?: AbortSignal;
 }
 
-const DEFAULT_RETRY_OPTIONS: Required<RetryOptions> = {
+const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   maxRetries: 3,
   retryDelay: 1000,
   retryableStatuses: [408, 429, 500, 502, 503, 504],
   onRetry: () => {
     // Default no-op retry handler
   },
+  timeout: undefined,
+  signal: undefined,
 };
 
 /**
@@ -96,7 +100,14 @@ export async function fetchWithRetry<T = unknown>(
   options?: RequestInit,
   retryOptions?: RetryOptions
 ): Promise<T> {
-  const opts = { ...DEFAULT_RETRY_OPTIONS, ...retryOptions };
+  // Merge options with defaults, ensuring required fields are present
+  const maxRetries = retryOptions?.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries!;
+  const retryDelay = retryOptions?.retryDelay ?? DEFAULT_RETRY_OPTIONS.retryDelay!;
+  const retryableStatuses = retryOptions?.retryableStatuses ?? DEFAULT_RETRY_OPTIONS.retryableStatuses!;
+  const onRetry = retryOptions?.onRetry ?? DEFAULT_RETRY_OPTIONS.onRetry!;
+  const timeout = retryOptions?.timeout;
+  const signal = retryOptions?.signal;
+
   let lastError: Error | null = null;
 
   // Add expert mode header if enabled
@@ -105,48 +116,75 @@ export async function fetchWithRetry<T = unknown>(
     headers.set('X-Expert-Mode', 'true');
   }
 
-  const requestOptions = {
-    ...options,
-    headers,
-  };
+  // Create abort controller for timeout if specified
+  let timeoutId: number | undefined;
+  let timeoutController: AbortController | undefined;
 
-  for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, requestOptions);
-
-      // If response is OK, parse and return data
-      if (response.ok) {
-        return await response.json() as T;
-      }
-
-      // Check if status is retryable
-      if (attempt < opts.maxRetries && isRetryableStatus(response.status, opts.retryableStatuses)) {
-        const error = await parseErrorResponse(response);
-        lastError = new Error(error.message);
-        opts.onRetry(attempt + 1, lastError);
-        await sleep(opts.retryDelay * (attempt + 1)); // Exponential backoff
-        continue;
-      }
-
-      // Non-retryable error, throw immediately
-      const error = await parseErrorResponse(response);
-      throw new Error(error.message);
-    } catch (error) {
-      // Network errors are retryable
-      if (attempt < opts.maxRetries && isNetworkError(error)) {
-        lastError = error as Error;
-        opts.onRetry(attempt + 1, lastError);
-        await sleep(opts.retryDelay * (attempt + 1)); // Exponential backoff
-        continue;
-      }
-
-      // Non-retryable error or max retries reached
-      throw error;
-    }
+  if (timeout && !signal) {
+    timeoutController = new AbortController();
+    timeoutId = window.setTimeout(() => {
+      timeoutController?.abort();
+    }, timeout);
   }
 
-  // Max retries reached
-  throw lastError ?? new Error('Request failed after maximum retries');
+  // Use provided signal or timeout controller signal
+  const requestSignal = signal ?? timeoutController?.signal;
+
+  const requestOptions: RequestInit = {
+    ...options,
+    headers,
+    signal: requestSignal,
+  };
+
+  try {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, requestOptions);
+
+        // If response is OK, parse and return data
+        if (response.ok) {
+          return await response.json() as T;
+        }
+
+        // Check if status is retryable
+        if (attempt < maxRetries && isRetryableStatus(response.status, retryableStatuses)) {
+          const error = await parseErrorResponse(response);
+          lastError = new Error(error.message);
+          onRetry(attempt + 1, lastError);
+          await sleep(retryDelay * (attempt + 1)); // Exponential backoff
+          continue;
+        }
+
+        // Non-retryable error, throw immediately
+        const error = await parseErrorResponse(response);
+        throw new Error(error.message);
+      } catch (error) {
+        // Check if request was aborted
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw error; // Don't retry aborted requests
+        }
+
+        // Network errors are retryable
+        if (attempt < maxRetries && isNetworkError(error)) {
+          lastError = error as Error;
+          onRetry(attempt + 1, lastError);
+          await sleep(retryDelay * (attempt + 1)); // Exponential backoff
+          continue;
+        }
+
+        // Non-retryable error or max retries reached
+        throw error;
+      }
+    }
+
+    // Max retries reached
+    throw lastError ?? new Error('Request failed after maximum retries');
+  } finally {
+    // Clear timeout if it was set
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  }
 }
 
 /**

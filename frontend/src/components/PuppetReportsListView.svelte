@@ -8,6 +8,7 @@
       failed: number;
       failed_to_restart: number;
       changed: number;
+      corrective_change: number;
       out_of_sync: number;
     };
     time: Record<string, number>;

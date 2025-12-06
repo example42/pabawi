@@ -2,7 +2,7 @@
  * Bolt service module for executing Bolt CLI commands
  */
 
-export { BoltService, type StreamingCallback } from './BoltService';
+export { BoltService, type StreamingCallback } from "./BoltService";
 export {
   type BoltExecutionResult,
   type BoltExecutionOptions,
@@ -20,4 +20,4 @@ export {
   BoltNodeUnreachableError,
   BoltTaskNotFoundError,
   BoltTaskParameterError,
-} from './types';
+} from "./types";

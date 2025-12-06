@@ -1,6 +1,6 @@
 <script lang="ts">
-  let selectedAuth: "token" | "ssl" = "token";
-  let showAdvanced = false;
+  let selectedAuth = $state<"token" | "ssl">("token");
+  let showAdvanced = $state(false);
 
   const copyToClipboard = (text: string): void => {
     navigator.clipboard.writeText(text);
@@ -33,10 +33,10 @@ PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT=60000
 PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
 </script>
 
-<div class="setup-guide" style="background: #f0f0f0; min-height: 500px;">
+<div class="setup-guide">
   <div class="guide-header">
-    <h2 style="color: #000;">Puppetserver Integration Setup</h2>
-    <p class="subtitle" style="color: #333;">
+    <h2>Puppetserver Integration Setup</h2>
+    <p class="subtitle">
       Configure Pabawi to connect to your Puppetserver for certificate
       management, catalog compilation, and node monitoring.
     </p>
@@ -297,6 +297,8 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
     max-width: 900px;
     margin: 0 auto;
     padding: 2rem;
+    background: #f5f5f5;
+    min-height: 100vh;
   }
 
   .card {
@@ -315,12 +317,12 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
     font-size: 2rem;
     font-weight: 600;
     margin-bottom: 0.5rem;
-    color: var(--color-text-primary, #1a1a1a);
+    color: #1a1a1a;
   }
 
   .subtitle {
     font-size: 1.1rem;
-    color: var(--color-text-secondary, #666);
+    color: #666;
     line-height: 1.6;
   }
 
@@ -332,20 +334,21 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
     font-size: 1.5rem;
     font-weight: 600;
     margin-bottom: 1rem;
-    color: var(--color-text-primary, #1a1a1a);
+    color: #1a1a1a;
   }
 
   .setup-section h4 {
     font-size: 1.2rem;
     font-weight: 500;
     margin: 1rem 0 0.5rem;
-    color: var(--color-text-primary, #1a1a1a);
+    color: #1a1a1a;
   }
 
   .setup-section ul,
   .setup-section ol {
     margin: 1rem 0;
     padding-left: 1.5rem;
+    color: #333;
   }
 
   .setup-section li {
@@ -362,22 +365,23 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
 
   .auth-option {
     padding: 1.5rem;
-    border: 2px solid var(--color-border, #e0e0e0);
+    border: 2px solid #e0e0e0;
     border-radius: 8px;
-    background: var(--color-bg-secondary, #f9f9f9);
+    background: #f9f9f9;
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
+    color: #333;
   }
 
   .auth-option:hover {
-    border-color: var(--color-primary, #007bff);
-    background: var(--color-bg-primary, #fff);
+    border-color: #007bff;
+    background: #fff;
   }
 
   .auth-option.selected {
-    border-color: var(--color-primary, #007bff);
-    background: var(--color-primary-light, #e3f2fd);
+    border-color: #007bff;
+    background: #e3f2fd;
   }
 
   .option-header {
@@ -398,20 +402,21 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
 
   .option-description {
     font-size: 0.9rem;
-    color: var(--color-text-secondary, #666);
+    color: #666;
     margin: 0;
   }
 
   .auth-instructions {
     margin-top: 1.5rem;
     padding: 1rem;
-    background: var(--color-bg-secondary, #f9f9f9);
+    background: #f9f9f9;
     border-radius: 6px;
+    color: #333;
   }
 
   .code-block {
-    background: var(--color-bg-code, #2d2d2d);
-    color: var(--color-text-code, #f8f8f2);
+    background: #2d2d2d;
+    color: #f8f8f2;
     padding: 1rem;
     border-radius: 6px;
     margin: 1rem 0;
@@ -426,7 +431,7 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
 
   .config-block {
     margin: 1rem 0;
-    border: 1px solid var(--color-border, #e0e0e0);
+    border: 1px solid #e0e0e0;
     border-radius: 6px;
     overflow: hidden;
   }
@@ -436,8 +441,8 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
-    background: var(--color-bg-secondary, #f5f5f5);
-    border-bottom: 1px solid var(--color-border, #e0e0e0);
+    background: #f5f5f5;
+    border-bottom: 1px solid #e0e0e0;
   }
 
   .config-title {

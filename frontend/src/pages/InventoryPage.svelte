@@ -16,6 +16,8 @@
       port?: number;
     };
     source?: string;
+    sources?: string[]; // List of sources this node appears in (Requirement 3.3)
+    linked?: boolean; // True if node exists in multiple sources (Requirement 3.4)
     certificateStatus?: 'signed' | 'requested' | 'revoked';
     lastCheckIn?: string;
   }
@@ -608,14 +610,32 @@
               <div class="mb-3 flex items-start justify-between gap-2">
                 <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400 flex-1 min-w-0">
                   {node.name}
+                  <!-- Multi-source indicator (Requirement 3.4) -->
+                  {#if node.linked && node.sources && node.sources.length > 1}
+                    <span class="ml-2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {node.sources.length} sources: {node.sources.join(', ')}">
+                      <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                      {node.sources.length}
+                    </span>
+                  {/if}
                 </h3>
                 <div class="flex flex-col gap-1 items-end">
                   <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">
                     {node.transport}
                   </span>
-                  <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
-                    {getSourceDisplayName(node.source || 'bolt')}
-                  </span>
+                  <!-- Display all sources for linked nodes (Requirement 3.3) -->
+                  {#if node.sources && node.sources.length > 0}
+                    {#each node.sources as source}
+                      <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(source)}">
+                        {getSourceDisplayName(source)}
+                      </span>
+                    {/each}
+                  {:else}
+                    <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
+                      {getSourceDisplayName(node.source || 'bolt')}
+                    </span>
+                  {/if}
                   <!-- Certificate status badge (Requirement 11.1, 11.2) -->
                   {#if node.certificateStatus}
                     <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium {getCertificateStatusColor(node.certificateStatus)}">
@@ -677,12 +697,32 @@
                         </svg>
                       {/if}
                       <span>{node.name}</span>
+                      <!-- Multi-source indicator (Requirement 3.4) -->
+                      {#if node.linked && node.sources && node.sources.length > 1}
+                        <span class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {node.sources.length} sources: {node.sources.join(', ')}">
+                          <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                          {node.sources.length}
+                        </span>
+                      {/if}
                     </div>
                   </td>
                   <td class="whitespace-nowrap px-6 py-4 text-sm">
-                    <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
-                      {getSourceDisplayName(node.source || 'bolt')}
-                    </span>
+                    <!-- Display all sources for linked nodes (Requirement 3.3) -->
+                    {#if node.sources && node.sources.length > 0}
+                      <div class="flex flex-wrap gap-1">
+                        {#each node.sources as source}
+                          <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(source)}">
+                            {getSourceDisplayName(source)}
+                          </span>
+                        {/each}
+                      </div>
+                    {:else}
+                      <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
+                        {getSourceDisplayName(node.source || 'bolt')}
+                      </span>
+                    {/if}
                   </td>
                   <td class="whitespace-nowrap px-6 py-4 text-sm">
                     <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">

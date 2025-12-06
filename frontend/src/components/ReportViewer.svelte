@@ -23,6 +23,7 @@
       failed_to_restart: number;
       restarted: number;
       changed: number;
+      corrective_change: number;
       out_of_sync: number;
       scheduled: number;
     };
@@ -33,6 +34,7 @@
     events: {
       success: number;
       failure: number;
+      noop: number;
       total: number;
     };
   }
