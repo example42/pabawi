@@ -45,6 +45,22 @@ export function errorHandler(
   // Format error response based on expert mode
   const errorResponse = errorService.formatError(err, expertMode, context);
 
+  // In development, also log to console for easier debugging
+  if (process.env.NODE_ENV === "development") {
+    console.error("\n=== Error Details for Developers ===");
+    console.error(`Type: ${errorResponse.error.type}`);
+    console.error(`Code: ${errorResponse.error.code}`);
+    console.error(`Message: ${errorResponse.error.message}`);
+    console.error(`Actionable: ${errorResponse.error.actionableMessage}`);
+    if (errorResponse.error.troubleshooting) {
+      console.error("\nTroubleshooting Steps:");
+      errorResponse.error.troubleshooting.steps.forEach((step, i) => {
+        console.error(`  ${i + 1}. ${step}`);
+      });
+    }
+    console.error("====================================\n");
+  }
+
   // Sanitize sensitive data even in expert mode
   if (expertMode && errorResponse.error.rawResponse) {
     errorResponse.error.rawResponse = errorService.sanitizeSensitiveData(
@@ -74,23 +90,43 @@ function getStatusCode(error: Error): number {
   // Map error types to status codes
   const errorName = error.name;
   switch (errorName) {
+    // Validation errors - 400
     case "ValidationError":
     case "ZodError":
     case "BoltTaskParameterError":
+    case "PuppetserverValidationError":
       return 400; // Bad Request
 
+    // Authentication errors - 401
+    case "PuppetserverAuthenticationError":
+      return 401; // Unauthorized
+
+    // Not found errors - 404
     case "BoltInventoryNotFoundError":
     case "BoltTaskNotFoundError":
       return 404; // Not Found
 
+    // Timeout errors - 504
     case "BoltTimeoutError":
+    case "PuppetserverTimeoutError":
       return 504; // Gateway Timeout
 
+    // Service unavailable - 503
     case "BoltNodeUnreachableError":
+    case "PuppetserverConnectionError":
       return 503; // Service Unavailable
 
+    // Execution/compilation errors - 500
     case "BoltExecutionError":
     case "BoltParseError":
+    case "CertificateOperationError":
+    case "CatalogCompilationError":
+    case "EnvironmentDeploymentError":
+    case "PuppetserverError":
+      return 500; // Internal Server Error
+
+    // Configuration errors - 500
+    case "PuppetserverConfigurationError":
       return 500; // Internal Server Error
 
     default:

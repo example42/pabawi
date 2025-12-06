@@ -1,6 +1,7 @@
 <script lang="ts">
   import { post } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import EnvironmentSelector from './EnvironmentSelector.svelte';
 
@@ -83,11 +84,20 @@
   async function compareCatalogs(): Promise<void> {
     if (!environment1 || !environment2) return;
 
+    if (expertMode.enabled) {
+      console.log('[CatalogComparison] Comparing catalogs');
+      console.log('[CatalogComparison] Certname:', certname);
+      console.log('[CatalogComparison] Environment 1:', environment1);
+      console.log('[CatalogComparison] Environment 2:', environment2);
+      console.log('[CatalogComparison] API endpoint: POST /api/integrations/puppetserver/catalog/compare');
+    }
+
     try {
       loading = true;
       error = null;
       catalogDiff = null;
 
+      const startTime = performance.now();
       const result = await post<CatalogDiff>(
         '/api/integrations/puppetserver/catalog/compare',
         {
@@ -96,8 +106,18 @@
           environment2
         }
       );
+      const endTime = performance.now();
 
       catalogDiff = result;
+
+      if (expertMode.enabled) {
+        console.log('[CatalogComparison] Comparison complete');
+        console.log('[CatalogComparison] Response time:', Math.round(endTime - startTime), 'ms');
+        console.log('[CatalogComparison] Added:', result.added.length);
+        console.log('[CatalogComparison] Removed:', result.removed.length);
+        console.log('[CatalogComparison] Modified:', result.modified.length);
+        console.log('[CatalogComparison] Unchanged:', result.unchanged.length);
+      }
       showSuccess('Catalogs compared', `Successfully compared ${environment1} and ${environment2}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to compare catalogs';

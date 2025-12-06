@@ -48,6 +48,9 @@ describe("ErrorHandlingService", () => {
 
       expect(result.error.message).toBe("Test error");
       expect(result.error.code).toBe("INTERNAL_SERVER_ERROR");
+      expect(result.error.type).toBe("unknown");
+      expect(result.error.actionableMessage).toBeDefined();
+      expect(result.error.troubleshooting).toBeDefined();
       expect(result.error.stackTrace).toBeUndefined();
       expect(result.error.executionContext).toBeUndefined();
     });
@@ -138,6 +141,57 @@ describe("ErrorHandlingService", () => {
       const result = service.formatError(error, false);
 
       expect(result.error.code).toBe("VALIDATION_ERROR");
+      expect(result.error.type).toBe("validation");
+    });
+
+    it("should categorize connection errors correctly", () => {
+      const error = new Error("ECONNREFUSED");
+      error.name = "PuppetserverConnectionError";
+
+      const result = service.formatError(error, false);
+
+      expect(result.error.type).toBe("connection");
+      expect(result.error.actionableMessage).toContain("connect");
+    });
+
+    it("should categorize authentication errors correctly", () => {
+      const error = new Error("Authentication failed");
+      error.name = "PuppetserverAuthenticationError";
+
+      const result = service.formatError(error, false);
+
+      expect(result.error.type).toBe("authentication");
+      expect(result.error.actionableMessage).toContain("Authentication");
+    });
+
+    it("should categorize timeout errors correctly", () => {
+      const error = new Error("Request timed out");
+      error.name = "BoltTimeoutError";
+
+      const result = service.formatError(error, false);
+
+      expect(result.error.type).toBe("timeout");
+      expect(result.error.actionableMessage).toContain("timed out");
+    });
+
+    it("should provide troubleshooting steps", () => {
+      const error = new Error("Connection failed");
+      error.name = "PuppetserverConnectionError";
+
+      const result = service.formatError(error, false);
+
+      expect(result.error.troubleshooting).toBeDefined();
+      expect(result.error.troubleshooting?.steps).toBeInstanceOf(Array);
+      expect(result.error.troubleshooting?.steps.length).toBeGreaterThan(0);
+    });
+
+    it("should include documentation links when available", () => {
+      const error = new Error("Configuration error");
+      error.name = "PuppetserverConfigurationError";
+
+      const result = service.formatError(error, false);
+
+      expect(result.error.troubleshooting?.documentation).toBeDefined();
     });
 
     it("should include error details when available", () => {

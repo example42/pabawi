@@ -95,10 +95,13 @@ export class PuppetserverClient {
       },
     });
 
-    // Initialize retry configuration
+    // Initialize retry configuration from config or use defaults
+    const retryAttempts = config.retryAttempts ?? 3;
+    const retryDelay = config.retryDelay ?? 1000;
+
     this.retryConfig = {
-      maxAttempts: 3,
-      initialDelay: 1000,
+      maxAttempts: retryAttempts,
+      initialDelay: retryDelay,
       maxDelay: 30000,
       backoffMultiplier: 2,
       jitter: true,
@@ -108,7 +111,7 @@ export class PuppetserverClient {
           error instanceof Error ? error.message : String(error);
         const category = this.categorizeError(error);
         console.warn(
-          `[Puppetserver] Retry attempt ${String(attempt)} after ${String(delay)}ms due to ${category} error: ${errorMessage}`,
+          `[Puppetserver] Retry attempt ${String(attempt)}/${String(retryAttempts)} after ${String(delay)}ms due to ${category} error: ${errorMessage}`,
         );
       },
     };
@@ -1336,6 +1339,178 @@ export class PuppetserverClient {
         "PARSE_ERROR",
         { error, responseText: text, url, method },
       );
+    }
+  }
+
+  /**
+   * Status API: Get services status
+   *
+   * Queries /status/v1/services endpoint to get status of all Puppetserver services.
+   * This endpoint provides detailed information about each service's state.
+   *
+   * @returns Services status information
+   */
+  async getServicesStatus(): Promise<unknown> {
+    console.warn("[Puppetserver] getServicesStatus() called", {
+      endpoint: "/status/v1/services",
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+    });
+
+    try {
+      const result = await this.get("/status/v1/services");
+
+      console.warn("[Puppetserver] getServicesStatus() response received", {
+        resultType: typeof result,
+        hasServices:
+          result && typeof result === "object" && Object.keys(result).length > 0,
+        serviceCount:
+          result && typeof result === "object"
+            ? Object.keys(result).length
+            : undefined,
+        sampleKeys:
+          result && typeof result === "object"
+            ? Object.keys(result).slice(0, 5)
+            : undefined,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("[Puppetserver] getServicesStatus() failed", {
+        endpoint: "/status/v1/services",
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Status API: Get simple status
+   *
+   * Queries /status/v1/simple endpoint to get a simple running/error status.
+   * This is a lightweight endpoint for basic health checks.
+   *
+   * @returns Simple status (typically "running" or error message)
+   */
+  async getSimpleStatus(): Promise<unknown> {
+    console.warn("[Puppetserver] getSimpleStatus() called", {
+      endpoint: "/status/v1/simple",
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+    });
+
+    try {
+      const result = await this.get("/status/v1/simple");
+
+      console.warn("[Puppetserver] getSimpleStatus() response received", {
+        resultType: typeof result,
+        result: result,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("[Puppetserver] getSimpleStatus() failed", {
+        endpoint: "/status/v1/simple",
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Admin API: Get admin API information
+   *
+   * Queries /puppet-admin-api/v1 endpoint to get information about the admin API.
+   * This endpoint provides metadata about available admin operations.
+   *
+   * @returns Admin API information
+   */
+  async getAdminApiInfo(): Promise<unknown> {
+    console.warn("[Puppetserver] getAdminApiInfo() called", {
+      endpoint: "/puppet-admin-api/v1",
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+    });
+
+    try {
+      const result = await this.get("/puppet-admin-api/v1");
+
+      console.warn("[Puppetserver] getAdminApiInfo() response received", {
+        resultType: typeof result,
+        hasInfo: result && typeof result === "object",
+        sampleKeys:
+          result && typeof result === "object"
+            ? Object.keys(result).slice(0, 10)
+            : undefined,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("[Puppetserver] getAdminApiInfo() failed", {
+        endpoint: "/puppet-admin-api/v1",
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Metrics API: Get metrics via Jolokia
+   *
+   * Queries /metrics/v2 endpoint (via Jolokia) to get JMX metrics.
+   * WARNING: This endpoint can be resource-intensive on the Puppetserver.
+   * Use sparingly and consider caching results.
+   *
+   * @param mbean - Optional MBean name to query specific metrics
+   * @returns Metrics data
+   */
+  async getMetrics(mbean?: string): Promise<unknown> {
+    console.warn("[Puppetserver] getMetrics() called", {
+      endpoint: "/metrics/v2",
+      mbean,
+      baseUrl: this.baseUrl,
+      hasToken: !!this.token,
+      hasCertAuth: !!this.httpsAgent,
+      warning: "This endpoint can be resource-intensive",
+    });
+
+    try {
+      const params: QueryParams = {};
+      if (mbean) {
+        params.mbean = mbean;
+      }
+
+      const result = await this.get("/metrics/v2", params);
+
+      console.warn("[Puppetserver] getMetrics() response received", {
+        resultType: typeof result,
+        mbean,
+        hasMetrics: result && typeof result === "object",
+        sampleKeys:
+          result && typeof result === "object"
+            ? Object.keys(result).slice(0, 10)
+            : undefined,
+      });
+
+      return result;
+    } catch (error) {
+      console.error("[Puppetserver] getMetrics() failed", {
+        endpoint: "/metrics/v2",
+        mbean,
+        error: error instanceof Error ? error.message : String(error),
+        errorType:
+          error instanceof Error ? error.constructor.name : typeof error,
+      });
+      throw error;
     }
   }
 

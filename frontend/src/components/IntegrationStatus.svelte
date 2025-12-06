@@ -1,6 +1,7 @@
 <script lang="ts">
   import StatusBadge from './StatusBadge.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
 
   interface IntegrationStatus {
     name: string;
@@ -11,6 +12,11 @@
     details?: unknown;
     workingCapabilities?: string[];
     failingCapabilities?: string[];
+    // Expert mode fields
+    endpoint?: string;
+    lastError?: string;
+    connectionAttempts?: number;
+    responseTime?: number;
   }
 
   interface Props {
@@ -277,6 +283,65 @@
                   class="mt-2 overflow-x-auto rounded bg-gray-100 p-2 text-xs text-gray-900 dark:bg-gray-900 dark:text-gray-100"
                 >{JSON.stringify(integration.details, null, 2)}</pre>
               </details>
+            {/if}
+
+            <!-- Expert Mode Information -->
+            {#if expertMode.enabled}
+              <div class="mt-3 space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                <div class="flex items-center gap-2">
+                  <svg class="h-4 w-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <h5 class="text-xs font-semibold text-amber-900 dark:text-amber-200">Expert Mode Details</h5>
+                </div>
+
+                {#if integration.endpoint}
+                  <div class="text-xs">
+                    <span class="font-medium text-amber-800 dark:text-amber-300">Endpoint:</span>
+                    <code class="ml-1 rounded bg-amber-100 px-1 py-0.5 text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">{integration.endpoint}</code>
+                  </div>
+                {/if}
+
+                {#if integration.responseTime !== undefined}
+                  <div class="text-xs">
+                    <span class="font-medium text-amber-800 dark:text-amber-300">Response Time:</span>
+                    <span class="ml-1 text-amber-700 dark:text-amber-300">{integration.responseTime}ms</span>
+                  </div>
+                {/if}
+
+                {#if integration.connectionAttempts !== undefined}
+                  <div class="text-xs">
+                    <span class="font-medium text-amber-800 dark:text-amber-300">Connection Attempts:</span>
+                    <span class="ml-1 text-amber-700 dark:text-amber-300">{integration.connectionAttempts}</span>
+                  </div>
+                {/if}
+
+                {#if integration.lastError}
+                  <div class="text-xs">
+                    <span class="font-medium text-amber-800 dark:text-amber-300">Last Error:</span>
+                    <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-xs text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">{integration.lastError}</pre>
+                  </div>
+                {/if}
+
+                <div class="pt-2 text-xs text-amber-700 dark:text-amber-300">
+                  <p class="font-medium">🔧 Troubleshooting:</p>
+                  <ul class="mt-1 list-inside list-disc space-y-1 pl-2">
+                    {#if integration.status === 'not_configured'}
+                      <li>Configure the integration using environment variables or config file</li>
+                      <li>Check the setup instructions for required parameters</li>
+                    {:else if integration.status === 'error' || integration.status === 'disconnected'}
+                      <li>Verify the service is running and accessible</li>
+                      <li>Check network connectivity and firewall rules</li>
+                      <li>Verify authentication credentials are correct</li>
+                      <li>Review service logs for detailed error information</li>
+                    {:else if integration.status === 'degraded'}
+                      <li>Some capabilities are failing - check logs for details</li>
+                      <li>Working capabilities can still be used normally</li>
+                      <li>Try refreshing to see if issues resolve</li>
+                    {/if}
+                  </ul>
+                </div>
+              </div>
             {/if}
           </div>
         </div>

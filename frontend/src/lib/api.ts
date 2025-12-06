@@ -3,10 +3,22 @@
  */
 
 import { expertMode } from './expertMode.svelte';
+import { showWarning } from './toast.svelte';
+
+export type ErrorType = 'connection' | 'authentication' | 'timeout' | 'validation' | 'not_found' | 'permission' | 'execution' | 'configuration' | 'unknown';
+
+export interface TroubleshootingGuidance {
+  steps: string[];
+  documentation?: string;
+  relatedErrors?: string[];
+}
 
 export interface ApiError {
   code: string;
   message: string;
+  type: ErrorType;
+  actionableMessage: string;
+  troubleshooting?: TroubleshootingGuidance;
   details?: unknown;
   // Expert mode fields
   stackTrace?: string;
@@ -29,6 +41,7 @@ export interface RetryOptions {
   onRetry?: (attempt: number, error: Error) => void;
   timeout?: number;
   signal?: AbortSignal;
+  showRetryNotifications?: boolean; // New option to control retry notifications
 }
 
 const DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -40,6 +53,7 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   },
   timeout: undefined,
   signal: undefined,
+  showRetryNotifications: true, // Show retry notifications by default
 };
 
 /**
@@ -78,7 +92,16 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
       return {
         code: data.error.code || 'UNKNOWN_ERROR',
         message: data.error.message || 'An unknown error occurred',
+        type: data.error.type || 'unknown',
+        actionableMessage: data.error.actionableMessage || data.error.message || 'An unknown error occurred',
+        troubleshooting: data.error.troubleshooting,
         details: data.error.details,
+        stackTrace: data.error.stackTrace,
+        requestId: data.error.requestId,
+        timestamp: data.error.timestamp,
+        rawResponse: data.error.rawResponse,
+        executionContext: data.error.executionContext,
+        boltCommand: data.error.boltCommand,
       };
     }
     // If no error field, fall through to default error
@@ -86,10 +109,59 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
     // Failed to parse JSON, use status text
   }
 
+  // Categorize HTTP error
+  const type = categorizeHttpError(response.status);
+  const actionableMessage = getActionableMessageForStatus(response.status);
+
   return {
     code: `HTTP_${String(response.status)}`,
     message: response.statusText !== '' ? response.statusText : 'Request failed',
+    type,
+    actionableMessage,
   };
+}
+
+/**
+ * Categorize HTTP status code into error type
+ */
+function categorizeHttpError(status: number): ErrorType {
+  if (status === 401) return 'authentication';
+  if (status === 403) return 'permission';
+  if (status === 404) return 'not_found';
+  if (status === 408 || status === 504) return 'timeout';
+  if (status >= 400 && status < 500) return 'validation';
+  if (status === 503) return 'connection';
+  return 'unknown';
+}
+
+/**
+ * Get actionable message for HTTP status code
+ */
+function getActionableMessageForStatus(status: number): string {
+  switch (status) {
+    case 400:
+      return 'Invalid request. Check your input and try again.';
+    case 401:
+      return 'Authentication required. Please log in and try again.';
+    case 403:
+      return 'You don\'t have permission to perform this action.';
+    case 404:
+      return 'The requested resource was not found.';
+    case 408:
+      return 'Request timed out. Please try again.';
+    case 429:
+      return 'Too many requests. Please wait a moment and try again.';
+    case 500:
+      return 'Server error occurred. Please try again later.';
+    case 502:
+      return 'Bad gateway. The server is temporarily unavailable.';
+    case 503:
+      return 'Service unavailable. Please try again later.';
+    case 504:
+      return 'Gateway timeout. The operation took too long to complete.';
+    default:
+      return 'An error occurred. Please try again.';
+  }
 }
 
 /**
@@ -107,6 +179,7 @@ export async function fetchWithRetry<T = unknown>(
   const onRetry = retryOptions?.onRetry ?? DEFAULT_RETRY_OPTIONS.onRetry!;
   const timeout = retryOptions?.timeout;
   const signal = retryOptions?.signal;
+  const showRetryNotifications = retryOptions?.showRetryNotifications ?? DEFAULT_RETRY_OPTIONS.showRetryNotifications!;
 
   let lastError: Error | null = null;
 
@@ -151,6 +224,16 @@ export async function fetchWithRetry<T = unknown>(
           const error = await parseErrorResponse(response);
           lastError = new Error(error.message);
           onRetry(attempt + 1, lastError);
+
+          // Show retry notification in UI
+          if (showRetryNotifications) {
+            const nextDelay = retryDelay * (attempt + 1);
+            showWarning(
+              `Request failed (${error.type}), retrying...`,
+              `Attempt ${String(attempt + 1)} of ${String(maxRetries)}. Retrying in ${String(nextDelay)}ms`
+            );
+          }
+
           await sleep(retryDelay * (attempt + 1)); // Exponential backoff
           continue;
         }
@@ -168,6 +251,16 @@ export async function fetchWithRetry<T = unknown>(
         if (attempt < maxRetries && isNetworkError(error)) {
           lastError = error as Error;
           onRetry(attempt + 1, lastError);
+
+          // Show retry notification in UI
+          if (showRetryNotifications) {
+            const nextDelay = retryDelay * (attempt + 1);
+            showWarning(
+              'Network error, retrying...',
+              `Attempt ${String(attempt + 1)} of ${String(maxRetries)}. Retrying in ${String(nextDelay)}ms`
+            );
+          }
+
           await sleep(retryDelay * (attempt + 1)); // Exponential backoff
           continue;
         }

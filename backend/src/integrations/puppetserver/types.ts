@@ -160,6 +160,8 @@ export interface PuppetserverClientConfig {
   ca?: string;
   timeout?: number;
   rejectUnauthorized?: boolean;
+  retryAttempts?: number;
+  retryDelay?: number;
 }
 
 /**

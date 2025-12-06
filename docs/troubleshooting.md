@@ -11,6 +11,8 @@ This guide helps you diagnose and resolve common issues with Pabawi. It covers i
 - [Quick Diagnostics](#quick-diagnostics)
 - [Installation Issues](#installation-issues)
 - [Bolt Integration Issues](#bolt-integration-issues)
+- [Puppetserver Integration Issues](#puppetserver-integration-issues)
+- [PuppetDB Integration Issues](#puppetdb-integration-issues)
 - [Configuration Issues](#configuration-issues)
 - [Connection and Network Issues](#connection-and-network-issues)
 - [Execution Issues](#execution-issues)
@@ -501,6 +503,766 @@ error TS2307: Cannot find module 'express' or its corresponding type declaration
 
    ```bash
    ls -la $BOLT_PROJECT_PATH/modules/*/tasks/
+   ```
+
+## Puppetserver Integration Issues
+
+### Problem: "Puppetserver nodes don't appear in inventory"
+
+**Symptoms:**
+
+- Inventory page shows only Bolt nodes
+- No nodes from Puppetserver CA
+- Certificate page shows no certificates
+
+**Causes:**
+
+- Puppetserver integration not enabled
+- Puppetserver plugin not registered
+- Connection to Puppetserver failed
+- Authentication failure
+
+**Solutions:**
+
+1. **Verify Puppetserver is enabled:**
+
+   ```bash
+   # Check .env file
+   grep PUPPETSERVER_ENABLED backend/.env
+   
+   # Should be:
+   PUPPETSERVER_ENABLED=true
+   ```
+
+2. **Check integration status:**
+
+   ```bash
+   # Via API
+   curl http://localhost:3000/api/integrations/status
+   
+   # Look for puppetserver in the response
+   ```
+
+3. **Test Puppetserver connectivity:**
+
+   ```bash
+   # Test certificate API endpoint
+   curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses \
+     -H "X-Authentication: your-token-here"
+   ```
+
+4. **Check server logs for errors:**
+
+   ```bash
+   # Look for Puppetserver initialization errors
+   sudo journalctl -u pabawi | grep -i puppetserver
+   ```
+
+5. **Enable expert mode and retry:**
+   - Turn on expert mode in the web interface
+   - Navigate to inventory page
+   - Check for detailed error messages
+
+### Problem: "Certificate API returns 403 Forbidden"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PUPPETSERVER_AUTH_ERROR",
+    "message": "Authentication failed: 403 Forbidden"
+  }
+}
+```
+
+**Causes:**
+
+- Invalid authentication token
+- Token doesn't have required permissions
+- Certificate-based auth not configured correctly
+- Puppetserver auth.conf misconfigured
+
+**Solutions:**
+
+1. **Verify authentication token:**
+
+   ```bash
+   # Test token manually
+   curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses \
+     -H "X-Authentication: your-token-here"
+   ```
+
+2. **Check token permissions:**
+
+   Token needs access to:
+   - `/puppet-ca/v1/certificate_statuses` (GET)
+   - `/puppet-ca/v1/certificate_status/:certname` (PUT, DELETE)
+   - `/puppet/v3/facts/:certname` (GET)
+   - `/puppet/v3/status/:certname` (GET)
+   - `/puppet/v3/catalog/:certname` (GET, POST)
+   - `/puppet/v3/environments` (GET)
+
+3. **Configure Puppetserver auth.conf:**
+
+   ```hocon
+   # /etc/puppetlabs/puppetserver/conf.d/auth.conf
+   authorization: {
+       version: 1
+       rules: [
+           {
+               match-request: {
+                   path: "^/puppet-ca/v1/certificate_statuses"
+                   type: regex
+                   method: get
+               }
+               allow: [pabawi-token]
+               sort-order: 200
+               name: "certificate statuses"
+           },
+           {
+               match-request: {
+                   path: "^/puppet-ca/v1/certificate_status/"
+                   type: regex
+                   method: [put, delete]
+               }
+               allow: [pabawi-token]
+               sort-order: 200
+               name: "certificate operations"
+           }
+       ]
+   }
+   ```
+
+4. **Use certificate-based authentication:**
+
+   ```bash
+   # In .env file
+   PUPPETSERVER_SSL_ENABLED=true
+   PUPPETSERVER_SSL_CERT=/path/to/client-cert.pem
+   PUPPETSERVER_SSL_KEY=/path/to/client-key.pem
+   PUPPETSERVER_SSL_CA=/path/to/ca.pem
+   ```
+
+5. **Restart Puppetserver after auth.conf changes:**
+
+   ```bash
+   sudo systemctl restart puppetserver
+   ```
+
+### Problem: "Certificate status shows errors for all nodes"
+
+**Symptoms:**
+
+- Certificate page loads but shows errors
+- "Failed to retrieve certificate" messages
+- Individual certificate lookups fail
+
+**Causes:**
+
+- Wrong API endpoint
+- Incorrect response parsing
+- Puppetserver version incompatibility
+
+**Solutions:**
+
+1. **Verify API endpoint:**
+
+   ```bash
+   # Correct endpoint for certificate list
+   curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses \
+     -H "X-Authentication: your-token"
+   
+   # Correct endpoint for individual certificate
+   curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_status/node1.example.com \
+     -H "X-Authentication: your-token"
+   ```
+
+2. **Check Puppetserver version:**
+
+   ```bash
+   puppetserver --version
+   # Recommended: 6.x or 7.x
+   ```
+
+3. **Enable debug logging:**
+
+   ```bash
+   # In .env file
+   LOG_LEVEL=debug
+   
+   # Restart and check logs
+   sudo journalctl -u pabawi -f | grep -i certificate
+   ```
+
+4. **Test with curl and compare response:**
+
+   ```bash
+   # Get raw response
+   curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses \
+     -H "X-Authentication: your-token" | jq .
+   ```
+
+### Problem: "Node facts don't show up from Puppetserver"
+
+**Symptoms:**
+
+- Facts tab shows "No facts available"
+- Only PuppetDB facts are displayed
+- Puppetserver facts API returns errors
+
+**Causes:**
+
+- Wrong facts API endpoint
+- Node hasn't checked in yet
+- Facts not cached on Puppetserver
+
+**Solutions:**
+
+1. **Verify facts API endpoint:**
+
+   ```bash
+   # Correct endpoint
+   curl -k https://puppetserver.example.com:8140/puppet/v3/facts/node1.example.com \
+     -H "X-Authentication: your-token"
+   ```
+
+2. **Check if node has checked in:**
+
+   ```bash
+   # Check node status
+   curl -k https://puppetserver.example.com:8140/puppet/v3/status/node1.example.com \
+     -H "X-Authentication: your-token"
+   ```
+
+3. **Trigger a Puppet run to cache facts:**
+
+   ```bash
+   # On the target node
+   sudo puppet agent -t
+   ```
+
+4. **Check Puppetserver logs:**
+
+   ```bash
+   sudo tail -f /var/log/puppetlabs/puppetserver/puppetserver.log
+   ```
+
+### Problem: "Catalog compilation shows fake environments"
+
+**Symptoms:**
+
+- Environment dropdown shows "environment 1", "environment 2"
+- Real environments not listed
+- Catalog compilation fails
+
+**Causes:**
+
+- Environments API not called
+- Wrong environments endpoint
+- Environments not configured on Puppetserver
+
+**Solutions:**
+
+1. **Verify environments API:**
+
+   ```bash
+   # Correct endpoint
+   curl -k https://puppetserver.example.com:8140/puppet/v3/environments \
+     -H "X-Authentication: your-token"
+   ```
+
+2. **Check Puppetserver environments:**
+
+   ```bash
+   # On Puppetserver
+   sudo ls -la /etc/puppetlabs/code/environments/
+   ```
+
+3. **Verify environment configuration:**
+
+   ```bash
+   # Check puppet.conf
+   sudo grep environmentpath /etc/puppetlabs/puppet/puppet.conf
+   ```
+
+4. **Enable debug logging:**
+
+   ```bash
+   # In .env file
+   LOG_LEVEL=debug
+   
+   # Check logs for environment API calls
+   sudo journalctl -u pabawi -f | grep -i environment
+   ```
+
+### Problem: "Catalog compilation fails with errors"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "CATALOG_COMPILATION_ERROR",
+    "message": "Failed to compile catalog"
+  }
+}
+```
+
+**Causes:**
+
+- Puppet code errors
+- Missing modules or dependencies
+- Node not found in Puppetserver
+- Environment doesn't exist
+
+**Solutions:**
+
+1. **Test catalog compilation manually:**
+
+   ```bash
+   # On Puppetserver
+   sudo puppet catalog compile node1.example.com --environment production
+   ```
+
+2. **Check Puppet code syntax:**
+
+   ```bash
+   # Validate Puppet code
+   sudo puppet parser validate /etc/puppetlabs/code/environments/production/manifests/site.pp
+   ```
+
+3. **Verify node classification:**
+
+   ```bash
+   # Check if node is classified
+   sudo puppet node classify node1.example.com
+   ```
+
+4. **Check module dependencies:**
+
+   ```bash
+   # Verify modules are installed
+   sudo ls -la /etc/puppetlabs/code/environments/production/modules/
+   ```
+
+5. **Enable expert mode to see compilation errors:**
+   - Turn on expert mode
+   - Retry catalog compilation
+   - Review detailed error messages with line numbers
+
+### Problem: "Node status returns 'node not found'"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "NODE_NOT_FOUND",
+    "message": "Node not found in Puppetserver"
+  }
+}
+```
+
+**Causes:**
+
+- Node hasn't checked in to Puppetserver yet
+- Wrong certname
+- Node certificate not signed
+
+**Solutions:**
+
+1. **Verify node has checked in:**
+
+   ```bash
+   # Check if certificate exists
+   curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_status/node1.example.com \
+     -H "X-Authentication: your-token"
+   ```
+
+2. **Trigger initial Puppet run:**
+
+   ```bash
+   # On the target node
+   sudo puppet agent -t
+   ```
+
+3. **Sign the certificate if pending:**
+
+   ```bash
+   # On Puppetserver
+   sudo puppetserver ca sign --certname node1.example.com
+   
+   # Or via Pabawi UI
+   # Navigate to Certificates page
+   # Find pending certificate
+   # Click "Sign"
+   ```
+
+4. **Verify certname matches:**
+
+   ```bash
+   # On target node
+   sudo puppet config print certname
+   ```
+
+### Problem: "SSL certificate verification failed"
+
+**Symptoms:**
+
+```
+Error: unable to verify the first certificate
+Error: self signed certificate in certificate chain
+```
+
+**Causes:**
+
+- Self-signed Puppetserver certificate
+- CA certificate not configured
+- Certificate verification enabled
+
+**Solutions:**
+
+1. **Provide CA certificate:**
+
+   ```bash
+   # In .env file
+   PUPPETSERVER_SSL_CA=/path/to/puppetserver-ca.pem
+   ```
+
+2. **Disable certificate verification (development only):**
+
+   ```bash
+   # In .env file
+   PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=false
+   ```
+
+3. **Export Puppetserver CA certificate:**
+
+   ```bash
+   # On Puppetserver
+   sudo cat /etc/puppetlabs/puppet/ssl/certs/ca.pem > puppetserver-ca.pem
+   
+   # Copy to Pabawi server
+   scp puppetserver-ca.pem pabawi-server:/path/to/certs/
+   ```
+
+4. **Verify certificate chain:**
+
+   ```bash
+   # Test SSL connection
+   openssl s_client -connect puppetserver.example.com:8140 -CAfile /path/to/ca.pem
+   ```
+
+## PuppetDB Integration Issues
+
+### Problem: "PuppetDB reports show '0 0 0' for all metrics"
+
+**Symptoms:**
+
+- Reports tab shows "0 changed, 0 unchanged, 0 failed"
+- Metrics are all zero despite successful runs
+- Report data exists but metrics missing
+
+**Causes:**
+
+- Wrong metrics parsing logic
+- PuppetDB response structure changed
+- Metrics field not in expected location
+
+**Solutions:**
+
+1. **Check raw PuppetDB response:**
+
+   ```bash
+   # Query reports API
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/reports' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["=","certname","node1.example.com"],"limit":1}' | jq .
+   ```
+
+2. **Verify metrics structure:**
+
+   ```bash
+   # Check metrics field in response
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/reports' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["=","certname","node1.example.com"],"limit":1}' | jq '.[0].metrics'
+   ```
+
+3. **Enable debug logging:**
+
+   ```bash
+   # In .env file
+   LOG_LEVEL=debug
+   
+   # Check logs for metrics parsing
+   sudo journalctl -u pabawi -f | grep -i metrics
+   ```
+
+4. **Check PuppetDB version:**
+
+   ```bash
+   curl http://puppetdb.example.com:8080/pdb/meta/v1/version
+   # Recommended: 6.x or 7.x
+   ```
+
+### Problem: "PuppetDB catalog shows no resources"
+
+**Symptoms:**
+
+- Catalog tab loads but shows empty
+- "No resources found" message
+- Catalog exists in PuppetDB
+
+**Causes:**
+
+- Wrong catalog API endpoint
+- Incorrect query format
+- Resources field not parsed correctly
+
+**Solutions:**
+
+1. **Verify catalog API endpoint:**
+
+   ```bash
+   # Correct endpoint
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/catalogs/node1.example.com' | jq .
+   ```
+
+2. **Check resources structure:**
+
+   ```bash
+   # Check resources field
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/catalogs/node1.example.com' | jq '.resources'
+   ```
+
+3. **Query resources directly:**
+
+   ```bash
+   # Alternative: query resources endpoint
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/resources' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["=","certname","node1.example.com"]}' | jq .
+   ```
+
+4. **Enable expert mode:**
+   - Turn on expert mode
+   - Navigate to catalog tab
+   - Check API endpoint and response in error details
+
+### Problem: "Events page hangs indefinitely"
+
+**Symptoms:**
+
+- Events page never finishes loading
+- Browser tab becomes unresponsive
+- High CPU usage
+
+**Causes:**
+
+- Too many events returned
+- No pagination implemented
+- Large event dataset
+- Missing query limit
+
+**Solutions:**
+
+1. **Check event count:**
+
+   ```bash
+   # Count events for node
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/events' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["=","certname","node1.example.com"]}' | jq '. | length'
+   ```
+
+2. **Use pagination:**
+
+   ```bash
+   # Query with limit
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/events' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["=","certname","node1.example.com"],"limit":100,"offset":0}' | jq .
+   ```
+
+3. **Filter by recent events:**
+
+   ```bash
+   # Query events from last 24 hours
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/events' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["and",["=","certname","node1.example.com"],[">","timestamp","2024-01-01T00:00:00Z"]],"limit":100}' | jq .
+   ```
+
+4. **Configure event query limits:**
+
+   ```bash
+   # In .env file
+   PUPPETDB_EVENT_LIMIT=100
+   PUPPETDB_QUERY_TIMEOUT=30000
+   ```
+
+5. **Check PuppetDB performance:**
+
+   ```bash
+   # Check PuppetDB metrics
+   curl http://puppetdb.example.com:8080/metrics/v1/mbeans
+   ```
+
+### Problem: "PuppetDB connection timeout"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PUPPETDB_TIMEOUT",
+    "message": "Request timeout after 30s"
+  }
+}
+```
+
+**Causes:**
+
+- PuppetDB server overloaded
+- Large dataset query
+- Network latency
+- Timeout too short
+
+**Solutions:**
+
+1. **Increase timeout:**
+
+   ```bash
+   # In .env file
+   PUPPETDB_TIMEOUT=60000  # 60 seconds
+   ```
+
+2. **Check PuppetDB performance:**
+
+   ```bash
+   # Check PuppetDB status
+   curl http://puppetdb.example.com:8080/status/v1/services
+   
+   # Check queue depth
+   curl http://puppetdb.example.com:8080/metrics/v1/mbeans/puppetlabs.puppetdb.mq:name=global.depth
+   ```
+
+3. **Optimize queries:**
+
+   ```bash
+   # Use more specific queries
+   # Add time filters
+   # Limit result sets
+   ```
+
+4. **Enable query caching:**
+
+   ```bash
+   # In .env file
+   PUPPETDB_CACHE_TTL=300000  # 5 minutes
+   ```
+
+### Problem: "PuppetDB authentication failed"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PUPPETDB_AUTH_ERROR",
+    "message": "Authentication failed"
+  }
+}
+```
+
+**Causes:**
+
+- SSL certificate not configured
+- Wrong certificate or key
+- PuppetDB requires client certificates
+
+**Solutions:**
+
+1. **Configure SSL certificates:**
+
+   ```bash
+   # In .env file
+   PUPPETDB_SSL_ENABLED=true
+   PUPPETDB_SSL_CERT=/path/to/client-cert.pem
+   PUPPETDB_SSL_KEY=/path/to/client-key.pem
+   PUPPETDB_SSL_CA=/path/to/ca.pem
+   ```
+
+2. **Test SSL connection:**
+
+   ```bash
+   # Test with curl
+   curl --cert /path/to/client-cert.pem \
+        --key /path/to/client-key.pem \
+        --cacert /path/to/ca.pem \
+        https://puppetdb.example.com:8081/pdb/query/v4/nodes
+   ```
+
+3. **Verify certificate permissions:**
+
+   ```bash
+   # Certificates should be readable
+   chmod 644 /path/to/client-cert.pem
+   chmod 600 /path/to/client-key.pem
+   chmod 644 /path/to/ca.pem
+   ```
+
+4. **Check PuppetDB certificate whitelist:**
+
+   ```bash
+   # On PuppetDB server
+   sudo grep certificate-whitelist /etc/puppetlabs/puppetdb/conf.d/jetty.ini
+   ```
+
+### Problem: "Managed resources view shows no data"
+
+**Symptoms:**
+
+- Managed Resources tab is empty
+- "No resources found" message
+- Resources exist in PuppetDB
+
+**Causes:**
+
+- Wrong resources API endpoint
+- Incorrect query format
+- Resources not grouped by type
+
+**Solutions:**
+
+1. **Verify resources API:**
+
+   ```bash
+   # Query resources for node
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/resources' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["=","certname","node1.example.com"]}' | jq .
+   ```
+
+2. **Check resource types:**
+
+   ```bash
+   # Get unique resource types
+   curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/resources' \
+     -H "Content-Type: application/json" \
+     -d '{"query":["=","certname","node1.example.com"]}' | jq '.[].type' | sort -u
+   ```
+
+3. **Enable debug logging:**
+
+   ```bash
+   # In .env file
+   LOG_LEVEL=debug
+   
+   # Check logs for resources API calls
+   sudo journalctl -u pabawi -f | grep -i resources
    ```
 
 ## Configuration Issues
@@ -1889,6 +2651,826 @@ bolt command run 'uptime' --targets node1 --debug
 - Unexpected behavior
 - Performance debugging
 
+## Enabling Debug Logging
+
+Debug logging provides detailed information about all operations, API calls, and internal processing. This section explains how to enable and use debug logging effectively.
+
+### Enabling Debug Logging
+
+**Method 1: Environment Variable**
+
+```bash
+# In backend/.env file
+LOG_LEVEL=debug
+
+# Restart the server
+npm run dev:backend
+# or
+sudo systemctl restart pabawi
+```
+
+**Method 2: Runtime Configuration**
+
+```bash
+# Set environment variable before starting
+LOG_LEVEL=debug npm run dev:backend
+```
+
+**Method 3: Docker**
+
+```bash
+# In docker-compose.yml
+environment:
+  - LOG_LEVEL=debug
+
+# Or via command line
+docker run -e LOG_LEVEL=debug example42/pabawi:latest
+```
+
+### Log Levels
+
+Available log levels (from most to least verbose):
+
+- `debug`: All operations, API calls, data transformations
+- `info`: Important operations, successful API calls
+- `warn`: Warnings, retries, fallbacks
+- `error`: Errors only
+
+**Recommended settings:**
+
+- Development: `debug`
+- Testing: `info`
+- Production: `warn` or `error`
+
+### What Debug Logging Shows
+
+**1. Integration Initialization:**
+
+```
+[DEBUG] Initializing Puppetserver integration
+[DEBUG] Puppetserver config: {"serverUrl":"https://puppetserver.example.com","port":8140}
+[DEBUG] Testing Puppetserver connectivity...
+[DEBUG] Puppetserver health check: OK
+[DEBUG] Registering Puppetserver plugin with priority 20
+```
+
+**2. API Requests:**
+
+```
+[DEBUG] [req-abc123] GET /puppet-ca/v1/certificate_statuses
+[DEBUG] [req-abc123] Request headers: {"X-Authentication":"***","Accept":"application/json"}
+[DEBUG] [req-abc123] Request timeout: 30000ms
+```
+
+**3. API Responses:**
+
+```
+[DEBUG] [req-abc123] Response status: 200
+[DEBUG] [req-abc123] Response headers: {"content-type":"application/json"}
+[DEBUG] [req-abc123] Response time: 234ms
+[DEBUG] [req-abc123] Response body: [{"certname":"node1.example.com","status":"signed"}]
+```
+
+**4. Data Transformations:**
+
+```
+[DEBUG] Transforming 15 certificates to inventory nodes
+[DEBUG] Certificate node1.example.com -> Node {id: "node1.example.com", source: "puppetserver"}
+[DEBUG] Transformed 15 certificates successfully
+```
+
+**5. Cache Operations:**
+
+```
+[DEBUG] Cache miss for key: puppetserver:certificates
+[DEBUG] Fetching fresh data from Puppetserver
+[DEBUG] Caching result with TTL: 300000ms
+[DEBUG] Cache hit for key: puppetserver:certificates (age: 45s)
+```
+
+**6. Error Details:**
+
+```
+[ERROR] [req-abc123] Puppetserver API call failed
+[ERROR] [req-abc123] Error: Connection timeout after 30s
+[ERROR] [req-abc123] Endpoint: /puppet-ca/v1/certificate_statuses
+[ERROR] [req-abc123] Stack trace: Error: Connection timeout...
+```
+
+### Viewing Debug Logs
+
+**Development (console):**
+
+```bash
+npm run dev:backend
+# Logs appear in console
+```
+
+**Systemd:**
+
+```bash
+# Follow logs in real-time
+sudo journalctl -u pabawi -f
+
+# Filter by log level
+sudo journalctl -u pabawi | grep DEBUG
+
+# Filter by request ID
+sudo journalctl -u pabawi | grep "req-abc123"
+
+# Show logs from last hour
+sudo journalctl -u pabawi --since "1 hour ago"
+```
+
+**Docker:**
+
+```bash
+# Follow logs
+docker logs -f pabawi
+
+# Filter by level
+docker logs pabawi 2>&1 | grep DEBUG
+
+# Last 100 lines
+docker logs --tail 100 pabawi
+```
+
+**PM2:**
+
+```bash
+# Follow logs
+pm2 logs pabawi
+
+# Show error logs only
+pm2 logs pabawi --err
+
+# Clear logs
+pm2 flush pabawi
+```
+
+### Filtering Debug Logs
+
+**By Integration:**
+
+```bash
+# Puppetserver logs only
+sudo journalctl -u pabawi | grep -i puppetserver
+
+# PuppetDB logs only
+sudo journalctl -u pabawi | grep -i puppetdb
+
+# Bolt logs only
+sudo journalctl -u pabawi | grep -i bolt
+```
+
+**By Operation:**
+
+```bash
+# Certificate operations
+sudo journalctl -u pabawi | grep -i certificate
+
+# Catalog operations
+sudo journalctl -u pabawi | grep -i catalog
+
+# Inventory operations
+sudo journalctl -u pabawi | grep -i inventory
+```
+
+**By Request ID:**
+
+```bash
+# Find all logs for a specific request
+sudo journalctl -u pabawi | grep "req-abc123"
+```
+
+### Debug Logging Best Practices
+
+1. **Enable temporarily**: Turn on debug logging only when troubleshooting
+2. **Monitor disk space**: Debug logs can grow quickly
+3. **Use log rotation**: Configure logrotate for systemd logs
+4. **Filter effectively**: Use grep to find relevant information
+5. **Correlate with request IDs**: Use request IDs to trace operations
+6. **Disable in production**: Use `warn` or `error` level in production
+
+### Log Rotation Configuration
+
+**For systemd:**
+
+```bash
+# /etc/systemd/journald.conf
+[Journal]
+SystemMaxUse=500M
+SystemMaxFileSize=100M
+MaxRetentionSec=7day
+```
+
+**For file-based logs:**
+
+```bash
+# /etc/logrotate.d/pabawi
+/var/log/pabawi/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 pabawi pabawi
+}
+```
+
+## Testing API Connectivity
+
+This section provides step-by-step instructions for testing connectivity to Puppetserver and PuppetDB APIs.
+
+### Testing Puppetserver API
+
+**1. Test Basic Connectivity:**
+
+```bash
+# Test HTTPS connection
+curl -k https://puppetserver.example.com:8140
+
+# Expected: HTML page or JSON response
+```
+
+**2. Test Certificate Status API:**
+
+```bash
+# With token authentication
+curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses \
+  -H "X-Authentication: your-token-here"
+
+# With certificate authentication
+curl --cert /path/to/cert.pem \
+     --key /path/to/key.pem \
+     --cacert /path/to/ca.pem \
+     https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses
+
+# Expected: JSON array of certificates
+```
+
+**3. Test Individual Certificate Lookup:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_status/node1.example.com \
+  -H "X-Authentication: your-token-here"
+
+# Expected: JSON object with certificate details
+```
+
+**4. Test Facts API:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/puppet/v3/facts/node1.example.com \
+  -H "X-Authentication: your-token-here"
+
+# Expected: JSON object with facts
+```
+
+**5. Test Node Status API:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/puppet/v3/status/node1.example.com \
+  -H "X-Authentication: your-token-here"
+
+# Expected: JSON object with node status
+```
+
+**6. Test Environments API:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/puppet/v3/environments \
+  -H "X-Authentication: your-token-here"
+
+# Expected: JSON object with environments list
+```
+
+**7. Test Catalog Compilation:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/puppet/v3/catalog/node1.example.com?environment=production \
+  -H "X-Authentication: your-token-here"
+
+# Expected: JSON object with compiled catalog
+```
+
+**8. Test Status Endpoints:**
+
+```bash
+# Services status
+curl -k https://puppetserver.example.com:8140/status/v1/services \
+  -H "X-Authentication: your-token-here"
+
+# Simple status
+curl -k https://puppetserver.example.com:8140/status/v1/simple \
+  -H "X-Authentication: your-token-here"
+```
+
+### Testing PuppetDB API
+
+**1. Test Basic Connectivity:**
+
+```bash
+# Test HTTP connection (default port 8080)
+curl http://puppetdb.example.com:8080/pdb/meta/v1/version
+
+# Test HTTPS connection (default port 8081)
+curl --cert /path/to/cert.pem \
+     --key /path/to/key.pem \
+     --cacert /path/to/ca.pem \
+     https://puppetdb.example.com:8081/pdb/meta/v1/version
+
+# Expected: JSON object with PuppetDB version
+```
+
+**2. Test Nodes Query:**
+
+```bash
+# List all nodes
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/nodes'
+
+# Query specific node
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/nodes/node1.example.com'
+
+# Expected: JSON array or object with node data
+```
+
+**3. Test Reports Query:**
+
+```bash
+# Query reports for a node
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/reports' \
+  -H "Content-Type: application/json" \
+  -d '{"query":["=","certname","node1.example.com"],"limit":10}'
+
+# Expected: JSON array of reports
+```
+
+**4. Test Catalog Query:**
+
+```bash
+# Get catalog for a node
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/catalogs/node1.example.com'
+
+# Expected: JSON object with catalog data
+```
+
+**5. Test Resources Query:**
+
+```bash
+# Query resources for a node
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/resources' \
+  -H "Content-Type: application/json" \
+  -d '{"query":["=","certname","node1.example.com"],"limit":100}'
+
+# Expected: JSON array of resources
+```
+
+**6. Test Events Query:**
+
+```bash
+# Query events for a node
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/events' \
+  -H "Content-Type: application/json" \
+  -d '{"query":["=","certname","node1.example.com"],"limit":100}'
+
+# Expected: JSON array of events
+```
+
+**7. Test Facts Query:**
+
+```bash
+# Query facts for a node
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/facts' \
+  -H "Content-Type: application/json" \
+  -d '{"query":["=","certname","node1.example.com"]}'
+
+# Expected: JSON array of facts
+```
+
+**8. Test Admin Endpoints:**
+
+```bash
+# Archive info
+curl http://puppetdb.example.com:8080/pdb/admin/v1/archive
+
+# Summary stats (may be slow)
+curl http://puppetdb.example.com:8080/pdb/admin/v1/summary-stats
+
+# Expected: JSON objects with admin data
+```
+
+### Troubleshooting API Tests
+
+**Problem: Connection refused**
+
+```bash
+# Check if service is running
+sudo systemctl status puppetserver
+sudo systemctl status puppetdb
+
+# Check if port is open
+sudo netstat -tlnp | grep 8140
+sudo netstat -tlnp | grep 8080
+
+# Check firewall
+sudo iptables -L -n | grep 8140
+sudo firewall-cmd --list-all
+```
+
+**Problem: SSL certificate errors**
+
+```bash
+# Test SSL connection
+openssl s_client -connect puppetserver.example.com:8140
+
+# Verify certificate
+openssl x509 -in /path/to/cert.pem -text -noout
+
+# Check certificate expiration
+openssl x509 -in /path/to/cert.pem -noout -enddate
+```
+
+**Problem: Authentication errors**
+
+```bash
+# Verify token is correct
+echo "your-token-here"
+
+# Check auth.conf on Puppetserver
+sudo cat /etc/puppetlabs/puppetserver/conf.d/auth.conf
+
+# Check certificate whitelist on PuppetDB
+sudo cat /etc/puppetlabs/puppetdb/conf.d/jetty.ini | grep certificate-whitelist
+```
+
+**Problem: Timeout errors**
+
+```bash
+# Increase curl timeout
+curl --max-time 60 http://puppetdb.example.com:8080/pdb/query/v4/nodes
+
+# Check server load
+ssh puppetserver.example.com 'uptime'
+ssh puppetdb.example.com 'uptime'
+
+# Check PuppetDB queue depth
+curl http://puppetdb.example.com:8080/metrics/v1/mbeans/puppetlabs.puppetdb.mq:name=global.depth
+```
+
+### Automated API Testing Script
+
+Create a script to test all API endpoints:
+
+```bash
+#!/bin/bash
+# test-api-connectivity.sh
+
+PUPPETSERVER="https://puppetserver.example.com:8140"
+PUPPETDB="http://puppetdb.example.com:8080"
+TOKEN="your-token-here"
+NODE="node1.example.com"
+
+echo "Testing Puppetserver API..."
+
+echo "1. Certificate statuses..."
+curl -sk "$PUPPETSERVER/puppet-ca/v1/certificate_statuses" \
+  -H "X-Authentication: $TOKEN" | jq -r 'if . then "✓ OK" else "✗ FAILED" end'
+
+echo "2. Environments..."
+curl -sk "$PUPPETSERVER/puppet/v3/environments" \
+  -H "X-Authentication: $TOKEN" | jq -r 'if . then "✓ OK" else "✗ FAILED" end'
+
+echo "3. Node facts..."
+curl -sk "$PUPPETSERVER/puppet/v3/facts/$NODE" \
+  -H "X-Authentication: $TOKEN" | jq -r 'if . then "✓ OK" else "✗ FAILED" end'
+
+echo ""
+echo "Testing PuppetDB API..."
+
+echo "1. Version..."
+curl -s "$PUPPETDB/pdb/meta/v1/version" | jq -r 'if . then "✓ OK" else "✗ FAILED" end'
+
+echo "2. Nodes..."
+curl -s "$PUPPETDB/pdb/query/v4/nodes" | jq -r 'if . then "✓ OK" else "✗ FAILED" end'
+
+echo "3. Reports..."
+curl -s -X GET "$PUPPETDB/pdb/query/v4/reports" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":[\"=\",\"certname\",\"$NODE\"],\"limit\":1}" | \
+  jq -r 'if . then "✓ OK" else "✗ FAILED" end'
+
+echo ""
+echo "API connectivity test complete!"
+```
+
+**Usage:**
+
+```bash
+chmod +x test-api-connectivity.sh
+./test-api-connectivity.sh
+```
+
+### Configuration Requirements
+
+This section documents the configuration requirements for each integration.
+
+### Puppetserver Configuration Requirements
+
+**Required Environment Variables:**
+
+```bash
+# Basic configuration
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppetserver.example.com
+PUPPETSERVER_PORT=8140
+
+# Authentication (choose one)
+# Option 1: Token-based
+PUPPETSERVER_TOKEN=your-token-here
+
+# Option 2: Certificate-based
+PUPPETSERVER_SSL_ENABLED=true
+PUPPETSERVER_SSL_CERT=/path/to/client-cert.pem
+PUPPETSERVER_SSL_KEY=/path/to/client-key.pem
+PUPPETSERVER_SSL_CA=/path/to/ca.pem
+PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
+
+# Optional configuration
+PUPPETSERVER_TIMEOUT=30000
+PUPPETSERVER_RETRY_ATTEMPTS=3
+PUPPETSERVER_RETRY_DELAY=1000
+PUPPETSERVER_CACHE_TTL=300000
+PUPPETSERVER_INACTIVITY_THRESHOLD=3600
+```
+
+**Puppetserver auth.conf Requirements:**
+
+The Pabawi token or certificate must have access to these endpoints:
+
+```hocon
+# /etc/puppetlabs/puppetserver/conf.d/auth.conf
+authorization: {
+    version: 1
+    rules: [
+        {
+            match-request: {
+                path: "^/puppet-ca/v1/certificate_statuses"
+                type: regex
+                method: get
+            }
+            allow: [pabawi-token]
+            sort-order: 200
+            name: "certificate statuses list"
+        },
+        {
+            match-request: {
+                path: "^/puppet-ca/v1/certificate_status/"
+                type: regex
+                method: [get, put, delete]
+            }
+            allow: [pabawi-token]
+            sort-order: 200
+            name: "certificate operations"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v3/facts/"
+                type: regex
+                method: get
+            }
+            allow: [pabawi-token]
+            sort-order: 200
+            name: "node facts"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v3/status/"
+                type: regex
+                method: get
+            }
+            allow: [pabawi-token]
+            sort-order: 200
+            name: "node status"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v3/catalog/"
+                type: regex
+                method: [get, post]
+            }
+            allow: [pabawi-token]
+            sort-order: 200
+            name: "catalog compilation"
+        },
+        {
+            match-request: {
+                path: "^/puppet/v3/environments"
+                type: regex
+                method: get
+            }
+            allow: [pabawi-token]
+            sort-order: 200
+            name: "environments list"
+        },
+        {
+            match-request: {
+                path: "^/status/v1/"
+                type: regex
+                method: get
+            }
+            allow: [pabawi-token]
+            sort-order: 200
+            name: "status endpoints"
+        }
+    ]
+}
+```
+
+**Important Notes:**
+
+- Use `type: regex` not `type: path` for pattern matching
+- Restart Puppetserver after auth.conf changes: `sudo systemctl restart puppetserver`
+- Test authentication with curl before configuring Pabawi
+
+### PuppetDB Configuration Requirements
+
+**Required Environment Variables:**
+
+```bash
+# Basic configuration
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=http://puppetdb.example.com
+PUPPETDB_PORT=8080
+
+# For HTTPS (recommended)
+PUPPETDB_SERVER_URL=https://puppetdb.example.com
+PUPPETDB_PORT=8081
+PUPPETDB_SSL_ENABLED=true
+PUPPETDB_SSL_CERT=/path/to/client-cert.pem
+PUPPETDB_SSL_KEY=/path/to/client-key.pem
+PUPPETDB_SSL_CA=/path/to/ca.pem
+PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
+
+# Optional configuration
+PUPPETDB_TIMEOUT=30000
+PUPPETDB_RETRY_ATTEMPTS=3
+PUPPETDB_RETRY_DELAY=1000
+PUPPETDB_CACHE_TTL=300000
+PUPPETDB_EVENT_LIMIT=100
+PUPPETDB_QUERY_TIMEOUT=30000
+```
+
+**PuppetDB jetty.ini Requirements (for HTTPS):**
+
+```ini
+# /etc/puppetlabs/puppetdb/conf.d/jetty.ini
+[jetty]
+ssl-host = 0.0.0.0
+ssl-port = 8081
+ssl-cert = /etc/puppetlabs/puppetdb/ssl/public.pem
+ssl-key = /etc/puppetlabs/puppetdb/ssl/private.pem
+ssl-ca-cert = /etc/puppetlabs/puppet/ssl/certs/ca.pem
+
+# Certificate whitelist (add Pabawi certificate CN)
+certificate-whitelist = /etc/puppetlabs/puppetdb/certificate-whitelist
+```
+
+**Certificate Whitelist:**
+
+```bash
+# /etc/puppetlabs/puppetdb/certificate-whitelist
+pabawi.example.com
+```
+
+**Important Notes:**
+
+- HTTP (port 8080) is simpler but less secure
+- HTTPS (port 8081) requires client certificates
+- Restart PuppetDB after configuration changes: `sudo systemctl restart puppetdb`
+- Test connectivity with curl before configuring Pabawi
+
+### Bolt Configuration Requirements
+
+**Required Environment Variables:**
+
+```bash
+# Basic configuration
+BOLT_PROJECT_PATH=/absolute/path/to/bolt-project
+
+# Optional configuration
+EXECUTION_TIMEOUT=300000
+CONCURRENT_EXECUTION_LIMIT=5
+MAX_QUEUE_SIZE=50
+STREAMING_BUFFER_MS=100
+STREAMING_MAX_OUTPUT_SIZE=10485760
+```
+
+**Required Bolt Project Files:**
+
+```bash
+# bolt-project.yaml
+name: my-bolt-project
+modulepath:
+  - modules
+color: false  # CRITICAL: Must be false for JSON parsing
+
+# inventory.yaml
+groups:
+  - name: all
+    targets:
+      - name: node1
+        uri: node1.example.com
+    config:
+      transport: ssh
+      ssh:
+        user: admin
+        private-key: ~/.ssh/id_rsa
+        host-key-check: true
+```
+
+**Important Notes:**
+
+- `BOLT_PROJECT_PATH` must be absolute path
+- `color: false` is required in bolt-project.yaml
+- Bolt CLI must be installed and in PATH
+- Test Bolt commands manually before using Pabawi
+
+### Minimum Configuration Example
+
+**For development/testing:**
+
+```bash
+# backend/.env
+PORT=3000
+NODE_ENV=development
+LOG_LEVEL=debug
+
+# Bolt (required)
+BOLT_PROJECT_PATH=/path/to/bolt-project
+
+# Puppetserver (optional)
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppetserver.example.com
+PUPPETSERVER_PORT=8140
+PUPPETSERVER_TOKEN=your-token
+PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=false
+
+# PuppetDB (optional)
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=http://puppetdb.example.com
+PUPPETDB_PORT=8080
+
+# Database
+DATABASE_PATH=./data/executions.db
+
+# Command whitelist (development only)
+COMMAND_WHITELIST_ALLOW_ALL=true
+```
+
+**For production:**
+
+```bash
+# backend/.env
+PORT=3000
+NODE_ENV=production
+LOG_LEVEL=warn
+
+# Bolt (required)
+BOLT_PROJECT_PATH=/opt/bolt-project
+
+# Puppetserver (recommended)
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppetserver.example.com
+PUPPETSERVER_PORT=8140
+PUPPETSERVER_TOKEN=${PUPPETSERVER_TOKEN}
+PUPPETSERVER_SSL_ENABLED=true
+PUPPETSERVER_SSL_CA=/etc/pabawi/certs/ca.pem
+PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
+
+# PuppetDB (recommended)
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=https://puppetdb.example.com
+PUPPETDB_PORT=8081
+PUPPETDB_SSL_ENABLED=true
+PUPPETDB_SSL_CERT=/etc/pabawi/certs/client-cert.pem
+PUPPETDB_SSL_KEY=/etc/pabawi/certs/client-key.pem
+PUPPETDB_SSL_CA=/etc/pabawi/certs/ca.pem
+
+# Database
+DATABASE_PATH=/var/lib/pabawi/executions.db
+
+# Command whitelist (production)
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST='["ls","pwd","uptime","systemctl"]'
+COMMAND_WHITELIST_MATCH_MODE=prefix
+
+# Security
+PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
+PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
+```
+
 ## Common Error Messages
 
 This section provides quick solutions for common error messages you might encounter.
@@ -2146,6 +3728,144 @@ Error: Authentication failed for user@host
 2. Check inventory.yaml for correct node names
 3. Clear cache and retry
 
+### "PUPPETSERVER_CONNECTION_ERROR"
+
+**Full error:**
+
+```json
+{
+  "error": {
+    "code": "PUPPETSERVER_CONNECTION_ERROR",
+    "message": "Failed to connect to Puppetserver"
+  }
+}
+```
+
+**Causes:**
+
+- Puppetserver not running
+- Wrong server URL or port
+- Network connectivity issue
+- Firewall blocking connection
+
+**Solutions:**
+
+1. Verify Puppetserver is running: `sudo systemctl status puppetserver`
+2. Check server URL: `curl -k https://puppetserver.example.com:8140`
+3. Verify port is correct (default: 8140)
+4. Check firewall rules: `sudo iptables -L -n | grep 8140`
+5. Test network connectivity: `ping puppetserver.example.com`
+
+### "PUPPETSERVER_AUTH_ERROR"
+
+**Full error:**
+
+```json
+{
+  "error": {
+    "code": "PUPPETSERVER_AUTH_ERROR",
+    "message": "Authentication failed: 403 Forbidden"
+  }
+}
+```
+
+**Causes:**
+
+- Invalid authentication token
+- Token doesn't have required permissions
+- Certificate-based auth not configured
+- Puppetserver auth.conf misconfigured
+
+**Solutions:**
+
+1. Verify token: Test with curl
+2. Check auth.conf on Puppetserver
+3. Ensure token has access to required endpoints
+4. Use certificate-based auth if token auth fails
+5. Restart Puppetserver after auth.conf changes
+
+### "CATALOG_COMPILATION_ERROR"
+
+**Full error:**
+
+```json
+{
+  "error": {
+    "code": "CATALOG_COMPILATION_ERROR",
+    "message": "Failed to compile catalog for node1.example.com"
+  }
+}
+```
+
+**Causes:**
+
+- Puppet code syntax errors
+- Missing modules or dependencies
+- Node not classified
+- Environment doesn't exist
+
+**Solutions:**
+
+1. Test compilation manually: `sudo puppet catalog compile node1.example.com`
+2. Validate Puppet code: `sudo puppet parser validate site.pp`
+3. Check module dependencies
+4. Verify node classification
+5. Enable expert mode to see detailed compilation errors
+
+### "PUPPETDB_TIMEOUT"
+
+**Full error:**
+
+```json
+{
+  "error": {
+    "code": "PUPPETDB_TIMEOUT",
+    "message": "Request timeout after 30s"
+  }
+}
+```
+
+**Causes:**
+
+- PuppetDB server overloaded
+- Large dataset query
+- Network latency
+- Timeout too short
+
+**Solutions:**
+
+1. Increase timeout: `PUPPETDB_TIMEOUT=60000`
+2. Check PuppetDB performance: `curl http://puppetdb:8080/status/v1/services`
+3. Optimize queries with filters and limits
+4. Enable query caching
+5. Check PuppetDB queue depth
+
+### "NODE_NOT_FOUND"
+
+**Full error:**
+
+```json
+{
+  "error": {
+    "code": "NODE_NOT_FOUND",
+    "message": "Node not found in Puppetserver"
+  }
+}
+```
+
+**Causes:**
+
+- Node hasn't checked in to Puppetserver
+- Wrong certname
+- Node certificate not signed
+
+**Solutions:**
+
+1. Verify certificate exists in CA
+2. Trigger Puppet run: `sudo puppet agent -t`
+3. Sign certificate if pending
+4. Verify certname matches: `sudo puppet config print certname`
+
 ## FAQ
 
 ### General Questions
@@ -2380,6 +4100,67 @@ See the [API documentation](./api.md) for details.
 #### Q: Can I use Pabawi with Ansible?
 
 **A:** No. Pabawi is specifically designed for Bolt. For Ansible, consider tools like AWX or Ansible Tower.
+
+#### Q: Do I need both Puppetserver and PuppetDB?
+
+**A:** No. Each integration is optional:
+
+- **Bolt only**: Basic command and task execution
+- **Bolt + Puppetserver**: Add certificate management, catalog compilation, environments
+- **Bolt + PuppetDB**: Add reports, events, catalog history
+- **All three**: Full Puppet infrastructure management
+
+Configure only the integrations you need.
+
+#### Q: How do I enable Puppetserver integration?
+
+**A:** Set these environment variables in backend/.env:
+
+```bash
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppetserver.example.com
+PUPPETSERVER_PORT=8140
+PUPPETSERVER_TOKEN=your-token-here
+```
+
+Then restart Pabawi. See [Configuration Requirements](#configuration-requirements) for details.
+
+#### Q: How do I enable PuppetDB integration?
+
+**A:** Set these environment variables in backend/.env:
+
+```bash
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=http://puppetdb.example.com
+PUPPETDB_PORT=8080
+```
+
+For HTTPS, also configure SSL certificates. See [Configuration Requirements](#configuration-requirements) for details.
+
+#### Q: Can I use Pabawi without Puppetserver or PuppetDB?
+
+**A:** Yes! Pabawi works with just Bolt. Puppetserver and PuppetDB integrations are optional enhancements that provide additional functionality when available.
+
+#### Q: What's the difference between Puppetserver and PuppetDB?
+
+**A:**
+
+- **Puppetserver**: Compiles catalogs, manages certificates, serves files, provides current node facts
+- **PuppetDB**: Stores historical data (reports, events, catalogs), provides query API, tracks changes over time
+
+They complement each other but serve different purposes.
+
+#### Q: How do I troubleshoot integration issues?
+
+**A:**
+
+1. Enable debug logging: `LOG_LEVEL=debug`
+2. Enable expert mode in the web interface
+3. Check integration status: `curl http://localhost:3000/api/integrations/status`
+4. Test API connectivity manually with curl
+5. Check server logs for detailed errors
+
+See [Enabling Debug Logging](#enabling-debug-logging) and [Testing API Connectivity](#testing-api-connectivity) for details.
 
 ### Future Features
 

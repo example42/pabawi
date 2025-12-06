@@ -207,3 +207,61 @@ export function createPuppetDBRetryConfig(
     },
   };
 }
+
+/**
+ * Create a retry configuration for Puppetserver operations
+ *
+ * @param maxAttempts - Maximum retry attempts
+ * @param initialDelay - Initial delay in milliseconds
+ * @returns Retry configuration
+ */
+export function createPuppetserverRetryConfig(
+  maxAttempts = 3,
+  initialDelay = 1000,
+): RetryConfig {
+  return {
+    maxAttempts,
+    initialDelay,
+    maxDelay: 30000,
+    backoffMultiplier: 2,
+    jitter: true,
+    shouldRetry: isRetryableError,
+    onRetry: (attempt, delay, error): void => {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[Puppetserver] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`,
+      );
+    },
+  };
+}
+
+/**
+ * Create a generic retry configuration for any integration
+ *
+ * @param integrationName - Name of the integration (for logging)
+ * @param maxAttempts - Maximum retry attempts
+ * @param initialDelay - Initial delay in milliseconds
+ * @returns Retry configuration
+ */
+export function createIntegrationRetryConfig(
+  integrationName: string,
+  maxAttempts = 3,
+  initialDelay = 1000,
+): RetryConfig {
+  return {
+    maxAttempts,
+    initialDelay,
+    maxDelay: 30000,
+    backoffMultiplier: 2,
+    jitter: true,
+    shouldRetry: isRetryableError,
+    onRetry: (attempt, delay, error): void => {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[${integrationName}] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`,
+      );
+    },
+  };
+}

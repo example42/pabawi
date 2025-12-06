@@ -4,6 +4,7 @@
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import IntegrationStatus from '../components/IntegrationStatus.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
+  import PuppetReportsSummary from '../components/PuppetReportsSummary.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
 
@@ -55,6 +56,14 @@
     };
   }
 
+  interface PuppetReportsSummaryData {
+    total: number;
+    failed: number;
+    changed: number;
+    unchanged: number;
+    noop: number;
+  }
+
   let nodes = $state<Node[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -67,6 +76,18 @@
   let executionsLoading = $state(true);
   let executionsError = $state<string | null>(null);
   let executionsSummary = $state<ExecutionsResponse['summary'] | null>(null);
+
+  let puppetReports = $state<PuppetReportsSummaryData>({
+    total: 0,
+    failed: 0,
+    changed: 0,
+    unchanged: 0,
+    noop: 0
+  });
+  let puppetReportsLoading = $state(true);
+  let puppetReportsError = $state<string | null>(null);
+  let puppetReportsTimeRange = $state(1); // Default to 1 hour
+  let isPuppetDBActive = $state(false);
 
   async function fetchInventory(): Promise<void> {
     loading = true;
@@ -97,14 +118,56 @@
       const data = await get<IntegrationStatusResponse>(url);
       console.log('[HomePage] Integration status loaded:', data.integrations?.length, 'integrations');
       integrations = data.integrations || [];
+
+      // Check if PuppetDB is active
+      const puppetDB = integrations.find(i => i.name === 'puppetdb');
+      isPuppetDBActive = puppetDB?.status === 'connected';
+      console.log('[HomePage] PuppetDB active:', isPuppetDBActive);
+
+      // Fetch Puppet reports if PuppetDB is active
+      if (isPuppetDBActive) {
+        void fetchPuppetReports(puppetReportsTimeRange);
+      }
     } catch (err) {
       integrationsError = err instanceof Error ? err.message : 'Failed to load integration status';
       console.error('[HomePage] Error fetching integration status:', err);
       // Set empty array on error so the page still renders
       integrations = [];
+      isPuppetDBActive = false;
     } finally {
       integrationsLoading = false;
     }
+  }
+
+  async function fetchPuppetReports(hours?: number): Promise<void> {
+    puppetReportsLoading = true;
+    puppetReportsError = null;
+
+    try {
+      const timeParam = hours ? `?hours=${hours}` : '';
+      console.log('[HomePage] Fetching Puppet reports summary...', hours ? `(last ${hours}h)` : '');
+      const data = await get<{ summary: PuppetReportsSummaryData }>(`/api/integrations/puppetdb/reports/summary${timeParam}`);
+      console.log('[HomePage] Puppet reports summary loaded:', data.summary);
+      puppetReports = data.summary;
+    } catch (err) {
+      puppetReportsError = err instanceof Error ? err.message : 'Failed to load Puppet reports';
+      console.error('[HomePage] Error fetching Puppet reports:', err);
+      // Set default values on error
+      puppetReports = {
+        total: 0,
+        failed: 0,
+        changed: 0,
+        unchanged: 0,
+        noop: 0
+      };
+    } finally {
+      puppetReportsLoading = false;
+    }
+  }
+
+  function handleTimeRangeChange(hours: number): void {
+    puppetReportsTimeRange = hours;
+    void fetchPuppetReports(hours);
   }
 
   async function fetchRecentExecutions(): Promise<void> {
@@ -265,6 +328,20 @@
       </div>
     {/if}
   </div>
+
+  <!-- Puppet Reports Summary (only show if PuppetDB is active) -->
+  {#if isPuppetDBActive}
+    <div class="mb-12">
+      <PuppetReportsSummary
+        reports={puppetReports}
+        loading={puppetReportsLoading}
+        error={puppetReportsError}
+        timeRange={puppetReportsTimeRange}
+        onRetry={() => fetchPuppetReports(puppetReportsTimeRange)}
+        onTimeRangeChange={handleTimeRangeChange}
+      />
+    </div>
+  {/if}
 
   <!-- Inventory Preview -->
   <div class="mb-8">
@@ -437,44 +514,5 @@
         </div>
       </div>
     {/if}
-  </div>
-
-  <!-- Features -->
-  <div class="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center mb-4">
-        <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
-        <h3 class="ml-3 text-lg font-medium text-gray-900 dark:text-white">Inventory Management</h3>
-      </div>
-      <p class="text-gray-600 dark:text-gray-400">
-        View and manage all your infrastructure nodes in one place
-      </p>
-    </div>
-
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center mb-4">
-        <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <h3 class="ml-3 text-lg font-medium text-gray-900 dark:text-white">Execute Commands</h3>
-      </div>
-      <p class="text-gray-600 dark:text-gray-400">
-        Run ad-hoc commands across your infrastructure with ease
-      </p>
-    </div>
-
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center mb-4">
-        <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <h3 class="ml-3 text-lg font-medium text-gray-900 dark:text-white">Task Execution</h3>
-      </div>
-      <p class="text-gray-600 dark:text-gray-400">
-        Execute Bolt tasks and track their progress in real-time
-      </p>
-    </div>
   </div>
 </div>

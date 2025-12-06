@@ -343,7 +343,7 @@ export function createInventoryRouter(
 
   /**
    * GET /api/nodes/:id
-   * Return specific node details
+   * Return specific node details from any inventory source
    */
   router.get(
     "/:id",
@@ -353,11 +353,19 @@ export function createInventoryRouter(
         const params = NodeIdParamSchema.parse(req.params);
         const nodeId = params.id;
 
-        // Get all nodes from inventory
-        const nodes = await boltService.getInventory();
+        let node: Node | undefined;
 
-        // Find the specific node
-        const node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
+        // If integration manager is available, search across all sources
+        if (integrationManager && integrationManager.isInitialized()) {
+          const aggregated = await integrationManager.getLinkedInventory();
+          node = aggregated.nodes.find(
+            (n) => n.id === nodeId || n.name === nodeId,
+          );
+        } else {
+          // Fallback to Bolt-only inventory
+          const nodes = await boltService.getInventory();
+          node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
+        }
 
         if (!node) {
           res.status(404).json({

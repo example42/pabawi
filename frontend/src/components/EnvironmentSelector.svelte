@@ -1,6 +1,7 @@
 <script lang="ts">
   import { get, post } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
 
   interface Environment {
@@ -32,11 +33,25 @@
 
   // Load environments
   async function loadEnvironments(): Promise<void> {
+    if (expertMode.enabled) {
+      console.log('[EnvironmentSelector] Loading environments');
+      console.log('[EnvironmentSelector] API endpoint: GET /api/integrations/puppetserver/environments');
+    }
+
     try {
       loading = true;
       error = null;
+      const startTime = performance.now();
       const data = await get<{ environments: Environment[]; source: string; count: number }>('/api/integrations/puppetserver/environments');
+      const endTime = performance.now();
+
       environments = data.environments;
+
+      if (expertMode.enabled) {
+        console.log('[EnvironmentSelector] Loaded', environments.length, 'environments');
+        console.log('[EnvironmentSelector] Response time:', Math.round(endTime - startTime), 'ms');
+        console.log('[EnvironmentSelector] Data:', data);
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load environments';
       showError('Failed to load environments', error);
@@ -55,13 +70,31 @@
 
   // Deploy environment
   async function deployEnvironment(environmentName: string): Promise<void> {
+    if (expertMode.enabled) {
+      console.log('[EnvironmentSelector] Deploying environment:', environmentName);
+      console.log('[EnvironmentSelector] API endpoint: POST /api/integrations/puppetserver/environments/' + environmentName + '/deploy');
+    }
+
     try {
       deployingEnvironment = environmentName;
+      const startTime = performance.now();
       await post(`/api/integrations/puppetserver/environments/${environmentName}/deploy`);
+      const endTime = performance.now();
+
+      if (expertMode.enabled) {
+        console.log('[EnvironmentSelector] Environment deployed successfully');
+        console.log('[EnvironmentSelector] Response time:', Math.round(endTime - startTime), 'ms');
+      }
+
       showSuccess('Environment deployed', `Successfully deployed environment: ${environmentName}`);
       await loadEnvironments();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to deploy environment';
+
+      if (expertMode.enabled) {
+        console.error('[EnvironmentSelector] Deploy failed:', err);
+      }
+
       showError('Failed to deploy environment', message);
     } finally {
       deployingEnvironment = null;

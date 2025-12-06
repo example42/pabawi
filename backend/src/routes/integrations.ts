@@ -487,6 +487,200 @@ export function createIntegrationsRouter(
   );
 
   /**
+   * GET /api/integrations/puppetdb/reports/summary
+   * Return summary statistics of recent Puppet reports across all nodes
+   *
+   * Used for home page dashboard display.
+   * Returns aggregated statistics:
+   * - Total number of recent reports
+   * - Count of failed reports
+   * - Count of changed reports
+   * - Count of unchanged reports
+   * - Count of noop reports
+   */
+  router.get(
+    "/puppetdb/reports/summary",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetDBService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_CONFIGURED",
+            message: "PuppetDB integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetDBService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_INITIALIZED",
+            message: "PuppetDB integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        // Get query parameters
+        const queryParams = ReportsQuerySchema.parse(req.query);
+        const limit = queryParams.limit || 100; // Default to 100 for summary
+        const hours = req.query.hours ? parseInt(String(req.query.hours), 10) : undefined;
+
+        // Get reports summary from PuppetDB
+        const summary = await puppetDBService.getReportsSummary(limit, hours);
+
+        res.json({
+          summary,
+          source: "puppetdb",
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid request parameters",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBAuthenticationError) {
+          res.status(401).json({
+            error: {
+              code: "PUPPETDB_AUTH_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETDB_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBQueryError) {
+          res.status(400).json({
+            error: {
+              code: "PUPPETDB_QUERY_ERROR",
+              message: error.message,
+              query: error.query,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error fetching reports summary from PuppetDB:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch reports summary from PuppetDB",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * GET /api/integrations/puppetdb/reports
+   * Return all recent Puppet reports across all nodes from PuppetDB
+   *
+   * Used for Puppet page reports tab.
+   * Returns reports with:
+   * - Reverse chronological order
+   * - Run timestamp, status, and resource change summary
+   * - Limit parameter to control number of results
+   */
+  router.get(
+    "/puppetdb/reports",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetDBService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_CONFIGURED",
+            message: "PuppetDB integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetDBService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_INITIALIZED",
+            message: "PuppetDB integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        // Get query parameters
+        const queryParams = ReportsQuerySchema.parse(req.query);
+        const limit = queryParams.limit || 100;
+
+        // Get all reports from PuppetDB
+        const reports = await puppetDBService.getAllReports(limit);
+
+        res.json({
+          reports,
+          source: "puppetdb",
+          count: reports.length,
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid request parameters",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBAuthenticationError) {
+          res.status(401).json({
+            error: {
+              code: "PUPPETDB_AUTH_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETDB_CONNECTION_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error fetching all reports from PuppetDB:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch reports from PuppetDB",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
    * GET /api/integrations/puppetdb/nodes/:certname/reports
    * Return Puppet reports for a specific node from PuppetDB
    *
@@ -850,6 +1044,110 @@ export function createIntegrationsRouter(
   );
 
   /**
+   * GET /api/integrations/puppetdb/nodes/:certname/resources
+   * Return managed resources for a specific node from PuppetDB
+   *
+   * Implements requirement 16.13: Use PuppetDB /pdb/query/v4/resources endpoint
+   * Returns resources organized by type.
+   */
+  router.get(
+    "/puppetdb/nodes/:certname/resources",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetDBService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_CONFIGURED",
+            message: "PuppetDB integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetDBService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_INITIALIZED",
+            message: "PuppetDB integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        // Validate request parameters
+        const params = CertnameParamSchema.parse(req.params);
+        const certname = params.certname;
+
+        // Get resources from PuppetDB
+        const resourcesByType = await puppetDBService.getNodeResources(certname);
+
+        res.json({
+          resources: resourcesByType,
+          source: "puppetdb",
+          certname,
+          typeCount: Object.keys(resourcesByType).length,
+          totalResources: Object.values(resourcesByType).reduce(
+            (sum, resources) => sum + resources.length,
+            0,
+          ),
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid request parameters",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBAuthenticationError) {
+          res.status(401).json({
+            error: {
+              code: "PUPPETDB_AUTH_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETDB_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBQueryError) {
+          res.status(400).json({
+            error: {
+              code: "PUPPETDB_QUERY_ERROR",
+              message: error.message,
+              query: error.query,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error fetching resources from PuppetDB:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch resources from PuppetDB",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
    * GET /api/integrations/puppetdb/nodes/:certname/events
    * Return Puppet events for a specific node from PuppetDB
    *
@@ -996,6 +1294,150 @@ export function createIntegrationsRouter(
           error: {
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch events from PuppetDB",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * GET /api/integrations/puppetdb/admin/archive
+   * Return PuppetDB archive information
+   *
+   * Implements requirement 16.7: Display PuppetDB admin components
+   * Returns information about PuppetDB's archive functionality.
+   */
+  router.get(
+    "/puppetdb/admin/archive",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetDBService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_CONFIGURED",
+            message: "PuppetDB integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetDBService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_INITIALIZED",
+            message: "PuppetDB integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        const archiveInfo = await puppetDBService.getArchiveInfo();
+
+        res.json({
+          archive: archiveInfo,
+          source: "puppetdb",
+        });
+      } catch (error) {
+        if (error instanceof PuppetDBAuthenticationError) {
+          res.status(401).json({
+            error: {
+              code: "PUPPETDB_AUTH_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETDB_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error fetching archive info from PuppetDB:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch archive info from PuppetDB",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * GET /api/integrations/puppetdb/admin/summary-stats
+   * Return PuppetDB summary statistics
+   *
+   * Implements requirement 16.7: Display PuppetDB admin components with performance warning
+   * WARNING: This endpoint can be resource-intensive on large PuppetDB instances.
+   * Returns database statistics including node counts, resource counts, etc.
+   */
+  router.get(
+    "/puppetdb/admin/summary-stats",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetDBService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_CONFIGURED",
+            message: "PuppetDB integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetDBService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETDB_NOT_INITIALIZED",
+            message: "PuppetDB integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        const summaryStats = await puppetDBService.getSummaryStats();
+
+        res.json({
+          stats: summaryStats,
+          source: "puppetdb",
+          warning: "This endpoint can be resource-intensive on large PuppetDB instances",
+        });
+      } catch (error) {
+        if (error instanceof PuppetDBAuthenticationError) {
+          res.status(401).json({
+            error: {
+              code: "PUPPETDB_AUTH_ERROR",
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetDBConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETDB_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        console.error("Error fetching summary stats from PuppetDB:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch summary stats from PuppetDB",
           },
         });
       }
@@ -2470,6 +2912,301 @@ export function createIntegrationsRouter(
           error: {
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to deploy environment in Puppetserver",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * GET /api/integrations/puppetserver/status/services
+   * Get services status from Puppetserver
+   *
+   * Implements requirement 17.1: Display component for /status/v1/services
+   * Returns detailed status information for all Puppetserver services.
+   */
+  router.get(
+    "/puppetserver/status/services",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetserverService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_CONFIGURED",
+            message: "Puppetserver integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetserverService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_INITIALIZED",
+            message: "Puppetserver integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        const servicesStatus = await puppetserverService.getServicesStatus();
+
+        res.json({
+          services: servicesStatus,
+          source: "puppetserver",
+        });
+      } catch (error) {
+        if (error instanceof PuppetserverConfigurationError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONFIG_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetserverConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        console.error("Error fetching services status from Puppetserver:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch services status from Puppetserver",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * GET /api/integrations/puppetserver/status/simple
+   * Get simple status from Puppetserver
+   *
+   * Implements requirement 17.2: Display component for /status/v1/simple
+   * Returns a simple running/error status for lightweight health checks.
+   */
+  router.get(
+    "/puppetserver/status/simple",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetserverService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_CONFIGURED",
+            message: "Puppetserver integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetserverService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_INITIALIZED",
+            message: "Puppetserver integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        const simpleStatus = await puppetserverService.getSimpleStatus();
+
+        res.json({
+          status: simpleStatus,
+          source: "puppetserver",
+        });
+      } catch (error) {
+        if (error instanceof PuppetserverConfigurationError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONFIG_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetserverConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        console.error("Error fetching simple status from Puppetserver:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch simple status from Puppetserver",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * GET /api/integrations/puppetserver/admin-api
+   * Get admin API information from Puppetserver
+   *
+   * Implements requirement 17.3: Display component for /puppet-admin-api/v1
+   * Returns information about available admin operations.
+   */
+  router.get(
+    "/puppetserver/admin-api",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetserverService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_CONFIGURED",
+            message: "Puppetserver integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetserverService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_INITIALIZED",
+            message: "Puppetserver integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        const adminApiInfo = await puppetserverService.getAdminApiInfo();
+
+        res.json({
+          adminApi: adminApiInfo,
+          source: "puppetserver",
+        });
+      } catch (error) {
+        if (error instanceof PuppetserverConfigurationError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONFIG_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetserverConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        console.error("Error fetching admin API info from Puppetserver:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch admin API info from Puppetserver",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * GET /api/integrations/puppetserver/metrics
+   * Get metrics from Puppetserver via Jolokia
+   *
+   * Implements requirement 17.4: Display component for /metrics/v2 with performance warning
+   * Returns JMX metrics from Puppetserver.
+   *
+   * WARNING: This endpoint can be resource-intensive on the Puppetserver.
+   * Use sparingly and consider caching results.
+   *
+   * Query parameters:
+   * - mbean: Optional MBean name to query specific metrics
+   */
+  router.get(
+    "/puppetserver/metrics",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetserverService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_CONFIGURED",
+            message: "Puppetserver integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetserverService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_INITIALIZED",
+            message: "Puppetserver integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        // Get optional mbean parameter
+        const mbean = typeof req.query.mbean === "string" ? req.query.mbean : undefined;
+
+        const metrics = await puppetserverService.getMetrics(mbean);
+
+        res.json({
+          metrics,
+          source: "puppetserver",
+          mbean,
+          warning: "This endpoint can be resource-intensive on Puppetserver. Use sparingly.",
+        });
+      } catch (error) {
+        if (error instanceof PuppetserverConfigurationError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONFIG_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof PuppetserverConnectionError) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_CONNECTION_ERROR",
+              message: error.message,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
+        console.error("Error fetching metrics from Puppetserver:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch metrics from Puppetserver",
           },
         });
       }

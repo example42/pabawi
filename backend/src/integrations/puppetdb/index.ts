@@ -31,6 +31,8 @@ export {
   calculateBackoffDelay,
   isRetryableError,
   createPuppetDBRetryConfig,
+  createPuppetserverRetryConfig,
+  createIntegrationRetryConfig,
 } from "./RetryLogic";
 export type { RetryConfig } from "./RetryLogic";
 
