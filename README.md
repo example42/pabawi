@@ -1,6 +1,6 @@
 # Pabawi
 
-Version 0.2.0 - Unified Remote Execution Interface
+Version 0.3.0 - Unified Remote Execution Interface
 
 Pabawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt and PuppetDB. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
 
@@ -517,6 +517,7 @@ npm test --workspace=backend
 
 ### Documentation
 
+- [Architecture Documentation](docs/architecture.md) - System architecture and plugin design
 - [Configuration Guide](docs/configuration.md)
 - [User Guide](docs/user-guide.md)
 - [API Documentation](docs/api.md)
@@ -558,14 +559,22 @@ Special thanks to all contributors and the Puppet community.
 
 ### Getting Started
 
+- [Architecture Documentation](docs/architecture.md) - System architecture and plugin design
 - [Configuration Guide](docs/configuration.md) - Complete configuration reference
 - [User Guide](docs/user-guide.md) - Comprehensive user documentation
 - [API Documentation](docs/api.md) - REST API reference
 
-### Version 0.2.0 Features
+### API Reference (v0.3.0)
 
-- [v0.2.0 Features Guide](docs/v0.2-features-guide.md) - Overview of new features
+- [Integrations API Documentation](docs/integrations-api.md) - Complete API reference for all integrations
+- [API Endpoints Reference](docs/api-endpoints-reference.md) - Quick reference table of all endpoints
+- [Authentication Guide](docs/authentication.md) - Authentication setup and troubleshooting
+- [Error Codes Reference](docs/error-codes.md) - Complete error code reference
+
+### Integration Setup
+
 - [PuppetDB Integration Setup](docs/puppetdb-integration-setup.md) - PuppetDB configuration guide
+- [Puppetserver Setup](docs/PUPPETSERVER_SETUP.md) - Puppetserver configuration guide
 - [PuppetDB API Documentation](docs/puppetdb-api.md) - PuppetDB-specific API endpoints
 
 ### Additional Resources

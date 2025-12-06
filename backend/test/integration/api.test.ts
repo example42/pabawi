@@ -153,4 +153,106 @@ describe("API Integration Tests", () => {
       expect(streamingManager).toBeDefined();
     });
   });
+
+  describe("Error Message Improvements", () => {
+    it("should return actionable error messages with troubleshooting guidance", async () => {
+      // Create a test app with error handler
+      const testApp = express();
+      testApp.use(express.json());
+      testApp.use(requestIdMiddleware);
+
+      // Create a route that throws a validation error
+      testApp.get("/test-validation-error", () => {
+        const error = new Error("Invalid input provided");
+        error.name = "ValidationError";
+        throw error;
+      });
+
+      testApp.use(errorHandler);
+
+      const request = (await import("supertest")).default;
+      const response = await request(testApp)
+        .get("/test-validation-error")
+        .expect(400);
+
+      expect(response.body.error).toBeDefined();
+      expect(response.body.error.code).toBe("VALIDATION_ERROR");
+      expect(response.body.error.type).toBe("validation");
+      expect(response.body.error.actionableMessage).toBeDefined();
+      expect(response.body.error.troubleshooting).toBeDefined();
+      expect(response.body.error.troubleshooting.steps).toBeInstanceOf(Array);
+      expect(response.body.error.troubleshooting.steps.length).toBeGreaterThan(0);
+    });
+
+    it("should categorize connection errors correctly", async () => {
+      const testApp = express();
+      testApp.use(express.json());
+      testApp.use(requestIdMiddleware);
+
+      testApp.get("/test-connection-error", () => {
+        const error = new Error("ECONNREFUSED");
+        error.name = "PuppetserverConnectionError";
+        throw error;
+      });
+
+      testApp.use(errorHandler);
+
+      const request = (await import("supertest")).default;
+      const response = await request(testApp)
+        .get("/test-connection-error")
+        .expect(503);
+
+      expect(response.body.error.type).toBe("connection");
+      expect(response.body.error.actionableMessage).toContain("connect");
+      expect(response.body.error.troubleshooting.documentation).toBeDefined();
+    });
+
+    it("should include expert mode details when header is set", async () => {
+      const testApp = express();
+      testApp.use(express.json());
+      testApp.use(requestIdMiddleware);
+
+      testApp.get("/test-expert-mode", () => {
+        const error = new Error("Test error");
+        throw error;
+      });
+
+      testApp.use(errorHandler);
+
+      const request = (await import("supertest")).default;
+      const response = await request(testApp)
+        .get("/test-expert-mode")
+        .set("X-Expert-Mode", "true")
+        .expect(500);
+
+      expect(response.body.error.stackTrace).toBeDefined();
+      expect(response.body.error.requestId).toBeDefined();
+      expect(response.body.error.timestamp).toBeDefined();
+      expect(response.body.error.executionContext).toBeDefined();
+    });
+
+    it("should not include expert mode details without header", async () => {
+      const testApp = express();
+      testApp.use(express.json());
+      testApp.use(requestIdMiddleware);
+
+      testApp.get("/test-no-expert-mode", () => {
+        const error = new Error("Test error");
+        throw error;
+      });
+
+      testApp.use(errorHandler);
+
+      const request = (await import("supertest")).default;
+      const response = await request(testApp)
+        .get("/test-no-expert-mode")
+        .expect(500);
+
+      expect(response.body.error.stackTrace).toBeUndefined();
+      expect(response.body.error.executionContext).toBeUndefined();
+      // But actionable message and troubleshooting should still be present
+      expect(response.body.error.actionableMessage).toBeDefined();
+      expect(response.body.error.troubleshooting).toBeDefined();
+    });
+  });
 });

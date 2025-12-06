@@ -1,12 +1,12 @@
 # Pabawi API Documentation
 
-Version: 0.1.0
+Version: 0.3.0
 
 ## Overview
 
-The Pabawi API provides a RESTful interface for managing Bolt automation through a web interface. This API enables you to:
+The Pabawi API provides a RESTful interface for managing infrastructure automation through multiple integrations. This API enables you to:
 
-- View and manage node inventory
+- View and manage node inventory from multiple sources (Bolt, PuppetDB, Puppetserver)
 - Gather system facts from nodes
 - Execute commands on remote nodes
 - Run Bolt tasks with parameters
@@ -14,6 +14,22 @@ The Pabawi API provides a RESTful interface for managing Bolt automation through
 - Install packages on nodes
 - View execution history and results
 - Stream real-time execution output
+- Manage Puppetserver certificates
+- Query PuppetDB for reports, catalogs, and events
+- Compare catalogs across environments
+
+## Integration Support
+
+Pabawi supports multiple infrastructure management integrations:
+
+- **Bolt**: Execution tool for running commands, tasks, and plans
+- **PuppetDB**: Information source for node data, reports, catalogs, and events
+- **Puppetserver**: Information source for certificates, node status, facts, and catalog compilation
+
+For detailed integration-specific API documentation, see:
+
+- [Integrations API Documentation](./integrations-api.md) - Complete reference for PuppetDB and Puppetserver endpoints
+- [PuppetDB API Documentation](./puppetdb-api.md) - Detailed PuppetDB integration guide
 
 ## Base URL
 
@@ -23,8 +39,16 @@ http://localhost:3000/api
 
 ## Authentication
 
-Version 0.1.0 does not implement authentication. All endpoints are publicly accessible.
-Authentication will be added in future versions.
+Pabawi supports multiple authentication methods depending on the integration:
+
+- **Bolt**: No API-level authentication (authentication handled by Bolt for node connections)
+- **PuppetDB**: Token-based authentication using RBAC tokens
+- **Puppetserver**: Certificate-based authentication for CA operations
+
+For detailed authentication setup and troubleshooting, see:
+
+- [Authentication Guide](./authentication.md) - Complete authentication reference
+- [Error Codes Reference](./error-codes.md) - Authentication error codes and solutions
 
 ## Expert Mode
 
@@ -1108,6 +1132,44 @@ X-API-Version: 0.1.0
 ```
 
 Future versions will maintain backward compatibility or provide versioned endpoints.
+
+## Integration Endpoints
+
+Version 0.3.0 adds comprehensive integration support. For complete documentation of integration-specific endpoints, see:
+
+### PuppetDB Integration
+
+- **Inventory**: `/api/integrations/puppetdb/nodes`
+- **Facts**: `/api/integrations/puppetdb/nodes/:certname/facts`
+- **Reports**: `/api/integrations/puppetdb/nodes/:certname/reports`
+- **Catalogs**: `/api/integrations/puppetdb/nodes/:certname/catalog`
+- **Events**: `/api/integrations/puppetdb/nodes/:certname/events`
+- **Resources**: `/api/integrations/puppetdb/nodes/:certname/resources`
+- **Admin**: `/api/integrations/puppetdb/admin/*`
+
+See [Integrations API Documentation](./integrations-api.md#puppetdb-integration) for details.
+
+### Puppetserver Integration
+
+- **Certificates**: `/api/integrations/puppetserver/certificates`
+- **Nodes**: `/api/integrations/puppetserver/nodes`
+- **Status**: `/api/integrations/puppetserver/nodes/:certname/status`
+- **Facts**: `/api/integrations/puppetserver/nodes/:certname/facts`
+- **Catalogs**: `/api/integrations/puppetserver/catalog/:certname/:environment`
+- **Environments**: `/api/integrations/puppetserver/environments`
+- **Status & Metrics**: `/api/integrations/puppetserver/status/*`
+
+See [Integrations API Documentation](./integrations-api.md#puppetserver-integration) for details.
+
+### Integration Status
+
+Check the health and connectivity of all integrations:
+
+```http
+GET /api/integrations/status
+```
+
+Returns status for Bolt, PuppetDB, and Puppetserver integrations.
 
 ## Support
 

@@ -194,6 +194,78 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN network errors occur THEN the system SHALL distinguish between connection failures, timeouts, and authentication errors
 5. WHEN errors are transient THEN the system SHALL implement retry logic with exponential backoff
 
+### Requirement 13: Restructure Navigation and Pages
+
+**User Story:** As a user, I want a reorganized navigation structure that groups Puppet-related functionality together, so that I can easily find and access Puppet features.
+
+#### Acceptance Criteria
+
+1. WHEN viewing the top navigation THEN it SHALL display: Home, Inventory, Executions, Puppet
+2. WHEN viewing the Home page with PuppetDB active THEN it SHALL display a Puppet reports summary component
+3. WHEN navigating to the Puppet page THEN it SHALL display Environments, Reports, and Certificates sections
+4. WHEN viewing the Puppet page with Puppetserver active THEN it SHALL display Puppetserver status components
+5. WHEN viewing the Puppet page with PuppetDB active THEN it SHALL display PuppetDB admin components
+
+### Requirement 14: Restructure Node Detail Page
+
+**User Story:** As a user, I want a reorganized node detail page that groups related functionality into logical tabs, so that I can efficiently navigate node information.
+
+#### Acceptance Criteria
+
+1. WHEN viewing a node detail page THEN it SHALL display four main tabs: Overview, Facts, Actions, Puppet
+2. WHEN viewing the Overview tab THEN it SHALL display general node info, latest Puppet runs, and latest executions
+3. WHEN viewing the Facts tab THEN it SHALL display facts from all sources with source attribution and YAML export option
+4. WHEN viewing the Actions tab THEN it SHALL display Install software, Execute Commands, Execute Task, and Execution History
+5. WHEN viewing the Puppet tab THEN it SHALL display sub-tabs for Certificate Status, Node Status, Catalog Compilation, Reports, Catalog, Events, and Managed Resources
+
+### Requirement 15: Implement Managed Resources View
+
+**User Story:** As a user, I want to view managed resources from PuppetDB, so that I can see all resources managed by Puppet on a node.
+
+#### Acceptance Criteria
+
+1. WHEN viewing the Managed Resources sub-tab THEN the system SHALL query PuppetDB /pdb/query/v4/resources endpoint
+2. WHEN displaying managed resources THEN they SHALL be grouped by resource type
+3. WHEN viewing resource details THEN the system SHALL use /pdb/query/v4/catalogs for catalog information
+4. WHEN no resources are available THEN the system SHALL display a clear message
+5. WHEN the API call fails THEN the system SHALL display an error with troubleshooting guidance
+
+### Requirement 16: Implement Expert Mode
+
+**User Story:** As a power user or developer, I want an expert mode that shows detailed technical information, so that I can troubleshoot issues and understand system operations.
+
+#### Acceptance Criteria
+
+1. WHEN expert mode is enabled THEN all components SHALL display detailed error messages and debug information
+2. WHEN expert mode is enabled and a command is executed THEN the system SHALL display the exact command used
+3. WHEN expert mode is enabled and an API call is made THEN the system SHALL display endpoint info and request/response details
+4. WHEN expert mode is enabled THEN components SHALL display troubleshooting hints
+5. WHEN expert mode is enabled THEN components SHALL display setup instructions where applicable
+
+### Requirement 17: Add Puppetserver Status Components
+
+**User Story:** As an administrator, I want to view Puppetserver status and metrics, so that I can monitor the health of my Puppet infrastructure.
+
+#### Acceptance Criteria
+
+1. WHEN viewing the Puppet page with Puppetserver active THEN it SHALL display a component for /status/v1/services
+2. WHEN viewing the Puppet page with Puppetserver active THEN it SHALL display a component for /status/v1/simple
+3. WHEN viewing the Puppet page with Puppetserver active THEN it SHALL display a component for /puppet-admin-api/v1
+4. WHEN viewing the Puppet page with Puppetserver active THEN it SHALL display a component for /metrics/v2 with performance warning
+5. WHEN Puppetserver is not active THEN these components SHALL not be displayed
+
+### Requirement 18: Add PuppetDB Admin Components
+
+**User Story:** As an administrator, I want to view PuppetDB administrative information, so that I can monitor and manage my PuppetDB instance.
+
+#### Acceptance Criteria
+
+1. WHEN viewing the Puppet page with PuppetDB active THEN it SHALL display a component for /pdb/admin/v1/archive
+2. WHEN viewing the Puppet page with PuppetDB active THEN it SHALL display a component for /pdb/admin/v1/summary-stats with performance warning
+3. WHEN displaying summary-stats THEN the system SHALL warn users about resource consumption
+4. WHEN PuppetDB is not active THEN these components SHALL not be displayed
+5. WHEN API calls fail THEN the system SHALL display errors with troubleshooting guidance
+
 ## Summary
 
 Version 0.3.0 focuses on **fixing critical bugs** rather than adding new features. The primary goals are:

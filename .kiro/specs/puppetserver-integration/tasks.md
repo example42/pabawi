@@ -111,86 +111,122 @@ Version 0.3.0 focuses on **fixing critical implementation issues** and **complet
   - Show multi-source indicators in UI
   - _Requirements: 3.3, 3.4_
 
-## Phase 5: Fix UI Integration (CRITICAL)
+## Phase 5: Restructure UI Navigation and Components (HIGH PRIORITY)
 
-- [x] 15. Fix certificates page
-  - Debug why no certificates are displayed
-  - Verify API endpoint is called correctly
-  - Verify response is parsed correctly
-  - Add error handling and display
-  - Test with actual Puppetserver
-  - _Requirements: 2.4, 2.5_
+### 5.1 Top Navigation Updates
 
-- [x] 16. Fix node detail page - Facts tab
-  - Remove Puppetserver facts view (Puppetserver facts API )
-  - Verify API endpoint is called
-  - Verify response parsing
+- [x] 23. Update top navigation links
+  - Keep: Home, Inventory, Executions
+  - Add: Puppet (new dedicated page)
+  - Remove: Certificates from top nav (move to Puppet page)
+  - _Requirements: 16.1_
+
+### 5.2 Home Page Enhancements
+
+- [x] 24. Add Puppet reports component to Home page
+  - Display when PuppetDB integration is active
+  - Show latest reports summary (all/failed/changed/noop)
+  - Link to detailed Puppet page
+  - _Requirements: 16.2_
+
+### 5.3 New Puppet Page
+
+- [x] 25. Create dedicated Puppet page
+  - Move Environments tab from node detail page
+  - Add Puppet reports for all nodes
+  - Move Certificates page here (previously at top nav)
+  - _Requirements: 16.3, 16.4, 16.5_
+
+- [x] 26. Add Puppetserver status components
+  - Component for /status/v1/services endpoint
+  - Component for /status/v1/simple endpoint
+  - Component for /puppet-admin-api/v1 endpoint
+  - Component for /metrics/v2 (via Jolokia) with user warning
+  - Display only when Puppetserver integration is active
+  - _Requirements: 16.6_
+
+- [x] 27. Add PuppetDB admin components
+  - Component for /pdb/admin/v1/archive endpoint
+  - Component for /pdb/admin/v1/summary-stats (with performance warning)
+  - Display only when PuppetDB integration is active
+  - _Requirements: 16.7_
+
+### 5.4 Node Detail Page Restructuring
+
+- [x] 28. Reorganize node detail tabs
+  - Tab 1: Overview (general info, latest runs, executions)
+  - Tab 2: Facts (from all sources)
+  - Tab 3: Actions (software install, commands, tasks, execution history)
+  - Tab 4: Puppet (certificate, status, catalog, reports, resources)
+  - _Requirements: 16.8_
+
+- [x] 29. Implement Overview tab
+  - General node info (OS, IP from facts)
+  - Latest puppet runs component (if PuppetDB enabled)
+  - Latest executions list
+  - _Requirements: 16.9_
+
+- [x] 30. Implement Facts tab
   - Display facts from all sources
-  - Show source attribution
-  - Show option to output facts in yaml format
-  - _Requirements: 4.2, 4.3, 4.4, 4.5_
+  - Show source attribution and timestamps
+  - YAML export option
+  - _Requirements: 16.10_
 
-- [x] 17. Fix node detail page - Certificate Status tab
-  - Debug certificate status errors
-  - Verify API endpoint is called correctly
-  - Handle missing certificates gracefully
-  - Display clear error messages
-  - _Requirements: 2.4, 2.5_
+- [x] 31. Implement Actions tab
+  - Rename "Install packages" to "Install software"
+  - Move Execute Commands here
+  - Move Execute Task here
+  - Move Execution History here
+  - _Requirements: 16.11_
 
-- [x] 18. Fix node detail page - Node Status tab
-  - Debug "node not found" errors
-  - Verify API endpoint is called correctly
-  - Handle missing status gracefully
-  - Display clear error messages
-  - _Requirements: 5.2, 5.3, 5.4, 5.5_
+- [x] 32. Implement Puppet tab
+  - Sub-tab: Certificate Status
+  - Sub-tab: Node Status
+  - Sub-tab: Catalog Compilation
+  - Sub-tab: Puppet Reports
+  - Sub-tab: Catalog (from PuppetDB)
+  - Sub-tab: Events
+  - Sub-tab: Managed Resources (new)
+  - _Requirements: 16.12_
 
-- [ ] 19. Fix node detail page - Environments tab
-  - Debug why no environments show
-  - Verify API endpoint is called
-  - Display environments correctly
-  - Handle empty environments list
-  - _Requirements: 7.2, 7.3, 7.4, 7.5_
+- [x] 33. Implement Managed Resources sub-tab
+  - Use PuppetDB /pdb/query/v4/resources endpoint
+  - Show resources grouped by type
+  - Use /pdb/query/v4/catalogs for catalog view
+  - _Requirements: 16.13_
 
-- [ ] 20. Fix node detail page - Reports tab
-  - Debug "0 0 0" metrics display
-  - Verify metrics are parsed correctly from backend
-  - Display correct changed/unchanged/failed counts
-  - Handle missing metrics gracefully
-  - _Requirements: 8.2, 8.3, 8.4, 8.5_
+### 5.5 Expert Mode Implementation
 
-- [ ] 21. Merge and fix Catalog tabs
-  - Combine "Catalog" and "Catalog Compilation" into single tab
-  - Provide toggle between PuppetDB (current) and Puppetserver (compile)
-  - Fix resource display for both sources
-  - Use real environments, not fake ones
-  - Allow environment selection for compilation
-  - _Requirements: 6.2, 6.3, 6.4, 9.2, 9.3, 9.4, 11.1, 11.2, 11.3, 11.4, 11.5_
+- [x] 34. Review expert mode toggle
+  - Global setting accessible from UI
+  - Persist user preference
+  - _Requirements: 16.14_
 
-- [x] 22. Fix events page hanging
-  - Implement loading indicator
-  - Add timeout handling
-  - Implement pagination or lazy loading
-  - Add cancel button for long-running queries
-  - Test with large datasets
-  - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+- [x] 35. Enhance all components with expert mode
+  - Show all errors/output/debug information when enabled
+  - Display commands used for operations
+  - Show API endpoint info and request/response details
+  - Add troubleshooting hints
+  - Add setup instructions where needed
+  - _Requirements: 16.15_
 
 ## Phase 6: Improve Error Handling and Logging (HIGH PRIORITY)
 
-- [ ] 23. Add comprehensive API logging
+- [x] 23. Add comprehensive API logging
   - Log all API requests (method, endpoint, parameters)
   - Log all API responses (status, headers, body)
   - Log authentication details (without sensitive data)
   - Add request/response correlation IDs
   - _Requirements: 12.1, 12.2_
 
-- [ ] 24. Improve error messages
+- [x] 24. Improve error messages
   - Display actionable error messages in UI
   - Include troubleshooting guidance
   - Distinguish between error types (connection, auth, timeout)
   - Show error details in developer console
   - _Requirements: 12.3, 12.4_
 
-- [ ] 25. Implement retry logic
+- [x] 25. Implement retry logic
   - Add exponential backoff for transient errors
   - Configure retry attempts per integration
   - Log retry attempts
@@ -199,21 +235,21 @@ Version 0.3.0 focuses on **fixing critical implementation issues** and **complet
 
 ## Phase 7: Testing and Validation (HIGH PRIORITY)
 
-- [ ] 26. Create integration test suite
+- [x] 26. Create integration test suite
   - Test Bolt plugin integration
   - Test PuppetDB API calls with mock responses
   - Test Puppetserver API calls with mock responses
   - Test inventory aggregation
   - Test node linking
 
-- [ ] 27. Manual testing with real instances
+- [x] 27. Manual testing with real instances
   - Test with real Puppetserver instance
   - Test with real PuppetDB instance
   - Test with real Bolt inventory
   - Verify all UI pages work correctly
   - Document any remaining issues
 
-- [ ] 28. Performance testing
+- [x] 28. Performance testing
   - Test with large inventories (100+ nodes)
   - Test with large event datasets
   - Test with large catalogs
@@ -221,19 +257,19 @@ Version 0.3.0 focuses on **fixing critical implementation issues** and **complet
 
 ## Phase 8: Documentation (MEDIUM PRIORITY)
 
-- [ ] 29. Update API documentation
+- [x] 29. Update API documentation
   - Document correct API endpoints for each integration
   - Document authentication requirements
   - Document response formats
   - Document error codes
 
-- [ ] 30. Update troubleshooting guide
+- [x] 30. Update troubleshooting guide
   - Document common errors and solutions
   - Document how to enable debug logging
   - Document how to test API connectivity
   - Document configuration requirements
 
-- [ ] 31. Update architecture documentation
+- [x] 31. Update architecture documentation
   - Document plugin architecture
   - Document how integrations are registered
   - Document data flow through the system
@@ -246,19 +282,27 @@ Version 0.3.0 is complete when:
 1. ✅ Bolt is fully migrated to plugin architecture
 2. ✅ All three integrations (Bolt, PuppetDB, Puppetserver) are registered as plugins
 3. ✅ Inventory view shows nodes from all configured sources
-4. ✅ Certificates page displays certificates without errors
-5. ✅ Node detail page displays all tabs without errors:
-   - Facts from all sources
-   - Certificate status
-   - Node status
-   - Environments (real, not fake)
-   - Reports with correct metrics
-   - Catalog from both PuppetDB and Puppetserver
-6. ✅ Events page loads without hanging
-7. ✅ All API calls have comprehensive logging
-8. ✅ Error messages are actionable and helpful
-9. ✅ Integration tests pass
-10. ✅ Manual testing with real instances succeeds
+4. ✅ Events page loads without hanging
+5. ✅ All API calls have comprehensive logging
+6. ✅ Error messages are actionable and helpful
+7. ✅ Integration tests pass
+8. ✅ Manual testing with real instances succeeds
+9. ⬜ Navigation restructured with new Puppet page
+10. ⬜ Home page shows Puppet reports summary
+11. ⬜ Puppet page displays:
+    - Environments
+    - All node reports
+    - Certificates
+    - Puppetserver status components
+    - PuppetDB admin components
+12. ⬜ Node detail page restructured with new tab layout:
+    - Overview tab with general info and latest runs
+    - Facts tab with multi-source facts
+    - Actions tab with all execution operations
+    - Puppet tab with all Puppet-specific data
+13. ⬜ Managed Resources view implemented
+14. ⬜ Expert mode implemented across all components
+15. ⬜ All components show appropriate troubleshooting hints
 
 ## Out of Scope for 0.3.0
 
