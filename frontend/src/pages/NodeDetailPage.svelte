@@ -137,6 +137,7 @@
   let events = $state<any[]>([]);
   let eventsLoading = $state(false);
   let eventsError = $state<string | null>(null);
+  let eventsAbortController = $state<AbortController | null>(null);
 
   // Puppetserver data state (for lazy loading)
   let certificateStatus = $state<any | null>(null);
@@ -147,9 +148,10 @@
   let nodeStatusLoading = $state(false);
   let nodeStatusError = $state<string | null>(null);
 
-  let puppetserverFacts = $state<any | null>(null);
-  let puppetserverFactsLoading = $state(false);
-  let puppetserverFactsError = $state<string | null>(null);
+  // Puppetserver facts removed per task 16 requirements
+  // let puppetserverFacts = $state<any | null>(null);
+  // let puppetserverFactsLoading = $state(false);
+  // let puppetserverFactsError = $state<string | null>(null);
 
   let puppetdbFacts = $state<any | null>(null);
   let puppetdbFactsLoading = $state(false);
@@ -395,23 +397,71 @@
       return;
     }
 
+    // Cancel any existing request
+    if (eventsAbortController) {
+      eventsAbortController.abort();
+    }
+
+    // Create new abort controller for this request
+    eventsAbortController = new AbortController();
+    const currentController = eventsAbortController;
+
     eventsLoading = true;
     eventsError = null;
 
     try {
+      // Add timeout to prevent hanging (requirement 10.4)
+      // Default limit of 100 events is applied by backend (requirement 10.3)
       const data = await get<{ events: any[] }>(
-        `/api/integrations/puppetdb/nodes/${nodeId}/events`,
-        { maxRetries: 2 }
+        `/api/integrations/puppetdb/nodes/${nodeId}/events?limit=100`,
+        {
+          maxRetries: 1, // Reduce retries for events to fail faster
+          timeout: 30000, // 30 second timeout (requirement 10.4)
+          signal: currentController.signal // Allow cancellation
+        }
       );
+
+      // Check if this request was cancelled
+      if (currentController.signal.aborted) {
+        return;
+      }
 
       events = data.events || [];
       dataCache['events'] = events;
+
+      console.log(`Loaded ${events.length} events for node ${nodeId}`);
     } catch (err) {
+      // Ignore abort errors (user cancelled)
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Events request was cancelled');
+        return;
+      }
+
       eventsError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching events:', err);
+
+      // Provide more specific error message for timeout
+      if (err instanceof Error && err.message.includes('timeout')) {
+        eventsError = 'Request timed out after 30 seconds. Try filtering events to reduce the dataset size.';
+      }
+
       showError('Failed to load events', eventsError);
     } finally {
+      // Only clear loading if this is still the current request
+      if (currentController === eventsAbortController) {
+        eventsLoading = false;
+        eventsAbortController = null;
+      }
+    }
+  }
+
+  // Cancel events loading
+  function cancelEventsLoading(): void {
+    if (eventsAbortController) {
+      eventsAbortController.abort();
+      eventsAbortController = null;
       eventsLoading = false;
+      showInfo('Events loading cancelled');
     }
   }
 
@@ -434,8 +484,23 @@
 
       certificateStatus = data.certificate;
       dataCache['certificate-status'] = certificateStatus;
-    } catch (err) {
-      certificateError = err instanceof Error ? err.message : 'An unknown error occurred';
+    } catch (err: any) {
+      // Handle different error types with specific messages
+      if (err?.code === 'CERTIFICATE_NOT_FOUND') {
+        certificateError = `Certificate not found for node '${nodeId}'. This node may not be registered with Puppetserver yet.`;
+      } else if (err?.code === 'PUPPETSERVER_NOT_CONFIGURED') {
+        certificateError = 'Puppetserver integration is not configured. Please configure Puppetserver in the application settings.';
+      } else if (err?.code === 'PUPPETSERVER_NOT_INITIALIZED') {
+        certificateError = 'Puppetserver integration is not initialized. Please check the Puppetserver configuration and restart the application.';
+      } else if (err?.code === 'PUPPETSERVER_CONNECTION_ERROR') {
+        certificateError = `Unable to connect to Puppetserver: ${err.message || 'Connection failed'}. Please verify the Puppetserver URL and network connectivity.`;
+      } else if (err?.code === 'PUPPETSERVER_AUTH_ERROR') {
+        certificateError = `Authentication failed with Puppetserver: ${err.message || 'Invalid credentials'}. Please check the authentication token or certificates.`;
+      } else if (err?.code === 'PUPPETSERVER_CONFIG_ERROR') {
+        certificateError = `Puppetserver configuration error: ${err.message || 'Invalid configuration'}. Please review the Puppetserver settings.`;
+      } else {
+        certificateError = err instanceof Error ? err.message : 'An unknown error occurred while fetching certificate status';
+      }
       console.error('Error fetching certificate status:', err);
       // Don't show error toast - display inline error instead
     } finally {
@@ -471,33 +536,33 @@
     }
   }
 
-  // Lazy load Puppetserver Facts
-  async function fetchPuppetserverFacts(): Promise<void> {
-    // Check cache first
-    if (dataCache['puppetserver-facts']) {
-      puppetserverFacts = dataCache['puppetserver-facts'];
-      return;
-    }
+  // Puppetserver facts removed per task 16 requirements
+  // async function fetchPuppetserverFacts(): Promise<void> {
+  //   // Check cache first
+  //   if (dataCache['puppetserver-facts']) {
+  //     puppetserverFacts = dataCache['puppetserver-facts'];
+  //     return;
+  //   }
 
-    puppetserverFactsLoading = true;
-    puppetserverFactsError = null;
+  //   puppetserverFactsLoading = true;
+  //   puppetserverFactsError = null;
 
-    try {
-      const data = await get<{ facts: any }>(
-        `/api/integrations/puppetserver/nodes/${nodeId}/facts`,
-        { maxRetries: 2 }
-      );
+  //   try {
+  //     const data = await get<{ facts: any }>(
+  //       `/api/integrations/puppetserver/nodes/${nodeId}/facts`,
+  //       { maxRetries: 2 }
+  //     );
 
-      puppetserverFacts = data.facts;
-      dataCache['puppetserver-facts'] = puppetserverFacts;
-    } catch (err) {
-      puppetserverFactsError = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error fetching Puppetserver facts:', err);
-      // Don't show error toast - display inline error instead
-    } finally {
-      puppetserverFactsLoading = false;
-    }
-  }
+  //     puppetserverFacts = data.facts;
+  //     dataCache['puppetserver-facts'] = puppetserverFacts;
+  //   } catch (err) {
+  //     puppetserverFactsError = err instanceof Error ? err.message : 'An unknown error occurred';
+  //     console.error('Error fetching Puppetserver facts:', err);
+  //     // Don't show error toast - display inline error instead
+  //   } finally {
+  //     puppetserverFactsLoading = false;
+  //   }
+  // }
 
   // Lazy load PuppetDB Facts
   async function fetchPuppetDBFacts(): Promise<void> {
@@ -562,13 +627,27 @@
       await post(`/api/integrations/puppetserver/certificates/${nodeId}/sign`, undefined, {
         maxRetries: 0,
       });
-      showSuccess('Certificate signed successfully');
+      showSuccess('Certificate signed successfully. The node can now communicate with Puppetserver.');
 
       // Refresh certificate status
       delete dataCache['certificate-status'];
       await fetchCertificateStatus();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'An unknown error occurred';
+    } catch (err: any) {
+      let errorMsg = 'An unknown error occurred';
+
+      // Provide specific error messages based on error code
+      if (err?.code === 'CERTIFICATE_NOT_FOUND') {
+        errorMsg = 'Certificate not found. The certificate request may have been removed.';
+      } else if (err?.code === 'CERTIFICATE_ALREADY_SIGNED') {
+        errorMsg = 'This certificate has already been signed. Refresh the page to see the current status.';
+      } else if (err?.code === 'PUPPETSERVER_CONNECTION_ERROR') {
+        errorMsg = 'Unable to connect to Puppetserver. Please check the connection and try again.';
+      } else if (err?.code === 'PUPPETSERVER_AUTH_ERROR') {
+        errorMsg = 'Authentication failed. Please check the Puppetserver credentials.';
+      } else if (err?.message) {
+        errorMsg = err.message;
+      }
+
       console.error('Error signing certificate:', err);
       showError('Failed to sign certificate', errorMsg);
     }
@@ -576,22 +655,45 @@
 
   // Revoke certificate
   async function revokeCertificate(): Promise<void> {
-    if (!confirm('Are you sure you want to revoke this certificate? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to revoke this certificate?\n\nThis action cannot be undone and will prevent the node from communicating with Puppetserver until a new certificate is issued.')) {
       return;
     }
 
     try {
       showInfo('Revoking certificate...');
-      await fetch(`/api/integrations/puppetserver/certificates/${nodeId}`, {
+      const response = await fetch(`/api/integrations/puppetserver/certificates/${nodeId}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
-      showSuccess('Certificate revoked successfully');
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      showSuccess('Certificate revoked successfully. The node will no longer be able to communicate with Puppetserver.');
 
       // Refresh certificate status
       delete dataCache['certificate-status'];
       await fetchCertificateStatus();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'An unknown error occurred';
+    } catch (err: any) {
+      let errorMsg = 'An unknown error occurred';
+
+      // Provide specific error messages based on error code or type
+      if (err?.code === 'CERTIFICATE_NOT_FOUND') {
+        errorMsg = 'Certificate not found. It may have already been revoked or removed.';
+      } else if (err?.code === 'CERTIFICATE_NOT_SIGNED') {
+        errorMsg = 'Cannot revoke a certificate that is not signed. Only signed certificates can be revoked.';
+      } else if (err?.code === 'PUPPETSERVER_CONNECTION_ERROR') {
+        errorMsg = 'Unable to connect to Puppetserver. Please check the connection and try again.';
+      } else if (err?.code === 'PUPPETSERVER_AUTH_ERROR') {
+        errorMsg = 'Authentication failed. Please check the Puppetserver credentials.';
+      } else if (err?.message) {
+        errorMsg = err.message;
+      }
+
       console.error('Error revoking certificate:', err);
       showError('Failed to revoke certificate', errorMsg);
     }
@@ -629,11 +731,8 @@
   async function loadTabData(tabId: TabId): Promise<void> {
     switch (tabId) {
       case 'facts':
-        // Load facts from all sources in parallel
-        await Promise.all([
-          fetchPuppetDBFacts(),
-          fetchPuppetserverFacts(),
-        ]);
+        // Load facts from PuppetDB only (Puppetserver facts removed per task 16)
+        await fetchPuppetDBFacts();
         break;
       case 'puppet-reports':
         await fetchPuppetReports();
@@ -1084,9 +1183,6 @@
             puppetdbFacts={puppetdbFacts}
             puppetdbLoading={puppetdbFactsLoading}
             puppetdbError={puppetdbFactsError}
-            puppetserverFacts={puppetserverFacts}
-            puppetserverLoading={puppetserverFactsLoading}
-            puppetserverError={puppetserverFactsError}
           />
         </div>
       {/if}
@@ -1290,8 +1386,20 @@
         </div>
 
         {#if eventsLoading}
-          <div class="flex justify-center py-12">
-            <LoadingSpinner size="lg" message="Loading events..." />
+          <div class="rounded-lg border border-gray-200 bg-white p-8 dark:border-gray-700 dark:bg-gray-800">
+            <div class="flex flex-col items-center gap-4 py-8">
+              <LoadingSpinner size="lg" message="Loading events..." />
+              <p class="text-sm text-gray-600 dark:text-gray-400">
+                This may take a moment for nodes with many events...
+              </p>
+              <button
+                type="button"
+                onclick={cancelEventsLoading}
+                class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         {:else if eventsError}
           <ErrorAlert
@@ -1313,11 +1421,28 @@
       <!-- Certificate Status Tab -->
       {#if activeTab === 'certificate-status'}
         <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <div class="mb-4 flex items-center gap-3">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Certificate Status</h2>
-            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-              Puppetserver
-            </span>
+          <div class="mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Certificate Status</h2>
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                Puppetserver
+              </span>
+            </div>
+            {#if !certificateLoading && !certificateError}
+              <button
+                type="button"
+                class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                onclick={async () => {
+                  delete dataCache['certificate-status'];
+                  await fetchCertificateStatus();
+                }}
+                title="Refresh certificate status"
+              >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            {/if}
           </div>
 
           {#if certificateLoading}
@@ -1325,16 +1450,63 @@
               <LoadingSpinner size="lg" message="Loading certificate status..." />
             </div>
           {:else if certificateError}
-            <ErrorAlert
-              message="Failed to load certificate status"
-              details={certificateError}
-              onRetry={fetchCertificateStatus}
-            />
+            <div class="space-y-4">
+              <ErrorAlert
+                message="Failed to load certificate status"
+                details={certificateError}
+                onRetry={fetchCertificateStatus}
+              />
+
+              <!-- Troubleshooting guidance -->
+              <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                <div class="flex items-start gap-3">
+                  <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div class="flex-1">
+                    <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Troubleshooting Tips</h4>
+                    <ul class="text-sm text-blue-800 dark:text-blue-400 space-y-1 list-disc list-inside">
+                      <li>Verify that Puppetserver is running and accessible</li>
+                      <li>Check that the node certname matches the certificate name in Puppetserver</li>
+                      <li>Ensure the Puppetserver integration is properly configured with valid credentials</li>
+                      <li>If the node hasn't registered yet, it needs to run the Puppet agent first</li>
+                      <li>Check the Puppetserver logs for any certificate-related errors</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           {:else if !certificateStatus}
-            <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
-              <p class="text-gray-500 dark:text-gray-400">
-                No certificate found for this node.
-              </p>
+            <div class="space-y-4">
+              <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
+                <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p class="text-gray-900 dark:text-white font-medium mb-2">
+                  No certificate found for this node
+                </p>
+                <p class="text-sm text-gray-500 dark:text-gray-400">
+                  This node has not registered with Puppetserver yet.
+                </p>
+              </div>
+
+              <!-- Help information -->
+              <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+                <div class="flex items-start gap-3">
+                  <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div class="flex-1">
+                    <h4 class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">How to register this node</h4>
+                    <ol class="text-sm text-blue-800 dark:text-blue-400 space-y-1 list-decimal list-inside">
+                      <li>Install the Puppet agent on the node</li>
+                      <li>Configure the agent to point to your Puppetserver</li>
+                      <li>Run <code class="px-1 py-0.5 bg-blue-100 dark:bg-blue-900 rounded font-mono text-xs">puppet agent -t</code> to generate a certificate request</li>
+                      <li>Sign the certificate request in Puppetserver or return to this page to sign it</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
             </div>
           {:else}
             <div class="space-y-6">
@@ -1349,12 +1521,25 @@
                   <div>
                     <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Status</dt>
                     <dd class="mt-1">
-                      <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {
+                      <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium {
                         certificateStatus.status === 'signed' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400' :
                         certificateStatus.status === 'requested' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400' :
                         'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'
                       }">
-                        {certificateStatus.status}
+                        {#if certificateStatus.status === 'signed'}
+                          <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                          </svg>
+                        {:else if certificateStatus.status === 'requested'}
+                          <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+                          </svg>
+                        {:else}
+                          <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                          </svg>
+                        {/if}
+                        <span class="capitalize">{certificateStatus.status}</span>
                       </span>
                     </dd>
                   </div>
@@ -1387,23 +1572,74 @@
                 </dl>
               </div>
 
+              <!-- Status-specific information -->
+              {#if certificateStatus.status === 'requested'}
+                <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
+                  <div class="flex items-start gap-3">
+                    <svg class="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div class="flex-1">
+                      <h4 class="text-sm font-semibold text-yellow-900 dark:text-yellow-300 mb-1">Certificate Pending</h4>
+                      <p class="text-sm text-yellow-800 dark:text-yellow-400">
+                        This certificate request is waiting to be signed. Sign it below to allow this node to communicate with Puppetserver.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              {:else if certificateStatus.status === 'revoked'}
+                <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                  <div class="flex items-start gap-3">
+                    <svg class="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div class="flex-1">
+                      <h4 class="text-sm font-semibold text-red-900 dark:text-red-300 mb-1">Certificate Revoked</h4>
+                      <p class="text-sm text-red-800 dark:text-red-400">
+                        This certificate has been revoked and can no longer be used. The node will not be able to communicate with Puppetserver until a new certificate is issued.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              {:else if certificateStatus.status === 'signed'}
+                <div class="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-800 dark:bg-green-900/20">
+                  <div class="flex items-start gap-3">
+                    <svg class="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div class="flex-1">
+                      <h4 class="text-sm font-semibold text-green-900 dark:text-green-300 mb-1">Certificate Active</h4>
+                      <p class="text-sm text-green-800 dark:text-green-400">
+                        This certificate is signed and active. The node can communicate with Puppetserver.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+
               <!-- Certificate Operations -->
               <div class="flex gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
                 {#if certificateStatus.status === 'requested'}
                   <button
                     type="button"
-                    class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+                    class="inline-flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     onclick={signCertificate}
                   >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                     Sign Certificate
                   </button>
                 {/if}
                 {#if certificateStatus.status === 'signed'}
                   <button
                     type="button"
-                    class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                    class="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                     onclick={revokeCertificate}
                   >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                     Revoke Certificate
                   </button>
                 {/if}

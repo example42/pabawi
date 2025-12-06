@@ -20,13 +20,6 @@
     } | null;
     puppetdbLoading?: boolean;
     puppetdbError?: string | null;
-
-    puppetserverFacts?: {
-      facts: Record<string, unknown>;
-      timestamp: string;
-    } | null;
-    puppetserverLoading?: boolean;
-    puppetserverError?: string | null;
   }
 
   let {
@@ -37,13 +30,10 @@
     puppetdbFacts = null,
     puppetdbLoading = false,
     puppetdbError = null,
-    puppetserverFacts = null,
-    puppetserverLoading = false,
-    puppetserverError = null,
   }: Props = $props();
 
   type FactCategory = 'system' | 'network' | 'hardware' | 'custom';
-  type SourceType = 'bolt' | 'puppetdb' | 'puppetserver';
+  type SourceType = 'bolt' | 'puppetdb';
 
   interface CategorizedFacts {
     system: Record<string, unknown>;
@@ -107,14 +97,11 @@
       return categorizeFacts(boltFacts.facts);
     } else if (activeSource === 'puppetdb' && puppetdbFacts) {
       return categorizeFacts(puppetdbFacts.facts);
-    } else if (activeSource === 'puppetserver' && puppetserverFacts) {
-      return categorizeFacts(puppetserverFacts.facts);
     } else if (activeSource === 'all') {
       // Merge all sources
       const merged: Record<string, unknown> = {};
       if (boltFacts) Object.assign(merged, boltFacts.facts);
       if (puppetdbFacts) Object.assign(merged, puppetdbFacts.facts);
-      if (puppetserverFacts) Object.assign(merged, puppetserverFacts.facts);
       return categorizeFacts(merged);
     }
     return { system: {}, network: {}, hardware: {}, custom: {} };
@@ -132,8 +119,6 @@
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
       case 'puppetdb':
         return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
-      case 'puppetserver':
-        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
       default:
         return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
     }
@@ -146,8 +131,6 @@
         return 'Bolt';
       case 'puppetdb':
         return 'PuppetDB';
-      case 'puppetserver':
-        return 'Puppetserver';
       default:
         return 'Unknown';
     }
@@ -156,19 +139,17 @@
   // Check if any facts are available
   const hasAnyFacts = $derived(
     (boltFacts && Object.keys(boltFacts.facts).length > 0) ||
-    (puppetdbFacts && Object.keys(puppetdbFacts.facts).length > 0) ||
-    (puppetserverFacts && Object.keys(puppetserverFacts.facts).length > 0)
+    (puppetdbFacts && Object.keys(puppetdbFacts.facts).length > 0)
   );
 
   // Check if any source is loading
-  const anyLoading = $derived(boltLoading || puppetdbLoading || puppetserverLoading);
+  const anyLoading = $derived(boltLoading || puppetdbLoading);
 
   // Count available sources
   const availableSources = $derived(() => {
     const sources: SourceType[] = [];
     if (boltFacts && Object.keys(boltFacts.facts).length > 0) sources.push('bolt');
     if (puppetdbFacts && Object.keys(puppetdbFacts.facts).length > 0) sources.push('puppetdb');
-    if (puppetserverFacts && Object.keys(puppetserverFacts.facts).length > 0) sources.push('puppetserver');
     return sources;
   });
 
@@ -190,6 +171,102 @@
       expandedCategories.add(category);
     }
     expandedCategories = new Set(expandedCategories);
+  }
+
+  // View mode: 'categorized' or 'yaml'
+  let viewMode = $state<'categorized' | 'yaml'>('categorized');
+
+  // Get current facts and source label
+  function getCurrentFactsAndSource(): { facts: Record<string, unknown>; sourceLabel: string; displayLabel: string } {
+    let factsToExport: Record<string, unknown> = {};
+    let sourceLabel = '';
+    let displayLabel = '';
+
+    if (activeSource === 'bolt' && boltFacts) {
+      factsToExport = boltFacts.facts;
+      sourceLabel = 'bolt';
+      displayLabel = 'Bolt';
+    } else if (activeSource === 'puppetdb' && puppetdbFacts) {
+      factsToExport = puppetdbFacts.facts;
+      sourceLabel = 'puppetdb';
+      displayLabel = 'PuppetDB';
+    } else if (activeSource === 'all') {
+      // Merge all sources
+      if (boltFacts) Object.assign(factsToExport, boltFacts.facts);
+      if (puppetdbFacts) Object.assign(factsToExport, puppetdbFacts.facts);
+      sourceLabel = 'all-sources';
+      displayLabel = 'All Sources';
+    }
+
+    return { facts: factsToExport, sourceLabel, displayLabel };
+  }
+
+  // Get YAML representation of current facts
+  const yamlOutput = $derived(() => {
+    const { facts } = getCurrentFactsAndSource();
+    return convertToYAML(facts);
+  });
+
+  // YAML export functionality (requirement 4.5)
+  function exportToYAML(): void {
+    const { facts, sourceLabel } = getCurrentFactsAndSource();
+    const yaml = convertToYAML(facts);
+
+    // Create a blob and download
+    const blob = new Blob([yaml], { type: 'text/yaml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `facts-${sourceLabel}-${new Date().toISOString().split('T')[0]}.yaml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Copy YAML to clipboard
+  async function copyYAMLToClipboard(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(yamlOutput());
+      // You could add a toast notification here
+      alert('YAML copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy YAML:', err);
+      alert('Failed to copy to clipboard');
+    }
+  }
+
+  // Simple YAML converter
+  function convertToYAML(obj: Record<string, unknown>, indent = 0): string {
+    const spaces = '  '.repeat(indent);
+    let yaml = '';
+
+    for (const [key, value] of Object.entries(obj)) {
+      if (value === null || value === undefined) {
+        yaml += `${spaces}${key}: null\n`;
+      } else if (typeof value === 'object' && !Array.isArray(value)) {
+        yaml += `${spaces}${key}:\n`;
+        yaml += convertToYAML(value as Record<string, unknown>, indent + 1);
+      } else if (Array.isArray(value)) {
+        yaml += `${spaces}${key}:\n`;
+        for (const item of value) {
+          if (typeof item === 'object') {
+            yaml += `${spaces}  -\n`;
+            yaml += convertToYAML(item as Record<string, unknown>, indent + 2);
+          } else {
+            yaml += `${spaces}  - ${item}\n`;
+          }
+        }
+      } else if (typeof value === 'string') {
+        // Escape strings that need quotes
+        const needsQuotes = value.includes(':') || value.includes('#') || value.includes('\n');
+        yaml += `${spaces}${key}: ${needsQuotes ? `"${value.replace(/"/g, '\\"')}"` : value}\n`;
+      } else {
+        yaml += `${spaces}${key}: ${value}\n`;
+      }
+    }
+
+    return yaml;
   }
 </script>
 
@@ -217,7 +294,7 @@
   {/if}
 
   <!-- Error Messages with Graceful Degradation -->
-  {#if (boltError || puppetdbError || puppetserverError) && hasAnyFacts}
+  {#if (boltError || puppetdbError) && hasAnyFacts}
     <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/50 dark:bg-yellow-900/20">
       <div class="flex items-start gap-3">
         <svg class="h-5 w-5 flex-shrink-0 text-yellow-600 dark:text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -234,9 +311,6 @@
             {#if puppetdbError}
               <p>• PuppetDB: {puppetdbError}</p>
             {/if}
-            {#if puppetserverError}
-              <p>• Puppetserver: {puppetserverError}</p>
-            {/if}
           </div>
           <p class="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
             Displaying facts from available sources. The system continues to operate normally.
@@ -246,8 +320,80 @@
     </div>
   {/if}
 
+  <!-- View Mode Toggle and Actions (requirement 4.5) -->
+  {#if hasAnyFacts}
+    <div class="flex items-center justify-between gap-4">
+      <!-- Current Source Indicator -->
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-600 dark:text-gray-400">Viewing facts from:</span>
+        <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {
+          activeSource === 'all'
+            ? 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
+            : activeSource === 'bolt'
+            ? getSourceBadgeClass('bolt')
+            : getSourceBadgeClass('puppetdb')
+        }">
+          {activeSource === 'all' ? 'All Sources' : activeSource === 'bolt' ? 'Bolt' : 'PuppetDB'}
+        </span>
+      </div>
+
+      <!-- View Mode and Export Actions -->
+      <div class="flex items-center gap-2">
+        <!-- View Mode Toggle -->
+        <div class="inline-flex rounded-lg border border-gray-300 dark:border-gray-600">
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm font-medium rounded-l-lg transition-colors {viewMode === 'categorized' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+            onclick={() => viewMode = 'categorized'}
+            title="View facts in categorized format"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm font-medium rounded-r-lg transition-colors {viewMode === 'yaml' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+            onclick={() => viewMode = 'yaml'}
+            title="View facts in YAML format"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Export Actions (only show in YAML mode) -->
+        {#if viewMode === 'yaml'}
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            onclick={copyYAMLToClipboard}
+            title="Copy YAML to clipboard"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Copy
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            onclick={exportToYAML}
+            title="Download facts as YAML file"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download
+          </button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   <!-- Source Information Cards -->
-  <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
     <!-- Bolt Facts Card -->
     <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <div class="mb-2 flex items-center justify-between">
@@ -320,36 +466,6 @@
       {/if}
     </div>
 
-    <!-- Puppetserver Facts Card -->
-    <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-      <div class="mb-2 flex items-center justify-between">
-        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetserver')}">
-          {getSourceLabel('puppetserver')}
-        </span>
-      </div>
-      {#if puppetserverLoading}
-        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <LoadingSpinner size="sm" />
-          <span>Loading...</span>
-        </div>
-      {:else if puppetserverError}
-        <div class="space-y-1">
-          <p class="text-xs text-red-600 dark:text-red-400">Error</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{puppetserverError}</p>
-        </div>
-      {:else if puppetserverFacts}
-        <div class="space-y-1">
-          <p class="text-sm text-gray-900 dark:text-white">
-            {Object.keys(puppetserverFacts.facts).length} facts
-          </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
-            {formatTimestamp(puppetserverFacts.timestamp)}
-          </p>
-        </div>
-      {:else}
-        <p class="text-xs text-gray-500 dark:text-gray-400">No facts available</p>
-      {/if}
-    </div>
   </div>
 
   <!-- Facts Display -->
@@ -371,6 +487,23 @@
           Gather Facts
         </button>
       {/if}
+    </div>
+  {:else if viewMode === 'yaml'}
+    <!-- YAML View -->
+    <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+      <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-medium text-gray-900 dark:text-white">
+            YAML Output
+          </h3>
+          <span class="text-xs text-gray-500 dark:text-gray-400">
+            {Object.keys(getCurrentFactsAndSource().facts).length} facts from {getCurrentFactsAndSource().displayLabel}
+          </span>
+        </div>
+      </div>
+      <div class="p-4">
+        <pre class="overflow-x-auto rounded-lg bg-gray-900 p-4 text-sm text-gray-100"><code>{yamlOutput()}</code></pre>
+      </div>
     </div>
   {:else}
     <!-- Categorized Facts Display -->

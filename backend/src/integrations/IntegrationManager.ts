@@ -16,6 +16,7 @@ import type {
   Action,
 } from "./types";
 import type { Node, Facts, ExecutionResult } from "../bolt/types";
+import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
 
 /**
  * Health check cache entry
@@ -65,6 +66,7 @@ export class IntegrationManager {
   private executionTools = new Map<string, ExecutionToolPlugin>();
   private informationSources = new Map<string, InformationSourcePlugin>();
   private initialized = false;
+  private nodeLinkingService: NodeLinkingService;
 
   // Health check scheduling
   private healthCheckCache = new Map<string, HealthCheckCacheEntry>();
@@ -78,6 +80,7 @@ export class IntegrationManager {
   }) {
     this.healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 60000; // Default: 1 minute
     this.healthCheckCacheTTL = options?.healthCheckCacheTTL ?? 300000; // Default: 5 minutes
+    this.nodeLinkingService = new NodeLinkingService(this);
     this.log("IntegrationManager created");
   }
 
@@ -221,6 +224,30 @@ export class IntegrationManager {
   }
 
   /**
+   * Get linked inventory from all information sources
+   *
+   * Queries all information sources, links nodes across sources, and returns
+   * nodes with source attribution and multi-source indicators.
+   *
+   * @returns Linked inventory with source attribution
+   */
+  async getLinkedInventory(): Promise<{
+    nodes: LinkedNode[];
+    sources: AggregatedInventory["sources"];
+  }> {
+    // Get aggregated inventory
+    const aggregated = await this.getAggregatedInventory();
+
+    // Link nodes across sources
+    const linkedNodes = this.nodeLinkingService.linkNodes(aggregated.nodes);
+
+    return {
+      nodes: linkedNodes,
+      sources: aggregated.sources,
+    };
+  }
+
+  /**
    * Get aggregated inventory from all information sources
    *
    * Queries all information sources in parallel and combines results.
@@ -229,6 +256,18 @@ export class IntegrationManager {
    * @returns Aggregated inventory with source attribution
    */
   async getAggregatedInventory(): Promise<AggregatedInventory> {
+    this.log("=== Starting getAggregatedInventory ===");
+    this.log(
+      `Total information sources registered: ${String(this.informationSources.size)}`,
+    );
+
+    // Log all registered information sources
+    for (const [name, source] of this.informationSources.entries()) {
+      this.log(
+        `  - Source: ${name}, Type: ${source.type}, Initialized: ${String(source.isInitialized())}`,
+      );
+    }
+
     const sources: AggregatedInventory["sources"] = {};
     const allNodes: Node[] = [];
     const now = new Date().toISOString();
@@ -236,8 +275,11 @@ export class IntegrationManager {
     // Get inventory from all sources in parallel
     const inventoryPromises = Array.from(this.informationSources.entries()).map(
       async ([name, source]) => {
+        this.log(`Processing source: ${name}`);
+
         try {
           if (!source.isInitialized()) {
+            this.log(`Source '${name}' is not initialized - skipping`);
             sources[name] = {
               nodeCount: 0,
               lastSync: now,
@@ -246,7 +288,17 @@ export class IntegrationManager {
             return [];
           }
 
+          this.log(`Calling getInventory() on source '${name}'`);
           const nodes = await source.getInventory();
+          this.log(`Source '${name}' returned ${String(nodes.length)} nodes`);
+
+          // Log sample of nodes for debugging
+          if (nodes.length > 0) {
+            const sampleNode = nodes[0];
+            this.log(
+              `Sample node from '${name}': ${JSON.stringify(sampleNode).substring(0, 200)}`,
+            );
+          }
 
           // Add source attribution to each node
           const nodesWithSource = nodes.map((node) => ({
@@ -260,6 +312,9 @@ export class IntegrationManager {
             status: "healthy",
           };
 
+          this.log(
+            `Successfully processed ${String(nodes.length)} nodes from '${name}'`,
+          );
           return nodesWithSource;
         } catch (error) {
           this.logError(`Failed to get inventory from '${name}'`, error);
@@ -274,19 +329,54 @@ export class IntegrationManager {
     );
 
     const results = await Promise.all(inventoryPromises);
+    this.log(`Received results from ${String(results.length)} sources`);
 
     // Flatten all nodes
     for (const nodes of results) {
+      this.log(`Adding ${String(nodes.length)} nodes to allNodes array`);
       allNodes.push(...nodes);
     }
 
+    this.log(`Total nodes before deduplication: ${String(allNodes.length)}`);
+
     // Deduplicate nodes by ID (prefer higher priority sources)
     const uniqueNodes = this.deduplicateNodes(allNodes);
+    this.log(`Total nodes after deduplication: ${String(uniqueNodes.length)}`);
+
+    // Log source breakdown
+    const sourceBreakdown: Record<string, number> = {};
+    for (const node of uniqueNodes) {
+      const nodeSource =
+        (node as Node & { source?: string }).source ?? "unknown";
+      sourceBreakdown[nodeSource] = (sourceBreakdown[nodeSource] ?? 0) + 1;
+    }
+    this.log("Node breakdown by source:");
+    for (const [source, count] of Object.entries(sourceBreakdown)) {
+      this.log(`  - ${source}: ${String(count)} nodes`);
+    }
+
+    this.log("=== Completed getAggregatedInventory ===");
 
     return {
       nodes: uniqueNodes,
       sources,
     };
+  }
+
+  /**
+   * Get linked data for a specific node
+   *
+   * Queries all information sources for the node, links data across sources,
+   * and returns aggregated data with source attribution.
+   *
+   * @param nodeId - Node identifier
+   * @returns Linked node data from all sources
+   */
+  async getLinkedNodeData(nodeId: string): Promise<{
+    node: LinkedNode;
+    dataBySource: Record<string, unknown>;
+  }> {
+    return await this.nodeLinkingService.getLinkedNodeData(nodeId);
   }
 
   /**

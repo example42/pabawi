@@ -86,13 +86,26 @@ export function createPuppetRouter(
         void (async (): Promise<void> => {
           try {
             // Set up streaming callback if expert mode is enabled and streaming manager is available
-            const streamingCallback = expertMode && streamingManager ? {
-              onCommand: (cmd: string): void => { streamingManager.emitCommand(executionId, cmd); },
-              onStdout: (chunk: string): void => { streamingManager.emitStdout(executionId, chunk); },
-              onStderr: (chunk: string): void => { streamingManager.emitStderr(executionId, chunk); },
-            } : undefined;
+            const streamingCallback =
+              expertMode && streamingManager
+                ? {
+                    onCommand: (cmd: string): void => {
+                      streamingManager.emitCommand(executionId, cmd);
+                    },
+                    onStdout: (chunk: string): void => {
+                      streamingManager.emitStdout(executionId, chunk);
+                    },
+                    onStderr: (chunk: string): void => {
+                      streamingManager.emitStderr(executionId, chunk);
+                    },
+                  }
+                : undefined;
 
-            const result = await boltService.runPuppetAgent(nodeId, config, streamingCallback);
+            const result = await boltService.runPuppetAgent(
+              nodeId,
+              config,
+              streamingCallback,
+            );
 
             // Update execution record with results
             // Include stdout/stderr when expert mode is enabled
@@ -113,7 +126,8 @@ export function createPuppetRouter(
           } catch (error) {
             console.error("Error executing Puppet run:", error);
 
-            const errorMessage = error instanceof Error ? error.message : "Unknown error";
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
 
             // Update execution record with error
             await executionRepository.update(executionId, {

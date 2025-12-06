@@ -15,6 +15,7 @@ export interface ReportMetrics {
     failed_to_restart: number;
     restarted: number;
     changed: number;
+    corrective_change?: number; // PuppetDB-specific: changes made to correct drift
     out_of_sync: number;
     scheduled: number;
   };
@@ -25,6 +26,7 @@ export interface ReportMetrics {
   events: {
     success: number;
     failure: number;
+    noop?: number; // PuppetDB-specific: events that would have changed in noop mode
     total: number;
   };
 }

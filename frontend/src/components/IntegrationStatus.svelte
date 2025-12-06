@@ -5,10 +5,12 @@
   interface IntegrationStatus {
     name: string;
     type: 'execution' | 'information' | 'both';
-    status: 'connected' | 'disconnected' | 'error' | 'not_configured';
+    status: 'connected' | 'disconnected' | 'error' | 'not_configured' | 'degraded';
     lastCheck: string;
     message?: string;
     details?: unknown;
+    workingCapabilities?: string[];
+    failingCapabilities?: string[];
   }
 
   interface Props {
@@ -24,6 +26,8 @@
     switch (status) {
       case 'connected':
         return 'success';
+      case 'degraded':
+        return 'running'; // Use warning/running badge for degraded
       case 'error':
       case 'disconnected':
         return 'failed';
@@ -156,9 +160,11 @@
               <div
                 class="flex h-10 w-10 items-center justify-center rounded-lg {integration.status === 'connected'
                   ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400'
-                  : integration.status === 'not_configured'
-                    ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                    : 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400'}"
+                  : integration.status === 'degraded'
+                    ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-400'
+                    : integration.status === 'not_configured'
+                      ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                      : 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400'}"
               >
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -190,14 +196,45 @@
               </span>
             </div>
 
+            {#if integration.status === 'degraded' && (integration.workingCapabilities || integration.failingCapabilities)}
+              <div class="mt-3 space-y-2">
+                {#if integration.workingCapabilities && integration.workingCapabilities.length > 0}
+                  <div>
+                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Working:</p>
+                    <div class="flex flex-wrap gap-1">
+                      {#each integration.workingCapabilities as capability}
+                        <span class="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20 dark:bg-green-900/20 dark:text-green-400">
+                          {capability}
+                        </span>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+                {#if integration.failingCapabilities && integration.failingCapabilities.length > 0}
+                  <div>
+                    <p class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Failing:</p>
+                    <div class="flex flex-wrap gap-1">
+                      {#each integration.failingCapabilities as capability}
+                        <span class="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/20 dark:bg-red-900/20 dark:text-red-400">
+                          {capability}
+                        </span>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
             {#if integration.message}
               <div class="mt-2">
                 <p
                   class="text-xs {integration.status === 'connected'
                     ? 'text-gray-600 dark:text-gray-400'
-                    : integration.status === 'not_configured'
-                      ? 'text-gray-600 dark:text-gray-400'
-                      : 'text-red-600 dark:text-red-400'}"
+                    : integration.status === 'degraded'
+                      ? 'text-yellow-600 dark:text-yellow-400'
+                      : integration.status === 'not_configured'
+                        ? 'text-gray-600 dark:text-gray-400'
+                        : 'text-red-600 dark:text-red-400'}"
                 >
                   {integration.message}
                 </p>

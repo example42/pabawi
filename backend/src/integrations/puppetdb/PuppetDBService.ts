@@ -433,10 +433,7 @@ export class PuppetDBService
    * @param filters - Event filters
    * @returns Array of events matching the filters
    */
-  async queryEvents(
-    nodeId: string,
-    filters: EventFilters,
-  ): Promise<Event[]> {
+  async queryEvents(nodeId: string, filters: EventFilters): Promise<Event[]> {
     return await this.getNodeEvents(nodeId, filters);
   }
 
@@ -483,7 +480,9 @@ export class PuppetDBService
 
       const firstResult = result[0] as Record<string, unknown>;
       const hasMetrics = Boolean(firstResult.metrics);
-      this.log(`Fetched report '${reportHash}', has metrics: ${String(hasMetrics)}`);
+      this.log(
+        `Fetched report '${reportHash}', has metrics: ${String(hasMetrics)}`,
+      );
 
       // Transform the report
       const report = this.transformReport(result[0]);
@@ -533,6 +532,11 @@ export class PuppetDBService
       // Order by producer_timestamp descending to get newest first
       const pqlQuery = `["=", "certname", "${nodeId}"]`;
 
+      this.log(
+        `Querying PuppetDB reports for node '${nodeId}' with limit ${String(limit)}`,
+      );
+      this.log(`PQL Query: ${pqlQuery}`);
+
       const result = await this.executeWithResilience(async () => {
         return await client.query("pdb/query/v4/reports", pqlQuery, {
           limit: limit,
@@ -545,11 +549,120 @@ export class PuppetDBService
           `Unexpected response format from PuppetDB reports endpoint for node '${nodeId}'`,
           "warn",
         );
+        this.log(`Result type: ${typeof result}`);
         return [];
       }
 
       const reportCount = result.length;
       this.log(`Fetched ${String(reportCount)} reports for node '${nodeId}'`);
+
+      // Log first report structure for debugging
+      if (reportCount > 0) {
+        const firstReport = result[0] as Record<string, unknown>;
+        this.log(`First report hash: ${String(firstReport.hash)}`);
+        this.log(
+          `First report has metrics: ${String(Boolean(firstReport.metrics))}`,
+        );
+        if (firstReport.metrics) {
+          this.log(`First report metrics type: ${typeof firstReport.metrics}`);
+          if (Array.isArray(firstReport.metrics)) {
+            this.log(
+              `First report metrics is array with ${String(firstReport.metrics.length)} items`,
+            );
+          } else if (typeof firstReport.metrics === "object") {
+            const metricsObj = firstReport.metrics as Record<string, unknown>;
+            this.log(
+              `First report metrics keys: ${Object.keys(metricsObj).join(", ")}`,
+            );
+
+            // Check if metrics is just an href reference (requirement 8.2)
+            // PuppetDB may return metrics as {"href": "/pdb/query/v4/reports/hash/metrics"}
+            // instead of embedded data
+            if (metricsObj.href && !metricsObj.data) {
+              this.log(
+                `Metrics returned as href reference: ${typeof metricsObj.href === "string" ? metricsObj.href : JSON.stringify(metricsObj.href)}`,
+                "warn",
+              );
+              this.log(
+                `Fetching metrics data from href for report ${String(firstReport.hash)}`,
+              );
+
+              // Fetch metrics data from href
+              try {
+                const metricsData = await this.executeWithResilience(
+                  async () => {
+                    return await client.get(String(metricsObj.href));
+                  },
+                );
+
+                if (Array.isArray(metricsData)) {
+                  this.log(
+                    `Successfully fetched ${String(metricsData.length)} metrics from href`,
+                  );
+                  // Replace href reference with actual data
+                  firstReport.metrics = { data: metricsData };
+                } else {
+                  this.log(
+                    `Unexpected metrics data format from href: ${typeof metricsData}`,
+                    "warn",
+                  );
+                }
+              } catch (error) {
+                this.logError(
+                  `Failed to fetch metrics from href for report ${String(firstReport.hash)}`,
+                  error,
+                );
+                // Continue with empty metrics rather than failing the entire request
+              }
+            }
+          }
+        }
+      }
+
+      // Fetch metrics for all reports that have href references (requirement 8.2)
+      // This ensures all reports have embedded metrics data for proper parsing
+      for (const report of result) {
+        const reportObj = report as Record<string, unknown>;
+
+        if (reportObj.metrics && typeof reportObj.metrics === "object") {
+          const metricsObj = reportObj.metrics as Record<string, unknown>;
+
+          // Check if metrics is just an href reference
+          if (metricsObj.href && !metricsObj.data) {
+            this.log(
+              `Fetching metrics for report ${String(reportObj.hash)} from href`,
+            );
+
+            try {
+              const metricsData = await this.executeWithResilience(async () => {
+                return await client.get(String(metricsObj.href));
+              });
+
+              if (Array.isArray(metricsData)) {
+                // Replace href reference with actual data
+                reportObj.metrics = { data: metricsData };
+                this.log(
+                  `Successfully fetched ${String(metricsData.length)} metrics for report ${String(reportObj.hash)}`,
+                );
+              } else {
+                this.log(
+                  `Unexpected metrics data format from href for report ${String(reportObj.hash)}: ${typeof metricsData}`,
+                  "warn",
+                );
+                // Set empty metrics to avoid parsing errors (requirement 8.4)
+                reportObj.metrics = { data: [] };
+              }
+            } catch (error) {
+              this.logError(
+                `Failed to fetch metrics from href for report ${String(reportObj.hash)}`,
+                error,
+              );
+              // Set empty metrics to handle missing metrics gracefully (requirement 8.4)
+              reportObj.metrics = { data: [] };
+            }
+          }
+        }
+      }
 
       // Transform reports
       const reports = result.map((report) => this.transformReport(report));
@@ -607,17 +720,73 @@ export class PuppetDBService
       // Build PQL query to get catalog for this node
       const pqlQuery = `["=", "certname", "${nodeId}"]`;
 
+      this.log(`Querying PuppetDB catalogs for node '${nodeId}'`);
+      this.log(`PQL Query: ${pqlQuery}`);
+
       const result = await this.executeWithResilience(async () => {
         return await client.query("pdb/query/v4/catalogs", pqlQuery);
       });
+
+      this.log(`Catalog query result type: ${typeof result}`);
+      this.log(
+        `Catalog query result is array: ${String(Array.isArray(result))}`,
+      );
 
       if (!Array.isArray(result) || result.length === 0) {
         this.log(`Catalog not found for node '${nodeId}'`, "warn");
         return null;
       }
 
+      this.log(`Fetched catalog for node '${nodeId}'`);
+
+      // Log the raw catalog structure for debugging
+      const rawCatalog = result[0] as Record<string, unknown>;
+      this.log(`Raw catalog keys: ${Object.keys(rawCatalog).join(", ")}`);
+      this.log(
+        `Raw catalog has resources: ${String(Boolean(rawCatalog.resources))}`,
+      );
+
+      if (rawCatalog.resources) {
+        this.log(`Raw catalog resources type: ${typeof rawCatalog.resources}`);
+        this.log(
+          `Raw catalog resources is array: ${String(Array.isArray(rawCatalog.resources))}`,
+        );
+
+        if (Array.isArray(rawCatalog.resources)) {
+          this.log(
+            `Raw catalog resources count: ${String(rawCatalog.resources.length)}`,
+          );
+
+          // Log first resource structure for debugging
+          if (rawCatalog.resources.length > 0) {
+            const firstResource = rawCatalog.resources[0] as Record<
+              string,
+              unknown
+            >;
+            this.log(
+              `First resource keys: ${Object.keys(firstResource).join(", ")}`,
+            );
+            this.log(`First resource type: ${String(firstResource.type)}`);
+            this.log(`First resource title: ${String(firstResource.title)}`);
+          }
+        }
+      }
+
       // Transform the catalog
       const catalog = this.transformCatalog(result[0]);
+
+      this.log(
+        `Transformed catalog has ${String(catalog.resources.length)} resources`,
+      );
+      this.log(`Transformed catalog has ${String(catalog.edges.length)} edges`);
+
+      // Handle empty catalogs gracefully (requirement 9.4)
+      if (catalog.resources.length === 0) {
+        this.log(
+          `Warning: Catalog for node '${nodeId}' has no resources`,
+          "warn",
+        );
+      }
 
       // Cache the result
       this.cache.set(cacheKey, catalog, this.cacheTTL);
@@ -697,8 +866,11 @@ export class PuppetDBService
    * Queries PuppetDB events endpoint and returns events in reverse chronological order.
    * Implements requirements 5.1, 5.2, 5.3.
    *
+   * IMPORTANT: This method implements pagination with a default limit of 100 events
+   * to prevent performance issues with large event datasets (requirement 10.3).
+   *
    * @param nodeId - Node identifier (certname)
-   * @param filters - Optional filters for status, resource type, time range
+   * @param filters - Optional filters for status, resource type, time range, and limit
    * @returns Array of events sorted by timestamp (newest first)
    */
   async getNodeEvents(
@@ -707,17 +879,28 @@ export class PuppetDBService
   ): Promise<Event[]> {
     this.ensureInitialized();
 
+    // Set default limit to prevent hanging on large datasets (requirement 10.3)
+    const DEFAULT_LIMIT = 100;
+    const limit = filters?.limit ?? DEFAULT_LIMIT;
+
+    this.log(
+      `Starting getNodeEvents for node '${nodeId}' with limit ${String(limit)}`,
+    );
+    this.log(`Filters: ${JSON.stringify(filters ?? {})}`);
+
     try {
       // Build cache key based on node and filters
       const filterKey = filters
-        ? `${filters.status ?? "all"}:${filters.resourceType ?? "all"}:${filters.startTime ?? ""}:${filters.endTime ?? ""}:${String(filters.limit ?? 100)}`
-        : "all";
+        ? `${filters.status ?? "all"}:${filters.resourceType ?? "all"}:${filters.startTime ?? ""}:${filters.endTime ?? ""}:${String(limit)}`
+        : `all:${String(limit)}`;
       const cacheKey = `events:${nodeId}:${filterKey}`;
 
       // Check cache first
       const cached = this.cache.get(cacheKey);
       if (Array.isArray(cached)) {
-        this.log(`Returning cached events for node '${nodeId}'`);
+        this.log(
+          `Returning ${String(cached.length)} cached events for node '${nodeId}'`,
+        );
         return cached as Event[];
       }
 
@@ -734,20 +917,24 @@ export class PuppetDBService
 
       // Add status filter if specified (requirement 5.5)
       if (filters?.status) {
+        this.log(`Adding status filter: ${filters.status}`);
         queryParts.push(`["=", "status", "${filters.status}"]`);
       }
 
       // Add resource type filter if specified (requirement 5.5)
       if (filters?.resourceType) {
+        this.log(`Adding resource type filter: ${filters.resourceType}`);
         queryParts.push(`["=", "resource_type", "${filters.resourceType}"]`);
       }
 
       // Add time range filters if specified (requirement 5.5)
       if (filters?.startTime) {
+        this.log(`Adding start time filter: ${filters.startTime}`);
         queryParts.push(`[">=", "timestamp", "${filters.startTime}"]`);
       }
 
       if (filters?.endTime) {
+        this.log(`Adding end time filter: ${filters.endTime}`);
         queryParts.push(`["<=", "timestamp", "${filters.endTime}"]`);
       }
 
@@ -757,10 +944,14 @@ export class PuppetDBService
           ? `["and", ${queryParts.join(", ")}]`
           : queryParts[0];
 
-      // Set limit (default to 100 if not specified)
-      const limit = filters?.limit ?? 100;
+      this.log(`PQL Query: ${pqlQuery}`);
+      this.log(
+        `Query parameters: limit=${String(limit)}, order_by=timestamp desc`,
+      );
 
+      const startTime = Date.now();
       const client = this.client;
+
       const result = await this.executeWithResilience(async () => {
         return await client.query("pdb/query/v4/events", pqlQuery, {
           limit: limit,
@@ -768,16 +959,39 @@ export class PuppetDBService
         });
       });
 
+      const queryDuration = Date.now() - startTime;
+      this.log(`PuppetDB events query completed in ${String(queryDuration)}ms`);
+
       if (!Array.isArray(result)) {
         this.log(
-          `Unexpected response format from PuppetDB events endpoint for node '${nodeId}'`,
+          `Unexpected response format from PuppetDB events endpoint for node '${nodeId}' - expected array, got ${typeof result}`,
           "warn",
         );
         return [];
       }
 
+      this.log(
+        `Received ${String(result.length)} events from PuppetDB for node '${nodeId}'`,
+      );
+
+      // Log first event structure for debugging
+      if (result.length > 0) {
+        const firstEvent = result[0] as Record<string, unknown>;
+        this.log(`First event keys: ${Object.keys(firstEvent).join(", ")}`);
+        this.log(`First event timestamp: ${String(firstEvent.timestamp)}`);
+        this.log(`First event status: ${String(firstEvent.status)}`);
+        this.log(
+          `First event resource_type: ${String(firstEvent.resource_type)}`,
+        );
+      }
+
       // Transform events
+      const transformStartTime = Date.now();
       const events = result.map((event) => this.transformEvent(event));
+      const transformDuration = Date.now() - transformStartTime;
+      this.log(
+        `Transformed ${String(events.length)} events in ${String(transformDuration)}ms`,
+      );
 
       // Sort by timestamp in reverse chronological order (requirement 5.2)
       // This ensures newest events are first
@@ -787,15 +1001,28 @@ export class PuppetDBService
         return timeB - timeA; // Descending order (newest first)
       });
 
+      this.log(`Sorted ${String(events.length)} events by timestamp`);
+
       // Cache the result
       this.cache.set(cacheKey, events, this.cacheTTL);
       this.log(
         `Cached ${String(events.length)} events for node '${nodeId}' for ${String(this.cacheTTL)}ms`,
       );
 
+      const totalDuration = Date.now() - startTime;
+      this.log(`Total getNodeEvents duration: ${String(totalDuration)}ms`);
+
       return events;
     } catch (error) {
       this.logError(`Failed to get events for node '${nodeId}'`, error);
+
+      // Log additional error details for debugging (requirement 10.1)
+      if (error instanceof Error) {
+        this.log(`Error name: ${error.name}`, "error");
+        this.log(`Error message: ${error.message}`, "error");
+        this.log(`Error stack: ${error.stack ?? "no stack trace"}`, "error");
+      }
+
       throw error;
     }
   }
@@ -882,9 +1109,15 @@ export class PuppetDBService
     // Type assertion - PuppetDB returns catalogs with these fields
     const raw = catalogData as Record<string, unknown>;
 
+    this.log(`Transforming catalog for certname: ${String(raw.certname)}`);
+
     // Transform resources
     const resources: Resource[] = [];
     if (Array.isArray(raw.resources)) {
+      this.log(
+        `Processing ${String(raw.resources.length)} resources from raw catalog`,
+      );
+
       for (const resourceData of raw.resources) {
         const res = resourceData as Record<string, unknown>;
         const resType = typeof res.type === "string" ? res.type : "";
@@ -904,11 +1137,23 @@ export class PuppetDBService
               : {},
         });
       }
+
+      this.log(
+        `Successfully transformed ${String(resources.length)} resources`,
+      );
+    } else {
+      this.log(
+        `No resources array found in raw catalog or resources is not an array`,
+        "warn",
+      );
+      this.log(`raw.resources type: ${typeof raw.resources}`, "warn");
     }
 
     // Transform edges
     const edges: Edge[] = [];
     if (Array.isArray(raw.edges)) {
+      this.log(`Processing ${String(raw.edges.length)} edges from raw catalog`);
+
       for (const edgeData of raw.edges) {
         const edge = edgeData as Record<string, unknown>;
         const source = edge.source as Record<string, unknown> | undefined;
@@ -916,10 +1161,15 @@ export class PuppetDBService
 
         if (source && target) {
           const sourceType = typeof source.type === "string" ? source.type : "";
-          const sourceTitle = typeof source.title === "string" ? source.title : "";
+          const sourceTitle =
+            typeof source.title === "string" ? source.title : "";
           const targetType = typeof target.type === "string" ? target.type : "";
-          const targetTitle = typeof target.title === "string" ? target.title : "";
-          const edgeRel = typeof edge.relationship === "string" ? edge.relationship : "contains";
+          const targetTitle =
+            typeof target.title === "string" ? target.title : "";
+          const edgeRel =
+            typeof edge.relationship === "string"
+              ? edge.relationship
+              : "contains";
 
           edges.push({
             source: {
@@ -934,15 +1184,26 @@ export class PuppetDBService
           });
         }
       }
+
+      this.log(`Successfully transformed ${String(edges.length)} edges`);
+    } else {
+      this.log(`No edges array found in raw catalog or edges is not an array`);
     }
 
     // Return catalog with all required fields (requirements 4.1, 4.2, 4.5)
     const certname = typeof raw.certname === "string" ? raw.certname : "";
     const version = typeof raw.version === "string" ? raw.version : "";
-    const transactionUuid = typeof raw.transaction_uuid === "string" ? raw.transaction_uuid : "";
-    const environment = typeof raw.environment === "string" ? raw.environment : "production";
-    const producerTimestamp = typeof raw.producer_timestamp === "string" ? raw.producer_timestamp : "";
+    const transactionUuid =
+      typeof raw.transaction_uuid === "string" ? raw.transaction_uuid : "";
+    const environment =
+      typeof raw.environment === "string" ? raw.environment : "production";
+    const producerTimestamp =
+      typeof raw.producer_timestamp === "string" ? raw.producer_timestamp : "";
     const hash = typeof raw.hash === "string" ? raw.hash : "";
+
+    this.log(
+      `Catalog transformation complete: ${String(resources.length)} resources, ${String(edges.length)} edges`,
+    );
 
     return {
       certname,
@@ -988,33 +1249,60 @@ export class PuppetDBService
     // Type assertion - PuppetDB returns reports with these fields
     const raw = reportData as Record<string, unknown>;
 
-    // Define interface for PuppetDB metric structure
+    // Define interface for PuppetDB metric structure (array format)
     interface PuppetDBMetric {
       category: unknown;
       name: unknown;
       value: unknown;
     }
 
-    // PuppetDB returns metrics as an array of objects with category, name, and value
-    // Example: [{"category": "resources", "name": "total", "value": 2153}, ...]
-    const metricsArray = Array.isArray(raw.metrics)
-      ? (raw.metrics as PuppetDBMetric[])
-      : [];
+    // Define interface for PuppetDB metrics object format (newer format)
+    interface PuppetDBMetricsObject {
+      data?: PuppetDBMetric[];
+      [key: string]: unknown;
+    }
+
+    this.log(`Processing report metrics for certname: ${String(raw.certname)}`);
+    this.log(`Raw metrics type: ${typeof raw.metrics}`);
+
+    // PuppetDB returns metrics in an object format with a 'data' property:
+    // {"data": [{"category": "resources", "name": "total", "value": 2153}, ...], "href": "..."}
+    // Older versions may return a direct array (for backward compatibility)
+    let metricsArray: PuppetDBMetric[] = [];
+
+    if (Array.isArray(raw.metrics)) {
+      // Format 1: Direct array (older PuppetDB versions)
+      metricsArray = raw.metrics as PuppetDBMetric[];
+      this.log(
+        `Metrics format: direct array with ${String(metricsArray.length)} entries`,
+      );
+    } else if (raw.metrics && typeof raw.metrics === "object") {
+      const metricsObj = raw.metrics as PuppetDBMetricsObject;
+
+      // Format 2: Object with 'data' property (current PuppetDB format)
+      if (Array.isArray(metricsObj.data)) {
+        metricsArray = metricsObj.data;
+        this.log(
+          `Metrics format: object with data array containing ${String(metricsArray.length)} entries`,
+        );
+      } else {
+        // Unexpected format - log for debugging
+        this.log(`Metrics format: unexpected object structure`, "warn");
+        this.log(
+          `Metrics object keys: ${Object.keys(metricsObj).join(", ")}`,
+          "warn",
+        );
+      }
+    } else {
+      this.log(`No metrics found or unexpected format`, "warn");
+    }
 
     // Debug logging to understand the metrics structure
     if (metricsArray.length > 0) {
+      this.log(`Successfully parsed ${String(metricsArray.length)} metrics`);
       this.log(`First metric sample: ${JSON.stringify(metricsArray[0])}`);
-      const metricsCount = metricsArray.length;
-      this.log(`Total metrics count: ${String(metricsCount)}`);
     } else {
-      this.log(
-        `No metrics array found. Raw metrics type: ${typeof raw.metrics}`,
-      );
-      if (raw.metrics) {
-        this.log(
-          `Raw metrics sample: ${JSON.stringify(raw.metrics).substring(0, 200)}`,
-        );
-      }
+      this.log(`Warning: No metrics found in report`, "warn");
     }
 
     // Helper to extract metric value from array
@@ -1026,40 +1314,97 @@ export class PuppetDBService
       const metric = metricsArray.find(
         (m) => m.category === category && m.name === name,
       );
-      const value =
-        metric && typeof metric.value === "number" ? metric.value : fallback;
-      if (category === "resources" && value === 0 && metricsArray.length > 0) {
-        const metricFound = Boolean(metric);
-        this.log(
-          `Warning: ${category}.${name} returned 0, metric found: ${String(metricFound)}`,
-        );
+
+      // Check if metric was found
+      if (!metric) {
+        if (metricsArray.length > 0) {
+          this.log(
+            `Metric ${category}.${name} not found, using fallback: ${String(fallback)}`,
+          );
+        }
+        return fallback;
       }
-      return value;
+
+      // Check if value is a valid number
+      if (typeof metric.value !== "number") {
+        this.log(
+          `Metric ${category}.${name} has invalid value type (${typeof metric.value}), using fallback: ${String(fallback)}`,
+        );
+        return fallback;
+      }
+
+      // Metric found and valid - log the actual value
+      this.log(`Metric ${category}.${name} = ${String(metric.value)}`);
+      return metric.value;
     };
 
     // Build time metrics object
     const timeMetrics: Record<string, number> = {};
-    metricsArray
-      .filter((m) => m.category === "time")
-      .forEach((m) => {
-        if (typeof m.name === "string" && typeof m.value === "number") {
-          timeMetrics[m.name] = m.value;
-        }
-      });
+    const timeMetricsFound = metricsArray.filter((m) => m.category === "time");
+    this.log(`Found ${String(timeMetricsFound.length)} time metrics`);
+
+    timeMetricsFound.forEach((m) => {
+      if (typeof m.name === "string" && typeof m.value === "number") {
+        timeMetrics[m.name] = m.value;
+        this.log(`  time.${m.name} = ${String(m.value)}`);
+      }
+    });
 
     // Transform to Report type with all required fields (requirement 3.3)
     const certname = typeof raw.certname === "string" ? raw.certname : "";
     const hash = typeof raw.hash === "string" ? raw.hash : "";
-    const environment = typeof raw.environment === "string" ? raw.environment : "production";
+    const environment =
+      typeof raw.environment === "string" ? raw.environment : "production";
     const statusStr = typeof raw.status === "string" ? raw.status : "unchanged";
-    const puppetVersion = typeof raw.puppet_version === "string" ? raw.puppet_version : "";
-    const reportFormat = typeof raw.report_format === "number" ? raw.report_format : 0;
-    const configVersion = typeof raw.configuration_version === "string" ? raw.configuration_version : "";
+    const puppetVersion =
+      typeof raw.puppet_version === "string" ? raw.puppet_version : "";
+    const reportFormat =
+      typeof raw.report_format === "number" ? raw.report_format : 0;
+    const configVersion =
+      typeof raw.configuration_version === "string"
+        ? raw.configuration_version
+        : "";
     const startTime = typeof raw.start_time === "string" ? raw.start_time : "";
     const endTime = typeof raw.end_time === "string" ? raw.end_time : "";
-    const producerTimestamp = typeof raw.producer_timestamp === "string" ? raw.producer_timestamp : "";
-    const receiveTime = typeof raw.receive_time === "string" ? raw.receive_time : "";
-    const transactionUuid = typeof raw.transaction_uuid === "string" ? raw.transaction_uuid : "";
+    const producerTimestamp =
+      typeof raw.producer_timestamp === "string" ? raw.producer_timestamp : "";
+    const receiveTime =
+      typeof raw.receive_time === "string" ? raw.receive_time : "";
+    const transactionUuid =
+      typeof raw.transaction_uuid === "string" ? raw.transaction_uuid : "";
+
+    // Extract metrics with detailed logging
+    this.log(`Extracting resource metrics for report ${hash}`);
+    const resourceMetrics = {
+      total: getMetricValue("resources", "total"),
+      skipped: getMetricValue("resources", "skipped"),
+      failed: getMetricValue("resources", "failed"),
+      failed_to_restart: getMetricValue("resources", "failed_to_restart"),
+      restarted: getMetricValue("resources", "restarted"),
+      changed: getMetricValue("resources", "changed"),
+      corrective_change: getMetricValue("resources", "corrective_change"),
+      out_of_sync: getMetricValue("resources", "out_of_sync"),
+      scheduled: getMetricValue("resources", "scheduled"),
+    };
+
+    this.log(
+      `Resource metrics summary: total=${String(resourceMetrics.total)}, changed=${String(resourceMetrics.changed)}, corrective_change=${String(resourceMetrics.corrective_change)}, failed=${String(resourceMetrics.failed)}`,
+    );
+
+    const changeMetrics = {
+      total: getMetricValue("changes", "total"),
+    };
+
+    const eventMetrics = {
+      success: getMetricValue("events", "success"),
+      failure: getMetricValue("events", "failure"),
+      noop: getMetricValue("events", "noop"),
+      total: getMetricValue("events", "total"),
+    };
+
+    this.log(
+      `Event metrics: success=${String(eventMetrics.success)}, failure=${String(eventMetrics.failure)}, noop=${String(eventMetrics.noop)}, total=${String(eventMetrics.total)}`,
+    );
 
     return {
       certname,
@@ -1076,25 +1421,10 @@ export class PuppetDBService
       receive_time: receiveTime,
       transaction_uuid: transactionUuid,
       metrics: {
-        resources: {
-          total: getMetricValue("resources", "total"),
-          skipped: getMetricValue("resources", "skipped"),
-          failed: getMetricValue("resources", "failed"),
-          failed_to_restart: getMetricValue("resources", "failed_to_restart"),
-          restarted: getMetricValue("resources", "restarted"),
-          changed: getMetricValue("resources", "changed"),
-          out_of_sync: getMetricValue("resources", "out_of_sync"),
-          scheduled: getMetricValue("resources", "scheduled"),
-        },
+        resources: resourceMetrics,
         time: timeMetrics,
-        changes: {
-          total: getMetricValue("changes", "total"),
-        },
-        events: {
-          success: getMetricValue("events", "success"),
-          failure: getMetricValue("events", "failure"),
-          total: getMetricValue("events", "total"),
-        },
+        changes: changeMetrics,
+        events: eventMetrics,
       },
       logs: Array.isArray(raw.logs)
         ? (raw.logs as {
@@ -1164,8 +1494,10 @@ export class PuppetDBService
     const certname = typeof raw.certname === "string" ? raw.certname : "";
     const timestamp = typeof raw.timestamp === "string" ? raw.timestamp : "";
     const report = typeof raw.report === "string" ? raw.report : "";
-    const resourceType = typeof raw.resource_type === "string" ? raw.resource_type : "";
-    const resourceTitle = typeof raw.resource_title === "string" ? raw.resource_title : "";
+    const resourceType =
+      typeof raw.resource_type === "string" ? raw.resource_type : "";
+    const resourceTitle =
+      typeof raw.resource_title === "string" ? raw.resource_title : "";
     const property = typeof raw.property === "string" ? raw.property : "";
     const statusStr = typeof raw.status === "string" ? raw.status : "success";
     const message = typeof raw.message === "string" ? raw.message : undefined;

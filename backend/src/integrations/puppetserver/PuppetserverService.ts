@@ -114,7 +114,15 @@ export class PuppetserverService
    *
    * Creates Puppetserver client with configuration validation.
    */
-  protected performInitialization(): void {
+  protected performInitialization(): Promise<void> {
+    this.performInitializationSync();
+    return Promise.resolve();
+  }
+
+  /**
+   * Synchronous initialization logic
+   */
+  private performInitializationSync(): void {
     // Extract Puppetserver config from integration config
     this.puppetserverConfig = this.config.config as PuppetserverConfig;
 
@@ -245,6 +253,7 @@ export class PuppetserverService
    * Perform plugin-specific health check
    *
    * Queries Puppetserver certificate status endpoint to verify connectivity.
+   * Tests multiple capabilities to detect partial functionality.
    */
   protected async performHealthCheck(): Promise<
     Omit<HealthStatus, "lastCheck">
@@ -256,10 +265,49 @@ export class PuppetserverService
       };
     }
 
-    try {
-      // Query certificates endpoint as a health check
-      await this.client.getCertificates();
+    // Test multiple capabilities to detect partial functionality
+    const capabilities = {
+      certificates: false,
+      environments: false,
+      status: false,
+    };
 
+    const errors: string[] = [];
+
+    // Test certificates endpoint
+    try {
+      await this.client.getCertificates();
+      capabilities.certificates = true;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      errors.push(`Certificates: ${errorMessage}`);
+    }
+
+    // Test environments endpoint
+    try {
+      await this.client.getEnvironments();
+      capabilities.environments = true;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      errors.push(`Environments: ${errorMessage}`);
+    }
+
+    // Determine overall health status
+    const workingCount = Object.values(capabilities).filter(Boolean).length;
+    const totalCount = Object.keys(capabilities).length;
+
+    const workingCapabilities = Object.entries(capabilities)
+      .filter(([, works]) => works)
+      .map(([name]) => name);
+
+    const failingCapabilities = Object.entries(capabilities)
+      .filter(([, works]) => !works)
+      .map(([name]) => name);
+
+    // All working - healthy
+    if (workingCount === totalCount) {
       return {
         healthy: true,
         message: "Puppetserver is reachable",
@@ -270,18 +318,32 @@ export class PuppetserverService
           hasSSL: this.client.hasSSL(),
         } as Record<string, unknown>,
       };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
+    }
+
+    // Some working - degraded
+    if (workingCount > 0) {
       return {
         healthy: false,
-        message: `Puppetserver health check failed: ${errorMessage}`,
+        degraded: true,
+        message: `Puppetserver partially functional. ${String(workingCount)}/${String(totalCount)} capabilities working`,
+        workingCapabilities,
+        failingCapabilities,
         details: {
           baseUrl: this.client.getBaseUrl(),
-          error: errorMessage,
+          errors,
         },
       };
     }
+
+    // None working - error
+    return {
+      healthy: false,
+      message: `Puppetserver health check failed: ${errors.join("; ")}`,
+      details: {
+        baseUrl: this.client.getBaseUrl(),
+        errors,
+      },
+    };
   }
 
   /**
@@ -293,7 +355,10 @@ export class PuppetserverService
    * @returns Array of nodes
    */
   async getInventory(): Promise<Node[]> {
+    this.log("=== PuppetserverService.getInventory() called ===");
+
     this.ensureInitialized();
+    this.log("Service is initialized");
 
     try {
       // Check cache first
@@ -304,28 +369,53 @@ export class PuppetserverService
         return cached as Node[];
       }
 
+      this.log("No cached inventory found, querying Puppetserver");
+
       // Query Puppetserver for all certificates
       const client = this.client;
       if (!client) {
+        this.log("ERROR: Puppetserver client is null!", "error");
         throw new PuppetserverConnectionError(
           "Puppetserver client not initialized. Ensure initialize() was called successfully.",
         );
       }
 
+      this.log("Calling client.getCertificates()");
       const result = await client.getCertificates();
+      this.log(
+        `Received result from getCertificates(): ${typeof result}, isArray: ${String(Array.isArray(result))}`,
+      );
 
       // Transform certificates to normalized format
       if (!Array.isArray(result)) {
         this.log(
-          "Unexpected response format from Puppetserver certificates endpoint",
+          `Unexpected response format from Puppetserver certificates endpoint: ${JSON.stringify(result).substring(0, 200)}`,
           "warn",
         );
         return [];
       }
 
+      this.log(`Transforming ${String(result.length)} certificates to nodes`);
+
+      // Log sample certificate for debugging
+      if (result.length > 0) {
+        this.log(
+          `Sample certificate: ${JSON.stringify(result[0]).substring(0, 200)}`,
+        );
+      }
+
       const nodes = result.map((cert) =>
         this.transformCertificateToNode(cert as Certificate),
       );
+
+      this.log(
+        `Successfully transformed ${String(nodes.length)} certificates to nodes`,
+      );
+
+      // Log sample node for debugging
+      if (nodes.length > 0) {
+        this.log(`Sample node: ${JSON.stringify(nodes[0])}`);
+      }
 
       // Cache the result
       this.cache.set(cacheKey, nodes, this.cacheTTL);
@@ -333,9 +423,13 @@ export class PuppetserverService
         `Cached inventory (${String(nodes.length)} nodes) for ${String(this.cacheTTL)}ms`,
       );
 
+      this.log(
+        "=== PuppetserverService.getInventory() completed successfully ===",
+      );
       return nodes;
     } catch (error) {
       this.logError("Failed to get inventory from Puppetserver", error);
+      this.log("=== PuppetserverService.getInventory() failed ===");
       throw error;
     }
   }
@@ -387,6 +481,13 @@ export class PuppetserverService
   /**
    * Get facts for a specific node
    *
+   * Implements requirements 4.1, 4.2, 4.3, 4.4, 4.5:
+   * - Queries Puppetserver facts API using correct endpoint
+   * - Parses and displays facts correctly
+   * - Handles missing facts gracefully
+   * - Provides detailed error logging
+   * - Displays facts from multiple sources with timestamps
+   *
    * Queries the facts endpoint for a node and returns structured facts.
    * Results are cached with TTL to reduce load on Puppetserver.
    *
@@ -395,6 +496,8 @@ export class PuppetserverService
    */
   async getNodeFacts(nodeId: string): Promise<Facts> {
     this.ensureInitialized();
+
+    this.log(`Getting facts for node '${nodeId}'`);
 
     try {
       // Check cache first
@@ -417,15 +520,64 @@ export class PuppetserverService
         );
       }
 
+      this.log(`Querying Puppetserver for facts for node '${nodeId}'`);
       const result = await client.getFacts(nodeId);
 
+      // Handle missing facts gracefully (requirement 4.4, 4.5)
       if (!result) {
-        throw new PuppetserverConnectionError(
-          `Node '${nodeId}' not found in Puppetserver`,
+        this.log(
+          `No facts found for node '${nodeId}' - node may not have checked in yet`,
+          "warn",
         );
+
+        // Return empty facts structure instead of throwing error
+        const emptyFacts: Facts = {
+          nodeId,
+          gatheredAt: new Date().toISOString(),
+          source: "puppetserver",
+          facts: {
+            os: {
+              family: "unknown",
+              name: "unknown",
+              release: {
+                full: "unknown",
+                major: "unknown",
+              },
+            },
+            processors: {
+              count: 0,
+              models: [],
+            },
+            memory: {
+              system: {
+                total: "0 MB",
+                available: "0 MB",
+              },
+            },
+            networking: {
+              hostname: nodeId,
+              interfaces: {},
+            },
+            categories: {
+              system: {},
+              network: {},
+              hardware: {},
+              custom: {},
+            },
+          },
+        };
+
+        // Cache the empty result with shorter TTL
+        this.cache.set(cacheKey, emptyFacts, Math.min(this.cacheTTL, 60000)); // Max 1 minute for empty facts
+        return emptyFacts;
       }
 
+      this.log(`Transforming facts for node '${nodeId}'`);
       const facts = this.transformFacts(nodeId, result);
+
+      this.log(
+        `Successfully retrieved and transformed facts for node '${nodeId}'`,
+      );
 
       // Cache the result
       this.cache.set(cacheKey, facts, this.cacheTTL);
@@ -435,7 +587,17 @@ export class PuppetserverService
 
       return facts;
     } catch (error) {
+      // Enhanced error logging (requirement 4.5)
       this.logError(`Failed to get facts for node '${nodeId}'`, error);
+
+      // Log additional context for debugging
+      if (error instanceof PuppetserverError) {
+        this.log(
+          `Puppetserver error details: ${JSON.stringify(error.details)}`,
+          "error",
+        );
+      }
+
       throw error;
     }
   }
@@ -707,11 +869,20 @@ export class PuppetserverService
   /**
    * Get node status
    *
+   * Implements requirements 5.1, 5.2, 5.3, 5.4, 5.5:
+   * - Queries Puppetserver status API using correct endpoint
+   * - Parses and displays node status correctly
+   * - Handles missing status gracefully without blocking other functionality
+   * - Provides detailed error logging for debugging
+   * - Returns status with activity categorization
+   *
    * @param certname - Node certname
-   * @returns Node status with activity categorization
+   * @returns Node status or minimal status if not found
    */
   async getNodeStatus(certname: string): Promise<NodeStatus> {
     this.ensureInitialized();
+
+    this.log(`Getting status for node '${certname}'`);
 
     try {
       const cacheKey = `status:${certname}`;
@@ -728,16 +899,43 @@ export class PuppetserverService
         );
       }
 
+      this.log(
+        `Querying Puppetserver for status for node '${certname}' (requirement 5.2)`,
+      );
       const result = await client.getStatus(certname);
 
+      // Handle missing status gracefully (requirement 5.4, 5.5)
       if (!result) {
-        throw new PuppetserverConnectionError(
-          `Node status not found for '${certname}'`,
+        this.log(
+          `No status found for node '${certname}' - node may not have checked in yet (requirement 5.4)`,
+          "warn",
         );
+
+        // Return minimal status structure instead of throwing error (requirement 5.4)
+        const minimalStatus: NodeStatus = {
+          certname,
+          // All other fields are optional and will be undefined
+        };
+
+        // Cache the minimal result with shorter TTL
+        this.cache.set(cacheKey, minimalStatus, Math.min(this.cacheTTL, 60000)); // Max 1 minute for missing status
+
+        this.log(
+          `Returning minimal status for node '${certname}' - node has not reported to Puppetserver yet`,
+          "info",
+        );
+
+        return minimalStatus;
       }
 
+      this.log(`Transforming status for node '${certname}' (requirement 5.3)`);
       const status = result as NodeStatus;
 
+      this.log(
+        `Successfully retrieved status for node '${certname}' with ${status.report_timestamp ? "report timestamp" : "no report timestamp"} (requirement 5.3)`,
+      );
+
+      // Cache the result
       this.cache.set(cacheKey, status, this.cacheTTL);
       this.log(
         `Cached status for node '${certname}' for ${String(this.cacheTTL)}ms`,
@@ -745,8 +943,35 @@ export class PuppetserverService
 
       return status;
     } catch (error) {
-      this.logError(`Failed to get status for node '${certname}'`, error);
-      throw error;
+      // Enhanced error logging (requirement 5.5)
+      this.logError(
+        `Failed to get status for node '${certname}' (requirement 5.5)`,
+        error,
+      );
+
+      // Log additional context for debugging (requirement 5.5)
+      if (error instanceof PuppetserverError) {
+        this.log(
+          `Puppetserver error details: ${JSON.stringify(error.details)}`,
+          "error",
+        );
+        this.log(
+          `Error code: ${error.code}, Message: ${error.message}`,
+          "error",
+        );
+      }
+
+      // Return minimal status instead of throwing to prevent blocking other functionality (requirement 5.4)
+      this.log(
+        `Returning minimal status for node '${certname}' due to error - graceful degradation (requirement 5.4)`,
+        "warn",
+      );
+
+      const minimalStatus: NodeStatus = {
+        certname,
+      };
+
+      return minimalStatus;
     }
   }
 
@@ -871,7 +1096,25 @@ export class PuppetserverService
         );
       }
 
-      const result = await client.compileCatalog(certname, environment);
+      // Try to get facts for the node to improve catalog compilation
+      let facts: Record<string, unknown> | undefined;
+      try {
+        this.log(`Fetching facts for node '${certname}' to include in catalog compilation`);
+        const factsResult = await client.getFacts(certname);
+        if (factsResult && typeof factsResult === "object") {
+          // Extract facts from the response
+          const factsData = factsResult as { name?: string; values?: Record<string, unknown> };
+          if (factsData.values) {
+            facts = factsData.values;
+            this.log(`Retrieved ${Object.keys(facts).length} facts for node '${certname}'`);
+          }
+        }
+      } catch (error) {
+        // Log but don't fail - catalog compilation can work without facts in some cases
+        this.log(`Warning: Could not retrieve facts for node '${certname}': ${error instanceof Error ? error.message : String(error)}`, "warn");
+      }
+
+      const result = await client.compileCatalog(certname, environment, facts);
 
       if (!result) {
         throw new CatalogCompilationError(
@@ -993,10 +1236,19 @@ export class PuppetserverService
   /**
    * List available environments
    *
+   * Implements requirements 7.1, 7.2, 7.3, 7.4, 7.5:
+   * - Queries Puppetserver environments API using correct endpoint
+   * - Parses and displays environments correctly
+   * - Handles empty environments list gracefully
+   * - Provides detailed error logging for debugging
+   * - Shows environment metadata when available
+   *
    * @returns Array of environments
    */
   async listEnvironments(): Promise<Environment[]> {
     this.ensureInitialized();
+
+    this.log("Listing environments from Puppetserver");
 
     try {
       const cacheKey = "environments:all";
@@ -1015,15 +1267,43 @@ export class PuppetserverService
         );
       }
 
+      this.log("Querying Puppetserver for environments");
       const result = await client.getEnvironments();
 
+      // Handle empty/null response gracefully (requirement 7.4)
       if (!result) {
-        return [];
+        this.log(
+          "No environments returned from Puppetserver - may not be configured or endpoint not available",
+          "warn",
+        );
+
+        // Cache empty result with shorter TTL
+        const emptyEnvironments: Environment[] = [];
+        this.cache.set(
+          cacheKey,
+          emptyEnvironments,
+          Math.min(this.cacheTTL, 60000),
+        ); // Max 1 minute for empty result
+        return emptyEnvironments;
       }
 
+      this.log("Transforming environments response");
       // Transform result to Environment array
       const environments = this.transformEnvironments(result);
 
+      // Log if no environments were found after transformation
+      if (environments.length === 0) {
+        this.log(
+          "No environments found after transformation - Puppetserver may not have any environments configured",
+          "warn",
+        );
+      } else {
+        this.log(
+          `Successfully retrieved ${String(environments.length)} environment(s): ${environments.map((e) => e.name).join(", ")}`,
+        );
+      }
+
+      // Cache the result
       this.cache.set(cacheKey, environments, this.cacheTTL);
       this.log(
         `Cached ${String(environments.length)} environments for ${String(this.cacheTTL)}ms`,
@@ -1031,7 +1311,17 @@ export class PuppetserverService
 
       return environments;
     } catch (err) {
+      // Enhanced error logging (requirement 7.5)
       this.logError("Failed to list environments", err);
+
+      // Log additional context for debugging
+      if (err instanceof PuppetserverError) {
+        this.log(
+          `Puppetserver error details: ${JSON.stringify(err.details)}`,
+          "error",
+        );
+      }
+
       throw err;
     }
   }
@@ -1119,13 +1409,19 @@ export class PuppetserverService
   /**
    * Transform certificate to normalized node format
    *
+   * Implements requirements 3.2: Transform Puppetserver certificates to normalized Node format
+   *
    * @param certificate - Certificate from Puppetserver
    * @returns Normalized node
    */
   private transformCertificateToNode(certificate: Certificate): Node {
     const certname = certificate.certname;
 
-    return {
+    this.log(
+      `Transforming certificate '${certname}' with status '${certificate.status}' to node`,
+    );
+
+    const node: Node = {
       id: certname,
       name: certname,
       uri: `ssh://${certname}`,
@@ -1134,20 +1430,48 @@ export class PuppetserverService
       source: "puppetserver",
       certificateStatus: certificate.status,
     };
+
+    this.log(`Transformed node: ${JSON.stringify(node)}`);
+
+    return node;
   }
 
   /**
    * Transform facts from Puppetserver to normalized format
+   *
+   * Implements requirements 4.2, 4.3:
+   * - Correctly parses Puppetserver facts response format
+   * - Transforms to normalized Facts structure
+   * - Handles missing or malformed data gracefully
    *
    * @param nodeId - Node identifier
    * @param factsResult - Raw facts from Puppetserver
    * @returns Normalized facts
    */
   private transformFacts(nodeId: string, factsResult: unknown): Facts {
+    this.log(`Transforming facts for node '${nodeId}'`);
+
     // Puppetserver returns facts in a different format than PuppetDB
+    // Expected format: { name: "certname", values: { "fact.name": "value", ... } }
     // Extract the facts object from the response
-    const factsData = factsResult as { values?: Record<string, unknown> };
+    const factsData = factsResult as {
+      name?: string;
+      values?: Record<string, unknown>;
+      environment?: string;
+      timestamp?: string;
+    };
+
     const factsMap = factsData.values ?? {};
+
+    this.log(
+      `Extracted ${String(Object.keys(factsMap).length)} facts from response for node '${nodeId}'`,
+    );
+
+    // Log sample of facts for debugging
+    const sampleKeys = Object.keys(factsMap).slice(0, 5);
+    if (sampleKeys.length > 0) {
+      this.log(`Sample fact keys: ${sampleKeys.join(", ")}`);
+    }
 
     // Helper to safely get string value
     const getString = (key: string, fallback = "unknown"): string => {
@@ -1338,18 +1662,36 @@ export class PuppetserverService
   /**
    * Transform environments response to Environment array
    *
+   * Handles multiple response formats from Puppetserver:
+   * - Array of environment objects
+   * - Array of environment strings
+   * - Object with 'environments' property
+   *
    * @param result - Raw environments response
    * @returns Array of environments
    */
   private transformEnvironments(result: unknown): Environment[] {
+    this.log("Transforming environments response");
+    this.log(
+      `Response type: ${Array.isArray(result) ? "array" : typeof result}`,
+    );
+
     // Puppetserver returns environments in different formats
     // Handle both array and object responses
     if (Array.isArray(result)) {
-      return result.map((env) => {
+      this.log(`Processing array of ${String(result.length)} environment(s)`);
+
+      const environments = result.map((env, index) => {
         if (typeof env === "string") {
+          this.log(`Environment ${String(index)}: string format - "${env}"`);
           return { name: env };
         }
+
         const envObj = env as Record<string, unknown>;
+        this.log(
+          `Environment ${String(index)}: object format - ${JSON.stringify(envObj).substring(0, 100)}`,
+        );
+
         return {
           name: typeof envObj.name === "string" ? envObj.name : "",
           last_deployed:
@@ -1362,14 +1704,67 @@ export class PuppetserverService
               : undefined,
         };
       });
+
+      this.log(
+        `Transformed ${String(environments.length)} environment(s) from array`,
+      );
+      return environments;
     }
 
-    // Handle object response with environments property
-    const envData = result as { environments?: unknown[] };
-    if (Array.isArray(envData.environments)) {
-      return this.transformEnvironments(envData.environments);
+    // Handle object response with environments property as array
+    const envData = result as { environments?: unknown };
+    if (typeof envData === "object" && envData.environments) {
+      // Check if environments is an array
+      if (Array.isArray(envData.environments)) {
+        this.log(
+          `Processing object with 'environments' array containing ${String(envData.environments.length)} environment(s)`,
+        );
+        return this.transformEnvironments(envData.environments);
+      }
+
+      // Handle environments as object (Puppetserver v3 API format)
+      // Format: { environments: { "env1": {...}, "env2": {...} } }
+      if (typeof envData.environments === "object") {
+        this.log("Processing object with 'environments' as object map");
+        const envMap = envData.environments as Record<string, unknown>;
+        const envNames = Object.keys(envMap);
+        this.log(`Found ${String(envNames.length)} environment(s) in object map`);
+
+        const environments = envNames.map((name) => {
+          const envDetails = envMap[name];
+          this.log(`Environment "${name}": ${JSON.stringify(envDetails).substring(0, 100)}`);
+
+          // Extract any available metadata from the environment details
+          if (typeof envDetails === "object" && envDetails !== null) {
+            const details = envDetails as Record<string, unknown>;
+            return {
+              name,
+              last_deployed:
+                typeof details.last_deployed === "string"
+                  ? details.last_deployed
+                  : undefined,
+              status:
+                typeof details.status === "string"
+                  ? (details.status as "deployed" | "deploying" | "failed")
+                  : undefined,
+            };
+          }
+
+          return { name };
+        });
+
+        this.log(
+          `Transformed ${String(environments.length)} environment(s) from object map`,
+        );
+        return environments;
+      }
     }
 
+    // If we get here, the response format is unexpected
+    this.log(
+      `Unexpected environments response format: ${JSON.stringify(result).substring(0, 200)}`,
+      "warn",
+    );
     return [];
   }
 

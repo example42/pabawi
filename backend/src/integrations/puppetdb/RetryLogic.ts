@@ -54,7 +54,8 @@ export function calculateBackoffDelay(
   attempt: number,
   config: RetryConfig,
 ): number {
-  const multiplier = config.backoffMultiplier ?? DEFAULT_RETRY_CONFIG.backoffMultiplier;
+  const multiplier =
+    config.backoffMultiplier ?? DEFAULT_RETRY_CONFIG.backoffMultiplier;
   const maxDelay = config.maxDelay ?? DEFAULT_RETRY_CONFIG.maxDelay;
 
   // Calculate exponential delay: initialDelay * (multiplier ^ attempt)
@@ -198,7 +199,8 @@ export function createPuppetDBRetryConfig(
     jitter: true,
     shouldRetry: isRetryableError,
     onRetry: (attempt, delay, error): void => {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.warn(
         `[PuppetDB] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`,
       );

@@ -103,16 +103,30 @@ export class BoltPlugin
       throw new Error("No target specified for action");
     }
 
+    // Extract streaming callback from action metadata if present
+    const streamingCallback = action.metadata?.streamingCallback as
+      | {
+          onCommand?: (cmd: string) => void;
+          onStdout?: (chunk: string) => void;
+          onStderr?: (chunk: string) => void;
+        }
+      | undefined;
+
     // Map action to appropriate Bolt service method
     switch (action.type) {
       case "command":
-        return this.boltService.runCommand(target, action.action);
+        return this.boltService.runCommand(
+          target,
+          action.action,
+          streamingCallback,
+        );
 
       case "task":
         return this.boltService.runTask(
           target,
           action.action,
           action.parameters,
+          streamingCallback,
         );
 
       case "script":
