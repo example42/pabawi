@@ -7,7 +7,7 @@
 
 export interface QueuedExecution {
   id: string;
-  type: 'command' | 'task' | 'facts' | 'puppet' | 'package';
+  type: "command" | "task" | "facts" | "puppet" | "package";
   nodeId: string;
   action: string;
   enqueuedAt: Date;
@@ -30,7 +30,7 @@ export class ExecutionQueueFullError extends Error {
     public readonly limit: number,
   ) {
     super(message);
-    this.name = 'ExecutionQueueFullError';
+    this.name = "ExecutionQueueFullError";
   }
 }
 
@@ -42,7 +42,10 @@ export class ExecutionQueue {
   private readonly maxQueueSize: number;
   private runningExecutions = new Set<string>();
   private queuedExecutions = new Map<string, QueuedExecution>();
-  private waitingPromises = new Map<string, { resolve: () => void; reject: (error: Error) => void }>();
+  private waitingPromises = new Map<
+    string,
+    { resolve: () => void; reject: (error: Error) => void }
+  >();
 
   constructor(limit = 5, maxQueueSize = 50) {
     this.limit = limit;
@@ -117,7 +120,9 @@ export class ExecutionQueue {
     }
 
     // Sort by enqueued time (oldest first)
-    entries.sort((a, b) => a[1].enqueuedAt.getTime() - b[1].enqueuedAt.getTime());
+    entries.sort(
+      (a, b) => a[1].enqueuedAt.getTime() - b[1].enqueuedAt.getTime(),
+    );
 
     const [executionId] = entries[0];
 
@@ -151,7 +156,7 @@ export class ExecutionQueue {
     const promise = this.waitingPromises.get(executionId);
     if (promise) {
       this.waitingPromises.delete(executionId);
-      promise.reject(new Error('Execution cancelled'));
+      promise.reject(new Error("Execution cancelled"));
     }
 
     return true;
@@ -167,15 +172,15 @@ export class ExecutionQueue {
       running: this.runningExecutions.size,
       queued: this.queuedExecutions.size,
       limit: this.limit,
-      queue: Array.from(this.queuedExecutions.values()).sort(
-        (a, b) => a.enqueuedAt.getTime() - b.enqueuedAt.getTime()
-      ).map(exec => ({
-        id: exec.id,
-        type: exec.type,
-        nodeId: exec.nodeId,
-        action: exec.action,
-        enqueuedAt: exec.enqueuedAt,
-      })),
+      queue: Array.from(this.queuedExecutions.values())
+        .sort((a, b) => a.enqueuedAt.getTime() - b.enqueuedAt.getTime())
+        .map((exec) => ({
+          id: exec.id,
+          type: exec.type,
+          nodeId: exec.nodeId,
+          action: exec.action,
+          enqueuedAt: exec.enqueuedAt,
+        })),
     };
   }
 
@@ -222,7 +227,7 @@ export class ExecutionQueue {
   public clearQueue(): void {
     // Reject all waiting promises
     for (const promise of this.waitingPromises.values()) {
-      promise.reject(new Error('Queue cleared'));
+      promise.reject(new Error("Queue cleared"));
     }
 
     // Clear the queue and promises

@@ -76,7 +76,7 @@ describe("Inventory Filtering and Sorting", () => {
 
     mockIntegrationManager = {
       isInitialized: vi.fn().mockReturnValue(true),
-      getAggregatedInventory: vi.fn().mockResolvedValue({
+      getLinkedInventory: vi.fn().mockResolvedValue({
         nodes: [
           ...mockBoltNodes,
           ...mockPuppetserverNodes,

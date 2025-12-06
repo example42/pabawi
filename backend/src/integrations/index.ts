@@ -19,14 +19,21 @@ export type {
   CapabilityParameter,
   Action,
   PluginRegistration,
-} from './types';
+} from "./types";
 
 // Export base plugin class
-export { BasePlugin } from './BasePlugin';
+export { BasePlugin } from "./BasePlugin";
 
 // Export integration manager
-export { IntegrationManager } from './IntegrationManager';
-export type { AggregatedInventory, AggregatedNodeData } from './IntegrationManager';
+export { IntegrationManager } from "./IntegrationManager";
+export type {
+  AggregatedInventory,
+  AggregatedNodeData,
+} from "./IntegrationManager";
+
+// Export node linking service
+export { NodeLinkingService } from "./NodeLinkingService";
+export type { LinkedNode, LinkedNodeData } from "./NodeLinkingService";
 
 // Export integration plugins
-export { BoltPlugin } from './bolt';
+export { BoltPlugin } from "./bolt";

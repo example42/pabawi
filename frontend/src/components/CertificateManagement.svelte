@@ -75,16 +75,45 @@
 
   // Load certificates
   async function loadCertificates(): Promise<void> {
+    console.log('[CertificateManagement] Loading certificates...');
     try {
       loading = true;
       error = null;
+      console.log('[CertificateManagement] Calling API endpoint: /api/integrations/puppetserver/certificates');
       const data = await get<Certificate[]>('/api/integrations/puppetserver/certificates');
+      console.log('[CertificateManagement] Received data:', data);
       certificates = data;
+      console.log('[CertificateManagement] Successfully loaded', certificates.length, 'certificates');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load certificates';
+      console.error('[CertificateManagement] Error loading certificates:', err);
+
+      // Extract detailed error message
+      let errorMessage = 'Failed to load certificates';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+
+        // Check for specific error patterns and provide helpful guidance
+        if (errorMessage.includes('Failed to connect')) {
+          errorMessage += '\n\n🔧 Troubleshooting:\n' +
+            '• Check that Puppetserver is running and accessible\n' +
+            '• Verify the Puppetserver URL in your configuration\n' +
+            '• Check network connectivity and firewall rules\n' +
+            '• Ensure the Puppetserver port (typically 8140) is open\n' +
+            '• If using SSL, verify certificate configuration';
+        } else if (errorMessage.includes('timeout')) {
+          errorMessage += '\n\n🔧 Troubleshooting:\n' +
+            '• Puppetserver may be overloaded or slow to respond\n' +
+            '• Try the operation again after a few moments\n' +
+            '• Check Puppetserver logs for performance issues';
+        }
+      }
+
+      error = errorMessage;
+      console.log('[CertificateManagement] Error state set to:', error);
       showError('Failed to load certificates', error);
     } finally {
       loading = false;
+      console.log('[CertificateManagement] Loading complete. Error:', error, 'Certificates:', certificates.length);
     }
   }
 
@@ -485,9 +514,21 @@
         <svg class="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <div class="ml-3">
+        <div class="ml-3 flex-1">
           <h3 class="text-sm font-medium text-red-800 dark:text-red-400">Error loading certificates</h3>
           <p class="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
+          <div class="mt-3">
+            <button
+              type="button"
+              onclick={loadCertificates}
+              class="inline-flex items-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+            >
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     </div>

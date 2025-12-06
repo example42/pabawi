@@ -739,11 +739,7 @@ export class BoltService {
 
     try {
       // Execute command and capture raw output
-      const boltResult = await this.executeCommand(
-        args,
-        {},
-        streamingCallback,
-      );
+      const boltResult = await this.executeCommand(args, {}, streamingCallback);
 
       if (!boltResult.success) {
         throw new BoltExecutionError(
@@ -961,11 +957,7 @@ export class BoltService {
 
     try {
       // Execute task and capture raw output
-      const boltResult = await this.executeCommand(
-        args,
-        {},
-        streamingCallback,
-      );
+      const boltResult = await this.executeCommand(args, {}, streamingCallback);
 
       if (!boltResult.success) {
         throw new BoltExecutionError(

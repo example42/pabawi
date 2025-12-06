@@ -1,12 +1,12 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../bolt/BoltService";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import type { CommandWhitelistService } from "../validation/CommandWhitelistService";
 import { CommandNotAllowedError } from "../validation/CommandWhitelistService";
 import { BoltInventoryNotFoundError } from "../bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
+import type { IntegrationManager } from "../integrations/IntegrationManager";
 
 /**
  * Request validation schemas
@@ -24,7 +24,7 @@ const CommandExecutionBodySchema = z.object({
  * Create commands router
  */
 export function createCommandsRouter(
-  boltService: BoltService,
+  integrationManager: IntegrationManager,
   executionRepository: ExecutionRepository,
   commandWhitelistService: CommandWhitelistService,
   streamingManager?: StreamingExecutionManager,
@@ -46,9 +46,12 @@ export function createCommandsRouter(
         const command = body.command;
         const expertMode = body.expertMode ?? false;
 
-        // Verify node exists in inventory
-        const nodes = await boltService.getInventory();
-        const node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
+        // Verify node exists in inventory using IntegrationManager
+        const aggregatedInventory =
+          await integrationManager.getAggregatedInventory();
+        const node = aggregatedInventory.nodes.find(
+          (n) => n.id === nodeId || n.name === nodeId,
+        );
 
         if (!node) {
           res.status(404).json({
@@ -88,7 +91,7 @@ export function createCommandsRouter(
           expertMode,
         });
 
-        // Execute command asynchronously
+        // Execute command asynchronously using IntegrationManager
         // We don't await here to return immediately with execution ID
         void (async (): Promise<void> => {
           try {
@@ -108,11 +111,15 @@ export function createCommandsRouter(
                   }
                 : undefined;
 
-            const result = await boltService.runCommand(
-              nodeId,
-              command,
-              streamingCallback,
-            );
+            // Execute action through IntegrationManager
+            const result = await integrationManager.executeAction("bolt", {
+              type: "command",
+              target: nodeId,
+              action: command,
+              metadata: {
+                streamingCallback,
+              },
+            });
 
             // Update execution record with results
             // Include stdout/stderr when expert mode is enabled

@@ -35,8 +35,8 @@
     try {
       loading = true;
       error = null;
-      const data = await get<Environment[]>('/api/integrations/puppetserver/environments');
-      environments = data;
+      const data = await get<{ environments: Environment[]; source: string; count: number }>('/api/integrations/puppetserver/environments');
+      environments = data.environments;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load environments';
       showError('Failed to load environments', error);

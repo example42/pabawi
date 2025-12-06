@@ -626,13 +626,17 @@ describe("PuppetserverService", () => {
         expect(mockClient.getStatus).toHaveBeenCalledTimes(1);
       });
 
-      it("should throw error when node status is not found", async () => {
+      it("should return minimal status when node status is not found", async () => {
         const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
         vi.mocked(mockClient.getStatus).mockResolvedValue(null);
 
-        await expect(
-          service.getNodeStatus("nonexistent.example.com"),
-        ).rejects.toThrow(PuppetserverConnectionError);
+        const result = await service.getNodeStatus("nonexistent.example.com");
+
+        // Should return minimal status with just certname
+        expect(result).toEqual({
+          certname: "nonexistent.example.com",
+        });
+        expect(mockClient.getStatus).toHaveBeenCalledWith("nonexistent.example.com");
       });
     });
 
@@ -675,7 +679,7 @@ describe("PuppetserverService", () => {
         expect(result).toEqual(mockStatuses);
       });
 
-      it("should skip nodes that fail to retrieve status", async () => {
+      it("should return minimal status for nodes that fail to retrieve status", async () => {
         const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
         const mockCertificates = [
           {
@@ -703,9 +707,13 @@ describe("PuppetserverService", () => {
 
         const result = await service.listNodeStatuses();
 
-        // Should only return the successful status
-        expect(result).toHaveLength(1);
+        // Should return both statuses - one full, one minimal
+        expect(result).toHaveLength(2);
         expect(result[0]).toEqual(mockStatus);
+        // Second node should have minimal status
+        expect(result[1]).toEqual({
+          certname: "node2.example.com",
+        });
       });
     });
 
@@ -1023,14 +1031,21 @@ describe("PuppetserverService", () => {
         expect(result.facts.processors.count).toBe(0);
       });
 
-      it("should throw error when node is not found", async () => {
+      it("should handle missing facts gracefully and return empty facts structure", async () => {
         const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
 
         vi.mocked(mockClient.getFacts).mockResolvedValue(null);
 
-        await expect(
-          service.getNodeFacts("nonexistent.example.com"),
-        ).rejects.toThrow(PuppetserverConnectionError);
+        const result = await service.getNodeFacts("nonexistent.example.com");
+
+        // Should return empty facts structure instead of throwing error (requirement 4.4, 4.5)
+        expect(result).toBeDefined();
+        expect(result.nodeId).toBe("nonexistent.example.com");
+        expect(result.source).toBe("puppetserver");
+        expect(result.facts.os.family).toBe("unknown");
+        expect(result.facts.os.name).toBe("unknown");
+        expect(result.facts.processors.count).toBe(0);
+        expect(result.facts.networking.hostname).toBe("nonexistent.example.com");
       });
 
       it("should include timestamp for fact freshness tracking", async () => {
