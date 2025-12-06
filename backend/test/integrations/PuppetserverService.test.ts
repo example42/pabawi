@@ -1169,6 +1169,7 @@ describe("PuppetserverService", () => {
         expect(mockClient.compileCatalog).toHaveBeenCalledWith(
           "node1.example.com",
           "production",
+          undefined, // facts parameter
         );
       });
 
@@ -1357,6 +1358,7 @@ describe("PuppetserverService", () => {
         expect(mockClient.compileCatalog).toHaveBeenCalledWith(
           "node1.example.com",
           "staging",
+          undefined, // facts parameter
         );
       });
 
@@ -1383,6 +1385,7 @@ describe("PuppetserverService", () => {
         expect(mockClient.compileCatalog).toHaveBeenCalledWith(
           "node1.example.com",
           "production",
+          undefined, // facts parameter
         );
       });
 

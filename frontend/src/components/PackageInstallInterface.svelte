@@ -264,7 +264,7 @@
     onclick={() => expanded = !expanded}
   >
     <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
-      Install Packages
+      Install Software
     </h2>
     <svg
       class="h-5 w-5 transform text-gray-500 transition-transform dark:text-gray-400"
@@ -280,7 +280,7 @@
   {#if expanded}
     <div class="mt-4 space-y-4">
       <p class="text-sm text-gray-600 dark:text-gray-400">
-        Install packages on this node using the configured package installation task.
+        Install software on this node using the configured package installation task.
       </p>
 
       <form onsubmit={installPackage} class="space-y-4">

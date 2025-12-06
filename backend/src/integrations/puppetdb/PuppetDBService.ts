@@ -1846,6 +1846,394 @@ export class PuppetDBService
   }
 
   /**
+   * Get summary of recent Puppet reports across all nodes
+   *
+   * Queries PuppetDB for recent reports and returns aggregated statistics.
+   * Used for home page dashboard display.
+   *
+   * @param limit - Maximum number of reports to analyze (default: 100)
+   * @param hours - Number of hours to look back (optional, filters by time)
+   * @returns Summary statistics of recent reports
+   */
+  async getReportsSummary(limit = 100, hours?: number): Promise<{
+    total: number;
+    failed: number;
+    changed: number;
+    unchanged: number;
+    noop: number;
+  }> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `reports:summary:${String(limit)}:${String(hours || 'all')}`;
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined && cached !== null) {
+        this.log("Returning cached reports summary");
+        return cached as {
+          total: number;
+          failed: number;
+          changed: number;
+          unchanged: number;
+          noop: number;
+        };
+      }
+
+      // Query PuppetDB for recent reports across all nodes
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      this.log(`Querying PuppetDB for recent reports summary (limit: ${String(limit)}, hours: ${String(hours || 'all')})`);
+
+      // Build query with optional time filter
+      let query: string | undefined = undefined;
+      let effectiveLimit = limit;
+
+      if (hours) {
+        const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+        query = `[">=", "producer_timestamp", "${cutoffTime}"]`;
+        // When filtering by time, we want all reports in that window, not just the first N
+        // Set a high limit to get all reports (PuppetDB will handle pagination internally)
+        effectiveLimit = 10000;
+      }
+
+      // Query all recent reports, ordered by timestamp
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/reports", query, {
+          limit: effectiveLimit,
+          order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
+        });
+      });
+
+      if (!Array.isArray(result)) {
+        this.log("Unexpected response format from PuppetDB reports endpoint", "warn");
+        return { total: 0, failed: 0, changed: 0, unchanged: 0, noop: 0 };
+      }
+
+      this.log(`Fetched ${String(result.length)} reports for summary`);
+
+      // Initialize counters
+      let failed = 0;
+      let changed = 0;
+      let unchanged = 0;
+      let noop = 0;
+
+      // Count reports by status
+      // Note: noop is a separate flag that indicates the run was in noop mode
+      // Status indicates the actual result: failed, changed, or unchanged
+      for (const report of result) {
+        const reportObj = report as Record<string, unknown>;
+        const status = String(reportObj.status || "unknown");
+        const isNoop = Boolean(reportObj.noop);
+
+        // Categorize by status first
+        if (status === "failed") {
+          failed++;
+        } else if (status === "changed") {
+          changed++;
+        } else if (status === "unchanged") {
+          unchanged++;
+        }
+
+        // Count noop runs separately (they can overlap with other statuses)
+        if (isNoop) {
+          noop++;
+        }
+      }
+
+      const summary = {
+        total: result.length,
+        failed,
+        changed,
+        unchanged,
+        noop,
+      };
+
+      // Cache the result with shorter TTL (30 seconds) since this is dashboard data
+      this.cache.set(cacheKey, summary, 30000);
+      this.log(`Cached reports summary for 30 seconds`);
+
+      return summary;
+    } catch (error) {
+      this.logError("Failed to get reports summary", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all recent reports across all nodes
+   * @param limit - Maximum number of reports to return (default: 100)
+   * @returns Array of reports sorted by timestamp (newest first)
+   */
+  async getAllReports(limit = 100): Promise<Report[]> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `reports:all:${String(limit)}`;
+      const cached = this.cache.get(cacheKey);
+      if (Array.isArray(cached)) {
+        this.log("Returning cached all reports");
+        return cached as Report[];
+      }
+
+      // Query PuppetDB for reports
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      this.log(`Querying PuppetDB for all recent reports (limit: ${String(limit)})`);
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/reports", undefined, {
+          limit: limit,
+          order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
+        });
+      });
+
+      if (!Array.isArray(result)) {
+        this.log("Unexpected response format from PuppetDB reports endpoint", "warn");
+        return [];
+      }
+
+      this.log(`Fetched ${String(result.length)} reports`);
+
+      // Transform reports to our Report type
+      const reports: Report[] = [];
+      for (const report of result) {
+        const reportObj = report as Record<string, unknown>;
+
+        // Fetch metrics if they're href references
+        if (reportObj.metrics && typeof reportObj.metrics === "object") {
+          const metricsObj = reportObj.metrics as Record<string, unknown>;
+          if (metricsObj.href && !metricsObj.data) {
+            try {
+              const metricsData = await this.executeWithResilience(async () => {
+                return await client.get(String(metricsObj.href));
+              });
+              if (Array.isArray(metricsData)) {
+                reportObj.metrics = { data: metricsData };
+              }
+            } catch (error) {
+              this.logError(`Failed to fetch metrics for report ${String(reportObj.hash)}`, error);
+            }
+          }
+        }
+
+        // Transform the report
+        const transformedReport = this.transformReport(reportObj);
+        reports.push(transformedReport);
+      }
+
+      // Cache the result with shorter TTL (30 seconds)
+      this.cache.set(cacheKey, reports, 30000);
+      this.log(`Cached ${String(reports.length)} reports for 30 seconds`);
+
+      return reports;
+    } catch (error) {
+      this.logError("Failed to get all reports", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get PuppetDB archive information
+   *
+   * Queries the /pdb/admin/v1/archive endpoint to get archive status.
+   * This endpoint provides information about PuppetDB's archive functionality.
+   *
+   * @returns Archive information
+   */
+  async getArchiveInfo(): Promise<unknown> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = "admin:archive";
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        this.log("Returning cached archive info");
+        return cached;
+      }
+
+      // Query PuppetDB admin endpoint
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      this.log("Querying PuppetDB archive endpoint");
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.get("/pdb/admin/v1/archive");
+      });
+
+      // Cache the result with longer TTL (5 minutes) since archive info doesn't change often
+      this.cache.set(cacheKey, result, 300000);
+      this.log("Cached archive info for 5 minutes");
+
+      return result;
+    } catch (error) {
+      this.logError("Failed to get archive info", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get PuppetDB summary statistics
+   *
+   * Queries the /pdb/admin/v1/summary-stats endpoint to get database statistics.
+   * WARNING: This endpoint can be resource-intensive on large PuppetDB instances.
+   *
+   * @returns Summary statistics
+   */
+  async getSummaryStats(): Promise<unknown> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = "admin:summary-stats";
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        this.log("Returning cached summary stats");
+        return cached;
+      }
+
+      // Query PuppetDB admin endpoint
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      this.log("Querying PuppetDB summary-stats endpoint (this may take a while)");
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.get("/pdb/admin/v1/summary-stats");
+      });
+
+      // Cache the result with longer TTL (10 minutes) since stats don't change rapidly
+      this.cache.set(cacheKey, result, 600000);
+      this.log("Cached summary stats for 10 minutes");
+
+      return result;
+    } catch (error) {
+      this.logError("Failed to get summary stats", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get resources for a specific node from PuppetDB
+   *
+   * Queries the /pdb/query/v4/resources endpoint to get all resources managed by Puppet on a node.
+   * Implements requirement 16.13: Use PuppetDB /pdb/query/v4/resources endpoint.
+   *
+   * @param certname - Node identifier (certname)
+   * @returns Resources organized by type
+   */
+  async getNodeResources(
+    certname: string,
+  ): Promise<Record<string, Resource[]>> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `resources:${certname}`;
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined && cached !== null) {
+        this.log(`Returning cached resources for node '${certname}'`);
+        return cached as Record<string, Resource[]>;
+      }
+
+      // Query PuppetDB for resources
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      // Build PQL query to get resources for this node
+      const pqlQuery = `["=", "certname", "${certname}"]`;
+
+      this.log(`Querying PuppetDB resources for node '${certname}'`);
+      this.log(`PQL Query: ${pqlQuery}`);
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/resources", pqlQuery);
+      });
+
+      if (!Array.isArray(result)) {
+        this.log(
+          `Unexpected response format from PuppetDB resources endpoint for node '${certname}'`,
+          "warn",
+        );
+        return {};
+      }
+
+      this.log(`Fetched ${String(result.length)} resources for node '${certname}'`);
+
+      // Transform and organize resources by type
+      const resourcesByType: Record<string, Resource[]> = {};
+
+      for (const resourceData of result) {
+        const raw = resourceData as Record<string, unknown>;
+        const resType = typeof raw.type === "string" ? raw.type : "";
+        const resTitle = typeof raw.title === "string" ? raw.title : "";
+        const resFile = typeof raw.file === "string" ? raw.file : undefined;
+
+        const resource: Resource = {
+          type: resType,
+          title: resTitle,
+          tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+          exported: Boolean(raw.exported),
+          file: resFile,
+          line: typeof raw.line === "number" ? raw.line : undefined,
+          parameters:
+            typeof raw.parameters === "object" && raw.parameters !== null
+              ? (raw.parameters as Record<string, unknown>)
+              : {},
+        };
+
+        // Initialize array for this type if not exists
+        if (!(resType in resourcesByType)) {
+          resourcesByType[resType] = [];
+        }
+
+        // Add resource to its type group
+        resourcesByType[resType].push(resource);
+      }
+
+      const typeCount = Object.keys(resourcesByType).length;
+      this.log(
+        `Organized ${String(result.length)} resources into ${String(typeCount)} types for node '${certname}'`,
+      );
+
+      // Cache the result
+      this.cache.set(cacheKey, resourcesByType, this.cacheTTL);
+      this.log(
+        `Cached resources for node '${certname}' for ${String(this.cacheTTL)}ms`,
+      );
+
+      return resourcesByType;
+    } catch (error) {
+      this.logError(`Failed to get resources for node '${certname}'`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Clear all cached data
    */
   clearCache(): void {

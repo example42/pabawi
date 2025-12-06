@@ -153,6 +153,8 @@ export class PuppetserverService
       ca: this.puppetserverConfig.ssl?.ca,
       timeout: this.puppetserverConfig.timeout,
       rejectUnauthorized: this.puppetserverConfig.ssl?.rejectUnauthorized,
+      retryAttempts: this.puppetserverConfig.retryAttempts,
+      retryDelay: this.puppetserverConfig.retryDelay,
     });
 
     // Set cache TTL from config
@@ -2095,6 +2097,183 @@ export class PuppetserverService
 
       return formatted;
     });
+  }
+
+  /**
+   * Get services status from Puppetserver
+   *
+   * Implements requirement 17.1: Display component for /status/v1/services
+   * Queries the services status endpoint to get detailed status of all Puppetserver services.
+   *
+   * @returns Services status information
+   */
+  async getServicesStatus(): Promise<unknown> {
+    this.ensureInitialized();
+
+    this.log("Getting services status from Puppetserver");
+
+    try {
+      const cacheKey = "status:services";
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        this.log("Returning cached services status");
+        return cached;
+      }
+
+      const client = this.client;
+      if (!client) {
+        throw new PuppetserverConnectionError(
+          "Puppetserver client not initialized",
+        );
+      }
+
+      const result = await client.getServicesStatus();
+
+      // Cache with shorter TTL (30 seconds) since status changes frequently
+      const statusCacheTTL = Math.min(this.cacheTTL, 30000);
+      this.cache.set(cacheKey, result, statusCacheTTL);
+      this.log(`Cached services status for ${String(statusCacheTTL)}ms`);
+
+      return result;
+    } catch (error) {
+      this.logError("Failed to get services status", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get simple status from Puppetserver
+   *
+   * Implements requirement 17.2: Display component for /status/v1/simple
+   * Queries the simple status endpoint for a lightweight health check.
+   *
+   * @returns Simple status (typically "running" or error message)
+   */
+  async getSimpleStatus(): Promise<unknown> {
+    this.ensureInitialized();
+
+    this.log("Getting simple status from Puppetserver");
+
+    try {
+      const cacheKey = "status:simple";
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        this.log("Returning cached simple status");
+        return cached;
+      }
+
+      const client = this.client;
+      if (!client) {
+        throw new PuppetserverConnectionError(
+          "Puppetserver client not initialized",
+        );
+      }
+
+      const result = await client.getSimpleStatus();
+
+      // Cache with shorter TTL (30 seconds) since status changes frequently
+      const statusCacheTTL = Math.min(this.cacheTTL, 30000);
+      this.cache.set(cacheKey, result, statusCacheTTL);
+      this.log(`Cached simple status for ${String(statusCacheTTL)}ms`);
+
+      return result;
+    } catch (error) {
+      this.logError("Failed to get simple status", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get admin API information from Puppetserver
+   *
+   * Implements requirement 17.3: Display component for /puppet-admin-api/v1
+   * Queries the admin API endpoint to get information about available admin operations.
+   *
+   * @returns Admin API information
+   */
+  async getAdminApiInfo(): Promise<unknown> {
+    this.ensureInitialized();
+
+    this.log("Getting admin API info from Puppetserver");
+
+    try {
+      const cacheKey = "admin:api-info";
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        this.log("Returning cached admin API info");
+        return cached;
+      }
+
+      const client = this.client;
+      if (!client) {
+        throw new PuppetserverConnectionError(
+          "Puppetserver client not initialized",
+        );
+      }
+
+      const result = await client.getAdminApiInfo();
+
+      // Cache with longer TTL since API info doesn't change often
+      this.cache.set(cacheKey, result, this.cacheTTL);
+      this.log(`Cached admin API info for ${String(this.cacheTTL)}ms`);
+
+      return result;
+    } catch (error) {
+      this.logError("Failed to get admin API info", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get metrics from Puppetserver via Jolokia
+   *
+   * Implements requirement 17.4: Display component for /metrics/v2 with performance warning
+   * Queries the metrics endpoint (via Jolokia) to get JMX metrics.
+   *
+   * WARNING: This endpoint can be resource-intensive on the Puppetserver.
+   * Use sparingly and consider caching results.
+   *
+   * @param mbean - Optional MBean name to query specific metrics
+   * @returns Metrics data
+   */
+  async getMetrics(mbean?: string): Promise<unknown> {
+    this.ensureInitialized();
+
+    this.log(
+      `Getting metrics from Puppetserver${mbean ? ` for MBean '${mbean}'` : ""}`,
+    );
+    this.log(
+      "WARNING: Metrics endpoint can be resource-intensive on Puppetserver",
+      "warn",
+    );
+
+    try {
+      const cacheKey = `metrics:${mbean ?? "all"}`;
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined) {
+        this.log("Returning cached metrics");
+        return cached;
+      }
+
+      const client = this.client;
+      if (!client) {
+        throw new PuppetserverConnectionError(
+          "Puppetserver client not initialized",
+        );
+      }
+
+      const result = await client.getMetrics(mbean);
+
+      // Cache with longer TTL (5 minutes) to reduce load on Puppetserver
+      const metricsCacheTTL = Math.max(this.cacheTTL, 300000); // At least 5 minutes
+      this.cache.set(cacheKey, result, metricsCacheTTL);
+      this.log(`Cached metrics for ${String(metricsCacheTTL)}ms`);
+
+      return result;
+    } catch (error) {
+      this.logError("Failed to get metrics", error);
+      throw error;
+    }
   }
 
   /**

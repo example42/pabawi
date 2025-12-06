@@ -283,6 +283,57 @@ class CatalogDiffService {
 }
 ```
 
+### UI Navigation Structure
+
+The application navigation is restructured to better organize Puppet-related functionality:
+
+```text
+Top Navigation:
+├── Home
+│   └── Puppet Reports Summary (if PuppetDB active)
+├── Inventory
+│   └── Node list with certificate status indicators
+├── Executions
+│   └── Execution history and management
+└── Puppet (NEW)
+    ├── Environments (moved from node detail)
+    ├── Reports (all nodes)
+    ├── Certificates (moved from top nav)
+    ├── Puppetserver Status (if active)
+    │   ├── Services (/status/v1/services)
+    │   ├── Simple Status (/status/v1/simple)
+    │   ├── Admin API (/puppet-admin-api/v1)
+    │   └── Metrics (/metrics/v2 via Jolokia)
+    └── PuppetDB Admin (if active)
+        ├── Archive (/pdb/admin/v1/archive)
+        └── Summary Stats (/pdb/admin/v1/summary-stats)
+
+Node Detail Page:
+├── Overview Tab
+│   ├── General Info (OS, IP from facts)
+│   ├── Latest Puppet Runs (if PuppetDB active)
+│   └── Latest Executions
+├── Facts Tab
+│   ├── Facts from all sources
+│   ├── Source attribution
+│   └── YAML export option
+├── Actions Tab
+│   ├── Install Software (renamed from Install packages)
+│   ├── Execute Commands
+│   ├── Execute Task
+│   └── Execution History (moved from separate tab)
+└── Puppet Tab
+    ├── Certificate Status
+    ├── Node Status
+    ├── Catalog Compilation
+    ├── Puppet Reports
+    ├── Catalog (from PuppetDB)
+    ├── Events
+    └── Managed Resources (NEW)
+        ├── Resources by type
+        └── Catalog view
+```
+
 ### Frontend Components
 
 #### 1. Certificate Management Component
@@ -402,14 +453,158 @@ interface InventoryNodeDisplay extends Node {
 
 #### 6. Enhanced Node Detail Page
 
-Updated node detail page with Puppetserver data tabs.
+Updated node detail page with restructured tabs.
 
 ```typescript
-// Additional tabs for Puppetserver data:
-// - Certificate Status (certificate info and operations)
-// - Node Status (last check-in, run status)
-// - Catalog Compilation (compile and compare catalogs)
-// - Environments (view and manage environments)
+interface NodeDetailPageProps {
+  node: Node;
+  activeTab: 'overview' | 'facts' | 'actions' | 'puppet';
+}
+
+// Overview Tab
+interface OverviewTabProps {
+  node: Node;
+  generalInfo: {
+    os: string;
+    ip: string;
+    // ... other facts
+  };
+  latestRuns?: PuppetRun[];
+  latestExecutions: Execution[];
+}
+
+// Facts Tab
+interface FactsTabProps {
+  facts: FactsBySource;
+  onExportYaml: () => void;
+}
+
+interface FactsBySource {
+  [source: string]: {
+    facts: Record<string, unknown>;
+    timestamp: string;
+  };
+}
+
+// Actions Tab
+interface ActionsTabProps {
+  node: Node;
+  onInstallSoftware: (packages: string[]) => Promise<void>;
+  onExecuteCommand: (command: string) => Promise<void>;
+  onExecuteTask: (task: string, params: Record<string, unknown>) => Promise<void>;
+  executionHistory: Execution[];
+}
+
+// Puppet Tab
+interface PuppetTabProps {
+  node: Node;
+  activeSubTab: 'certificate' | 'status' | 'compilation' | 'reports' | 'catalog' | 'events' | 'resources';
+}
+
+// Managed Resources Sub-tab
+interface ManagedResourcesProps {
+  certname: string;
+  resources: ResourcesByType;
+  catalog: Catalog;
+}
+
+interface ResourcesByType {
+  [resourceType: string]: Resource[];
+}
+```
+
+#### 7. Puppet Page Components
+
+New dedicated Puppet page with multiple sections.
+
+```typescript
+interface PuppetPageProps {
+  puppetdbActive: boolean;
+  puppetserverActive: boolean;
+}
+
+// Puppetserver Status Components
+interface PuppetserverStatusProps {
+  services: ServiceStatus[];
+  simpleStatus: SimpleStatus;
+  adminApi: AdminApiInfo;
+  metrics: MetricsData;
+}
+
+interface ServiceStatus {
+  name: string;
+  state: 'running' | 'stopped' | 'error';
+  status: string;
+}
+
+interface SimpleStatus {
+  state: 'running' | 'error';
+  status: string;
+}
+
+// PuppetDB Admin Components
+interface PuppetDBAdminProps {
+  archive: ArchiveInfo;
+  summaryStats: SummaryStats;
+}
+
+interface ArchiveInfo {
+  // Archive endpoint data
+}
+
+interface SummaryStats {
+  // Summary stats with performance warning
+  nodes: number;
+  resources: number;
+  // ... other stats
+}
+```
+
+#### 8. Expert Mode Component
+
+Global expert mode toggle and display enhancements.
+
+```typescript
+interface ExpertModeProps {
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+}
+
+interface ExpertModeDisplay {
+  // When expert mode is enabled, components show:
+  commandUsed?: string;
+  apiEndpoint?: string;
+  requestDetails?: {
+    method: string;
+    headers: Record<string, string>;
+    body?: unknown;
+  };
+  responseDetails?: {
+    status: number;
+    headers: Record<string, string>;
+    body: unknown;
+  };
+  troubleshootingHints?: string[];
+  setupInstructions?: string[];
+  debugInfo?: Record<string, unknown>;
+}
+```
+
+#### 9. Home Page Puppet Reports Component
+
+Summary component for home page.
+
+```typescript
+interface PuppetReportsSummaryProps {
+  reports: {
+    total: number;
+    failed: number;
+    changed: number;
+    unchanged: number;
+    noop: number;
+  };
+  onViewDetails: () => void; // Navigate to Puppet page
+}
 ```
 
 ## Data Models
@@ -925,6 +1120,7 @@ UI tests will verify:
 ### New Puppetserver Endpoints
 
 ```http
+# Certificates
 GET    /api/integrations/puppetserver/certificates
 GET    /api/integrations/puppetserver/certificates/:certname
 POST   /api/integrations/puppetserver/certificates/:certname/sign
@@ -932,17 +1128,41 @@ DELETE /api/integrations/puppetserver/certificates/:certname
 POST   /api/integrations/puppetserver/certificates/bulk-sign
 POST   /api/integrations/puppetserver/certificates/bulk-revoke
 
+# Nodes
 GET    /api/integrations/puppetserver/nodes
 GET    /api/integrations/puppetserver/nodes/:certname
 GET    /api/integrations/puppetserver/nodes/:certname/status
 GET    /api/integrations/puppetserver/nodes/:certname/facts
 
+# Catalogs
 GET    /api/integrations/puppetserver/catalog/:certname/:environment
 POST   /api/integrations/puppetserver/catalog/compare
 
+# Environments
 GET    /api/integrations/puppetserver/environments
 GET    /api/integrations/puppetserver/environments/:name
 POST   /api/integrations/puppetserver/environments/:name/deploy
+
+# Status and Metrics
+GET    /api/integrations/puppetserver/status/services
+GET    /api/integrations/puppetserver/status/simple
+GET    /api/integrations/puppetserver/admin-api
+GET    /api/integrations/puppetserver/metrics
+```
+
+### Enhanced PuppetDB Endpoints
+
+```http
+# Resources
+GET    /api/integrations/puppetdb/resources/:certname
+GET    /api/integrations/puppetdb/resources/:certname/by-type
+
+# Admin
+GET    /api/integrations/puppetdb/admin/archive
+GET    /api/integrations/puppetdb/admin/summary-stats
+
+# Reports Summary
+GET    /api/integrations/puppetdb/reports/summary
 ```
 
 ### Enhanced Inventory Endpoints

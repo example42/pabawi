@@ -1,6 +1,7 @@
 <script lang="ts">
   import { get, post, del } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
 
   interface Certificate {
@@ -75,15 +76,25 @@
 
   // Load certificates
   async function loadCertificates(): Promise<void> {
-    console.log('[CertificateManagement] Loading certificates...');
+    if (expertMode.enabled) {
+      console.log('[CertificateManagement] Loading certificates...');
+      console.log('[CertificateManagement] API endpoint: GET /api/integrations/puppetserver/certificates');
+    }
+
     try {
       loading = true;
       error = null;
-      console.log('[CertificateManagement] Calling API endpoint: /api/integrations/puppetserver/certificates');
+      const startTime = performance.now();
       const data = await get<Certificate[]>('/api/integrations/puppetserver/certificates');
-      console.log('[CertificateManagement] Received data:', data);
+      const endTime = performance.now();
+
       certificates = data;
-      console.log('[CertificateManagement] Successfully loaded', certificates.length, 'certificates');
+
+      if (expertMode.enabled) {
+        console.log('[CertificateManagement] Successfully loaded', certificates.length, 'certificates');
+        console.log('[CertificateManagement] Response time:', Math.round(endTime - startTime), 'ms');
+        console.log('[CertificateManagement] Received data:', data);
+      }
     } catch (err) {
       console.error('[CertificateManagement] Error loading certificates:', err);
 
@@ -109,38 +120,81 @@
       }
 
       error = errorMessage;
-      console.log('[CertificateManagement] Error state set to:', error);
+
+      if (expertMode.enabled) {
+        console.log('[CertificateManagement] Error state set to:', error);
+      }
+
       showError('Failed to load certificates', error);
     } finally {
       loading = false;
-      console.log('[CertificateManagement] Loading complete. Error:', error, 'Certificates:', certificates.length);
+
+      if (expertMode.enabled) {
+        console.log('[CertificateManagement] Loading complete. Error:', error, 'Certificates:', certificates.length);
+      }
     }
   }
 
   // Sign certificate
   async function signCertificate(certname: string): Promise<void> {
+    if (expertMode.enabled) {
+      console.log('[CertificateManagement] Signing certificate:', certname);
+      console.log('[CertificateManagement] API endpoint: POST /api/integrations/puppetserver/certificates/' + certname + '/sign');
+    }
+
     try {
+      const startTime = performance.now();
       await post(`/api/integrations/puppetserver/certificates/${certname}/sign`);
+      const endTime = performance.now();
+
+      if (expertMode.enabled) {
+        console.log('[CertificateManagement] Certificate signed successfully');
+        console.log('[CertificateManagement] Response time:', Math.round(endTime - startTime), 'ms');
+      }
+
       showSuccess('Certificate signed', `Successfully signed certificate for ${certname}`);
       await loadCertificates();
       selectedCertnames.delete(certname);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sign certificate';
       const troubleshooting = getTroubleshootingMessage('sign', message);
+
+      if (expertMode.enabled) {
+        console.error('[CertificateManagement] Sign failed:', err);
+      }
+
       showError('Failed to sign certificate', `${message}\n\n${troubleshooting}`);
     }
   }
 
   // Revoke certificate
   async function revokeCertificate(certname: string): Promise<void> {
+    if (expertMode.enabled) {
+      console.log('[CertificateManagement] Revoking certificate:', certname);
+      console.log('[CertificateManagement] API endpoint: DELETE /api/integrations/puppetserver/certificates/' + certname);
+    }
+
     try {
+      const startTime = performance.now();
       await del(`/api/integrations/puppetserver/certificates/${certname}`);
+      const endTime = performance.now();
+
+      if (expertMode.enabled) {
+        console.log('[CertificateManagement] Certificate revoked successfully');
+        console.log('[CertificateManagement] Response time:', Math.round(endTime - startTime), 'ms');
+      }
+
       showSuccess('Certificate revoked', `Successfully revoked certificate for ${certname}`);
       await loadCertificates();
       selectedCertnames.delete(certname);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to revoke certificate';
       const troubleshooting = getTroubleshootingMessage('revoke', message);
+
+      if (expertMode.enabled) {
+        console.error('[CertificateManagement] Revoke failed:', err);
+      }
+
       showError('Failed to revoke certificate', `${message}\n\n${troubleshooting}`);
     }
   }
@@ -502,6 +556,37 @@
     </div>
   {/if}
 
+  <!-- Expert Mode Info Banner -->
+  {#if expertMode.enabled && !loading}
+    <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+      <div class="flex items-start gap-3">
+        <svg class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div class="flex-1">
+          <h4 class="text-sm font-semibold text-amber-900 dark:text-amber-200">Expert Mode Active</h4>
+          <div class="mt-2 space-y-1 text-xs text-amber-800 dark:text-amber-300">
+            <p><strong>API Endpoint:</strong> <code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /api/integrations/puppetserver/certificates</code></p>
+            <p><strong>Setup Instructions:</strong></p>
+            <ul class="ml-4 mt-1 list-disc space-y-1">
+              <li>Configure PUPPETSERVER_SERVER_URL environment variable</li>
+              <li>Set PUPPETSERVER_TOKEN or configure SSL certificates</li>
+              <li>Ensure Puppetserver CA API is accessible on port 8140</li>
+              <li>Verify auth.conf allows certificate API access</li>
+            </ul>
+            <p class="mt-2"><strong>Troubleshooting:</strong></p>
+            <ul class="ml-4 mt-1 list-disc space-y-1">
+              <li>Check browser console for detailed API request/response logs</li>
+              <li>Verify X-Expert-Mode header is being sent with requests</li>
+              <li>Review backend logs for Puppetserver connection errors</li>
+              <li>Test Puppetserver API directly: <code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">curl -k https://puppetserver:8140/puppet-ca/v1/certificate_statuses</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
   <!-- Loading State -->
   {#if loading && certificates.length === 0}
     <div class="flex items-center justify-center py-12">
@@ -516,7 +601,7 @@
         </svg>
         <div class="ml-3 flex-1">
           <h3 class="text-sm font-medium text-red-800 dark:text-red-400">Error loading certificates</h3>
-          <p class="mt-1 text-sm text-red-700 dark:text-red-300">{error}</p>
+          <p class="mt-1 text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">{error}</p>
           <div class="mt-3">
             <button
               type="button"

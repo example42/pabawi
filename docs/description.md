@@ -53,23 +53,47 @@ The objective is to provide a **common abstraction layer** and **consistent web 
 
 ## 4. Implementation steps
 
-Version 0.1.0 - Simple web interface serving the Bolt environment of the local cwd, it directly uses credentials, inventory files and modules found on the local existing directory of the Bolt user.
-Implements Bolt support for Inventory, Facts, and Executions.
-The web interface should provide the following pages:
+### Version 0.1.0 (Completed)
 
-- Nodes inventory (able to adapt efficently to from dozens to thousands of nodes)
-- Node detail page (where to see facts, execution resuts, run commands and tasks)
+Simple web interface serving the Bolt environment of the local cwd, it directly uses credentials, inventory files and modules found on the local existing directory of the Bolt user.
+Implements Bolt support for Inventory, Facts, and Executions.
+The web interface provides the following pages:
+
+- Nodes inventory (able to adapt efficiently to from dozens to thousands of nodes)
+- Node detail page (where to see facts, execution results, run commands and tasks)
 - Executions results page (summary of all executions and link to drill down for details)
 
-Version 0.2.0 - Add PuppetDB support for Inventory, Facts and reports add Puppet support for Executions
+### Version 0.2.0 (Completed)
 
-Version 0.3.0 - Add Ansible support for Inventory, Facts and Executions
+Add PuppetDB support for Inventory, Facts and reports. Implement plugin architecture for integrations.
 
-Version 0.4.0 - Implement workflows logic
+### Version 0.3.0 (Current)
 
-Version 0.x.0 - Add support for other tools
+Complete plugin architecture migration for all integrations. Add Puppetserver support for certificate management, node status, and catalog compilation. Restructure UI navigation with dedicated Puppet page. Implement expert mode and comprehensive error handling.
 
-Version 1.0.0 - Add multitenant support, with centralized authentication and authorisation
+Key features:
+
+- Bolt fully migrated to plugin architecture
+- Puppetserver integration for CA and node management
+- Multi-source inventory with node linking
+- Unified facts display from all sources
+- Comprehensive logging and error handling
+- Restructured UI with Puppet page
+- Expert mode for troubleshooting
+
+### Version 0.4.0 (Planned)
+
+Add Ansible support for Inventory, Facts and Executions. Implement workflows logic.
+
+### Version 0.x.0 (Future)
+
+Add support for other tools (Terraform, Salt, Chef, etc.)
+
+### Version 1.0.0 (Future)
+
+Add multitenant support, with centralized authentication and authorization
+
+For detailed architecture information, see [Architecture Documentation](./architecture.md).
 
 ---
 
