@@ -98,6 +98,49 @@ export const PuppetDBConfigSchema = z.object({
 export type PuppetDBConfig = z.infer<typeof PuppetDBConfigSchema>;
 
 /**
+ * Prometheus integration configuration schema
+ */
+export const PrometheusConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  serverUrl: z.string().url(),
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  username: z.string().optional(),
+  password: z.string().optional(),
+  grafanaUrl: z.string().url().optional(),
+});
+
+export type PrometheusConfig = z.infer<typeof PrometheusConfigSchema>;
+
+/**
+ * Ansible AWX/Tower integration configuration schema
+ */
+export const AnsibleConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  url: z.string().url(), // AWX/Tower base URL
+  token: z.string().optional(), // API token
+  username: z.string().optional(), // Basic auth username
+  password: z.string().optional(), // Basic auth password
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  verifySsl: z.boolean().default(true),
+  organizationId: z.number().int().positive().optional(), // Default organization
+});
+
+export type AnsibleConfig = z.infer<typeof AnsibleConfigSchema>;
+
+/**
+ * Terraform Cloud/Enterprise integration configuration schema
+ */
+export const TerraformConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  url: z.string().url().default('https://app.terraform.io'), // TFC/TFE URL
+  token: z.string(), // API token
+  organization: z.string().optional(), // Default organization
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+});
+
+export type TerraformConfig = z.infer<typeof TerraformConfigSchema>;
+
+/**
  * Integration configuration schema
  */
 export const IntegrationConfigSchema = z.object({
@@ -115,7 +158,9 @@ export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
  */
 export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
-  // Future integrations: ansible, terraform, etc.
+  prometheus: PrometheusConfigSchema.optional(),
+  ansible: AnsibleConfigSchema.optional(),
+  terraform: TerraformConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;

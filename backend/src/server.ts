@@ -22,6 +22,12 @@ import { errorHandler, requestIdMiddleware } from "./middleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { BoltPlugin } from "./integrations/bolt";
+import { PrometheusPlugin } from "./integrations/prometheus";
+import { AnsiblePlugin } from "./integrations/ansible";
+import { TerraformPlugin } from "./integrations/terraform";
+import { createPrometheusRouter } from "./routes/prometheus";
+import { createAnsibleRouter } from "./routes/ansible";
+import { createTerraformRouter } from "./routes/terraform";
 import type { IntegrationConfig } from "./integrations/types";
 
 /**
@@ -179,6 +185,102 @@ async function startServer(): Promise<Express> {
       console.warn("PuppetDB integration not configured - skipping registration");
     }
 
+    // Initialize Prometheus integration if configured
+    const prometheusConfig = config.integrations.prometheus;
+    const prometheusConfigured = !!prometheusConfig?.serverUrl;
+
+    if (prometheusConfigured) {
+      console.warn("Initializing Prometheus integration...");
+      try {
+        const prometheusPlugin = new PrometheusPlugin();
+        const prometheusIntegrationConfig: IntegrationConfig = {
+          enabled: prometheusConfig.enabled,
+          name: "prometheus",
+          type: "information",
+          config: prometheusConfig,
+          priority: 8, // Between Bolt and PuppetDB
+        };
+
+        integrationManager.registerPlugin(prometheusPlugin, prometheusIntegrationConfig);
+
+        console.warn("Prometheus integration registered and enabled");
+        console.warn(`- Server URL: ${prometheusConfig.serverUrl}`);
+        console.warn(
+          `- Grafana URL: ${prometheusConfig.grafanaUrl ?? "not configured"}`,
+        );
+      } catch (error) {
+        console.warn(
+          `WARNING: Failed to initialize Prometheus integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    } else {
+      console.warn("Prometheus integration not configured - skipping registration");
+    }
+
+    // Initialize Ansible AWX/Tower integration if configured
+    const ansibleConfig = config.integrations.ansible;
+    const ansibleConfigured = !!ansibleConfig?.url;
+
+    if (ansibleConfigured) {
+      console.warn("Initializing Ansible AWX/Tower integration...");
+      try {
+        const ansiblePlugin = new AnsiblePlugin();
+        const ansibleIntegrationConfig: IntegrationConfig = {
+          enabled: ansibleConfig.enabled,
+          name: "ansible",
+          type: "both", // Can provide inventory and execute jobs
+          config: ansibleConfig,
+          priority: 7, // Between Bolt and Prometheus
+        };
+
+        integrationManager.registerPlugin(ansiblePlugin, ansibleIntegrationConfig);
+
+        console.warn("Ansible integration registered and enabled");
+        console.warn(`- AWX/Tower URL: ${ansibleConfig.url}`);
+        console.warn(
+          `- Authentication: ${ansibleConfig.token ? "token" : ansibleConfig.username ? "basic auth" : "not configured"}`,
+        );
+      } catch (error) {
+        console.warn(
+          `WARNING: Failed to initialize Ansible integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    } else {
+      console.warn("Ansible integration not configured - skipping registration");
+    }
+
+    // Initialize Terraform Cloud/Enterprise integration if configured
+    const terraformConfig = config.integrations.terraform;
+    const terraformConfigured = !!terraformConfig?.url && !!terraformConfig?.token;
+
+    if (terraformConfigured) {
+      console.warn("Initializing Terraform Cloud/Enterprise integration...");
+      try {
+        const terraformPlugin = new TerraformPlugin();
+        const terraformIntegrationConfig: IntegrationConfig = {
+          enabled: terraformConfig.enabled,
+          name: "terraform",
+          type: "information", // Read-only infrastructure state
+          config: terraformConfig,
+          priority: 6, // Lower priority
+        };
+
+        integrationManager.registerPlugin(terraformPlugin, terraformIntegrationConfig);
+
+        console.warn("Terraform integration registered and enabled");
+        console.warn(`- Terraform URL: ${terraformConfig.url}`);
+        console.warn(
+          `- Organization: ${terraformConfig.organization ?? "not specified"}`,
+        );
+      } catch (error) {
+        console.warn(
+          `WARNING: Failed to initialize Terraform integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+      }
+    } else {
+      console.warn("Terraform integration not configured - skipping registration");
+    }
+
     // Initialize all registered plugins
     console.warn("Initializing all integration plugins...");
     const initErrors = await integrationManager.initializePlugins();
@@ -328,6 +430,18 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api/integrations",
       createIntegrationsRouter(integrationManager, puppetDBService),
+    );
+    app.use(
+      "/api/prometheus",
+      createPrometheusRouter(integrationManager),
+    );
+    app.use(
+      "/api/ansible",
+      createAnsibleRouter(integrationManager),
+    );
+    app.use(
+      "/api/terraform",
+      createTerraformRouter(integrationManager),
     );
 
     // Serve static frontend files in production
