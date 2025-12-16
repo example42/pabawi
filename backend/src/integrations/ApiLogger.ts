@@ -334,43 +334,55 @@ export class ApiLogger {
    * @param body - Raw body
    * @returns Sanitized body
    */
-  private sanitizeBody(body: unknown): unknown {
-    if (!body) {
-      return body;
-    }
-
-    // If body is a string, return as-is (already serialized)
-    if (typeof body === "string") {
-      return body;
-    }
-
-    // If body is an object, sanitize sensitive fields
-    if (typeof body === "object" && body !== null) {
-      const sanitized: Record<string, unknown> = {};
-      const sensitiveFields = [
-        "password",
-        "token",
-        "secret",
-        "api_key",
-        "apiKey",
-        "private_key",
-        "privateKey",
-      ];
-
-      for (const [key, value] of Object.entries(body)) {
-        const lowerKey = key.toLowerCase();
-        if (sensitiveFields.some((field) => lowerKey.includes(field))) {
-          sanitized[key] = "[REDACTED]";
-        } else {
-          sanitized[key] = value;
-        }
+    private sanitizeBody(body: unknown): unknown {
+      if (!body) {
+        return body;
       }
 
-      return sanitized;
+      // If body is a string, return as-is (already serialized)
+      if (typeof body === "string") {
+        return body;
+      }
+
+      // If body is a plain object, sanitize sensitive fields
+      if (this.isPlainObject(body)) {
+        const sanitized: Record<string, unknown> = {};
+        const sensitiveFields = [
+          "password",
+          "token",
+          "secret",
+          "api_key",
+          "apiKey",
+          "private_key",
+          "privateKey",
+        ];
+
+        for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+          const lowerKey = key.toLowerCase();
+          if (sensitiveFields.some((field) => lowerKey.includes(field))) {
+            sanitized[key] = "[REDACTED]";
+          } else {
+            sanitized[key] = value;
+          }
+        }
+
+        return sanitized;
+      }
+
+      return body;
     }
 
-    return body;
-  }
+
+    /**
+     * Check if value is a plain object
+     */
+    private isPlainObject(value: unknown): value is Record<string, unknown> {
+      if (Object.prototype.toString.call(value) !== "[object Object]") {
+        return false;
+      }
+      const prototype = Object.getPrototypeOf(value);
+      return prototype === null || prototype === Object.prototype;
+    }
 
   /**
    * Create a preview of the body for logging
