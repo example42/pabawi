@@ -42,8 +42,8 @@ http://localhost:3000/api
 Pabawi supports multiple authentication methods depending on the integration:
 
 - **Bolt**: No API-level authentication (authentication handled by Bolt for node connections)
-- **PuppetDB**: Token-based authentication using RBAC tokens
-- **Puppetserver**: Certificate-based authentication for CA operations
+- **PuppetDB**: Token-based authentication using RBAC tokens (Puppet Enterprise only) or certificate-based authentication
+- **Puppetserver**: Token-based authentication (Puppet Enterprise only) or certificate-based authentication for CA operations
 
 For detailed authentication setup and troubleshooting, see:
 

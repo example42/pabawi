@@ -635,6 +635,9 @@ export class PuppetserverService
   /**
    * List certificates with optional status filter
    *
+   * Note: In PE 2025.3.0, falls back to using PuppetDB nodes as certificate source
+   * when CA API is not available.
+   *
    * @param status - Optional certificate status filter
    * @returns Array of certificates
    */
@@ -658,27 +661,90 @@ export class PuppetserverService
         );
       }
 
-      const result = await client.getCertificates(status);
+      try {
+        const result = await client.getCertificates(status);
 
-      if (!Array.isArray(result)) {
+        if (!Array.isArray(result)) {
+          this.log(
+            "Unexpected response format from certificates endpoint",
+            "warn",
+          );
+          return [];
+        }
+
+        const certificates = result as Certificate[];
+
+        this.cache.set(cacheKey, certificates, this.cacheTTL);
         this.log(
-          "Unexpected response format from certificates endpoint",
+          `Cached ${String(certificates.length)} certificates for ${String(this.cacheTTL)}ms`,
+        );
+
+        return certificates;
+      } catch (caError) {
+        this.log(
+          "CA API not available, falling back to PuppetDB nodes as certificate source",
           "warn",
         );
-        return [];
+
+        // Fallback: Get certificates from PuppetDB nodes
+        const certificates = await this.getCertificatesFromPuppetDB(status);
+
+        this.cache.set(cacheKey, certificates, this.cacheTTL);
+        this.log(
+          `Cached ${String(certificates.length)} certificates from PuppetDB fallback for ${String(this.cacheTTL)}ms`,
+        );
+
+        return certificates;
       }
-
-      const certificates = result as Certificate[];
-
-      this.cache.set(cacheKey, certificates, this.cacheTTL);
-      this.log(
-        `Cached ${String(certificates.length)} certificates for ${String(this.cacheTTL)}ms`,
-      );
-
-      return certificates;
     } catch (error) {
       this.logError("Failed to list certificates", error);
       throw error;
+    }
+  }
+
+  /**
+   * Fallback method to get certificate information from PuppetDB nodes
+   * Used when CA API is not available in PE 2025.3.0+
+   */
+  private async getCertificatesFromPuppetDB(status?: CertificateStatus): Promise<Certificate[]> {
+    try {
+      // Get the PuppetDB service from the integration manager
+      const integrationManager = (global as any).integrationManager;
+      if (!integrationManager) {
+        this.log("Integration manager not available for PuppetDB fallback", "warn");
+        return [];
+      }
+
+      const puppetdbService = integrationManager.getInformationSource("puppetdb");
+      if (!puppetdbService || !puppetdbService.isInitialized()) {
+        this.log("PuppetDB service not available for certificate fallback", "warn");
+        return [];
+      }
+
+      // Get all nodes from PuppetDB - these represent active certificates
+      const nodes = await puppetdbService.getInventory();
+
+      // Convert nodes to certificate format
+      const certificates: Certificate[] = nodes.map((node: any) => ({
+        certname: node.certname || node.name || node.id,
+        status: "signed" as const, // Nodes in PuppetDB are signed certificates
+        fingerprint: "N/A", // Not available from PuppetDB
+        expiration: null, // Would need to be fetched separately
+        dns_alt_names: [],
+        authorization_extensions: {},
+        state: "signed" as const,
+      }));
+
+      // Apply status filter if provided
+      if (status) {
+        return certificates.filter(cert => cert.status === status);
+      }
+
+      this.log(`Retrieved ${certificates.length} certificates from PuppetDB fallback`);
+      return certificates;
+    } catch (error) {
+      this.logError("Failed to get certificates from PuppetDB fallback", error);
+      return [];
     }
   }
 

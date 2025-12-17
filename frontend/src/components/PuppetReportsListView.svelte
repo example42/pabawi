@@ -78,6 +78,9 @@
             Duration
           </th>
           <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Hostname
+          </th>
+          <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Environment
           </th>
           <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -111,6 +114,9 @@
             </td>
             <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
               {getDuration(report.start_time, report.end_time)}
+            </td>
+            <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
+              {report.certname}
             </td>
             <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
               <div class="flex items-center gap-2">

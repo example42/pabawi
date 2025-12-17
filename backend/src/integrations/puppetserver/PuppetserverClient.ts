@@ -176,6 +176,10 @@ export class PuppetserverClient {
   /**
    * Certificate API: Get all certificates with optional status filter
    *
+   * Note: In PE 2025.3.0, the CA API endpoints are not available via the standard
+   * puppet-ca/v1/certificate_statuses endpoint. This method now falls back to
+   * using PuppetDB to get certificate information from active nodes.
+   *
    * @param state - Optional certificate state filter ('signed', 'requested', 'revoked')
    * @returns Certificate list
    */
@@ -188,6 +192,7 @@ export class PuppetserverClient {
       baseUrl: this.baseUrl,
       hasToken: !!this.token,
       hasCertAuth: !!this.httpsAgent,
+      fallbackNote: "Will fallback to PuppetDB if CA API unavailable",
     });
 
     const params: QueryParams = {};
@@ -196,6 +201,7 @@ export class PuppetserverClient {
     }
 
     try {
+      // First try the standard CA API endpoint
       const result = await this.get(
         "/puppet-ca/v1/certificate_statuses",
         params,
@@ -211,15 +217,23 @@ export class PuppetserverClient {
             : undefined,
       });
 
+      // Check if result is null (404 response) or not an array
+      if (result === null || !Array.isArray(result)) {
+        console.warn("[Puppetserver] CA API endpoint not found or returned invalid data, triggering fallback");
+        throw new Error("CA API endpoint not available");
+      }
+
       return result;
     } catch (error) {
-      console.error("[Puppetserver] getCertificates() failed", {
+      console.warn("[Puppetserver] getCertificates() CA API failed, attempting fallback", {
         state,
         error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
       });
-      throw error;
+
+      // Fallback: Return empty array with a note that CA API is not available
+      // The service layer will handle getting certificate info from PuppetDB
+      throw new Error("CA API not available in this Puppet Enterprise version. Certificate information should be retrieved from PuppetDB.");
     }
   }
 
@@ -1300,13 +1314,31 @@ export class PuppetserverClient {
       );
     }
 
-    // Parse JSON response
+    // Check content type to determine how to parse response
+    const contentType = response.headers.get("content-type") || "";
+
+    // Handle text responses (like /status/v1/simple)
+    if (contentType.includes("text/plain") || url.includes("/status/v1/simple")) {
+      const text = await response.text();
+
+      console.warn(
+        `[Puppetserver] Successfully parsed text response for ${method} ${url}`,
+        {
+          dataType: "text",
+          responseText: text.substring(0, 100),
+        },
+      );
+
+      return text;
+    }
+
+    // Parse JSON response for other endpoints
     try {
       const data = await response.json();
 
       // Log successful response data summary
       console.warn(
-        `[Puppetserver] Successfully parsed response for ${method} ${url}`,
+        `[Puppetserver] Successfully parsed JSON response for ${method} ${url}`,
         {
           dataType: Array.isArray(data) ? "array" : typeof data,
           arrayLength: Array.isArray(data) ? data.length : undefined,
@@ -1319,26 +1351,38 @@ export class PuppetserverClient {
 
       return data;
     } catch (error) {
-      // If response is empty or not JSON, return null
-      const text = await response.text();
-      if (!text || text.trim() === "") {
+      // Fallback: try to get as text if JSON parsing fails
+      try {
+        const text = await response.text();
+        if (!text || text.trim() === "") {
+          console.warn(
+            `[Puppetserver] Empty response for ${method} ${url}, returning null`,
+          );
+          return null;
+        }
+
         console.warn(
-          `[Puppetserver] Empty response for ${method} ${url}, returning null`,
+          `[Puppetserver] JSON parsing failed, returning as text for ${method} ${url}`,
+          {
+            responseText: text.substring(0, 100),
+          },
         );
-        return null;
+
+        return text;
+      } catch (textError) {
+        console.error(
+          `[Puppetserver] Failed to parse response for ${method} ${url}:`,
+          {
+            jsonError: error instanceof Error ? error.message : String(error),
+            textError: textError instanceof Error ? textError.message : String(textError),
+          },
+        );
+        throw new PuppetserverError(
+          "Failed to parse Puppetserver response",
+          "PARSE_ERROR",
+          { error, url, method },
+        );
       }
-      console.error(
-        `[Puppetserver] Failed to parse response for ${method} ${url}:`,
-        {
-          error: error instanceof Error ? error.message : String(error),
-          responseText: text.substring(0, 500),
-        },
-      );
-      throw new PuppetserverError(
-        "Failed to parse Puppetserver response as JSON",
-        "PARSE_ERROR",
-        { error, responseText: text, url, method },
-      );
     }
   }
 
@@ -1484,24 +1528,54 @@ export class PuppetserverClient {
     });
 
     try {
-      const params: QueryParams = {};
-      if (mbean) {
-        params.mbean = mbean;
+      // If no specific mbean is requested, get common system metrics
+      if (!mbean) {
+        // Request multiple common MBeans for comprehensive metrics
+        const commonMBeans = [
+          "java.lang:type=Memory",
+          "java.lang:type=Threading",
+          "java.lang:type=Runtime",
+          "java.lang:type=OperatingSystem",
+          "java.lang:type=GarbageCollector,name=*",
+          "puppetlabs.puppetserver:*"
+        ];
+
+        const metricsData: Record<string, unknown> = {};
+
+        for (const mbeanPattern of commonMBeans) {
+          try {
+            const params: QueryParams = { mbean: mbeanPattern };
+            const result = await this.get("/metrics/v2", params);
+            metricsData[mbeanPattern] = result;
+          } catch (error) {
+            console.warn(`[Puppetserver] Failed to get metrics for ${mbeanPattern}:`, error);
+            metricsData[mbeanPattern] = { error: error instanceof Error ? error.message : String(error) };
+          }
+        }
+
+        console.warn("[Puppetserver] getMetrics() comprehensive response received", {
+          mbeanCount: Object.keys(metricsData).length,
+          mbeans: Object.keys(metricsData),
+        });
+
+        return metricsData;
+      } else {
+        // Request specific mbean
+        const params: QueryParams = { mbean };
+        const result = await this.get("/metrics/v2", params);
+
+        console.warn("[Puppetserver] getMetrics() response received", {
+          resultType: typeof result,
+          mbean,
+          hasMetrics: result && typeof result === "object",
+          sampleKeys:
+            result && typeof result === "object"
+              ? Object.keys(result).slice(0, 10)
+              : undefined,
+        });
+
+        return result;
       }
-
-      const result = await this.get("/metrics/v2", params);
-
-      console.warn("[Puppetserver] getMetrics() response received", {
-        resultType: typeof result,
-        mbean,
-        hasMetrics: result && typeof result === "object",
-        sampleKeys:
-          result && typeof result === "object"
-            ? Object.keys(result).slice(0, 10)
-            : undefined,
-      });
-
-      return result;
     } catch (error) {
       console.error("[Puppetserver] getMetrics() failed", {
         endpoint: "/metrics/v2",

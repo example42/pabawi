@@ -85,15 +85,16 @@
       loading = true;
       error = null;
       const startTime = performance.now();
-      const data = await get<Certificate[]>('/api/integrations/puppetserver/certificates');
+      const response = await get<{certificates: Certificate[], source: string, count: number, filtered: boolean}>('/api/integrations/puppetserver/certificates');
       const endTime = performance.now();
 
-      certificates = data;
+      certificates = response.certificates;
 
       if (expertMode.enabled) {
         console.log('[CertificateManagement] Successfully loaded', certificates.length, 'certificates');
         console.log('[CertificateManagement] Response time:', Math.round(endTime - startTime), 'ms');
-        console.log('[CertificateManagement] Received data:', data);
+        console.log('[CertificateManagement] Received response:', response);
+        console.log('[CertificateManagement] Certificates:', certificates);
       }
     } catch (err) {
       console.error('[CertificateManagement] Error loading certificates:', err);

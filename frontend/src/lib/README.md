@@ -411,7 +411,7 @@ const data = await get('/api/inventory', { maxRetries: 2 });
 import { showSuccess, showError } from '../lib/toast.svelte';
 ```
 
-2. Replace console.log with toasts:
+1. Replace console.log with toasts:
 
 ```typescript
 // Before
@@ -421,7 +421,7 @@ console.log('Operation successful');
 showSuccess('Operation successful');
 ```
 
-3. Add ToastContainer to App.svelte:
+1. Add ToastContainer to App.svelte:
 
 ```svelte
 <ToastContainer />

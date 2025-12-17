@@ -272,16 +272,20 @@
   {#if selectedResource}
     <div
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onclick={closeResourceDetails}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      tabindex="-1"
+      onclick={(e) => e.target === e.currentTarget && closeResourceDetails()}
+      onkeydown={(e) => e.key === 'Escape' && closeResourceDetails()}
     >
       <div
         class="max-h-[90vh] w-full max-w-4xl overflow-auto rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800"
-        onclick={(e) => e.stopPropagation()}
       >
         <!-- Modal Header -->
         <div class="sticky top-0 flex items-center justify-between border-b border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
           <div>
-            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Resource Details</h3>
+            <h3 id="modal-title" class="text-lg font-semibold text-gray-900 dark:text-white">Resource Details</h3>
             <p class="mt-1 font-mono text-sm text-gray-600 dark:text-gray-400">
               {selectedResource.type}[{selectedResource.title}]
             </p>
@@ -290,6 +294,7 @@
             type="button"
             class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
             onclick={closeResourceDetails}
+            aria-label="Close resource details modal"
           >
             <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

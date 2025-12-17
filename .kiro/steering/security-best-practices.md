@@ -3,8 +3,6 @@ title: Security Best Practices
 inclusion: always
 ---
 
-# Security Best Practices
-
 ## Code Security
 
 - Never hardcode secrets, API keys, or passwords

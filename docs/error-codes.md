@@ -72,7 +72,7 @@ When expert mode is enabled (via `X-Expert-Mode: true` header or `expertMode: tr
 | `PUPPETDB_NOT_CONFIGURED` | 503 | PuppetDB integration not configured | Missing configuration, integration disabled |
 | `PUPPETDB_NOT_INITIALIZED` | 503 | PuppetDB integration not initialized | Initialization failed, service not started |
 | `PUPPETDB_CONNECTION_ERROR` | 503 | Cannot connect to PuppetDB | PuppetDB offline, network issues, incorrect URL |
-| `PUPPETDB_AUTH_ERROR` | 401 | Authentication failed | Invalid token, expired certificate, missing credentials |
+| `PUPPETDB_AUTH_ERROR` | 401 | Authentication failed | Invalid token (PE only), expired certificate, missing credentials |
 | `PUPPETDB_QUERY_ERROR` | 400 | Invalid PQL query syntax | Malformed PQL query, unsupported query features |
 | `PUPPETDB_TIMEOUT` | 504 | PuppetDB request timeout | Query too complex, PuppetDB overloaded, timeout too short |
 | `NODE_NOT_FOUND` | 404 | Node not found in PuppetDB | Node never reported, deactivated node, typo in certname |
@@ -101,7 +101,7 @@ When expert mode is enabled (via `X-Expert-Mode: true` header or `expertMode: tr
 | `INTEGRATION_NOT_CONFIGURED` | 503 | Integration not configured | Missing configuration, integration disabled |
 | `INTEGRATION_NOT_INITIALIZED` | 503 | Integration not initialized | Initialization failed, service not started |
 | `CONNECTION_ERROR` | 503 | Cannot connect to integration | Service offline, network issues, incorrect URL |
-| `AUTH_ERROR` | 401 | Authentication failed | Invalid credentials, expired token/certificate |
+| `AUTH_ERROR` | 401 | Authentication failed | Invalid credentials, expired token/certificate (tokens only available in PE) |
 | `TIMEOUT` | 504 | Request timeout | Service slow, timeout too short |
 
 ## Error Handling Best Practices

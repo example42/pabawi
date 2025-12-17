@@ -9,7 +9,7 @@
 Complete setup guide including:
 
 - Prerequisites and requirements
-- Two authentication methods (Token & SSL Certificate)
+- Two authentication methods (Token for Puppet Enterprise & SSL Certificate for all installations)
 - All configuration options with detailed explanations
 - Step-by-step verification process
 - Troubleshooting guide for common issues
@@ -81,8 +81,8 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 
 ### Authentication Options
 
-- **Token Authentication** (Recommended): Easier to rotate, includes generation instructions
-- **SSL Certificates**: More secure for production environments
+- **Token Authentication** (Puppet Enterprise Only): Easier to rotate, includes generation instructions
+- **SSL Certificates**: Required for Open Source Puppet, also available for Puppet Enterprise
 
 ### Interactive Elements
 
@@ -107,7 +107,7 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 - `PUPPETSERVER_ENABLED`: Enable/disable the integration
 - `PUPPETSERVER_SERVER_URL`: Puppetserver API endpoint
 - `PUPPETSERVER_PORT`: API port (default: 8140)
-- `PUPPETSERVER_TOKEN`: API authentication token
+- `PUPPETSERVER_TOKEN`: API authentication token (Puppet Enterprise only)
 
 ### SSL Settings
 

@@ -42,6 +42,14 @@ export class ConfigService {
       timeout?: number;
       retryAttempts?: number;
       retryDelay?: number;
+      cache?: {
+        ttl?: number;
+      };
+      circuitBreaker?: {
+        threshold?: number;
+        timeout?: number;
+        resetTimeout?: number;
+      };
     };
     puppetserver?: {
       enabled: boolean;
@@ -113,6 +121,35 @@ export class ConfigService {
           key: process.env.PUPPETDB_SSL_KEY,
           rejectUnauthorized:
             process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED !== "false",
+        };
+      }
+
+      // Parse cache configuration
+      if (process.env.PUPPETDB_CACHE_TTL) {
+        integrations.puppetdb.cache = {
+          ttl: parseInt(process.env.PUPPETDB_CACHE_TTL, 10),
+        };
+      }
+
+      // Parse circuit breaker configuration
+      if (
+        process.env.PUPPETDB_CIRCUIT_BREAKER_THRESHOLD ||
+        process.env.PUPPETDB_CIRCUIT_BREAKER_TIMEOUT ||
+        process.env.PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT
+      ) {
+        integrations.puppetdb.circuitBreaker = {
+          threshold: process.env.PUPPETDB_CIRCUIT_BREAKER_THRESHOLD
+            ? parseInt(process.env.PUPPETDB_CIRCUIT_BREAKER_THRESHOLD, 10)
+            : undefined,
+          timeout: process.env.PUPPETDB_CIRCUIT_BREAKER_TIMEOUT
+            ? parseInt(process.env.PUPPETDB_CIRCUIT_BREAKER_TIMEOUT, 10)
+            : undefined,
+          resetTimeout: process.env.PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT
+            ? parseInt(
+                process.env.PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT,
+                10,
+              )
+            : undefined,
         };
       }
     }

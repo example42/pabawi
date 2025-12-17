@@ -169,11 +169,11 @@ export class PuppetDBService
     // Create PuppetDB client
     this.client = createPuppetDBClient(this.puppetDBConfig);
 
-    // Create circuit breaker
+    // Create circuit breaker with config values or defaults
     this.circuitBreaker = createPuppetDBCircuitBreaker(
-      5, // failure threshold
-      60000, // reset timeout (60 seconds)
-      this.puppetDBConfig.timeout,
+      this.puppetDBConfig.circuitBreaker?.threshold ?? 5,
+      this.puppetDBConfig.circuitBreaker?.resetTimeout ?? 60000,
+      this.puppetDBConfig.circuitBreaker?.timeout ?? this.puppetDBConfig.timeout,
     );
 
     // Create retry configuration (defaults are set in schema)

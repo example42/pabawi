@@ -3,8 +3,6 @@ title: Development Standards
 inclusion: always
 ---
 
-# Development Standards
-
 ## Dependency Management
 
 - Use latest stable versions of all libraries and dependencies

@@ -234,7 +234,7 @@ All endpoints return JSON responses with the following structure:
 | Header | Description | Applicable Endpoints |
 |--------|-------------|---------------------|
 | `X-Expert-Mode` | Enable expert mode | All endpoints |
-| `X-Authentication-Token` | PuppetDB token | PuppetDB endpoints |
+| `X-Authentication-Token` | PuppetDB token (PE only) | PuppetDB endpoints |
 | `X-Cache-Control` | Cache control | All endpoints |
 | `Content-Type` | Request content type | POST/PUT endpoints |
 | `Accept` | Response content type | All endpoints |

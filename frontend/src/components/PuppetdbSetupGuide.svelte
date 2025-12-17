@@ -6,60 +6,39 @@
     navigator.clipboard.writeText(text);
   };
 
-  const tokenConfig = `# Puppetserver Integration - Token Authentication (Puppet Enterprise Only)
-PUPPETSERVER_ENABLED=true
-PUPPETSERVER_SERVER_URL=https://puppet.example.com
-PUPPETSERVER_PORT=8140
-PUPPETSERVER_TOKEN=your-api-token-here
-PUPPETSERVER_TIMEOUT=30000
-PUPPETSERVER_RETRY_ATTEMPTS=3
-PUPPETSERVER_RETRY_DELAY=1000`;
+  const tokenConfig = `# PuppetDB Integration - Token Authentication (Puppet Enterprise Only)
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=https://puppetdb.example.com
+PUPPETDB_PORT=8081
+PUPPETDB_TOKEN=your-api-token-here
+PUPPETDB_TIMEOUT=30000
+PUPPETDB_RETRY_ATTEMPTS=3
+PUPPETDB_RETRY_DELAY=1000`;
 
-  const sslConfig = `# Puppetserver Integration - SSL Certificate Authentication
-PUPPETSERVER_ENABLED=true
-PUPPETSERVER_SERVER_URL=https://puppet.example.com
-PUPPETSERVER_PORT=8140
-PUPPETSERVER_SSL_ENABLED=true
-PUPPETSERVER_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-PUPPETSERVER_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/admin.pem
-PUPPETSERVER_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/admin.pem
-PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true`;
+  const sslConfig = `# PuppetDB Integration - SSL Certificate Authentication
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=https://puppetdb.example.com
+PUPPETDB_PORT=8081
+PUPPETDB_SSL_ENABLED=true
+PUPPETDB_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
+PUPPETDB_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/admin.pem
+PUPPETDB_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/admin.pem
+PUPPETDB_SSL_REJECT_UNAUTHORIZED=true`;
 
   const advancedConfig = `# Advanced Configuration
-PUPPETSERVER_INACTIVITY_THRESHOLD=3600
-PUPPETSERVER_CACHE_TTL=300000
-PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD=5
-PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT=60000
-PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
-
-  const authConfConfig = `# /etc/puppetlabs/puppetserver/conf.d/auth.conf
-authorization: {
-    version: 1
-    rules: [
-        # Pabawi API Access Rule
-        {
-            match-request: {
-                path: "^/(puppet-ca/v1|puppet/v3|status/v1|puppet-admin-api/v1)"
-                type: "regex"
-                method: [get, post, put, delete]
-            }
-            allow: ["pabawi.example.com"]
-            sort-order: 200
-            name: "pabawi-api-access"
-        }
-
-        # Your existing rules go here...
-        # Make sure this rule comes BEFORE any deny-all rules
-    ]
-}`;
+PUPPETDB_CACHE_TTL=300000
+PUPPETDB_CIRCUIT_BREAKER_THRESHOLD=5
+PUPPETDB_CIRCUIT_BREAKER_TIMEOUT=60000
+PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
+PUPPETDB_PRIORITY=10`;
 </script>
 
 <div class="max-w-4xl mx-auto px-4 py-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
   <div class="mb-8">
-    <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">Puppetserver Integration Setup</h2>
+    <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">PuppetDB Integration Setup</h2>
     <p class="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-      Configure Pabawi to connect to your Puppetserver for certificate
-      management, catalog compilation, and node monitoring.
+      Configure Pabawi to connect to your PuppetDB for dynamic inventory discovery,
+      node facts retrieval, Puppet run reports viewing, and event tracking.
     </p>
   </div>
 
@@ -69,11 +48,11 @@ authorization: {
       <ul class="space-y-2 text-gray-700 dark:text-gray-300">
         <li class="flex items-start">
           <span class="text-blue-500 mr-2">•</span>
-          A running Puppetserver instance (version 6.x or 7.x)
+          A running PuppetDB instance (version 6.0 or later)
         </li>
         <li class="flex items-start">
           <span class="text-blue-500 mr-2">•</span>
-          Network access to the Puppetserver API (default port 8140)
+          Network access to the PuppetDB API (default port 8081)
         </li>
         <li class="flex items-start">
           <span class="text-blue-500 mr-2">•</span>
@@ -118,18 +97,9 @@ authorization: {
       {#if selectedAuth === "token"}
         <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
           <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Generate API Token (Puppet Enterprise Only)</h4>
-          <p class="text-gray-700 dark:text-gray-300 mb-3"><strong>Note:</strong> Token authentication is only available with Puppet Enterprise. Open Source Puppet installations must use SSL certificates.</p>
-
-          <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-r-lg mb-3">
-            <p class="text-sm text-gray-700 dark:text-gray-300">
-              <strong>Important:</strong> The PE Console user account used to generate the token must have the necessary RBAC permissions.
-              See Step 2 for detailed permission requirements.
-            </p>
-          </div>
-
+          <p class="text-gray-700 dark:text-gray-300 mb-3"><strong>Note:</strong> Token authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use SSL certificates.</p>
           <p class="text-gray-700 dark:text-gray-300 mb-3">Run these commands on your Puppetserver:</p>
           <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
-            <div># Login with a user that has required RBAC permissions</div>
             <div>puppet access login --lifetime 1y</div>
             <div>puppet access show</div>
           </div>
@@ -150,118 +120,7 @@ authorization: {
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Configure Puppetserver Authorization</h3>
-
-      <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-r-lg mb-6">
-        <div class="flex items-start">
-          <span class="text-amber-500 text-xl mr-3">⚠️</span>
-          <div>
-            <h4 class="font-medium text-gray-900 dark:text-white mb-2">Important: Authorization Required</h4>
-            <p class="text-gray-700 dark:text-gray-300 text-sm">
-              Pabawi needs access to multiple Puppetserver API endpoints. Without proper authorization configuration,
-              you'll receive 403 Forbidden errors even with valid credentials.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Required API Endpoints</h4>
-      <p class="text-gray-700 dark:text-gray-300 mb-3">Pabawi requires access to these Puppetserver endpoints:</p>
-
-      <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
-        <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300 font-mono">
-          <li>• <strong>Certificate Management:</strong> /puppet-ca/v1/certificate_statuses, /puppet-ca/v1/certificate_status/*</li>
-          <li>• <strong>Node Status:</strong> /puppet/v3/status/*</li>
-          <li>• <strong>Facts:</strong> /puppet/v3/facts/*</li>
-          <li>• <strong>Catalogs:</strong> /puppet/v3/catalog/*</li>
-          <li>• <strong>Environments:</strong> /puppet/v3/environments, /puppet/v3/environment/*</li>
-          <li>• <strong>Status & Metrics:</strong> /status/v1/services, /status/v1/simple</li>
-          <li>• <strong>Admin API:</strong> /puppet-admin-api/v1, /puppet-admin-api/v1/environment-cache</li>
-        </ul>
-      </div>
-
-      {#if selectedAuth === "token"}
-        <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Configure RBAC Permissions (Puppet Enterprise)</h4>
-        <p class="text-gray-700 dark:text-gray-300 mb-4">
-          For token-based authentication, the user account used to generate the token must have the necessary RBAC permissions
-          in the Puppet Enterprise Console.
-        </p>
-
-        <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg mb-4">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Required RBAC Roles:</h4>
-          <p class="text-gray-700 dark:text-gray-300 text-sm mb-3">
-            The PE Console user must have these permissions (or be assigned to roles that include them):
-          </p>
-          <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-            <li>• <strong>Certificate requests:</strong> View and manage certificate requests</li>
-            <li>• <strong>Node classifier:</strong> View node groups and classes</li>
-            <li>• <strong>Puppet agent:</strong> View node run status and facts</li>
-            <li>• <strong>Code Manager:</strong> Deploy environments (if using environment management)</li>
-            <li>• <strong>Console:</strong> View nodes and reports</li>
-          </ul>
-        </div>
-
-        <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Generate Token with Proper User</h4>
-        <p class="text-gray-700 dark:text-gray-300 mb-3">
-          Ensure you generate the token using a PE Console user account that has the required permissions:
-        </p>
-        <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm mb-4">
-          <div># Login with a user that has the required RBAC permissions</div>
-          <div>puppet access login --lifetime 1y</div>
-          <div>puppet access show</div>
-        </div>
-
-        <div class="p-4 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 rounded-r-lg">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">✅ Token Authentication Benefits:</h4>
-          <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-            <li>• No need to modify auth.conf files</li>
-            <li>• Permissions managed through PE Console RBAC</li>
-            <li>• Easier to rotate and manage</li>
-            <li>• Centralized access control</li>
-          </ul>
-        </div>
-      {:else}
-        <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Update auth.conf File</h4>
-        <p class="text-gray-700 dark:text-gray-300 mb-3">
-          For SSL certificate authentication, you need to update Puppetserver's authorization file
-          (typically located at <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">/etc/puppetlabs/puppetserver/conf.d/auth.conf</code>):
-        </p>
-
-        <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
-          <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-            <span class="font-medium text-gray-900 dark:text-white text-sm">Puppetserver auth.conf Configuration</span>
-            <button
-              class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-              onclick={() => copyToClipboard(authConfConfig)}
-            >
-              📋 Copy
-            </button>
-          </div>
-          <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto">{authConfConfig}</pre>
-        </div>
-
-        <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg mb-4">
-          <h4 class="font-medium text-gray-900 dark:text-white mb-2">Configuration Notes:</h4>
-          <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-            <li>• Replace <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">pabawi.example.com</code> with your actual certificate name</li>
-            <li>• Use <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">type: regex</code> for flexible path matching</li>
-            <li>• The <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">method: [get, post, put, delete]</code> allows all required HTTP methods</li>
-            <li>• Add this rule <strong>before</strong> any deny-all rules in your auth.conf</li>
-          </ul>
-        </div>
-
-        <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Apply Configuration</h4>
-        <p class="text-gray-700 dark:text-gray-300 mb-3">After updating auth.conf, restart Puppetserver:</p>
-        <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm">
-          sudo systemctl restart puppetserver
-        </div>
-      {/if}
-    </div>
-  </div>
-
-  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
-    <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Configure Environment Variables</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Configure Environment Variables</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Add these variables to your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code> file:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
@@ -312,16 +171,16 @@ authorization: {
           <h4 class="font-medium text-gray-900 dark:text-white mb-2">Configuration Options:</h4>
           <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
             <li>
-              <strong>INACTIVITY_THRESHOLD</strong>: Seconds before a node is
-              marked inactive (default: 3600)
-            </li>
-            <li>
               <strong>CACHE_TTL</strong>: Cache duration in milliseconds
               (default: 300000)
             </li>
             <li>
               <strong>CIRCUIT_BREAKER_*</strong>: Resilience settings for
               connection failures
+            </li>
+            <li>
+              <strong>PRIORITY</strong>: Source priority for multi-source inventory
+              (default: 10)
             </li>
           </ul>
         </div>
@@ -331,7 +190,7 @@ authorization: {
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Restart Backend Server</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Restart Backend Server</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Apply the configuration by restarting the backend:</p>
       <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
         <div>cd backend</div>
@@ -342,17 +201,17 @@ authorization: {
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Verify Connection</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Verify Connection</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Check the integration status:</p>
       <ol class="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 mb-4">
         <li>Navigate to the <strong>Integrations</strong> page</li>
-        <li>Look for "Puppetserver" in the list</li>
+        <li>Look for "PuppetDB" in the list</li>
         <li>Status should show "healthy" with a green indicator</li>
       </ol>
 
       <p class="text-gray-700 dark:text-gray-300 mb-3">Or test via API:</p>
       <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm">
-        curl http://localhost:3000/api/integrations/puppetserver/health
+        curl http://localhost:3000/api/integrations/puppetdb/nodes
       </div>
     </div>
   </div>
@@ -362,24 +221,24 @@ authorization: {
       <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Features Available</h3>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
-          <span class="text-3xl block mb-2">📜</span>
-          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Certificate Management</h4>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Sign, revoke, and manage node certificates</p>
-        </div>
-        <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
           <span class="text-3xl block mb-2">📊</span>
-          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Node Monitoring</h4>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Track node status and activity</p>
+          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Dynamic Inventory</h4>
+          <p class="text-sm text-gray-600 dark:text-gray-400">Automatic node discovery from PuppetDB</p>
         </div>
         <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
-          <span class="text-3xl block mb-2">📦</span>
-          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Catalog Operations</h4>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Compile and compare catalogs</p>
+          <span class="text-3xl block mb-2">📋</span>
+          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Node Facts</h4>
+          <p class="text-sm text-gray-600 dark:text-gray-400">Retrieve comprehensive system facts</p>
         </div>
         <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
-          <span class="text-3xl block mb-2">🌍</span>
-          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Environment Management</h4>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Deploy and manage environments</p>
+          <span class="text-3xl block mb-2">📈</span>
+          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Puppet Reports</h4>
+          <p class="text-sm text-gray-600 dark:text-gray-400">View run reports and status</p>
+        </div>
+        <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
+          <span class="text-3xl block mb-2">🔍</span>
+          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Event Tracking</h4>
+          <p class="text-sm text-gray-600 dark:text-gray-400">Monitor resource changes and events</p>
         </div>
       </div>
     </div>
@@ -395,15 +254,15 @@ authorization: {
             Connection Errors
           </summary>
           <div class="p-4 text-gray-700 dark:text-gray-300">
-            <p class="mb-3"><strong>Error:</strong> "Failed to connect to Puppetserver"</p>
+            <p class="mb-3"><strong>Error:</strong> "Failed to connect to PuppetDB"</p>
             <ul class="space-y-2 list-disc list-inside">
               <li>Verify network connectivity and firewall rules</li>
               <li>
                 Test connection: <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm"
-                  >curl -k https://puppet.example.com:8140/status/v1/simple</code
+                  >curl -k https://puppetdb.example.com:8081/pdb/meta/v1/version</code
                 >
               </li>
-              <li>Check PUPPETSERVER_SERVER_URL is correct</li>
+              <li>Check PUPPETDB_SERVER_URL is correct</li>
             </ul>
           </div>
         </details>
@@ -433,7 +292,7 @@ authorization: {
             <ul class="space-y-2 list-disc list-inside">
               <li>
                 For self-signed certs: Set <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm"
-                  >PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=false</code
+                  >PUPPETDB_SSL_REJECT_UNAUTHORIZED=false</code
                 >
               </li>
               <li>Or add CA certificate to system trusted store</li>
@@ -448,9 +307,9 @@ authorization: {
   <div class="mt-8 text-center">
     <p class="text-gray-600 dark:text-gray-400">
       For detailed documentation, see <a
-        href="https://github.com/example42/pabawi/tree/main/docs/PUPPETSERVER_SETUP.md"
+        href="https://github.com/example42/pabawi/tree/main/docs/puppetdb-integration-setup.md"
         target="_blank"
-        class="text-blue-600 dark:text-blue-400 hover:underline">PUPPETSERVER_SETUP.md</a
+        class="text-blue-600 dark:text-blue-400 hover:underline">puppetdb-integration-setup.md</a
       >
     </p>
   </div>

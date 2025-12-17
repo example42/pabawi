@@ -3,8 +3,6 @@ title: Git Best Practices
 inclusion: always
 ---
 
-# Git Best Practices
-
 ## Commit Messages
 
 - Use conventional commit format: `type(scope): description`

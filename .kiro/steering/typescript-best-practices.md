@@ -3,8 +3,6 @@ title: TypeScript Best Practices
 inclusion: always
 ---
 
-# TypeScript Best Practices
-
 ## Code Style
 
 - Use strict TypeScript configuration (`strict: true`)

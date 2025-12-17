@@ -135,7 +135,7 @@ PUPPETDB_ENABLED=true
 PUPPETDB_SERVER_URL=https://puppetdb.example.com
 PUPPETDB_PORT=8081
 
-# Authentication (choose one)
+# Authentication (Puppet Enterprise only - use certificates for Open Source Puppet)
 PUPPETDB_TOKEN=your-token-here
 
 # SSL Configuration
@@ -393,10 +393,12 @@ Copy `.env.example` to `.env` and configure as needed. Key variables:
 - `PUPPETDB_ENABLED`: Enable PuppetDB integration (default: false)
 - `PUPPETDB_SERVER_URL`: PuppetDB server URL
 - `PUPPETDB_PORT`: PuppetDB port (default: 8081)
-- `PUPPETDB_TOKEN`: Authentication token
+- `PUPPETDB_TOKEN`: Authentication token (Puppet Enterprise only)
 - `PUPPETDB_SSL_ENABLED`: Enable SSL (default: true)
 - `PUPPETDB_SSL_CA`: Path to CA certificate
 - `PUPPETDB_CACHE_TTL`: Cache duration in ms (default: 300000)
+
+**Important:** Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use certificate-based authentication.
 
 See [Configuration Guide](docs/configuration.md) for complete reference.
 
@@ -511,7 +513,7 @@ npm test --workspace=backend
 
 ## License
 
-[Add your license information here]
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Support
 

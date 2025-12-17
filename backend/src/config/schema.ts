@@ -81,6 +81,19 @@ export const PuppetDBCacheConfigSchema = z.object({
 export type PuppetDBCacheConfig = z.infer<typeof PuppetDBCacheConfigSchema>;
 
 /**
+ * PuppetDB circuit breaker configuration schema
+ */
+export const PuppetDBCircuitBreakerConfigSchema = z.object({
+  threshold: z.number().int().positive().default(5),
+  timeout: z.number().int().positive().default(60000), // 60 seconds
+  resetTimeout: z.number().int().positive().default(30000), // 30 seconds
+});
+
+export type PuppetDBCircuitBreakerConfig = z.infer<
+  typeof PuppetDBCircuitBreakerConfigSchema
+>;
+
+/**
  * PuppetDB integration configuration schema
  */
 export const PuppetDBConfigSchema = z.object({
@@ -93,6 +106,7 @@ export const PuppetDBConfigSchema = z.object({
   retryAttempts: z.number().int().nonnegative().default(3),
   retryDelay: z.number().int().positive().default(1000), // 1 second
   cache: PuppetDBCacheConfigSchema.optional(),
+  circuitBreaker: PuppetDBCircuitBreakerConfigSchema.optional(),
 });
 
 export type PuppetDBConfig = z.infer<typeof PuppetDBConfigSchema>;

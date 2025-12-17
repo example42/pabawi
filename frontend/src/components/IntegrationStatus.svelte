@@ -49,6 +49,8 @@
     return `/integrations/${name}/setup`;
   }
 
+
+
   // Format last check time
   function formatLastCheck(timestamp: string): string {
     try {
@@ -272,6 +274,8 @@
               </div>
             {/if}
 
+
+
             {#if integration.details && integration.status === 'error'}
               <details class="mt-2">
                 <summary
@@ -330,6 +334,7 @@
                       <li>Configure the integration using environment variables or config file</li>
                       <li>Check the setup instructions for required parameters</li>
                     {:else if integration.status === 'error' || integration.status === 'disconnected'}
+                      <li>Verify if you have the command available</li>
                       <li>Verify the service is running and accessible</li>
                       <li>Check network connectivity and firewall rules</li>
                       <li>Verify authentication credentials are correct</li>

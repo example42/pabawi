@@ -24,7 +24,7 @@ Before configuring PuppetDB integration, ensure you have:
 
 1. **PuppetDB Server**: A running PuppetDB instance (version 6.0 or later recommended)
 2. **Network Access**: Pabawi server can reach PuppetDB server (default port: 8081)
-3. **Credentials**: Authentication token or SSL certificates for PuppetDB access
+3. **Credentials**: Authentication token (Puppet Enterprise only) or SSL certificates for PuppetDB access
 4. **Permissions**: Appropriate permissions to query PuppetDB data
 
 ### Verifying PuppetDB Availability
@@ -331,9 +331,11 @@ PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
 
 ## Authentication Setup
 
-PuppetDB supports token-based authentication for API access.
+**Important: Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use certificate-based authentication.**
 
-### Token Authentication
+PuppetDB supports token-based authentication for API access when using Puppet Enterprise.
+
+### Token Authentication (Puppet Enterprise Only)
 
 #### Obtaining a Token
 
@@ -367,6 +369,8 @@ curl -X POST https://puppetdb.example.com:8081/pdb/admin/v1/token \
 4. Generate API token
 5. Copy token for configuration
 
+**Note: This method is only available with Puppet Enterprise installations.**
+
 #### Configuring Token
 
 ```bash
@@ -394,9 +398,9 @@ Pabawi requires read-only access to:
 - `/pdb/query/v4/catalogs`
 - `/pdb/query/v4/events`
 
-### Combined SSL and Token Authentication
+### Combined SSL and Token Authentication (Puppet Enterprise Only)
 
-Most production deployments use both SSL and token authentication:
+Most Puppet Enterprise production deployments use both SSL and token authentication:
 
 ```bash
 PUPPETDB_ENABLED=true
@@ -896,7 +900,7 @@ Before deploying to production:
 - [ ] PuppetDB URL and port configured correctly
 - [ ] SSL/TLS enabled with proper certificates
 - [ ] Certificate validation enabled (`PUPPETDB_SSL_REJECT_UNAUTHORIZED=true`)
-- [ ] Authentication token configured and tested
+- [ ] Authentication token configured and tested (Puppet Enterprise only)
 - [ ] Token has minimum required permissions
 - [ ] `.env` file has restricted permissions (600)
 - [ ] Connection timeout appropriate for network
