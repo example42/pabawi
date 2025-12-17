@@ -18,7 +18,7 @@ function Find-BoltProject {
     }
 
     # Search in subdirectories (max depth 3)
-    $foundPath = Get-ChildItem -Path . -Recurse -Depth 3 -Filter "bolt-project.yaml" -File -ErrorAction SilentlyContinue | 
+    $foundPath = Get-ChildItem -Path . -Recurse -Depth 3 -Filter "bolt-project.yaml" -File -ErrorAction SilentlyContinue |
                  Select-Object -First 1
 
     if ($foundPath) {

@@ -9,17 +9,14 @@
   // State
   let servicesStatus = $state<any>(null);
   let simpleStatus = $state<any>(null);
-  let adminApiInfo = $state<any>(null);
   let metrics = $state<any>(null);
 
   let servicesLoading = $state(false);
   let simpleLoading = $state(false);
-  let adminApiLoading = $state(false);
   let metricsLoading = $state(false);
 
   let servicesError = $state<string | null>(null);
   let simpleError = $state<string | null>(null);
-  let adminApiError = $state<string | null>(null);
   let metricsError = $state<string | null>(null);
 
   let showMetricsWarning = $state(true);
@@ -86,36 +83,7 @@
     }
   }
 
-  // Fetch admin API info
-  async function fetchAdminApiInfo(): Promise<void> {
-    adminApiLoading = true;
-    adminApiError = null;
 
-    if (expertMode.enabled) {
-      console.log('[PuppetserverStatus] Fetching admin API info');
-      console.log('[PuppetserverStatus] API endpoint: GET /api/integrations/puppetserver/admin-api');
-    }
-
-    try {
-      const startTime = performance.now();
-      const data = await get<{ adminApi: any }>('/api/integrations/puppetserver/admin-api');
-      const endTime = performance.now();
-
-      adminApiInfo = data.adminApi;
-
-      if (expertMode.enabled) {
-        console.log('[PuppetserverStatus] Admin API info loaded successfully');
-        console.log('[PuppetserverStatus] Response time:', Math.round(endTime - startTime), 'ms');
-        console.log('[PuppetserverStatus] Data:', data);
-      }
-    } catch (err) {
-      adminApiError = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error fetching admin API info:', err);
-      showError('Failed to load admin API info', adminApiError);
-    } finally {
-      adminApiLoading = false;
-    }
-  }
 
   // Fetch metrics (with warning)
   async function fetchMetrics(): Promise<void> {
@@ -153,6 +121,7 @@
   function loadMetrics(): void {
     if (showMetricsWarning) {
       showMetricsWarning = false;
+      fetchMetrics();
     } else {
       fetchMetrics();
     }
@@ -162,7 +131,6 @@
   onMount(() => {
     fetchServicesStatus();
     fetchSimpleStatus();
-    fetchAdminApiInfo();
   });
 </script>
 
@@ -182,7 +150,7 @@
               <ul class="ml-4 mt-1 list-disc space-y-1">
                 <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /status/v1/simple</code> - Basic health check</li>
                 <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /status/v1/services</code> - Detailed service status</li>
-                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /puppet-admin-api/v1</code> - Admin API information</li>
+
                 <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /metrics/v2</code> - JMX metrics via Jolokia (resource-intensive)</li>
               </ul>
             </div>
@@ -280,40 +248,7 @@
     {/if}
   </div>
 
-  <!-- Admin API Info -->
-  <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-    <div class="mb-4 flex items-center justify-between">
-      <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Admin API</h3>
-      <button
-        type="button"
-        onclick={fetchAdminApiInfo}
-        class="rounded-md px-3 py-1 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/20"
-        disabled={adminApiLoading}
-      >
-        Refresh
-      </button>
-    </div>
 
-    {#if expertMode.enabled && !adminApiLoading && !adminApiError}
-      <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
-        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /puppet-admin-api/v1</code>
-      </div>
-    {/if}
-
-    {#if adminApiLoading}
-      <div class="flex justify-center py-8">
-        <LoadingSpinner size="md" message="Loading admin API info..." />
-      </div>
-    {:else if adminApiError}
-      <ErrorAlert message="Failed to load admin API info" details={adminApiError} onRetry={fetchAdminApiInfo} />
-    {:else if adminApiInfo}
-      <div class="rounded-md bg-gray-50 p-4 dark:bg-gray-900/50">
-        <pre class="text-sm text-gray-900 dark:text-gray-100">{JSON.stringify(adminApiInfo, null, 2)}</pre>
-      </div>
-    {:else}
-      <p class="text-sm text-gray-500 dark:text-gray-400">No admin API info available</p>
-    {/if}
-  </div>
 
   <!-- Metrics (with warning) -->
   <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">

@@ -33,7 +33,9 @@ groups:
 
 ### Token-Based Authentication (PuppetDB)
 
-PuppetDB supports token-based authentication using RBAC tokens from Puppet Enterprise or API tokens.
+**Note: Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox require certificate-based authentication.**
+
+PuppetDB supports token-based authentication using RBAC tokens from Puppet Enterprise.
 
 **Configuration:**
 
@@ -55,12 +57,14 @@ Or in your configuration file:
 }
 ```
 
-**Generating a PuppetDB Token (Puppet Enterprise):**
+**Generating a PuppetDB Token (Puppet Enterprise Only):**
 
 ```bash
 puppet access login --lifetime 1y
 puppet access show
 ```
+
+**Note: The `puppet access` command is only available with Puppet Enterprise. Open Source Puppet installations must use certificate-based authentication.**
 
 **Using the Token:**
 

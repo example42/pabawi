@@ -3,8 +3,6 @@ title: MCP (Model Context Protocol) Best Practices
 inclusion: always
 ---
 
-# MCP (Model Context Protocol) Best Practices
-
 ## Server Configuration
 
 - Use workspace-level config (`.kiro/settings/mcp.json`) for project-specific servers

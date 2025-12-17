@@ -19,7 +19,9 @@ This document describes the API endpoints for all Pabawi integrations including 
 
 ### Token-Based Authentication
 
-Some integrations (PuppetDB, Puppetserver) support token-based authentication:
+**Note: Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use certificate-based authentication.**
+
+Some integrations (PuppetDB, Puppetserver) support token-based authentication when using Puppet Enterprise:
 
 ```http
 X-Authentication-Token: your-token-here

@@ -42,31 +42,119 @@ export class BoltPlugin
       await this.boltService.getInventory();
       this.log("Bolt is accessible and inventory loaded");
     } catch (error) {
-      this.logError("Failed to verify Bolt accessibility", error);
-      throw error;
+      this.logError("Failed to verify Bolt accessibility during initialization", error);
+      // Don't throw error during initialization - let health checks handle this
+      // This allows the server to start even if Bolt is not properly configured
+      this.log("Bolt plugin initialized with configuration issues - will report in health checks");
     }
   }
 
   /**
    * Perform plugin-specific health check
    *
-   * Verifies that Bolt CLI is accessible and inventory can be loaded.
+   * Verifies that Bolt CLI is accessible and project-specific configuration exists.
    *
    * @returns Health status (without lastCheck timestamp)
    */
   protected async performHealthCheck(): Promise<
     Omit<HealthStatus, "lastCheck">
   > {
+    const { existsSync } = await import("fs");
+    const { join } = await import("path");
+
     try {
-      // Try to load inventory as a health check
+      // First check if Bolt command is available
+      const { spawn } = await import("child_process");
+      const boltCheck = spawn("bolt", ["--version"], { stdio: "pipe" });
+
+      const boltAvailable = await new Promise<boolean>((resolve) => {
+        let resolved = false;
+
+        boltCheck.on("close", (code) => {
+          if (!resolved) {
+            resolved = true;
+            resolve(code === 0);
+          }
+        });
+
+        boltCheck.on("error", () => {
+          if (!resolved) {
+            resolved = true;
+            resolve(false);
+          }
+        });
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            boltCheck.kill();
+            resolve(false);
+          }
+        }, 5000);
+      });
+
+      if (!boltAvailable) {
+        return {
+          healthy: false,
+          message: "Bolt command is not available. Please install Puppet Bolt.",
+          details: {
+            error: "bolt command not found",
+            projectPath: this.boltService.getBoltProjectPath(),
+          },
+        };
+      }
+
+      // Check for project-specific configuration files
+      const projectPath = this.boltService.getBoltProjectPath();
+      const inventoryYaml = join(projectPath, "inventory.yaml");
+      const inventoryYml = join(projectPath, "inventory.yml");
+      const boltProjectYaml = join(projectPath, "bolt-project.yaml");
+      const boltProjectYml = join(projectPath, "bolt-project.yml");
+
+      const hasInventory = existsSync(inventoryYaml) || existsSync(inventoryYml);
+      const hasBoltProject = existsSync(boltProjectYaml) || existsSync(boltProjectYml);
+
+      // If no project-specific configuration exists, report as degraded
+      if (!hasInventory && !hasBoltProject) {
+        return {
+          healthy: false,
+          message: "Bolt project configuration is missing. Using global configuration as fallback.",
+          details: {
+            error: "No project-specific inventory.yaml or bolt-project.yaml found",
+            projectPath,
+            missingFiles: ["inventory.yaml", "bolt-project.yaml"],
+            usingGlobalConfig: true,
+          },
+        };
+      }
+
+      // If inventory is missing but bolt-project exists, report as degraded
+      if (!hasInventory) {
+        return {
+          healthy: false,
+          degraded: true,
+          message: "Bolt inventory file is missing. Task execution will be limited.",
+          details: {
+            error: "inventory.yaml not found in project directory",
+            projectPath,
+            missingFiles: ["inventory.yaml"],
+            hasBoltProject,
+          },
+        };
+      }
+
+      // Try to load inventory as a final health check
       const inventory = await this.boltService.getInventory();
 
       return {
         healthy: true,
-        message: `Bolt is operational. ${String(inventory.length)} nodes in inventory.`,
+        message: `Bolt is properly configured. ${String(inventory.length)} nodes in inventory.`,
         details: {
           nodeCount: inventory.length,
-          projectPath: this.boltService.getBoltProjectPath(),
+          projectPath,
+          hasInventory,
+          hasBoltProject,
         },
       };
     } catch (error: unknown) {
@@ -78,6 +166,7 @@ export class BoltPlugin
         message: `Bolt health check failed: ${errorMessage}`,
         details: {
           error: errorMessage,
+          projectPath: this.boltService.getBoltProjectPath(),
         },
       };
     }

@@ -3,8 +3,6 @@ title: Testing Best Practices
 inclusion: always
 ---
 
-# Testing Best Practices
-
 ## Test Execution
 
 - Always run tests with minimal verbosity to prevent session timeouts

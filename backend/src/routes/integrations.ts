@@ -162,6 +162,20 @@ export function createIntegrationsRouter(
           });
         }
 
+        // Check if Bolt is not configured
+        if (!configuredNames.has("bolt")) {
+          integrations.push({
+            name: "bolt",
+            type: "both",
+            status: "not_configured",
+            lastCheck: new Date().toISOString(),
+            message: "Bolt integration is not configured",
+            details: undefined,
+            workingCapabilities: undefined,
+            failingCapabilities: undefined,
+          });
+        }
+
         res.json({
           integrations,
           timestamp: new Date().toISOString(),
@@ -525,7 +539,9 @@ export function createIntegrationsRouter(
         // Get query parameters
         const queryParams = ReportsQuerySchema.parse(req.query);
         const limit = queryParams.limit || 100; // Default to 100 for summary
-        const hours = req.query.hours ? parseInt(String(req.query.hours), 10) : undefined;
+        const hours = req.query.hours
+          ? parseInt(String(req.query.hours), 10)
+          : undefined;
 
         // Get reports summary from PuppetDB
         const summary = await puppetDBService.getReportsSummary(limit, hours);
@@ -1079,7 +1095,8 @@ export function createIntegrationsRouter(
         const certname = params.certname;
 
         // Get resources from PuppetDB
-        const resourcesByType = await puppetDBService.getNodeResources(certname);
+        const resourcesByType =
+          await puppetDBService.getNodeResources(certname);
 
         res.json({
           resources: resourcesByType,
@@ -1309,7 +1326,7 @@ export function createIntegrationsRouter(
    */
   router.get(
     "/puppetdb/admin/archive",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       if (!puppetDBService) {
         res.status(503).json({
           error: {
@@ -1381,7 +1398,7 @@ export function createIntegrationsRouter(
    */
   router.get(
     "/puppetdb/admin/summary-stats",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       if (!puppetDBService) {
         res.status(503).json({
           error: {
@@ -1408,7 +1425,8 @@ export function createIntegrationsRouter(
         res.json({
           stats: summaryStats,
           source: "puppetdb",
-          warning: "This endpoint can be resource-intensive on large PuppetDB instances",
+          warning:
+            "This endpoint can be resource-intensive on large PuppetDB instances",
         });
       } catch (error) {
         if (error instanceof PuppetDBAuthenticationError) {
@@ -2563,10 +2581,17 @@ export function createIntegrationsRouter(
 
       try {
         // Validate request body
-        console.log("[Catalog Compare] Request body:", JSON.stringify(req.body));
+        console.log(
+          "[Catalog Compare] Request body:",
+          JSON.stringify(req.body),
+        );
         const body = CatalogCompareSchema.parse(req.body);
         const { certname, environment1, environment2 } = body;
-        console.log("[Catalog Compare] Parsed values:", { certname, environment1, environment2 });
+        console.log("[Catalog Compare] Parsed values:", {
+          certname,
+          environment1,
+          environment2,
+        });
 
         // Compare catalogs from Puppetserver
         const diff = await puppetserverService.compareCatalogs(
@@ -2927,7 +2952,7 @@ export function createIntegrationsRouter(
    */
   router.get(
     "/puppetserver/status/services",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       if (!puppetserverService) {
         res.status(503).json({
           error: {
@@ -2978,7 +3003,10 @@ export function createIntegrationsRouter(
           return;
         }
 
-        console.error("Error fetching services status from Puppetserver:", error);
+        console.error(
+          "Error fetching services status from Puppetserver:",
+          error,
+        );
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -2998,7 +3026,7 @@ export function createIntegrationsRouter(
    */
   router.get(
     "/puppetserver/status/simple",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       if (!puppetserverService) {
         res.status(503).json({
           error: {
@@ -3069,7 +3097,7 @@ export function createIntegrationsRouter(
    */
   router.get(
     "/puppetserver/admin-api",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       if (!puppetserverService) {
         res.status(503).json({
           error: {
@@ -3120,7 +3148,10 @@ export function createIntegrationsRouter(
           return;
         }
 
-        console.error("Error fetching admin API info from Puppetserver:", error);
+        console.error(
+          "Error fetching admin API info from Puppetserver:",
+          error,
+        );
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -3169,7 +3200,8 @@ export function createIntegrationsRouter(
 
       try {
         // Get optional mbean parameter
-        const mbean = typeof req.query.mbean === "string" ? req.query.mbean : undefined;
+        const mbean =
+          typeof req.query.mbean === "string" ? req.query.mbean : undefined;
 
         const metrics = await puppetserverService.getMetrics(mbean);
 
@@ -3177,7 +3209,8 @@ export function createIntegrationsRouter(
           metrics,
           source: "puppetserver",
           mbean,
-          warning: "This endpoint can be resource-intensive on Puppetserver. Use sparingly.",
+          warning:
+            "This endpoint can be resource-intensive on Puppetserver. Use sparingly.",
         });
       } catch (error) {
         if (error instanceof PuppetserverConfigurationError) {

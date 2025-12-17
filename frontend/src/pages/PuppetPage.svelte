@@ -348,7 +348,7 @@
           </span>
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
-          View detailed status information, services, admin API, and metrics from your Puppetserver.
+          View detailed status information, services, and metrics from your Puppetserver.
         </p>
         <PuppetserverStatus />
       </div>

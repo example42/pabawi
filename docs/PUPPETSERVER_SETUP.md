@@ -6,7 +6,7 @@ This guide will help you configure the Puppetserver integration in Pabawi to man
 
 - A running Puppetserver instance (version 6.x or 7.x)
 - Network access to the Puppetserver API (default port 8140)
-- Authentication credentials (either token or SSL certificates)
+- Authentication credentials (token for Puppet Enterprise, or SSL certificates for all installations)
 
 ## Configuration Options
 
@@ -29,14 +29,16 @@ PUPPETSERVER_PORT=8140
 
 Choose one of the following authentication methods:
 
-#### Option 1: Token Authentication (Recommended)
+#### Option 1: Token Authentication (Puppet Enterprise Only)
+
+**Note: Token authentication is only available with Puppet Enterprise. Open Source Puppet installations must use certificate-based authentication.**
 
 ```bash
-# API token for authentication
+# API token for authentication (Puppet Enterprise only)
 PUPPETSERVER_TOKEN=your-api-token-here
 ```
 
-To generate a token:
+To generate a token (Puppet Enterprise only):
 
 ```bash
 puppet access login --lifetime 1y
@@ -82,10 +84,10 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 
 ## Complete Example Configuration
 
-### Example 1: Token Authentication
+### Example 1: Token Authentication (Puppet Enterprise Only)
 
 ```bash
-# Puppetserver Integration
+# Puppetserver Integration (Puppet Enterprise only)
 PUPPETSERVER_ENABLED=true
 PUPPETSERVER_SERVER_URL=https://puppet.example.com
 PUPPETSERVER_PORT=8140
@@ -218,7 +220,7 @@ Once configured, you can:
 
 ## Security Best Practices
 
-1. **Use token authentication** when possible (easier to rotate)
+1. **Use token authentication** when using Puppet Enterprise (easier to rotate than certificates)
 2. **Store credentials securely** - never commit `.env` files
 3. **Use SSL/TLS** for all connections
 4. **Rotate tokens regularly** (set appropriate lifetime)

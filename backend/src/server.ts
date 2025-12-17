@@ -3,7 +3,7 @@ import cors from "cors";
 import path from "path";
 import { ConfigService } from "./config/ConfigService";
 import { DatabaseService } from "./database/DatabaseService";
-import { BoltValidator } from "./validation/BoltValidator";
+import { BoltValidator, BoltValidationError } from "./validation/BoltValidator";
 import { BoltService } from "./bolt/BoltService";
 import { ExecutionRepository } from "./database/ExecutionRepository";
 import { CommandWhitelistService } from "./validation/CommandWhitelistService";
@@ -48,11 +48,27 @@ async function startServer(): Promise<Express> {
       `- Command Whitelist Count: ${String(config.commandWhitelist.whitelist.length)}`,
     );
 
-    // Validate Bolt configuration
+    // Validate Bolt configuration (non-blocking)
     console.warn("Validating Bolt configuration...");
     const boltValidator = new BoltValidator(config.boltProjectPath);
-    boltValidator.validate();
-    console.warn("Bolt configuration validated successfully");
+    try {
+      boltValidator.validate();
+      console.warn("Bolt configuration validated successfully");
+    } catch (error) {
+      if (error instanceof BoltValidationError) {
+        console.warn(`Bolt validation failed: ${error.message}`);
+        if (error.details) {
+          console.warn(`Details: ${error.details}`);
+        }
+        if (error.missingFiles.length > 0) {
+          console.warn(`Missing files: ${error.missingFiles.join(", ")}`);
+        }
+        console.warn("Server will continue to start, but Bolt operations may be limited");
+      } else {
+        console.warn(`Unexpected error during Bolt validation: ${String(error)}`);
+        console.warn("Server will continue to start, but Bolt operations may be limited");
+      }
+    }
 
     // Initialize database
     console.warn("Initializing database...");
@@ -131,19 +147,59 @@ async function startServer(): Promise<Express> {
     console.warn("Initializing integration manager...");
     const integrationManager = new IntegrationManager();
 
-    // Register Bolt as an integration plugin
-    console.warn("Registering Bolt integration...");
-    const boltPlugin = new BoltPlugin(boltService);
-    const boltConfig: IntegrationConfig = {
-      enabled: true,
-      name: "bolt",
-      type: "both",
-      config: {
-        projectPath: config.boltProjectPath,
-      },
-      priority: 5, // Lower priority than PuppetDB
-    };
-    integrationManager.registerPlugin(boltPlugin, boltConfig);
+    // Initialize Bolt integration only if configured
+    let boltPlugin: BoltPlugin | undefined;
+    const boltProjectPath = config.boltProjectPath;
+
+    // Check if Bolt is properly configured by looking for project files
+    let boltConfigured = false;
+    if (boltProjectPath && boltProjectPath !== '.') {
+      const { existsSync } = await import("fs");
+      const { join } = await import("path");
+
+      const inventoryYaml = join(boltProjectPath, "inventory.yaml");
+      const inventoryYml = join(boltProjectPath, "inventory.yml");
+      const boltProjectYaml = join(boltProjectPath, "bolt-project.yaml");
+      const boltProjectYml = join(boltProjectPath, "bolt-project.yml");
+
+      const hasInventory = existsSync(inventoryYaml) || existsSync(inventoryYml);
+      const hasBoltProject = existsSync(boltProjectYaml) || existsSync(boltProjectYml);
+
+      boltConfigured = hasInventory || hasBoltProject;
+    }
+
+    console.warn("=== Bolt Integration Setup ===");
+    console.warn(`Bolt configured: ${String(boltConfigured)}`);
+    console.warn(`Bolt project path: ${boltProjectPath || 'not set'}`);
+
+    if (boltConfigured) {
+      console.warn("Registering Bolt integration...");
+      try {
+        boltPlugin = new BoltPlugin(boltService);
+        const boltConfig: IntegrationConfig = {
+          enabled: true,
+          name: "bolt",
+          type: "both",
+          config: {
+            projectPath: config.boltProjectPath,
+          },
+          priority: 5, // Lower priority than PuppetDB
+        };
+        integrationManager.registerPlugin(boltPlugin, boltConfig);
+        console.warn("Bolt integration registered successfully");
+        console.warn(`- Project Path: ${config.boltProjectPath}`);
+      } catch (error) {
+        console.warn(
+          `WARNING: Failed to initialize Bolt integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+        boltPlugin = undefined;
+      }
+    } else {
+      console.warn(
+        "Bolt integration not configured - skipping registration",
+      );
+      console.warn("Set BOLT_PROJECT_PATH to a valid project directory to enable Bolt integration");
+    }
 
     // Initialize PuppetDB integration only if configured
     let puppetDBService: PuppetDBService | undefined;
@@ -288,6 +344,9 @@ async function startServer(): Promise<Express> {
 
     console.warn("Integration manager initialized successfully");
     console.warn("=== End Integration Plugin Initialization ===");
+
+    // Make integration manager available globally for cross-service access
+    (global as any).integrationManager = integrationManager;
 
     // Start health check scheduler for integrations
     if (integrationManager.getPluginCount() > 0) {

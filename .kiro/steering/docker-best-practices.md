@@ -4,8 +4,6 @@ inclusion: fileMatch
 fileMatchPattern: 'Dockerfile*,docker-compose*,*.dockerfile'
 ---
 
-# Docker Best Practices
-
 ## Dockerfile Optimization
 
 - Use multi-stage builds to reduce image size
