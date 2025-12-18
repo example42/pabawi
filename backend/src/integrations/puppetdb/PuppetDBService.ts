@@ -1866,7 +1866,7 @@ export class PuppetDBService
 
     try {
       // Check cache first
-      const cacheKey = `reports:summary:${String(limit)}:${String(hours || 'all')}`;
+      const cacheKey = `reports:summary:${String(limit)}:${String(hours ?? 'all')}`;
       const cached = this.cache.get(cacheKey);
       if (cached !== undefined && cached !== null) {
         this.log("Returning cached reports summary");
@@ -1887,7 +1887,7 @@ export class PuppetDBService
         );
       }
 
-      this.log(`Querying PuppetDB for recent reports summary (limit: ${String(limit)}, hours: ${String(hours || 'all')})`);
+      this.log(`Querying PuppetDB for recent reports summary (limit: ${String(limit)}, hours: ${String(hours ?? 'all')})`);
 
       // Build query with optional time filter
       let query: string | undefined = undefined;
@@ -1927,7 +1927,8 @@ export class PuppetDBService
       // Status indicates the actual result: failed, changed, or unchanged
       for (const report of result) {
         const reportObj = report as Record<string, unknown>;
-        const status = String(reportObj.status || "unknown");
+        const statusValue = reportObj.status;
+        const status = typeof statusValue === 'string' ? statusValue : "unknown";
         const isNoop = Boolean(reportObj.noop);
 
         // Categorize by status first

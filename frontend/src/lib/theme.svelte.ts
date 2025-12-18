@@ -7,8 +7,8 @@ class ThemeManager {
   constructor() {
     // Initialize theme from localStorage or default to system
     if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('theme') as Theme;
-      if (stored && ['light', 'dark', 'system'].includes(stored)) {
+      const stored = localStorage.getItem('theme');
+      if (stored === 'light' || stored === 'dark' || stored === 'system') {
         this._theme = stored;
       }
 

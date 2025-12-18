@@ -55,7 +55,7 @@ export function errorHandler(
     if (errorResponse.error.troubleshooting) {
       console.error("\nTroubleshooting Steps:");
       errorResponse.error.troubleshooting.steps.forEach((step, i) => {
-        console.error(`  ${i + 1}. ${step}`);
+        console.error(`  ${String(i + 1)}. ${step}`);
       });
     }
     console.error("====================================\n");

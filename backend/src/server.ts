@@ -154,16 +154,16 @@ async function startServer(): Promise<Express> {
     // Check if Bolt is properly configured by looking for project files
     let boltConfigured = false;
     if (boltProjectPath && boltProjectPath !== '.') {
-      const { existsSync } = await import("fs");
-      const { join } = await import("path");
+      const fs = await import("fs");
+      const path = await import("path");
 
-      const inventoryYaml = join(boltProjectPath, "inventory.yaml");
-      const inventoryYml = join(boltProjectPath, "inventory.yml");
-      const boltProjectYaml = join(boltProjectPath, "bolt-project.yaml");
-      const boltProjectYml = join(boltProjectPath, "bolt-project.yml");
+      const inventoryYaml = path.join(boltProjectPath, "inventory.yaml");
+      const inventoryYml = path.join(boltProjectPath, "inventory.yml");
+      const boltProjectYaml = path.join(boltProjectPath, "bolt-project.yaml");
+      const boltProjectYml = path.join(boltProjectPath, "bolt-project.yml");
 
-      const hasInventory = existsSync(inventoryYaml) || existsSync(inventoryYml);
-      const hasBoltProject = existsSync(boltProjectYaml) || existsSync(boltProjectYml);
+      const hasInventory = fs.existsSync(inventoryYaml) || fs.existsSync(inventoryYml);
+      const hasBoltProject = fs.existsSync(boltProjectYaml) || fs.existsSync(boltProjectYml);
 
       boltConfigured = hasInventory || hasBoltProject;
     }
@@ -346,11 +346,12 @@ async function startServer(): Promise<Express> {
     console.warn("=== End Integration Plugin Initialization ===");
 
     // Make integration manager available globally for cross-service access
-    (global as any).integrationManager = integrationManager;
+    (global as Record<string, unknown>).integrationManager = integrationManager;
 
     // Start health check scheduler for integrations
     if (integrationManager.getPluginCount() > 0) {
-      integrationManager.startHealthCheckScheduler();
+      const startScheduler = integrationManager.startHealthCheckScheduler.bind(integrationManager);
+      startScheduler();
       console.warn("Integration health check scheduler started");
     }
 

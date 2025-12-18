@@ -637,7 +637,7 @@ Parameters:
 **Problem: "Task timeout"**
 
 - Task takes longer than configured timeout
-- Increase `EXECUTION_TIMEOUT` setting
+- Increase `BOLT_EXECUTION_TIMEOUT` setting
 - Optimize task for faster execution
 - Check target node performance
 

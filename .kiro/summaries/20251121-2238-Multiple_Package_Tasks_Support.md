@@ -20,7 +20,7 @@ the built-in `package` task or other custom modules.
    - Each task has: name, label, and parameterMapping object
 
 2. **Configuration Service** (`backend/src/config/ConfigService.ts`)
-   - Loads package tasks from `PACKAGE_TASKS` environment variable (JSON array)
+   - Loads package tasks from `BOLT_PACKAGE_TASKS` environment variable (JSON array)
    - Falls back to default configuration if not provided
    - Removed old `packageInstallTask` and `packageInstallModule` methods
    - Added `getPackageTasks()` method
@@ -60,7 +60,7 @@ the built-in `package` task or other custom modules.
 Updated all `.env` files to document the new configuration format:
 
 - Default: `tp::install` only
-- Shows how to add additional tasks via `PACKAGE_TASKS` JSON array
+- Shows how to add additional tasks via `BOLT_PACKAGE_TASKS` JSON array
 - Includes example for adding built-in `package` task
 
 ## Default Configuration
@@ -174,7 +174,7 @@ Install a package using the selected task.
 
 To add a custom package installation task:
 
-1. Set the `PACKAGE_TASKS` environment variable with a JSON array
+1. Set the `BOLT_PACKAGE_TASKS` environment variable with a JSON array
 2. Include your custom task configuration with:
    - `name`: The Bolt task name (e.g., `mymodule::install`)
    - `label`: Display name for the UI
@@ -183,7 +183,7 @@ To add a custom package installation task:
 **Example:**
 
 ```bash
-PACKAGE_TASKS='[{"name":"tp::install","label":"Tiny Puppet","parameterMapping":{"packageName":"app","ensure":"ensure","version":"version","settings":"settings"}},{"name":"mymodule::install","label":"My Custom Installer","parameterMapping":{"packageName":"package","ensure":"state","version":"ver"}}]'
+BOLT_PACKAGE_TASKS='[{"name":"tp::install","label":"Tiny Puppet","parameterMapping":{"packageName":"app","ensure":"ensure","version":"version","settings":"settings"}},{"name":"mymodule::install","label":"My Custom Installer","parameterMapping":{"packageName":"package","ensure":"state","version":"ver"}}]'
 ```
 
 ## Benefits

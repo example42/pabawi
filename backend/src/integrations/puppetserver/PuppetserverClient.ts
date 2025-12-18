@@ -1315,7 +1315,7 @@ export class PuppetserverClient {
     }
 
     // Check content type to determine how to parse response
-    const contentType = response.headers.get("content-type") || "";
+    const contentType = response.headers.get("content-type") ?? "";
 
     // Handle text responses (like /status/v1/simple)
     if (contentType.includes("text/plain") || url.includes("/status/v1/simple")) {

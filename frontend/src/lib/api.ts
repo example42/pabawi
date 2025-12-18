@@ -87,21 +87,22 @@ function isNetworkError(error: unknown): boolean {
  */
 async function parseErrorResponse(response: Response): Promise<ApiError> {
   try {
-    const data = await response.json() as { error?: ApiError };
-    if (data.error) {
+    const data = await response.json() as { error?: ApiError } | null;
+    if (data?.error) {
+      const error = data.error;
       return {
-        code: data.error.code || 'UNKNOWN_ERROR',
-        message: data.error.message || 'An unknown error occurred',
-        type: data.error.type || 'unknown',
-        actionableMessage: data.error.actionableMessage || data.error.message || 'An unknown error occurred',
-        troubleshooting: data.error.troubleshooting,
-        details: data.error.details,
-        stackTrace: data.error.stackTrace,
-        requestId: data.error.requestId,
-        timestamp: data.error.timestamp,
-        rawResponse: data.error.rawResponse,
-        executionContext: data.error.executionContext,
-        boltCommand: data.error.boltCommand,
+        code: error.code,
+        message: error.message,
+        type: error.type,
+        actionableMessage: error.actionableMessage,
+        troubleshooting: error.troubleshooting,
+        details: error.details,
+        stackTrace: error.stackTrace,
+        requestId: error.requestId,
+        timestamp: error.timestamp,
+        rawResponse: error.rawResponse,
+        executionContext: error.executionContext,
+        boltCommand: error.boltCommand,
       };
     }
     // If no error field, fall through to default error
@@ -173,13 +174,15 @@ export async function fetchWithRetry<T = unknown>(
   retryOptions?: RetryOptions
 ): Promise<T> {
   // Merge options with defaults, ensuring required fields are present
-  const maxRetries = retryOptions?.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries!;
-  const retryDelay = retryOptions?.retryDelay ?? DEFAULT_RETRY_OPTIONS.retryDelay!;
-  const retryableStatuses = retryOptions?.retryableStatuses ?? DEFAULT_RETRY_OPTIONS.retryableStatuses!;
-  const onRetry = retryOptions?.onRetry ?? DEFAULT_RETRY_OPTIONS.onRetry!;
+  const maxRetries = retryOptions?.maxRetries ?? DEFAULT_RETRY_OPTIONS.maxRetries ?? 3;
+  const retryDelay = retryOptions?.retryDelay ?? DEFAULT_RETRY_OPTIONS.retryDelay ?? 1000;
+  const retryableStatuses = retryOptions?.retryableStatuses ?? DEFAULT_RETRY_OPTIONS.retryableStatuses ?? [408, 429, 500, 502, 503, 504];
+  const onRetry = retryOptions?.onRetry ?? DEFAULT_RETRY_OPTIONS.onRetry ?? ((): void => {
+    // Default no-op retry handler
+  });
   const timeout = retryOptions?.timeout;
   const signal = retryOptions?.signal;
-  const showRetryNotifications = retryOptions?.showRetryNotifications ?? DEFAULT_RETRY_OPTIONS.showRetryNotifications!;
+  const showRetryNotifications = retryOptions?.showRetryNotifications ?? DEFAULT_RETRY_OPTIONS.showRetryNotifications ?? true;
 
   let lastError: Error | null = null;
 

@@ -59,30 +59,33 @@ export class BoltPlugin
   protected async performHealthCheck(): Promise<
     Omit<HealthStatus, "lastCheck">
   > {
-    const { existsSync } = await import("fs");
-    const { join } = await import("path");
+    const fs = await import("fs");
+    const path = await import("path");
 
     try {
       // First check if Bolt command is available
-      const { spawn } = await import("child_process");
-      const boltCheck = spawn("bolt", ["--version"], { stdio: "pipe" });
+      const childProcess = await import("child_process");
+      const boltCheck = childProcess.spawn("bolt", ["--version"], { stdio: "pipe" });
 
       const boltAvailable = await new Promise<boolean>((resolve) => {
         let resolved = false;
 
-        boltCheck.on("close", (code) => {
+        const handleClose = (code: number | null): void => {
           if (!resolved) {
             resolved = true;
             resolve(code === 0);
           }
-        });
+        };
 
-        boltCheck.on("error", () => {
+        const handleError = (): void => {
           if (!resolved) {
             resolved = true;
             resolve(false);
           }
-        });
+        };
+
+        boltCheck.on("close", handleClose);
+        boltCheck.on("error", handleError);
 
         // Timeout after 5 seconds
         setTimeout(() => {
@@ -107,13 +110,13 @@ export class BoltPlugin
 
       // Check for project-specific configuration files
       const projectPath = this.boltService.getBoltProjectPath();
-      const inventoryYaml = join(projectPath, "inventory.yaml");
-      const inventoryYml = join(projectPath, "inventory.yml");
-      const boltProjectYaml = join(projectPath, "bolt-project.yaml");
-      const boltProjectYml = join(projectPath, "bolt-project.yml");
+      const inventoryYaml = path.join(projectPath, "inventory.yaml");
+      const inventoryYml = path.join(projectPath, "inventory.yml");
+      const boltProjectYaml = path.join(projectPath, "bolt-project.yaml");
+      const boltProjectYml = path.join(projectPath, "bolt-project.yml");
 
-      const hasInventory = existsSync(inventoryYaml) || existsSync(inventoryYml);
-      const hasBoltProject = existsSync(boltProjectYaml) || existsSync(boltProjectYml);
+      const hasInventory = fs.existsSync(inventoryYaml) || fs.existsSync(inventoryYml);
+      const hasBoltProject = fs.existsSync(boltProjectYaml) || fs.existsSync(boltProjectYml);
 
       // If no project-specific configuration exists, report as degraded
       if (!hasInventory && !hasBoltProject) {

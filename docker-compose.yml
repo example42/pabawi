@@ -34,11 +34,11 @@ services:
       - DATABASE_PATH=/data/executions.db
 
       # Command whitelist configuration
-      - COMMAND_WHITELIST_ALLOW_ALL=${COMMAND_WHITELIST_ALLOW_ALL:-false}
-      - COMMAND_WHITELIST=${COMMAND_WHITELIST:-["ls","pwd","whoami","uptime"]}
+      - BOLT_COMMAND_WHITELIST_ALLOW_ALL=${BOLT_COMMAND_WHITELIST_ALLOW_ALL:-false}
+      - BOLT_COMMAND_WHITELIST=${BOLT_COMMAND_WHITELIST:-["ls","pwd","whoami","uptime"]}
 
       # Execution configuration
-      - EXECUTION_TIMEOUT=${EXECUTION_TIMEOUT:-300000}
+      - BOLT_EXECUTION_TIMEOUT=${BOLT_EXECUTION_TIMEOUT:-300000}
 
       # Logging configuration
       - LOG_LEVEL=${LOG_LEVEL:-info}
