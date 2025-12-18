@@ -54,8 +54,8 @@ describe("ApiLogger", () => {
         },
       });
 
-      expect(consoleLogSpy).toHaveBeenCalled();
-      const logCall = consoleLogSpy.mock.calls[0];
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      const logCall = consoleWarnSpy.mock.calls[0];
       expect(logCall[0]).toContain("API Request");
       expect(logCall[0]).toContain(correlationId);
     });
@@ -71,8 +71,8 @@ describe("ApiLogger", () => {
         },
       });
 
-      expect(consoleLogSpy).toHaveBeenCalled();
-      const logCall = consoleLogSpy.mock.calls[0];
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      const logCall = consoleWarnSpy.mock.calls[0];
       // In debug mode, the second parameter is the JSON string
       const logData = logCall[1];
 
@@ -90,8 +90,8 @@ describe("ApiLogger", () => {
         body,
       });
 
-      expect(consoleLogSpy).toHaveBeenCalled();
-      const logCall = consoleLogSpy.mock.calls[0];
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      const logCall = consoleWarnSpy.mock.calls[0];
       const logData = logCall[1];
       expect(logData).toContain("username");
     });
@@ -109,8 +109,8 @@ describe("ApiLogger", () => {
         body,
       });
 
-      expect(consoleLogSpy).toHaveBeenCalled();
-      const logCall = consoleLogSpy.mock.calls[0];
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      const logCall = consoleWarnSpy.mock.calls[0];
       const logData = logCall[1];
 
       // Check that sensitive fields are redacted
@@ -141,8 +141,8 @@ describe("ApiLogger", () => {
         150,
       );
 
-      expect(consoleLogSpy).toHaveBeenCalled();
-      const logCall = consoleLogSpy.mock.calls[0];
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      const logCall = consoleWarnSpy.mock.calls[0];
       // In debug mode, first parameter is the message, second is the JSON
       expect(logCall[0]).toContain("API Response");
       expect(logCall[0]).toContain(correlationId);
@@ -210,8 +210,8 @@ describe("ApiLogger", () => {
         1234,
       );
 
-      expect(consoleLogSpy).toHaveBeenCalled();
-      const logCall = consoleLogSpy.mock.calls[0];
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      const logCall = consoleWarnSpy.mock.calls[0];
       const logData = logCall[1];
       expect(logData).toContain("1234");
     });
@@ -233,8 +233,8 @@ describe("ApiLogger", () => {
         100,
       );
 
-      expect(consoleLogSpy).toHaveBeenCalled();
-      const logCall = consoleLogSpy.mock.calls[0];
+      expect(consoleWarnSpy).toHaveBeenCalled();
+      const logCall = consoleWarnSpy.mock.calls[0];
       const logData = logCall[1];
       expect(logData).toContain("truncated");
     });
@@ -302,9 +302,9 @@ describe("ApiLogger", () => {
         body: { data: "test" },
       });
 
-      expect(consoleLogSpy).toHaveBeenCalled();
+      expect(consoleWarnSpy).toHaveBeenCalled();
       // In info mode, body should not be logged in detail
-      const logCall = consoleLogSpy.mock.calls[0];
+      const logCall = consoleWarnSpy.mock.calls[0];
       expect(logCall[0]).toContain("API Request");
     });
 
@@ -315,7 +315,7 @@ describe("ApiLogger", () => {
       warnLogger.logRequest(correlationId, "GET", "/api/test", "https://example.com/api/test");
 
       // In warn mode, info-level requests should not be logged
-      expect(consoleLogSpy).not.toHaveBeenCalled();
+      expect(consoleWarnSpy).not.toHaveBeenCalled();
     });
 
     it("should always log errors regardless of log level", () => {

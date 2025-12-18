@@ -201,8 +201,8 @@ describe("Integration Status API", () => {
         .get("/api/integrations/status")
         .expect(200);
 
-      // Should have unconfigured puppetdb and puppetserver entries
-      expect(response.body.integrations).toHaveLength(2);
+      // Should have unconfigured puppetdb, puppetserver, and bolt entries
+      expect(response.body.integrations).toHaveLength(3);
       expect(response.body.timestamp).toBeDefined();
 
       const puppetdb = response.body.integrations.find(
@@ -218,6 +218,12 @@ describe("Integration Status API", () => {
       expect(puppetserver).toBeDefined();
       expect(puppetserver.status).toBe("not_configured");
       expect(puppetserver.message).toBe("Puppetserver integration is not configured");
+
+      const bolt = response.body.integrations.find(
+        (i: { name: string }) => i.name === "bolt",
+      );
+      expect(bolt).toBeDefined();
+      expect(bolt.status).toBe("not_configured");
     });
 
     it("should use cached results by default", async () => {

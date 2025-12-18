@@ -220,7 +220,7 @@ export class PuppetserverClient {
       // Check if result is null (404 response) or not an array
       if (result === null || !Array.isArray(result)) {
         console.warn("[Puppetserver] CA API endpoint not found or returned invalid data, triggering fallback");
-        throw new Error("CA API endpoint not available");
+        throw new PuppetserverConnectionError("CA API endpoint not available");
       }
 
       return result;
@@ -233,7 +233,7 @@ export class PuppetserverClient {
 
       // Fallback: Return empty array with a note that CA API is not available
       // The service layer will handle getting certificate info from PuppetDB
-      throw new Error("CA API not available in this Puppet Enterprise version. Certificate information should be retrieved from PuppetDB.");
+      throw new PuppetserverConnectionError("CA API not available in this Puppet Enterprise version. Certificate information should be retrieved from PuppetDB.");
     }
   }
 
