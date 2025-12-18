@@ -96,12 +96,12 @@ All configuration is managed through environment variables. You can set these in
   - Database file will be created automatically if it doesn't exist
   - Consider using a persistent volume in Docker deployments
 
-#### EXECUTION_TIMEOUT
+#### BOLT_EXECUTION_TIMEOUT
 
 - **Type:** Integer (milliseconds)
 - **Default:** `300000` (5 minutes)
 - **Description:** Maximum execution time for Bolt commands and tasks
-- **Example:** `EXECUTION_TIMEOUT=600000` (10 minutes)
+- **Example:** `BOLT_EXECUTION_TIMEOUT=600000` (10 minutes)
 - **Notes:**
   - Executions exceeding this timeout will be terminated
   - Set higher for long-running tasks (e.g., system updates, large deployments)
@@ -111,30 +111,30 @@ All configuration is managed through environment variables. You can set these in
 
 The command whitelist provides security by restricting which commands can be executed on target nodes.
 
-#### COMMAND_WHITELIST_ALLOW_ALL
+#### BOLT_COMMAND_WHITELIST_ALLOW_ALL
 
 - **Type:** Boolean (`true` or `false`)
 - **Default:** `false`
 - **Description:** Allow execution of any command without whitelist validation
-- **Example:** `COMMAND_WHITELIST_ALLOW_ALL=true`
+- **Example:** `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true`
 - **Security Warning:** Only enable in trusted environments. When enabled, any command can be executed on target nodes.
 
-#### COMMAND_WHITELIST
+#### BOLT_COMMAND_WHITELIST
 
 - **Type:** JSON array of strings
 - **Default:** `[]` (empty array)
 - **Description:** List of allowed commands
-- **Example:** `COMMAND_WHITELIST=["ls","pwd","whoami","systemctl status"]`
+- **Example:** `BOLT_COMMAND_WHITELIST=["ls","pwd","whoami","systemctl status"]`
 - **Notes:**
-  - Commands are matched based on `COMMAND_WHITELIST_MATCH_MODE`
-  - If `COMMAND_WHITELIST_ALLOW_ALL=false` and whitelist is empty, all commands are rejected
+  - Commands are matched based on `BOLT_COMMAND_WHITELIST_MATCH_MODE`
+  - If `BOLT_COMMAND_WHITELIST_ALLOW_ALL=false` and whitelist is empty, all commands are rejected
 
-#### COMMAND_WHITELIST_MATCH_MODE
+#### BOLT_COMMAND_WHITELIST_MATCH_MODE
 
 - **Type:** Enum (`exact`, `prefix`)
 - **Default:** `exact`
 - **Description:** How commands are matched against the whitelist
-- **Example:** `COMMAND_WHITELIST_MATCH_MODE=prefix`
+- **Example:** `BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix`
 - **Modes:**
   - `exact`: Command must exactly match a whitelist entry
   - `prefix`: Command must start with a whitelist entry (allows arguments)
@@ -143,21 +143,21 @@ The command whitelist provides security by restricting which commands can be exe
 
 ```bash
 # Strict: Only allow exact commands
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST=["ls","ps","uptime"]
-COMMAND_WHITELIST_MATCH_MODE=exact
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
+BOLT_COMMAND_WHITELIST=["ls","ps","uptime"]
+BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
 # Allows: "ls", "pwd", "whoami"
 # Rejects: "ls -la", "pwd /tmp"
 
 # Flexible: Allow commands with arguments
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST=["ls","systemctl","cat /var/log"]
-COMMAND_WHITELIST_MATCH_MODE=prefix
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
+BOLT_COMMAND_WHITELIST=["ls","systemctl","cat /var/log"]
+BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
 # Allows: "ls -la", "systemctl status nginx", "cat /var/log/messages"
 # Rejects: "rm", "shutdown"
 
 # Development: Allow all commands
-COMMAND_WHITELIST_ALLOW_ALL=true
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
 # Allows: Any command
 ```
 
@@ -165,7 +165,7 @@ COMMAND_WHITELIST_ALLOW_ALL=true
 
 Configure which Bolt tasks are available for package installation through the web interface.
 
-#### PACKAGE_TASKS
+#### BOLT_PACKAGE_TASKS
 
 - **Type:** JSON array of task configuration objects
 - **Default:** Built-in `package` task only
@@ -173,7 +173,7 @@ Configure which Bolt tasks are available for package installation through the we
 - **Example:**
 
 ```bash
-PACKAGE_TASKS='[
+BOLT_PACKAGE_TASKS='[
   {
     "name": "package",
     "label": "Package (built-in)",
@@ -562,9 +562,9 @@ The command whitelist is a critical security feature that controls which command
 Only specific commands are allowed:
 
 ```bash
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST='["ls","pwd","whoami","uptime","df -h","free -m"]'
-COMMAND_WHITELIST_MATCH_MODE=exact
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
+BOLT_COMMAND_WHITELIST='["ls","pwd","whoami","uptime","df -h","free -m"]'
+BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
 ```
 
 **Use case:** Production environments where only specific diagnostic commands should be allowed.
@@ -574,9 +574,9 @@ COMMAND_WHITELIST_MATCH_MODE=exact
 Allow commands with arguments:
 
 ```bash
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST='["ls","cat","grep","systemctl","journalctl"]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
+BOLT_COMMAND_WHITELIST='["ls","cat","grep","systemctl","journalctl"]'
+BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
 ```
 
 **Use case:** Development or staging environments where operators need flexibility but still want some restrictions.
@@ -586,7 +586,7 @@ COMMAND_WHITELIST_MATCH_MODE=prefix
 Allow any command:
 
 ```bash
-COMMAND_WHITELIST_ALLOW_ALL=true
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
 ```
 
 **Use case:** Local development or trusted environments. **Not recommended for production.**
@@ -596,7 +596,7 @@ COMMAND_WHITELIST_ALLOW_ALL=true
 #### System Monitoring
 
 ```bash
-COMMAND_WHITELIST='[
+BOLT_COMMAND_WHITELIST='[
   "uptime",
   "df -h",
   "free -m",
@@ -605,38 +605,38 @@ COMMAND_WHITELIST='[
   "netstat -tulpn",
   "ss -tulpn"
 ]'
-COMMAND_WHITELIST_MATCH_MODE=exact
+BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
 ```
 
 #### Log Viewing
 
 ```bash
-COMMAND_WHITELIST='[
+BOLT_COMMAND_WHITELIST='[
   "cat /var/log",
   "tail /var/log",
   "grep",
   "journalctl"
 ]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
+BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
 ```
 
 #### Service Management
 
 ```bash
-COMMAND_WHITELIST='[
+BOLT_COMMAND_WHITELIST='[
   "systemctl status",
   "systemctl restart",
   "systemctl start",
   "systemctl stop",
   "service"
 ]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
+BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
 ```
 
 #### Web Server Operations
 
 ```bash
-COMMAND_WHITELIST='[
+BOLT_COMMAND_WHITELIST='[
   "nginx -t",
   "nginx -s reload",
   "apache2ctl configtest",
@@ -644,7 +644,7 @@ COMMAND_WHITELIST='[
   "curl -I",
   "wget --spider"
 ]'
-COMMAND_WHITELIST_MATCH_MODE=exact
+BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
 ```
 
 ### Best Practices
@@ -755,10 +755,10 @@ Only enable expert mode for trusted users in production environments.
 PORT=3000
 HOST=localhost
 BOLT_PROJECT_PATH=./bolt-project
-COMMAND_WHITELIST_ALLOW_ALL=true
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
 LOG_LEVEL=debug
 DATABASE_PATH=./data/executions.db
-EXECUTION_TIMEOUT=600000
+BOLT_EXECUTION_TIMEOUT=600000
 
 # Disable caching for immediate updates
 CACHE_INVENTORY_TTL=0
@@ -795,12 +795,12 @@ npm run dev
 PORT=3000
 HOST=0.0.0.0
 BOLT_PROJECT_PATH=/opt/bolt-project
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST='["ls","pwd","uptime","systemctl status","journalctl"]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
+BOLT_COMMAND_WHITELIST='["ls","pwd","uptime","systemctl status","journalctl"]'
+BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
 LOG_LEVEL=info
 DATABASE_PATH=/var/lib/pabawi/executions.db
-EXECUTION_TIMEOUT=300000
+BOLT_EXECUTION_TIMEOUT=300000
 
 # Short cache for testing
 CACHE_INVENTORY_TTL=30000
@@ -836,12 +836,12 @@ pm2 start dist/server.js --name pabawi
 PORT=3000
 HOST=0.0.0.0
 BOLT_PROJECT_PATH=/opt/bolt-project
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST='["uptime","df -h","free -m","systemctl status"]'
-COMMAND_WHITELIST_MATCH_MODE=exact
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
+BOLT_COMMAND_WHITELIST='["uptime","df -h","free -m","systemctl status"]'
+BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
 LOG_LEVEL=warn
 DATABASE_PATH=/var/lib/pabawi/executions.db
-EXECUTION_TIMEOUT=300000
+BOLT_EXECUTION_TIMEOUT=300000
 
 # Optimize caching
 CACHE_INVENTORY_TTL=60000
@@ -913,12 +913,12 @@ services:
       PORT: 3000
       HOST: 0.0.0.0
       BOLT_PROJECT_PATH: /bolt-project
-      COMMAND_WHITELIST_ALLOW_ALL: "false"
-      COMMAND_WHITELIST: '["ls","pwd","uptime","systemctl status"]'
-      COMMAND_WHITELIST_MATCH_MODE: exact
+      BOLT_COMMAND_WHITELIST_ALLOW_ALL: "false"
+      BOLT_COMMAND_WHITELIST: '["ls","pwd","uptime","systemctl status"]'
+      BOLT_COMMAND_WHITELIST_MATCH_MODE: exact
       LOG_LEVEL: info
       DATABASE_PATH: /data/executions.db
-      EXECUTION_TIMEOUT: 300000
+      BOLT_EXECUTION_TIMEOUT: 300000
       CACHE_INVENTORY_TTL: 60000
       CACHE_FACTS_TTL: 300000
       CONCURRENT_EXECUTION_LIMIT: 10
@@ -976,11 +976,11 @@ data:
   PORT: "3000"
   HOST: "0.0.0.0"
   BOLT_PROJECT_PATH: "/bolt-project"
-  COMMAND_WHITELIST_ALLOW_ALL: "false"
-  COMMAND_WHITELIST_MATCH_MODE: "exact"
+  BOLT_COMMAND_WHITELIST_ALLOW_ALL: "false"
+  BOLT_COMMAND_WHITELIST_MATCH_MODE: "exact"
   LOG_LEVEL: "info"
   DATABASE_PATH: "/data/executions.db"
-  EXECUTION_TIMEOUT: "300000"
+  BOLT_EXECUTION_TIMEOUT: "300000"
   CACHE_INVENTORY_TTL: "60000"
   CACHE_FACTS_TTL: "300000"
   CONCURRENT_EXECUTION_LIMIT: "10"
@@ -1012,7 +1012,7 @@ spec:
         - configMapRef:
             name: pabawi-config
         env:
-        - name: COMMAND_WHITELIST
+        - name: BOLT_COMMAND_WHITELIST
           value: '["ls","pwd","uptime"]'
         volumeMounts:
         - name: bolt-project
@@ -1086,12 +1086,12 @@ spec:
 
 #### Problem: "All commands are rejected"
 
-**Cause:** `COMMAND_WHITELIST_ALLOW_ALL=false` with empty whitelist.
+**Cause:** `BOLT_COMMAND_WHITELIST_ALLOW_ALL=false` with empty whitelist.
 
 **Solution:**
 
-1. Enable allow-all mode: `COMMAND_WHITELIST_ALLOW_ALL=true`
-2. Or add commands to whitelist: `COMMAND_WHITELIST='["ls","pwd"]'`
+1. Enable allow-all mode: `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true`
+2. Or add commands to whitelist: `BOLT_COMMAND_WHITELIST='["ls","pwd"]'`
 
 #### Problem: "Command not in whitelist" with prefix mode
 
@@ -1099,8 +1099,8 @@ spec:
 
 **Solution:**
 
-1. Check the whitelist: `echo $COMMAND_WHITELIST`
-2. Verify match mode: `echo $COMMAND_WHITELIST_MATCH_MODE`
+1. Check the whitelist: `echo $BOLT_COMMAND_WHITELIST`
+2. Verify match mode: `echo $BOLT_COMMAND_WHITELIST_MATCH_MODE`
 3. Add the command prefix to whitelist
 
 ### Database Issues
@@ -1183,11 +1183,11 @@ spec:
 
 #### Problem: "Bolt command timeout"
 
-**Cause:** Execution exceeds `EXECUTION_TIMEOUT`.
+**Cause:** Execution exceeds `BOLT_EXECUTION_TIMEOUT`.
 
 **Solution:**
 
-1. Increase timeout: `EXECUTION_TIMEOUT=600000` (10 minutes)
+1. Increase timeout: `BOLT_EXECUTION_TIMEOUT=600000` (10 minutes)
 2. Optimize Bolt tasks to run faster
 3. Check target node connectivity
 
@@ -1215,16 +1215,16 @@ spec:
 3. Restart the server after changes
 4. Use `printenv` to verify variables are set
 
-#### Problem: "JSON parse error in COMMAND_WHITELIST"
+#### Problem: "JSON parse error in BOLT_COMMAND_WHITELIST"
 
 **Cause:** Invalid JSON syntax.
 
 **Solution:**
 
-1. Validate JSON: `echo $COMMAND_WHITELIST | jq .`
+1. Validate JSON: `echo $BOLT_COMMAND_WHITELIST | jq .`
 2. Use single quotes around the value
 3. Escape special characters properly
-4. Example: `COMMAND_WHITELIST='["ls","pwd"]'`
+4. Example: `BOLT_COMMAND_WHITELIST='["ls","pwd"]'`
 
 ## Configuration Validation
 

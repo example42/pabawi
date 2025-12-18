@@ -9,7 +9,7 @@ if (!appElement) {
 }
 
 // Initialize theme manager
-themeManager;
+void themeManager;
 
 const app = mount(App, {
   target: appElement,

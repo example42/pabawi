@@ -1,19 +1,27 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock localStorage
-const localStorageMock = (() => {
+const localStorageMock = ((): Storage => {
   let store: Record<string, string> = {};
 
   return {
-    getItem: (key: string) => store[key] || null,
-    setItem: (key: string, value: string) => {
+    getItem: (key: string): string | null => store[key] || null,
+    setItem: (key: string, value: string): void => {
       store[key] = value;
     },
-    removeItem: (key: string) => {
+    removeItem: (key: string): void => {
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
       delete store[key];
     },
-    clear: () => {
+    clear: (): void => {
       store = {};
+    },
+    get length(): number {
+      return Object.keys(store).length;
+    },
+    key: (index: number): string | null => {
+      const keys = Object.keys(store);
+      return keys[index] || null;
     },
   };
 })();
@@ -37,19 +45,19 @@ describe('ExpertMode Store', () => {
     vi.resetModules();
   });
 
-  it('should initialize with enabled=false when no stored value exists', async () => {
+  it('should initialize with enabled=false when no stored value exists', async (): Promise<void> => {
     const { expertMode } = await import('./expertMode.svelte');
     expect(expertMode.enabled).toBe(false);
   });
 
-  it('should initialize with stored value when it exists', async () => {
+  it('should initialize with stored value when it exists', async (): Promise<void> => {
     localStorageMock.setItem('pabawi_expert_mode', 'true');
     vi.resetModules();
     const { expertMode } = await import('./expertMode.svelte');
     expect(expertMode.enabled).toBe(true);
   });
 
-  it('should toggle expert mode and persist to localStorage', async () => {
+  it('should toggle expert mode and persist to localStorage', async (): Promise<void> => {
     const { expertMode } = await import('./expertMode.svelte');
 
     expect(expertMode.enabled).toBe(false);
@@ -66,7 +74,7 @@ describe('ExpertMode Store', () => {
     expect(localStorageMock.getItem('pabawi_expert_mode')).toBe('false');
   });
 
-  it('should set enabled value and persist to localStorage', async () => {
+  it('should set enabled value and persist to localStorage', async (): Promise<void> => {
     const { expertMode } = await import('./expertMode.svelte');
 
     expertMode.setEnabled(true);
@@ -80,7 +88,7 @@ describe('ExpertMode Store', () => {
     expect(localStorageMock.getItem('pabawi_expert_mode')).toBe('false');
   });
 
-  it('should persist user preference across page reloads', async () => {
+  it('should persist user preference across page reloads', async (): Promise<void> => {
     // First session
     const { expertMode: session1 } = await import('./expertMode.svelte');
     session1.setEnabled(true);

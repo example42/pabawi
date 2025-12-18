@@ -103,8 +103,8 @@ docker run -d `
   -e PORT=3000 `
   -e BOLT_PROJECT_PATH=/bolt-project `
   -e DATABASE_PATH=/data/executions.db `
-  -e COMMAND_WHITELIST_ALLOW_ALL=false `
-  -e COMMAND_WHITELIST="ls,pwd" `
+  -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false `
+  -e BOLT_COMMAND_WHITELIST="ls,pwd" `
   -e LOG_LEVEL=info `
   -e BOLT_GEM=true `
   --restart unless-stopped `

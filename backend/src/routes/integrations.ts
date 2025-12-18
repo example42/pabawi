@@ -539,8 +539,9 @@ export function createIntegrationsRouter(
         // Get query parameters
         const queryParams = ReportsQuerySchema.parse(req.query);
         const limit = queryParams.limit || 100; // Default to 100 for summary
-        const hours = req.query.hours
-          ? parseInt(String(req.query.hours), 10)
+        const hoursValue = req.query.hours;
+        const hours = typeof hoursValue === 'string' 
+          ? parseInt(hoursValue, 10)
           : undefined;
 
         // Get reports summary from PuppetDB
@@ -2581,13 +2582,13 @@ export function createIntegrationsRouter(
 
       try {
         // Validate request body
-        console.log(
+        console.warn(
           "[Catalog Compare] Request body:",
           JSON.stringify(req.body),
         );
         const body = CatalogCompareSchema.parse(req.body);
         const { certname, environment1, environment2 } = body;
-        console.log("[Catalog Compare] Parsed values:", {
+        console.warn("[Catalog Compare] Parsed values:", {
           certname,
           environment1,
           environment2,

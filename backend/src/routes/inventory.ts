@@ -356,7 +356,7 @@ export function createInventoryRouter(
         let node: Node | undefined;
 
         // If integration manager is available, search across all sources
-        if (integrationManager && integrationManager.isInitialized()) {
+        if (integrationManager?.isInitialized()) {
           const aggregated = await integrationManager.getLinkedInventory();
           node = aggregated.nodes.find(
             (n) => n.id === nodeId || n.name === nodeId,

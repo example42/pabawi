@@ -680,7 +680,7 @@ export class PuppetserverService
         );
 
         return certificates;
-      } catch (caError) {
+      } catch {
         this.log(
           "CA API not available, falling back to PuppetDB nodes as certificate source",
           "warn",
@@ -709,14 +709,19 @@ export class PuppetserverService
   private async getCertificatesFromPuppetDB(status?: CertificateStatus): Promise<Certificate[]> {
     try {
       // Get the PuppetDB service from the integration manager
-      const integrationManager = (global as any).integrationManager;
+      const integrationManager = (global as Record<string, unknown>).integrationManager as {
+        getInformationSource: (name: string) => {
+          isInitialized: () => boolean;
+          getInventory: () => Promise<{ certname?: string; name?: string; id?: string }[]>;
+        } | null;
+      } | undefined;
       if (!integrationManager) {
         this.log("Integration manager not available for PuppetDB fallback", "warn");
         return [];
       }
 
       const puppetdbService = integrationManager.getInformationSource("puppetdb");
-      if (!puppetdbService || !puppetdbService.isInitialized()) {
+      if (!puppetdbService?.isInitialized()) {
         this.log("PuppetDB service not available for certificate fallback", "warn");
         return [];
       }
@@ -725,8 +730,8 @@ export class PuppetserverService
       const nodes = await puppetdbService.getInventory();
 
       // Convert nodes to certificate format
-      const certificates: Certificate[] = nodes.map((node: any) => ({
-        certname: node.certname || node.name || node.id,
+      const certificates: Certificate[] = nodes.map((node) => ({
+        certname: node.certname ?? node.name ?? node.id ?? "unknown",
         status: "signed" as const, // Nodes in PuppetDB are signed certificates
         fingerprint: "N/A", // Not available from PuppetDB
         expiration: null, // Would need to be fetched separately
@@ -740,7 +745,7 @@ export class PuppetserverService
         return certificates.filter(cert => cert.status === status);
       }
 
-      this.log(`Retrieved ${certificates.length} certificates from PuppetDB fallback`);
+      this.log(`Retrieved ${String(certificates.length)} certificates from PuppetDB fallback`);
       return certificates;
     } catch (error) {
       this.logError("Failed to get certificates from PuppetDB fallback", error);
@@ -1174,7 +1179,7 @@ export class PuppetserverService
           const factsData = factsResult as { name?: string; values?: Record<string, unknown> };
           if (factsData.values) {
             facts = factsData.values;
-            this.log(`Retrieved ${Object.keys(facts).length} facts for node '${certname}'`);
+            this.log(`Retrieved ${String(Object.keys(facts).length)} facts for node '${certname}'`);
           }
         }
       } catch (error) {

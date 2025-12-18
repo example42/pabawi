@@ -141,12 +141,12 @@ export class ApiLogger {
 
     // Log at appropriate level
     if (this.shouldLog("debug")) {
-      console.log(
+      console.warn(
         `[${this.integration}] API Request [${correlationId}]:`,
         JSON.stringify(requestLog, null, 2),
       );
     } else if (this.shouldLog("info")) {
-      console.log(
+      console.warn(
         `[${this.integration}] API Request [${correlationId}]: ${method} ${endpoint}`,
         {
           url,
@@ -219,12 +219,12 @@ export class ApiLogger {
         },
       );
     } else if (this.shouldLog("debug")) {
-      console.log(
+      console.warn(
         `[${this.integration}] API Response [${correlationId}]:`,
         JSON.stringify(responseLog, null, 2),
       );
     } else if (this.shouldLog("info")) {
-      console.log(
+      console.warn(
         `[${this.integration}] API Response [${correlationId}]: ${method} ${endpoint} - ${String(response.status)} ${response.statusText}`,
         {
           status: response.status,
@@ -357,7 +357,8 @@ export class ApiLogger {
           "privateKey",
         ];
 
-        for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
+        // TypeScript knows body is Record<string, unknown> here due to type guard
+        for (const [key, value] of Object.entries(body)) {
           const lowerKey = key.toLowerCase();
           if (sensitiveFields.some((field) => lowerKey.includes(field))) {
             sanitized[key] = "[REDACTED]";
@@ -380,7 +381,7 @@ export class ApiLogger {
       if (Object.prototype.toString.call(value) !== "[object Object]") {
         return false;
       }
-      const prototype = Object.getPrototypeOf(value);
+      const prototype = Object.getPrototypeOf(value) as object | null;
       return prototype === null || prototype === Object.prototype;
     }
 

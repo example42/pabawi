@@ -355,7 +355,7 @@ error TS2307: Cannot find module 'express' or its corresponding type declaration
 
 **Causes:**
 
-- Operation takes longer than `EXECUTION_TIMEOUT`
+- Operation takes longer than `BOLT_EXECUTION_TIMEOUT`
 - Slow network connection to target nodes
 - Target node unresponsive
 
@@ -365,7 +365,7 @@ error TS2307: Cannot find module 'express' or its corresponding type declaration
 
    ```bash
    # In .env file (milliseconds)
-   EXECUTION_TIMEOUT=600000  # 10 minutes
+   BOLT_EXECUTION_TIMEOUT=600000  # 10 minutes
    ```
 
 2. **Test connectivity to target:**
@@ -1282,7 +1282,7 @@ Error: self signed certificate in certificate chain
 
 **Causes:**
 
-- `COMMAND_WHITELIST_ALLOW_ALL=false` with empty whitelist
+- `BOLT_COMMAND_WHITELIST_ALLOW_ALL=false` with empty whitelist
 - Command not in whitelist
 - Wrong match mode
 
@@ -1292,22 +1292,22 @@ Error: self signed certificate in certificate chain
 
    ```bash
    # In .env file
-   COMMAND_WHITELIST_ALLOW_ALL=true
+   BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
    ```
 
 2. **Add commands to whitelist:**
 
    ```bash
    # In .env file
-   COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]'
+   BOLT_COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]'
    ```
 
 3. **Use prefix match mode:**
 
    ```bash
    # Allow commands with arguments
-   COMMAND_WHITELIST='["ls","systemctl"]'
-   COMMAND_WHITELIST_MATCH_MODE=prefix
+   BOLT_COMMAND_WHITELIST='["ls","systemctl"]'
+   BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
    # Now allows: "ls -la", "systemctl status nginx"
    ```
 
@@ -1388,7 +1388,7 @@ SyntaxError: Unexpected token in JSON
 
 **Causes:**
 
-- Invalid JSON in `COMMAND_WHITELIST` or `PACKAGE_TASKS`
+- Invalid JSON in `BOLT_COMMAND_WHITELIST` or `BOLT_PACKAGE_TASKS`
 - Missing quotes or brackets
 - Unescaped special characters
 
@@ -1397,8 +1397,8 @@ SyntaxError: Unexpected token in JSON
 1. **Validate JSON syntax:**
 
    ```bash
-   # Test COMMAND_WHITELIST
-   echo $COMMAND_WHITELIST | jq .
+   # Test BOLT_COMMAND_WHITELIST
+   echo $BOLT_COMMAND_WHITELIST | jq .
    
    # Should output:
    # ["ls","pwd","whoami"]
@@ -1408,17 +1408,17 @@ SyntaxError: Unexpected token in JSON
 
    ```bash
    # Correct (single quotes around value)
-   COMMAND_WHITELIST='["ls","pwd"]'
+   BOLT_COMMAND_WHITELIST='["ls","pwd"]'
    
    # Incorrect (double quotes)
-   COMMAND_WHITELIST=["ls","pwd"]
+   BOLT_COMMAND_WHITELIST=["ls","pwd"]
    ```
 
 3. **Escape special characters:**
 
    ```bash
    # For complex JSON, use single quotes
-   PACKAGE_TASKS='[{"name":"tp::install","label":"Tiny Puppet"}]'
+   BOLT_PACKAGE_TASKS='[{"name":"tp::install","label":"Tiny Puppet"}]'
    ```
 
 ## Connection and Network Issues
@@ -1649,7 +1649,7 @@ Error: Authentication failed for user@host
 
    ```bash
    # In .env file
-   EXECUTION_TIMEOUT=600000  # 10 minutes
+   BOLT_EXECUTION_TIMEOUT=600000  # 10 minutes
    ```
 
 ### Problem: "Command execution fails with exit code 1"
@@ -2163,7 +2163,7 @@ Error: database disk image is malformed
 
    ```bash
    # Reduce timeout for quick operations
-   EXECUTION_TIMEOUT=120000  # 2 minutes
+   BOLT_EXECUTION_TIMEOUT=120000  # 2 minutes
    ```
 
 ### Problem: "High memory usage"
@@ -3360,7 +3360,7 @@ pabawi.example.com
 BOLT_PROJECT_PATH=/absolute/path/to/bolt-project
 
 # Optional configuration
-EXECUTION_TIMEOUT=300000
+BOLT_EXECUTION_TIMEOUT=300000
 CONCURRENT_EXECUTION_LIMIT=5
 MAX_QUEUE_SIZE=50
 STREAMING_BUFFER_MS=100
@@ -3426,7 +3426,7 @@ PUPPETDB_PORT=8080
 DATABASE_PATH=./data/executions.db
 
 # Command whitelist (development only)
-COMMAND_WHITELIST_ALLOW_ALL=true
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
 ```
 
 **For production:**
@@ -3462,9 +3462,9 @@ PUPPETDB_SSL_CA=/etc/pabawi/certs/ca.pem
 DATABASE_PATH=/var/lib/pabawi/executions.db
 
 # Command whitelist (production)
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST='["ls","pwd","uptime","systemctl"]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
+BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
+BOLT_COMMAND_WHITELIST='["ls","pwd","uptime","systemctl"]'
+BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
 
 # Security
 PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
@@ -3676,8 +3676,8 @@ Error: Authentication failed for user@host
 
 **Solutions:**
 
-1. Add command to whitelist: `COMMAND_WHITELIST='["ls","pwd","uptime"]'`
-2. Or enable allow-all: `COMMAND_WHITELIST_ALLOW_ALL=true`
+1. Add command to whitelist: `BOLT_COMMAND_WHITELIST='["ls","pwd","uptime"]'`
+2. Or enable allow-all: `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true`
 3. Check current config: `curl http://localhost:3000/api/config`
 
 ### "Task 'xyz' not found"
@@ -3899,7 +3899,7 @@ Error: Authentication failed for user@host
 
 #### Q: How do I allow all commands?
 
-**A:** Set `COMMAND_WHITELIST_ALLOW_ALL=true` in your .env file. **Warning:** Only use this in trusted environments, as it allows execution of any command on target nodes.
+**A:** Set `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true` in your .env file. **Warning:** Only use this in trusted environments, as it allows execution of any command on target nodes.
 
 #### Q: Can I use multiple Bolt projects?
 
@@ -3922,7 +3922,7 @@ Error: Authentication failed for user@host
 
 #### Q: How does the command whitelist work?
 
-**A:** The whitelist controls which commands can be executed. In `exact` mode, commands must match exactly. In `prefix` mode, commands must start with a whitelist entry. If `COMMAND_WHITELIST_ALLOW_ALL=true`, all commands are allowed.
+**A:** The whitelist controls which commands can be executed. In `exact` mode, commands must match exactly. In `prefix` mode, commands must start with a whitelist entry. If `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true`, all commands are allowed.
 
 #### Q: Can I restrict access to specific users?
 
