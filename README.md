@@ -267,7 +267,7 @@ docker run -d \
   -e PUPPETDB_PORT=8081 \
   -e PUPPETDB_TOKEN=your-token-here \
   -e PUPPETDB_SSL_ENABLED=true \
-  example42/padawi:0.2.0
+  example42/padawi:0.3.0
 ```
 
 Access the application at <http://localhost:3000>
