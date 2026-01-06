@@ -1,6 +1,6 @@
 # Pabawi
 
-Version 0.3.0 - Unified Remote Execution Interface
+Version 0.4.0 - Unified Remote Execution Interface
 
 Pabawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt and PuppetDB. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
 
@@ -267,7 +267,7 @@ docker run -d \
   -e PUPPETDB_PORT=8081 \
   -e PUPPETDB_TOKEN=your-token-here \
   -e PUPPETDB_SSL_ENABLED=true \
-  example42/padawi:0.3.0
+  example42/padawi:0.4.0
 ```
 
 Access the application at <http://localhost:3000>

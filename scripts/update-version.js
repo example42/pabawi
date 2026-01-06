@@ -6,7 +6,6 @@
  */
 
 import fs from 'fs';
-import path from 'path';
 import { execSync } from 'child_process';
 
 // Colors for console output
@@ -77,6 +76,69 @@ function updateReadme(newVersion) {
   }
 }
 
+function updateNavigation(newVersion) {
+  const filePath = 'frontend/src/components/Navigation.svelte';
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      log(`✗ File not found: ${filePath}`, 'red');
+      return false;
+    }
+
+    log(`Updating ${filePath}`, 'yellow');
+
+    let content = fs.readFileSync(filePath, 'utf8');
+
+    // Update version in header (e.g., v0.3.0)
+    content = content.replace(/v\d+\.\d+\.\d+/g, `v${newVersion}`);
+
+    fs.writeFileSync(filePath, content);
+    log(`✓ Updated ${filePath}`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ Error updating ${filePath}: ${error.message}`, 'red');
+    return false;
+  }
+}
+
+function updateDockerfiles(newVersion) {
+  const dockerfiles = [
+    'Dockerfile',
+    'Dockerfile.alpine',
+    'Dockerfile.ubuntu'
+  ];
+
+  let allSuccess = true;
+
+  for (const filePath of dockerfiles) {
+    try {
+      if (!fs.existsSync(filePath)) {
+        log(`✗ File not found: ${filePath}`, 'red');
+        allSuccess = false;
+        continue;
+      }
+
+      log(`Updating ${filePath}`, 'yellow');
+
+      let content = fs.readFileSync(filePath, 'utf8');
+
+      // Update OCI image version label
+      content = content.replace(
+        /org\.opencontainers\.image\.version="\d+\.\d+\.\d+"/g,
+        `org.opencontainers.image.version="${newVersion}"`
+      );
+
+      fs.writeFileSync(filePath, content);
+      log(`✓ Updated ${filePath}`, 'green');
+    } catch (error) {
+      log(`✗ Error updating ${filePath}: ${error.message}`, 'red');
+      allSuccess = false;
+    }
+  }
+
+  return allSuccess;
+}
+
 function showGitStatus() {
   try {
     const status = execSync('git status --short', { encoding: 'utf8' });
@@ -129,6 +191,16 @@ function main() {
 
   // Update README.md
   if (!updateReadme(newVersion)) {
+    allSuccess = false;
+  }
+
+  // Update Navigation.svelte header version
+  if (!updateNavigation(newVersion)) {
+    allSuccess = false;
+  }
+
+  // Update Dockerfiles
+  if (!updateDockerfiles(newVersion)) {
     allSuccess = false;
   }
 
