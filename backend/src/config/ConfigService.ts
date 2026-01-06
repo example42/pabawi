@@ -76,6 +76,33 @@ export class ConfigService {
         resetTimeout?: number;
       };
     };
+    hiera?: {
+      enabled: boolean;
+      controlRepoPath: string;
+      hieraConfigPath?: string;
+      environments?: string[];
+      factSources?: {
+        preferPuppetDB?: boolean;
+        localFactsPath?: string;
+      };
+      catalogCompilation?: {
+        enabled?: boolean;
+        timeout?: number;
+        cacheTTL?: number;
+      };
+      cache?: {
+        enabled?: boolean;
+        ttl?: number;
+        maxEntries?: number;
+      };
+      codeAnalysis?: {
+        enabled?: boolean;
+        lintEnabled?: boolean;
+        moduleUpdateCheck?: boolean;
+        analysisInterval?: number;
+        exclusionPatterns?: string[];
+      };
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -228,6 +255,125 @@ export class ConfigService {
                 10,
               )
             : undefined,
+        };
+      }
+    }
+
+    // Parse Hiera configuration
+    if (process.env.HIERA_ENABLED === "true") {
+      const controlRepoPath = process.env.HIERA_CONTROL_REPO_PATH;
+      if (!controlRepoPath) {
+        throw new Error(
+          "HIERA_CONTROL_REPO_PATH is required when HIERA_ENABLED is true",
+        );
+      }
+
+      // Parse environments from JSON array
+      let environments: string[] | undefined;
+      if (process.env.HIERA_ENVIRONMENTS) {
+        try {
+          const parsed = JSON.parse(process.env.HIERA_ENVIRONMENTS) as unknown;
+          if (Array.isArray(parsed)) {
+            environments = parsed.filter(
+              (item): item is string => typeof item === "string",
+            );
+          }
+        } catch {
+          throw new Error(
+            "HIERA_ENVIRONMENTS must be a valid JSON array of strings",
+          );
+        }
+      }
+
+      integrations.hiera = {
+        enabled: true,
+        controlRepoPath,
+        hieraConfigPath: process.env.HIERA_CONFIG_PATH,
+        environments,
+      };
+
+      // Parse fact source configuration
+      if (
+        process.env.HIERA_FACT_SOURCE_PREFER_PUPPETDB !== undefined ||
+        process.env.HIERA_FACT_SOURCE_LOCAL_PATH
+      ) {
+        integrations.hiera.factSources = {
+          preferPuppetDB:
+            process.env.HIERA_FACT_SOURCE_PREFER_PUPPETDB !== "false",
+          localFactsPath: process.env.HIERA_FACT_SOURCE_LOCAL_PATH,
+        };
+      }
+
+      // Parse catalog compilation configuration
+      if (
+        process.env.HIERA_CATALOG_COMPILATION_ENABLED !== undefined ||
+        process.env.HIERA_CATALOG_COMPILATION_TIMEOUT ||
+        process.env.HIERA_CATALOG_COMPILATION_CACHE_TTL
+      ) {
+        integrations.hiera.catalogCompilation = {
+          enabled: process.env.HIERA_CATALOG_COMPILATION_ENABLED === "true",
+          timeout: process.env.HIERA_CATALOG_COMPILATION_TIMEOUT
+            ? parseInt(process.env.HIERA_CATALOG_COMPILATION_TIMEOUT, 10)
+            : undefined,
+          cacheTTL: process.env.HIERA_CATALOG_COMPILATION_CACHE_TTL
+            ? parseInt(process.env.HIERA_CATALOG_COMPILATION_CACHE_TTL, 10)
+            : undefined,
+        };
+      }
+
+      // Parse cache configuration
+      if (
+        process.env.HIERA_CACHE_ENABLED !== undefined ||
+        process.env.HIERA_CACHE_TTL ||
+        process.env.HIERA_CACHE_MAX_ENTRIES
+      ) {
+        integrations.hiera.cache = {
+          enabled: process.env.HIERA_CACHE_ENABLED !== "false",
+          ttl: process.env.HIERA_CACHE_TTL
+            ? parseInt(process.env.HIERA_CACHE_TTL, 10)
+            : undefined,
+          maxEntries: process.env.HIERA_CACHE_MAX_ENTRIES
+            ? parseInt(process.env.HIERA_CACHE_MAX_ENTRIES, 10)
+            : undefined,
+        };
+      }
+
+      // Parse code analysis configuration
+      if (
+        process.env.HIERA_CODE_ANALYSIS_ENABLED !== undefined ||
+        process.env.HIERA_CODE_ANALYSIS_LINT_ENABLED !== undefined ||
+        process.env.HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK !== undefined ||
+        process.env.HIERA_CODE_ANALYSIS_INTERVAL ||
+        process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS
+      ) {
+        // Parse exclusion patterns from JSON array
+        let exclusionPatterns: string[] | undefined;
+        if (process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS) {
+          try {
+            const parsed = JSON.parse(
+              process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS,
+            ) as unknown;
+            if (Array.isArray(parsed)) {
+              exclusionPatterns = parsed.filter(
+                (item): item is string => typeof item === "string",
+              );
+            }
+          } catch {
+            throw new Error(
+              "HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS must be a valid JSON array of strings",
+            );
+          }
+        }
+
+        integrations.hiera.codeAnalysis = {
+          enabled: process.env.HIERA_CODE_ANALYSIS_ENABLED !== "false",
+          lintEnabled: process.env.HIERA_CODE_ANALYSIS_LINT_ENABLED !== "false",
+          moduleUpdateCheck:
+            process.env.HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK !== "false",
+          analysisInterval: process.env.HIERA_CODE_ANALYSIS_INTERVAL
+            ? parseInt(process.env.HIERA_CODE_ANALYSIS_INTERVAL, 10)
+            : undefined,
+          exclusionPatterns,
         };
       }
     }
@@ -464,6 +610,19 @@ export class ConfigService {
     const puppetserver = this.config.integrations.puppetserver;
     if (puppetserver?.enabled) {
       return puppetserver as typeof puppetserver & { enabled: true };
+    }
+    return null;
+  }
+
+  /**
+   * Get Hiera configuration if enabled
+   */
+  public getHieraConfig():
+    | (typeof this.config.integrations.hiera & { enabled: true })
+    | null {
+    const hiera = this.config.integrations.hiera;
+    if (hiera?.enabled) {
+      return hiera as typeof hiera & { enabled: true };
     }
     return null;
   }

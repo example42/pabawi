@@ -176,6 +176,23 @@ export function createIntegrationsRouter(
           });
         }
 
+        // Check if Hiera is not configured
+        if (!configuredNames.has("hiera")) {
+          integrations.push({
+            name: "hiera",
+            type: "information",
+            status: "not_configured",
+            lastCheck: new Date().toISOString(),
+            message: "Hiera integration is not configured",
+            details: {
+              setupRequired: true,
+              setupUrl: "/integrations/hiera/setup",
+            },
+            workingCapabilities: undefined,
+            failingCapabilities: undefined,
+          });
+        }
+
         res.json({
           integrations,
           timestamp: new Date().toISOString(),
@@ -540,7 +557,7 @@ export function createIntegrationsRouter(
         const queryParams = ReportsQuerySchema.parse(req.query);
         const limit = queryParams.limit || 100; // Default to 100 for summary
         const hoursValue = req.query.hours;
-        const hours = typeof hoursValue === 'string' 
+        const hours = typeof hoursValue === 'string'
           ? parseInt(hoursValue, 10)
           : undefined;
 

@@ -34,12 +34,12 @@ function updatePackageJson(filePath, newVersion) {
     }
 
     log(`Updating ${filePath}`, 'yellow');
-    
+
     const content = fs.readFileSync(filePath, 'utf8');
     const packageJson = JSON.parse(content);
-    
+
     packageJson.version = newVersion;
-    
+
     fs.writeFileSync(filePath, JSON.stringify(packageJson, null, 2) + '\n');
     log(`✓ Updated ${filePath}`, 'green');
     return true;
@@ -51,7 +51,7 @@ function updatePackageJson(filePath, newVersion) {
 
 function updateReadme(newVersion) {
   const filePath = 'README.md';
-  
+
   try {
     if (!fs.existsSync(filePath)) {
       log(`✗ File not found: ${filePath}`, 'red');
@@ -59,15 +59,15 @@ function updateReadme(newVersion) {
     }
 
     log(`Updating ${filePath}`, 'yellow');
-    
+
     let content = fs.readFileSync(filePath, 'utf8');
-    
+
     // Update version line
     content = content.replace(/^Version \d+\.\d+\.\d+/m, `Version ${newVersion}`);
-    
+
     // Update docker image tags in examples
     content = content.replace(/example42\/padawi:\d+\.\d+\.\d+/g, `example42/padawi:${newVersion}`);
-    
+
     fs.writeFileSync(filePath, content);
     log(`✓ Updated ${filePath}`, 'green');
     return true;
@@ -93,7 +93,7 @@ function showGitStatus() {
 
 function main() {
   const args = process.argv.slice(2);
-  
+
   if (args.length === 0) {
     log('Error: Version number required', 'red');
     console.log('Usage: node scripts/update-version.js <version>');
@@ -120,7 +120,7 @@ function main() {
   ];
 
   let allSuccess = true;
-  
+
   for (const file of packageFiles) {
     if (!updatePackageJson(file, newVersion)) {
       allSuccess = false;
@@ -133,7 +133,7 @@ function main() {
   }
 
   console.log();
-  
+
   if (allSuccess) {
     log('Version update complete!', 'green');
     log(`Files updated to version ${newVersion}`, 'yellow');

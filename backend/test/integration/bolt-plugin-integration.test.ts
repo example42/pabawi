@@ -21,29 +21,29 @@ import type { Node } from "../../src/bolt/types";
 async function checkBoltAvailability(): Promise<boolean> {
   try {
     const { spawn } = await import("child_process");
-    
+
     return new Promise<boolean>((resolve) => {
       const boltCheck = spawn("bolt", ["--version"], { stdio: "pipe" });
-      
+
       let resolved = false;
-      
+
       const handleClose = (code: number | null): void => {
         if (!resolved) {
           resolved = true;
           resolve(code === 0);
         }
       };
-      
+
       const handleError = (): void => {
         if (!resolved) {
           resolved = true;
           resolve(false);
         }
       };
-      
+
       boltCheck.on("close", handleClose);
       boltCheck.on("error", handleError);
-      
+
       // Timeout after 5 seconds
       setTimeout(() => {
         if (!resolved) {
@@ -453,7 +453,7 @@ describe("Bolt Plugin Integration", () => {
 
       tempManager.registerPlugin(tempPlugin, config);
       expect(tempManager.getPluginCount()).toBe(1);
-      
+
       // Check if plugin is actually registered
       const registeredPlugin = tempManager.getExecutionTool("bolt");
       expect(registeredPlugin).not.toBeNull();

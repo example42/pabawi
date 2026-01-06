@@ -10,9 +10,11 @@
   import CertificateManagement from '../components/CertificateManagement.svelte';
   import PuppetserverStatus from '../components/PuppetserverStatus.svelte';
   import PuppetDBAdmin from '../components/PuppetDBAdmin.svelte';
+  import GlobalHieraTab from '../components/GlobalHieraTab.svelte';
+  import CodeAnalysisTab from '../components/CodeAnalysisTab.svelte';
 
   // Tab types
-  type TabId = 'environments' | 'reports' | 'certificates' | 'status' | 'admin';
+  type TabId = 'environments' | 'reports' | 'certificates' | 'status' | 'admin' | 'hiera' | 'analysis';
 
   // State
   let activeTab = $state<TabId>('environments');
@@ -53,6 +55,7 @@
   // Integration status
   let isPuppetDBActive = $state(false);
   let isPuppetserverActive = $state(false);
+  let isHieraActive = $state(false);
 
   // Check integration status
   async function checkIntegrationStatus(): Promise<void> {
@@ -64,9 +67,11 @@
 
       const puppetDB = data.integrations.find(i => i.name === 'puppetdb');
       const puppetserver = data.integrations.find(i => i.name === 'puppetserver');
+      const hiera = data.integrations.find(i => i.name === 'hiera');
 
       isPuppetDBActive = puppetDB?.status === 'connected';
       isPuppetserverActive = puppetserver?.status === 'connected';
+      isHieraActive = hiera?.status === 'connected';
     } catch (err) {
       console.error('Error checking integration status:', err);
     }
@@ -136,7 +141,7 @@
     const url = new URL(window.location.href);
     const tabParam = url.searchParams.get('tab') as TabId | null;
 
-    if (tabParam && ['environments', 'reports', 'certificates', 'status', 'admin'].includes(tabParam)) {
+    if (tabParam && ['environments', 'reports', 'certificates', 'status', 'admin', 'hiera', 'analysis'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -259,6 +264,42 @@
           </div>
         </button>
       {/if}
+
+      <button
+        type="button"
+        onclick={() => switchTab('hiera')}
+        class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors {activeTab === 'hiera'
+          ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-400'
+          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
+      >
+        <div class="flex items-center gap-2">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+          </svg>
+          Hiera
+          {#if isHieraActive}
+            <span class="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+          {/if}
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onclick={() => switchTab('analysis')}
+        class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors {activeTab === 'analysis'
+          ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-400'
+          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
+      >
+        <div class="flex items-center gap-2">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+          Code Analysis
+          {#if isHieraActive}
+            <span class="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
+          {/if}
+        </div>
+      </button>
     </nav>
   </div>
 
@@ -367,6 +408,38 @@
           View PuppetDB administrative information including archive status and database statistics.
         </p>
         <PuppetDBAdmin />
+      </div>
+    {/if}
+
+    <!-- Hiera Tab -->
+    {#if activeTab === 'hiera'}
+      <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div class="mb-4 flex items-center gap-3">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Hiera Data</h2>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400">
+            Control Repository
+          </span>
+        </div>
+        <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
+          Search for Hiera keys and see their resolved values across all nodes in your infrastructure.
+        </p>
+        <GlobalHieraTab />
+      </div>
+    {/if}
+
+    <!-- Code Analysis Tab -->
+    {#if activeTab === 'analysis'}
+      <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div class="mb-4 flex items-center gap-3">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Code Analysis</h2>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400">
+            Control Repository
+          </span>
+        </div>
+        <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
+          Analyze your Puppet codebase for unused code, lint issues, and module updates.
+        </p>
+        <CodeAnalysisTab />
       </div>
     {/if}
   </div>

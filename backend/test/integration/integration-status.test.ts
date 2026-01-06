@@ -114,8 +114,8 @@ describe("Integration Status API", () => {
       expect(response.body).toHaveProperty("integrations");
       expect(response.body).toHaveProperty("timestamp");
       expect(Array.isArray(response.body.integrations)).toBe(true);
-      // Now includes unconfigured Puppetserver
-      expect(response.body.integrations).toHaveLength(3);
+      // Now includes unconfigured Puppetserver and Hiera
+      expect(response.body.integrations).toHaveLength(4);
 
       // Check first integration
       const puppetdb = response.body.integrations.find(
@@ -144,6 +144,15 @@ describe("Integration Status API", () => {
       expect(puppetserver).toBeDefined();
       expect(puppetserver.type).toBe("information");
       expect(puppetserver.status).toBe("not_configured");
+
+      // Check unconfigured Hiera
+      const hiera = response.body.integrations.find(
+        (i: { name: string }) => i.name === "hiera",
+      );
+      expect(hiera).toBeDefined();
+      expect(hiera.type).toBe("information");
+      expect(hiera.status).toBe("not_configured");
+      expect(hiera.message).toBe("Hiera integration is not configured");
     });
 
     it("should return error status for unhealthy integrations", async () => {
@@ -201,8 +210,8 @@ describe("Integration Status API", () => {
         .get("/api/integrations/status")
         .expect(200);
 
-      // Should have unconfigured puppetdb, puppetserver, and bolt entries
-      expect(response.body.integrations).toHaveLength(3);
+      // Should have unconfigured puppetdb, puppetserver, bolt, and hiera entries
+      expect(response.body.integrations).toHaveLength(4);
       expect(response.body.timestamp).toBeDefined();
 
       const puppetdb = response.body.integrations.find(
@@ -224,6 +233,13 @@ describe("Integration Status API", () => {
       );
       expect(bolt).toBeDefined();
       expect(bolt.status).toBe("not_configured");
+
+      const hiera = response.body.integrations.find(
+        (i: { name: string }) => i.name === "hiera",
+      );
+      expect(hiera).toBeDefined();
+      expect(hiera.status).toBe("not_configured");
+      expect(hiera.message).toBe("Hiera integration is not configured");
     });
 
     it("should use cached results by default", async () => {
@@ -232,8 +248,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(true);
-      // Now includes unconfigured Puppetserver
-      expect(response.body.integrations).toHaveLength(3);
+      // Now includes unconfigured Puppetserver and Hiera
+      expect(response.body.integrations).toHaveLength(4);
     });
 
     it("should refresh health checks when requested", async () => {
@@ -242,8 +258,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(false);
-      // Now includes unconfigured Puppetserver
-      expect(response.body.integrations).toHaveLength(3);
+      // Now includes unconfigured Puppetserver and Hiera
+      expect(response.body.integrations).toHaveLength(4);
     });
   });
 });

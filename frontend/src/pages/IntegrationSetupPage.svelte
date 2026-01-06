@@ -1,6 +1,6 @@
 <script lang="ts">
   import { router } from '../lib/router.svelte';
-  import { PuppetserverSetupGuide, PuppetdbSetupGuide, BoltSetupGuide } from '../components';
+  import { PuppetserverSetupGuide, PuppetdbSetupGuide, BoltSetupGuide, HieraSetupGuide } from '../components';
 
   interface Props {
     params?: { integration: string };
@@ -74,6 +74,26 @@
       Back to Home
     </button>
     <BoltSetupGuide />
+  </div>
+{:else if integration === 'hiera'}
+  <!-- Use the dedicated Hiera setup guide component -->
+  <div class="mx-auto max-w-4xl px-4 py-8">
+    <button
+      type="button"
+      onclick={goBack}
+      class="mb-4 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+    >
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        />
+      </svg>
+      Back to Home
+    </button>
+    <HieraSetupGuide />
   </div>
 {:else}
   <!-- Generic setup guide for other integrations -->

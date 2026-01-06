@@ -19,6 +19,7 @@
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
   import NodeStatus from '../components/NodeStatus.svelte';
   import CatalogComparison from '../components/CatalogComparison.svelte';
+  import NodeHieraTab from '../components/NodeHieraTab.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -86,7 +87,7 @@
   const nodeId = $derived(params?.id || '');
 
   // Tab types
-  type TabId = 'overview' | 'facts' | 'actions' | 'puppet';
+  type TabId = 'overview' | 'facts' | 'actions' | 'puppet' | 'hiera';
   type PuppetSubTabId = 'certificate-status' | 'node-status' | 'catalog-compilation' | 'puppet-reports' | 'catalog' | 'events' | 'managed-resources';
 
   // State
@@ -380,12 +381,31 @@
     catalogError = null;
 
     try {
-      const data = await get<{ catalog: any }>(
-        `/api/integrations/puppetdb/nodes/${nodeId}/catalog`,
-        { maxRetries: 2 }
-      );
+      // Fetch both catalog metadata and resources in parallel
+      const [catalogData, resourcesData] = await Promise.all([
+        get<{ catalog: any }>(
+          `/api/integrations/puppetdb/nodes/${nodeId}/catalog`,
+          { maxRetries: 2 }
+        ),
+        get<{ resources: Record<string, any[]> }>(
+          `/api/integrations/puppetdb/nodes/${nodeId}/resources`,
+          { maxRetries: 2 }
+        )
+      ]);
 
-      catalog = data.catalog;
+      // Flatten resources from grouped format to array
+      const resourcesArray: any[] = [];
+      if (resourcesData.resources) {
+        for (const typeResources of Object.values(resourcesData.resources)) {
+          resourcesArray.push(...typeResources);
+        }
+      }
+
+      // Merge catalog metadata with resources
+      catalog = {
+        ...catalogData.catalog,
+        resources: resourcesArray
+      };
       dataCache['catalog'] = catalog;
     } catch (err) {
       catalogError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -850,7 +870,7 @@
     const subTabParam = url.searchParams.get('subtab') as PuppetSubTabId | null;
 
     // Set main tab
-    if (tabParam && ['overview', 'facts', 'actions', 'puppet'].includes(tabParam)) {
+    if (tabParam && ['overview', 'facts', 'actions', 'puppet', 'hiera'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -1084,6 +1104,13 @@
           onclick={() => switchTab('puppet')}
         >
           Puppet
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'hiera' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('hiera')}
+        >
+          Hiera
         </button>
       </nav>
     </div>
@@ -1987,80 +2014,6 @@
             </div>
           {/if}
 
-          <!-- Catalog Sub-Tab (from PuppetDB) -->
-          {#if activePuppetSubTab === 'catalog'}
-            <!-- Source Badge Header -->
-            <div class="mb-4 flex items-center gap-3">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                {getSourceBadge('puppetdb')}
-              </span>
-            </div>
-
-            {#if catalogLoading}
-              <div class="flex justify-center py-12">
-                <LoadingSpinner size="lg" message="Loading catalog..." />
-              </div>
-            {:else if catalogError}
-              <ErrorAlert
-                message="Failed to load catalog"
-                details={catalogError}
-                onRetry={fetchCatalog}
-              />
-            {:else if !catalog}
-              <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
-                <p class="text-gray-500 dark:text-gray-400">
-                  No catalog found for this node.
-                </p>
-              </div>
-            {:else}
-              <CatalogViewer catalog={catalog} />
-            {/if}
-          {/if}
-
-          <!-- Events Sub-Tab -->
-          {#if activePuppetSubTab === 'events'}
-            <!-- Source Badge Header -->
-            <div class="mb-4 flex items-center gap-3">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Events</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                {getSourceBadge('puppetdb')}
-              </span>
-            </div>
-
-            {#if eventsLoading}
-              <div class="rounded-lg border border-gray-200 bg-white p-8 dark:border-gray-700 dark:bg-gray-800">
-                <div class="flex flex-col items-center gap-4 py-8">
-                  <LoadingSpinner size="lg" message="Loading events..." />
-                  <p class="text-sm text-gray-600 dark:text-gray-400">
-                    This may take a moment for nodes with many events...
-                  </p>
-                  <button
-                    type="button"
-                    onclick={cancelEventsLoading}
-                    class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            {:else if eventsError}
-              <ErrorAlert
-                message="Failed to load events"
-                details={eventsError}
-                onRetry={fetchEvents}
-              />
-            {:else if events.length === 0}
-              <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
-                <p class="text-gray-500 dark:text-gray-400">
-                  No events found for this node.
-                </p>
-              </div>
-            {:else}
-              <EventsViewer events={events} />
-            {/if}
-          {/if}
-
           <!-- Managed Resources Sub-Tab -->
           {#if activePuppetSubTab === 'managed-resources'}
             <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -2083,6 +2036,23 @@
               />
             </div>
           {/if}
+        </div>
+      {/if}
+
+      <!-- Hiera Tab -->
+      {#if activeTab === 'hiera'}
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Hiera Data</h2>
+            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400">
+              Hiera
+            </span>
+          </div>
+          <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
+            View Hiera configuration data for this node, including resolved values from all hierarchy levels.
+          </p>
+
+          <NodeHieraTab nodeId={nodeId} />
         </div>
       {/if}
 

@@ -462,6 +462,7 @@ npm test --workspace=backend
 ### Version History
 
 = **v0.3.0**: Puppetserver integration, interface enhancements
+
 - **v0.2.0**: PuppetDB integration, re-execution, expert mode enhancements
 - **v0.1.0**: Initial release with Bolt integration
 
