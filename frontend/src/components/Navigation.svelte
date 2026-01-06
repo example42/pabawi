@@ -40,7 +40,7 @@
           <h1 class="text-2xl font-bold text-primary-600 dark:text-primary-400">
             Pabawi
           </h1>
-          <span class="text-xs text-gray-500 dark:text-gray-400">v0.3.0</span>
+          <span class="text-xs text-gray-500 dark:text-gray-400">v0.4.0</span>
         </div>
         <div class="ml-10 flex items-baseline space-x-4">
           {#each navItems as item}

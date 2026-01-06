@@ -51,7 +51,7 @@ ARG BUILDPLATFORM
 # Add metadata labels
 LABEL org.opencontainers.image.title="Pabawi"
 LABEL org.opencontainers.image.description="Web interface for Bolt automation tool"
-LABEL org.opencontainers.image.version="0.3.0"
+LABEL org.opencontainers.image.version="0.4.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
