@@ -27,8 +27,8 @@
     environment: string;
     producer_timestamp: string;
     hash: string;
-    resources: Resource[];
-    edges: Edge[];
+    resources?: Resource[];
+    edges?: Edge[];
   }
 
   interface Props {
@@ -47,8 +47,9 @@
   // Group resources by type
   const resourcesByType = $derived(() => {
     const grouped = new Map<string, Resource[]>();
+    const resources = catalog.resources ?? [];
 
-    for (const resource of catalog.resources) {
+    for (const resource of resources) {
       if (!grouped.has(resource.type)) {
         grouped.set(resource.type, []);
       }
@@ -86,7 +87,8 @@
 
   // Get relationships for a resource
   function getResourceRelationships(resource: Resource): Edge[] {
-    return catalog.edges.filter(edge =>
+    const edges = catalog.edges ?? [];
+    return edges.filter(edge =>
       (edge.source.type === resource.type && edge.source.title === resource.title) ||
       (edge.target.type === resource.type && edge.target.title === resource.title)
     );
@@ -119,10 +121,9 @@
 </script>
 
 <div class="catalog-viewer space-y-4">
-  <!-- Catalog Header -->
+  <!-- Catalog Metadata -->
   <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-    <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Puppet Catalog</h3>
-    <div class="mt-2 grid grid-cols-2 gap-4 text-sm">
+    <div class="grid grid-cols-2 gap-4 text-sm">
       <div>
         <span class="text-gray-500 dark:text-gray-400">Environment:</span>
         <span class="ml-2 font-medium text-gray-900 dark:text-gray-100">{catalog.environment}</span>
@@ -137,7 +138,7 @@
       </div>
       <div>
         <span class="text-gray-500 dark:text-gray-400">Resources:</span>
-        <span class="ml-2 font-medium text-gray-900 dark:text-gray-100">{catalog.resources.length}</span>
+        <span class="ml-2 font-medium text-gray-900 dark:text-gray-100">{catalog.resources?.length ?? 0}</span>
       </div>
     </div>
   </div>
@@ -226,41 +227,21 @@
             <div class="border-t border-gray-200 dark:border-gray-700">
               <div class="divide-y divide-gray-200 dark:divide-gray-700">
                 {#each resources as resource}
-                  <div class="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <button
-                      type="button"
-                      class="w-full text-left"
-                      onclick={() => selectResource(resource)}
-                      aria-label={`View details for ${resource.type} ${resource.title}`}
-                    >
-                      <div class="flex items-start justify-between">
-                        <div class="flex-1">
-                          <div class="font-medium text-gray-900 hover:text-primary-600 dark:text-gray-100 dark:hover:text-primary-400">
-                            {resource.title}
-                          </div>
-                          {#if resource.tags.length > 0}
-                            <div class="mt-1 flex flex-wrap gap-1">
-                              {#each resource.tags as tag}
-                                <span class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-400">
-                                  {tag}
-                                </span>
-                              {/each}
-                            </div>
-                          {/if}
-                          {#if resource.file}
-                            <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              {resource.file}{resource.line ? `:${resource.line}` : ''}
-                            </div>
-                          {/if}
-                        </div>
-                        {#if resource.exported}
-                          <span class="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
-                            Exported
-                          </span>
-                        {/if}
-                      </div>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    class="w-full px-4 py-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center justify-between"
+                    onclick={() => selectResource(resource)}
+                    aria-label={`View details for ${resource.type} ${resource.title}`}
+                  >
+                    <span class="font-medium text-gray-900 hover:text-primary-600 dark:text-gray-100 dark:hover:text-primary-400 truncate">
+                      {resource.title}
+                    </span>
+                    {#if resource.exported}
+                      <span class="ml-2 inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 flex-shrink-0">
+                        Exported
+                      </span>
+                    {/if}
+                  </button>
                 {/each}
               </div>
             </div>

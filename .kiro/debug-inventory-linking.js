@@ -2,7 +2,7 @@
 
 /**
  * Debug script to test inventory API and node linking behavior
- * 
+ *
  * This script will:
  * 1. Fetch the inventory from the API
  * 2. Check which sources each node appears in
@@ -58,11 +58,11 @@ async function debugInventoryLinking() {
   try {
     console.log('🔍 Fetching inventory from API...');
     const response = await makeRequest(API_PATH);
-    
+
     console.log('\n📊 Inventory Summary:');
     console.log(`Total nodes: ${response.nodes?.length || 0}`);
     console.log(`Sources: ${Object.keys(response.sources || {}).join(', ')}`);
-    
+
     if (!response.nodes || response.nodes.length === 0) {
       console.log('❌ No nodes found in inventory');
       return;
@@ -70,16 +70,16 @@ async function debugInventoryLinking() {
 
     console.log('\n🏷️  Node Source Analysis:');
     console.log('='.repeat(80));
-    
+
     const nodesBySource = {};
     const multiSourceNodes = [];
-    
+
     for (const node of response.nodes) {
       const sources = node.sources || [node.source || 'bolt'];
       const sourcesStr = sources.join(', ');
-      
+
       console.log(`${node.name.padEnd(25)} | Sources: [${sourcesStr.padEnd(20)}] | Linked: ${node.linked || false}`);
-      
+
       // Track nodes by source
       for (const source of sources) {
         if (!nodesBySource[source]) {
@@ -87,7 +87,7 @@ async function debugInventoryLinking() {
         }
         nodesBySource[source].push(node.name);
       }
-      
+
       // Track multi-source nodes
       if (sources.length > 1) {
         multiSourceNodes.push({
@@ -97,14 +97,14 @@ async function debugInventoryLinking() {
         });
       }
     }
-    
+
     console.log('\n📈 Source Breakdown:');
     console.log('='.repeat(50));
     for (const [source, nodes] of Object.entries(nodesBySource)) {
       console.log(`${source}: ${nodes.length} nodes`);
       console.log(`  - ${nodes.join(', ')}`);
     }
-    
+
     console.log('\n🔗 Multi-Source Nodes:');
     console.log('='.repeat(50));
     if (multiSourceNodes.length === 0) {
@@ -115,7 +115,7 @@ async function debugInventoryLinking() {
         console.log(`✅ ${node.name}: [${node.sources.join(', ')}] (linked: ${node.linked})`);
       }
     }
-    
+
     // Specific check for puppet.office.lab42
     console.log('\n🎯 Specific Node Analysis: puppet.office.lab42');
     console.log('='.repeat(50));
@@ -128,7 +128,7 @@ async function debugInventoryLinking() {
       console.log(`Sources Array: [${(puppetNode.sources || []).join(', ')}]`);
       console.log(`Linked: ${puppetNode.linked || false}`);
       console.log(`Transport: ${puppetNode.transport}`);
-      
+
       if (puppetNode.sources && puppetNode.sources.length === 1) {
         console.log('⚠️  ISSUE: This node only shows one source but should show multiple');
         console.log('   Expected: Should appear in both Bolt and PuppetDB inventories');
@@ -136,7 +136,7 @@ async function debugInventoryLinking() {
     } else {
       console.log('❌ puppet.office.lab42 not found in inventory');
     }
-    
+
   } catch (error) {
     console.error('❌ Error debugging inventory:', error.message);
     console.log('\n💡 Troubleshooting:');

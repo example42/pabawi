@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { SvelteSet } from 'svelte/reactivity';
   import StatusBadge from './StatusBadge.svelte';
 
   interface Event {
@@ -24,6 +25,8 @@
     limit?: number;
   }
 
+  type TimeFilter = 'last-run' | '1h' | '6h' | '12h' | '1d' | '1w' | 'all';
+
   interface Props {
     events: Event[];
     filters?: EventFilters;
@@ -36,19 +39,58 @@
   let statusFilter = $state<'all' | 'success' | 'failure' | 'noop' | 'skipped'>('all');
   let resourceTypeFilter = $state('');
   let searchQuery = $state('');
+  let timeFilter = $state<TimeFilter>('last-run');
 
-  // Get unique resource types
-  const resourceTypes = $derived(() => {
-    const types = new Set<string>();
-    for (const event of events) {
+  // Get the latest report hash (identifies the last puppet run)
+  const latestReportHash = $derived.by(() => {
+    if (events.length === 0) return null;
+    // Sort by timestamp to find the most recent event, then get its report hash
+    const sorted = [...events].sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+    return sorted[0]?.report ?? null;
+  });
+
+  // Filter events by time
+  function filterByTime(eventList: Event[]): Event[] {
+    if (timeFilter === 'all') return eventList;
+
+    if (timeFilter === 'last-run') {
+      if (!latestReportHash) return eventList;
+      return eventList.filter(e => e.report === latestReportHash);
+    }
+
+    // Time-based filters
+    const now = Date.now();
+    const hoursMap: Record<string, number> = {
+      '1h': 1,
+      '6h': 6,
+      '12h': 12,
+      '1d': 24,
+      '1w': 168,
+    };
+    const hours = hoursMap[timeFilter];
+    if (!hours) return eventList;
+
+    const cutoff = now - hours * 60 * 60 * 1000;
+    return eventList.filter(e => new Date(e.timestamp).getTime() >= cutoff);
+  }
+
+  // Get unique resource types (from time-filtered events)
+  const timeFilteredEvents = $derived.by(() => filterByTime(events));
+
+  const resourceTypes = $derived.by(() => {
+    const types = new SvelteSet<string>();
+    for (const event of timeFilteredEvents) {
       types.add(event.resource_type);
     }
     return Array.from(types).sort();
   });
 
   // Filter events
-  const filteredEvents = $derived(() => {
-    let filtered = events;
+  const filteredEvents = $derived.by(() => {
+    // Start with time-filtered events
+    let filtered = [...timeFilteredEvents];
 
     // Status filter
     if (statusFilter !== 'all') {
@@ -77,14 +119,16 @@
     );
   });
 
-  // Count events by status
-  const eventCounts = $derived(() => ({
-    all: events.length,
-    success: events.filter(e => e.status === 'success').length,
-    failure: events.filter(e => e.status === 'failure').length,
-    noop: events.filter(e => e.status === 'noop').length,
-    skipped: events.filter(e => e.status === 'skipped').length,
-  }));
+  // Count events by status (from time-filtered events)
+  const eventCounts = $derived.by(() => {
+    return {
+      all: timeFilteredEvents.length,
+      success: timeFilteredEvents.filter(e => e.status === 'success').length,
+      failure: timeFilteredEvents.filter(e => e.status === 'failure').length,
+      noop: timeFilteredEvents.filter(e => e.status === 'noop').length,
+      skipped: timeFilteredEvents.filter(e => e.status === 'skipped').length,
+    };
+  });
 
   function formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
@@ -136,8 +180,27 @@
     statusFilter = 'all';
     resourceTypeFilter = '';
     searchQuery = '';
+    timeFilter = 'last-run';
     onFilterChange?.({});
   }
+
+  function setTimeFilter(filter: TimeFilter): void {
+    timeFilter = filter;
+    // Reset resource type filter when time filter changes since available types may differ
+    resourceTypeFilter = '';
+    applyFilters();
+  }
+
+  // Time filter button config
+  const timeFilterOptions: { value: TimeFilter; label: string }[] = [
+    { value: 'last-run', label: 'Last Run' },
+    { value: '1h', label: '1 Hour' },
+    { value: '6h', label: '6 Hours' },
+    { value: '12h', label: '12 Hours' },
+    { value: '1d', label: '1 Day' },
+    { value: '1w', label: '1 Week' },
+    { value: 'all', label: 'All' },
+  ];
 </script>
 
 <div class="events-viewer space-y-4">
@@ -206,6 +269,26 @@
         {/if}
       </div>
 
+      <!-- Time Range Filter -->
+      <div>
+        <label for="time-filter-group" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Time Range
+        </label>
+        <div id="time-filter-group" role="group" aria-label="Filter by time range">
+          <div class="flex flex-wrap gap-2">
+            {#each timeFilterOptions as option (option.value)}
+              <button
+                type="button"
+                class="rounded px-3 py-1.5 text-sm font-medium transition-colors {timeFilter === option.value ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                onclick={() => setTimeFilter(option.value)}
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+      </div>
+
       <!-- Status Filter -->
       <div>
         <label for="status-filter-group" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -264,14 +347,14 @@
           class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
         >
           <option value="">All Resource Types</option>
-          {#each resourceTypes() as type}
+          {#each resourceTypes as type (type)}
             <option value={type}>{type}</option>
           {/each}
         </select>
       </div>
 
       <!-- Clear Filters -->
-      {#if statusFilter !== 'all' || resourceTypeFilter || searchQuery}
+      {#if statusFilter !== 'all' || resourceTypeFilter || searchQuery || timeFilter !== 'last-run'}
         <button
           type="button"
           class="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
@@ -284,22 +367,22 @@
   </div>
 
   <!-- Results Count -->
-  {#if filteredEvents().length !== events.length}
+  {#if filteredEvents.length !== events.length}
     <div class="text-sm text-gray-600 dark:text-gray-400">
-      Showing {filteredEvents().length} of {events.length} events
+      Showing {filteredEvents.length} of {events.length} events
     </div>
   {/if}
 
   <!-- Events List -->
   <div class="space-y-3">
-    {#if filteredEvents().length === 0}
+    {#if filteredEvents.length === 0}
       <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
         <p class="text-gray-500 dark:text-gray-400">
           {searchQuery || statusFilter !== 'all' || resourceTypeFilter ? 'No events match your filters' : 'No events to display'}
         </p>
       </div>
     {:else}
-      {#each filteredEvents() as event}
+      {#each filteredEvents as event (`${event.report}-${event.resource_type}-${event.resource_title}-${event.timestamp}`)}
         <div
           class="rounded-lg border p-4 {event.status === 'failure' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20' : 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'}"
         >

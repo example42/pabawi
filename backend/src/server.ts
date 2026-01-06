@@ -16,12 +16,14 @@ import { createPuppetRouter } from "./routes/puppet";
 import { createPackagesRouter } from "./routes/packages";
 import { createStreamingRouter } from "./routes/streaming";
 import { createIntegrationsRouter } from "./routes/integrations";
+import { createHieraRouter } from "./routes/hiera";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware } from "./middleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
+import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import { BoltPlugin } from "./integrations/bolt";
 import type { IntegrationConfig } from "./integrations/types";
 
@@ -300,6 +302,62 @@ async function startServer(): Promise<Express> {
     }
     console.warn("=== End Puppetserver Integration Setup ===");
 
+    // Initialize Hiera integration only if configured
+    let hieraPlugin: HieraPlugin | undefined;
+    const hieraConfig = config.integrations.hiera;
+    const hieraConfigured = !!hieraConfig?.controlRepoPath;
+
+    console.warn("=== Hiera Integration Setup ===");
+    console.warn(`Hiera configured: ${String(hieraConfigured)}`);
+    console.warn(
+      `Hiera config: ${JSON.stringify(hieraConfig, null, 2)}`,
+    );
+
+    if (hieraConfigured) {
+      console.warn("Initializing Hiera integration...");
+      try {
+        hieraPlugin = new HieraPlugin();
+        hieraPlugin.setIntegrationManager(integrationManager);
+        console.warn("HieraPlugin instance created");
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: hieraConfig.enabled,
+          name: "hiera",
+          type: "information",
+          config: hieraConfig,
+          priority: 6, // Lower priority than Puppetserver (8), higher than Bolt (5)
+        };
+
+        console.warn(
+          `Registering Hiera plugin with config: ${JSON.stringify(integrationConfig, null, 2)}`,
+        );
+        integrationManager.registerPlugin(
+          hieraPlugin,
+          integrationConfig,
+        );
+
+        console.warn("Hiera integration registered successfully");
+        console.warn(`- Enabled: ${String(hieraConfig.enabled)}`);
+        console.warn(`- Control Repo Path: ${hieraConfig.controlRepoPath}`);
+        console.warn(`- Hiera Config Path: ${hieraConfig.hieraConfigPath ?? "hiera.yaml"}`);
+        console.warn(`- Priority: 6`);
+      } catch (error) {
+        console.warn(
+          `WARNING: Failed to initialize Hiera integration: ${error instanceof Error ? error.message : "Unknown error"}`,
+        );
+        if (error instanceof Error && error.stack) {
+          console.warn(error.stack);
+        }
+        hieraPlugin = undefined;
+      }
+    } else {
+      console.warn(
+        "Hiera integration not configured - skipping registration",
+      );
+      console.warn("Set HIERA_CONTROL_REPO_PATH to a valid control repository to enable Hiera integration");
+    }
+    console.warn("=== End Hiera Integration Setup ===");
+
     // Initialize all registered plugins
     console.warn("=== Initializing All Integration Plugins ===");
     console.warn(
@@ -493,6 +551,10 @@ async function startServer(): Promise<Express> {
         puppetDBService,
         puppetserverService,
       ),
+    );
+    app.use(
+      "/api/integrations/hiera",
+      createHieraRouter(integrationManager),
     );
 
     // Serve static frontend files in production

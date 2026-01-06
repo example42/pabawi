@@ -21,8 +21,8 @@ PUPPETDB_SERVER_URL=https://puppetdb.example.com
 PUPPETDB_PORT=8081
 PUPPETDB_SSL_ENABLED=true
 PUPPETDB_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-PUPPETDB_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/admin.pem
-PUPPETDB_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/admin.pem
+PUPPETDB_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/hostname.pem
+PUPPETDB_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/hostname.pem
 PUPPETDB_SSL_REJECT_UNAUTHORIZED=true`;
 
   const advancedConfig = `# Advanced Configuration
@@ -90,7 +90,7 @@ PUPPETDB_PRIORITY=10`;
             <span class="text-2xl">🔒</span>
             <span class="font-semibold text-gray-900 dark:text-white">SSL Certificate</span>
           </div>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Required for Open Source Puppet</p>
+          <p class="text-sm text-gray-600 dark:text-gray-400">Required for Open Source Puppet and OpenVox</p>
         </button>
       </div>
 
@@ -106,12 +106,25 @@ PUPPETDB_PRIORITY=10`;
         </div>
       {:else}
         <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Locate SSL Certificates</h4>
-          <p class="text-gray-700 dark:text-gray-300 mb-3">Default certificate locations on Puppetserver:</p>
+          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Use existing SSL Certificates</h4>
+          <p class="text-gray-700 dark:text-gray-300 mb-3">If Pabawi runs on a node managed by Puppet, you can use the local existing puppet agent certificates:</p>
           <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
             <div>CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
-            <div>Cert: /etc/puppetlabs/puppet/ssl/certs/admin.pem</div>
-            <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/admin.pem</div>
+            <div>Cert: /etc/puppetlabs/puppet/ssl/certs/hostname.pem</div>
+            <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/hostname.pem</div>
+          </div>
+
+          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Generate dedicated SSL Certificates</h4>
+          <p class="text-gray-700 dark:text-gray-300 mb-3">Alternatively, you can
+          generate on your Puppet server a dedicated certificate to use for Pabawi. Run, as root on the Puppet server:</p>
+          <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+            pupperserver ca generate --certname pabawi
+          </div>
+          <p class="text-gray-700 dark:text-gray-300 mb-3">The command generates the following files which should be copied on your Pabawi host (in the paths you configure for PUPPETDB_SSL_CA , PUPPETDB_SSL_CERT and PUPPETDB_SSL_KEY settings):</p>
+          <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+            <div>CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
+            <div>Cert: /etc/puppetlabs/puppet/ssl/certs/pabawi.pem</div>
+            <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/pabawi.pem</div>
           </div>
         </div>
       {/if}

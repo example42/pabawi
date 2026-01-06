@@ -168,12 +168,93 @@ export const PuppetserverConfigSchema = z.object({
 export type PuppetserverConfig = z.infer<typeof PuppetserverConfigSchema>;
 
 /**
+ * Hiera fact source configuration schema
+ */
+export const HieraFactSourceConfigSchema = z.object({
+  preferPuppetDB: z.boolean().default(true),
+  localFactsPath: z.string().optional(),
+});
+
+export type HieraFactSourceConfig = z.infer<typeof HieraFactSourceConfigSchema>;
+
+/**
+ * Hiera catalog compilation configuration schema
+ */
+export const HieraCatalogCompilationConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  timeout: z.number().int().positive().default(60000), // 60 seconds
+  cacheTTL: z.number().int().positive().default(300000), // 5 minutes
+});
+
+export type HieraCatalogCompilationConfig = z.infer<
+  typeof HieraCatalogCompilationConfigSchema
+>;
+
+/**
+ * Hiera cache configuration schema
+ */
+export const HieraCacheConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  ttl: z.number().int().positive().default(300000), // 5 minutes
+  maxEntries: z.number().int().positive().default(10000),
+});
+
+export type HieraCacheConfig = z.infer<typeof HieraCacheConfigSchema>;
+
+/**
+ * Hiera code analysis configuration schema
+ */
+export const HieraCodeAnalysisConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  lintEnabled: z.boolean().default(true),
+  moduleUpdateCheck: z.boolean().default(true),
+  analysisInterval: z.number().int().positive().default(3600000), // 1 hour
+  exclusionPatterns: z.array(z.string()).default([]),
+});
+
+export type HieraCodeAnalysisConfig = z.infer<
+  typeof HieraCodeAnalysisConfigSchema
+>;
+
+/**
+ * Hiera integration configuration schema
+ */
+export const HieraConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  controlRepoPath: z.string(),
+  hieraConfigPath: z.string().default("hiera.yaml"),
+  environments: z.array(z.string()).default(["production"]),
+  factSources: HieraFactSourceConfigSchema.default({
+    preferPuppetDB: true,
+  }),
+  catalogCompilation: HieraCatalogCompilationConfigSchema.default({
+    enabled: false,
+    timeout: 60000,
+    cacheTTL: 300000,
+  }),
+  cache: HieraCacheConfigSchema.default({
+    enabled: true,
+    ttl: 300000,
+    maxEntries: 10000,
+  }),
+  codeAnalysis: HieraCodeAnalysisConfigSchema.default({
+    enabled: true,
+    lintEnabled: true,
+    moduleUpdateCheck: true,
+    analysisInterval: 3600000,
+    exclusionPatterns: [],
+  }),
+});
+
+export type HieraConfig = z.infer<typeof HieraConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
   puppetserver: PuppetserverConfigSchema.optional(),
-  // Future integrations: ansible, terraform, etc.
+  hiera: HieraConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
