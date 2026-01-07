@@ -96,6 +96,52 @@ vi.mock("../../src/integrations/hiera/CodeAnalyzer", () => {
   };
 });
 
+/**
+ * Helper function to create complete HieraPlugin configuration
+ */
+function createHieraConfig(overrides: Partial<IntegrationConfig> = {}): IntegrationConfig {
+  const baseConfig: IntegrationConfig = {
+    enabled: true,
+    name: "hiera",
+    type: "information" as const,
+    config: {
+      controlRepoPath: "/valid/repo",
+      hieraConfigPath: "hiera.yaml",
+      environments: ["production"],
+      factSources: {
+        preferPuppetDB: true,
+        localFactsPath: undefined,
+      },
+      catalogCompilation: {
+        enabled: false,
+        timeout: 60000,
+        cacheTTL: 300000,
+      },
+      cache: {
+        enabled: true,
+        ttl: 300000,
+        maxEntries: 10000,
+      },
+      codeAnalysis: {
+        enabled: true,
+        lintEnabled: true,
+        moduleUpdateCheck: true,
+        analysisInterval: 3600000,
+        exclusionPatterns: [],
+      },
+    },
+  };
+
+  return {
+    ...baseConfig,
+    ...overrides,
+    config: {
+      ...baseConfig.config,
+      ...(overrides.config || {}),
+    },
+  };
+}
+
 describe("HieraPlugin", () => {
   let plugin: HieraPlugin;
   let mockIntegrationManager: IntegrationManager;
@@ -224,6 +270,29 @@ describe("HieraPlugin", () => {
         type: "information",
         config: {
           controlRepoPath: "",
+          hieraConfigPath: "hiera.yaml",
+          environments: ["production"],
+          factSources: {
+            preferPuppetDB: true,
+            localFactsPath: undefined,
+          },
+          catalogCompilation: {
+            enabled: false,
+            timeout: 60000,
+            cacheTTL: 300000,
+          },
+          cache: {
+            enabled: true,
+            ttl: 300000,
+            maxEntries: 10000,
+          },
+          codeAnalysis: {
+            enabled: true,
+            lintEnabled: true,
+            moduleUpdateCheck: true,
+            analysisInterval: 3600000,
+            exclusionPatterns: [],
+          },
         },
       };
 
@@ -244,6 +313,29 @@ describe("HieraPlugin", () => {
         type: "information",
         config: {
           controlRepoPath: "/nonexistent/path",
+          hieraConfigPath: "hiera.yaml",
+          environments: ["production"],
+          factSources: {
+            preferPuppetDB: true,
+            localFactsPath: undefined,
+          },
+          catalogCompilation: {
+            enabled: false,
+            timeout: 60000,
+            cacheTTL: 300000,
+          },
+          cache: {
+            enabled: true,
+            ttl: 300000,
+            maxEntries: 10000,
+          },
+          codeAnalysis: {
+            enabled: true,
+            lintEnabled: true,
+            moduleUpdateCheck: true,
+            analysisInterval: 3600000,
+            exclusionPatterns: [],
+          },
         },
       };
 
@@ -267,7 +359,15 @@ describe("HieraPlugin", () => {
           controlRepoPath: "/valid/repo",
           hieraConfigPath: "hiera.yaml",
           environments: ["production"],
-          factSources: { preferPuppetDB: true },
+          factSources: {
+            preferPuppetDB: true,
+            localFactsPath: undefined,
+          },
+          catalogCompilation: {
+            enabled: true,
+            timeout: 60000,
+            cacheTTL: 300000,
+          },
           cache: { enabled: true, ttl: 300000, maxEntries: 10000 },
           codeAnalysis: {
             enabled: true,
@@ -287,36 +387,24 @@ describe("HieraPlugin", () => {
 
   describe("healthCheck", () => {
     it("should return not initialized when plugin is not initialized", async () => {
-      const config: IntegrationConfig = {
-        enabled: false,
-        name: "hiera",
-        type: "information",
-        config: {},
-      };
+      const config = createHieraConfig({ enabled: false });
 
       await plugin.initialize(config);
       const health = await plugin.healthCheck();
 
       expect(health.healthy).toBe(false);
-      // Base class returns "not initialized" when plugin is disabled
+      // Base class returns "not initialized" when plugin is disabled (because it doesn't initialize)
       expect(health.message).toContain("not initialized");
     });
 
     it("should return not initialized when integration is disabled", async () => {
-      const config: IntegrationConfig = {
-        enabled: false,
-        name: "hiera",
-        type: "information",
-        config: {
-          controlRepoPath: "/some/path",
-        },
-      };
+      const config = createHieraConfig({ enabled: false, config: { controlRepoPath: "/some/path" } });
 
       await plugin.initialize(config);
       const health = await plugin.healthCheck();
 
       expect(health.healthy).toBe(false);
-      // Base class returns "not initialized" when plugin is disabled
+      // Base class returns "not initialized" when plugin is disabled (because it doesn't initialize)
       expect(health.message).toContain("not initialized");
     });
 
@@ -327,14 +415,7 @@ describe("HieraPlugin", () => {
         isDirectory: () => true,
       } as fs.Stats);
 
-      const config: IntegrationConfig = {
-        enabled: true,
-        name: "hiera",
-        type: "information",
-        config: {
-          controlRepoPath: "/valid/repo",
-        },
-      };
+      const config = createHieraConfig();
 
       await plugin.initialize(config);
       const health = await plugin.healthCheck();
@@ -352,15 +433,7 @@ describe("HieraPlugin", () => {
         isDirectory: () => true,
       } as fs.Stats);
 
-      const config: IntegrationConfig = {
-        enabled: true,
-        name: "hiera",
-        type: "information",
-        config: {
-          controlRepoPath: "/valid/repo",
-        },
-      };
-
+      const config = createHieraConfig();
       await plugin.initialize(config);
     });
 
@@ -392,15 +465,7 @@ describe("HieraPlugin", () => {
         isDirectory: () => true,
       } as fs.Stats);
 
-      const config: IntegrationConfig = {
-        enabled: true,
-        name: "hiera",
-        type: "information",
-        config: {
-          controlRepoPath: "/valid/repo",
-        },
-      };
-
+      const config = createHieraConfig();
       await plugin.initialize(config);
     });
 
@@ -424,15 +489,7 @@ describe("HieraPlugin", () => {
         isDirectory: () => true,
       } as fs.Stats);
 
-      const config: IntegrationConfig = {
-        enabled: true,
-        name: "hiera",
-        type: "information",
-        config: {
-          controlRepoPath: "/valid/repo",
-        },
-      };
-
+      const config = createHieraConfig();
       await plugin.initialize(config);
       const inventory = await plugin.getInventory();
 
@@ -454,15 +511,7 @@ describe("HieraPlugin", () => {
         isDirectory: () => true,
       } as fs.Stats);
 
-      const config: IntegrationConfig = {
-        enabled: true,
-        name: "hiera",
-        type: "information",
-        config: {
-          controlRepoPath: "/valid/repo",
-        },
-      };
-
+      const config = createHieraConfig();
       await plugin.initialize(config);
       const inventory = await plugin.getInventory();
 
