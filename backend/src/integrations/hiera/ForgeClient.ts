@@ -25,10 +25,10 @@ export interface ForgeModuleInfo {
     file_size: number;
     supported: boolean;
   };
-  releases: Array<{
+  releases: {
     version: string;
     created_at: string;
-  }>;
+  }[];
   deprecated_at: string | null;
   deprecated_for: string | null;
   superseded_by: { slug: string } | null;
@@ -116,7 +116,7 @@ export class ForgeClient {
   private baseUrl: string;
   private timeout: number;
   private userAgent: string;
-  private securityAdvisories: Map<string, SecurityAdvisory[]> = new Map();
+  private securityAdvisories = new Map<string, SecurityAdvisory[]>();
 
   constructor(config: ForgeClientConfig = {}) {
     this.baseUrl = config.baseUrl ?? DEFAULT_FORGE_URL;
@@ -184,11 +184,11 @@ export class ForgeClient {
     const ranges = affectedVersions.split(",").map((r) => r.trim());
 
     for (const range of ranges) {
-      const ltMatch = range.match(/^<\s*(.+)$/);
-      const lteMatch = range.match(/^<=\s*(.+)$/);
-      const gtMatch = range.match(/^>\s*(.+)$/);
-      const gteMatch = range.match(/^>=\s*(.+)$/);
-      const eqMatch = range.match(/^=\s*(.+)$/);
+      const ltMatch = /^<\s*(.+)$/.exec(range);
+      const lteMatch = /^<=\s*(.+)$/.exec(range);
+      const gtMatch = /^>\s*(.+)$/.exec(range);
+      const gteMatch = /^>=\s*(.+)$/.exec(range);
+      const eqMatch = /^=\s*(.+)$/.exec(range);
 
       if (ltMatch) {
         if (!this.isNewerVersion(ltMatch[1], version)) continue;
@@ -278,7 +278,7 @@ export class ForgeClient {
       }
 
       if (!response.ok) {
-        throw new Error(`Forge API returned status ${response.status}`);
+        throw new Error(`Forge API returned status ${String(response.status)}`);
       }
 
       const data = await response.json();
@@ -297,7 +297,7 @@ export class ForgeClient {
    */
   async getLatestVersion(moduleSlug: string): Promise<string | null> {
     const moduleInfo = await this.getModuleInfo(moduleSlug);
-    return moduleInfo?.current_release?.version ?? null;
+    return moduleInfo?.current_release.version ?? null;
   }
 
   /**
@@ -356,7 +356,7 @@ export class ForgeClient {
         };
       }
 
-      const latestVersion = moduleInfo.current_release?.version ?? module.version;
+      const latestVersion = moduleInfo.current_release.version || module.version;
       const hasUpdate = this.isNewerVersion(latestVersion, module.version);
 
       // Get security status
@@ -450,7 +450,7 @@ export class ForgeClient {
     // Split by dots and convert to numbers
     return cleaned.split(".").map((part) => {
       // Extract numeric portion (handles things like "1.0.0-rc1")
-      const match = part.match(/^(\d+)/);
+      const match = /^(\d+)/.exec(part);
       return match ? parseInt(match[1], 10) : 0;
     });
   }
@@ -468,7 +468,7 @@ export class ForgeClient {
    */
   private async fetchWithTimeout(url: string): Promise<Response> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutId = setTimeout(() => { controller.abort(); }, this.timeout);
 
     try {
       const response = await fetch(url, {

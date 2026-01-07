@@ -52,7 +52,7 @@ interface CatalogCacheEntry {
 export class CatalogCompiler {
   private integrationManager: IntegrationManager;
   private config: CatalogCompilationConfig;
-  private cache: Map<string, CatalogCacheEntry> = new Map();
+  private cache = new Map<string, CatalogCacheEntry>();
 
   constructor(
     integrationManager: IntegrationManager,
@@ -82,7 +82,7 @@ export class CatalogCompiler {
   async compileCatalog(
     nodeId: string,
     environment: string,
-    facts: Facts
+    _facts: Facts
   ): Promise<CompiledCatalogResult> {
     if (!this.config.enabled) {
       return this.createDisabledResult(nodeId, environment);
@@ -142,7 +142,7 @@ export class CatalogCompiler {
 
       this.log(
         `Successfully compiled catalog for node '${nodeId}': ` +
-        `${Object.keys(variables).length} variables, ${classes.length} classes`
+        `${String(Object.keys(variables).length)} variables, ${String(classes.length)} classes`
       );
 
       return result;
@@ -207,7 +207,7 @@ export class CatalogCompiler {
 
     return new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        reject(new Error(`Catalog compilation timed out after ${timeoutMs}ms`));
+        reject(new Error(`Catalog compilation timed out after ${String(timeoutMs)}ms`));
       }, timeoutMs);
 
       // Use getNodeData with 'catalog' type to get compiled catalog
@@ -217,9 +217,9 @@ export class CatalogCompiler {
           clearTimeout(timeoutId);
           resolve(result);
         })
-        .catch((error) => {
+        .catch((error: unknown) => {
           clearTimeout(timeoutId);
-          reject(error);
+          reject(error instanceof Error ? error : new Error(String(error)));
         });
     });
   }
@@ -267,11 +267,11 @@ export class CatalogCompiler {
     }
 
     const catalogObj = catalog as {
-      resources?: Array<{
+      resources?: {
         type: string;
         title: string;
         parameters?: Record<string, unknown>;
-      }>;
+      }[];
       classes?: string[];
       environment?: string;
     };
@@ -293,7 +293,7 @@ export class CatalogCompiler {
 
     // Add environment as a variable
     if (catalogObj.environment) {
-      variables["environment"] = catalogObj.environment;
+      variables.environment = catalogObj.environment;
     }
 
     return variables;
@@ -313,10 +313,10 @@ export class CatalogCompiler {
     }
 
     const catalogObj = catalog as {
-      resources?: Array<{
+      resources?: {
         type: string;
         title: string;
-      }>;
+      }[];
       classes?: string[];
     };
 
@@ -442,7 +442,7 @@ export class CatalogCompiler {
       this.cache.delete(key);
     }
     if (keysToDelete.length > 0) {
-      this.log(`Invalidated ${keysToDelete.length} cache entries for node '${nodeId}'`);
+      this.log(`Invalidated ${String(keysToDelete.length)} cache entries for node '${nodeId}'`);
     }
   }
 
@@ -468,7 +468,7 @@ export class CatalogCompiler {
     this.config = config;
     // Clear cache when config changes
     this.clearCache();
-    this.log(`Configuration updated: enabled=${config.enabled}, timeout=${config.timeout}ms, cacheTTL=${config.cacheTTL}ms`);
+    this.log(`Configuration updated: enabled=${String(config.enabled)}, timeout=${String(config.timeout)}ms, cacheTTL=${String(config.cacheTTL)}ms`);
   }
 
   /**

@@ -339,7 +339,7 @@ async function startServer(): Promise<Express> {
         console.warn("Hiera integration registered successfully");
         console.warn(`- Enabled: ${String(hieraConfig.enabled)}`);
         console.warn(`- Control Repo Path: ${hieraConfig.controlRepoPath}`);
-        console.warn(`- Hiera Config Path: ${hieraConfig.hieraConfigPath ?? "hiera.yaml"}`);
+        console.warn(`- Hiera Config Path: ${hieraConfig.hieraConfigPath}`);
         console.warn(`- Priority: 6`);
       } catch (error) {
         console.warn(

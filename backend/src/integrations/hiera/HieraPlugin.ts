@@ -158,30 +158,30 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    */
   private extractHieraConfig(schemaConfig: SchemaHieraConfig): HieraPluginConfig {
     return {
-      enabled: schemaConfig.enabled ?? false,
-      controlRepoPath: schemaConfig.controlRepoPath ?? "",
-      hieraConfigPath: schemaConfig.hieraConfigPath ?? "hiera.yaml",
-      environments: schemaConfig.environments ?? ["production"],
+      enabled: schemaConfig.enabled,
+      controlRepoPath: schemaConfig.controlRepoPath,
+      hieraConfigPath: schemaConfig.hieraConfigPath,
+      environments: schemaConfig.environments,
       factSources: {
-        preferPuppetDB: schemaConfig.factSources?.preferPuppetDB ?? true,
-        localFactsPath: schemaConfig.factSources?.localFactsPath,
+        preferPuppetDB: schemaConfig.factSources.preferPuppetDB,
+        localFactsPath: schemaConfig.factSources.localFactsPath,
       },
       catalogCompilation: {
-        enabled: schemaConfig.catalogCompilation?.enabled ?? false,
-        timeout: schemaConfig.catalogCompilation?.timeout ?? 60000,
-        cacheTTL: schemaConfig.catalogCompilation?.cacheTTL ?? 300000,
+        enabled: schemaConfig.catalogCompilation.enabled,
+        timeout: schemaConfig.catalogCompilation.timeout,
+        cacheTTL: schemaConfig.catalogCompilation.cacheTTL,
       },
       cache: {
-        enabled: schemaConfig.cache?.enabled ?? true,
-        ttl: schemaConfig.cache?.ttl ?? 300000,
-        maxEntries: schemaConfig.cache?.maxEntries ?? 10000,
+        enabled: schemaConfig.cache.enabled,
+        ttl: schemaConfig.cache.ttl,
+        maxEntries: schemaConfig.cache.maxEntries,
       },
       codeAnalysis: {
-        enabled: schemaConfig.codeAnalysis?.enabled ?? true,
-        lintEnabled: schemaConfig.codeAnalysis?.lintEnabled ?? true,
-        moduleUpdateCheck: schemaConfig.codeAnalysis?.moduleUpdateCheck ?? true,
-        analysisInterval: schemaConfig.codeAnalysis?.analysisInterval ?? 3600000,
-        exclusionPatterns: schemaConfig.codeAnalysis?.exclusionPatterns ?? [],
+        enabled: schemaConfig.codeAnalysis.enabled,
+        lintEnabled: schemaConfig.codeAnalysis.lintEnabled,
+        moduleUpdateCheck: schemaConfig.codeAnalysis.moduleUpdateCheck,
+        analysisInterval: schemaConfig.codeAnalysis.analysisInterval,
+        exclusionPatterns: schemaConfig.codeAnalysis.exclusionPatterns,
       },
     };
   }
@@ -515,7 +515,10 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    */
   async getAllKeys(): Promise<HieraKeyIndex> {
     this.ensureInitialized();
-    return this.hieraService!.getAllKeys();
+    if (!this.hieraService) {
+      throw new Error("HieraService is not initialized");
+    }
+    return this.hieraService.getAllKeys();
   }
 
   /**
@@ -526,7 +529,10 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    */
   async searchKeys(query: string): Promise<HieraKeyIndex["keys"]> {
     this.ensureInitialized();
-    const keys = await this.hieraService!.searchKeys(query);
+    if (!this.hieraService) {
+      throw new Error("HieraService is not initialized");
+    }
+    const keys = await this.hieraService.searchKeys(query);
     // Convert array to Map for consistency
     const keyMap = new Map<string, typeof keys[0]>();
     for (const key of keys) {
@@ -549,7 +555,10 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
     environment?: string
   ): Promise<HieraResolution> {
     this.ensureInitialized();
-    return this.hieraService!.resolveKey(nodeId, key, environment);
+    if (!this.hieraService) {
+      throw new Error("HieraService is not initialized");
+    }
+    return this.hieraService.resolveKey(nodeId, key, environment);
   }
 
   /**
@@ -560,7 +569,10 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    */
   async getNodeHieraData(nodeId: string): Promise<NodeHieraData> {
     this.ensureInitialized();
-    return this.hieraService!.getNodeHieraData(nodeId);
+    if (!this.hieraService) {
+      throw new Error("HieraService is not initialized");
+    }
+    return this.hieraService.getNodeHieraData(nodeId);
   }
 
   /**
@@ -571,7 +583,10 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    */
   async getKeyValuesAcrossNodes(key: string): Promise<KeyNodeValues[]> {
     this.ensureInitialized();
-    return this.hieraService!.getKeyValuesAcrossNodes(key);
+    if (!this.hieraService) {
+      throw new Error("HieraService is not initialized");
+    }
+    return this.hieraService.getKeyValuesAcrossNodes(key);
   }
 
   /**
@@ -618,14 +633,14 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    *
    * Requirements: 13.5
    */
-  async disable(): Promise<void> {
+  disable(): void {
     if (!this.config.enabled) {
       this.log("Hiera integration is already disabled");
       return;
     }
 
     // Shutdown services
-    await this.shutdown();
+    this.shutdown();
 
     this.config.enabled = false;
     this.initialized = false;
@@ -690,11 +705,11 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
   /**
    * Shutdown the plugin and clean up resources
    */
-  async shutdown(): Promise<void> {
+  shutdown(): void {
     this.log("Shutting down Hiera plugin...");
 
     if (this.hieraService) {
-      await this.hieraService.shutdown();
+      this.hieraService.shutdown();
       this.hieraService = null;
     }
 

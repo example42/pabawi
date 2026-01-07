@@ -39,7 +39,7 @@ export interface CatalogAwareResolveOptions extends ResolveOptions {
 export class HieraResolver {
   private controlRepoPath: string;
   private parser: HieraParser;
-  private lookupOptionsCache: Map<string, Map<string, LookupOptions>> = new Map();
+  private lookupOptionsCache = new Map<string, Map<string, LookupOptions>>();
 
   constructor(controlRepoPath: string) {
     this.controlRepoPath = controlRepoPath;
@@ -55,7 +55,7 @@ export class HieraResolver {
    * @param options - Optional resolve options (including catalog variables)
    * @returns Resolution result with value and metadata
    */
-  async resolve(
+  resolve(
     key: string,
     facts: Facts,
     config: HieraConfig,
@@ -66,7 +66,7 @@ export class HieraResolver {
     const interpolatedVariables: Record<string, unknown> = {};
 
     // Get lookup options for this key (from hieradata or options parameter)
-    const lookupOptions = await this.getLookupOptionsForKey(key, config, facts);
+    const lookupOptions = this.getLookupOptionsForKey(key, config, facts);
     const lookupMethod = options?.lookupMethod ?? lookupOptions?.merge ?? "first";
     const mergeOptions = options?.mergeOptions ?? this.buildMergeOptions(lookupOptions);
 
@@ -75,7 +75,7 @@ export class HieraResolver {
 
     // Iterate through hierarchy levels
     for (const level of config.hierarchy) {
-      const levelValues = await this.resolveFromLevel(key, level, config, facts, catalogVariables);
+      const levelValues = this.resolveFromLevel(key, level, config, facts, catalogVariables);
 
       for (const location of levelValues) {
         // Interpolate the value using both facts and catalog variables
@@ -146,13 +146,13 @@ export class HieraResolver {
    * @param catalogVariables - Variables from catalog compilation
    * @returns Array of key locations found in this level
    */
-  private async resolveFromLevel(
+  private resolveFromLevel(
     key: string,
     level: HierarchyLevel,
     config: HieraConfig,
     facts: Facts,
     catalogVariables: Record<string, unknown> = {}
-  ): Promise<HieraKeyLocation[]> {
+  ): HieraKeyLocation[] {
     const locations: HieraKeyLocation[] = [];
     const datadir = level.datadir ?? config.defaults?.datadir ?? "data";
     const paths = this.getLevelPaths(level);
@@ -163,13 +163,13 @@ export class HieraResolver {
       const fullPath = this.resolvePath(path.join(datadir, interpolatedPath));
 
       // Try to read and parse the file
-      const value = await this.getKeyFromFile(fullPath, key);
+      const value = this.getKeyFromFile(fullPath, key);
 
       if (value !== undefined) {
         locations.push({
           file: path.join(datadir, interpolatedPath),
           hierarchyLevel: level.name,
-          lineNumber: await this.findKeyLineNumber(fullPath, key),
+          lineNumber: this.findKeyLineNumber(fullPath, key),
           value,
         });
       }
@@ -210,7 +210,7 @@ export class HieraResolver {
    * @param key - Key to look up
    * @returns Value or undefined if not found
    */
-  private async getKeyFromFile(filePath: string, key: string): Promise<unknown> {
+  private getKeyFromFile(filePath: string, key: string): unknown {
     if (!fs.existsSync(filePath)) {
       return undefined;
     }
@@ -279,7 +279,7 @@ export class HieraResolver {
    * @param key - Key to find
    * @returns Line number (1-based) or 0 if not found
    */
-  private async findKeyLineNumber(filePath: string, key: string): Promise<number> {
+  private findKeyLineNumber(filePath: string, key: string): number {
     if (!fs.existsSync(filePath)) {
       return 0;
     }
@@ -428,7 +428,10 @@ export class HieraResolver {
           // Handle knockout prefix
           if (knockoutPrefix && key.startsWith(knockoutPrefix)) {
             const knockedOut = key.slice(knockoutPrefix.length);
-            delete result[knockedOut];
+            if (Object.prototype.hasOwnProperty.call(result, knockedOut)) {
+              // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+              delete result[knockedOut];
+            }
             continue;
           }
           result[key] = val;
@@ -493,7 +496,7 @@ export class HieraResolver {
     if (Array.isArray(base) && Array.isArray(override)) {
       if (mergeOptions?.mergeHashArrays) {
         // Merge arrays element by element
-        const result = [...base];
+        const result = Array.isArray(base) ? [...(base as unknown[])] : [];
         for (const item of override) {
           if (knockoutPrefix && typeof item === "string" && item.startsWith(knockoutPrefix)) {
             const knockedOut = item.slice(knockoutPrefix.length);
@@ -524,7 +527,10 @@ export class HieraResolver {
         // Handle knockout prefix
         if (knockoutPrefix && key.startsWith(knockoutPrefix)) {
           const knockedOut = key.slice(knockoutPrefix.length);
-          delete result[knockedOut];
+          if (Object.prototype.hasOwnProperty.call(result, knockedOut)) {
+            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+            delete result[knockedOut];
+          }
           continue;
         }
 
@@ -564,11 +570,11 @@ export class HieraResolver {
    * @param facts - Node facts
    * @returns Lookup options or undefined
    */
-  private async getLookupOptionsForKey(
+  private getLookupOptionsForKey(
     key: string,
     config: HieraConfig,
     facts: Facts
-  ): Promise<LookupOptions | undefined> {
+  ): LookupOptions | undefined {
     // Check each hierarchy level for lookup_options
     for (const level of config.hierarchy) {
       const datadir = level.datadir ?? config.defaults?.datadir ?? "data";
@@ -583,7 +589,7 @@ export class HieraResolver {
         let lookupOptionsMap = this.lookupOptionsCache.get(cacheKey);
 
         if (!lookupOptionsMap) {
-          lookupOptionsMap = await this.parser.parseLookupOptions(fullPath);
+          lookupOptionsMap = this.parser.parseLookupOptions(fullPath);
           this.lookupOptionsCache.set(cacheKey, lookupOptionsMap);
         }
 
@@ -731,7 +737,7 @@ export class HieraResolver {
 
       if (value !== undefined) {
         variables[trimmedVar] = value;
-        return String(value);
+        return typeof value === 'string' ? value : JSON.stringify(value);
       }
 
       // Return original if not resolved
@@ -767,7 +773,7 @@ export class HieraResolver {
     // Handle trusted.xxx syntax
     if (variable.startsWith("trusted.")) {
       const trustedPath = variable.slice(8);
-      const trusted = facts.facts["trusted"] as Record<string, unknown> | undefined;
+      const trusted = facts.facts.trusted as Record<string, unknown> | undefined;
       if (trusted) {
         return this.getNestedFactValue(trusted, trustedPath);
       }
@@ -777,7 +783,7 @@ export class HieraResolver {
     // Handle server_facts.xxx syntax
     if (variable.startsWith("server_facts.")) {
       const serverPath = variable.slice(13);
-      const serverFacts = facts.facts["server_facts"] as Record<string, unknown> | undefined;
+      const serverFacts = facts.facts.server_facts as Record<string, unknown> | undefined;
       if (serverFacts) {
         return this.getNestedFactValue(serverFacts, serverPath);
       }

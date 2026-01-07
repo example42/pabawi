@@ -42,7 +42,7 @@ export class HieraScanner {
   private changeCallbacks: FileChangeCallback[] = [];
   private isWatching = false;
 
-  constructor(controlRepoPath: string, hieradataPath: string = "data") {
+  constructor(controlRepoPath: string, hieradataPath = "data") {
     this.controlRepoPath = controlRepoPath;
     this.hieradataPath = hieradataPath;
     this.keyIndex = this.createEmptyIndex();
@@ -201,7 +201,7 @@ export class HieraScanner {
       if (entry.isDirectory()) {
         await this.scanDirectory(entryPath, entryRelativePath);
       } else if (entry.isFile() && this.isHieradataFile(entry.name)) {
-        await this.scanFile(entryPath, entryRelativePath);
+        this.scanFile(entryPath, entryRelativePath);
       }
     }
   }
@@ -212,11 +212,11 @@ export class HieraScanner {
    * @param filePath - Absolute path to file
    * @param relativePath - Path relative to control repo
    */
-  private async scanFile(filePath: string, relativePath: string): Promise<void> {
+  private scanFile(filePath: string, relativePath: string): void {
     const result = this.scanFileContent(filePath, relativePath);
 
     if (!result.success) {
-      console.warn(`[HieraScanner] Failed to scan file ${relativePath}: ${result.error}`);
+      console.warn(`[HieraScanner] Failed to scan file ${relativePath}: ${result.error ?? 'Unknown error'}`);
       return;
     }
 
@@ -702,7 +702,7 @@ export class HieraScanner {
    *
    * @param filePaths - Array of file paths to rescan
    */
-  async rescanFiles(filePaths: string[]): Promise<void> {
+  rescanFiles(filePaths: string[]): void {
     // First invalidate the files
     this.invalidateFiles(filePaths);
 
@@ -710,7 +710,7 @@ export class HieraScanner {
     for (const relativePath of filePaths) {
       const fullPath = this.resolvePath(relativePath);
       if (fs.existsSync(fullPath)) {
-        await this.scanFile(fullPath, relativePath);
+        this.scanFile(fullPath, relativePath);
       }
     }
 
