@@ -274,7 +274,6 @@ export class FactService {
     return {
       nodeId,
       gatheredAt: new Date().toISOString(),
-      source: "local",
       facts: this.buildFactsObject(values),
     };
   }
@@ -290,7 +289,6 @@ export class FactService {
     return {
       nodeId,
       gatheredAt: new Date().toISOString(),
-      source: "local",
       facts: this.buildFactsObject(flatFacts),
     };
   }
@@ -329,11 +327,11 @@ export class FactService {
       family: typeof os?.family === "string" ? os.family : "Unknown",
       name: typeof os?.name === "string" ? os.name : "Unknown",
       release: {
-        full: typeof (os?.release as Record<string, unknown> | undefined)?.full === "string" 
-          ? (os.release as Record<string, unknown>).full as string 
+        full: os && typeof os.release === "object" && os.release !== null
+          ? (os.release as Record<string, unknown>).full as string
           : "Unknown",
-        major: typeof (os?.release as Record<string, unknown> | undefined)?.major === "string" 
-          ? (os.release as Record<string, unknown>).major as string 
+        major: os && typeof os.release === "object" && os.release !== null
+          ? (os.release as Record<string, unknown>).major as string
           : "Unknown",
       },
     };
@@ -405,7 +403,6 @@ export class FactService {
       facts: {
         nodeId,
         gatheredAt: new Date().toISOString(),
-        source: "local",
         facts: {
           os: {
             family: "Unknown",

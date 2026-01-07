@@ -538,7 +538,7 @@ export class PuppetDBService
           const pqlResult = this.parsePqlToJson(pqlQuery);
           if (pqlResult) {
             endpointToUse = pqlResult.endpoint;
-            queryToUse = pqlResult.query;
+            queryToUse = pqlResult.query ?? undefined;
             this.log(`Converted PQL "${pqlQuery}" to endpoint: ${endpointToUse}, query: ${queryToUse ?? 'none'}`);
           } else if (pqlQuery.trim() === 'nodes[certname]') {
             // Basic query for all nodes, no filter needed
@@ -567,7 +567,7 @@ export class PuppetDBService
       });
 
       // Transform results to normalized format based on endpoint
-      if (!Array.isArray(result.results)) {
+      if (!Array.isArray((result as { results: unknown }).results)) {
         this.log(
           "Unexpected response format from PuppetDB endpoint",
           "warn",
@@ -576,13 +576,13 @@ export class PuppetDBService
       }
 
       let nodes: Node[];
-      if (result.endpoint === "pdb/query/v4/inventory") {
+      if ((result as { endpoint: string }).endpoint === "pdb/query/v4/inventory") {
         // Transform inventory results (which include facts and resources)
-        const inventoryResults = result.results as InventoryItem[];
+        const inventoryResults = (result as { results: InventoryItem[] }).results;
         nodes = inventoryResults.map((item: InventoryItem) => this.transformInventoryItem(item));
       } else {
         // Transform regular node results
-        const nodeResults = result.results as PuppetDBNode[];
+        const nodeResults = (result as { results: PuppetDBNode[] }).results;
         nodes = nodeResults.map((node: PuppetDBNode) => this.transformNode(node));
       }
 
