@@ -97,7 +97,7 @@ export function createInventoryRouter(
             });
           }
 
-          // Apply PQL filter if specified (only for PuppetDB nodes)
+          // Apply PQL filter if specified (show only PuppetDB nodes that match)
           if (query.pql) {
             const puppetdbSource =
               integrationManager.getInformationSource("puppetdb");
@@ -113,14 +113,12 @@ export function createInventoryRouter(
                 );
                 const pqlNodeIds = new Set(pqlNodes.map((n) => n.id));
 
-                // Filter to only include nodes that match PQL query
+                // Filter to only include PuppetDB nodes that match PQL query
                 filteredNodes = filteredNodes.filter((node) => {
                   const nodeSource =
                     (node as { source?: string }).source ?? "bolt";
-                  if (nodeSource === "puppetdb") {
-                    return pqlNodeIds.has(node.id);
-                  }
-                  return true; // Keep non-PuppetDB nodes
+                  // When PQL query is applied, only show PuppetDB nodes that match
+                  return nodeSource === "puppetdb" && pqlNodeIds.has(node.id);
                 });
               } catch (error) {
                 console.error("Error applying PQL filter:", error);

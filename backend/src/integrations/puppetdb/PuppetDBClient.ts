@@ -6,6 +6,7 @@
  */
 
 import https from "https";
+import http from "http";
 import fs from "fs";
 import type { PuppetDBConfig } from "../../config/schema";
 
@@ -186,10 +187,18 @@ export class PuppetDBClient {
     pql?: string,
     params?: QueryParams,
   ): Promise<unknown> {
-    const url = this.buildQueryUrl(endpoint, pql, params);
-
     try {
-      const response = await this.fetchWithTimeout(url);
+      let response: Response;
+
+      // Use GET for all endpoints including PQL
+      if (pql) {
+        const url = this.buildQueryUrl(endpoint, pql, params);
+        response = await this.fetchWithTimeout(url);
+      } else {
+        const url = this.buildQueryUrl(endpoint, undefined, params);
+        response = await this.fetchWithTimeout(url);
+      }
+
       return await this.handleResponse(response);
     } catch (error) {
       if (error instanceof PuppetDBError) {
@@ -278,6 +287,91 @@ export class PuppetDBClient {
     }
 
     return url.toString();
+  }
+
+  /**
+   * POST request with timeout support for PQL queries
+   *
+   * @param url - URL to post to
+   * @param body - Request body (PQL query)
+   * @param contentType - Content type for the request
+   * @returns Response
+   */
+  private async postWithTimeout(url: string, body: string, contentType = "application/json"): Promise<Response> {
+    return new Promise((resolve, reject) => {
+      const parsedUrl = new URL(url);
+
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+        "Content-Type": contentType,
+        "Content-Length": Buffer.byteLength(body, "utf8").toString(),
+      };
+
+      // Add authentication token if provided
+      if (this.token) {
+        headers["X-Authentication"] = this.token;
+      }
+
+      const options: https.RequestOptions = {
+        hostname: parsedUrl.hostname,
+        port: parsedUrl.port || (parsedUrl.protocol === "https:" ? 443 : 80),
+        path: parsedUrl.pathname + parsedUrl.search,
+        method: "POST",
+        headers,
+        agent: this.httpsAgent,
+      };
+
+      const timeoutId = setTimeout(() => {
+        req.destroy();
+        reject(new Error(`Request timeout after ${String(this.timeout)}ms`));
+      }, this.timeout);
+
+      const protocol = parsedUrl.protocol === "https:" ? https : http;
+      const req = protocol.request(options, (res) => {
+        clearTimeout(timeoutId);
+
+        let data = "";
+        res.on("data", (chunk: Buffer) => {
+          data += chunk.toString();
+        });
+
+        res.on("end", () => {
+          // Create a Response-like object
+          const response = {
+            ok: res.statusCode
+              ? res.statusCode >= 200 && res.statusCode < 300
+              : false,
+            status: res.statusCode ?? 500,
+            statusText: res.statusMessage ?? "Unknown",
+            headers: res.headers,
+            text: () => Promise.resolve(data),
+            json: () => Promise.resolve(JSON.parse(data) as unknown),
+          } as unknown as Response;
+
+          resolve(response);
+        });
+
+        res.on("error", (error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        });
+      });
+
+      req.on("error", (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+
+      req.on("timeout", () => {
+        clearTimeout(timeoutId);
+        req.destroy();
+        reject(new Error(`Request timeout after ${String(this.timeout)}ms`));
+      });
+
+      // Write the PQL query to the request body
+      req.write(body);
+      req.end();
+    });
   }
 
   /**

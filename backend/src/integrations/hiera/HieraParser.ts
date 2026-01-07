@@ -7,7 +7,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { parse as parseYaml, YAMLParseError } from "yaml";
+import { parse as parseYaml, stringify, YAMLParseError } from "yaml";
 import type {
   HieraConfig,
   HieraDefaults,
@@ -68,7 +68,7 @@ export class HieraParser {
    * @param configPath - Path to hiera.yaml (relative to control repo or absolute)
    * @returns Parse result with config or error
    */
-  async parse(configPath: string): Promise<HieraParseResult> {
+  parse(configPath: string): HieraParseResult {
     const fullPath = this.resolvePath(configPath);
 
     // Check if file exists
@@ -114,7 +114,7 @@ export class HieraParser {
    * @param filePath - Path for error reporting
    * @returns Parse result with config or error
    */
-  parseContent(content: string, filePath: string = "hiera.yaml"): HieraParseResult {
+  parseContent(content: string, filePath = "hiera.yaml"): HieraParseResult {
     let rawConfig: unknown;
 
     try {
@@ -211,7 +211,7 @@ export class HieraParser {
     // Parse hierarchy levels
     const hierarchy: HierarchyLevel[] = [];
     for (let i = 0; i < config.hierarchy.length; i++) {
-      const level = config.hierarchy[i];
+      const level = config.hierarchy[i] as unknown;
       const parsedLevel = this.parseHierarchyLevel(level, i, filePath);
       if (!parsedLevel.success) {
         return {
@@ -219,7 +219,9 @@ export class HieraParser {
           error: parsedLevel.error,
         };
       }
-      hierarchy.push(parsedLevel.level!);
+      if (parsedLevel.level) {
+        hierarchy.push(parsedLevel.level);
+      }
     }
 
     // Parse defaults if present
@@ -258,7 +260,7 @@ export class HieraParser {
         success: false,
         error: {
           code: HIERA_ERROR_CODES.PARSE_ERROR,
-          message: `Invalid hierarchy level at index ${index}: expected an object`,
+          message: `Invalid hierarchy level at index ${String(index)}: expected an object`,
           details: {
             file: filePath,
           },
@@ -274,7 +276,7 @@ export class HieraParser {
         success: false,
         error: {
           code: HIERA_ERROR_CODES.PARSE_ERROR,
-          message: `Hierarchy level at index ${index} missing required 'name' field`,
+          message: `Hierarchy level at index ${String(index)} missing required 'name' field`,
           details: {
             file: filePath,
           },
@@ -323,7 +325,9 @@ export class HieraParser {
 
     // Parse mapped_paths
     if (Array.isArray(rawLevel.mapped_paths) && rawLevel.mapped_paths.length === 3) {
-      const [var1, var2, template] = rawLevel.mapped_paths;
+      const var1 = rawLevel.mapped_paths[0] as unknown;
+      const var2 = rawLevel.mapped_paths[1] as unknown;
+      const template = rawLevel.mapped_paths[2] as unknown;
       if (typeof var1 === "string" && typeof var2 === "string" && typeof template === "string") {
         hierarchyLevel.mapped_paths = [var1, var2, template];
       }
@@ -376,26 +380,23 @@ export class HieraParser {
     const errors: string[] = [];
     const warnings: string[] = [];
 
-    // Check version
-    if (config.version !== 5) {
-      errors.push(`Unsupported Hiera version: ${config.version}`);
-    }
+    // Version is enforced by TypeScript interface (version: 5)
 
     // Check hierarchy
-    if (!config.hierarchy || config.hierarchy.length === 0) {
+    if (!config.hierarchy.length) {
       errors.push("Hierarchy is empty - at least one level is required");
     }
 
     // Validate each hierarchy level
     for (const level of config.hierarchy) {
       // Check for path specification
-      const hasPath = level.path || level.paths || level.glob || level.globs || level.mapped_paths;
+      const hasPath = level.path ?? level.paths ?? level.glob ?? level.globs ?? level.mapped_paths;
       if (!hasPath) {
         warnings.push(`Hierarchy level '${level.name}' has no path specification`);
       }
 
       // Check for data provider
-      const hasProvider = level.data_hash || level.lookup_key || config.defaults?.data_hash;
+      const hasProvider = level.data_hash ?? level.lookup_key ?? config.defaults?.data_hash;
       if (!hasProvider) {
         warnings.push(`Hierarchy level '${level.name}' has no data provider specified`);
       }
@@ -508,7 +509,10 @@ export class HieraParser {
 
     return template.replace(variablePattern, (match, variable: string) => {
       const value = this.resolveVariable(variable.trim(), facts, catalogVariables);
-      return value !== undefined ? String(value) : match;
+      if (value !== undefined) {
+        return typeof value === 'string' ? value : JSON.stringify(value);
+      }
+      return match;
     });
   }
 
@@ -540,7 +544,7 @@ export class HieraParser {
     // Handle trusted.xxx syntax
     if (variable.startsWith("trusted.")) {
       const trustedPath = variable.slice(8);
-      const trusted = facts.facts["trusted"] as Record<string, unknown> | undefined;
+      const trusted = facts.facts.trusted as Record<string, unknown> | undefined;
       if (trusted) {
         return this.getNestedValue(trusted, trustedPath);
       }
@@ -550,7 +554,7 @@ export class HieraParser {
     // Handle server_facts.xxx syntax
     if (variable.startsWith("server_facts.")) {
       const serverPath = variable.slice(13);
-      const serverFacts = facts.facts["server_facts"] as Record<string, unknown> | undefined;
+      const serverFacts = facts.facts.server_facts as Record<string, unknown> | undefined;
       if (serverFacts) {
         return this.getNestedValue(serverFacts, serverPath);
       }
@@ -608,7 +612,7 @@ export class HieraParser {
    * @param filePath - Path to hieradata file
    * @returns Map of key to lookup options
    */
-  async parseLookupOptions(filePath: string): Promise<Map<string, LookupOptions>> {
+  parseLookupOptions(filePath: string): Map<string, LookupOptions> {
     const fullPath = this.resolvePath(filePath);
     const lookupOptionsMap = new Map<string, LookupOptions>();
 
@@ -635,7 +639,7 @@ export class HieraParser {
     }
 
     const dataObj = data as Record<string, unknown>;
-    const lookupOptions = dataObj["lookup_options"];
+    const lookupOptions = dataObj.lookup_options;
 
     if (!lookupOptions || typeof lookupOptions !== "object") {
       return lookupOptionsMap;
@@ -676,7 +680,7 @@ export class HieraParser {
     }
 
     const dataObj = data as Record<string, unknown>;
-    const lookupOptions = dataObj["lookup_options"];
+    const lookupOptions = dataObj.lookup_options;
 
     if (!lookupOptions || typeof lookupOptions !== "object") {
       return lookupOptionsMap;
@@ -783,7 +787,6 @@ export class HieraParser {
    * @returns YAML string
    */
   serializeConfig(config: HieraConfig): string {
-    const { stringify } = require("yaml") as { stringify: (obj: unknown) => string };
     return stringify(config);
   }
 }

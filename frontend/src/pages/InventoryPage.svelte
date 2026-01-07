@@ -49,6 +49,90 @@
   let pqlQuery = $state('');
   let pqlError = $state<string | null>(null);
   let showPqlInput = $state(false);
+  let selectedPqlTemplate = $state('');
+
+  // Placeholder text to avoid Svelte expression parsing issues
+  const placeholderText = 'Example: nodes[certname] { certname = "node1.example.com" }';
+  const helpText = 'Select a template above or enter a custom PQL query to filter PuppetDB nodes. Use PQL syntax (e.g., nodes[certname] { certname = "example" }).';
+
+  // Common PQL query templates
+  const pqlTemplates = [
+    {
+      name: 'All nodes',
+      description: 'Get all nodes from PuppetDB',
+      query: 'nodes[certname]'
+    },
+    {
+      name: 'Nodes by certname pattern',
+      description: 'Find nodes matching a certname pattern',
+      query: 'nodes[certname] { certname ~ "web.*" }'
+    },
+    {
+      name: 'Nodes with specific OS',
+      description: 'Find nodes with a specific operating system (using modern os fact)',
+      query: 'inventory[certname] { facts.os.name = "Ubuntu" }'
+    },
+    {
+      name: 'Nodes by environment',
+      description: 'Get nodes from a specific environment',
+      query: 'nodes[certname] { catalog_environment = "production" }'
+    },
+    {
+      name: 'Recently active nodes',
+      description: 'Find nodes that checked in within the last 24 hours',
+      query: `nodes[certname] { report_timestamp > "${new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()}" }`
+    },
+    {
+      name: 'Nodes with failed reports',
+      description: 'Find nodes with recent failed reports',
+      query: 'nodes[certname] { latest_report_status = "failed" }'
+    },
+    {
+      name: 'Nodes by OS family',
+      description: 'Find nodes by operating system family (using modern os fact)',
+      query: 'inventory[certname] { facts.os.family = "RedHat" }'
+    },
+    {
+      name: 'Nodes with specific resource',
+      description: 'Find nodes that have a specific service resource',
+      query: 'inventory[certname] { resources { type = "Service" and title = "apache2" } }'
+    },
+    {
+      name: 'Nodes by processor count',
+      description: 'Find nodes with specific processor count (using modern processors fact)',
+      query: 'inventory[certname] { facts.processors.count = 4 }'
+    },
+    {
+      name: 'Nodes with high uptime',
+      description: 'Find nodes with uptime greater than 30 days (using modern system_uptime fact)',
+      query: 'inventory[certname] { facts.system_uptime.days > 30 }'
+    },
+    {
+      name: 'Deactivated nodes',
+      description: 'Find deactivated nodes',
+      query: 'nodes[certname] { deactivated is not null }'
+    },
+    {
+      name: 'Nodes by IP subnet',
+      description: 'Find nodes in a specific IP subnet (using modern networking fact)',
+      query: 'inventory[certname] { facts.networking.ip ~ "192\\\\.168\\\\.1\\\\..*" }'
+    },
+    {
+      name: 'Nodes with specific class',
+      description: 'Find nodes that have a specific Puppet class applied',
+      query: 'inventory[certname] { resources { type = "Class" and title = "Apache" } }'
+    },
+    {
+      name: 'Windows nodes',
+      description: 'Find all Windows nodes (using modern os fact)',
+      query: 'inventory[certname] { facts.os.family = "windows" }'
+    },
+    {
+      name: 'Nodes not checked in recently',
+      description: 'Find nodes that have not checked in for 7 days',
+      query: `nodes[certname] { report_timestamp < "${new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()}" }`
+    }
+  ];
 
   // Computed filtered nodes
   let filteredNodes = $derived.by(() => {
@@ -181,11 +265,10 @@
       return;
     }
 
-    // Validate PQL query format (basic check)
-    try {
-      JSON.parse(pqlQuery);
-    } catch (err) {
-      pqlError = 'Invalid PQL query: must be valid JSON';
+    // Basic PQL query validation (check for common syntax)
+    const query = pqlQuery.trim();
+    if (!query.match(/^(nodes|facts|resources|reports|catalogs|edges|events|inventory|fact-contents)/)) {
+      pqlError = 'Invalid PQL query: must start with a valid entity (nodes, facts, resources, inventory, etc.)';
       showError('Invalid PQL query', pqlError);
       return;
     }
@@ -205,7 +288,19 @@
   async function clearPqlQuery(): Promise<void> {
     pqlQuery = '';
     pqlError = null;
+    selectedPqlTemplate = '';
     await fetchInventory();
+  }
+
+  // Apply PQL template
+  function applyPqlTemplate(): void {
+    if (selectedPqlTemplate) {
+      const template = pqlTemplates.find(t => t.name === selectedPqlTemplate);
+      if (template) {
+        pqlQuery = template.query;
+        pqlError = null;
+      }
+    }
   }
 
   // Handle search with debouncing
@@ -379,11 +474,43 @@
           PQL Documentation ↗
         </a>
       </div>
+      
+      <!-- Query Template Selector -->
+      <div class="mb-3">
+        <label for="pql-template" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+          Common Queries
+        </label>
+        <div class="flex gap-2">
+          <select
+            id="pql-template"
+            bind:value={selectedPqlTemplate}
+            onchange={applyPqlTemplate}
+            class="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+          >
+            <option value="">Select a query template...</option>
+            {#each pqlTemplates as template}
+              <option value={template.name}>{template.name} - {template.description}</option>
+            {/each}
+          </select>
+          <button
+            type="button"
+            onclick={() => selectedPqlTemplate = ''}
+            disabled={!selectedPqlTemplate}
+            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+            title="Clear template selection"
+          >
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
       <div class="flex gap-2">
         <textarea
           id="pql-query"
           bind:value={pqlQuery}
-          placeholder='Example: ["=", "certname", "node1.example.com"]'
+          placeholder={placeholderText}
           rows="3"
           class="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-mono focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
         ></textarea>
@@ -412,7 +539,7 @@
         </p>
       {/if}
       <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        Enter a PQL query to filter PuppetDB nodes. The query must be valid JSON array format.
+        {helpText}
       </p>
     </div>
   {/if}

@@ -109,14 +109,14 @@ export class PuppetfileParser {
       }
 
       // Parse forge directive
-      const forgeMatch = trimmedLine.match(/^forge\s+['"]([^'"]+)['"]/);
+      const forgeMatch = /^forge\s+['"]([^'"]+)['"]/.exec(trimmedLine);
       if (forgeMatch) {
         forgeUrl = forgeMatch[1];
         continue;
       }
 
       // Parse moduledir directive
-      const moduledirMatch = trimmedLine.match(/^moduledir\s+['"]([^'"]+)['"]/);
+      const moduledirMatch = /^moduledir\s+['"]([^'"]+)['"]/.exec(trimmedLine);
       if (moduledirMatch) {
         moduledir = moduledirMatch[1];
         continue;
@@ -172,7 +172,7 @@ export class PuppetfileParser {
 
       // Unknown directive - add warning
       if (trimmedLine.length > 0 && !trimmedLine.startsWith("mod")) {
-        warnings.push(`Unknown directive at line ${lineNumber}: ${trimmedLine.substring(0, 50)}`);
+        warnings.push(`Unknown directive at line ${String(lineNumber)}: ${trimmedLine.substring(0, 50)}`);
       }
     }
 
@@ -205,8 +205,8 @@ export class PuppetfileParser {
       return true;
     }
     // Check for unclosed hash/array
-    const openBraces = (trimmed.match(/{/g) || []).length;
-    const closeBraces = (trimmed.match(/}/g) || []).length;
+    const openBraces = (trimmed.match(/{/g) ?? []).length;
+    const closeBraces = (trimmed.match(/}/g) ?? []).length;
     if (openBraces > closeBraces) {
       return true;
     }
@@ -224,9 +224,7 @@ export class PuppetfileParser {
     const normalized = declaration.replace(/\s+/g, " ").trim();
 
     // Try to parse as simple forge module: mod 'author/name', 'version'
-    const simpleForgeMatch = normalized.match(
-      /^mod\s+['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*$/
-    );
+    const simpleForgeMatch = /^mod\s+['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]\s*$/.exec(normalized);
     if (simpleForgeMatch) {
       const moduleName = simpleForgeMatch[1];
       const version = simpleForgeMatch[2];
@@ -242,7 +240,7 @@ export class PuppetfileParser {
     }
 
     // Try to parse as forge module without version: mod 'author/name'
-    const forgeNoVersionMatch = normalized.match(/^mod\s+['"]([^'"]+)['"]\s*$/);
+    const forgeNoVersionMatch = /^mod\s+['"]([^'"]+)['"]\s*$/.exec(normalized);
     if (forgeNoVersionMatch) {
       const moduleName = forgeNoVersionMatch[1];
       return {
@@ -253,25 +251,23 @@ export class PuppetfileParser {
           forgeSlug: moduleName,
           line: lineNumber,
         },
-        warning: `Module '${moduleName}' at line ${lineNumber} has no version specified`,
+        warning: `Module '${moduleName}' at line ${String(lineNumber)} has no version specified`,
       };
     }
 
     // Try to parse as git module: mod 'name', :git => 'url', ...
-    const gitMatch = normalized.match(
-      /^mod\s+['"]([^'"]+)['"]\s*,\s*:git\s*=>\s*['"]([^'"]+)['"]/
-    );
+    const gitMatch = /^mod\s+['"]([^'"]+)['"]\s*,\s*:git\s*=>\s*['"]([^'"]+)['"]/.exec(normalized);
     if (gitMatch) {
       const moduleName = gitMatch[1];
       const gitUrl = gitMatch[2];
 
       // Extract git ref options
-      const tagMatch = normalized.match(/:tag\s*=>\s*['"]([^'"]+)['"]/);
-      const branchMatch = normalized.match(/:branch\s*=>\s*['"]([^'"]+)['"]/);
-      const refMatch = normalized.match(/:ref\s*=>\s*['"]([^'"]+)['"]/);
-      const commitMatch = normalized.match(/:commit\s*=>\s*['"]([^'"]+)['"]/);
+      const tagMatch = /:tag\s*=>\s*['"]([^'"]+)['"]/.exec(normalized);
+      const branchMatch = /:branch\s*=>\s*['"]([^'"]+)['"]/.exec(normalized);
+      const refMatch = /:ref\s*=>\s*['"]([^'"]+)['"]/.exec(normalized);
+      const commitMatch = /:commit\s*=>\s*['"]([^'"]+)['"]/.exec(normalized);
 
-      const version = tagMatch?.[1] || branchMatch?.[1] || refMatch?.[1] || commitMatch?.[1] || "HEAD";
+      const version = tagMatch?.[1] ?? branchMatch?.[1] ?? refMatch?.[1] ?? commitMatch?.[1] ?? "HEAD";
 
       return {
         module: {
@@ -289,9 +285,7 @@ export class PuppetfileParser {
     }
 
     // Try to parse as local module: mod 'name', :local => true
-    const localMatch = normalized.match(
-      /^mod\s+['"]([^'"]+)['"]\s*,\s*:local\s*=>\s*true/
-    );
+    const localMatch = /^mod\s+['"]([^'"]+)['"]\s*,\s*:local\s*=>\s*true/.exec(normalized);
     if (localMatch) {
       return {
         module: {
@@ -357,7 +351,7 @@ export class PuppetfileParser {
     const errorMessages = result.errors.map((err) => {
       let msg = err.message;
       if (err.line) {
-        msg = `Line ${err.line}: ${msg}`;
+        msg = `Line ${String(err.line)}: ${msg}`;
       }
       if (err.suggestion) {
         msg += ` (${err.suggestion})`;
@@ -393,7 +387,7 @@ export class PuppetfileParser {
     // Convert warnings to issues
     for (const warning of parseResult.warnings) {
       // Extract line number from warning if present
-      const lineMatch = warning.match(/line (\d+)/i);
+      const lineMatch = /line (\d+)/i.exec(warning);
       issues.push({
         severity: "warning",
         message: warning,

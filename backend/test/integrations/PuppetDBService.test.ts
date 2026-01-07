@@ -93,6 +93,53 @@ describe('PuppetDBService', () => {
       await expect(service.queryInventory('[]')).rejects.toThrow(PuppetDBQueryError);
       await expect(service.queryInventory('[123]')).rejects.toThrow(PuppetDBQueryError);
     });
+
+    it('should identify PQL string format vs JSON format correctly', async () => {
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: 'puppetdb',
+        type: 'information',
+        config: {
+          serverUrl: 'https://puppetdb.example.com',
+        },
+      };
+
+      await service.initialize(config);
+
+      // Test that PQL string queries are properly identified
+      // These will fail to connect, but should not fail validation
+      const pqlStringQueries = [
+        'nodes[certname]',
+        'nodes[certname] { certname = "web01" }',
+        'inventory[certname] { facts.os.name = "Ubuntu" }',
+        'facts[certname, value] { name = "operatingsystem" }',
+      ];
+
+      const jsonQueries = [
+        '["=", "certname", "web01"]',
+        '["and", ["=", "certname", "web01"], ["=", "environment", "production"]]',
+      ];
+
+      // PQL string queries should not throw validation errors
+      for (const query of pqlStringQueries) {
+        try {
+          await service.queryInventory(query);
+        } catch (error) {
+          // Should fail with connection error, not validation error
+          expect(error).not.toBeInstanceOf(PuppetDBQueryError);
+        }
+      }
+
+      // JSON queries should not throw validation errors either
+      for (const query of jsonQueries) {
+        try {
+          await service.queryInventory(query);
+        } catch (error) {
+          // Should fail with connection error, not validation error
+          expect(error).not.toBeInstanceOf(PuppetDBQueryError);
+        }
+      }
+    });
   });
 
   describe('cache management', () => {

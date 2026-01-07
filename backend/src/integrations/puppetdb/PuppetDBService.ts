@@ -18,6 +18,29 @@ import {
   PuppetDBConnectionError,
   PuppetDBQueryError,
 } from "./PuppetDBClient";
+
+// PQL parsing types
+interface PqlExpression {
+  entity: string;
+  fields: string[];
+  conditions: PqlCondition | null;
+}
+
+type PqlCondition = 
+  | [string, string, string | number | boolean] // Binary operation
+  | [string, PqlCondition] // Unary operation
+  | [string, PqlCondition, PqlCondition]; // Binary logical operation
+
+interface PqlParseResult {
+  endpoint: string;
+  query: PqlCondition | null;
+}
+
+interface InventoryItem {
+  certname: string;
+  facts?: Record<string, unknown>;
+  resources?: unknown[];
+}
 import type { CircuitBreaker } from "./CircuitBreaker";
 import { createPuppetDBCircuitBreaker } from "./CircuitBreaker";
 import {
@@ -243,6 +266,233 @@ export class PuppetDBService
   }
 
   /**
+   * Parse PQL string format to JSON format for the appropriate endpoint
+   * 
+   * @param pqlQuery - PQL query string
+   * @returns Object with endpoint and JSON query, or null if conversion not supported
+   */
+  private parsePqlToJson(pqlQuery: string): { endpoint: string; query: string | null } | null {
+    const trimmed = pqlQuery.trim();
+    
+    try {
+      // Parse the PQL query structure
+      const parsed = this.parsePqlExpression(trimmed);
+      if (!parsed) {
+        return null;
+      }
+      
+      // Convert parsed structure to endpoint and JSON query
+      const result = this.convertParsedToJson(parsed);
+      if (!result) {
+        return null;
+      }
+      
+      return {
+        endpoint: result.endpoint,
+        query: result.query ? JSON.stringify(result.query) : null
+      };
+    } catch (error) {
+      this.log(`Failed to parse PQL query "${trimmed}": ${error instanceof Error ? error.message : 'Unknown error'}`, "warn");
+      return null;
+    }
+  }
+
+  /**
+   * Parse a PQL expression into a structured format
+   */
+  private parsePqlExpression(query: string): PqlExpression | null {
+    // Remove extra whitespace
+    query = query.replace(/\s+/g, ' ').trim();
+    
+    // Match: entity[fields] { conditions }
+    const mainMatch = /^(\w+)\[([^\]]+)\]\s*(?:\{\s*(.+?)\s*\})?$/.exec(query);
+    if (!mainMatch) {
+      return null;
+    }
+    
+    const [, entity, fields, conditions] = mainMatch;
+    
+    // Parse fields (comma-separated)
+    const fieldList = fields.split(',').map(f => f.trim());
+    
+    // Parse conditions if present
+    let conditionAst: PqlCondition | null = null;
+    if (conditions) {
+      conditionAst = this.parseConditions(conditions);
+    }
+    
+    return {
+      entity,
+      fields: fieldList,
+      conditions: conditionAst
+    };
+  }
+
+  /**
+   * Parse condition expressions (supports and, or, =, ~, >, <, etc.)
+   */
+  private parseConditions(conditions: string): PqlCondition | null {
+    // Handle parentheses first
+    conditions = conditions.trim();
+    
+    // Simple tokenizer for conditions
+    const tokens = this.tokenizeConditions(conditions);
+    return this.parseConditionTokens(tokens);
+  }
+
+  /**
+   * Tokenize condition string into operators and operands
+   */
+  private tokenizeConditions(conditions: string): string[] {
+    const tokens: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let quoteChar = '';
+    
+    for (const char of conditions) {
+      if (!inQuotes && (char === '"' || char === "'")) {
+        inQuotes = true;
+        quoteChar = char;
+        current += char;
+      } else if (inQuotes && char === quoteChar) {
+        inQuotes = false;
+        current += char;
+      } else if (!inQuotes && /\s/.test(char)) {
+        if (current.trim()) {
+          tokens.push(current.trim());
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    
+    if (current.trim()) {
+      tokens.push(current.trim());
+    }
+    
+    return tokens;
+  }
+
+  /**
+   * Parse tokenized conditions into AST
+   */
+  private parseConditionTokens(tokens: string[]): PqlCondition | null {
+    if (tokens.length === 0) {
+      return null;
+    }
+    
+    // Handle simple binary operations: field operator value
+    if (tokens.length === 3) {
+      const [field, operator, value] = tokens;
+      return this.createBinaryOperation(field, operator, this.parseValue(value));
+    }
+    
+    // Handle "field is null" / "field is not null"
+    if (tokens.length === 3 && tokens[1] === 'is' && tokens[2] === 'null') {
+      return ['null?', tokens[0], true];
+    }
+    
+    if (tokens.length === 4 && tokens[1] === 'is' && tokens[2] === 'not' && tokens[3] === 'null') {
+      return ['not', ['null?', tokens[0], true]];
+    }
+    
+    // Handle logical operators (and, or)
+    for (let i = 1; i < tokens.length - 1; i++) {
+      if (tokens[i] === 'and' || tokens[i] === 'or') {
+        const left = this.parseConditionTokens(tokens.slice(0, i));
+        const right = this.parseConditionTokens(tokens.slice(i + 1));
+        if (left && right) {
+          return [tokens[i], left, right];
+        }
+      }
+    }
+    
+    // If we can't parse it, return null
+    return null;
+  }
+
+  /**
+   * Create binary operation AST node
+   */
+  private createBinaryOperation(field: string, operator: string, value: string | number | boolean): PqlCondition {
+    switch (operator) {
+      case '=':
+      case '!=':
+      case '>':
+      case '>=':
+      case '<':
+      case '<=':
+      case '~':
+      case '!~':
+        return [operator, field, value];
+      default:
+        throw new Error(`Unsupported operator: ${operator}`);
+    }
+  }
+
+  /**
+   * Parse a value (string, number, boolean)
+   */
+  private parseValue(value: string): string | number | boolean {
+    // Remove quotes from strings
+    if ((value.startsWith('"') && value.endsWith('"')) || 
+        (value.startsWith("'") && value.endsWith("'"))) {
+      return value.slice(1, -1);
+    }
+    
+    // Parse numbers
+    if (/^\d+$/.test(value)) {
+      return parseInt(value, 10);
+    }
+    
+    if (/^\d+\.\d+$/.test(value)) {
+      return parseFloat(value);
+    }
+    
+    // Parse booleans
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    
+    // Return as string if nothing else matches
+    return value;
+  }
+
+  /**
+   * Convert parsed PQL structure to JSON query format
+   */
+  private convertParsedToJson(parsed: PqlExpression): PqlParseResult | null {
+    // Determine the correct endpoint based on entity type
+    let endpoint: string;
+    
+    switch (parsed.entity) {
+      case 'nodes':
+        endpoint = 'pdb/query/v4/nodes';
+        break;
+      case 'inventory':
+        endpoint = 'pdb/query/v4/inventory';
+        break;
+      case 'facts':
+        endpoint = 'pdb/query/v4/facts';
+        break;
+      case 'resources':
+        endpoint = 'pdb/query/v4/resources';
+        break;
+      case 'reports':
+        endpoint = 'pdb/query/v4/reports';
+        break;
+      default:
+        this.log(`Unsupported entity type: ${parsed.entity}`, "warn");
+        return null;
+    }
+    
+    // If no conditions, return null query (fetch all)
+    const query = parsed.conditions ?? null;
+    
+    return { endpoint, query };
+  }
+
+  /**
    * Get inventory of nodes from PuppetDB
    *
    * Queries the nodes endpoint and transforms results to normalized format.
@@ -279,21 +529,62 @@ export class PuppetDBService
       }
 
       const result = await this.executeWithResilience(async () => {
-        return await client.query("pdb/query/v4/nodes", pqlQuery);
+        // Convert PQL string to JSON format if needed
+        let endpointToUse = "pdb/query/v4/nodes";
+        let queryToUse = pqlQuery;
+        
+        if (pqlQuery && !pqlQuery.trim().startsWith('[')) {
+          // This is a PQL string, try to convert to JSON
+          const pqlResult = this.parsePqlToJson(pqlQuery);
+          if (pqlResult) {
+            endpointToUse = pqlResult.endpoint;
+            queryToUse = pqlResult.query;
+            this.log(`Converted PQL "${pqlQuery}" to endpoint: ${endpointToUse}, query: ${queryToUse ?? 'none'}`);
+          } else if (pqlQuery.trim() === 'nodes[certname]') {
+            // Basic query for all nodes, no filter needed
+            endpointToUse = "pdb/query/v4/nodes";
+            queryToUse = undefined;
+            this.log(`Basic nodes query, fetching all nodes`);
+          } else {
+            this.log(`Could not convert PQL query: ${pqlQuery}`, "warn");
+            return { results: [], endpoint: endpointToUse }; // Return empty array for unsupported queries
+          }
+        }
+        
+        this.log(`Using endpoint: ${endpointToUse} for query: ${queryToUse ?? 'none'}`);
+        const queryResult = await client.query(endpointToUse, queryToUse);
+        this.log(`Query result type: ${typeof queryResult}, isArray: ${String(Array.isArray(queryResult))}`);
+        if (Array.isArray(queryResult)) {
+          this.log(`Query result length: ${String(queryResult.length)}`);
+          if (queryResult.length > 0) {
+            this.log(`Sample result item: ${JSON.stringify(queryResult[0]).substring(0, 200)}...`);
+          }
+        } else {
+          this.log(`Non-array result: ${JSON.stringify(queryResult).substring(0, 200)}...`);
+        }
+        
+        return { results: queryResult, endpoint: endpointToUse };
       });
 
-      // Transform PuppetDB nodes to normalized format
-      if (!Array.isArray(result)) {
+      // Transform results to normalized format based on endpoint
+      if (!Array.isArray(result.results)) {
         this.log(
-          "Unexpected response format from PuppetDB nodes endpoint",
+          "Unexpected response format from PuppetDB endpoint",
           "warn",
         );
         return [];
       }
 
-      const nodes = result.map((node) =>
-        this.transformNode(node as PuppetDBNode),
-      );
+      let nodes: Node[];
+      if (result.endpoint === "pdb/query/v4/inventory") {
+        // Transform inventory results (which include facts and resources)
+        const inventoryResults = result.results as InventoryItem[];
+        nodes = inventoryResults.map((item: InventoryItem) => this.transformInventoryItem(item));
+      } else {
+        // Transform regular node results
+        const nodeResults = result.results as PuppetDBNode[];
+        nodes = nodeResults.map((node: PuppetDBNode) => this.transformNode(node));
+      }
 
       // Cache the result
       this.cache.set(cacheKey, nodes, this.cacheTTL);
@@ -1059,6 +1350,33 @@ export class PuppetDBService
   }
 
   /**
+   * Transform inventory item to normalized Node format
+   *
+   * @param item - Raw inventory item from PuppetDB
+   * @returns Normalized node
+   */
+  private transformInventoryItem(item: InventoryItem): Node {
+    // Inventory items have certname and facts/resources
+    const certname = item.certname;
+    
+    return {
+      id: certname,
+      name: certname,
+      uri: `ssh://${certname}`,
+      transport: 'ssh' as const,
+      config: {},
+      source: 'puppetdb',
+      // Add any additional fields from facts if available
+      ...(item.facts && {
+        facts: item.facts
+      }),
+      ...(item.resources && {
+        resources: item.resources
+      })
+    };
+  }
+
+  /**
    * Transform PuppetDB node to normalized format
    *
    * Adds source attribution to indicate the node came from PuppetDB.
@@ -1738,6 +2056,7 @@ export class PuppetDBService
    *
    * Performs basic validation to ensure the query is well-formed.
    * This is a simple check - PuppetDB will perform full validation.
+   * Supports both PQL string format and JSON array format.
    *
    * @param pqlQuery - PQL query to validate
    * @throws Error if query is invalid
@@ -1749,72 +2068,125 @@ export class PuppetDBService
       });
     }
 
-    // Basic syntax validation
-    // PQL queries should be valid JSON arrays starting with an operator
-    try {
-      const parsed: unknown = JSON.parse(pqlQuery);
+    const trimmedQuery = pqlQuery.trim();
 
-      // PQL queries are arrays with operator as first element
-      if (!Array.isArray(parsed)) {
-        const parsedType = typeof parsed;
-        throw new PuppetDBQueryError(
-          "PQL query must be a JSON array",
-          pqlQuery,
-          { reason: "not_array", parsedType },
-        );
-      }
+    // Check if it's JSON format (starts with '[')
+    if (trimmedQuery.startsWith('[')) {
+      // JSON format validation
+      try {
+        const parsed: unknown = JSON.parse(pqlQuery);
 
-      if (parsed.length === 0) {
-        throw new PuppetDBQueryError(
-          "PQL query array cannot be empty",
-          pqlQuery,
-          { reason: "empty_array" },
-        );
-      }
+        // PQL queries are arrays with operator as first element
+        if (!Array.isArray(parsed)) {
+          const parsedType = typeof parsed;
+          throw new PuppetDBQueryError(
+            "PQL query must be a JSON array",
+            pqlQuery,
+            { reason: "not_array", parsedType },
+          );
+        }
 
-      // First element should be an operator (string)
-      if (typeof parsed[0] !== "string") {
-        const firstElement = parsed[0] as unknown;
-        throw new PuppetDBQueryError(
-          "PQL query must start with an operator",
-          pqlQuery,
-          { reason: "invalid_operator", firstElement },
-        );
-      }
+        if (parsed.length === 0) {
+          throw new PuppetDBQueryError(
+            "PQL query array cannot be empty",
+            pqlQuery,
+            { reason: "empty_array" },
+          );
+        }
 
-      // Common PQL operators
-      const validOperators = [
-        "=",
-        "!=",
-        ">",
-        ">=",
-        "<",
-        "<=",
-        "~",
-        "!~", // regex operators
-        "and",
-        "or",
-        "not",
-        "in",
-        "extract",
-        "null?",
-      ];
+        // First element should be an operator (string)
+        if (typeof parsed[0] !== "string") {
+          const firstElement = parsed[0] as unknown;
+          throw new PuppetDBQueryError(
+            "PQL query must start with an operator",
+            pqlQuery,
+            { reason: "invalid_operator", firstElement },
+          );
+        }
 
-      if (!validOperators.includes(parsed[0])) {
-        this.log(`Warning: Unknown PQL operator '${parsed[0]}'`, "warn");
-      }
-    } catch (error) {
-      if (error instanceof PuppetDBQueryError) {
+        // Common PQL operators
+        const validOperators = [
+          "=",
+          "!=",
+          ">",
+          ">=",
+          "<",
+          "<=",
+          "~",
+          "!~", // regex operators
+          "and",
+          "or",
+          "not",
+          "in",
+          "extract",
+          "null?",
+          "from",
+          "is",
+          "is not",
+          "select_resources",
+          "select_facts",
+        ];
+
+        if (!validOperators.includes(parsed[0])) {
+          this.log(`Warning: Unknown PQL operator '${parsed[0]}'`, "warn");
+        }
+      } catch (error) {
+        if (error instanceof PuppetDBQueryError) {
+          throw error;
+        }
+        if (error instanceof SyntaxError) {
+          throw new PuppetDBQueryError(
+            `Invalid PQL query syntax: ${error.message}`,
+            pqlQuery,
+            { reason: "syntax_error", originalError: error.message },
+          );
+        }
         throw error;
       }
-      if (error instanceof SyntaxError) {
+    } else {
+      // PQL string format validation
+      // Check if it starts with a valid entity
+      const validEntities = [
+        'nodes', 'facts', 'resources', 'reports', 'catalogs', 
+        'edges', 'events', 'inventory', 'fact-contents'
+      ];
+      
+      const startsWithValidEntity = validEntities.some(entity => 
+        trimmedQuery.startsWith(entity)
+      );
+      
+      if (!startsWithValidEntity) {
         throw new PuppetDBQueryError(
-          `Invalid PQL query syntax: ${error.message}`,
+          `PQL query must start with a valid entity: ${validEntities.join(', ')}`,
           pqlQuery,
-          { reason: "syntax_error", originalError: error.message },
+          { reason: "invalid_entity", validEntities },
         );
       }
-      throw error;
+
+      // Basic syntax checks for string format
+      // Check for balanced brackets if they exist
+      const openBrackets = (trimmedQuery.match(/\[/g) ?? []).length;
+      const closeBrackets = (trimmedQuery.match(/\]/g) ?? []).length;
+      
+      if (openBrackets !== closeBrackets) {
+        throw new PuppetDBQueryError(
+          "PQL query has unbalanced brackets",
+          pqlQuery,
+          { reason: "unbalanced_brackets", openBrackets, closeBrackets },
+        );
+      }
+
+      // Check for balanced braces if they exist
+      const openBraces = (trimmedQuery.match(/\{/g) ?? []).length;
+      const closeBraces = (trimmedQuery.match(/\}/g) ?? []).length;
+      
+      if (openBraces !== closeBraces) {
+        throw new PuppetDBQueryError(
+          "PQL query has unbalanced braces",
+          pqlQuery,
+          { reason: "unbalanced_braces", openBraces, closeBraces },
+        );
+      }
     }
   }
 

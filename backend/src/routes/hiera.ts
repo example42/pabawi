@@ -323,7 +323,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
       try {
         const searchParams = SearchQuerySchema.parse(req.query);
         const paginationParams = PaginationQuerySchema.parse(req.query);
-        const query = searchParams.q || searchParams.query || "";
+        const query = searchParams.q ?? searchParams.query ?? "";
 
         const hieraService = hieraPlugin.getHieraService();
         const matchingKeys = await hieraService.searchKeys(query);
@@ -759,7 +759,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.get(
     "/analysis/unused",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler((_req: Request, res: Response): void => {
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
@@ -768,7 +768,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
 
       try {
         const codeAnalyzer = hieraPlugin.getCodeAnalyzer();
-        const unusedCode = await codeAnalyzer.getUnusedCode();
+        const unusedCode = codeAnalyzer.getUnusedCode();
 
         res.json({
           unusedClasses: unusedCode.unusedClasses,
@@ -799,7 +799,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.get(
     "/analysis/lint",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler((req: Request, res: Response): void => {
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
@@ -811,7 +811,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
         const paginationParams = PaginationQuerySchema.parse(req.query);
         const codeAnalyzer = hieraPlugin.getCodeAnalyzer();
 
-        let lintIssues = await codeAnalyzer.getLintIssues();
+        let lintIssues = codeAnalyzer.getLintIssues();
 
         // Apply filters
         if (filterParams.severity || filterParams.types) {

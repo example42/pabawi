@@ -63,7 +63,7 @@ export class FactService {
     }
 
     // Try local facts
-    const localResult = await this.getFactsFromLocalFiles(nodeId);
+    const localResult = this.getFactsFromLocalFiles(nodeId);
     if (localResult) {
       return localResult;
     }
@@ -199,7 +199,7 @@ export class FactService {
    * @param nodeId - Node identifier
    * @returns FactResult or null if unavailable
    */
-  private async getFactsFromLocalFiles(nodeId: string): Promise<FactResult | null> {
+  private getFactsFromLocalFiles(nodeId: string): FactResult | null {
     if (!this.localFactsPath) {
       return null;
     }
@@ -210,7 +210,7 @@ export class FactService {
     }
 
     try {
-      const facts = await this.parseLocalFactFile(factFile, nodeId);
+      const facts = this.parseLocalFactFile(factFile, nodeId);
       return {
         facts,
         source: "local",
@@ -231,7 +231,7 @@ export class FactService {
    * @param nodeId - Node identifier
    * @returns Parsed facts
    */
-  private async parseLocalFactFile(filePath: string, nodeId: string): Promise<Facts> {
+  private parseLocalFactFile(filePath: string, nodeId: string): Facts {
     const content = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(content) as LocalFactFile | Record<string, unknown>;
 
@@ -241,7 +241,7 @@ export class FactService {
     }
 
     // Assume it's a flat fact structure
-    return this.transformFlatFacts(parsed as Record<string, unknown>, nodeId);
+    return this.transformFlatFacts(parsed, nodeId);
   }
 
   /**
@@ -326,11 +326,15 @@ export class FactService {
     const os = values.os as Record<string, unknown> | undefined;
 
     return {
-      family: (os?.family as string) ?? "Unknown",
-      name: (os?.name as string) ?? "Unknown",
+      family: typeof os?.family === "string" ? os.family : "Unknown",
+      name: typeof os?.name === "string" ? os.name : "Unknown",
       release: {
-        full: ((os?.release as Record<string, unknown>)?.full as string) ?? "Unknown",
-        major: ((os?.release as Record<string, unknown>)?.major as string) ?? "Unknown",
+        full: typeof (os?.release as Record<string, unknown> | undefined)?.full === "string" 
+          ? (os.release as Record<string, unknown>).full as string 
+          : "Unknown",
+        major: typeof (os?.release as Record<string, unknown> | undefined)?.major === "string" 
+          ? (os.release as Record<string, unknown>).major as string 
+          : "Unknown",
       },
     };
   }
@@ -342,8 +346,8 @@ export class FactService {
     const processors = values.processors as Record<string, unknown> | undefined;
 
     return {
-      count: (processors?.count as number) ?? 0,
-      models: (processors?.models as string[]) ?? [],
+      count: typeof processors?.count === "number" ? processors.count : 0,
+      models: Array.isArray(processors?.models) ? processors.models as string[] : [],
     };
   }
 
@@ -356,8 +360,8 @@ export class FactService {
 
     return {
       system: {
-        total: (system?.total as string) ?? "Unknown",
-        available: (system?.available as string) ?? "Unknown",
+        total: (system?.total as string) || "Unknown",
+        available: (system?.available as string) || "Unknown",
       },
     };
   }
@@ -369,8 +373,10 @@ export class FactService {
     const networking = values.networking as Record<string, unknown> | undefined;
 
     return {
-      hostname: (networking?.hostname as string) ?? "Unknown",
-      interfaces: (networking?.interfaces as Record<string, unknown>) ?? {},
+      hostname: typeof networking?.hostname === "string" ? networking.hostname : "Unknown",
+      interfaces: typeof networking?.interfaces === "object" && networking.interfaces !== null && !Array.isArray(networking.interfaces) 
+        ? networking.interfaces as Record<string, unknown> 
+        : {},
     };
   }
 

@@ -24,7 +24,7 @@ import type {
 import type { IntegrationManager } from "../IntegrationManager";
 import type { HieraScanner } from "./HieraScanner";
 import { PuppetfileParser } from "./PuppetfileParser";
-import type { PuppetfileParseResult, ParsedModule } from "./PuppetfileParser";
+import type { PuppetfileParseResult } from "./PuppetfileParser";
 import { ForgeClient } from "./ForgeClient";
 import type { ModuleUpdateCheckResult } from "./ForgeClient";
 
@@ -108,14 +108,14 @@ export class CodeAnalyzer {
 
   // Cache storage
   private analysisCache: AnalysisCacheEntry<CodeAnalysisResult> | null = null;
-  private manifestCache: Map<string, ManifestInfo> = new Map();
+  private manifestCache = new Map<string, ManifestInfo>();
   private lastPuppetfileParseResult: PuppetfileParseResult | null = null;
   private lastModuleUpdateResults: ModuleUpdateCheckResult[] | null = null;
   private forgeClient: ForgeClient;
 
   // Parsed data
-  private classes: Map<string, PuppetClass> = new Map();
-  private definedTypes: Map<string, PuppetDefinedType> = new Map();
+  private classes = new Map<string, PuppetClass>();
+  private definedTypes = new Map<string, PuppetDefinedType>();
   private manifests: ManifestInfo[] = [];
   private initialized = false;
 
@@ -174,7 +174,7 @@ export class CodeAnalyzer {
     }
 
     this.initialized = true;
-    this.log(`CodeAnalyzer initialized: ${this.classes.size} classes, ${this.definedTypes.size} defined types`);
+    this.log(`CodeAnalyzer initialized: ${String(this.classes.size)} classes, ${String(this.definedTypes.size)} defined types`);
   }
 
   /**
@@ -203,8 +203,8 @@ export class CodeAnalyzer {
     }
 
     const result: CodeAnalysisResult = {
-      unusedCode: await this.getUnusedCode(),
-      lintIssues: this.config.lintEnabled ? await this.getLintIssues() : [],
+      unusedCode: this.getUnusedCode(),
+      lintIssues: this.config.lintEnabled ? this.getLintIssues() : [],
       moduleUpdates: this.config.moduleUpdateCheck ? await this.getModuleUpdates() : [],
       statistics: await this.getUsageStatistics(),
       analyzedAt: new Date().toISOString(),
@@ -223,12 +223,12 @@ export class CodeAnalyzer {
    *
    * Requirements: 8.1, 8.2, 8.3, 8.4
    */
-  async getUnusedCode(): Promise<UnusedCodeReport> {
+  getUnusedCode(): UnusedCodeReport {
     this.ensureInitialized();
 
-    const unusedClasses = await this.detectUnusedClasses();
-    const unusedDefinedTypes = await this.detectUnusedDefinedTypes();
-    const unusedHieraKeys = await this.detectUnusedHieraKeys();
+    const unusedClasses = this.detectUnusedClasses();
+    const unusedDefinedTypes = this.detectUnusedDefinedTypes();
+    const unusedHieraKeys = this.detectUnusedHieraKeys();
 
     return {
       unusedClasses,
@@ -242,14 +242,14 @@ export class CodeAnalyzer {
    *
    * Requirements: 9.1, 9.2, 9.3
    */
-  async getLintIssues(): Promise<LintIssue[]> {
+  getLintIssues(): LintIssue[] {
     this.ensureInitialized();
 
     const issues: LintIssue[] = [];
 
     // Scan all manifest files for issues
     for (const manifest of this.manifests) {
-      const fileIssues = await this.lintManifest(manifest.file);
+      const fileIssues = this.lintManifest(manifest.file);
       issues.push(...fileIssues);
     }
 
@@ -284,11 +284,12 @@ export class CodeAnalyzer {
         const updateResults = await this.forgeClient.checkForUpdates(parseResult.modules);
         this.lastModuleUpdateResults = updateResults;
         return this.forgeClient.toModuleUpdates(updateResults);
-      } catch (error) {
-        this.log(`Failed to check for module updates: ${this.getErrorMessage(error)}`, "warn");
-        // Fall back to basic module info without update check
-        return parser.toModuleUpdates(parseResult.modules);
-      }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          this.log(`Failed to check for module updates: ${errorMessage}`, "warn");
+          // Fall back to basic module info without update check
+          return parser.toModuleUpdates(parseResult.modules);
+        }
     }
 
     // Convert to ModuleUpdate format without update check
@@ -327,7 +328,7 @@ export class CodeAnalyzer {
     const resourceCounts = new Map<string, number>();
     for (const manifest of this.manifests) {
       for (const resource of manifest.resources) {
-        const count = resourceCounts.get(resource.type) || 0;
+        const count = resourceCounts.get(resource.type) ?? 0;
         resourceCounts.set(resource.type, count + 1);
       }
     }
@@ -367,20 +368,20 @@ export class CodeAnalyzer {
     if (this.integrationManager) {
       const puppetdb = this.integrationManager.getInformationSource("puppetdb");
 
-      if (puppetdb && puppetdb.isInitialized()) {
+      if (puppetdb?.isInitialized()) {
         try {
           // Get all nodes from PuppetDB
           const inventory = await puppetdb.getInventory();
 
           for (const node of inventory) {
-            const nodeId = node.certname || node.id;
+            const nodeId = String(node.certname ?? node.id);
 
             try {
               // Get catalog for each node
               const catalogData = await puppetdb.getNodeData(nodeId, "catalog");
 
               if (catalogData && typeof catalogData === "object") {
-                const catalog = catalogData as { resources?: Array<{ type: string; title: string }> };
+                const catalog = catalogData as { resources?: { type: string; title: string }[] };
 
                 if (catalog.resources && Array.isArray(catalog.resources)) {
                   // Extract Class resources
@@ -391,23 +392,28 @@ export class CodeAnalyzer {
                       if (!classUsageCounts.has(className)) {
                         classUsageCounts.set(className, new Set());
                       }
-                      classUsageCounts.get(className)!.add(nodeId);
+                      const classSet = classUsageCounts.get(className);
+                      if (classSet) {
+                        classSet.add(nodeId);
+                      }
                     }
                   }
                 }
               }
-            } catch (error) {
-              // Skip nodes where catalog retrieval fails
-              this.log(`Failed to get catalog for node ${nodeId}: ${this.getErrorMessage(error)}`, "warn");
-            }
+        } catch (error) {
+          // Skip nodes where catalog retrieval fails
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          this.log(`Failed to get catalog for node ${nodeId}: ${errorMessage}`, "warn");
+        }
           }
         } catch (error) {
-          this.log(`Failed to get nodes from PuppetDB: ${this.getErrorMessage(error)}`, "warn");
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          this.log(`Failed to get nodes from PuppetDB: ${errorMessage}`, "warn");
         }
       }
     }
 
-    // If no PuppetDB data, fall back to manifest-based analysis
+    // Check if no PuppetDB data, fall back to manifest-based analysis
     if (classUsageCounts.size === 0) {
       return this.getClassUsageFromManifests();
     }
@@ -438,7 +444,10 @@ export class CodeAnalyzer {
         if (!classUsageCounts.has(includedClass)) {
           classUsageCounts.set(includedClass, new Set());
         }
-        classUsageCounts.get(includedClass)!.add(manifest.file);
+        const classSet = classUsageCounts.get(includedClass);
+        if (classSet) {
+          classSet.add(manifest.file);
+        }
       }
     }
 
@@ -521,7 +530,7 @@ export class CodeAnalyzer {
    *
    * Requirements: 8.1, 8.4
    */
-  private async detectUnusedClasses(): Promise<UnusedItem[]> {
+  private detectUnusedClasses(): UnusedItem[] {
     const unusedClasses: UnusedItem[] = [];
 
     // Collect all included classes
@@ -563,7 +572,7 @@ export class CodeAnalyzer {
    *
    * Requirements: 8.2, 8.4
    */
-  private async detectUnusedDefinedTypes(): Promise<UnusedItem[]> {
+  private detectUnusedDefinedTypes(): UnusedItem[] {
     const unusedDefinedTypes: UnusedItem[] = [];
 
     // Collect all instantiated defined types
@@ -604,7 +613,7 @@ export class CodeAnalyzer {
    *
    * Requirements: 8.3, 8.4
    */
-  private async detectUnusedHieraKeys(): Promise<UnusedItem[]> {
+  private detectUnusedHieraKeys(): UnusedItem[] {
     const unusedHieraKeys: UnusedItem[] = [];
 
     if (!this.hieraScanner) {
@@ -633,7 +642,7 @@ export class CodeAnalyzer {
 
       if (!referencedKeys.has(lowerName)) {
         // Get the first location for file/line info
-        const location = key.locations[0];
+        const location = key.locations.length > 0 ? key.locations[0] : undefined;
         unusedHieraKeys.push({
           name: key.name,
           file: location?.file ?? "unknown",
@@ -680,7 +689,7 @@ export class CodeAnalyzer {
    *
    * Requirements: 9.1, 9.2
    */
-  private async lintManifest(filePath: string): Promise<LintIssue[]> {
+  private lintManifest(filePath: string): LintIssue[] {
     const issues: LintIssue[] = [];
     const fullPath = this.resolvePath(filePath);
 
@@ -711,12 +720,12 @@ export class CodeAnalyzer {
       }
 
       // Check for tabs (prefer spaces)
-      const tabMatch = line.match(/\t/);
+      const tabMatch = /\t/.exec(line);
       if (tabMatch) {
         issues.push({
           file: filePath,
           line: lineNumber,
-          column: tabMatch.index! + 1,
+          column: tabMatch.index + 1,
           severity: "warning",
           message: "Tab character found, use spaces for indentation",
           rule: "no_tabs",
@@ -731,7 +740,7 @@ export class CodeAnalyzer {
           line: lineNumber,
           column: 141,
           severity: "warning",
-          message: `Line exceeds 140 characters (${line.length})`,
+          message: `Line exceeds 140 characters (${String(line.length)})`,
           rule: "line_length",
           fixable: false,
         });
@@ -751,12 +760,12 @@ export class CodeAnalyzer {
       }
 
       // Check for unquoted resource titles
-      const unquotedTitleMatch = line.match(/^\s*(\w+)\s*{\s*([^'":\s][^:]*)\s*:/);
+      const unquotedTitleMatch = /^\s*(\w+)\s*{\s*([^'":\s][^:]*)\s*:/.exec(line);
       if (unquotedTitleMatch && !["class", "define", "node"].includes(unquotedTitleMatch[1])) {
         issues.push({
           file: filePath,
           line: lineNumber,
-          column: unquotedTitleMatch.index! + unquotedTitleMatch[1].length + 3,
+          column: unquotedTitleMatch.index + unquotedTitleMatch[1].length + 3,
           severity: "warning",
           message: "Resource title should be quoted",
           rule: "unquoted_resource_title",
@@ -765,12 +774,12 @@ export class CodeAnalyzer {
       }
 
       // Check for double-quoted strings that could be single-quoted
-      const doubleQuoteMatch = line.match(/"([^"$\\]*)"/);
+      const doubleQuoteMatch = /"([^"$\\]*)"/.exec(line);
       if (doubleQuoteMatch && !doubleQuoteMatch[1].includes("'")) {
         issues.push({
           file: filePath,
           line: lineNumber,
-          column: doubleQuoteMatch.index! + 1,
+          column: doubleQuoteMatch.index + 1,
           severity: "info",
           message: "Use single quotes for strings without interpolation",
           rule: "single_quote_string_with_variables",
@@ -788,8 +797,6 @@ export class CodeAnalyzer {
       }
 
       // Check for syntax errors: unmatched braces
-      const openBraces = (line.match(/{/g) || []).length;
-      const closeBraces = (line.match(/}/g) || []).length;
       // This is a simple check - real syntax validation would need a parser
 
       // Check for empty class/define bodies
@@ -808,7 +815,7 @@ export class CodeAnalyzer {
 
     // Check for missing documentation
     if (!content.includes("# @summary") && !content.includes("# @description")) {
-      const classMatch = content.match(/^\s*class\s+([\w:]+)/m);
+      const classMatch = /^\s*class\s+([\w:]+)/m.exec(content);
       if (classMatch) {
         issues.push({
           file: filePath,
@@ -834,11 +841,11 @@ export class CodeAnalyzer {
     let filtered = issues;
 
     if (options.severity && options.severity.length > 0) {
-      filtered = filtered.filter((issue) => options.severity!.includes(issue.severity));
+      filtered = filtered.filter((issue) => options.severity.includes(issue.severity));
     }
 
     if (options.types && options.types.length > 0) {
-      filtered = filtered.filter((issue) => options.types!.includes(issue.rule));
+      filtered = filtered.filter((issue) => options.types.includes(issue.rule));
     }
 
     return filtered;
@@ -895,7 +902,7 @@ export class CodeAnalyzer {
       if (entry.isDirectory()) {
         await this.scanManifestsDirectory(entryPath, entryRelativePath);
       } else if (entry.isFile() && entry.name.endsWith(".pp")) {
-        await this.scanManifestFile(entryPath, entryRelativePath);
+        this.scanManifestFile(entryPath, entryRelativePath);
       }
     }
   }
@@ -929,10 +936,13 @@ export class CodeAnalyzer {
   /**
    * Scan a single manifest file
    */
-  private async scanManifestFile(filePath: string, relativePath: string): Promise<void> {
+  private scanManifestFile(filePath: string, relativePath: string): void {
     // Check cache
     if (this.manifestCache.has(relativePath)) {
-      const cached = this.manifestCache.get(relativePath)!;
+      const cached = this.manifestCache.get(relativePath);
+      if (!cached) {
+        return;
+      }
       this.manifests.push(cached);
       this.addManifestToIndex(cached);
       return;
@@ -1092,7 +1102,7 @@ export class CodeAnalyzer {
    */
   private getLineNumber(content: string, position: number): number {
     const beforeMatch = content.substring(0, position);
-    return (beforeMatch.match(/\n/g) || []).length + 1;
+    return (beforeMatch.match(/\n/g) ?? []).length + 1;
   }
 
 

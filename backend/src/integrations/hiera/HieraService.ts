@@ -71,8 +71,8 @@ export class HieraService {
 
   // Cache storage
   private keyIndexCache: CacheEntry<HieraKeyIndex> | null = null;
-  private resolutionCache: Map<string, CacheEntry<HieraResolution>> = new Map();
-  private nodeDataCache: Map<string, CacheEntry<NodeHieraData>> = new Map();
+  private resolutionCache = new Map<string, CacheEntry<HieraResolution>>();
+  private nodeDataCache = new Map<string, CacheEntry<NodeHieraData>>();
   private hieraConfigCache: CacheEntry<HieraConfig> | null = null;
 
   // Cache configuration
@@ -102,7 +102,7 @@ export class HieraService {
         integrationManager,
         config.catalogCompilation
       );
-      this.log(`CatalogCompiler initialized (enabled: ${config.catalogCompilation.enabled})`);
+      this.log(`CatalogCompiler initialized (enabled: ${String(config.catalogCompilation.enabled)})`);
     }
 
     // Cache configuration
@@ -122,7 +122,7 @@ export class HieraService {
     this.log("Initializing HieraService...");
 
     // Parse hiera.yaml
-    const parseResult = await this.parser.parse(this.config.hieraConfigPath);
+    const parseResult = this.parser.parse(this.config.hieraConfigPath);
     if (!parseResult.success || !parseResult.config) {
       throw new Error(
         `Failed to parse hiera.yaml: ${parseResult.error?.message ?? "Unknown error"}`
@@ -233,7 +233,7 @@ export class HieraService {
   async resolveKey(
     nodeId: string,
     key: string,
-    environment: string = "production"
+    environment = "production"
   ): Promise<HieraResolution> {
     this.ensureInitialized();
 
@@ -254,10 +254,14 @@ export class HieraService {
     const resolveOptions = await this.buildResolveOptions(nodeId, environment, facts);
 
     // Resolve the key with catalog variables (or empty if compilation disabled/failed)
+    if (!this.hieraConfig) {
+      throw new Error("Hiera configuration not loaded");
+    }
+    
     const resolution = await this.resolver.resolve(
       key,
       facts,
-      this.hieraConfig!,
+      this.hieraConfig,
       resolveOptions
     );
 
@@ -288,7 +292,7 @@ export class HieraService {
     facts: Facts
   ): Promise<CatalogAwareResolveOptions> {
     // If catalog compilation is not configured or disabled, return empty options
-    if (!this.catalogCompiler || !this.catalogCompiler.isEnabled()) {
+    if (!this.catalogCompiler?.isEnabled()) {
       return {};
     }
 
@@ -321,7 +325,7 @@ export class HieraService {
    */
   async resolveAllKeys(
     nodeId: string,
-    environment: string = "production"
+    environment = "production"
   ): Promise<Map<string, HieraResolution>> {
     this.ensureInitialized();
 
@@ -351,10 +355,14 @@ export class HieraService {
       }
 
       // Resolve the key with catalog variables
+      if (!this.hieraConfig) {
+        throw new Error("Hiera configuration not loaded");
+      }
+      
       const resolution = await this.resolver.resolve(
         keyName,
         facts,
-        this.hieraConfig!,
+        this.hieraConfig,
         resolveOptions
       );
 
@@ -482,7 +490,7 @@ export class HieraService {
       // Try to get PuppetDB service from integration manager
       const puppetdb = this.integrationManager.getInformationSource("puppetdb");
 
-      if (!puppetdb || !puppetdb.isInitialized()) {
+      if (!puppetdb?.isInitialized()) {
         this.log("PuppetDB not available for catalog analysis");
         return [];
       }
@@ -496,7 +504,7 @@ export class HieraService {
       }
 
       // Extract class names from catalog resources
-      const catalog = catalogData as { resources?: Array<{ type: string; title: string }> };
+      const catalog = catalogData as { resources?: { type: string; title: string }[] };
 
       if (!catalog.resources || !Array.isArray(catalog.resources)) {
         return [];
@@ -507,7 +515,7 @@ export class HieraService {
         .filter(resource => resource.type === "Class")
         .map(resource => resource.title.toLowerCase());
 
-      this.log(`Found ${classes.length} classes in catalog for node: ${nodeId}`);
+      this.log(`Found ${String(classes.length)} classes in catalog for node: ${nodeId}`);
       return classes;
     } catch (error) {
       this.log(`Failed to get catalog for key usage analysis: ${error instanceof Error ? error.message : String(error)}`);
@@ -633,7 +641,10 @@ export class HieraService {
         });
       }
 
-      valueMap.get(valueKey)!.nodes.push(result.nodeId);
+      const valueEntry = valueMap.get(valueKey);
+      if (valueEntry) {
+        valueEntry.nodes.push(result.nodeId);
+      }
     }
 
     // Convert to array of ValueGroup
@@ -699,7 +710,7 @@ export class HieraService {
     this.invalidateCache();
 
     // Re-parse hiera.yaml
-    const parseResult = await this.parser.parse(this.config.hieraConfigPath);
+    const parseResult = this.parser.parse(this.config.hieraConfigPath);
     if (!parseResult.success || !parseResult.config) {
       throw new Error(
         `Failed to parse hiera.yaml: ${parseResult.error?.message ?? "Unknown error"}`
@@ -940,7 +951,7 @@ export class HieraService {
   /**
    * Stop the service and clean up resources
    */
-  async shutdown(): Promise<void> {
+  shutdown(): void {
     this.log("Shutting down HieraService...");
 
     // Stop file watching
