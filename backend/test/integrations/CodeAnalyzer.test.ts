@@ -354,8 +354,8 @@ describe("CodeAnalyzer", () => {
     it("should count manifests correctly", async () => {
       const stats = await analyzer.getUsageStatistics();
 
-      // We created 5 manifest files in the test setup
-      expect(stats.totalManifests).toBe(5);
+      // We created 6 manifest files in the test setup (including lint_test.pp)
+      expect(stats.totalManifests).toBe(6);
     });
 
     it("should calculate lines of code", async () => {
@@ -491,6 +491,15 @@ class profile::unused {
 }
 `;
   fs.writeFileSync(path.join(testDir, "manifests", "profile", "unused.pp"), unusedManifest);
+
+  // Create a file with trailing whitespace for lint testing
+  const lintTestManifest = `
+class profile::lint_test {   
+  # This line has trailing spaces   
+  notify { 'test': }
+}
+`;
+  fs.writeFileSync(path.join(testDir, "manifests", "profile", "lint_test.pp"), lintTestManifest);
 
   // Create profile::vhost defined type
   const vhostManifest = `
