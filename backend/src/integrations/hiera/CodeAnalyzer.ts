@@ -374,7 +374,7 @@ export class CodeAnalyzer {
           const inventory = await puppetdb.getInventory();
 
           for (const node of inventory) {
-            const nodeId = String(node.certname ?? node.id);
+            const nodeId = (node as { certname?: string; id: string }).certname ?? node.id;
 
             try {
               // Get catalog for each node
@@ -841,11 +841,11 @@ export class CodeAnalyzer {
     let filtered = issues;
 
     if (options.severity && options.severity.length > 0) {
-      filtered = filtered.filter((issue) => options.severity.includes(issue.severity));
+      filtered = filtered.filter((issue) => options.severity?.includes(issue.severity) ?? false);
     }
 
     if (options.types && options.types.length > 0) {
-      filtered = filtered.filter((issue) => options.types.includes(issue.rule));
+      filtered = filtered.filter((issue) => options.types?.includes(issue.rule) ?? false);
     }
 
     return filtered;

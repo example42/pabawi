@@ -97,7 +97,7 @@ export class HieraResolver {
 
     // If no values found, return not found result
     if (allValues.length === 0) {
-      return this.createNotFoundResult(key, lookupMethod, options?.defaultValue);
+      return Promise.resolve(this.createNotFoundResult(key, lookupMethod, options?.defaultValue));
     }
 
     // Apply lookup method to get final value
@@ -132,7 +132,7 @@ export class HieraResolver {
       };
     }
 
-    return result;
+    return Promise.resolve(result);
   }
 
 
