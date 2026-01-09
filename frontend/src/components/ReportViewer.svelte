@@ -105,6 +105,38 @@
     report.resource_events.filter(e => e.status === 'failure')
   );
 
+  // Calculate additional metrics
+  const unchangedResources = $derived(
+    report.metrics.resources.total - report.metrics.resources.out_of_sync
+  );
+
+  const correctiveChanges = $derived(
+    report.metrics.resources.corrective_change || 0
+  );
+
+  const intentionalChanges = $derived(
+    report.metrics.resources.changed - correctiveChanges
+  );
+
+  // Get top resource types by time
+  const topResourceTypes = $derived(() => {
+    const timeMetrics = report.metrics.time;
+    const resourceTypes: Array<{name: string, time: number}> = [];
+
+    // Extract resource type times from time metrics
+    Object.entries(timeMetrics).forEach(([key, value]) => {
+      if (key !== 'total' && key !== 'config_retrieval' && key !== 'fact_generation' &&
+          key !== 'transaction_evaluation' && key !== 'convert_catalog' &&
+          key !== 'node_retrieval' && key !== 'plugin_sync' && key !== 'catalog_application') {
+        resourceTypes.push({ name: key, time: value });
+      }
+    });
+
+    return resourceTypes
+      .sort((a, b) => b.time - a.time)
+      .slice(0, 10); // Top 10
+  });
+
   function formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
   }
@@ -122,13 +154,13 @@
   }
 </script>
 
-<div class="report-viewer space-y-4">
+<div class="report-viewer space-y-6">
   <!-- Report Summary -->
-  <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+  <div class="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
     <div class="flex items-start justify-between">
       <div class="flex-1">
         <div class="flex items-center gap-3">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
             Puppet Run Report
           </h3>
           <StatusBadge status={statusBadgeStatus} />
@@ -138,27 +170,183 @@
             </span>
           {/if}
         </div>
-        <div class="mt-2 grid grid-cols-2 gap-4 text-sm">
+
+        <!-- Puppet Run Timing Information -->
+        <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div class="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+            <div class="text-sm font-medium text-blue-800 dark:text-blue-200">Run began</div>
+            <div class="text-lg font-semibold text-blue-900 dark:text-blue-100">{formatTimestamp(report.start_time)}</div>
+          </div>
+          <div class="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
+            <div class="text-sm font-medium text-green-800 dark:text-green-200">Catalog submitted</div>
+            <div class="text-lg font-semibold text-green-900 dark:text-green-100">{formatTimestamp(report.producer_timestamp)}</div>
+          </div>
+          <div class="rounded-lg bg-purple-50 p-4 dark:bg-purple-900/20">
+            <div class="text-sm font-medium text-purple-800 dark:text-purple-200">Run ended</div>
+            <div class="text-lg font-semibold text-purple-900 dark:text-purple-100">{formatTimestamp(report.end_time)}</div>
+          </div>
+          <div class="rounded-lg bg-orange-50 p-4 dark:bg-orange-900/20">
+            <div class="text-sm font-medium text-orange-800 dark:text-orange-200">Report received</div>
+            <div class="text-lg font-semibold text-orange-900 dark:text-orange-100">{formatTimestamp(report.receive_time)}</div>
+          </div>
+        </div>
+
+        <!-- Performance Metrics -->
+        <div class="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div>
-            <span class="text-gray-500 dark:text-gray-400">Environment:</span>
-            <span class="ml-2 font-medium text-gray-900 dark:text-gray-100">{report.environment}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Total runtime (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">{duration()}</div>
           </div>
           <div>
-            <span class="text-gray-500 dark:text-gray-400">Duration:</span>
-            <span class="ml-2 font-medium text-gray-900 dark:text-gray-100">{duration()}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Config retrieval time (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {report.metrics.time.config_retrieval?.toFixed(2) || 'N/A'}
+            </div>
           </div>
           <div>
-            <span class="text-gray-500 dark:text-gray-400">Started:</span>
-            <span class="ml-2 font-medium text-gray-900 dark:text-gray-100">{formatTimestamp(report.start_time)}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Fact generation (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {report.metrics.time.fact_generation?.toFixed(2) || 'N/A'}
+            </div>
           </div>
           <div>
-            <span class="text-gray-500 dark:text-gray-400">Puppet Version:</span>
-            <span class="ml-2 font-medium text-gray-900 dark:text-gray-100">{report.puppet_version}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Transaction evaluation (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {report.metrics.time.transaction_evaluation?.toFixed(2) || 'N/A'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Additional Performance Metrics -->
+        <div class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Convert catalog (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {report.metrics.time.convert_catalog?.toFixed(2) || 'N/A'}
+            </div>
+          </div>
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Node retrieval (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {report.metrics.time.node_retrieval?.toFixed(2) || 'N/A'}
+            </div>
+          </div>
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Plugin sync (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {report.metrics.time.plugin_sync?.toFixed(2) || 'N/A'}
+            </div>
+          </div>
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Time to apply (sec):</span>
+            <div class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              {report.metrics.time.catalog_application?.toFixed(2) || 'N/A'}
+            </div>
+          </div>
+        </div>
+
+        <!-- Catalog Information -->
+        <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Config version:</span>
+            <div class="text-sm font-mono text-gray-900 dark:text-gray-100 break-all">
+              {report.configuration_version}
+            </div>
+          </div>
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Catalog UUID:</span>
+            <div class="text-sm font-mono text-gray-900 dark:text-gray-100">
+              {report.transaction_uuid}
+            </div>
+          </div>
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Cached catalog used:</span>
+            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">
+              {report.noop ? 'yes' : 'no'}
+            </div>
+          </div>
+          <div>
+            <span class="text-sm text-gray-500 dark:text-gray-400">Environment:</span>
+            <div class="text-sm font-semibold text-gray-900 dark:text-gray-100">{report.environment}</div>
           </div>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- Resources Summary -->
+  <div class="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+    <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Resources</h4>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div>
+        <span class="text-sm text-gray-500 dark:text-gray-400">Total managed by Puppet:</span>
+        <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          {report.metrics.resources.total.toLocaleString()}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Events Summary -->
+  <div class="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+    <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Events</h4>
+    <div class="grid grid-cols-2 gap-4 sm:grid-cols-6">
+      <div class="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
+        <div class="text-2xl font-bold text-red-700 dark:text-red-400">{report.metrics.resources.failed}</div>
+        <div class="text-sm text-red-600 dark:text-red-500">Failures</div>
+      </div>
+      <div class="rounded-lg bg-yellow-50 p-4 dark:bg-yellow-900/20">
+        <div class="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{correctiveChanges}</div>
+        <div class="text-sm text-yellow-600 dark:text-yellow-500">Corrective changes</div>
+      </div>
+      <div class="rounded-lg bg-blue-50 p-4 dark:bg-blue-900/20">
+        <div class="text-2xl font-bold text-blue-700 dark:text-blue-400">{intentionalChanges}</div>
+        <div class="text-sm text-blue-600 dark:text-blue-500">Intentional changes</div>
+      </div>
+      <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/50">
+        <div class="text-2xl font-bold text-gray-700 dark:text-gray-400">{report.metrics.events.noop || 0}</div>
+        <div class="text-sm text-gray-600 dark:text-gray-500">No-ops</div>
+      </div>
+      <div class="rounded-lg bg-purple-50 p-4 dark:bg-purple-900/20">
+        <div class="text-2xl font-bold text-purple-700 dark:text-purple-400">{report.metrics.resources.skipped}</div>
+        <div class="text-sm text-purple-600 dark:text-purple-500">Skips</div>
+      </div>
+      <div class="rounded-lg bg-orange-50 p-4 dark:bg-orange-900/20">
+        <div class="text-2xl font-bold text-orange-700 dark:text-orange-400">{report.metrics.resources.failed_to_restart}</div>
+        <div class="text-sm text-orange-600 dark:text-orange-500">Failed restarts</div>
+      </div>
+    </div>
+    <div class="mt-4">
+      <div class="rounded-lg bg-green-50 p-4 dark:bg-green-900/20">
+        <div class="text-2xl font-bold text-green-700 dark:text-green-400">{unchangedResources}</div>
+        <div class="text-sm text-green-600 dark:text-green-500">Unchanged</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Resource Types by Time -->
+  {#if topResourceTypes.length > 0}
+    <div class="rounded-lg border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
+      <h4 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        Top resource types by time to apply (sec)
+      </h4>
+      <div class="space-y-3">
+        {#each topResourceTypes as resourceType, index}
+          <div class="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50">
+            <div class="flex items-center gap-3">
+              <span class="flex h-6 w-6 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-800 dark:bg-primary-900/50 dark:text-primary-200">
+                {index + 1}
+              </span>
+              <span class="font-medium text-gray-900 dark:text-gray-100">{resourceType.name}</span>
+            </div>
+            <span class="font-mono text-sm text-gray-600 dark:text-gray-400">
+              {resourceType.time.toFixed(2)}
+            </span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <!-- Metrics Section -->
   <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
@@ -167,7 +355,7 @@
       class="flex w-full items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
       onclick={() => toggleSection('metrics')}
     >
-      <h4 class="text-base font-semibold text-gray-900 dark:text-gray-100">Resource Metrics</h4>
+      <h4 class="text-base font-semibold text-gray-900 dark:text-gray-100">Detailed Resource Metrics</h4>
       <svg
         class="h-5 w-5 transition-transform {showMetrics ? 'rotate-180' : ''}"
         fill="none"
@@ -195,6 +383,22 @@
           <div class="rounded-lg bg-red-50 p-3 dark:bg-red-900/20">
             <div class="text-2xl font-bold text-red-700 dark:text-red-400">{report.metrics.resources.failed}</div>
             <div class="text-sm text-red-600 dark:text-red-500">Failed</div>
+          </div>
+          <div class="rounded-lg bg-purple-50 p-3 dark:bg-purple-900/20">
+            <div class="text-2xl font-bold text-purple-700 dark:text-purple-400">{report.metrics.resources.skipped}</div>
+            <div class="text-sm text-purple-600 dark:text-purple-500">Skipped</div>
+          </div>
+          <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+            <div class="text-2xl font-bold text-blue-700 dark:text-blue-400">{report.metrics.resources.restarted}</div>
+            <div class="text-sm text-blue-600 dark:text-blue-500">Restarted</div>
+          </div>
+          <div class="rounded-lg bg-orange-50 p-3 dark:bg-orange-900/20">
+            <div class="text-2xl font-bold text-orange-700 dark:text-orange-400">{report.metrics.resources.out_of_sync}</div>
+            <div class="text-sm text-orange-600 dark:text-orange-500">Out of Sync</div>
+          </div>
+          <div class="rounded-lg bg-indigo-50 p-3 dark:bg-indigo-900/20">
+            <div class="text-2xl font-bold text-indigo-700 dark:text-indigo-400">{report.metrics.resources.scheduled}</div>
+            <div class="text-sm text-indigo-600 dark:text-indigo-500">Scheduled</div>
           </div>
         </div>
       </div>

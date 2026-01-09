@@ -4,7 +4,6 @@
  * Primary service for interacting with Puppetserver API.
  * Implements InformationSourcePlugin interface to provide:
  * - Node inventory from Puppetserver CA
- * - Certificate management operations
  * - Node status tracking
  * - Catalog compilation
  * - Facts retrieval
@@ -17,8 +16,6 @@ import type { Node, Facts } from "../../bolt/types";
 import type { PuppetserverConfig } from "../../config/schema";
 import { PuppetserverClient } from "./PuppetserverClient";
 import type {
-  Certificate,
-  CertificateStatus,
   NodeStatus,
   NodeActivityCategory,
   Environment,
@@ -33,7 +30,6 @@ import {
   PuppetserverError,
   PuppetserverConnectionError,
   PuppetserverConfigurationError,
-  CertificateOperationError,
   CatalogCompilationError,
   EnvironmentDeploymentError,
 } from "./errors";
@@ -269,22 +265,11 @@ export class PuppetserverService
 
     // Test multiple capabilities to detect partial functionality
     const capabilities = {
-      certificates: false,
       environments: false,
       status: false,
     };
 
     const errors: string[] = [];
-
-    // Test certificates endpoint
-    try {
-      await this.client.getCertificates();
-      capabilities.certificates = true;
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      errors.push(`Certificates: ${errorMessage}`);
-    }
 
     // Test environments endpoint
     try {
@@ -294,6 +279,16 @@ export class PuppetserverService
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       errors.push(`Environments: ${errorMessage}`);
+    }
+
+    // Test status endpoint
+    try {
+      await this.client.getSimpleStatus();
+      capabilities.status = true;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      errors.push(`Status: ${errorMessage}`);
     }
 
     // Determine overall health status
@@ -351,133 +346,35 @@ export class PuppetserverService
   /**
    * Get inventory of nodes from Puppetserver CA
    *
-   * Queries the certificates endpoint and transforms results to normalized format.
-   * Results are cached with TTL to reduce load on Puppetserver.
+   * Note: Certificate management has been removed. This method now returns
+   * an empty array as the primary node inventory source is PuppetDB.
    *
-   * @returns Array of nodes
+   * @returns Empty array of nodes
    */
   async getInventory(): Promise<Node[]> {
     this.log("=== PuppetserverService.getInventory() called ===");
+    this.log("Certificate management has been removed - returning empty inventory");
 
     this.ensureInitialized();
-    this.log("Service is initialized");
 
-    try {
-      // Check cache first
-      const cacheKey = "inventory:all";
-      const cached = this.cache.get(cacheKey);
-      if (Array.isArray(cached)) {
-        this.log(`Returning cached inventory (${String(cached.length)} nodes)`);
-        return cached as Node[];
-      }
-
-      this.log("No cached inventory found, querying Puppetserver");
-
-      // Query Puppetserver for all certificates
-      const client = this.client;
-      if (!client) {
-        this.log("ERROR: Puppetserver client is null!", "error");
-        throw new PuppetserverConnectionError(
-          "Puppetserver client not initialized. Ensure initialize() was called successfully.",
-        );
-      }
-
-      this.log("Calling client.getCertificates()");
-      const result = await client.getCertificates();
-      this.log(
-        `Received result from getCertificates(): ${typeof result}, isArray: ${String(Array.isArray(result))}`,
-      );
-
-      // Transform certificates to normalized format
-      if (!Array.isArray(result)) {
-        this.log(
-          `Unexpected response format from Puppetserver certificates endpoint: ${JSON.stringify(result).substring(0, 200)}`,
-          "warn",
-        );
-        return [];
-      }
-
-      this.log(`Transforming ${String(result.length)} certificates to nodes`);
-
-      // Log sample certificate for debugging
-      if (result.length > 0) {
-        this.log(
-          `Sample certificate: ${JSON.stringify(result[0]).substring(0, 200)}`,
-        );
-      }
-
-      const nodes = result.map((cert) =>
-        this.transformCertificateToNode(cert as Certificate),
-      );
-
-      this.log(
-        `Successfully transformed ${String(nodes.length)} certificates to nodes`,
-      );
-
-      // Log sample node for debugging
-      if (nodes.length > 0) {
-        this.log(`Sample node: ${JSON.stringify(nodes[0])}`);
-      }
-
-      // Cache the result
-      this.cache.set(cacheKey, nodes, this.cacheTTL);
-      this.log(
-        `Cached inventory (${String(nodes.length)} nodes) for ${String(this.cacheTTL)}ms`,
-      );
-
-      this.log(
-        "=== PuppetserverService.getInventory() completed successfully ===",
-      );
-      return nodes;
-    } catch (error) {
-      this.logError("Failed to get inventory from Puppetserver", error);
-      this.log("=== PuppetserverService.getInventory() failed ===");
-      throw error;
-    }
+    // Return empty array since certificate management has been removed
+    // Node inventory should come from PuppetDB instead
+    return [];
   }
 
   /**
    * Get a single node from inventory
    *
-   * Retrieves a specific node by certname from the Puppetserver CA.
-   * Results are cached with TTL to reduce load on Puppetserver.
+   * Note: Certificate management has been removed. This method now returns
+   * null as the primary node inventory source is PuppetDB.
    *
    * @param certname - Node certname
-   * @returns Node or null if not found
+   * @returns null (certificate management removed)
    */
   async getNode(certname: string): Promise<Node | null> {
     this.ensureInitialized();
-
-    try {
-      // Check cache first
-      const cacheKey = `node:${certname}`;
-      const cached = this.cache.get(cacheKey);
-      if (cached !== undefined) {
-        this.log(`Returning cached node '${certname}'`);
-        return cached as Node | null;
-      }
-
-      // Get the certificate for this node
-      const certificate = await this.getCertificate(certname);
-
-      if (!certificate) {
-        this.log(`Node '${certname}' not found in Puppetserver CA`, "warn");
-        this.cache.set(cacheKey, null, this.cacheTTL);
-        return null;
-      }
-
-      // Transform certificate to node
-      const node = this.transformCertificateToNode(certificate);
-
-      // Cache the result
-      this.cache.set(cacheKey, node, this.cacheTTL);
-      this.log(`Cached node '${certname}' for ${String(this.cacheTTL)}ms`);
-
-      return node;
-    } catch (error) {
-      this.logError(`Failed to get node '${certname}'`, error);
-      throw error;
-    }
+    this.log(`Certificate management removed - getNode('${certname}') returning null`);
+    return null;
   }
 
   /**
@@ -607,7 +504,8 @@ export class PuppetserverService
   /**
    * Get arbitrary data for a node
    *
-   * Supports data types: 'status', 'catalog', 'certificate', 'facts'
+   * Supports data types: 'status', 'catalog', 'facts'
+   * Note: 'certificate' data type has been removed
    *
    * @param nodeId - Node identifier
    * @param dataType - Type of data to retrieve
@@ -621,515 +519,27 @@ export class PuppetserverService
         return await this.getNodeStatus(nodeId);
       case "catalog":
         return await this.getNodeCatalog(nodeId);
-      case "certificate":
-        return await this.getCertificate(nodeId);
       case "facts":
         return await this.getNodeFacts(nodeId);
       default:
         throw new Error(
-          `Unsupported data type: ${dataType}. Supported types are: status, catalog, certificate, facts`,
+          `Unsupported data type: ${dataType}. Supported types are: status, catalog, facts`,
         );
     }
-  }
-
-  /**
-   * List certificates with optional status filter
-   *
-   * Note: In PE 2025.3.0, falls back to using PuppetDB nodes as certificate source
-   * when CA API is not available.
-   *
-   * @param status - Optional certificate status filter
-   * @returns Array of certificates
-   */
-  async listCertificates(status?: CertificateStatus): Promise<Certificate[]> {
-    this.ensureInitialized();
-
-    try {
-      const cacheKey = `certificates:${status ?? "all"}`;
-      const cached = this.cache.get(cacheKey);
-      if (Array.isArray(cached)) {
-        this.log(
-          `Returning cached certificates (${String(cached.length)} certs)`,
-        );
-        return cached as Certificate[];
-      }
-
-      const client = this.client;
-      if (!client) {
-        throw new PuppetserverConnectionError(
-          "Puppetserver client not initialized",
-        );
-      }
-
-      try {
-        const result = await client.getCertificates(status);
-
-        if (!Array.isArray(result)) {
-          this.log(
-            "Unexpected response format from certificates endpoint",
-            "warn",
-          );
-          return [];
-        }
-
-        const certificates = result as Certificate[];
-
-        this.cache.set(cacheKey, certificates, this.cacheTTL);
-        this.log(
-          `Cached ${String(certificates.length)} certificates for ${String(this.cacheTTL)}ms`,
-        );
-
-        return certificates;
-      } catch {
-        this.log(
-          "CA API not available, falling back to PuppetDB nodes as certificate source",
-          "warn",
-        );
-
-        // Fallback: Get certificates from PuppetDB nodes
-        const certificates = await this.getCertificatesFromPuppetDB(status);
-
-        this.cache.set(cacheKey, certificates, this.cacheTTL);
-        this.log(
-          `Cached ${String(certificates.length)} certificates from PuppetDB fallback for ${String(this.cacheTTL)}ms`,
-        );
-
-        return certificates;
-      }
-    } catch (error) {
-      this.logError("Failed to list certificates", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Fallback method to get certificate information from PuppetDB nodes
-   * Used when CA API is not available in PE 2025.3.0+
-   */
-  private async getCertificatesFromPuppetDB(status?: CertificateStatus): Promise<Certificate[]> {
-    try {
-      // Get the PuppetDB service from the integration manager
-      const integrationManager = (global as Record<string, unknown>).integrationManager as {
-        getInformationSource: (name: string) => {
-          isInitialized: () => boolean;
-          getInventory: () => Promise<{ certname?: string; name?: string; id?: string }[]>;
-        } | null;
-      } | undefined;
-      if (!integrationManager) {
-        this.log("Integration manager not available for PuppetDB fallback", "warn");
-        return [];
-      }
-
-      const puppetdbService = integrationManager.getInformationSource("puppetdb");
-      if (!puppetdbService?.isInitialized()) {
-        this.log("PuppetDB service not available for certificate fallback", "warn");
-        return [];
-      }
-
-      // Get all nodes from PuppetDB - these represent active certificates
-      const nodes = await puppetdbService.getInventory();
-
-      // Convert nodes to certificate format
-      const certificates: Certificate[] = nodes.map((node) => ({
-        certname: node.certname ?? node.name ?? node.id ?? "unknown",
-        status: "signed" as const, // Nodes in PuppetDB are signed certificates
-        fingerprint: "N/A", // Not available from PuppetDB
-        expiration: null, // Would need to be fetched separately
-        dns_alt_names: [],
-        authorization_extensions: {},
-        state: "signed" as const,
-      }));
-
-      // Apply status filter if provided
-      if (status) {
-        return certificates.filter(cert => cert.status === status);
-      }
-
-      this.log(`Retrieved ${String(certificates.length)} certificates from PuppetDB fallback`);
-      return certificates;
-    } catch (error) {
-      this.logError("Failed to get certificates from PuppetDB fallback", error);
-      return [];
-    }
-  }
-
-  /**
-   * Get a specific certificate
-   *
-   * @param certname - Certificate name
-   * @returns Certificate or null if not found
-   */
-  async getCertificate(certname: string): Promise<Certificate | null> {
-    this.ensureInitialized();
-
-    try {
-      const cacheKey = `certificate:${certname}`;
-      const cached = this.cache.get(cacheKey);
-      if (cached !== undefined) {
-        this.log(`Returning cached certificate for '${certname}'`);
-        return cached as Certificate | null;
-      }
-
-      const client = this.client;
-      if (!client) {
-        throw new PuppetserverConnectionError(
-          "Puppetserver client not initialized",
-        );
-      }
-
-      const result = await client.getCertificate(certname);
-
-      if (!result) {
-        return null;
-      }
-
-      const certificate = result as Certificate;
-
-      this.cache.set(cacheKey, certificate, this.cacheTTL);
-      this.log(
-        `Cached certificate for '${certname}' for ${String(this.cacheTTL)}ms`,
-      );
-
-      return certificate;
-    } catch (error) {
-      this.logError(`Failed to get certificate for '${certname}'`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Sign a certificate request
-   *
-   * @param certname - Certificate name to sign
-   */
-  async signCertificate(certname: string): Promise<void> {
-    this.ensureInitialized();
-
-    try {
-      const client = this.client;
-      if (!client) {
-        throw new PuppetserverConnectionError(
-          "Puppetserver client not initialized",
-        );
-      }
-
-      await client.signCertificate(certname);
-
-      // Clear cache for this certificate and inventory
-      this.cache.clear();
-      this.log(`Signed certificate for '${certname}' and cleared cache`);
-    } catch (error) {
-      this.logError(`Failed to sign certificate for '${certname}'`, error);
-      throw new CertificateOperationError(
-        `Failed to sign certificate for '${certname}'`,
-        "sign",
-        certname,
-        error,
-      );
-    }
-  }
-
-  /**
-   * Revoke a certificate
-   *
-   * @param certname - Certificate name to revoke
-   */
-  async revokeCertificate(certname: string): Promise<void> {
-    this.ensureInitialized();
-
-    try {
-      const client = this.client;
-      if (!client) {
-        throw new PuppetserverConnectionError(
-          "Puppetserver client not initialized",
-        );
-      }
-
-      await client.revokeCertificate(certname);
-
-      // Clear cache for this certificate and inventory
-      this.cache.clear();
-      this.log(`Revoked certificate for '${certname}' and cleared cache`);
-    } catch (error) {
-      this.logError(`Failed to revoke certificate for '${certname}'`, error);
-      throw new CertificateOperationError(
-        `Failed to revoke certificate for '${certname}'`,
-        "revoke",
-        certname,
-        error,
-      );
-    }
-  }
-
-  /**
-   * Bulk sign certificates
-   *
-   * @param certnames - Array of certificate names to sign
-   * @returns Bulk operation result
-   */
-  async bulkSignCertificates(
-    certnames: string[],
-  ): Promise<BulkOperationResult> {
-    this.ensureInitialized();
-
-    const result: BulkOperationResult = {
-      successful: [],
-      failed: [],
-      total: certnames.length,
-      successCount: 0,
-      failureCount: 0,
-    };
-
-    for (const certname of certnames) {
-      try {
-        await this.signCertificate(certname);
-        result.successful.push(certname);
-        result.successCount++;
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        result.failed.push({ certname, error: errorMessage });
-        result.failureCount++;
-      }
-    }
-
-    this.log(
-      `Bulk sign completed: ${String(result.successCount)} successful, ${String(result.failureCount)} failed`,
-    );
-
-    return result;
-  }
-
-  /**
-   * Bulk revoke certificates
-   *
-   * @param certnames - Array of certificate names to revoke
-   * @returns Bulk operation result
-   */
-  async bulkRevokeCertificates(
-    certnames: string[],
-  ): Promise<BulkOperationResult> {
-    this.ensureInitialized();
-
-    const result: BulkOperationResult = {
-      successful: [],
-      failed: [],
-      total: certnames.length,
-      successCount: 0,
-      failureCount: 0,
-    };
-
-    for (const certname of certnames) {
-      try {
-        await this.revokeCertificate(certname);
-        result.successful.push(certname);
-        result.successCount++;
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        result.failed.push({ certname, error: errorMessage });
-        result.failureCount++;
-      }
-    }
-
-    this.log(
-      `Bulk revoke completed: ${String(result.successCount)} successful, ${String(result.failureCount)} failed`,
-    );
-
-    return result;
-  }
-
-  /**
-   * Get node status
-   *
-   * Implements requirements 5.1, 5.2, 5.3, 5.4, 5.5:
-   * - Queries Puppetserver status API using correct endpoint
-   * - Parses and displays node status correctly
-   * - Handles missing status gracefully without blocking other functionality
-   * - Provides detailed error logging for debugging
-   * - Returns status with activity categorization
-   *
-   * @param certname - Node certname
-   * @returns Node status or minimal status if not found
-   */
-  async getNodeStatus(certname: string): Promise<NodeStatus> {
-    this.ensureInitialized();
-
-    this.log(`Getting status for node '${certname}'`);
-
-    try {
-      const cacheKey = `status:${certname}`;
-      const cached = this.cache.get(cacheKey);
-      if (cached !== undefined && cached !== null) {
-        this.log(`Returning cached status for node '${certname}'`);
-        return cached as NodeStatus;
-      }
-
-      const client = this.client;
-      if (!client) {
-        throw new PuppetserverConnectionError(
-          "Puppetserver client not initialized",
-        );
-      }
-
-      this.log(
-        `Querying Puppetserver for status for node '${certname}' (requirement 5.2)`,
-      );
-      const result = await client.getStatus(certname);
-
-      // Handle missing status gracefully (requirement 5.4, 5.5)
-      if (!result) {
-        this.log(
-          `No status found for node '${certname}' - node may not have checked in yet (requirement 5.4)`,
-          "warn",
-        );
-
-        // Return minimal status structure instead of throwing error (requirement 5.4)
-        const minimalStatus: NodeStatus = {
-          certname,
-          // All other fields are optional and will be undefined
-        };
-
-        // Cache the minimal result with shorter TTL
-        this.cache.set(cacheKey, minimalStatus, Math.min(this.cacheTTL, 60000)); // Max 1 minute for missing status
-
-        this.log(
-          `Returning minimal status for node '${certname}' - node has not reported to Puppetserver yet`,
-          "info",
-        );
-
-        return minimalStatus;
-      }
-
-      this.log(`Transforming status for node '${certname}' (requirement 5.3)`);
-      const status = result as NodeStatus;
-
-      this.log(
-        `Successfully retrieved status for node '${certname}' with ${status.report_timestamp ? "report timestamp" : "no report timestamp"} (requirement 5.3)`,
-      );
-
-      // Cache the result
-      this.cache.set(cacheKey, status, this.cacheTTL);
-      this.log(
-        `Cached status for node '${certname}' for ${String(this.cacheTTL)}ms`,
-      );
-
-      return status;
-    } catch (error) {
-      // Enhanced error logging (requirement 5.5)
-      this.logError(
-        `Failed to get status for node '${certname}' (requirement 5.5)`,
-        error,
-      );
-
-      // Log additional context for debugging (requirement 5.5)
-      if (error instanceof PuppetserverError) {
-        this.log(
-          `Puppetserver error details: ${JSON.stringify(error.details)}`,
-          "error",
-        );
-        this.log(
-          `Error code: ${error.code}, Message: ${error.message}`,
-          "error",
-        );
-      }
-
-      // Return minimal status instead of throwing to prevent blocking other functionality (requirement 5.4)
-      this.log(
-        `Returning minimal status for node '${certname}' due to error - graceful degradation (requirement 5.4)`,
-        "warn",
-      );
-
-      const minimalStatus: NodeStatus = {
-        certname,
-      };
-
-      return minimalStatus;
-    }
-  }
-
-  /**
-   * Categorize node activity status based on last check-in time
-   *
-   * @param status - Node status
-   * @returns Activity category: 'active', 'inactive', or 'never_checked_in'
-   */
-  categorizeNodeActivity(status: NodeStatus): NodeActivityCategory {
-    // If no report timestamp, node has never checked in
-    if (!status.report_timestamp) {
-      return "never_checked_in";
-    }
-
-    // Get inactivity threshold from config (default 1 hour = 3600 seconds)
-    const thresholdSeconds =
-      this.puppetserverConfig?.inactivityThreshold ?? 3600;
-
-    // Parse the report timestamp
-    const reportTime = new Date(status.report_timestamp).getTime();
-    const now = Date.now();
-    const secondsSinceReport = (now - reportTime) / 1000;
-
-    // Check if node is inactive based on threshold
-    if (secondsSinceReport > thresholdSeconds) {
-      return "inactive";
-    }
-
-    return "active";
-  }
-
-  /**
-   * Check if a node should be highlighted as problematic
-   *
-   * @param status - Node status
-   * @returns true if node should be highlighted (inactive or never checked in)
-   */
-  shouldHighlightNode(status: NodeStatus): boolean {
-    const activity = this.categorizeNodeActivity(status);
-    return activity === "inactive" || activity === "never_checked_in";
-  }
-
-  /**
-   * Get time since last check-in in seconds
-   *
-   * @param status - Node status
-   * @returns Seconds since last check-in, or null if never checked in
-   */
-  getSecondsSinceLastCheckIn(status: NodeStatus): number | null {
-    if (!status.report_timestamp) {
-      return null;
-    }
-
-    const reportTime = new Date(status.report_timestamp).getTime();
-    const now = Date.now();
-    return (now - reportTime) / 1000;
   }
 
   /**
    * List all node statuses
    *
-   * @returns Array of node statuses
+   * Note: Certificate management has been removed. This method now returns
+   * an empty array as node status should come from PuppetDB instead.
+   *
+   * @returns Empty array of node statuses
    */
   async listNodeStatuses(): Promise<NodeStatus[]> {
     this.ensureInitialized();
-
-    // Get all certificates first
-    const certificates = await this.listCertificates();
-
-    // Get status for each certificate
-    const statuses: NodeStatus[] = [];
-    for (const cert of certificates) {
-      try {
-        const status = await this.getNodeStatus(cert.certname);
-        statuses.push(status);
-      } catch {
-        this.log(
-          `Failed to get status for '${cert.certname}', skipping`,
-          "warn",
-        );
-      }
-    }
-
-    return statuses;
+    this.log("Certificate management removed - listNodeStatuses() returning empty array");
+    return [];
   }
 
   /**
@@ -1477,36 +887,6 @@ export class PuppetserverService
         error,
       );
     }
-  }
-
-  /**
-   * Transform certificate to normalized node format
-   *
-   * Implements requirements 3.2: Transform Puppetserver certificates to normalized Node format
-   *
-   * @param certificate - Certificate from Puppetserver
-   * @returns Normalized node
-   */
-  private transformCertificateToNode(certificate: Certificate): Node {
-    const certname = certificate.certname;
-
-    this.log(
-      `Transforming certificate '${certname}' with status '${certificate.status}' to node`,
-    );
-
-    const node: Node = {
-      id: certname,
-      name: certname,
-      uri: `ssh://${certname}`,
-      transport: "ssh",
-      config: {},
-      source: "puppetserver",
-      certificateStatus: certificate.status,
-    };
-
-    this.log(`Transformed node: ${JSON.stringify(node)}`);
-
-    return node;
   }
 
   /**

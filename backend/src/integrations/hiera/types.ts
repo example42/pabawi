@@ -139,6 +139,18 @@ export interface MergeOptions {
 }
 
 /**
+ * Information about a file in the Hiera hierarchy
+ */
+export interface HierarchyFileInfo {
+  path: string;
+  hierarchyLevel: string;
+  interpolatedPath: string;
+  exists: boolean;
+  canResolve: boolean;
+  unresolvedVariables?: string[];
+}
+
+/**
  * Hiera data for a specific node
  */
 export interface NodeHieraData {
@@ -147,6 +159,7 @@ export interface NodeHieraData {
   keys: Map<string, HieraResolution>;
   usedKeys: Set<string>;
   unusedKeys: Set<string>;
+  hierarchyFiles: HierarchyFileInfo[];
 }
 
 /**
@@ -338,6 +351,8 @@ export interface NodeHieraDataResponse {
   unusedKeys: string[];
   factSource: "puppetdb" | "local";
   warnings?: string[];
+  hierarchyFiles: HierarchyFileInfo[];
+  totalKeys: number;
 }
 
 /**
@@ -350,6 +365,8 @@ export interface HieraResolutionInfo {
   sourceFile: string;
   hierarchyLevel: string;
   found: boolean;
+  allValues?: HieraKeyLocation[];
+  interpolatedVariables?: Record<string, unknown>;
 }
 
 /**

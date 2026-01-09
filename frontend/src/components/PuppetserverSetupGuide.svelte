@@ -136,12 +136,49 @@ authorization: {
         </div>
       {:else}
         <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Locate SSL Certificates</h4>
-          <p class="text-gray-700 dark:text-gray-300 mb-3">Default certificate locations on Puppetserver:</p>
-          <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
-            <div>CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
-            <div>Cert: /etc/puppetlabs/puppet/ssl/certs/admin.pem</div>
-            <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/admin.pem</div>
+          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Certificate Generation Options</h4>
+          <p class="text-gray-700 dark:text-gray-300 mb-3">The certificate used for authentication should be generated with proper client authentication extensions. The same certname can be used for both Puppetserver and PuppetDB integrations for simplicity.</p>
+
+          <div class="space-y-4">
+            <div>
+              <h5 class="text-md font-medium text-gray-900 dark:text-white mb-2">Option 1: Manual Certificate Generation on Puppetserver</h5>
+              <p class="text-gray-700 dark:text-gray-300 mb-2">Generate the certificate directly on the Puppetserver and copy it locally:</p>
+              <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+                <div># On the Puppetserver</div>
+                <div>puppetserver ca generate --certname pabawi</div>
+                <div></div>
+                <div># Copy the generated files to your local machine:</div>
+                <div># CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
+                <div># Cert: /etc/puppetlabs/puppet/ssl/certs/pabawi.pem</div>
+                <div># Key: /etc/puppetlabs/puppet/ssl/private_keys/pabawi.pem</div>
+              </div>
+            </div>
+
+            <div>
+              <h5 class="text-md font-medium text-gray-900 dark:text-white mb-2">Option 2: Automated Certificate Generation Script</h5>
+              <p class="text-gray-700 dark:text-gray-300 mb-2">Use the provided script to generate a CSR and manage the certificate lifecycle:</p>
+              <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+                <div># Generate and submit CSR</div>
+                <div>./scripts/generate-pabawi-cert.sh</div>
+                <div></div>
+                <div># After running the script, sign the certificate on Puppetserver:</div>
+                <div>puppetserver ca sign --certname pabawi</div>
+                <div></div>
+                <div># Download the signed certificate</div>
+                <div>./scripts/generate-pabawi-cert.sh --download</div>
+              </div>
+              <p class="text-gray-700 dark:text-gray-300 mt-2 text-sm">The script automatically updates your .env file with the certificate paths.</p>
+            </div>
+
+            <div>
+              <h5 class="text-md font-medium text-gray-900 dark:text-white mb-2">Option 3: Use Existing SSL Certificates</h5>
+              <p class="text-gray-700 dark:text-gray-300 mb-2">Default certificate locations on Puppetserver:</p>
+              <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+                <div>CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
+                <div>Cert: /etc/puppetlabs/puppet/ssl/certs/admin.pem</div>
+                <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/admin.pem</div>
+              </div>
+            </div>
           </div>
         </div>
       {/if}
@@ -356,6 +393,55 @@ authorization: {
       </div>
     </div>
   </div>
+
+  {#if selectedAuth === "ssl"}
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Certificate Setup (SSL Authentication)</h3>
+
+      <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-r-lg mb-4">
+        <h4 class="font-medium text-gray-900 dark:text-white mb-2">⚠️ Important for Certificate Management</h4>
+        <p class="text-sm text-gray-700 dark:text-gray-300">
+          For certificate management functionality to work properly, your SSL certificate must include the <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">cli_auth</code> extension.
+          This extension is required to access the Puppetserver CA API endpoints.
+        </p>
+      </div>
+
+      <p class="text-gray-700 dark:text-gray-300 mb-4">
+        If your current certificate doesn't have the cli_auth extension, you can generate a new one using the provided script:
+      </p>
+
+      <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1 mb-4">
+        <div># Generate a new certificate with cli_auth extension</div>
+        <div>./scripts/generate-cli-auth-csr.sh</div>
+        <div></div>
+        <div># After running the script, sign the certificate on your Puppetserver:</div>
+        <div>puppetserver ca sign --certname pabawi</div>
+        <div></div>
+        <div># Download the signed certificate</div>
+        <div>./scripts/generate-cli-auth-csr.sh --download</div>
+      </div>
+
+      <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg mb-4">
+        <h4 class="font-medium text-gray-900 dark:text-white mb-2">What the script does:</h4>
+        <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+          <li>• Generates a new private key and Certificate Signing Request (CSR) with the cli_auth extension</li>
+          <li>• Submits the CSR to your Puppetserver via the CA API</li>
+          <li>• After you sign it on the Puppetserver, downloads and installs the signed certificate</li>
+          <li>• Updates your <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">.env</code> file with the new certificate paths</li>
+        </ul>
+      </div>
+
+      <div class="p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg">
+        <h4 class="font-medium text-gray-900 dark:text-white mb-2">📝 Note about cli_auth extension</h4>
+        <p class="text-sm text-gray-700 dark:text-gray-300">
+          The cli_auth extension (OID: 1.3.6.1.4.1.34380.1.3.39) is required for accessing Puppetserver CA API endpoints.
+          Without this extension, certificate management features will fall back to PuppetDB data, which only shows signed certificates that have checked in.
+        </p>
+      </div>
+    </div>
+  </div>
+  {/if}
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">

@@ -266,18 +266,34 @@ PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
 
 **Generating Client Certificates:**
 
-If using Puppet's CA:
+The certname used for PuppetDB integration can be either manually generated on the Puppetserver or generated via the provided script (which requires signing on the Puppetserver). Note that the same certname can be used for both Puppetserver and PuppetDB integrations for simplicity.
+
+**Option 1: Manual Certificate Generation on Puppetserver**
 
 ```bash
-# Generate certificate request
-puppet certificate generate padawi.example.com
+# On the Puppetserver
+puppetserver ca generate --certname pabawi
 
-# Sign the certificate (on Puppet CA server)
-puppetserver ca sign --certname padawi.example.com
-
-# Retrieve signed certificate
-puppet certificate find padawi.example.com
+# Copy the generated files to your local machine:
+# - /etc/puppetlabs/puppet/ssl/certs/ca.pem (CA certificate)
+# - /etc/puppetlabs/puppet/ssl/certs/pabawi.pem (client certificate)
+# - /etc/puppetlabs/puppet/ssl/private_keys/pabawi.pem (private key)
 ```
+
+**Option 2: Automated Certificate Generation Script**
+
+```bash
+# Generate and submit CSR
+./scripts/generate-pabawi-cert.sh
+
+# After running the script, sign the certificate on Puppetserver:
+puppetserver ca sign --certname pabawi
+
+# Download the signed certificate
+./scripts/generate-pabawi-cert.sh --download
+```
+
+The script automatically updates your `.env` file with the certificate paths.
 
 ### Option 4: Disable Certificate Validation (Development Only)
 

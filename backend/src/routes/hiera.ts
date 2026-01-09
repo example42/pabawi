@@ -457,6 +457,8 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
             sourceFile: resolution.sourceFile,
             hierarchyLevel: resolution.hierarchyLevel,
             found: resolution.found,
+            allValues: resolution.allValues,
+            interpolatedVariables: resolution.interpolatedVariables,
           });
         }
 
@@ -481,6 +483,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           unusedKeys: Array.from(nodeData.unusedKeys),
           factSource,
           totalKeys: keysArray.length,
+          hierarchyFiles: nodeData.hierarchyFiles,
         });
       } catch (error) {
         if (error instanceof z.ZodError) {
@@ -537,6 +540,8 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
             sourceFile: resolution.sourceFile,
             hierarchyLevel: resolution.hierarchyLevel,
             found: resolution.found,
+            allValues: resolution.allValues,
+            interpolatedVariables: resolution.interpolatedVariables,
           });
         }
 

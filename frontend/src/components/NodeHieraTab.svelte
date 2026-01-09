@@ -25,6 +25,15 @@
     interpolatedVariables?: Record<string, unknown>;
   }
 
+  interface HierarchyFileInfo {
+    path: string;
+    hierarchyLevel: string;
+    interpolatedPath: string;
+    exists: boolean;
+    canResolve: boolean;
+    unresolvedVariables?: string[];
+  }
+
   interface NodeHieraDataResponse {
     nodeId: string;
     keys: HieraResolutionInfo[];
@@ -32,6 +41,8 @@
     unusedKeys: string[];
     factSource: 'puppetdb' | 'local';
     warnings?: string[];
+    hierarchyFiles: HierarchyFileInfo[];
+    totalKeys: number;
   }
 
   interface Props {
@@ -45,7 +56,8 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let searchQuery = $state('');
-  let filterMode = $state<'all' | 'used' | 'unused'>('all');
+  let filterMode = $state<'all' | 'used' | 'unused'>('used');
+  let classificationMode = $state<'found' | 'classes'>('found');
   let expandedKeys = $state<Set<string>>(new Set());
   let selectedKey = $state<HieraResolutionInfo | null>(null);
 
@@ -75,16 +87,21 @@
   }
 
   // Filter keys based on search and filter mode
-  const filteredKeys = $derived(() => {
-    if (!hieraData) return [];
+  let filteredKeys = $state<HieraResolutionInfo[]>([]);
+
+  $effect(() => {
+    if (!hieraData || !hieraData.keys) {
+      filteredKeys = [];
+      return;
+    }
 
     let keys = hieraData.keys;
 
     // Apply filter mode
     if (filterMode === 'used') {
-      keys = keys.filter(k => hieraData!.usedKeys.includes(k.key));
+      keys = keys.filter(k => hieraData.usedKeys.includes(k.key));
     } else if (filterMode === 'unused') {
-      keys = keys.filter(k => hieraData!.unusedKeys.includes(k.key));
+      keys = keys.filter(k => hieraData.unusedKeys.includes(k.key));
     }
 
     // Apply search filter
@@ -96,8 +113,8 @@
       );
     }
 
-    // Sort alphabetically by key name (use spread to avoid mutating state)
-    return [...keys].sort((a, b) => a.key.localeCompare(b.key));
+    // Sort alphabetically by key name
+    filteredKeys = [...keys].sort((a, b) => a.key.localeCompare(b.key));
   });
 
   // Check if a key is used
@@ -236,6 +253,44 @@
       {/if}
     </div>
 
+    <!-- Hierarchy Files Section -->
+    {#if hieraData.hierarchyFiles && hieraData.hierarchyFiles.length > 0}
+      <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Hierarchy Files</h3>
+        <div class="space-y-2">
+          {#each hieraData.hierarchyFiles as fileInfo}
+            <div class="flex items-center justify-between p-3 rounded-lg border {fileInfo.exists ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50'}">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white">{fileInfo.hierarchyLevel}</span>
+                  {#if fileInfo.exists}
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                      Found
+                    </span>
+                  {:else}
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                      Not Found
+                    </span>
+                  {/if}
+                  {#if !fileInfo.canResolve}
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400">
+                      Unresolved Variables
+                    </span>
+                  {/if}
+                </div>
+                <p class="text-xs font-mono text-gray-500 dark:text-gray-400 mt-1 truncate">{fileInfo.interpolatedPath}</p>
+                {#if fileInfo.unresolvedVariables && fileInfo.unresolvedVariables.length > 0}
+                  <p class="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                    Unresolved: {fileInfo.unresolvedVariables.join(', ')}
+                  </p>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
     <!-- Search and Filter Controls -->
     <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -275,44 +330,85 @@
         </div>
 
         <!-- Filter Buttons -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-600 dark:text-gray-400">Filter:</span>
-          <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
-            <button
-              type="button"
-              class="px-3 py-1.5 text-sm font-medium rounded-l-lg {filterMode === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-              onclick={() => filterMode = 'all'}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 {filterMode === 'used' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-              onclick={() => filterMode = 'used'}
-            >
-              Used
-            </button>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 rounded-r-lg {filterMode === 'unused' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-              onclick={() => filterMode = 'unused'}
-            >
-              Unused
-            </button>
+        <div class="flex items-center gap-4">
+          <!-- Classification Mode Toggle -->
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-600 dark:text-gray-400">Classification:</span>
+            <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
+              <button
+                type="button"
+                class="px-3 py-1.5 text-sm font-medium rounded-l-lg {classificationMode === 'found' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                onclick={() => classificationMode = 'found'}
+              >
+                Found Keys
+              </button>
+              <button
+                type="button"
+                class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 rounded-r-lg {classificationMode === 'classes' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                onclick={() => classificationMode = 'classes'}
+              >
+                Class-Matched
+              </button>
+            </div>
+          </div>
+
+          <!-- Filter Mode Toggle -->
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-gray-600 dark:text-gray-400">Filter:</span>
+            <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
+              <button
+                type="button"
+                class="px-3 py-1.5 text-sm font-medium rounded-l-lg {filterMode === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                onclick={() => filterMode = 'all'}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 {filterMode === 'used' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                onclick={() => filterMode = 'used'}
+              >
+                Used
+              </button>
+              <button
+                type="button"
+                class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 rounded-r-lg {filterMode === 'unused' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                onclick={() => filterMode = 'unused'}
+              >
+                Unused
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {#if searchQuery || filterMode !== 'all'}
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Showing {filteredKeys().length} of {hieraData.keys.length} keys
+          Showing {filteredKeys.length} of {hieraData.keys.length} keys
         </p>
+      {/if}
+
+      <!-- Classification Mode Info -->
+      {#if classificationMode === 'classes'}
+        <div class="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+          <div class="flex items-start gap-2">
+            <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div class="flex-1">
+              <p class="text-sm text-blue-800 dark:text-blue-400">
+                Class-Matched mode shows the same results as Found Keys mode until class detection is fixed.
+                Currently showing all keys with resolved values as "used".
+              </p>
+            </div>
+          </div>
+        </div>
       {/if}
     </div>
 
     <!-- Keys List -->
     <div class="space-y-2">
-      {#if filteredKeys().length === 0}
+      {#if filteredKeys.length === 0}
         <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
           <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -322,7 +418,7 @@
           </p>
         </div>
       {:else}
-        {#each filteredKeys() as keyInfo (keyInfo.key)}
+        {#each filteredKeys as keyInfo (keyInfo.key)}
           <div class="relative rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 {isKeyUsed(keyInfo.key) ? 'border-l-4 border-l-green-500' : ''}">
             <!-- Key Header -->
             <button

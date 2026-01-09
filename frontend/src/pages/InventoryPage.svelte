@@ -18,7 +18,6 @@
     source?: string;
     sources?: string[]; // List of sources this node appears in (Requirement 3.3)
     linked?: boolean; // True if node exists in multiple sources (Requirement 3.4)
-    certificateStatus?: 'signed' | 'requested' | 'revoked';
     lastCheckIn?: string;
   }
 
@@ -41,7 +40,6 @@
   let searchQuery = $state('');
   let transportFilter = $state<string>('all');
   let sourceFilter = $state<string>('all');
-  let certificateStatusFilter = $state<string>('all');
   let sortBy = $state<string>('name');
   let sortOrder = $state<'asc' | 'desc'>('asc');
   let viewMode = $state<'grid' | 'list'>('grid');
@@ -157,10 +155,7 @@
       result = result.filter(node => (node.source || 'bolt') === sourceFilter);
     }
 
-    // Filter by certificate status (Requirement 11.4)
-    if (certificateStatusFilter !== 'all') {
-      result = result.filter(node => node.certificateStatus === certificateStatusFilter);
-    }
+
 
     // Sort nodes (Requirement 11.5)
     result = [...result].sort((a, b) => {
@@ -170,14 +165,6 @@
         case 'name':
           comparison = a.name.localeCompare(b.name);
           break;
-        case 'certificateStatus': {
-          // Sort by certificate status (signed < requested < revoked)
-          const statusOrder = { signed: 1, requested: 2, revoked: 3 };
-          const statusA = a.certificateStatus ? statusOrder[a.certificateStatus] : 999;
-          const statusB = b.certificateStatus ? statusOrder[b.certificateStatus] : 999;
-          comparison = statusA - statusB;
-          break;
-        }
         case 'lastCheckIn': {
           // Sort by last check-in time (most recent first when desc)
           const timeA = a.lastCheckIn ? new Date(a.lastCheckIn).getTime() : 0;
@@ -219,11 +206,6 @@
       const params = new URLSearchParams();
       if (pql) {
         params.append('pql', pql);
-      }
-
-      // Add certificate status filter if set (Requirement 11.4)
-      if (certificateStatusFilter !== 'all') {
-        params.append('certificateStatus', certificateStatusFilter);
       }
 
       // Add sorting parameters (Requirement 11.5)
@@ -373,48 +355,6 @@
     }
   }
 
-  // Get certificate status badge color (Requirement 11.1, 11.2, 11.3)
-  function getCertificateStatusColor(status: string): string {
-    switch (status) {
-      case 'signed':
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'requested':
-        return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'revoked':
-        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
-    }
-  }
-
-  // Get certificate status icon (Requirement 11.1, 11.2, 11.3)
-  function getCertificateStatusIcon(status: string): string {
-    switch (status) {
-      case 'signed':
-        return '✓'; // Checkmark for signed
-      case 'requested':
-        return '⏳'; // Hourglass for pending
-      case 'revoked':
-        return '⚠'; // Warning for revoked
-      default:
-        return '';
-    }
-  }
-
-  // Get certificate status display name
-  function getCertificateStatusDisplayName(status: string): string {
-    switch (status) {
-      case 'signed':
-        return 'Signed';
-      case 'requested':
-        return 'Pending';
-      case 'revoked':
-        return 'Revoked';
-      default:
-        return status.charAt(0).toUpperCase() + status.slice(1);
-    }
-  }
-
   // Toggle sort order
   function toggleSort(field: string): void {
     if (sortBy === field) {
@@ -474,7 +414,7 @@
           PQL Documentation ↗
         </a>
       </div>
-      
+
       <!-- Query Template Selector -->
       <div class="mb-3">
         <label for="pql-template" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
@@ -617,25 +557,6 @@
           </select>
         </div>
 
-        <!-- Certificate Status Filter (Requirement 11.4) -->
-        {#if nodes.some(n => n.source === 'puppetserver')}
-          <div class="flex items-center gap-2">
-            <label for="cert-status-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Certificate:
-            </label>
-            <select
-              id="cert-status-filter"
-              bind:value={certificateStatusFilter}
-              class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-            >
-              <option value="all">All</option>
-              <option value="signed">Signed</option>
-              <option value="requested">Pending</option>
-              <option value="revoked">Revoked</option>
-            </select>
-          </div>
-        {/if}
-
         <!-- Sort By (Requirement 11.5) -->
         <div class="flex items-center gap-2">
           <label for="sort-by" class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -648,9 +569,6 @@
           >
             <option value="name">Name</option>
             <option value="source">Source</option>
-            {#if nodes.some(n => n.certificateStatus)}
-              <option value="certificateStatus">Certificate Status</option>
-            {/if}
             {#if nodes.some(n => n.lastCheckIn)}
               <option value="lastCheckIn">Last Check-in</option>
             {/if}
@@ -725,14 +643,6 @@
               class="group relative rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-500 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-400"
               onclick={() => navigateToNode(node.id)}
             >
-              <!-- Revoked certificate warning banner (Requirement 11.3) -->
-              {#if node.certificateStatus === 'revoked'}
-                <div class="absolute -top-2 -right-2 rounded-full bg-red-600 p-2 shadow-lg" title="Certificate Revoked">
-                  <svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-              {/if}
 
               <div class="mb-3 flex items-start justify-between gap-2">
                 <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400 flex-1 min-w-0">
@@ -763,13 +673,6 @@
                       {getSourceDisplayName(node.source || 'bolt')}
                     </span>
                   {/if}
-                  <!-- Certificate status badge (Requirement 11.1, 11.2) -->
-                  {#if node.certificateStatus}
-                    <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium {getCertificateStatusColor(node.certificateStatus)}">
-                      <span>{getCertificateStatusIcon(node.certificateStatus)}</span>
-                      <span>{getCertificateStatusDisplayName(node.certificateStatus)}</span>
-                    </span>
-                  {/if}
                 </div>
               </div>
               <p class="text-sm text-gray-600 dark:text-gray-400 truncate">
@@ -797,11 +700,6 @@
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Transport
                 </th>
-                {#if nodes.some(n => n.certificateStatus)}
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Certificate
-                  </th>
-                {/if}
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   URI
                 </th>
@@ -813,16 +711,11 @@
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
               {#each filteredNodes as node (node.id)}
                 <tr
-                  class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700 {node.certificateStatus === 'revoked' ? 'bg-red-50 dark:bg-red-900/10' : ''}"
+                  class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
                   onclick={() => navigateToNode(node.id)}
                 >
                   <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
                     <div class="flex items-center gap-2">
-                      {#if node.certificateStatus === 'revoked'}
-                        <svg class="h-5 w-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Certificate Revoked">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      {/if}
                       <span>{node.name}</span>
                       <!-- Multi-source indicator (Requirement 3.4) -->
                       {#if node.linked && node.sources && node.sources.length > 1}
@@ -856,18 +749,6 @@
                       {node.transport}
                     </span>
                   </td>
-                  {#if nodes.some(n => n.certificateStatus)}
-                    <td class="whitespace-nowrap px-6 py-4 text-sm">
-                      {#if node.certificateStatus}
-                        <span class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium {getCertificateStatusColor(node.certificateStatus)}">
-                          <span>{getCertificateStatusIcon(node.certificateStatus)}</span>
-                          <span>{getCertificateStatusDisplayName(node.certificateStatus)}</span>
-                        </span>
-                      {:else}
-                        <span class="text-gray-400 dark:text-gray-600">-</span>
-                      {/if}
-                    </td>
-                  {/if}
                   <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                     {node.uri}
                   </td>

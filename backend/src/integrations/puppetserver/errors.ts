@@ -39,20 +39,7 @@ export class PuppetserverAuthenticationError extends PuppetserverError {
   }
 }
 
-/**
- * Error for certificate operation failures
- */
-export class CertificateOperationError extends PuppetserverError {
-  constructor(
-    message: string,
-    public readonly operation: "sign" | "revoke",
-    public readonly certname: string,
-    details?: unknown,
-  ) {
-    super(message, "CERTIFICATE_OPERATION_ERROR", details);
-    this.name = "CertificateOperationError";
-  }
-}
+
 
 /**
  * Error for catalog compilation failures

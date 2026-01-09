@@ -7,7 +7,6 @@
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import EnvironmentSelector from '../components/EnvironmentSelector.svelte';
   import PuppetReportsListView from '../components/PuppetReportsListView.svelte';
-  import CertificateManagement from '../components/CertificateManagement.svelte';
   import PuppetserverStatus from '../components/PuppetserverStatus.svelte';
   import PuppetDBAdmin from '../components/PuppetDBAdmin.svelte';
   import GlobalHieraTab from '../components/GlobalHieraTab.svelte';
@@ -32,6 +31,12 @@
       out_of_sync: number;
     };
     time: Record<string, number>;
+    events?: {
+      success: number;
+      failure: number;
+      noop?: number;
+      total: number;
+    };
   }
 
   interface Report {
@@ -375,7 +380,15 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           Manage Puppet certificates for all nodes in your infrastructure.
         </p>
-        <CertificateManagement />
+        <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
+          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">Certificate Management</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Certificate management component is not available.
+          </p>
+        </div>
       </div>
     {/if}
 

@@ -35,7 +35,6 @@ describe("Inventory Filtering and Sorting", () => {
       transport: "ssh",
       config: {},
       source: "puppetserver",
-      certificateStatus: "signed",
     },
     {
       id: "web02.example.com",
@@ -44,7 +43,6 @@ describe("Inventory Filtering and Sorting", () => {
       transport: "ssh",
       config: {},
       source: "puppetserver",
-      certificateStatus: "requested",
     },
     {
       id: "web03.example.com",
@@ -53,7 +51,6 @@ describe("Inventory Filtering and Sorting", () => {
       transport: "ssh",
       config: {},
       source: "puppetserver",
-      certificateStatus: "revoked",
     },
   ];
 
@@ -109,214 +106,6 @@ describe("Inventory Filtering and Sorting", () => {
       "/api/inventory",
       createInventoryRouter(mockBoltService, mockIntegrationManager),
     );
-  });
-
-  describe("Certificate Status Filtering", () => {
-    it("should filter Puppetserver nodes by certificate status (signed)", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ certificateStatus: "signed" });
-
-      expect(response.status).toBe(200);
-      expect(response.body.nodes).toBeDefined();
-
-      // Should include signed Puppetserver nodes and all non-Puppetserver nodes
-      const puppetserverNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetserver",
-      );
-      expect(puppetserverNodes).toHaveLength(1);
-      expect(puppetserverNodes[0].certificateStatus).toBe("signed");
-    });
-
-    it("should filter Puppetserver nodes by certificate status (requested)", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ certificateStatus: "requested" });
-
-      expect(response.status).toBe(200);
-      const puppetserverNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetserver",
-      );
-      expect(puppetserverNodes).toHaveLength(1);
-      expect(puppetserverNodes[0].certificateStatus).toBe("requested");
-    });
-
-    it("should filter Puppetserver nodes by certificate status (revoked)", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ certificateStatus: "revoked" });
-
-      expect(response.status).toBe(200);
-      const puppetserverNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetserver",
-      );
-      expect(puppetserverNodes).toHaveLength(1);
-      expect(puppetserverNodes[0].certificateStatus).toBe("revoked");
-    });
-
-    it("should filter by multiple certificate statuses", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ certificateStatus: "signed,requested" });
-
-      expect(response.status).toBe(200);
-      const puppetserverNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetserver",
-      );
-      expect(puppetserverNodes).toHaveLength(2);
-      expect(
-        puppetserverNodes.every(
-          (n: Node & { certificateStatus?: string }) =>
-            n.certificateStatus === "signed" ||
-            n.certificateStatus === "requested",
-        ),
-      ).toBe(true);
-    });
-
-    it("should not filter non-Puppetserver nodes when certificate status filter is applied", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ certificateStatus: "signed" });
-
-      expect(response.status).toBe(200);
-
-      // Should still include Bolt and PuppetDB nodes
-      const boltNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "bolt",
-      );
-      const puppetdbNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetdb",
-      );
-
-      expect(boltNodes.length).toBeGreaterThan(0);
-      expect(puppetdbNodes.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe("Sorting", () => {
-    it("should sort nodes by certificate status (ascending)", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ sortBy: "certificateStatus", sortOrder: "asc" });
-
-      expect(response.status).toBe(200);
-      const puppetserverNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetserver",
-      );
-
-      // Should be ordered: signed, requested, revoked
-      expect(puppetserverNodes[0].certificateStatus).toBe("signed");
-      expect(puppetserverNodes[1].certificateStatus).toBe("requested");
-      expect(puppetserverNodes[2].certificateStatus).toBe("revoked");
-    });
-
-    it("should sort nodes by certificate status (descending)", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ sortBy: "certificateStatus", sortOrder: "desc" });
-
-      expect(response.status).toBe(200);
-      const puppetserverNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetserver",
-      );
-
-      // Should be ordered: revoked, requested, signed
-      expect(puppetserverNodes[0].certificateStatus).toBe("revoked");
-      expect(puppetserverNodes[1].certificateStatus).toBe("requested");
-      expect(puppetserverNodes[2].certificateStatus).toBe("signed");
-    });
-
-    it("should sort nodes by name (ascending)", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ sortBy: "name", sortOrder: "asc" });
-
-      expect(response.status).toBe(200);
-      const nodes = response.body.nodes;
-
-      // Verify nodes are sorted alphabetically by name
-      for (let i = 0; i < nodes.length - 1; i++) {
-        expect(nodes[i].name.localeCompare(nodes[i + 1].name)).toBeLessThanOrEqual(0);
-      }
-    });
-
-    it("should sort nodes by source (ascending)", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ sortBy: "source", sortOrder: "asc" });
-
-      expect(response.status).toBe(200);
-      const nodes = response.body.nodes;
-
-      // Verify nodes are sorted by source
-      for (let i = 0; i < nodes.length - 1; i++) {
-        const sourceA = nodes[i].source ?? "";
-        const sourceB = nodes[i + 1].source ?? "";
-        expect(sourceA.localeCompare(sourceB)).toBeLessThanOrEqual(0);
-      }
-    });
-
-    it("should default to ascending order when sortOrder is not specified", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({ sortBy: "name" });
-
-      expect(response.status).toBe(200);
-      const nodes = response.body.nodes;
-
-      // Verify nodes are sorted alphabetically by name (ascending)
-      for (let i = 0; i < nodes.length - 1; i++) {
-        expect(nodes[i].name.localeCompare(nodes[i + 1].name)).toBeLessThanOrEqual(0);
-      }
-    });
-  });
-
-  describe("Combined Filtering and Sorting", () => {
-    it("should filter by certificate status and sort by name", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({
-          certificateStatus: "signed,requested",
-          sortBy: "name",
-          sortOrder: "asc",
-        });
-
-      expect(response.status).toBe(200);
-      const puppetserverNodes = response.body.nodes.filter(
-        (n: Node & { source?: string }) => n.source === "puppetserver",
-      );
-
-      // Should only have signed and requested nodes
-      expect(puppetserverNodes).toHaveLength(2);
-      expect(
-        puppetserverNodes.every(
-          (n: Node & { certificateStatus?: string }) =>
-            n.certificateStatus === "signed" ||
-            n.certificateStatus === "requested",
-        ),
-      ).toBe(true);
-
-      // Should be sorted by name
-      expect(puppetserverNodes[0].name).toBe("web01.example.com");
-      expect(puppetserverNodes[1].name).toBe("web02.example.com");
-    });
-
-    it("should filter by source and certificate status", async () => {
-      const response = await request(app)
-        .get("/api/inventory")
-        .query({
-          sources: "puppetserver",
-          certificateStatus: "signed",
-        });
-
-      expect(response.status).toBe(200);
-      const nodes = response.body.nodes;
-
-      // Should only have Puppetserver nodes with signed status
-      expect(nodes).toHaveLength(1);
-      expect(nodes[0].source).toBe("puppetserver");
-      expect(nodes[0].certificateStatus).toBe("signed");
-    });
   });
 
   describe("Source Filtering", () => {

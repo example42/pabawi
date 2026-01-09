@@ -60,6 +60,32 @@ PUPPETSERVER_SSL_KEY=/path/to/key.pem
 PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
 ```
 
+**Important**: For certificate management functionality to work properly, your SSL certificate must include the `cli_auth` extension. This extension is required to access the Puppetserver CA API endpoints.
+
+### Step 6: Certificate Setup (SSL Authentication Users)
+
+If you're using SSL certificate authentication and need access to certificate management features, your certificate must have the `cli_auth` extension. You can generate a new certificate with this extension using the provided script:
+
+```bash
+# Generate a new certificate with cli_auth extension
+./scripts/generate-cli-auth-csr.sh
+
+# After running the script, sign the certificate on your Puppetserver:
+puppetserver ca sign --certname pabawi
+
+# Download the signed certificate
+./scripts/generate-cli-auth-csr.sh --download
+```
+
+The script will:
+
+1. Generate a new private key and Certificate Signing Request (CSR) with the cli_auth extension
+2. Submit the CSR to your Puppetserver via the CA API
+3. After you sign it on the Puppetserver, download and install the signed certificate
+4. Update your `.env` file with the new certificate paths
+
+**Note**: The cli_auth extension (OID: 1.3.6.1.4.1.34380.1.3.39) is required for accessing Puppetserver CA API endpoints. Without this extension, certificate management features will fall back to PuppetDB data, which only shows signed certificates that have checked in.
+
 ### Advanced Configuration
 
 ```bash

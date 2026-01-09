@@ -305,26 +305,6 @@ describe('Comprehensive Integration Test Suite', () => {
       await expect(puppetserverService.initialize(config)).rejects.toThrow();
     });
 
-    it('should have certificate management methods', async () => {
-      const puppetserverService = new PuppetserverService();
-
-      const config: IntegrationConfig = {
-        enabled: true,
-        name: 'puppetserver',
-        type: 'information',
-        config: {
-          serverUrl: 'https://puppet.example.com',
-        },
-      };
-
-      await puppetserverService.initialize(config);
-
-      expect(puppetserverService.listCertificates).toBeDefined();
-      expect(puppetserverService.getCertificate).toBeDefined();
-      expect(puppetserverService.signCertificate).toBeDefined();
-      expect(puppetserverService.revokeCertificate).toBeDefined();
-    });
-
     it('should have inventory methods', async () => {
       const puppetserverService = new PuppetserverService();
 
@@ -482,8 +462,7 @@ describe('Comprehensive Integration Test Suite', () => {
           transport: 'ssh',
           config: {},
           source: 'puppetserver',
-          certificateStatus: 'signed',
-        } as Node & { source: string; certificateStatus: string },
+        } as Node & { source: string },
         {
           id: 'web01.example.com',
           name: 'web01.example.com',
@@ -536,33 +515,6 @@ describe('Comprehensive Integration Test Suite', () => {
       expect(linkedNodes).toHaveLength(2);
       expect(linkedNodes[0].linked).toBe(false);
       expect(linkedNodes[1].linked).toBe(false);
-    });
-
-    it('should merge certificate status from puppetserver source', () => {
-      const nodes: Node[] = [
-        {
-          id: 'web01.example.com',
-          name: 'web01.example.com',
-          uri: 'ssh://web01.example.com',
-          transport: 'ssh',
-          config: {},
-          source: 'bolt',
-        } as Node & { source: string },
-        {
-          id: 'web01.example.com',
-          name: 'web01.example.com',
-          uri: 'ssh://web01.example.com',
-          transport: 'ssh',
-          config: {},
-          source: 'puppetserver',
-          certificateStatus: 'requested',
-        } as Node & { source: string; certificateStatus: string },
-      ];
-
-      const linkedNodes = nodeLinkingService.linkNodes(nodes);
-
-      expect(linkedNodes).toHaveLength(1);
-      expect(linkedNodes[0].certificateStatus).toBe('requested');
     });
 
     it('should merge lastCheckIn using most recent timestamp', () => {

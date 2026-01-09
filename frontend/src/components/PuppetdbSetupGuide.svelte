@@ -106,25 +106,49 @@ PUPPETDB_PRIORITY=10`;
         </div>
       {:else}
         <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Use existing SSL Certificates</h4>
-          <p class="text-gray-700 dark:text-gray-300 mb-3">If Pabawi runs on a node managed by Puppet, you can use the local existing puppet agent certificates:</p>
-          <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
-            <div>CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
-            <div>Cert: /etc/puppetlabs/puppet/ssl/certs/hostname.pem</div>
-            <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/hostname.pem</div>
-          </div>
+          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Certificate Generation Options</h4>
+          <p class="text-gray-700 dark:text-gray-300 mb-3">The certname used for PuppetDB integration can be either manually generated on the Puppetserver or generated via the provided script. Note that the same certname can be used for both Puppetserver and PuppetDB integrations for simplicity.</p>
 
-          <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Generate dedicated SSL Certificates</h4>
-          <p class="text-gray-700 dark:text-gray-300 mb-3">Alternatively, you can
-          generate on your Puppet server a dedicated certificate to use for Pabawi. Run, as root on the Puppet server:</p>
-          <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
-            pupperserver ca generate --certname pabawi
-          </div>
-          <p class="text-gray-700 dark:text-gray-300 mb-3">The command generates the following files which should be copied on your Pabawi host (in the paths you configure for PUPPETDB_SSL_CA , PUPPETDB_SSL_CERT and PUPPETDB_SSL_KEY settings):</p>
-          <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
-            <div>CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
-            <div>Cert: /etc/puppetlabs/puppet/ssl/certs/pabawi.pem</div>
-            <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/pabawi.pem</div>
+          <div class="space-y-4">
+            <div>
+              <h5 class="text-md font-medium text-gray-900 dark:text-white mb-2">Option 1: Manual Certificate Generation on Puppetserver</h5>
+              <p class="text-gray-700 dark:text-gray-300 mb-2">Generate the certificate directly on the Puppetserver and copy it locally:</p>
+              <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+                <div># On the Puppetserver</div>
+                <div>puppetserver ca generate --certname pabawi</div>
+                <div></div>
+                <div># Copy the generated files to your local machine:</div>
+                <div># CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
+                <div># Cert: /etc/puppetlabs/puppet/ssl/certs/pabawi.pem</div>
+                <div># Key: /etc/puppetlabs/puppet/ssl/private_keys/pabawi.pem</div>
+              </div>
+            </div>
+
+            <div>
+              <h5 class="text-md font-medium text-gray-900 dark:text-white mb-2">Option 2: Automated Certificate Generation Script</h5>
+              <p class="text-gray-700 dark:text-gray-300 mb-2">Use the provided script to generate a CSR and manage the certificate lifecycle:</p>
+              <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+                <div># Generate and submit CSR</div>
+                <div>./scripts/generate-pabawi-cert.sh</div>
+                <div></div>
+                <div># After running the script, sign the certificate on Puppetserver:</div>
+                <div>puppetserver ca sign --certname pabawi</div>
+                <div></div>
+                <div># Download the signed certificate</div>
+                <div>./scripts/generate-pabawi-cert.sh --download</div>
+              </div>
+              <p class="text-gray-700 dark:text-gray-300 mt-2 text-sm">The script automatically updates your .env file with the certificate paths.</p>
+            </div>
+
+            <div>
+              <h5 class="text-md font-medium text-gray-900 dark:text-white mb-2">Option 3: Use Existing Puppet Agent Certificates</h5>
+              <p class="text-gray-700 dark:text-gray-300 mb-2">If Pabawi runs on a node managed by Puppet, you can use the existing puppet agent certificates:</p>
+              <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+                <div>CA: /etc/puppetlabs/puppet/ssl/certs/ca.pem</div>
+                <div>Cert: /etc/puppetlabs/puppet/ssl/certs/hostname.pem</div>
+                <div>Key: /etc/puppetlabs/puppet/ssl/private_keys/hostname.pem</div>
+              </div>
+            </div>
           </div>
         </div>
       {/if}

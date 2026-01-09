@@ -144,7 +144,6 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 
 ## Available Features After Setup
 
-- **Certificate Management**: Sign, revoke, and manage node certificates
 - **Node Monitoring**: Track node status and last check-in times
 - **Catalog Operations**: Compile and compare catalogs across environments
 - **Environment Management**: Deploy and manage Puppet environments
@@ -154,7 +153,6 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
 
 After successful setup:
 
-1. Navigate to **Certificates** page to manage node certificates
-2. Use **Inventory** page to view nodes from Puppetserver
-3. Explore **Node Details** to view status, facts, and catalogs
-4. Configure **Environment Deployments** for code management
+1. Use **Inventory** page to view nodes from Puppetserver
+2. Explore **Node Details** to view status, facts, and catalogs
+3. Configure **Environment Deployments** for code management

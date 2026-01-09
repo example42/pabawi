@@ -33,8 +33,7 @@ describe("NodeLinkingService", () => {
           transport: "ssh",
           config: {},
           source: "puppetserver",
-          certificateStatus: "signed",
-        } as Node & { source: string; certificateStatus: string },
+        } as Node & { source: string },
         {
           id: "web01.example.com",
           name: "web01.example.com",
@@ -68,9 +67,6 @@ describe("NodeLinkingService", () => {
 
       // Requirement 3.4: Show multi-source indicators
       expect(linkedNode.linked).toBe(true);
-
-      // Should preserve certificate status from puppetserver
-      expect(linkedNode.certificateStatus).toBe("signed");
     });
 
     it("should not link nodes with different certnames", () => {
@@ -143,14 +139,13 @@ describe("NodeLinkingService", () => {
           transport: "ssh",
           config: {},
           source: "puppetserver",
-          certificateStatus: "requested",
-        } as Node & { source: string; certificateStatus: string },
+        } as Node & { source: string },
       ];
 
       const linkedNodes = service.linkNodes(nodes);
 
       expect(linkedNodes).toHaveLength(1);
-      expect(linkedNodes[0].certificateStatus).toBe("requested");
+      expect(linkedNodes[0].sources).toContain("puppetserver");
     });
 
     it("should merge lastCheckIn using most recent timestamp", () => {

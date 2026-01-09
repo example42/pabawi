@@ -126,11 +126,6 @@ This document provides a quick reference table of all Pabawi API endpoints.
 
 ## Puppetserver Endpoints
 
-### Puppetserver Certificates
-
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/integrations/puppetserver/certificates` | List all certificates | Certificate |
 | GET | `/api/integrations/puppetserver/certificates/:certname` | Get certificate details | Certificate |
 | POST | `/api/integrations/puppetserver/certificates/:certname/sign` | Sign certificate | Certificate |
 | DELETE | `/api/integrations/puppetserver/certificates/:certname` | Revoke certificate | Certificate |

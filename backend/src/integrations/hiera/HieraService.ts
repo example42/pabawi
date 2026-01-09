@@ -9,7 +9,10 @@
  * Requirements: 12.2, 12.3, 12.4 - Catalog compilation mode with fallback
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import type { IntegrationManager } from "../IntegrationManager";
+import type { Catalog } from "../puppetdb/types";
 import { HieraParser } from "./HieraParser";
 import { HieraScanner } from "./HieraScanner";
 import { HieraResolver } from "./HieraResolver";
@@ -28,6 +31,8 @@ import type {
   HieraCacheConfig,
   FactSourceConfig,
   CatalogCompilationConfig,
+  HierarchyFileInfo,
+  HierarchyLevel,
 } from "./types";
 
 /**
@@ -89,9 +94,16 @@ export class HieraService {
 
     // Initialize components
     this.parser = new HieraParser(config.controlRepoPath);
+
+    // Parse hiera.yaml to get the actual datadir configuration
+    const hieraParseResult = this.parser.parse(config.hieraConfigPath);
+    const actualDatadir = hieraParseResult.success && hieraParseResult.config?.defaults?.datadir
+      ? hieraParseResult.config.defaults.datadir
+      : config.hieradataPath ?? "data";
+
     this.scanner = new HieraScanner(
       config.controlRepoPath,
-      config.hieradataPath ?? "data"
+      actualDatadir
     );
     this.resolver = new HieraResolver(config.controlRepoPath);
     this.factService = new FactService(integrationManager, config.factSources);
@@ -131,13 +143,25 @@ export class HieraService {
 
     this.hieraConfig = parseResult.config;
 
+    // Check if the datadir from hiera.yaml differs from what the scanner is using
+    const configuredDatadir = this.hieraConfig.defaults?.datadir;
+    if (configuredDatadir) {
+      // Get all unique datadirs from the hierarchy
+      const allDatadirs = this.getAllDatadirs(this.hieraConfig);
+
+      // Always use scanMultipleDatadirs to handle all datadirs properly
+      await this.scanner.scanMultipleDatadirs(allDatadirs);
+      this.log(`Updated scanner to use datadirs: ${allDatadirs.join(', ')}`);
+    } else {
+      // Perform initial scan with the fallback path
+      await this.scanner.scan();
+      this.log(`Using fallback hieradata path: ${this.config.hieradataPath ?? "data"}`);
+    }
+
     // Cache the parsed config
     if (this.cacheEnabled) {
       this.hieraConfigCache = this.createCacheEntry(this.hieraConfig);
     }
-
-    // Perform initial scan
-    await this.scanner.scan();
 
     // Set up file watching for cache invalidation
     this.scanner.watchForChanges((changedFiles) => {
@@ -172,8 +196,8 @@ export class HieraService {
       return this.keyIndexCache.value;
     }
 
-    // Scan for keys
-    const keyIndex = await this.scanner.scan();
+    // Get the current key index from the scanner (don't rescan)
+    const keyIndex = this.scanner.getKeyIndex();
 
     // Update cache
     if (this.cacheEnabled) {
@@ -257,7 +281,7 @@ export class HieraService {
     if (!this.hieraConfig) {
       throw new Error("Hiera configuration not loaded");
     }
-    
+
     const resolution = await this.resolver.resolve(
       key,
       facts,
@@ -358,7 +382,7 @@ export class HieraService {
       if (!this.hieraConfig) {
         throw new Error("Hiera configuration not loaded");
       }
-      
+
       const resolution = await this.resolver.resolve(
         keyName,
         facts,
@@ -414,12 +438,16 @@ export class HieraService {
     // Classify keys as used/unused based on catalog analysis
     const { usedKeys, unusedKeys } = await this.classifyKeyUsage(nodeId, keys);
 
+    // Generate hierarchy file information
+    const hierarchyFiles = await this.getHierarchyFiles(nodeId, facts);
+
     const nodeData: NodeHieraData = {
       nodeId,
       facts,
       keys,
       usedKeys,
       unusedKeys,
+      hierarchyFiles,
     };
 
     // Update cache
@@ -453,17 +481,24 @@ export class HieraService {
     // Try to get included classes from PuppetDB catalog
     const includedClasses = await this.getIncludedClasses(nodeId);
 
-    // If no catalog data available, mark all keys as unused
+    // If no catalog data available, classify based on whether keys are found
     if (includedClasses.length === 0) {
-      for (const keyName of keys.keys()) {
-        unusedKeys.add(keyName);
+      this.log(`No catalog classes found for node ${nodeId}, falling back to resolution-based classification`);
+      for (const [keyName, resolution] of keys) {
+        if (resolution.found) {
+          usedKeys.add(keyName);
+        } else {
+          unusedKeys.add(keyName);
+        }
       }
+      this.log(`Fallback classification: ${usedKeys.size} used keys, ${unusedKeys.size} unused keys`);
       return { usedKeys, unusedKeys };
     }
 
     // Build class prefixes for matching
     // e.g., "profile::nginx" -> ["profile::nginx::", "profile::nginx"]
     const classPrefixes = this.buildClassPrefixes(includedClasses);
+    this.log(`Built ${classPrefixes.size} class prefixes from ${includedClasses.length} classes`);
 
     // Classify each key
     for (const keyName of keys.keys()) {
@@ -474,6 +509,7 @@ export class HieraService {
       }
     }
 
+    this.log(`Class-based classification: ${usedKeys.size} used keys, ${unusedKeys.size} unused keys`);
     return { usedKeys, unusedKeys };
   }
 
@@ -495,18 +531,18 @@ export class HieraService {
         return [];
       }
 
-      // Get catalog data
-      const catalogData = await puppetdb.getNodeData(nodeId, "catalog");
+      // Use the same method as Managed Resources: call getNodeCatalog directly
+      // This ensures we get the properly transformed catalog data
+      const catalog = await (puppetdb as any).getNodeCatalog(nodeId) as Catalog | null;
 
-      if (!catalogData || typeof catalogData !== "object") {
+      if (!catalog) {
         this.log(`No catalog data available for node: ${nodeId}`);
         return [];
       }
 
       // Extract class names from catalog resources
-      const catalog = catalogData as { resources?: { type: string; title: string }[] };
-
       if (!catalog.resources || !Array.isArray(catalog.resources)) {
+        this.log(`Catalog for node ${nodeId} has no resources array`);
         return [];
       }
 
@@ -516,6 +552,13 @@ export class HieraService {
         .map(resource => resource.title.toLowerCase());
 
       this.log(`Found ${String(classes.length)} classes in catalog for node: ${nodeId}`);
+
+      // Log some example classes for debugging
+      if (classes.length > 0) {
+        const exampleClasses = classes.slice(0, 5).join(", ");
+        this.log(`Example classes: ${exampleClasses}`);
+      }
+
       return classes;
     } catch (error) {
       this.log(`Failed to get catalog for key usage analysis: ${error instanceof Error ? error.message : String(error)}`);
@@ -659,6 +702,125 @@ export class HieraService {
     return groups;
   }
 
+  /**
+   * Get hierarchy files information for a node
+   *
+   * Generates information about all files in the Hiera hierarchy for troubleshooting,
+   * including which files exist, which can be resolved, and which variables are unresolved.
+   *
+   * @param nodeId - Node identifier
+   * @param facts - Node facts for interpolation
+   * @returns Array of hierarchy file information
+   */
+  private async getHierarchyFiles(nodeId: string, facts: Facts): Promise<HierarchyFileInfo[]> {
+    if (!this.hieraConfig) {
+      return [];
+    }
+
+    const hierarchyFiles: HierarchyFileInfo[] = [];
+
+    // Get catalog variables if catalog compilation is enabled
+    let catalogVariables: Record<string, unknown> = {};
+    if (this.catalogCompiler) {
+      try {
+        const catalogResult = await this.catalogCompiler.compileCatalog(nodeId, "production", facts);
+        if (catalogResult.success && catalogResult.variables) {
+          catalogVariables = catalogResult.variables;
+        }
+      } catch (error) {
+        this.log(`Failed to get catalog variables for ${nodeId}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
+    // Process each hierarchy level
+    for (const level of this.hieraConfig.hierarchy) {
+      const datadir = level.datadir ?? this.hieraConfig.defaults?.datadir ?? "data";
+      const paths = this.getLevelPaths(level);
+
+      for (const pathTemplate of paths) {
+        try {
+          // Try to interpolate the path
+          const interpolationResult = this.parser.interpolatePathWithDetails(
+            pathTemplate,
+            facts,
+            catalogVariables
+          );
+
+          const fullPath = this.resolvePath(path.join(datadir, interpolationResult.interpolatedPath));
+          const exists = fs.existsSync(fullPath);
+
+          hierarchyFiles.push({
+            path: pathTemplate,
+            hierarchyLevel: level.name,
+            interpolatedPath: path.join(datadir, interpolationResult.interpolatedPath),
+            exists,
+            canResolve: interpolationResult.canResolve,
+            unresolvedVariables: interpolationResult.unresolvedVariables,
+          });
+        } catch (error) {
+          // If interpolation fails completely, still show the template
+          hierarchyFiles.push({
+            path: pathTemplate,
+            hierarchyLevel: level.name,
+            interpolatedPath: `${datadir}/${pathTemplate}`,
+            exists: false,
+            canResolve: false,
+            unresolvedVariables: this.extractVariablesFromPath(pathTemplate),
+          });
+        }
+      }
+    }
+
+    return hierarchyFiles;
+  }
+
+  /**
+   * Get all paths from a hierarchy level
+   */
+  private getLevelPaths(level: HierarchyLevel): string[] {
+    const paths: string[] = [];
+
+    if (level.path) {
+      paths.push(level.path);
+    }
+    if (level.paths) {
+      paths.push(...level.paths);
+    }
+    if (level.glob) {
+      paths.push(level.glob);
+    }
+    if (level.globs) {
+      paths.push(...level.globs);
+    }
+
+    return paths;
+  }
+
+  /**
+   * Extract variable names from a path template
+   */
+  private extractVariablesFromPath(pathTemplate: string): string[] {
+    const variables: string[] = [];
+    const regex = /%\{([^}]+)\}/g;
+    let match;
+
+    while ((match = regex.exec(pathTemplate)) !== null) {
+      variables.push(match[1]);
+    }
+
+    return variables;
+  }
+
+  /**
+   * Resolve a relative path to an absolute path
+   */
+  private resolvePath(relativePath: string): string {
+    if (path.isAbsolute(relativePath)) {
+      return relativePath;
+    }
+    return path.resolve(this.config.controlRepoPath, relativePath);
+  }
+
   // ============================================================================
   // Cache Management Methods
   // ============================================================================
@@ -719,13 +881,25 @@ export class HieraService {
 
     this.hieraConfig = parseResult.config;
 
+    // Check if the datadir from hiera.yaml differs from what the scanner is using
+    const configuredDatadir = this.hieraConfig.defaults?.datadir;
+    if (configuredDatadir) {
+      // Get all unique datadirs from the hierarchy
+      const allDatadirs = this.getAllDatadirs(this.hieraConfig);
+
+      // Always use scanMultipleDatadirs to handle all datadirs properly
+      await this.scanner.scanMultipleDatadirs(allDatadirs);
+      this.log(`Updated scanner to use datadirs: ${allDatadirs.join(', ')}`);
+    } else {
+      // Rescan with the current path
+      await this.scanner.scan();
+      this.log(`Using fallback hieradata path: ${this.config.hieradataPath ?? "data"}`);
+    }
+
     // Cache the parsed config
     if (this.cacheEnabled) {
       this.hieraConfigCache = this.createCacheEntry(this.hieraConfig);
     }
-
-    // Rescan hieradata
-    await this.scanner.scan();
 
     this.log("Control repository reloaded successfully");
   }
@@ -805,6 +979,29 @@ export class HieraService {
     if (!this.initialized) {
       throw new Error("HieraService is not initialized. Call initialize() first.");
     }
+  }
+
+  /**
+   * Get all unique datadirs from the hiera configuration
+   *
+   * @param config - Hiera configuration
+   * @returns Array of unique datadir paths
+   */
+  private getAllDatadirs(config: HieraConfig): string[] {
+    const datadirs = new Set<string>();
+    const defaultDatadir = config.defaults?.datadir ?? this.config.hieradataPath ?? "data";
+
+    // Add the default datadir
+    datadirs.add(defaultDatadir);
+
+    // Add level-specific datadirs
+    for (const level of config.hierarchy) {
+      if (level.datadir) {
+        datadirs.add(level.datadir);
+      }
+    }
+
+    return Array.from(datadirs);
   }
 
   /**
