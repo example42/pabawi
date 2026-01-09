@@ -26,7 +26,7 @@ interface PqlExpression {
   conditions: PqlCondition | null;
 }
 
-type PqlCondition = 
+type PqlCondition =
   | [string, string, string | number | boolean] // Binary operation
   | [string, PqlCondition] // Unary operation
   | [string, PqlCondition, PqlCondition]; // Binary logical operation
@@ -267,26 +267,26 @@ export class PuppetDBService
 
   /**
    * Parse PQL string format to JSON format for the appropriate endpoint
-   * 
+   *
    * @param pqlQuery - PQL query string
    * @returns Object with endpoint and JSON query, or null if conversion not supported
    */
   private parsePqlToJson(pqlQuery: string): { endpoint: string; query: string | null } | null {
     const trimmed = pqlQuery.trim();
-    
+
     try {
       // Parse the PQL query structure
       const parsed = this.parsePqlExpression(trimmed);
       if (!parsed) {
         return null;
       }
-      
+
       // Convert parsed structure to endpoint and JSON query
       const result = this.convertParsedToJson(parsed);
       if (!result) {
         return null;
       }
-      
+
       return {
         endpoint: result.endpoint,
         query: result.query ? JSON.stringify(result.query) : null
@@ -303,24 +303,24 @@ export class PuppetDBService
   private parsePqlExpression(query: string): PqlExpression | null {
     // Remove extra whitespace
     query = query.replace(/\s+/g, ' ').trim();
-    
+
     // Match: entity[fields] { conditions }
     const mainMatch = /^(\w+)\[([^\]]+)\]\s*(?:\{\s*(.+?)\s*\})?$/.exec(query);
     if (!mainMatch) {
       return null;
     }
-    
+
     const [, entity, fields, conditions] = mainMatch;
-    
+
     // Parse fields (comma-separated)
     const fieldList = fields.split(',').map(f => f.trim());
-    
+
     // Parse conditions if present
     let conditionAst: PqlCondition | null = null;
     if (conditions) {
       conditionAst = this.parseConditions(conditions);
     }
-    
+
     return {
       entity,
       fields: fieldList,
@@ -334,7 +334,7 @@ export class PuppetDBService
   private parseConditions(conditions: string): PqlCondition | null {
     // Handle parentheses first
     conditions = conditions.trim();
-    
+
     // Simple tokenizer for conditions
     const tokens = this.tokenizeConditions(conditions);
     return this.parseConditionTokens(tokens);
@@ -348,7 +348,7 @@ export class PuppetDBService
     let current = '';
     let inQuotes = false;
     let quoteChar = '';
-    
+
     for (const char of conditions) {
       if (!inQuotes && (char === '"' || char === "'")) {
         inQuotes = true;
@@ -366,11 +366,11 @@ export class PuppetDBService
         current += char;
       }
     }
-    
+
     if (current.trim()) {
       tokens.push(current.trim());
     }
-    
+
     return tokens;
   }
 
@@ -381,22 +381,22 @@ export class PuppetDBService
     if (tokens.length === 0) {
       return null;
     }
-    
+
     // Handle simple binary operations: field operator value
     if (tokens.length === 3) {
       const [field, operator, value] = tokens;
       return this.createBinaryOperation(field, operator, this.parseValue(value));
     }
-    
+
     // Handle "field is null" / "field is not null"
     if (tokens.length === 3 && tokens[1] === 'is' && tokens[2] === 'null') {
       return ['null?', tokens[0], true];
     }
-    
+
     if (tokens.length === 4 && tokens[1] === 'is' && tokens[2] === 'not' && tokens[3] === 'null') {
       return ['not', ['null?', tokens[0], true]];
     }
-    
+
     // Handle logical operators (and, or)
     for (let i = 1; i < tokens.length - 1; i++) {
       if (tokens[i] === 'and' || tokens[i] === 'or') {
@@ -407,7 +407,7 @@ export class PuppetDBService
         }
       }
     }
-    
+
     // If we can't parse it, return null
     return null;
   }
@@ -436,24 +436,24 @@ export class PuppetDBService
    */
   private parseValue(value: string): string | number | boolean {
     // Remove quotes from strings
-    if ((value.startsWith('"') && value.endsWith('"')) || 
+    if ((value.startsWith('"') && value.endsWith('"')) ||
         (value.startsWith("'") && value.endsWith("'"))) {
       return value.slice(1, -1);
     }
-    
+
     // Parse numbers
     if (/^\d+$/.test(value)) {
       return parseInt(value, 10);
     }
-    
+
     if (/^\d+\.\d+$/.test(value)) {
       return parseFloat(value);
     }
-    
+
     // Parse booleans
     if (value === 'true') return true;
     if (value === 'false') return false;
-    
+
     // Return as string if nothing else matches
     return value;
   }
@@ -464,7 +464,7 @@ export class PuppetDBService
   private convertParsedToJson(parsed: PqlExpression): PqlParseResult | null {
     // Determine the correct endpoint based on entity type
     let endpoint: string;
-    
+
     switch (parsed.entity) {
       case 'nodes':
         endpoint = 'pdb/query/v4/nodes';
@@ -485,10 +485,10 @@ export class PuppetDBService
         this.log(`Unsupported entity type: ${parsed.entity}`, "warn");
         return null;
     }
-    
+
     // If no conditions, return null query (fetch all)
     const query = parsed.conditions ?? null;
-    
+
     return { endpoint, query };
   }
 
@@ -532,7 +532,7 @@ export class PuppetDBService
         // Convert PQL string to JSON format if needed
         let endpointToUse = "pdb/query/v4/nodes";
         let queryToUse = pqlQuery;
-        
+
         if (pqlQuery && !pqlQuery.trim().startsWith('[')) {
           // This is a PQL string, try to convert to JSON
           const pqlResult = this.parsePqlToJson(pqlQuery);
@@ -550,7 +550,7 @@ export class PuppetDBService
             return { results: [], endpoint: endpointToUse }; // Return empty array for unsupported queries
           }
         }
-        
+
         this.log(`Using endpoint: ${endpointToUse} for query: ${queryToUse ?? 'none'}`);
         const queryResult = await client.query(endpointToUse, queryToUse);
         this.log(`Query result type: ${typeof queryResult}, isArray: ${String(Array.isArray(queryResult))}`);
@@ -562,7 +562,7 @@ export class PuppetDBService
         } else {
           this.log(`Non-array result: ${JSON.stringify(queryResult).substring(0, 200)}...`);
         }
-        
+
         return { results: queryResult, endpoint: endpointToUse };
       });
 
@@ -1358,7 +1358,7 @@ export class PuppetDBService
   private transformInventoryItem(item: InventoryItem): Node {
     // Inventory items have certname and facts/resources
     const certname = item.certname;
-    
+
     return {
       id: certname,
       name: certname,
@@ -2147,14 +2147,14 @@ export class PuppetDBService
       // PQL string format validation
       // Check if it starts with a valid entity
       const validEntities = [
-        'nodes', 'facts', 'resources', 'reports', 'catalogs', 
+        'nodes', 'facts', 'resources', 'reports', 'catalogs',
         'edges', 'events', 'inventory', 'fact-contents'
       ];
-      
-      const startsWithValidEntity = validEntities.some(entity => 
+
+      const startsWithValidEntity = validEntities.some(entity =>
         trimmedQuery.startsWith(entity)
       );
-      
+
       if (!startsWithValidEntity) {
         throw new PuppetDBQueryError(
           `PQL query must start with a valid entity: ${validEntities.join(', ')}`,
@@ -2167,7 +2167,7 @@ export class PuppetDBService
       // Check for balanced brackets if they exist
       const openBrackets = (trimmedQuery.match(/\[/g) ?? []).length;
       const closeBrackets = (trimmedQuery.match(/\]/g) ?? []).length;
-      
+
       if (openBrackets !== closeBrackets) {
         throw new PuppetDBQueryError(
           "PQL query has unbalanced brackets",
@@ -2179,7 +2179,7 @@ export class PuppetDBService
       // Check for balanced braces if they exist
       const openBraces = (trimmedQuery.match(/\{/g) ?? []).length;
       const closeBraces = (trimmedQuery.match(/\}/g) ?? []).length;
-      
+
       if (openBraces !== closeBraces) {
         throw new PuppetDBQueryError(
           "PQL query has unbalanced braces",

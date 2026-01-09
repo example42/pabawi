@@ -517,6 +517,50 @@ export class HieraParser {
   }
 
   /**
+   * Interpolate variables in a path template with detailed information
+   *
+   * Returns both the interpolated path and information about which variables
+   * could not be resolved, useful for troubleshooting.
+   *
+   * @param template - Path template with variables
+   * @param facts - Node facts for interpolation
+   * @param catalogVariables - Optional variables from catalog compilation
+   * @returns Object with interpolated path and resolution details
+   */
+  interpolatePathWithDetails(
+    template: string,
+    facts: Facts,
+    catalogVariables: Record<string, unknown> = {}
+  ): {
+    interpolatedPath: string;
+    canResolve: boolean;
+    unresolvedVariables: string[];
+  } {
+    const variablePattern = /%\{([^}]+)\}/g;
+    const unresolvedVariables: string[] = [];
+    let canResolve = true;
+
+    const interpolatedPath = template.replace(variablePattern, (match, variable: string) => {
+      const trimmedVariable = variable.trim();
+      const value = this.resolveVariable(trimmedVariable, facts, catalogVariables);
+
+      if (value !== undefined) {
+        return typeof value === 'string' ? value : JSON.stringify(value);
+      } else {
+        unresolvedVariables.push(trimmedVariable);
+        canResolve = false;
+        return match; // Keep the original placeholder
+      }
+    });
+
+    return {
+      interpolatedPath,
+      canResolve,
+      unresolvedVariables,
+    };
+  }
+
+  /**
    * Resolve a variable reference to its value
    *
    * @param variable - Variable reference (e.g., "facts.os.family", "::hostname")

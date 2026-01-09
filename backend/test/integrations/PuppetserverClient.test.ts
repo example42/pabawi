@@ -105,7 +105,7 @@ describe('PuppetserverClient', () => {
       });
 
       try {
-        await badClient.getCertificates();
+        await badClient.getEnvironments();
         expect.fail('Should have thrown an error');
       } catch (error) {
         expect(error).toBeInstanceOf(PuppetserverConnectionError);
@@ -125,7 +125,7 @@ describe('PuppetserverClient', () => {
       });
 
       try {
-        await timeoutClient.getCertificates();
+        await timeoutClient.getEnvironments();
         expect.fail('Should have thrown an error');
       } catch (error) {
         // Should be either timeout or connection error
@@ -183,13 +183,6 @@ describe('PuppetserverClient', () => {
   });
 
   describe('API Methods', () => {
-    it('should have certificate API methods', () => {
-      expect(typeof client.getCertificates).toBe('function');
-      expect(typeof client.getCertificate).toBe('function');
-      expect(typeof client.signCertificate).toBe('function');
-      expect(typeof client.revokeCertificate).toBe('function');
-    });
-
     it('should have status API methods', () => {
       expect(typeof client.getStatus).toBe('function');
     });
@@ -216,29 +209,5 @@ describe('PuppetserverClient', () => {
     });
   });
 
-  describe('Certificate API Validation', () => {
-    it('should reject empty certname in getCertificate', async () => {
-      await expect(client.getCertificate('')).rejects.toThrow('Certificate name is required');
-    });
 
-    it('should reject whitespace-only certname in getCertificate', async () => {
-      await expect(client.getCertificate('   ')).rejects.toThrow('Certificate name is required');
-    });
-
-    it('should reject empty certname in signCertificate', async () => {
-      await expect(client.signCertificate('')).rejects.toThrow('Certificate name is required');
-    });
-
-    it('should reject whitespace-only certname in signCertificate', async () => {
-      await expect(client.signCertificate('   ')).rejects.toThrow('Certificate name is required');
-    });
-
-    it('should reject empty certname in revokeCertificate', async () => {
-      await expect(client.revokeCertificate('')).rejects.toThrow('Certificate name is required');
-    });
-
-    it('should reject whitespace-only certname in revokeCertificate', async () => {
-      await expect(client.revokeCertificate('   ')).rejects.toThrow('Certificate name is required');
-    });
-  });
 });

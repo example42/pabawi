@@ -372,8 +372,8 @@ export class FactService {
 
     return {
       hostname: typeof networking?.hostname === "string" ? networking.hostname : "Unknown",
-      interfaces: typeof networking?.interfaces === "object" && networking.interfaces !== null && !Array.isArray(networking.interfaces) 
-        ? networking.interfaces as Record<string, unknown> 
+      interfaces: typeof networking?.interfaces === "object" && networking.interfaces !== null && !Array.isArray(networking.interfaces)
+        ? networking.interfaces as Record<string, unknown>
         : {},
     };
   }

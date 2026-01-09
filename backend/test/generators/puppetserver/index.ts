@@ -6,33 +6,13 @@
 
 import fc from 'fast-check';
 import type {
-  Certificate,
-  CertificateStatus,
   NodeStatus,
   Environment,
   PuppetserverConfig,
   PuppetserverSSLConfig,
 } from '../../../src/integrations/puppetserver/types';
 
-/**
- * Generate a valid certificate status
- */
-export const certificateStatusArbitrary = (): fc.Arbitrary<CertificateStatus> =>
-  fc.constantFrom('signed', 'requested', 'revoked');
 
-/**
- * Generate a valid certificate
- */
-export const certificateArbitrary = (): fc.Arbitrary<Certificate> =>
-  fc.record({
-    certname: fc.domain(),
-    status: certificateStatusArbitrary(),
-    fingerprint: fc.hexaString({ minLength: 64, maxLength: 64 }),
-    dns_alt_names: fc.option(fc.array(fc.domain(), { minLength: 0, maxLength: 5 })),
-    authorization_extensions: fc.option(fc.dictionary(fc.string(), fc.anything())),
-    not_before: fc.option(fc.date().map((d) => d.toISOString())),
-    not_after: fc.option(fc.date().map((d) => d.toISOString())),
-  });
 
 /**
  * Generate a valid node status

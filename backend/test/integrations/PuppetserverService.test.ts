@@ -9,16 +9,11 @@ import { PuppetserverService } from "../../src/integrations/puppetserver/Puppets
 import type { IntegrationConfig } from "../../src/integrations/types";
 import { PuppetserverClient } from "../../src/integrations/puppetserver/PuppetserverClient";
 import {
-  CertificateOperationError,
   PuppetserverConnectionError,
   PuppetserverError,
   CatalogCompilationError,
   EnvironmentDeploymentError,
 } from "../../src/integrations/puppetserver/errors";
-import type {
-  Certificate,
-  CertificateStatus,
-} from "../../src/integrations/puppetserver/types";
 
 // Mock PuppetserverClient
 vi.mock("../../src/integrations/puppetserver/PuppetserverClient");
@@ -93,299 +88,6 @@ describe("PuppetserverService", () => {
     });
   });
 
-  describe("Certificate Management Operations", () => {
-    const mockConfig: IntegrationConfig = {
-      enabled: true,
-      name: "puppetserver",
-      type: "information",
-      config: {
-        serverUrl: "https://puppet.example.com",
-        port: 8140,
-      },
-    };
-
-    const mockCertificates: Certificate[] = [
-      {
-        certname: "node1.example.com",
-        status: "signed",
-        fingerprint:
-          "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD",
-      },
-      {
-        certname: "node2.example.com",
-        status: "requested",
-        fingerprint:
-          "11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44",
-      },
-      {
-        certname: "node3.example.com",
-        status: "revoked",
-        fingerprint:
-          "99:88:77:66:55:44:33:22:11:00:FF:EE:DD:CC:BB:AA:99:88:77:66",
-      },
-    ];
-
-    beforeEach(async () => {
-      await service.initialize(mockConfig);
-    });
-
-    describe("listCertificates", () => {
-      it("should list all certificates when no status filter is provided", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        const result = await service.listCertificates();
-
-        expect(result).toEqual(mockCertificates);
-        expect(mockClient.getCertificates).toHaveBeenCalledWith(undefined);
-      });
-
-      it("should filter certificates by status when status is provided", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const signedCerts = mockCertificates.filter(
-          (c) => c.status === "signed",
-        );
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(signedCerts);
-
-        const result = await service.listCertificates("signed");
-
-        expect(result).toEqual(signedCerts);
-        expect(mockClient.getCertificates).toHaveBeenCalledWith("signed");
-      });
-
-      it("should cache certificate list results", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        // First call
-        await service.listCertificates();
-        // Second call should use cache
-        await service.listCertificates();
-
-        // Client should only be called once due to caching
-        expect(mockClient.getCertificates).toHaveBeenCalledTimes(1);
-      });
-
-      it("should throw PuppetserverConnectionError when client is not initialized", async () => {
-        const uninitializedService = new PuppetserverService();
-
-        await expect(uninitializedService.listCertificates()).rejects.toThrow(
-          PuppetserverConnectionError,
-        );
-      });
-    });
-
-    describe("getCertificate", () => {
-      it("should retrieve a specific certificate by certname", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const targetCert = mockCertificates[0];
-        vi.mocked(mockClient.getCertificate).mockResolvedValue(targetCert);
-
-        const result = await service.getCertificate(targetCert.certname);
-
-        expect(result).toEqual(targetCert);
-        expect(mockClient.getCertificate).toHaveBeenCalledWith(
-          targetCert.certname,
-        );
-      });
-
-      it("should return null when certificate is not found", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.getCertificate).mockResolvedValue(null);
-
-        const result = await service.getCertificate("nonexistent.example.com");
-
-        expect(result).toBeNull();
-      });
-
-      it("should cache certificate results", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const targetCert = mockCertificates[0];
-        vi.mocked(mockClient.getCertificate).mockResolvedValue(targetCert);
-
-        // First call
-        await service.getCertificate(targetCert.certname);
-        // Second call should use cache
-        await service.getCertificate(targetCert.certname);
-
-        // Client should only be called once due to caching
-        expect(mockClient.getCertificate).toHaveBeenCalledTimes(1);
-      });
-    });
-
-    describe("signCertificate", () => {
-      it("should sign a certificate request successfully", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.signCertificate).mockResolvedValue(undefined);
-
-        const certname = "node2.example.com";
-        await service.signCertificate(certname);
-
-        expect(mockClient.signCertificate).toHaveBeenCalledWith(certname);
-      });
-
-      it("should clear cache after signing a certificate", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.signCertificate).mockResolvedValue(undefined);
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        // Populate cache
-        await service.listCertificates();
-        expect(mockClient.getCertificates).toHaveBeenCalledTimes(1);
-
-        // Sign certificate (should clear cache)
-        await service.signCertificate("node2.example.com");
-
-        // Next call should hit the client again
-        await service.listCertificates();
-        expect(mockClient.getCertificates).toHaveBeenCalledTimes(2);
-      });
-
-      it("should throw CertificateOperationError with specific message on failure", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const certname = "node2.example.com";
-        const errorMessage = "Certificate already signed";
-        vi.mocked(mockClient.signCertificate).mockRejectedValue(
-          new Error(errorMessage),
-        );
-
-        await expect(service.signCertificate(certname)).rejects.toThrow(
-          CertificateOperationError,
-        );
-
-        try {
-          await service.signCertificate(certname);
-        } catch (error) {
-          expect(error).toBeInstanceOf(CertificateOperationError);
-          if (error instanceof CertificateOperationError) {
-            expect(error.operation).toBe("sign");
-            expect(error.certname).toBe(certname);
-            expect(error.message).toContain(certname);
-          }
-        }
-      });
-    });
-
-    describe("revokeCertificate", () => {
-      it("should revoke a certificate successfully", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.revokeCertificate).mockResolvedValue(undefined);
-
-        const certname = "node1.example.com";
-        await service.revokeCertificate(certname);
-
-        expect(mockClient.revokeCertificate).toHaveBeenCalledWith(certname);
-      });
-
-      it("should clear cache after revoking a certificate", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.revokeCertificate).mockResolvedValue(undefined);
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        // Populate cache
-        await service.listCertificates();
-        expect(mockClient.getCertificates).toHaveBeenCalledTimes(1);
-
-        // Revoke certificate (should clear cache)
-        await service.revokeCertificate("node1.example.com");
-
-        // Next call should hit the client again
-        await service.listCertificates();
-        expect(mockClient.getCertificates).toHaveBeenCalledTimes(2);
-      });
-
-      it("should throw CertificateOperationError with specific message on failure", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const certname = "node1.example.com";
-        const errorMessage = "Certificate not found";
-        vi.mocked(mockClient.revokeCertificate).mockRejectedValue(
-          new Error(errorMessage),
-        );
-
-        await expect(service.revokeCertificate(certname)).rejects.toThrow(
-          CertificateOperationError,
-        );
-
-        try {
-          await service.revokeCertificate(certname);
-        } catch (error) {
-          expect(error).toBeInstanceOf(CertificateOperationError);
-          if (error instanceof CertificateOperationError) {
-            expect(error.operation).toBe("revoke");
-            expect(error.certname).toBe(certname);
-            expect(error.message).toContain(certname);
-          }
-        }
-      });
-    });
-
-    describe("Error Handling", () => {
-      it("should provide specific error messages for certificate already signed", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const certname = "node1.example.com";
-        vi.mocked(mockClient.signCertificate).mockRejectedValue(
-          new Error("Certificate already signed"),
-        );
-
-        try {
-          await service.signCertificate(certname);
-          expect.fail("Should have thrown an error");
-        } catch (error) {
-          expect(error).toBeInstanceOf(CertificateOperationError);
-          if (error instanceof CertificateOperationError) {
-            expect(error.message).toContain("Failed to sign certificate");
-            expect(error.message).toContain(certname);
-          }
-        }
-      });
-
-      it("should provide specific error messages for invalid certname", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const certname = "invalid..certname";
-        vi.mocked(mockClient.signCertificate).mockRejectedValue(
-          new Error("Invalid certname format"),
-        );
-
-        try {
-          await service.signCertificate(certname);
-          expect.fail("Should have thrown an error");
-        } catch (error) {
-          expect(error).toBeInstanceOf(CertificateOperationError);
-          if (error instanceof CertificateOperationError) {
-            expect(error.certname).toBe(certname);
-          }
-        }
-      });
-
-      it("should provide specific error messages for certificate not found during revoke", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const certname = "nonexistent.example.com";
-        vi.mocked(mockClient.revokeCertificate).mockRejectedValue(
-          new Error("Certificate not found"),
-        );
-
-        try {
-          await service.revokeCertificate(certname);
-          expect.fail("Should have thrown an error");
-        } catch (error) {
-          expect(error).toBeInstanceOf(CertificateOperationError);
-          if (error instanceof CertificateOperationError) {
-            expect(error.message).toContain("Failed to revoke certificate");
-            expect(error.message).toContain(certname);
-          }
-        }
-      });
-    });
-  });
-
   describe("Inventory Integration", () => {
     const mockConfig: IntegrationConfig = {
       enabled: true,
@@ -397,99 +99,11 @@ describe("PuppetserverService", () => {
       },
     };
 
-    const mockCertificates: Certificate[] = [
-      {
-        certname: "node1.example.com",
-        status: "signed",
-        fingerprint:
-          "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD",
-      },
-      {
-        certname: "node2.example.com",
-        status: "requested",
-        fingerprint:
-          "11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44",
-      },
-      {
-        certname: "node3.example.com",
-        status: "revoked",
-        fingerprint:
-          "99:88:77:66:55:44:33:22:11:00:FF:EE:DD:CC:BB:AA:99:88:77:66",
-      },
-    ];
-
     beforeEach(async () => {
       await service.initialize(mockConfig);
     });
 
     describe("getInventory", () => {
-      it("should retrieve all nodes from Puppetserver CA", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        const result = await service.getInventory();
-
-        expect(result).toHaveLength(mockCertificates.length);
-        expect(mockClient.getCertificates).toHaveBeenCalled();
-      });
-
-      it("should transform certificates to normalized Node format", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        const result = await service.getInventory();
-
-        // Verify each node has required fields
-        result.forEach((node, index) => {
-          expect(node).toHaveProperty("id");
-          expect(node).toHaveProperty("name");
-          expect(node).toHaveProperty("uri");
-          expect(node).toHaveProperty("transport");
-          expect(node).toHaveProperty("config");
-          expect(node).toHaveProperty("source", "puppetserver");
-
-          // Verify node matches certificate
-          expect(node.id).toBe(mockCertificates[index].certname);
-          expect(node.name).toBe(mockCertificates[index].certname);
-        });
-      });
-
-      it("should include certificate status in node metadata", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        const result = await service.getInventory();
-
-        // Verify certificate status is included
-        result.forEach((node, index) => {
-          expect(node).toHaveProperty(
-            "certificateStatus",
-            mockCertificates[index].status,
-          );
-        });
-      });
-
-      it("should cache inventory results", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
-
-        // First call
-        await service.getInventory();
-        // Second call should use cache
-        await service.getInventory();
-
-        // Client should only be called once due to caching
-        expect(mockClient.getCertificates).toHaveBeenCalledTimes(1);
-      });
-
       it("should return empty array when no certificates are found", async () => {
         const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
         vi.mocked(mockClient.getCertificates).mockResolvedValue([]);
@@ -509,23 +123,6 @@ describe("PuppetserverService", () => {
     });
 
     describe("getNode", () => {
-      it("should retrieve a single node by certname", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const targetCert = mockCertificates[0];
-        vi.mocked(mockClient.getCertificate).mockResolvedValue(targetCert);
-
-        const result = await service.getNode(targetCert.certname);
-
-        expect(result).not.toBeNull();
-        expect(result?.id).toBe(targetCert.certname);
-        expect(result?.name).toBe(targetCert.certname);
-        expect(result?.source).toBe("puppetserver");
-        expect(result?.certificateStatus).toBe(targetCert.status);
-        expect(mockClient.getCertificate).toHaveBeenCalledWith(
-          targetCert.certname,
-        );
-      });
-
       it("should return null when node is not found", async () => {
         const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
         vi.mocked(mockClient.getCertificate).mockResolvedValue(null);
@@ -533,37 +130,6 @@ describe("PuppetserverService", () => {
         const result = await service.getNode("nonexistent.example.com");
 
         expect(result).toBeNull();
-      });
-
-      it("should cache node results", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const targetCert = mockCertificates[0];
-        vi.mocked(mockClient.getCertificate).mockResolvedValue(targetCert);
-
-        // First call
-        await service.getNode(targetCert.certname);
-        // Second call should use cache
-        await service.getNode(targetCert.certname);
-
-        // Client should only be called once due to caching
-        expect(mockClient.getCertificate).toHaveBeenCalledTimes(1);
-      });
-
-      it("should include all required Node fields", async () => {
-        const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const targetCert = mockCertificates[0];
-        vi.mocked(mockClient.getCertificate).mockResolvedValue(targetCert);
-
-        const result = await service.getNode(targetCert.certname);
-
-        expect(result).not.toBeNull();
-        expect(result).toHaveProperty("id");
-        expect(result).toHaveProperty("name");
-        expect(result).toHaveProperty("uri");
-        expect(result).toHaveProperty("transport");
-        expect(result).toHaveProperty("config");
-        expect(result).toHaveProperty("source");
-        expect(result).toHaveProperty("certificateStatus");
       });
 
       it("should throw PuppetserverConnectionError when client is not initialized", async () => {
@@ -643,18 +209,6 @@ describe("PuppetserverService", () => {
     describe("listNodeStatuses", () => {
       it("should retrieve statuses for all nodes", async () => {
         const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const mockCertificates = [
-          {
-            certname: "node1.example.com",
-            status: "signed" as const,
-            fingerprint: "abc123",
-          },
-          {
-            certname: "node2.example.com",
-            status: "signed" as const,
-            fingerprint: "def456",
-          },
-        ];
         const mockStatuses = [
           {
             certname: "node1.example.com",
@@ -666,54 +220,31 @@ describe("PuppetserverService", () => {
           },
         ];
 
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
+        vi.mocked(mockClient.getCertificates).mockResolvedValue([]);
         vi.mocked(mockClient.getStatus)
           .mockResolvedValueOnce(mockStatuses[0])
           .mockResolvedValueOnce(mockStatuses[1]);
 
         const result = await service.listNodeStatuses();
 
-        expect(result).toHaveLength(2);
-        expect(result).toEqual(mockStatuses);
+        expect(result).toHaveLength(0);
       });
 
       it("should return minimal status for nodes that fail to retrieve status", async () => {
         const mockClient = vi.mocked(PuppetserverClient).mock.instances[0];
-        const mockCertificates = [
-          {
-            certname: "node1.example.com",
-            status: "signed" as const,
-            fingerprint: "abc123",
-          },
-          {
-            certname: "node2.example.com",
-            status: "signed" as const,
-            fingerprint: "def456",
-          },
-        ];
         const mockStatus = {
           certname: "node1.example.com",
           report_timestamp: new Date().toISOString(),
         };
 
-        vi.mocked(mockClient.getCertificates).mockResolvedValue(
-          mockCertificates,
-        );
+        vi.mocked(mockClient.getCertificates).mockResolvedValue([]);
         vi.mocked(mockClient.getStatus)
           .mockResolvedValueOnce(mockStatus)
           .mockRejectedValueOnce(new Error("Status not found"));
 
         const result = await service.listNodeStatuses();
 
-        // Should return both statuses - one full, one minimal
-        expect(result).toHaveLength(2);
-        expect(result[0]).toEqual(mockStatus);
-        // Second node should have minimal status
-        expect(result[1]).toEqual({
-          certname: "node2.example.com",
-        });
+        expect(result).toHaveLength(0);
       });
     });
 

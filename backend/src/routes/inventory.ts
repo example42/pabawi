@@ -20,7 +20,6 @@ const NodeIdParamSchema = z.object({
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
   pql: z.string().optional(),
-  certificateStatus: z.string().optional(),
   sortBy: z.string().optional(),
   sortOrder: z.enum(["asc", "desc"]).optional(),
 });
@@ -73,30 +72,6 @@ export function createInventoryRouter(
             });
           }
 
-          // Filter by certificate status for Puppetserver nodes (Requirement 2.2)
-          if (query.certificateStatus) {
-            const statusFilter = query.certificateStatus
-              .split(",")
-              .map((s) => s.trim().toLowerCase());
-            filteredNodes = filteredNodes.filter((node) => {
-              const nodeWithCert = node as {
-                source?: string;
-                certificateStatus?: string;
-              };
-              // Only filter Puppetserver nodes
-              if (nodeWithCert.source === "puppetserver") {
-                return (
-                  nodeWithCert.certificateStatus &&
-                  statusFilter.includes(
-                    nodeWithCert.certificateStatus.toLowerCase(),
-                  )
-                );
-              }
-              // Keep non-Puppetserver nodes
-              return true;
-            });
-          }
-
           // Apply PQL filter if specified (show only PuppetDB nodes that match)
           if (query.pql) {
             const puppetdbSource =
@@ -145,29 +120,14 @@ export function createInventoryRouter(
             filteredNodes.sort((a, b) => {
               const nodeA = a as {
                 source?: string;
-                certificateStatus?: string;
                 name?: string;
               };
               const nodeB = b as {
                 source?: string;
-                certificateStatus?: string;
                 name?: string;
               };
 
               switch (query.sortBy) {
-                case "certificateStatus": {
-                  // Sort by certificate status (signed < requested < revoked)
-                  const statusOrder = { signed: 1, requested: 2, revoked: 3 };
-                  const statusA =
-                    statusOrder[
-                      nodeA.certificateStatus as keyof typeof statusOrder
-                    ] || 999;
-                  const statusB =
-                    statusOrder[
-                      nodeB.certificateStatus as keyof typeof statusOrder
-                    ] || 999;
-                  return (statusA - statusB) * sortMultiplier;
-                }
                 case "name": {
                   // Sort by node name
                   const nameA = nodeA.name ?? "";

@@ -132,6 +132,76 @@ export class HieraScanner {
   }
 
   /**
+   * Scan multiple hieradata directories and build the key index
+   *
+   * @param datadirPaths - Array of datadir paths to scan
+   * @returns The complete key index
+   */
+  async scanMultipleDatadirs(datadirPaths: string[]): Promise<HieraKeyIndex> {
+    // Reset the index
+    this.keyIndex = this.createEmptyIndex();
+
+    for (const dataPath of datadirPaths) {
+      const fullPath = this.resolvePath(dataPath);
+
+      if (!fs.existsSync(fullPath)) {
+        console.warn(`[HieraScanner] Hieradata path does not exist: ${fullPath}`);
+        continue;
+      }
+
+      // Recursively scan all YAML/JSON files in this datadir
+      await this.scanDirectory(fullPath, dataPath);
+    }
+
+    // Update metadata
+    this.keyIndex.lastScan = new Date().toISOString();
+    this.keyIndex.totalKeys = this.keyIndex.keys.size;
+    this.keyIndex.totalFiles = this.keyIndex.files.size;
+
+    return this.keyIndex;
+  }
+
+  /**
+   * Get the current key index without rescanning
+   *
+   * @returns The current key index
+   */
+  getKeyIndex(): HieraKeyIndex {
+    return this.keyIndex;
+  }
+
+  /**
+   * Update the hieradata path and rescan if needed
+   *
+   * @param newHieradataPath - New hieradata path
+   * @returns Promise that resolves when rescan is complete
+   */
+  async updateHieradataPath(newHieradataPath: string): Promise<HieraKeyIndex> {
+    if (this.hieradataPath !== newHieradataPath) {
+      this.hieradataPath = newHieradataPath;
+
+      // Stop watching the old path
+      if (this.isWatching) {
+        this.stopWatching();
+      }
+
+      // Rescan with the new path
+      const index = await this.scan();
+
+      // Restart watching if it was previously enabled
+      if (this.changeCallbacks.length > 0) {
+        this.watchForChanges(() => {
+          this.changeCallbacks.forEach(callback => callback([]));
+        });
+      }
+
+      return index;
+    }
+
+    return this.keyIndex;
+  }
+
+  /**
    * Watch the hieradata directory for changes
    *
    * @param callback - Callback to invoke when files change

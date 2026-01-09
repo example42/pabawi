@@ -12,6 +12,12 @@
       out_of_sync: number;
     };
     time: Record<string, number>;
+    events?: {
+      success: number;
+      failure: number;
+      noop?: number;
+      total: number;
+    };
   }
 
   interface Report {
@@ -43,10 +49,24 @@
     return seconds > 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
   }
 
-  function getStatusBadgeStatus(status: string): 'success' | 'failed' | 'partial' {
+  function getStatusBadgeStatus(status: string, configRetrievalTime?: number): 'success' | 'failed' | 'partial' {
+    if (configRetrievalTime === 0) return 'failed';
+
     if (status === 'failed') return 'failed';
     if (status === 'changed') return 'partial';
     return 'success';
+  }
+
+  function formatCompilationTime(configRetrievalTime?: number): string {
+    if (configRetrievalTime === undefined || configRetrievalTime === null) {
+      return 'N/A';
+    }
+
+    if (configRetrievalTime === 0) {
+      return 'Catalog Failure';
+    }
+
+    return `${configRetrievalTime.toFixed(2)}s`;
   }
 
   // Calculate successful resources
@@ -64,6 +84,12 @@
   function getUnchanged(metrics: ReportMetrics): number {
     return metrics.resources.total - metrics.resources.out_of_sync;
   }
+
+  // Get intentional changes - should be 0 if calculation would be negative
+  function getIntentionalChanges(metrics: ReportMetrics): number {
+    const intentional = metrics.resources.changed - (metrics.resources.corrective_change || 0);
+    return Math.max(0, intentional);
+  }
 </script>
 
 <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
@@ -71,34 +97,43 @@
     <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
       <thead class="bg-gray-50 dark:bg-gray-900">
         <tr>
-          <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Start Time
           </th>
-          <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Duration
           </th>
-          <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Hostname
           </th>
-          <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Environment
           </th>
-          <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Total
           </th>
-          <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-            Changed
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Corrective
           </th>
-          <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Intentional
+          </th>
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Unchanged
           </th>
-          <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Failed
           </th>
-          <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Skipped
           </th>
-          <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Noop
+          </th>
+          <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Compile Time
+          </th>
+          <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Status
           </th>
         </tr>
@@ -109,16 +144,16 @@
             class="hover:bg-gray-50 dark:hover:bg-gray-700 {onReportClick ? 'cursor-pointer' : ''}"
             onclick={() => onReportClick?.(report)}
           >
-            <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
+            <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
               {formatTimestamp(report.start_time)}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-600 dark:text-gray-400">
+            <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-600 dark:text-gray-400">
               {getDuration(report.start_time, report.end_time)}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
+            <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
               {report.certname}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
+            <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
               <div class="flex items-center gap-2">
                 {report.environment}
                 {#if report.noop}
@@ -128,23 +163,32 @@
                 {/if}
               </div>
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-center text-sm text-gray-900 dark:text-white">
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-900 dark:text-white">
               {report.metrics.resources.total}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-center text-sm text-yellow-700 dark:text-yellow-400">
-              {report.metrics.resources.changed}
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-yellow-700 dark:text-yellow-400">
+              {report.metrics.resources.corrective_change || 0}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-center text-sm text-gray-600 dark:text-gray-400">
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-blue-700 dark:text-blue-400">
+              {getIntentionalChanges(report.metrics)}
+            </td>
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-600 dark:text-gray-400">
               {getUnchanged(report.metrics)}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-center text-sm text-red-700 dark:text-red-400">
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-red-700 dark:text-red-400">
               {report.metrics.resources.failed}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-center text-sm text-gray-600 dark:text-gray-400">
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-600 dark:text-gray-400">
               {report.metrics.resources.skipped}
             </td>
-            <td class="whitespace-nowrap px-3 py-2 text-sm">
-              <StatusBadge status={getStatusBadgeStatus(report.status)} size="sm" />
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-purple-700 dark:text-purple-400">
+              {report.metrics.events?.noop || 0}
+            </td>
+            <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-900 dark:text-white">
+              {formatCompilationTime(report.metrics.time?.config_retrieval)}
+            </td>
+            <td class="whitespace-nowrap px-2 py-2 text-sm">
+              <StatusBadge status={getStatusBadgeStatus(report.status, report.metrics.time?.config_retrieval)} size="sm" />
             </td>
           </tr>
         {/each}

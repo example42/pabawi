@@ -23,7 +23,6 @@ const API_THRESHOLDS = {
   NODE_DETAIL_ENDPOINT: 500,
   EVENTS_ENDPOINT: 2000,
   CATALOG_ENDPOINT: 1500,
-  CERTIFICATES_ENDPOINT: 800,
   REPORTS_ENDPOINT: 1000,
 };
 
@@ -189,29 +188,7 @@ describe('API Performance Tests', () => {
     });
   });
 
-  describe('Certificates Endpoint Performance', () => {
-    it('should respond within threshold for certificates list', async () => {
-      const { response, duration } = await measureApiTime(
-        app,
-        'get',
-        '/api/integrations/puppetserver/certificates'
-      );
 
-      console.log(`  ✓ Certificates endpoint responded in ${duration}ms (threshold: ${API_THRESHOLDS.CERTIFICATES_ENDPOINT}ms)`);
-      expect(duration).toBeLessThan(API_THRESHOLDS.CERTIFICATES_ENDPOINT);
-    });
-
-    it('should handle certificate status filter efficiently', async () => {
-      const { response, duration } = await measureApiTime(
-        app,
-        'get',
-        '/api/integrations/puppetserver/certificates?status=requested'
-      );
-
-      console.log(`  ✓ Filtered certificates query responded in ${duration}ms`);
-      expect(duration).toBeLessThan(API_THRESHOLDS.CERTIFICATES_ENDPOINT);
-    });
-  });
 
   describe('Reports Endpoint Performance', () => {
     it('should respond within threshold for reports query', async () => {
@@ -297,7 +274,6 @@ describe('API Performance Tests', () => {
       console.log(`  - Node Detail: ${API_THRESHOLDS.NODE_DETAIL_ENDPOINT}ms`);
       console.log(`  - Events: ${API_THRESHOLDS.EVENTS_ENDPOINT}ms`);
       console.log(`  - Catalog: ${API_THRESHOLDS.CATALOG_ENDPOINT}ms`);
-      console.log(`  - Certificates: ${API_THRESHOLDS.CERTIFICATES_ENDPOINT}ms`);
       console.log(`  - Reports: ${API_THRESHOLDS.REPORTS_ENDPOINT}ms`);
       console.log('\nRecommendations:');
       console.log('  - Implement response caching for frequently accessed data');

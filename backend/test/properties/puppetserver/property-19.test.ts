@@ -58,31 +58,6 @@ describe('Property 19: REST API usage', () => {
     );
   });
 
-  it('should use correct certificate API endpoints for any certname', () => {
-    fc.assert(
-      fc.property(
-        fc.webUrl({ validSchemes: ['https'] }),
-        fc.domain(),
-        (serverUrl, certname) => {
-          const client = createTestClient(serverUrl);
-          const baseUrl = client.getBaseUrl();
-
-          // Certificate list endpoint should be correct
-          // Note: We can't actually call the API without a real server,
-          // but we can verify the client is constructed correctly
-          expect(baseUrl).toContain('https://');
-
-          // Verify client has the expected methods
-          expect(typeof client.getCertificates).toBe('function');
-          expect(typeof client.getCertificate).toBe('function');
-          expect(typeof client.signCertificate).toBe('function');
-          expect(typeof client.revokeCertificate).toBe('function');
-        }
-      ),
-      propertyTestConfig
-    );
-  });
-
   it('should use correct catalog API endpoints for any certname and environment', () => {
     fc.assert(
       fc.property(
@@ -184,8 +159,8 @@ describe('Property 19: REST API usage', () => {
     fc.assert(
       fc.property(
         fc.webUrl({ validSchemes: ['https'] }),
-        fc.constantFrom('signed', 'requested', 'revoked'),
-        (serverUrl, state) => {
+        fc.constantFrom('production', 'development', 'testing'),
+        (serverUrl, environment) => {
           const client = createTestClient(serverUrl);
           const baseUrl = client.getBaseUrl();
 
@@ -194,7 +169,7 @@ describe('Property 19: REST API usage', () => {
           expect(baseUrl).toMatch(/^https:\/\//);
 
           // Client should be ready to make requests with parameters
-          expect(typeof client.getCertificates).toBe('function');
+          expect(typeof client.getEnvironments).toBe('function');
         }
       ),
       propertyTestConfig
@@ -220,7 +195,6 @@ describe('Property 19: REST API usage', () => {
           expect(baseUrl).toContain(`${port}`);
 
           // All methods should use the same base URL
-          expect(typeof client.getCertificates).toBe('function');
           expect(typeof client.compileCatalog).toBe('function');
           expect(typeof client.getFacts).toBe('function');
           expect(typeof client.getEnvironments).toBe('function');

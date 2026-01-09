@@ -119,16 +119,6 @@ describe('Graceful Degradation', () => {
   });
 
   describe('Puppetserver Endpoints', () => {
-    it('should return 503 for certificates when not configured', async () => {
-      const response = await request(app)
-        .get('/api/integrations/puppetserver/certificates')
-        .expect(503);
-
-      expect(response.body).toHaveProperty('error');
-      expect(response.body.error.code).toBe('PUPPETSERVER_NOT_CONFIGURED');
-      expect(response.body.error.message).toContain('not configured');
-    });
-
     it('should return 503 for node status when not configured', async () => {
       const response = await request(app)
         .get('/api/integrations/puppetserver/nodes/test-node/status')
@@ -211,7 +201,7 @@ describe('Graceful Degradation', () => {
   describe('Error Messages', () => {
     it('should provide clear error messages for not configured services', async () => {
       const response = await request(app)
-        .get('/api/integrations/puppetserver/certificates')
+        .get('/api/integrations/puppetserver/nodes/test-node/status')
         .expect(503);
 
       expect(response.body.error.message).toMatch(
@@ -235,7 +225,6 @@ describe('Graceful Degradation', () => {
     it('should not crash when querying unconfigured Puppetserver', async () => {
       // Make multiple requests to ensure system stability
       const requests = [
-        request(app).get('/api/integrations/puppetserver/certificates'),
         request(app).get('/api/integrations/puppetserver/nodes'),
         request(app).get('/api/integrations/puppetserver/nodes/test/status'),
         request(app).get('/api/integrations/puppetserver/nodes/test/facts'),
