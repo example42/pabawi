@@ -1657,7 +1657,19 @@ export function createIntegrationsRouter(
         const certname = params.certname;
 
         // Initialize response data
-        let status: any = {
+        interface NodeStatusResponse {
+          certname: string;
+          catalog_environment: string;
+          report_environment: string;
+          report_timestamp?: string | null;
+          catalog_timestamp?: string | null;
+          facts_timestamp?: string | null;
+          latest_report_hash?: string;
+          latest_report_status?: string;
+          latest_report_noop?: boolean;
+        }
+
+        let status: NodeStatusResponse = {
           certname,
           catalog_environment: "production",
           report_environment: "production",
@@ -1670,32 +1682,33 @@ export function createIntegrationsRouter(
         let secondsSinceLastCheckIn = 0;
 
         // Try to get comprehensive status from PuppetDB first
-        if (puppetDBService && puppetDBService.isInitialized()) {
+        if (puppetDBService?.isInitialized()) {
           try {
-            console.log(`[Node Status] Fetching comprehensive status for '${certname}' from PuppetDB`);
+            console.warn(`[Node Status] Fetching comprehensive status for '${certname}' from PuppetDB`);
 
             // Get latest report
             const reports = await puppetDBService.getNodeReports(certname, 1);
             let latestReport = null;
-            if (reports && reports.length > 0) {
+            if (reports.length > 0) {
               latestReport = reports[0];
-              console.log(`[Node Status] Found latest report: ${latestReport.hash}, status: ${latestReport.status}`);
+              console.warn(`[Node Status] Found latest report: ${latestReport.hash}, status: ${latestReport.status}`);
             }
 
             // Get node facts for facts timestamp
             let factsTimestamp = null;
             try {
               const facts = await puppetDBService.getNodeFacts(certname);
-              if (facts && facts.gatheredAt) {
+              if (facts.gatheredAt) {
                 factsTimestamp = facts.gatheredAt;
-                console.log(`[Node Status] Found facts timestamp: ${factsTimestamp}`);
+                console.warn(`[Node Status] Found facts timestamp: ${factsTimestamp}`);
               }
-            } catch (error) {
-              console.warn(`[Node Status] Could not fetch facts for '${certname}':`, error instanceof Error ? error.message : 'Unknown error');
+            } catch (factsError) {
+              console.warn(`[Node Status] Could not fetch facts for '${certname}':`, factsError instanceof Error ? factsError.message : 'Unknown error');
             }
 
             // Build comprehensive status from PuppetDB data
             if (latestReport) {
+              const reportTimestamp = latestReport.producer_timestamp || latestReport.end_time;
               status = {
                 certname,
                 latest_report_hash: latestReport.hash,
@@ -1703,14 +1716,14 @@ export function createIntegrationsRouter(
                 latest_report_noop: latestReport.noop,
                 catalog_environment: latestReport.environment || "production",
                 report_environment: latestReport.environment || "production",
-                report_timestamp: latestReport.producer_timestamp || latestReport.end_time,
+                report_timestamp: reportTimestamp,
                 catalog_timestamp: latestReport.start_time, // Catalog compiled at start of run
                 facts_timestamp: factsTimestamp,
               };
 
               // Calculate activity metrics
-              if (status.report_timestamp) {
-                const lastCheckIn = new Date(status.report_timestamp);
+              if (reportTimestamp) {
+                const lastCheckIn = new Date(reportTimestamp);
                 const now = new Date();
                 const hoursSinceLastCheckIn = (now.getTime() - lastCheckIn.getTime()) / (1000 * 60 * 60);
                 secondsSinceLastCheckIn = Math.floor((now.getTime() - lastCheckIn.getTime()) / 1000);
@@ -1726,16 +1739,16 @@ export function createIntegrationsRouter(
                 }
               }
 
-              console.log(`[Node Status] Comprehensive status built: activity=${activityCategory}, highlight=${shouldHighlight}`);
+              console.warn(`[Node Status] Comprehensive status built: activity=${activityCategory}, highlight=${String(shouldHighlight)}`);
             }
 
-          } catch (error) {
-            console.error(`[Node Status] Error fetching from PuppetDB for '${certname}':`, error instanceof Error ? error.message : 'Unknown error');
+          } catch (puppetDBError) {
+            console.error(`[Node Status] Error fetching from PuppetDB for '${certname}':`, puppetDBError instanceof Error ? puppetDBError.message : 'Unknown error');
           }
         }
 
         // Fallback to Puppetserver service if available
-        if (puppetserverService && puppetserverService.isInitialized()) {
+        if (puppetserverService?.isInitialized()) {
           try {
             const puppetserverStatus = await puppetserverService.getNodeStatus(certname);
             const puppetserverActivity = puppetserverService.categorizeNodeActivity(puppetserverStatus);
@@ -1749,8 +1762,8 @@ export function createIntegrationsRouter(
               shouldHighlight = puppetserverHighlight;
               secondsSinceLastCheckIn = puppetserverSeconds;
             }
-          } catch (error) {
-            console.error(`[Node Status] Error fetching from Puppetserver for '${certname}':`, error instanceof Error ? error.message : 'Unknown error');
+          } catch (puppetserverError) {
+            console.error(`[Node Status] Error fetching from Puppetserver for '${certname}':`, puppetserverError instanceof Error ? puppetserverError.message : 'Unknown error');
           }
         }
 
@@ -1773,11 +1786,12 @@ export function createIntegrationsRouter(
           // If we have PuppetDB, check if we found any reports or facts
           try {
             const reports = await puppetDBService.getNodeReports(certname, 1);
-            if (reports && reports.length > 0) {
+            if (reports.length > 0) {
               foundNodeData = true;
             }
-          } catch (error) {
+          } catch (reportsError) {
             // Error fetching reports doesn't mean node doesn't exist
+            console.warn(`[Node Status] Error checking node existence:`, reportsError instanceof Error ? reportsError.message : 'Unknown error');
           }
         }
 

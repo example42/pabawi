@@ -349,6 +349,7 @@ export class PuppetserverService
    *
    * @returns Empty array of nodes
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async getInventory(): Promise<Node[]> {
     this.log("=== PuppetserverService.getInventory() called ===");
     this.log("Certificate management has been removed - returning empty inventory");
@@ -369,6 +370,7 @@ export class PuppetserverService
    * @param certname - Node certname
    * @returns null (certificate management removed)
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async getNode(certname: string): Promise<Node | null> {
     this.ensureInitialized();
     this.log(`Certificate management removed - getNode('${certname}') returning null`);
@@ -549,6 +551,7 @@ export class PuppetserverService
    * @param nodeId - Node identifier
    * @returns Basic node status
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async getNodeStatus(nodeId: string): Promise<NodeStatus> {
     this.ensureInitialized();
     this.log(`Certificate management removed - getNodeStatus('${nodeId}') returning basic status`);
