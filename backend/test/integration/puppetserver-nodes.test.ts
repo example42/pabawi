@@ -25,7 +25,6 @@ class MockPuppetserverService extends PuppetserverService {
       transport: "ssh",
       config: {},
       source: "puppetserver",
-      certificateStatus: "signed",
     },
     {
       id: "node2.example.com",
@@ -34,7 +33,6 @@ class MockPuppetserverService extends PuppetserverService {
       transport: "ssh",
       config: {},
       source: "puppetserver",
-      certificateStatus: "requested",
     },
   ];
 
@@ -297,7 +295,6 @@ describe("Puppetserver Node API", () => {
       expect(response.body.nodes[0]).toHaveProperty("id");
       expect(response.body.nodes[0]).toHaveProperty("name");
       expect(response.body.nodes[0]).toHaveProperty("source", "puppetserver");
-      expect(response.body.nodes[0]).toHaveProperty("certificateStatus");
     });
   });
 
@@ -311,7 +308,6 @@ describe("Puppetserver Node API", () => {
       expect(response.body.node.id).toBe("node1.example.com");
       expect(response.body.node.name).toBe("node1.example.com");
       expect(response.body.node.source).toBe("puppetserver");
-      expect(response.body.node.certificateStatus).toBe("signed");
       expect(response.body.source).toBe("puppetserver");
     });
 

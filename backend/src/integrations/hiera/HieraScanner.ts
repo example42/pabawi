@@ -161,14 +161,7 @@ export class HieraScanner {
     return this.keyIndex;
   }
 
-  /**
-   * Get the current key index without rescanning
-   *
-   * @returns The current key index
-   */
-  getKeyIndex(): HieraKeyIndex {
-    return this.keyIndex;
-  }
+
 
   /**
    * Update the hieradata path and rescan if needed
@@ -191,7 +184,9 @@ export class HieraScanner {
       // Restart watching if it was previously enabled
       if (this.changeCallbacks.length > 0) {
         this.watchForChanges(() => {
-          this.changeCallbacks.forEach(callback => callback([]));
+          this.changeCallbacks.forEach(callback => {
+          callback([]);
+        });
         });
       }
 

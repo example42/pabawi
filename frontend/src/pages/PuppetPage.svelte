@@ -13,7 +13,7 @@
   import CodeAnalysisTab from '../components/CodeAnalysisTab.svelte';
 
   // Tab types
-  type TabId = 'environments' | 'reports' | 'certificates' | 'status' | 'admin' | 'hiera' | 'analysis';
+  type TabId = 'environments' | 'reports' | 'status' | 'admin' | 'hiera' | 'analysis';
 
   // State
   let activeTab = $state<TabId>('environments');
@@ -137,7 +137,7 @@
       case 'reports':
         await fetchAllReports();
         break;
-      // 'environments' and 'certificates' load their own data
+      // 'environments' loads its own data
     }
   }
 
@@ -146,7 +146,7 @@
     const url = new URL(window.location.href);
     const tabParam = url.searchParams.get('tab') as TabId | null;
 
-    if (tabParam && ['environments', 'reports', 'certificates', 'status', 'admin', 'hiera', 'analysis'].includes(tabParam)) {
+    if (tabParam && ['environments', 'reports', 'status', 'admin', 'hiera', 'analysis'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -185,7 +185,7 @@
       Puppet
     </h1>
     <p class="mt-2 text-gray-600 dark:text-gray-400">
-      Manage Puppet environments, reports, and certificates
+      Manage Puppet environments and reports
     </p>
   </div>
 
@@ -222,20 +222,7 @@
         </div>
       </button>
 
-      <button
-        type="button"
-        onclick={() => switchTab('certificates')}
-        class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors {activeTab === 'certificates'
-          ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-400'
-          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
-      >
-        <div class="flex items-center gap-2">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          Certificates
-        </div>
-      </button>
+
 
       <button
         type="button"
@@ -368,29 +355,7 @@
       </div>
     {/if}
 
-    <!-- Certificates Tab -->
-    {#if activeTab === 'certificates'}
-      <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div class="mb-4 flex items-center gap-3">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Certificate Management</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-            Puppetserver
-          </span>
-        </div>
-        <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
-          Manage Puppet certificates for all nodes in your infrastructure.
-        </p>
-        <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
-          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">Certificate Management</h3>
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Certificate management component is not available.
-          </p>
-        </div>
-      </div>
-    {/if}
+
 
     <!-- Status Tab -->
     {#if activeTab === 'status'}

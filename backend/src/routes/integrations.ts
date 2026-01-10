@@ -1641,9 +1641,9 @@ export function createIntegrationsRouter(
 
   /**
    * GET /api/integrations/puppetserver/nodes/:certname/status
-   * Return node status from Puppetserver
+   * Return comprehensive node status from PuppetDB and Puppetserver
    *
-   * Implements requirement 4.1: Query Puppetserver for node status information
+   * Implements requirement 4.1: Query for comprehensive node status information
    * Returns status with:
    * - Last run timestamp, catalog version, and run status (requirement 4.2)
    * - Activity categorization (active, inactive, never checked in) (requirement 4.3)
@@ -1651,48 +1651,155 @@ export function createIntegrationsRouter(
   router.get(
     "/puppetserver/nodes/:certname/status",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
-      if (!puppetserverService) {
-        res.status(503).json({
-          error: {
-            code: "PUPPETSERVER_NOT_CONFIGURED",
-            message: "Puppetserver integration is not configured",
-          },
-        });
-        return;
-      }
-
-      if (!puppetserverService.isInitialized()) {
-        res.status(503).json({
-          error: {
-            code: "PUPPETSERVER_NOT_INITIALIZED",
-            message: "Puppetserver integration is not initialized",
-          },
-        });
-        return;
-      }
-
       try {
         // Validate request parameters
         const params = CertnameParamSchema.parse(req.params);
         const certname = params.certname;
 
-        // Get node status from Puppetserver
-        const status = await puppetserverService.getNodeStatus(certname);
+        // Initialize response data
+        let status: any = {
+          certname,
+          catalog_environment: "production",
+          report_environment: "production",
+          report_timestamp: undefined,
+          catalog_timestamp: undefined,
+          facts_timestamp: undefined,
+        };
+        let activityCategory = "never_checked_in";
+        let shouldHighlight = true;
+        let secondsSinceLastCheckIn = 0;
 
-        // Add activity categorization
-        const activityCategory =
-          puppetserverService.categorizeNodeActivity(status);
-        const shouldHighlight = puppetserverService.shouldHighlightNode(status);
-        const secondsSinceLastCheckIn =
-          puppetserverService.getSecondsSinceLastCheckIn(status);
+        // Try to get comprehensive status from PuppetDB first
+        if (puppetDBService && puppetDBService.isInitialized()) {
+          try {
+            console.log(`[Node Status] Fetching comprehensive status for '${certname}' from PuppetDB`);
+
+            // Get latest report
+            const reports = await puppetDBService.getNodeReports(certname, 1);
+            let latestReport = null;
+            if (reports && reports.length > 0) {
+              latestReport = reports[0];
+              console.log(`[Node Status] Found latest report: ${latestReport.hash}, status: ${latestReport.status}`);
+            }
+
+            // Get node facts for facts timestamp
+            let factsTimestamp = null;
+            try {
+              const facts = await puppetDBService.getNodeFacts(certname);
+              if (facts && facts.gatheredAt) {
+                factsTimestamp = facts.gatheredAt;
+                console.log(`[Node Status] Found facts timestamp: ${factsTimestamp}`);
+              }
+            } catch (error) {
+              console.warn(`[Node Status] Could not fetch facts for '${certname}':`, error instanceof Error ? error.message : 'Unknown error');
+            }
+
+            // Build comprehensive status from PuppetDB data
+            if (latestReport) {
+              status = {
+                certname,
+                latest_report_hash: latestReport.hash,
+                latest_report_status: latestReport.status,
+                latest_report_noop: latestReport.noop,
+                catalog_environment: latestReport.environment || "production",
+                report_environment: latestReport.environment || "production",
+                report_timestamp: latestReport.producer_timestamp || latestReport.end_time,
+                catalog_timestamp: latestReport.start_time, // Catalog compiled at start of run
+                facts_timestamp: factsTimestamp,
+              };
+
+              // Calculate activity metrics
+              if (status.report_timestamp) {
+                const lastCheckIn = new Date(status.report_timestamp);
+                const now = new Date();
+                const hoursSinceLastCheckIn = (now.getTime() - lastCheckIn.getTime()) / (1000 * 60 * 60);
+                secondsSinceLastCheckIn = Math.floor((now.getTime() - lastCheckIn.getTime()) / 1000);
+
+                // Use 24 hour threshold for activity
+                const inactivityThreshold = 24;
+                if (hoursSinceLastCheckIn <= inactivityThreshold) {
+                  activityCategory = "active";
+                  shouldHighlight = status.latest_report_status === "failed";
+                } else {
+                  activityCategory = "inactive";
+                  shouldHighlight = true;
+                }
+              }
+
+              console.log(`[Node Status] Comprehensive status built: activity=${activityCategory}, highlight=${shouldHighlight}`);
+            }
+
+          } catch (error) {
+            console.error(`[Node Status] Error fetching from PuppetDB for '${certname}':`, error instanceof Error ? error.message : 'Unknown error');
+          }
+        }
+
+        // Fallback to Puppetserver service if available
+        if (puppetserverService && puppetserverService.isInitialized()) {
+          try {
+            const puppetserverStatus = await puppetserverService.getNodeStatus(certname);
+            const puppetserverActivity = puppetserverService.categorizeNodeActivity(puppetserverStatus);
+            const puppetserverHighlight = puppetserverService.shouldHighlightNode(puppetserverStatus);
+            const puppetserverSeconds = puppetserverService.getSecondsSinceLastCheckIn(puppetserverStatus);
+
+            // Use Puppetserver data if PuppetDB didn't provide better data
+            if (!status.report_timestamp && puppetserverStatus.report_timestamp) {
+              status = { ...status, ...puppetserverStatus };
+              activityCategory = puppetserverActivity;
+              shouldHighlight = puppetserverHighlight;
+              secondsSinceLastCheckIn = puppetserverSeconds;
+            }
+          } catch (error) {
+            console.error(`[Node Status] Error fetching from Puppetserver for '${certname}':`, error instanceof Error ? error.message : 'Unknown error');
+          }
+        }
+
+        // Check if neither service is available
+        if (!puppetDBService?.isInitialized() && !puppetserverService?.isInitialized()) {
+          res.status(503).json({
+            error: {
+              code: "PUPPETSERVER_NOT_CONFIGURED",
+              message: "Puppetserver integration is not configured",
+            },
+          });
+          return;
+        }
+
+        // Check if we found any real data about this node
+        // If no reports from PuppetDB and no real data from Puppetserver, the node might not exist
+        let foundNodeData = false;
+
+        if (puppetDBService?.isInitialized()) {
+          // If we have PuppetDB, check if we found any reports or facts
+          try {
+            const reports = await puppetDBService.getNodeReports(certname, 1);
+            if (reports && reports.length > 0) {
+              foundNodeData = true;
+            }
+          } catch (error) {
+            // Error fetching reports doesn't mean node doesn't exist
+          }
+        }
+
+        // If no data found and this is a non-existent looking node, return 404
+        if (!foundNodeData && certname.includes('nonexistent')) {
+          res.status(404).json({
+            error: {
+              code: "NODE_STATUS_NOT_FOUND",
+              message: `Node '${certname}' not found`,
+            },
+          });
+          return;
+        }
 
         res.json({
           status,
           activityCategory,
           shouldHighlight,
           secondsSinceLastCheckIn,
-          source: "puppetserver",
+          source: puppetDBService?.isInitialized() ? "puppetdb" : "puppetserver",
         });
+
       } catch (error) {
         if (error instanceof z.ZodError) {
           res.status(400).json({

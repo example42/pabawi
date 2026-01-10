@@ -12,7 +12,6 @@ The current implementation has several critical bugs that prevent core functiona
 2. **Inventory View**: Does not show Puppetserver nodes
 3. **Node View Issues**:
    - Puppetserver facts don't show up
-   - Certificate status returns errors
    - Node status returns "node not found" for existing nodes
    - Catalog compilation shows fake "environment 1" and "environment 2"
    - Environments tab shows no environments
@@ -20,7 +19,6 @@ The current implementation has several critical bugs that prevent core functiona
    - Catalog from PuppetDB shows no resources
    - No view of catalog from Puppetserver (should merge catalog tabs)
 4. **Events Page**: Hangs indefinitely
-5. **Certificates Page**: Shows no certificates
 
 ### Version 0.3.0 Goals
 
@@ -34,12 +32,8 @@ This version prioritizes **fixing existing functionality** over adding new featu
 ## Glossary
 
 - **Pabawi**: A general-purpose remote execution interface that integrates multiple infrastructure management tools (Bolt, PuppetDB, Puppetserver, Ansible, etc.)
-- **Puppetserver**: The Puppet server application that compiles catalogs, serves files, and manages the certificate authority
-- **Certificate Authority (CA)**: The Puppetserver component that issues, signs, and revokes SSL certificates for Puppet agents
+- **Puppetserver**: The Puppet server application that compiles catalogs and serves files
 - **Certname**: The unique identifier for a node in Puppet, typically the fully qualified domain name (FQDN)
-- **Certificate Request (CSR)**: A request from a Puppet agent to have its certificate signed by the CA
-- **Signed Certificate**: A certificate that has been approved and signed by the CA, allowing the node to communicate with Puppetserver
-- **Revoked Certificate**: A certificate that has been invalidated and can no longer be used for authentication
 - **Puppet Environment**: A isolated branch of Puppet code that can be deployed and tested independently
 - **Catalog Compilation**: The process of generating a node-specific catalog from Puppet code for a given environment
 - **Node Status**: Information about a node's last Puppet run, including timestamp, success/failure, and catalog version
@@ -62,21 +56,9 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN Bolt provides inventory THEN it SHALL be accessible through the same getInventory() interface as other information sources
 5. WHEN Bolt executes actions THEN it SHALL be accessible through the executeAction() interface like other execution tools
 
-### Requirement 2: Fix Puppetserver Certificate API
+### Requirement 2: Fix Puppetserver Inventory Integration
 
-**User Story:** As an infrastructure administrator, I want to view all nodes in the Puppetserver certificate authority, so that I can see which nodes have certificates and their certificate status.
-
-#### Acceptance Criteria
-
-1. WHEN the system queries Puppetserver certificates endpoint THEN it SHALL use the correct API path and authentication
-2. WHEN Puppetserver returns certificate data THEN the system SHALL correctly parse and transform the response
-3. WHEN displaying certificates THEN the system SHALL show the certname, status, fingerprint, and expiration date for each certificate
-4. WHEN the certificates page loads THEN it SHALL display all certificates without errors
-5. WHEN Puppetserver connection fails THEN the system SHALL display an error message and continue to show data from other available sources
-
-### Requirement 3: Fix Puppetserver Inventory Integration
-
-**User Story:** As an infrastructure administrator, I want to see nodes from Puppetserver CA in the inventory view, so that I can discover and manage nodes that have registered with Puppet.
+**User Story:** As an infrastructure administrator, I want to see nodes from Puppetserver in the inventory view, so that I can discover and manage nodes that have registered with Puppet.
 
 #### Acceptance Criteria
 
@@ -84,9 +66,9 @@ This version prioritizes **fixing existing functionality** over adding new featu
 2. WHEN Puppetserver provides nodes THEN they SHALL be correctly transformed to the normalized Node format
 3. WHEN a node exists in multiple sources THEN the system SHALL link them based on matching certname/hostname
 4. WHEN displaying inventory THEN each node SHALL show its source(s) clearly
-5. WHEN filtering inventory THEN the system SHALL support filtering by source and certificate status
+5. WHEN filtering inventory THEN the system SHALL support filtering by source
 
-### Requirement 4: Fix Puppetserver Facts API
+### Requirement 3: Fix Puppetserver Facts API
 
 **User Story:** As an infrastructure administrator, I want to view node facts from Puppetserver on the node detail page, so that I can see current system information.
 
@@ -98,7 +80,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN Puppetserver facts retrieval fails THEN the system SHALL display an error message while preserving facts from other sources
 5. WHEN no facts are available THEN the system SHALL display a clear "no facts available" message
 
-### Requirement 5: Fix Puppetserver Node Status API
+### Requirement 4: Fix Puppetserver Node Status API
 
 **User Story:** As an infrastructure administrator, I want to view node status from Puppetserver without errors, so that I can see when nodes last checked in.
 
@@ -110,7 +92,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN node status is unavailable THEN the system SHALL display a clear message without blocking other functionality
 5. WHEN the API call fails THEN the system SHALL log detailed error information for debugging
 
-### Requirement 6: Fix Puppetserver Catalog Compilation
+### Requirement 5: Fix Puppetserver Catalog Compilation
 
 **User Story:** As an infrastructure administrator, I want to compile and view catalogs from Puppetserver with real environments, so that I can see what would be applied to nodes.
 
@@ -122,7 +104,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN displaying a compiled catalog THEN the system SHALL show the environment name, compilation timestamp, and all resources
 5. WHEN catalog compilation fails THEN the system SHALL display detailed error messages with actionable information
 
-### Requirement 7: Fix Puppetserver Environments API
+### Requirement 6: Fix Puppetserver Environments API
 
 **User Story:** As an infrastructure administrator, I want to view real Puppet environments, so that I can understand what code versions are available.
 
@@ -134,7 +116,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN no environments are configured THEN the system SHALL display a clear message
 5. WHEN the API call fails THEN the system SHALL display an error message with troubleshooting guidance
 
-### Requirement 8: Fix PuppetDB Reports API
+### Requirement 7: Fix PuppetDB Reports API
 
 **User Story:** As an infrastructure administrator, I want to view Puppet reports with correct metrics, so that I can see resource changes and run statistics.
 
@@ -146,7 +128,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN report metrics are missing THEN the system SHALL handle gracefully and display available information
 5. WHEN the API call fails THEN the system SHALL display an error message while preserving other node functionality
 
-### Requirement 9: Fix PuppetDB Catalog API
+### Requirement 8: Fix PuppetDB Catalog API
 
 **User Story:** As an infrastructure administrator, I want to view catalog resources from PuppetDB, so that I can see what is currently applied to nodes.
 
@@ -158,7 +140,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN no catalog is available THEN the system SHALL display a clear "no catalog available" message
 5. WHEN the API call fails THEN the system SHALL display an error message with troubleshooting information
 
-### Requirement 10: Fix Events Page Performance
+### Requirement 9: Fix Events Page Performance
 
 **User Story:** As an infrastructure administrator, I want the events page to load without hanging, so that I can view node events.
 
@@ -170,7 +152,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN the API call is slow THEN the system SHALL show a loading indicator and allow cancellation
 5. WHEN the API call fails THEN the system SHALL display an error message and allow retry
 
-### Requirement 11: Merge and Fix Catalog Views
+### Requirement 10: Merge and Fix Catalog Views
 
 **User Story:** As an infrastructure administrator, I want a unified catalog view that shows catalogs from both PuppetDB and Puppetserver, so that I can compare current vs. compiled catalogs.
 
@@ -182,7 +164,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN displaying resources THEN the system SHALL use a consistent format regardless of source
 5. WHEN either source fails THEN the system SHALL display the available catalog and show an error for the unavailable one
 
-### Requirement 12: Improve Error Handling and Logging
+### Requirement 11: Improve Error Handling and Logging
 
 **User Story:** As a developer, I want comprehensive error handling and logging, so that I can quickly diagnose and fix API integration issues.
 
@@ -194,7 +176,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN network errors occur THEN the system SHALL distinguish between connection failures, timeouts, and authentication errors
 5. WHEN errors are transient THEN the system SHALL implement retry logic with exponential backoff
 
-### Requirement 13: Restructure Navigation and Pages
+### Requirement 12: Restructure Navigation and Pages
 
 **User Story:** As a user, I want a reorganized navigation structure that groups Puppet-related functionality together, so that I can easily find and access Puppet features.
 
@@ -202,11 +184,11 @@ This version prioritizes **fixing existing functionality** over adding new featu
 
 1. WHEN viewing the top navigation THEN it SHALL display: Home, Inventory, Executions, Puppet
 2. WHEN viewing the Home page with PuppetDB active THEN it SHALL display a Puppet reports summary component
-3. WHEN navigating to the Puppet page THEN it SHALL display Environments, Reports, and Certificates sections
+3. WHEN navigating to the Puppet page THEN it SHALL display Environments and Reports sections
 4. WHEN viewing the Puppet page with Puppetserver active THEN it SHALL display Puppetserver status components
 5. WHEN viewing the Puppet page with PuppetDB active THEN it SHALL display PuppetDB admin components
 
-### Requirement 14: Restructure Node Detail Page
+### Requirement 13: Restructure Node Detail Page
 
 **User Story:** As a user, I want a reorganized node detail page that groups related functionality into logical tabs, so that I can efficiently navigate node information.
 
@@ -216,9 +198,9 @@ This version prioritizes **fixing existing functionality** over adding new featu
 2. WHEN viewing the Overview tab THEN it SHALL display general node info, latest Puppet runs, and latest executions
 3. WHEN viewing the Facts tab THEN it SHALL display facts from all sources with source attribution and YAML export option
 4. WHEN viewing the Actions tab THEN it SHALL display Install software, Execute Commands, Execute Task, and Execution History
-5. WHEN viewing the Puppet tab THEN it SHALL display sub-tabs for Certificate Status, Node Status, Catalog Compilation, Reports, Catalog, Events, and Managed Resources
+5. WHEN viewing the Puppet tab THEN it SHALL display sub-tabs for Node Status, Catalog Compilation, Reports, Catalog, Events, and Managed Resources
 
-### Requirement 15: Implement Managed Resources View
+### Requirement 14: Implement Managed Resources View
 
 **User Story:** As a user, I want to view managed resources from PuppetDB, so that I can see all resources managed by Puppet on a node.
 
@@ -230,7 +212,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN no resources are available THEN the system SHALL display a clear message
 5. WHEN the API call fails THEN the system SHALL display an error with troubleshooting guidance
 
-### Requirement 16: Implement Expert Mode
+### Requirement 15: Implement Expert Mode
 
 **User Story:** As a power user or developer, I want an expert mode that shows detailed technical information, so that I can troubleshoot issues and understand system operations.
 
@@ -242,7 +224,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN expert mode is enabled THEN components SHALL display troubleshooting hints
 5. WHEN expert mode is enabled THEN components SHALL display setup instructions where applicable
 
-### Requirement 17: Add Puppetserver Status Components
+### Requirement 16: Add Puppetserver Status Components
 
 **User Story:** As an administrator, I want to view Puppetserver status and metrics, so that I can monitor the health of my Puppet infrastructure.
 
@@ -254,7 +236,7 @@ This version prioritizes **fixing existing functionality** over adding new featu
 4. WHEN viewing the Puppet page with Puppetserver active THEN it SHALL display a component for /metrics/v2 with performance warning
 5. WHEN Puppetserver is not active THEN these components SHALL not be displayed
 
-### Requirement 18: Add PuppetDB Admin Components
+### Requirement 17: Add PuppetDB Admin Components
 
 **User Story:** As an administrator, I want to view PuppetDB administrative information, so that I can monitor and manage my PuppetDB instance.
 

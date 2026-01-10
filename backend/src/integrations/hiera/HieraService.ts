@@ -188,12 +188,12 @@ export class HieraService {
    *
    * @returns Key index with all discovered keys
    */
-  async getAllKeys(): Promise<HieraKeyIndex> {
+  getAllKeys(): Promise<HieraKeyIndex> {
     this.ensureInitialized();
 
     // Check cache
     if (this.cacheEnabled && this.keyIndexCache && !this.isCacheExpired(this.keyIndexCache)) {
-      return this.keyIndexCache.value;
+      return Promise.resolve(this.keyIndexCache.value);
     }
 
     // Get the current key index from the scanner (don't rescan)
@@ -204,7 +204,7 @@ export class HieraService {
       this.keyIndexCache = this.createCacheEntry(keyIndex);
     }
 
-    return keyIndex;
+    return Promise.resolve(keyIndex);
   }
 
   /**
@@ -481,24 +481,20 @@ export class HieraService {
     // Try to get included classes from PuppetDB catalog
     const includedClasses = await this.getIncludedClasses(nodeId);
 
-    // If no catalog data available, classify based on whether keys are found
+    // If no catalog data available, mark all keys as unused since we can't determine usage
     if (includedClasses.length === 0) {
-      this.log(`No catalog classes found for node ${nodeId}, falling back to resolution-based classification`);
-      for (const [keyName, resolution] of keys) {
-        if (resolution.found) {
-          usedKeys.add(keyName);
-        } else {
-          unusedKeys.add(keyName);
-        }
+      this.log(`No catalog classes found for node ${nodeId}, marking all keys as unused`);
+      for (const keyName of keys.keys()) {
+        unusedKeys.add(keyName);
       }
-      this.log(`Fallback classification: ${usedKeys.size} used keys, ${unusedKeys.size} unused keys`);
+      this.log(`No-catalog classification: ${String(usedKeys.size)} used keys, ${String(unusedKeys.size)} unused keys`);
       return { usedKeys, unusedKeys };
     }
 
     // Build class prefixes for matching
     // e.g., "profile::nginx" -> ["profile::nginx::", "profile::nginx"]
     const classPrefixes = this.buildClassPrefixes(includedClasses);
-    this.log(`Built ${classPrefixes.size} class prefixes from ${includedClasses.length} classes`);
+    this.log(`Built ${String(classPrefixes.size)} class prefixes from ${String(includedClasses.length)} classes`);
 
     // Classify each key
     for (const keyName of keys.keys()) {
@@ -509,7 +505,7 @@ export class HieraService {
       }
     }
 
-    this.log(`Class-based classification: ${usedKeys.size} used keys, ${unusedKeys.size} unused keys`);
+    this.log(`Class-based classification: ${String(usedKeys.size)} used keys, ${String(unusedKeys.size)} unused keys`);
     return { usedKeys, unusedKeys };
   }
 
@@ -533,7 +529,7 @@ export class HieraService {
 
       // Use the same method as Managed Resources: call getNodeCatalog directly
       // This ensures we get the properly transformed catalog data
-      const catalog = await (puppetdb as any).getNodeCatalog(nodeId) as Catalog | null;
+      const catalog = await (puppetdb as unknown as { getNodeCatalog: (nodeId: string) => Promise<Catalog | null> }).getNodeCatalog(nodeId);
 
       if (!catalog) {
         this.log(`No catalog data available for node: ${nodeId}`);
@@ -541,7 +537,7 @@ export class HieraService {
       }
 
       // Extract class names from catalog resources
-      if (!catalog.resources || !Array.isArray(catalog.resources)) {
+      if (!Array.isArray(catalog.resources)) {
         this.log(`Catalog for node ${nodeId} has no resources array`);
         return [];
       }
@@ -724,9 +720,7 @@ export class HieraService {
     if (this.catalogCompiler) {
       try {
         const catalogResult = await this.catalogCompiler.compileCatalog(nodeId, "production", facts);
-        if (catalogResult.success && catalogResult.variables) {
-          catalogVariables = catalogResult.variables;
-        }
+        catalogVariables = catalogResult.variables;
       } catch (error) {
         this.log(`Failed to get catalog variables for ${nodeId}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -757,7 +751,7 @@ export class HieraService {
             canResolve: interpolationResult.canResolve,
             unresolvedVariables: interpolationResult.unresolvedVariables,
           });
-        } catch (error) {
+        } catch {
           // If interpolation fails completely, still show the template
           hierarchyFiles.push({
             path: pathTemplate,

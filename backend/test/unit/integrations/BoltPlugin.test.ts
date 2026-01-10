@@ -7,6 +7,18 @@ import { BoltPlugin } from "../../../src/integrations/bolt/BoltPlugin";
 import type { BoltService } from "../../../src/bolt/BoltService";
 import type { IntegrationConfig } from "../../../src/integrations/types";
 
+// Mock child_process
+const mockSpawn = vi.fn();
+vi.mock("child_process", () => ({
+  spawn: mockSpawn,
+}));
+
+// Mock fs
+const mockExistsSync = vi.fn();
+vi.mock("fs", () => ({
+  existsSync: mockExistsSync,
+}));
+
 describe("BoltPlugin", () => {
   let mockBoltService: BoltService;
   let boltPlugin: BoltPlugin;
@@ -19,10 +31,14 @@ describe("BoltPlugin", () => {
       runTask: vi.fn(),
       runScript: vi.fn(),
       getFacts: vi.fn(),
+      gatherFacts: vi.fn(),
       getBoltProjectPath: vi.fn().mockReturnValue("/test/bolt-project"),
     } as unknown as BoltService;
 
     boltPlugin = new BoltPlugin(mockBoltService);
+
+    // Reset mocks
+    vi.clearAllMocks();
   });
 
   describe("initialization", () => {
@@ -73,6 +89,17 @@ describe("BoltPlugin", () => {
       ];
       vi.mocked(mockBoltService.getInventory).mockResolvedValue(mockInventory);
 
+      // Mock spawn to simulate bolt command not available
+      const mockProcess = {
+        on: vi.fn((event, callback) => {
+          if (event === "error") {
+            setTimeout(() => callback(new Error("Command not found")), 10);
+          }
+        }),
+        kill: vi.fn(),
+      };
+      mockSpawn.mockReturnValue(mockProcess);
+
       const config: IntegrationConfig = {
         enabled: true,
         name: "bolt",
@@ -87,7 +114,7 @@ describe("BoltPlugin", () => {
       // Since Bolt is not installed on the test system, health check should fail
       expect(health.healthy).toBe(false);
       expect(health.message).toContain("Bolt");
-    });
+    }, 10000);
 
     it("should return unhealthy status when not initialized", async () => {
       const health = await boltPlugin.healthCheck();
@@ -100,6 +127,17 @@ describe("BoltPlugin", () => {
       vi.mocked(mockBoltService.getInventory)
         .mockResolvedValueOnce([]); // First call for initialization
 
+      // Mock spawn to simulate bolt command not available
+      const mockProcess = {
+        on: vi.fn((event, callback) => {
+          if (event === "close") {
+            setTimeout(() => callback(1), 10); // Exit code 1 = failure
+          }
+        }),
+        kill: vi.fn(),
+      };
+      mockSpawn.mockReturnValue(mockProcess);
+
       const config: IntegrationConfig = {
         enabled: true,
         name: "bolt",
@@ -111,10 +149,9 @@ describe("BoltPlugin", () => {
       await boltPlugin.initialize(config);
       const health = await boltPlugin.healthCheck();
 
-      // Health check will fail because Bolt is not installed
       expect(health.healthy).toBe(false);
-      expect(health.message).toContain("Bolt");
-    });
+      expect(health.message).toContain("Bolt command is not available");
+    }, 10000);
   });
 
   describe("executeAction", () => {

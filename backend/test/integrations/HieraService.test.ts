@@ -421,7 +421,16 @@ describe("HieraService", () => {
 
   describe("error handling", () => {
     it("should throw error when not initialized", async () => {
-      await expect(service.getAllKeys()).rejects.toThrow("not initialized");
+      // Create a fresh, uninitialized service for this test
+      const freshService = new HieraService(integrationManager, config);
+
+      try {
+        await freshService.getAllKeys();
+        expect.fail("Expected getAllKeys to throw an error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe("HieraService is not initialized. Call initialize() first.");
+      }
     });
   });
 

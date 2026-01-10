@@ -107,6 +107,7 @@ hierarchy:
 ## Key Resolution Flow
 
 ### 1. Configuration Parsing
+
 ```
 HieraService.initialize()
   ↓
@@ -116,6 +117,7 @@ Extract hierarchy levels and datadirs
 ```
 
 ### 2. Data Discovery
+
 ```
 HieraScanner.scan()
   ↓
@@ -127,6 +129,7 @@ Build HieraKeyIndex (Map<keyName, HieraKey>)
 ```
 
 ### 3. Key Resolution
+
 ```
 HieraService.resolveKey(nodeId, key)
   ↓
@@ -145,6 +148,7 @@ Return HieraResolution
 ## Diagnostic Steps
 
 ### Step 1: Verify Configuration
+
 ```bash
 # Check if Hiera is enabled
 curl http://localhost:3000/api/integrations/hiera/status
@@ -161,6 +165,7 @@ curl http://localhost:3000/api/integrations/hiera/status
 ```
 
 ### Step 2: Check Key Discovery
+
 ```bash
 # Get all discovered keys
 curl http://localhost:3000/api/integrations/hiera/keys
@@ -173,6 +178,7 @@ curl http://localhost:3000/api/integrations/hiera/keys
 ```
 
 ### Step 3: Verify Node Facts
+
 ```bash
 # Check if facts are available for the node
 curl http://localhost:3000/api/integrations/puppetdb/nodes/puppet.office.lab42/facts
@@ -185,6 +191,7 @@ curl http://localhost:3000/api/integrations/puppetdb/nodes/puppet.office.lab42/f
 ```
 
 ### Step 4: Test Key Resolution
+
 ```bash
 # Try to resolve a specific key
 curl http://localhost:3000/api/integrations/hiera/nodes/puppet.office.lab42/keys/common::setting
@@ -201,9 +208,11 @@ curl http://localhost:3000/api/integrations/hiera/nodes/puppet.office.lab42/keys
 ## Common Issues and Solutions
 
 ### Issue 1: "Hiera integration is not configured"
+
 **Cause:** `HIERA_CONTROL_REPO_PATH` not set or invalid
 
 **Solution:**
+
 ```bash
 # Set the environment variable
 export HIERA_CONTROL_REPO_PATH=/path/to/control-repo
@@ -213,9 +222,11 @@ ls -la /path/to/control-repo/hiera.yaml
 ```
 
 ### Issue 2: "Key count: 0" in status
+
 **Cause:** Hieradata directory not found or empty
 
 **Solution:**
+
 ```bash
 # Check if data directory exists
 ls -la /path/to/control-repo/data/
@@ -228,9 +239,11 @@ find /path/to/control-repo/data -name "*.yaml" -o -name "*.yml"
 ```
 
 ### Issue 3: "found: false" for all keys
+
 **Cause:** Facts not available or hierarchy paths not interpolating correctly
 
 **Solution:**
+
 ```bash
 # Check if node has facts in PuppetDB
 curl https://puppetdb.example.com:8081/pdb/query/v4/nodes/puppet.office.lab42
@@ -243,9 +256,11 @@ ls -la /path/to/facts/puppet.office.lab42.json
 ```
 
 ### Issue 4: "Hiera integration is not initialized"
+
 **Cause:** Initialization failed, check server logs
 
 **Solution:**
+
 ```bash
 # Check server logs for errors
 tail -f /var/log/application.log | grep -i hiera
@@ -260,6 +275,7 @@ tail -f /var/log/application.log | grep -i hiera
 ## File Locations and Responsibilities
 
 ### Configuration Files
+
 - **`backend/src/config/schema.ts`** (lines 220-250)
   - Defines HieraConfig schema with all configuration options
   - Validates environment variables
@@ -269,6 +285,7 @@ tail -f /var/log/application.log | grep -i hiera
   - Documents all Hiera-related settings
 
 ### Implementation Files
+
 - **`backend/src/integrations/hiera/HieraParser.ts`**
   - Parses `hiera.yaml` in Hiera 5 format
   - Extracts hierarchy levels and datadirs
@@ -294,6 +311,7 @@ tail -f /var/log/application.log | grep -i hiera
   - Implements fact source priority
 
 ### API Routes
+
 - **`backend/src/routes/hiera.ts`**
   - `GET /api/integrations/hiera/status` - Check integration status
   - `GET /api/integrations/hiera/keys` - List all discovered keys
@@ -353,6 +371,7 @@ tail -f /var/log/application.log | grep -i hiera
 ## Testing the Setup
 
 ### 1. Create Test Hiera Configuration
+
 ```yaml
 # /path/to/control-repo/hiera.yaml
 ---
@@ -368,6 +387,7 @@ hierarchy:
 ```
 
 ### 2. Create Test Data File
+
 ```yaml
 # /path/to/control-repo/data/common.yaml
 ---
@@ -376,12 +396,14 @@ common::port: 8080
 ```
 
 ### 3. Set Environment Variables
+
 ```bash
 export HIERA_ENABLED=true
 export HIERA_CONTROL_REPO_PATH=/path/to/control-repo
 ```
 
 ### 4. Restart Application and Test
+
 ```bash
 # Check status
 curl http://localhost:3000/api/integrations/hiera/status

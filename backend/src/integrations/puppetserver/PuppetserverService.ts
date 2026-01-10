@@ -17,10 +17,8 @@ import type { PuppetserverConfig } from "../../config/schema";
 import { PuppetserverClient } from "./PuppetserverClient";
 import type {
   NodeStatus,
-  NodeActivityCategory,
   Environment,
   DeploymentResult,
-  BulkOperationResult,
   Catalog,
   CatalogDiff,
   CatalogResource,
@@ -536,10 +534,82 @@ export class PuppetserverService
    *
    * @returns Empty array of node statuses
    */
-  async listNodeStatuses(): Promise<NodeStatus[]> {
+  listNodeStatuses(): Promise<NodeStatus[]> {
     this.ensureInitialized();
     this.log("Certificate management removed - listNodeStatuses() returning empty array");
-    return [];
+    return Promise.resolve([]);
+  }
+
+  /**
+   * Get node status
+   *
+   * Note: Certificate management has been removed. This method now returns
+   * a basic status object as node status should come from PuppetDB instead.
+   *
+   * @param nodeId - Node identifier
+   * @returns Basic node status
+   */
+  async getNodeStatus(nodeId: string): Promise<NodeStatus> {
+    this.ensureInitialized();
+    this.log(`Certificate management removed - getNodeStatus('${nodeId}') returning basic status`);
+    return {
+      certname: nodeId,
+      state: "unknown",
+      catalog_environment: "production",
+      report_environment: "production",
+      facts_environment: "production",
+      report_timestamp: null,
+      catalog_timestamp: null,
+      facts_timestamp: null,
+    };
+  }
+
+  /**
+   * Categorize node activity
+   *
+   * Note: Certificate management has been removed. This method now returns
+   * a basic activity category.
+   *
+   * @param _status - Node status (unused)
+   * @returns Activity category
+   */
+  categorizeNodeActivity(_status: NodeStatus): string {
+    this.log(`Certificate management removed - categorizeNodeActivity returning 'unknown'`);
+    return "unknown";
+  }
+
+  /**
+   * Check if node should be highlighted
+   *
+   * Note: Certificate management has been removed. This method now returns false.
+   *
+   * @param _status - Node status (unused)
+   * @returns False
+   */
+  /**
+   * Determine if node should be highlighted
+   *
+   * Note: Certificate management has been removed. This method now returns false.
+   *
+   * @param _status - Node status (unused)
+   * @returns False
+   */
+  shouldHighlightNode(_status: NodeStatus): boolean {
+    this.log(`Certificate management removed - shouldHighlightNode returning false`);
+    return false;
+  }
+
+  /**
+   * Get seconds since last check-in
+   *
+   * Note: Certificate management has been removed. This method now returns 0.
+   *
+   * @param _status - Node status (unused)
+   * @returns 0
+   */
+  getSecondsSinceLastCheckIn(_status: NodeStatus): number {
+    this.log(`Certificate management removed - getSecondsSinceLastCheckIn returning 0`);
+    return 0;
   }
 
   /**
@@ -664,7 +734,7 @@ export class PuppetserverService
     try {
       // Try to get node status first to determine environment
       const status = await this.getNodeStatus(certname);
-      const environment = status.catalog_environment ?? "production";
+      const environment = (status as { catalog_environment?: string }).catalog_environment ?? "production";
 
       return await this.compileCatalog(certname, environment);
     } catch {
