@@ -105,32 +105,32 @@ validate_env() {
 
     # Set default port if not specified
     PUPPETSERVER_PORT="${PUPPETSERVER_PORT:-8140}"
-    
+
     print_status "Using Puppetserver: $PUPPETSERVER_SERVER_URL:$PUPPETSERVER_PORT"
 }
 
 # Function to get certificate paths from environment
 get_cert_paths() {
     local certname="$1"
-    
+
     # Use configured paths from environment variables
     CERT_FILE="${PUPPETSERVER_SSL_CERT:-}"
     KEY_FILE="${PUPPETSERVER_SSL_KEY:-}"
     CA_FILE="${PUPPETSERVER_SSL_CA:-}"
-    
+
     # If paths are not configured, fall back to default structure
     if [[ -z "$CERT_FILE" ]]; then
         CERT_FILE="$PROJECT_ROOT/certs/${certname}.pem"
     fi
-    
+
     if [[ -z "$KEY_FILE" ]]; then
         KEY_FILE="$PROJECT_ROOT/certs/private/${certname}.pem"
     fi
-    
+
     if [[ -z "$CA_FILE" ]]; then
         CA_FILE="$PROJECT_ROOT/certs/ca.pem"
     fi
-    
+
     print_status "Certificate paths:"
     print_status "  Certificate: $CERT_FILE"
     print_status "  Private Key: $KEY_FILE"
@@ -140,37 +140,37 @@ get_cert_paths() {
 # Function to create certificate directories based on configured paths
 create_cert_dirs() {
     local certname="$1"
-    
+
     # Get paths from environment
     get_cert_paths "$certname"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would create directories for certificate paths"
         return
     fi
-    
+
     # Create directories for certificate files
     local cert_dir=$(dirname "$CERT_FILE")
     local key_dir=$(dirname "$KEY_FILE")
     local ca_dir=$(dirname "$CA_FILE")
-    
+
     mkdir -p "$cert_dir" "$key_dir" "$ca_dir"
-    
+
     # Secure private key directory
     chmod 700 "$key_dir"
-    
+
     print_status "Created certificate directories"
 }
 
 # Function to generate private key
 generate_private_key() {
     local certname="$1"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would generate private key: $KEY_FILE"
         return
     fi
-    
+
     if [[ -f "$KEY_FILE" ]]; then
         print_warning "Private key already exists: $KEY_FILE"
         read -p "Overwrite? (y/N): " -n 1 -r
@@ -180,7 +180,7 @@ generate_private_key() {
             return
         fi
     fi
-    
+
     print_status "Generating private key..."
     openssl genrsa -out "$KEY_FILE" 4096
     chmod 600 "$KEY_FILE"
@@ -191,12 +191,12 @@ generate_private_key() {
 create_openssl_config() {
     local certname="$1"
     local config_file="$(dirname "$CERT_FILE")/${certname}.conf"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would create OpenSSL config: $config_file"
         return
     fi
-    
+
     cat > "$config_file" << EOF
 [req]
 distinguished_name = req_distinguished_name
@@ -205,7 +205,7 @@ prompt = no
 [req_distinguished_name]
 CN = $certname
 EOF
-    
+
     print_success "OpenSSL configuration created: $config_file"
     CONFIG_FILE="$config_file"
 }
@@ -214,12 +214,12 @@ EOF
 generate_csr() {
     local certname="$1"
     local csr_file="$(dirname "$CERT_FILE")/${certname}.csr"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would generate CSR: $csr_file"
         return
     fi
-    
+
     print_status "Generating Certificate Signing Request..."
     openssl req -new -key "$KEY_FILE" -out "$csr_file" -config "$CONFIG_FILE"
     print_success "CSR generated: $csr_file"
@@ -230,40 +230,40 @@ generate_csr() {
 submit_csr() {
     local certname="$1"
     local url="$PUPPETSERVER_SERVER_URL:$PUPPETSERVER_PORT/puppet-ca/v1/certificate_request/$certname"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would submit CSR to: $url"
         return
     fi
-    
+
     print_status "Submitting CSR to Puppetserver..."
-    
+
     # Build curl command with SSL options
     local curl_cmd="curl -X PUT"
     curl_cmd+=" -H 'Content-Type: text/plain'"
     curl_cmd+=" --data-binary @$CSR_FILE"
-    
+
     # Add SSL options if available
     if [[ -n "${PUPPETSERVER_SSL_CA:-}" ]] && [[ -f "${PUPPETSERVER_SSL_CA}" ]]; then
         curl_cmd+=" --cacert $PUPPETSERVER_SSL_CA"
     fi
-    
+
     if [[ -n "${PUPPETSERVER_SSL_CERT:-}" ]] && [[ -f "${PUPPETSERVER_SSL_CERT}" ]]; then
         curl_cmd+=" --cert $PUPPETSERVER_SSL_CERT"
     fi
-    
+
     if [[ -n "${PUPPETSERVER_SSL_KEY:-}" ]] && [[ -f "${PUPPETSERVER_SSL_KEY}" ]]; then
         curl_cmd+=" --key $PUPPETSERVER_SSL_KEY"
     fi
-    
+
     # Always skip certificate validation when submitting CSR
     # since we don't have the CA certificate yet or it's self-signed
     curl_cmd+=" -k"
-    
+
     curl_cmd+=" $url"
-    
+
     print_status "Executing: $curl_cmd"
-    
+
     if eval "$curl_cmd"; then
         print_success "CSR submitted successfully"
         print_status ""
@@ -284,30 +284,30 @@ submit_csr() {
 download_certificate() {
     local certname="$1"
     local url="$PUPPETSERVER_SERVER_URL:$PUPPETSERVER_PORT/puppet-ca/v1/certificate/$certname"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would download certificate from: $url"
         return
     fi
-    
+
     print_status "Downloading signed certificate..."
-    
+
     # Build curl command
     local curl_cmd="curl -o $CERT_FILE"
-    
+
     # Add SSL options if available
     if [[ -n "${PUPPETSERVER_SSL_CA:-}" ]] && [[ -f "${PUPPETSERVER_SSL_CA}" ]]; then
         curl_cmd+=" --cacert $PUPPETSERVER_SSL_CA"
     fi
-    
+
     if [[ -n "${PUPPETSERVER_SSL_CERT:-}" ]] && [[ -f "${PUPPETSERVER_SSL_CERT}" ]]; then
         curl_cmd+=" --cert $PUPPETSERVER_SSL_CERT"
     fi
-    
+
     if [[ -n "${PUPPETSERVER_SSL_KEY:-}" ]] && [[ -f "${PUPPETSERVER_SSL_KEY}" ]]; then
         curl_cmd+=" --key $PUPPETSERVER_SSL_KEY"
     fi
-    
+
     # Add reject unauthorized option (for downloading, we might have CA cert)
     if [[ "${PUPPETSERVER_SSL_REJECT_UNAUTHORIZED:-true}" == "false" ]]; then
         curl_cmd+=" -k"
@@ -315,18 +315,18 @@ download_certificate() {
         # If no CA cert available, skip validation
         curl_cmd+=" -k"
     fi
-    
+
     curl_cmd+=" $url"
-    
+
     if eval "$curl_cmd"; then
         print_success "Certificate downloaded: $CERT_FILE"
-        
+
         # Download CA certificate if it doesn't exist
         download_ca_certificate
-        
+
         # Verify the certificate
         verify_certificate "$certname"
-        
+
         print_success "Certificate setup completed successfully!"
     else
         print_error "Failed to download certificate"
@@ -341,13 +341,13 @@ download_ca_certificate() {
         print_status "CA certificate already exists: $CA_FILE"
         return
     fi
-    
+
     print_status "Downloading CA certificate..."
     local ca_url="$PUPPETSERVER_SERVER_URL:$PUPPETSERVER_PORT/puppet-ca/v1/certificate/ca"
-    
+
     # Build curl command for CA download
     local curl_cmd="curl -o $CA_FILE -k $ca_url"
-    
+
     if eval "$curl_cmd"; then
         print_success "CA certificate downloaded: $CA_FILE"
     else
@@ -358,33 +358,33 @@ download_ca_certificate() {
 # Function to verify certificate
 verify_certificate() {
     local certname="$1"
-    
+
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would verify certificate: $CERT_FILE"
         return
     fi
-    
+
     print_status "Verifying certificate..."
-    
+
     # Check if certificate file exists and is valid
     if [[ ! -f "$CERT_FILE" ]]; then
         print_error "Certificate file not found: $CERT_FILE"
         return 1
     fi
-    
+
     # Verify certificate format
     if ! openssl x509 -in "$CERT_FILE" -text -noout > /dev/null 2>&1; then
         print_error "Invalid certificate format"
         return 1
     fi
-    
+
     print_success "✅ Certificate format is valid"
-    
+
     # Verify private key matches certificate
     if [[ -f "$KEY_FILE" ]]; then
         local cert_modulus=$(openssl x509 -noout -modulus -in "$CERT_FILE" | openssl md5)
         local key_modulus=$(openssl rsa -noout -modulus -in "$KEY_FILE" | openssl md5)
-        
+
         if [[ "$cert_modulus" == "$key_modulus" ]]; then
             print_success "✅ Private key matches certificate"
         else
@@ -392,7 +392,7 @@ verify_certificate() {
             return 1
         fi
     fi
-    
+
     # Show certificate details
     print_status "Certificate details:"
     openssl x509 -in "$CERT_FILE" -text -noout | grep -E "(Subject:|Issuer:|Not Before:|Not After:|DNS:)"
@@ -401,15 +401,15 @@ verify_certificate() {
 # Function to check if certificates already exist
 check_existing_certificates() {
     local certname="$1"
-    
+
     # Get paths from environment
     get_cert_paths "$certname"
-    
+
     if [[ -f "$CERT_FILE" ]] && [[ -f "$KEY_FILE" ]]; then
         print_warning "Certificates already exist for certname: $certname"
         print_status "Certificate: $CERT_FILE"
         print_status "Private key: $KEY_FILE"
-        
+
         if [[ "$DOWNLOAD_ONLY" != "true" ]]; then
             read -p "Overwrite existing certificates? (y/N): " -n 1 -r
             echo
@@ -426,7 +426,7 @@ main() {
     local certname="$DEFAULT_CERTNAME"
     local download_only=false
     local dry_run=false
-    
+
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -453,25 +453,25 @@ main() {
                 ;;
         esac
     done
-    
+
     # Set global variables
     DOWNLOAD_ONLY="$download_only"
     DRY_RUN="$dry_run"
-    
+
     print_status "Pabawi Certificate Generation Script"
     print_status "Certname: $certname"
-    
+
     if [[ "$dry_run" == "true" ]]; then
         print_warning "DRY RUN MODE - No changes will be made"
     fi
-    
+
     # Load environment and validate
     load_env
     validate_env
-    
+
     # Check for existing certificates
     check_existing_certificates "$certname"
-    
+
     if [[ "$download_only" == "true" ]]; then
         # Only download certificate
         download_certificate "$certname"
@@ -483,9 +483,9 @@ main() {
         generate_csr "$certname"
         submit_csr "$certname"
     fi
-    
+
     print_success "Script completed successfully!"
-    
+
     if [[ "$download_only" != "true" ]]; then
         print_status ""
         print_status "Remember to:"

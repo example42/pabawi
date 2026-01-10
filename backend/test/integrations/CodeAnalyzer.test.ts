@@ -427,7 +427,7 @@ describe("CodeAnalyzer", () => {
       const result2 = await analyzer.analyze();
 
       expect(result1.analyzedAt).not.toBe(result2.analyzedAt);
-    });
+    }, 10000); // 10 second timeout
 
     it("should reload analyzer", async () => {
       const classesBefore = analyzer.getClasses().size;

@@ -119,7 +119,6 @@ function getStatusCode(error: Error): number {
     // Execution/compilation errors - 500
     case "BoltExecutionError":
     case "BoltParseError":
-    case "CertificateOperationError":
     case "CatalogCompilationError":
     case "EnvironmentDeploymentError":
     case "PuppetserverError":

@@ -92,24 +92,6 @@ This document provides a comprehensive list of all PuppetDB and Puppet Server AP
 
 ## Puppet Server API Endpoints
 
-### Certificate Authority (CA) Endpoints
-
-#### `/puppet-ca/v1/certificate_statuses`
-
-- **Used in**: `PuppetserverClient.getCertificates()`, `PuppetserverService.getInventory()`
-- **Purpose**: Retrieve all certificates with optional status filter
-- **Method**: GET
-- **Parameters**: `state` (optional: 'signed', 'requested', 'revoked')
-- **Location**: `backend/src/integrations/puppetserver/PuppetserverClient.ts:175`
-
-#### `/puppet-ca/v1/certificate_status/{certname}`
-
-- **Used in**: `PuppetserverClient.getCertificate()`, `PuppetserverClient.signCertificate()`, `PuppetserverClient.revokeCertificate()`
-- **Purpose**: Get, sign, or revoke a specific certificate
-- **Methods**: GET (retrieve), PUT (sign/revoke)
-- **Body for PUT**: `{"desired_state": "signed"}` or `{"desired_state": "revoked"}`
-- **Location**: `backend/src/integrations/puppetserver/PuppetserverClient.ts:200, 217, 233`
-
 ### Node Information Endpoints
 
 #### `/puppet/v3/status/{certname}`
