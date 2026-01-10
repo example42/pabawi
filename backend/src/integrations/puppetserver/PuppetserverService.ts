@@ -557,13 +557,11 @@ export class PuppetserverService
     this.log(`Certificate management removed - getNodeStatus('${nodeId}') returning basic status`);
     return {
       certname: nodeId,
-      state: "unknown",
       catalog_environment: "production",
       report_environment: "production",
-      facts_environment: "production",
-      report_timestamp: null,
-      catalog_timestamp: null,
-      facts_timestamp: null,
+      report_timestamp: undefined,
+      catalog_timestamp: undefined,
+      facts_timestamp: undefined,
     };
   }
 
