@@ -204,13 +204,11 @@ describe("PuppetserverService", () => {
 
         expect(result).toEqual({
           certname: "node1.example.com",
-          state: "unknown",
           catalog_environment: "production",
-          catalog_timestamp: null,
-          facts_environment: "production",
-          facts_timestamp: null,
+          catalog_timestamp: undefined,
           report_environment: "production",
-          report_timestamp: null,
+          report_timestamp: undefined,
+          facts_timestamp: undefined,
         });
       });
 
@@ -229,13 +227,11 @@ describe("PuppetserverService", () => {
         // Should return basic status with the provided certname
         expect(result).toEqual({
           certname: "nonexistent.example.com",
-          state: "unknown",
           catalog_environment: "production",
-          catalog_timestamp: null,
-          facts_environment: "production",
-          facts_timestamp: null,
+          catalog_timestamp: undefined,
           report_environment: "production",
-          report_timestamp: null,
+          report_timestamp: undefined,
+          facts_timestamp: undefined,
         });
       });
     });
