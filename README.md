@@ -2,13 +2,25 @@
 
 Version 0.4.0 - Unified Remote Execution Interface
 
-Pabawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt and PuppetDB. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
+Pabawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt, PuppetDB, and Hiera. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
+
+## Security Notice
+
+**⚠️ IMPORTANT: Pabawi is designed for local use by Puppet administrators and developers on their workstations.**
+
+- **No Built-in Authentication**: Pabawi currently has no user authentication or authorization system
+- **Localhost Access Only**: The application should only be accessed via `localhost` or `127.0.0.1`
+- **Network Access Not Recommended**: Do not expose Pabawi directly to network access without external authentication
+- **Production Deployment**: If network access is required, use a reverse proxy (nginx, Apache) with proper authentication and SSL termination
+- **Privileged Operations**: Pabawi can execute commands and tasks on your infrastructure - restrict access accordingly
+
+For production or multi-user environments, implement external authentication through a reverse proxy before allowing network access.
 
 ## Features
 
 ### Core Capabilities
 
-- **Multi-Source Inventory**: View and manage nodes from Bolt inventory and PuppetDB
+- **Multi-Source Inventory**: View and manage nodes from Bolt inventory, PuppetDB, and Puppetserver
 - **Command Execution**: Run ad-hoc commands on remote nodes with whitelist security
 - **Task Execution**: Execute Bolt tasks with parameter support
 - **Puppet Integration**: Trigger Puppet agent runs with full configuration control
@@ -20,6 +32,7 @@ Pabawi is a general-purpose remote execution platform that integrates multiple i
 - **Catalog Inspection**: Examine compiled Puppet catalogs and resource relationships
 - **Event Tracking**: Monitor individual resource changes and failures over time
 - **PQL Queries**: Filter nodes using PuppetDB Query Language
+- **Hiera Data Browser**: Explore hierarchical configuration data and key usage analysis
 
 ### Advanced Features
 
@@ -44,7 +57,10 @@ padawi/
 │   ├── src/
 │   │   ├── bolt/          # Bolt integration
 │   │   ├── integrations/  # Plugin architecture
-│   │   │   └── puppetdb/  # PuppetDB integration
+│   │   │   ├── bolt/      # Bolt plugin
+│   │   │   ├── puppetdb/  # PuppetDB integration
+│   │   │   ├── puppetserver/ # Puppetserver integration
+│   │   │   └── hiera/     # Hiera integration
 │   │   ├── database/      # SQLite database
 │   │   ├── routes/        # API endpoints
 │   │   └── services/      # Business logic
@@ -86,6 +102,8 @@ npm run dev:frontend
 
 ### Accessing the Application
 
+**⚠️ Security Reminder: Access Pabawi only via localhost for security**
+
 **Development Mode** (when running both servers separately):
 
 - **Frontend UI**: <http://localhost:5173> (Main application interface)
@@ -95,6 +113,8 @@ npm run dev:frontend
 
 - **Application**: <http://localhost:3000> (Frontend and API served together)
 - The backend serves the built frontend as static files
+
+**Network Access**: If you need to access Pabawi from other machines, use SSH port forwarding or implement a reverse proxy with proper authentication. Never expose Pabawi directly to the network without authentication.
 
 ## Build
 
@@ -149,6 +169,38 @@ PUPPETDB_CACHE_TTL=300000
 ```
 
 See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md) for detailed configuration instructions.
+
+### Hiera Integration (Optional)
+
+To enable Hiera integration, add to `backend/.env`:
+
+```env
+# Enable Hiera
+HIERA_ENABLED=true
+HIERA_CONTROL_REPO_PATH=/path/to/control-repo
+
+# Optional Configuration
+HIERA_CONFIG_PATH=hiera.yaml
+HIERA_ENVIRONMENTS=["production","development"]
+
+# Fact Source Configuration
+HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
+HIERA_FACT_SOURCE_LOCAL_PATH=/path/to/facts
+
+# Cache Configuration
+HIERA_CACHE_ENABLED=true
+HIERA_CACHE_TTL=300000
+HIERA_CACHE_MAX_ENTRIES=10000
+
+# Code Analysis Configuration
+HIERA_CODE_ANALYSIS_ENABLED=true
+HIERA_CODE_ANALYSIS_LINT_ENABLED=true
+```
+
+The Hiera integration requires:
+- A valid Puppet control repository with `hiera.yaml` configuration
+- Hieradata files in the configured data directories
+- Node facts (from PuppetDB or local files) for hierarchy interpolation
 
 ## Testing
 
@@ -270,7 +322,29 @@ docker run -d \
   example42/padawi:0.4.0
 ```
 
+### Running with Hiera Integration
+
+```bash
+docker run -d \
+  --name padawi \
+  -p 3000:3000 \
+  -v $(pwd):/bolt-project:ro \
+  -v $(pwd)/control-repo:/control-repo:ro \
+  -v $(pwd)/data:/data \
+  -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false \
+  -e HIERA_ENABLED=true \
+  -e HIERA_CONTROL_REPO_PATH=/control-repo \
+  -e HIERA_FACT_SOURCE_PREFER_PUPPETDB=true \
+  example42/padawi:0.4.0
+```
+
 Access the application at <http://localhost:3000>
+
+**⚠️ Security Note**: Only access via localhost. For remote access, use SSH port forwarding:
+```bash
+# SSH port forwarding for remote access
+ssh -L 3000:localhost:3000 user@your-workstation
+```
 
 ### Running with Docker Compose
 
@@ -286,6 +360,12 @@ docker-compose down
 ```
 
 Access the application at <http://localhost:3000>
+
+**⚠️ Security Note**: Only access via localhost. For remote access, use SSH port forwarding:
+```bash
+# SSH port forwarding for remote access
+ssh -L 3000:localhost:3000 user@your-workstation
+```
 
 ## Screenshots
 
@@ -352,6 +432,16 @@ Copy `.env.example` to `.env` and configure as needed. Key variables:
 - `PUPPETDB_SSL_CA`: Path to CA certificate
 - `PUPPETDB_CACHE_TTL`: Cache duration in ms (default: 300000)
 
+**Hiera Integration (Optional):**
+
+- `HIERA_ENABLED`: Enable Hiera integration (default: false)
+- `HIERA_CONTROL_REPO_PATH`: Path to Puppet control repository
+- `HIERA_CONFIG_PATH`: Path to hiera.yaml (default: hiera.yaml)
+- `HIERA_ENVIRONMENTS`: JSON array of environments (default: ["production"])
+- `HIERA_FACT_SOURCE_PREFER_PUPPETDB`: Prefer PuppetDB for facts (default: true)
+- `HIERA_CACHE_ENABLED`: Enable caching (default: true)
+- `HIERA_CACHE_TTL`: Cache duration in ms (default: 300000)
+
 **Important:** Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use certificate-based authentication.
 
 See [Configuration Guide](docs/configuration.md) for complete reference.
@@ -359,6 +449,7 @@ See [Configuration Guide](docs/configuration.md) for complete reference.
 ### Volume Mounts
 
 - `/bolt-project`: Mount your Bolt project directory (read-only)
+- `/control-repo`: Mount your Puppet control repository for Hiera integration (read-only, optional)
 - `/data`: Persistent storage for SQLite database
 
 ### Troubleshooting
@@ -395,6 +486,17 @@ If PuppetDB integration shows "Disconnected":
 3. Test connectivity: `curl https://puppetdb.example.com:8081/pdb/meta/v1/version`
 4. Review logs with `LOG_LEVEL=debug`
 5. See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md)
+
+#### Hiera Integration Issues
+
+If Hiera integration shows "Not Found" for all keys:
+
+1. Verify control repository path is correct (`HIERA_CONTROL_REPO_PATH`)
+2. Check `hiera.yaml` exists in control repository root
+3. Ensure hieradata directories exist and contain YAML files
+4. Verify node facts are available (PuppetDB or local files)
+5. Check hierarchy path interpolation with available facts
+6. Review logs with `LOG_LEVEL=debug` for detailed error messages
 
 #### Expert Mode Not Showing Full Output
 
@@ -461,8 +563,8 @@ npm test --workspace=backend
 
 ### Version History
 
-= **v0.3.0**: Puppetserver integration, interface enhancements
-
+- **v0.4.0**: Hiera integration, puppetserver CA management removal, enhanced plugin architecture
+- **v0.3.0**: Puppetserver integration, interface enhancements
 - **v0.2.0**: PuppetDB integration, re-execution, expert mode enhancements
 - **v0.1.0**: Initial release with Bolt integration
 

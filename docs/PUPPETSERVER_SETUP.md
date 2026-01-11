@@ -67,14 +67,14 @@ PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
 If you're using SSL certificate authentication and need access to certificate management features, your certificate must have the `cli_auth` extension. You can generate a new certificate with this extension using the provided script:
 
 ```bash
-# Generate a new certificate with cli_auth extension
-./scripts/generate-cli-auth-csr.sh
+# Generate a new certificate 
+./scripts/generate-pabawi-cert.sh
 
 # After running the script, sign the certificate on your Puppetserver:
 puppetserver ca sign --certname pabawi
 
 # Download the signed certificate
-./scripts/generate-cli-auth-csr.sh --download
+./scripts/generate-pabawi-cert.sh --download
 ```
 
 The script will:

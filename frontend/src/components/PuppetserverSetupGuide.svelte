@@ -33,24 +33,54 @@ PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT=60000
 PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
 
   const authConfConfig = `# /etc/puppetlabs/puppetserver/conf.d/auth.conf
-authorization: {
-    version: 1
-    rules: [
-        # Pabawi API Access Rule
-        {
-            match-request: {
-                path: "^/(puppet-ca/v1|puppet/v3|status/v1|puppet-admin-api/v1)"
-                type: "regex"
-                method: [get, post, put, delete]
-            }
-            allow: ["pabawi.example.com"]
-            sort-order: 200
-            name: "pabawi-api-access"
-        }
+# Modify these existing rules to add "pabawi" to the allow list:
 
-        # Your existing rules go here...
-        # Make sure this rule comes BEFORE any deny-all rules
-    ]
+# 1. Find the "puppetlabs node" rule and update it:
+{
+    match-request: {
+        path: "^/puppet/v3/node/([^/]+)$"
+        type: regex
+        method: get
+    }
+    allow: [ "$1", "pabawi" ]  # Add "pabawi" here
+    sort-order: 500
+    name: "puppetlabs node"
+}
+
+# 2. Find the "puppetlabs facts" rule and update it:
+{
+    match-request: {
+        path: "^/puppet/v3/facts/([^/]+)$"
+        type: regex
+        method: put
+    }
+    allow: [ "$1", "pabawi" ]  # Add "pabawi" here
+    sort-order: 500
+    name: "puppetlabs facts"
+}
+
+# 3. Add this new rule for catalog access (add after existing catalog rules):
+{
+    match-request: {
+        path: "^/puppet/v3/catalog/([^/]+)$"
+        type: regex
+        method: get
+    }
+    allow: [ "$1", "pabawi" ]
+    sort-order: 501
+    name: "pabawi catalog access"
+}
+
+# 4. Add this new rule for environment cache management:
+{
+    match-request: {
+        path: "/puppet-admin-api/v1/environment-cache"
+        type: path
+        method: delete
+    }
+    allow: "pabawi"
+    sort-order: 500
+    name: "pabawi environment cache"
 }`;
 </script>
 
@@ -144,7 +174,7 @@ authorization: {
               <h5 class="text-md font-medium text-gray-900 dark:text-white mb-2">Option 1: Manual Certificate Generation on Puppetserver</h5>
               <p class="text-gray-700 dark:text-gray-300 mb-2">Generate the certificate directly on the Puppetserver and copy it locally:</p>
               <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
-                <div># On the Puppetserver</div>
+                <div># On the Puppetserver - NOTE: The certname used here must be the same added in auth.conf</div>
                 <div>puppetserver ca generate --certname pabawi</div>
                 <div></div>
                 <div># Copy the generated files to your local machine:</div>
@@ -207,13 +237,11 @@ authorization: {
 
       <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-6">
         <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300 font-mono">
-          <li>• <strong>Certificate Management:</strong> /puppet-ca/v1/certificate_statuses, /puppet-ca/v1/certificate_status/*</li>
-          <li>• <strong>Node Status:</strong> /puppet/v3/status/*</li>
-          <li>• <strong>Facts:</strong> /puppet/v3/facts/*</li>
-          <li>• <strong>Catalogs:</strong> /puppet/v3/catalog/*</li>
-          <li>• <strong>Environments:</strong> /puppet/v3/environments, /puppet/v3/environment/*</li>
-          <li>• <strong>Status & Metrics:</strong> /status/v1/services, /status/v1/simple</li>
-          <li>• <strong>Admin API:</strong> /puppet-admin-api/v1, /puppet-admin-api/v1/environment-cache</li>
+          <li>• <strong>Node Information:</strong> /puppet/v3/node/* (read node definitions)</li>
+          <li>• <strong>Facts:</strong> /puppet/v3/facts/* (read node facts)</li>
+          <li>• <strong>Catalogs:</strong> /puppet/v3/catalog/* (compile catalogs)</li>
+          <li>• <strong>Environment Cache:</strong> /puppet-admin-api/v1/environment-cache (clear cache)</li>
+          <li>• <strong>Status & Health:</strong> /status/v1/* (already allowed by default)</li>
         </ul>
       </div>
 
@@ -260,13 +288,14 @@ authorization: {
       {:else}
         <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-3">Update auth.conf File</h4>
         <p class="text-gray-700 dark:text-gray-300 mb-3">
-          For SSL certificate authentication, you need to update Puppetserver's authorization file
-          (typically located at <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">/etc/puppetlabs/puppetserver/conf.d/auth.conf</code>):
+          For SSL certificate authentication, you need to modify specific rules in Puppetserver's authorization file
+          (typically located at <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">/etc/puppetlabs/puppetserver/conf.d/auth.conf</code>).
+          Instead of adding new rules, modify existing ones to include "pabawi" in their allow lists:
         </p>
 
         <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
           <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-            <span class="font-medium text-gray-900 dark:text-white text-sm">Puppetserver auth.conf Configuration</span>
+            <span class="font-medium text-gray-900 dark:text-white text-sm">Required auth.conf Modifications</span>
             <button
               class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
               onclick={() => copyToClipboard(authConfConfig)}
@@ -280,10 +309,11 @@ authorization: {
         <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg mb-4">
           <h4 class="font-medium text-gray-900 dark:text-white mb-2">Configuration Notes:</h4>
           <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-            <li>• Replace <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">pabawi.example.com</code> with your actual certificate name</li>
-            <li>• Use <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">type: regex</code> for flexible path matching</li>
-            <li>• The <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">method: [get, post, put, delete]</code> allows all required HTTP methods</li>
-            <li>• Add this rule <strong>before</strong> any deny-all rules in your auth.conf</li>
+            <li>• These modifications work with the default OSS Puppetserver / Openvoxserver auth.conf</li>
+            <li>• Only modify existing rules - don't replace the entire file</li>
+            <li>• Add "pabawi" to the allow arrays of existing rules as shown</li>
+            <li>• The certificate name must match exactly (here we used "pabawi" as the certname)</li>
+            <li>• Add the new rules for catalog and environment cache access</li>
           </ul>
         </div>
 
@@ -394,64 +424,11 @@ authorization: {
     </div>
   </div>
 
-  {#if selectedAuth === "ssl"}
-  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
-    <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Certificate Setup (SSL Authentication)</h3>
-
-      <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-r-lg mb-4">
-        <h4 class="font-medium text-gray-900 dark:text-white mb-2">⚠️ Important for Certificate Management</h4>
-        <p class="text-sm text-gray-700 dark:text-gray-300">
-          For certificate management functionality to work properly, your SSL certificate must include the <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">cli_auth</code> extension.
-          This extension is required to access the Puppetserver CA API endpoints.
-        </p>
-      </div>
-
-      <p class="text-gray-700 dark:text-gray-300 mb-4">
-        If your current certificate doesn't have the cli_auth extension, you can generate a new one using the provided script:
-      </p>
-
-      <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1 mb-4">
-        <div># Generate a new certificate with cli_auth extension</div>
-        <div>./scripts/generate-cli-auth-csr.sh</div>
-        <div></div>
-        <div># After running the script, sign the certificate on your Puppetserver:</div>
-        <div>puppetserver ca sign --certname pabawi</div>
-        <div></div>
-        <div># Download the signed certificate</div>
-        <div>./scripts/generate-cli-auth-csr.sh --download</div>
-      </div>
-
-      <div class="p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg mb-4">
-        <h4 class="font-medium text-gray-900 dark:text-white mb-2">What the script does:</h4>
-        <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
-          <li>• Generates a new private key and Certificate Signing Request (CSR) with the cli_auth extension</li>
-          <li>• Submits the CSR to your Puppetserver via the CA API</li>
-          <li>• After you sign it on the Puppetserver, downloads and installs the signed certificate</li>
-          <li>• Updates your <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">.env</code> file with the new certificate paths</li>
-        </ul>
-      </div>
-
-      <div class="p-4 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg">
-        <h4 class="font-medium text-gray-900 dark:text-white mb-2">📝 Note about cli_auth extension</h4>
-        <p class="text-sm text-gray-700 dark:text-gray-300">
-          The cli_auth extension (OID: 1.3.6.1.4.1.34380.1.3.39) is required for accessing Puppetserver CA API endpoints.
-          Without this extension, certificate management features will fall back to PuppetDB data, which only shows signed certificates that have checked in.
-        </p>
-      </div>
-    </div>
-  </div>
-  {/if}
-
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
       <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Features Available</h3>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
-          <span class="text-3xl block mb-2">📜</span>
-          <h4 class="font-medium text-gray-900 dark:text-white mb-1">Certificate Management</h4>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Sign, revoke, and manage node certificates</p>
-        </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
         <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
           <span class="text-3xl block mb-2">📊</span>
           <h4 class="font-medium text-gray-900 dark:text-white mb-1">Node Monitoring</h4>

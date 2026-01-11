@@ -1,6 +1,6 @@
 # Pabawi Architecture Documentation
 
-Version: 0.3.0
+Version: 0.4.0
 
 ## Table of Contents
 
@@ -31,7 +31,8 @@ Pabawi is a unified remote execution interface that orchestrates multiple infras
 
 - **Bolt**: Execution tool and information source (priority: 10)
 - **PuppetDB**: Information source for Puppet infrastructure data (priority: 10)
-- **Puppetserver**: Information source for certificate authority and node management (priority: 20)
+- **Puppetserver**: Information source for node management and catalog compilation (priority: 20)
+- **Hiera**: Information source for hierarchical configuration data (priority: 6)
 
 ## Plugin Architecture
 
