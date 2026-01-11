@@ -1,12 +1,12 @@
 # Pabawi API Documentation
 
-Version: 0.3.0
+Version: 0.4.0
 
 ## Overview
 
 The Pabawi API provides a RESTful interface for managing infrastructure automation through multiple integrations. This API enables you to:
 
-- View and manage node inventory from multiple sources (Bolt, PuppetDB, Puppetserver)
+- View and manage node inventory from multiple sources (Bolt, PuppetDB)
 - Gather system facts from nodes
 - Execute commands on remote nodes
 - Run Bolt tasks with parameters
@@ -14,9 +14,9 @@ The Pabawi API provides a RESTful interface for managing infrastructure automati
 - Install packages on nodes
 - View execution history and results
 - Stream real-time execution output
-- Manage Puppetserver certificates
 - Query PuppetDB for reports, catalogs, and events
 - Compare catalogs across environments
+- Browse Hiera data and key usage analysis
 
 ## Integration Support
 
@@ -24,11 +24,12 @@ Pabawi supports multiple infrastructure management integrations:
 
 - **Bolt**: Execution tool for running commands, tasks, and plans
 - **PuppetDB**: Information source for node data, reports, catalogs, and events
-- **Puppetserver**: Information source for certificates, node status, facts, and catalog compilation
+- **Puppetserver**: Information source for catalog compilation
+- **Hiera**: Puppet data source for hierarchical key-value lookups and analysis
 
 For detailed integration-specific API documentation, see:
 
-- [Integrations API Documentation](./integrations-api.md) - Complete reference for PuppetDB and Puppetserver endpoints
+- [Integrations API Documentation](./integrations-api.md) - Complete reference for PuppetDB, Puppetserver, and Hiera endpoints
 - [PuppetDB API Documentation](./puppetdb-api.md) - Detailed PuppetDB integration guide
 
 ## Base URL
@@ -37,74 +38,6 @@ For detailed integration-specific API documentation, see:
 http://localhost:3000/api
 ```
 
-## Authentication
-
-Pabawi supports multiple authentication methods depending on the integration:
-
-- **Bolt**: No API-level authentication (authentication handled by Bolt for node connections)
-- **PuppetDB**: Token-based authentication using RBAC tokens (Puppet Enterprise only) or certificate-based authentication
-- **Puppetserver**: Token-based authentication (Puppet Enterprise only) or certificate-based authentication for CA operations
-
-For detailed authentication setup and troubleshooting, see:
-
-- [Authentication Guide](./authentication.md) - Complete authentication reference
-- [Error Codes Reference](./error-codes.md) - Authentication error codes and solutions
-
-## Expert Mode
-
-Many endpoints support an "expert mode" that provides additional diagnostic information when errors occur.
-To enable expert mode:
-
-1. Include the `X-Expert-Mode: true` header in your request, OR
-2. Set `expertMode: true` in the request body (where supported)
-
-When expert mode is enabled, error responses include:
-
-- Full stack traces
-- Request IDs for correlation
-- Execution context (endpoint, method, timestamp)
-- Raw Bolt CLI output and the full command executed
-- Additional diagnostic information
-
-**Example with header:**
-
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/command \
-  -H "Content-Type: application/json" \
-  -H "X-Expert-Mode: true" \
-  -d '{"command": "ls -la"}'
-```
-
-**Example with body:**
-
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/command \
-  -H "Content-Type: application/json" \
-  -d '{"command": "ls -la", "expertMode": true}'
-```
-
-## Streaming Execution Output
-
-For long-running operations, you can subscribe to real-time execution output via Server-Sent Events (SSE).
-After starting an execution, connect to the streaming endpoint to receive stdout, stderr, and status updates
-as they occur.
-
-**Workflow:**
-
-1. Start an execution (command, task, Puppet run, or package installation)
-2. Receive an execution ID in the response
-3. Connect to `/api/executions/{id}/stream` to receive real-time updates
-4. Process SSE events as they arrive
-
-**Event Types:**
-
-- `start`: Execution started
-- `command`: Bolt CLI command being executed
-- `stdout`: Standard output chunk
-- `stderr`: Standard error chunk
-- `status`: Status update
-- `complete`: Execution completed with results
-- `error`: Execution error
 
 ## Error Handling
 
@@ -1151,7 +1084,6 @@ See [Integrations API Documentation](./integrations-api.md#puppetdb-integration)
 
 ### Puppetserver Integration
 
-- **Certificates**: `/api/integrations/puppetserver/certificates`
 - **Nodes**: `/api/integrations/puppetserver/nodes`
 - **Status**: `/api/integrations/puppetserver/nodes/:certname/status`
 - **Facts**: `/api/integrations/puppetserver/nodes/:certname/facts`
@@ -1161,6 +1093,15 @@ See [Integrations API Documentation](./integrations-api.md#puppetdb-integration)
 
 See [Integrations API Documentation](./integrations-api.md#puppetserver-integration) for details.
 
+### Hiera Integration
+
+- **Node Data**: `/api/integrations/hiera/nodes/:nodeId/data`
+- **Global Keys**: `/api/integrations/hiera/keys`
+- **Key Analysis**: `/api/integrations/hiera/keys/:key/analysis`
+- **Configuration**: `/api/integrations/hiera/config`
+
+See [Integrations API Documentation](./integrations-api.md#hiera-integration) for details.
+
 ### Integration Status
 
 Check the health and connectivity of all integrations:
@@ -1169,7 +1110,7 @@ Check the health and connectivity of all integrations:
 GET /api/integrations/status
 ```
 
-Returns status for Bolt, PuppetDB, and Puppetserver integrations.
+Returns status for Bolt, PuppetDB, Puppetserver, and Hiera integrations.
 
 ## Support
 

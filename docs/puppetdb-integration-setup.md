@@ -1,10 +1,8 @@
 # PuppetDB Integration Setup Guide
 
-Version: 0.2.0
-
 ## Overview
 
-This guide walks you through configuring Pabawi to integrate with PuppetDB, enabling dynamic inventory discovery, node facts retrieval, Puppet run reports viewing, catalog inspection, and event tracking. PuppetDB integration provides a comprehensive view of your Puppet-managed infrastructure directly within Pabawi.
+Configure Pabawi to integrate with PuppetDB for dynamic inventory discovery, node facts, Puppet reports, catalogs, and events.
 
 ## Table of Contents
 
@@ -15,40 +13,35 @@ This guide walks you through configuring Pabawi to integrate with PuppetDB, enab
 - [Authentication Setup](#authentication-setup)
 - [Testing the Connection](#testing-the-connection)
 - [Troubleshooting](#troubleshooting)
-- [Advanced Configuration](#advanced-configuration)
 - [Security Best Practices](#security-best-practices)
 
 ## Prerequisites
 
-Before configuring PuppetDB integration, ensure you have:
+- Running PuppetDB instance (version 6.0+)
+- Network access to PuppetDB server (default SSL port: 8081)
+- SSL certificates signed by Puppetserver CA or authentication token (Puppet Enterprise only)
 
-1. **PuppetDB Server**: A running PuppetDB instance (version 6.0 or later recommended)
-2. **Network Access**: Pabawi server can reach PuppetDB server (default port: 8081)
-3. **Credentials**: Authentication token (Puppet Enterprise only) or SSL certificates for PuppetDB access
-4. **Permissions**: Appropriate permissions to query PuppetDB data
-
-### Verifying PuppetDB Availability
-
-Test PuppetDB connectivity from the Pabawi server:
-
+Test connectivity:
 ```bash
-# Test HTTP connection (if not using SSL)
-curl http://puppetdb.example.com:8080/pdb/meta/v1/version
-
-# Test HTTPS connection (if using SSL)
 curl https://puppetdb.example.com:8081/pdb/meta/v1/version
-
-# Expected response:
-{
-  "version": "7.x.x"
-}
 ```
 
 ## Quick Start
 
-### Minimal Configuration
+### Localhost Configuration (HTTP)
 
-The simplest PuppetDB configuration requires only the server URL:
+For PuppetDB running on localhost, HTTP access is allowed by default:
+
+```bash
+# Enable PuppetDB integration
+export PUPPETDB_ENABLED=true
+export PUPPETDB_SERVER_URL=http://localhost
+export PUPPETDB_PORT=8080
+```
+
+### Remote Server Configuration (HTTPS + SSL)
+
+For remote PuppetDB servers, SSL certificates signed by the Puppetserver CA are required. The same certificates can be used for both PuppetDB and Puppetserver integrations.
 
 **Using Environment Variables:**
 
@@ -56,11 +49,16 @@ The simplest PuppetDB configuration requires only the server URL:
 # Enable PuppetDB integration
 export PUPPETDB_ENABLED=true
 
-# Set PuppetDB server URL
+# Set PuppetDB server URL and port
 export PUPPETDB_SERVER_URL=https://puppetdb.example.com
-
-# Optional: Set port (default: 8081 for HTTPS, 8080 for HTTP)
 export PUPPETDB_PORT=8081
+
+# SSL Configuration (required for remote servers)
+export PUPPETDB_SSL_ENABLED=true
+export PUPPETDB_SSL_CA=/path/to/ca.pem
+export PUPPETDB_SSL_CERT=/path/to/client-cert.pem
+export PUPPETDB_SSL_KEY=/path/to/client-key.pem
+export PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
 ```
 
 **Using Configuration File:**
@@ -71,26 +69,14 @@ Create or edit `backend/.env`:
 PUPPETDB_ENABLED=true
 PUPPETDB_SERVER_URL=https://puppetdb.example.com
 PUPPETDB_PORT=8081
+
+# SSL Configuration (required for remote servers)
+PUPPETDB_SSL_ENABLED=true
+PUPPETDB_SSL_CA=/path/to/ca.pem
+PUPPETDB_SSL_CERT=/path/to/client-cert.pem
+PUPPETDB_SSL_KEY=/path/to/client-key.pem
+PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
 ```
-
-### Starting Pabawi
-
-```bash
-# Restart Pabawi to apply configuration
-npm run dev:backend
-
-# Or if using Docker
-docker-compose restart
-```
-
-### Verifying Integration
-
-1. Open Pabawi in your browser: `http://localhost:3000`
-2. Navigate to the **Home** page
-3. Look for **Integration Status** section
-4. Verify PuppetDB shows as "Connected"
-5. Navigate to **Inventory** page
-6. You should see nodes from PuppetDB with source attribution
 
 ## Configuration Options
 
@@ -197,65 +183,7 @@ The circuit breaker prevents cascading failures by temporarily disabling PuppetD
 
 ## SSL/TLS Setup
 
-PuppetDB typically uses HTTPS with SSL/TLS certificates. Pabawi supports various SSL configurations.
-
-### Option 1: System CA Certificates (Recommended)
-
-If your PuppetDB certificate is signed by a trusted CA:
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-```
-
-No additional certificate configuration needed.
-
-### Option 2: Custom CA Certificate
-
-If using a custom or self-signed CA:
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/path/to/ca.pem
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-```
-
-**CA Certificate Path:**
-
-- Must be absolute path or relative to Pabawi working directory
-- File must be readable by Pabawi process
-- PEM format required
-
-**Example CA Certificate Location:**
-
-```bash
-# Puppet CA certificate (typical location)
-PUPPETDB_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-
-# Custom location
-PUPPETDB_SSL_CA=/opt/padawi/certs/puppetdb-ca.pem
-```
-
-### Option 3: Client Certificate Authentication
-
-If PuppetDB requires client certificates:
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/path/to/ca.pem
-PUPPETDB_SSL_CERT=/path/to/client-cert.pem
-PUPPETDB_SSL_KEY=/path/to/client-key.pem
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-```
+PuppetDB typically uses HTTPS with SSL/TLS certificates.
 
 **Certificate Requirements:**
 
@@ -295,97 +223,25 @@ puppetserver ca sign --certname pabawi
 
 The script automatically updates your `.env` file with the certificate paths.
 
-### Option 4: Disable Certificate Validation (Development Only)
 
-**WARNING:** Only use in development/testing environments!
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=false
-```
-
-**Security Risk:** This disables certificate validation and is vulnerable to man-in-the-middle attacks. Never use in production.
-
-### SSL Configuration Examples
-
-**Example 1: Production with Puppet CA**
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-PUPPETDB_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/padawi.pem
-PUPPETDB_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/padawi.pem
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-```
-
-**Example 2: Development with Self-Signed Certificate**
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://localhost
-PUPPETDB_PORT=8081
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=false  # Development only!
-```
-
-**Example 3: Production with Commercial CA**
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-# No custom CA needed - uses system trust store
-```
-
-## Authentication Setup
+## Token Authentication (Puppet Enterprise Only)
 
 **Important: Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use certificate-based authentication.**
 
-PuppetDB supports token-based authentication for API access when using Puppet Enterprise.
+### Obtaining a Token
 
-### Token Authentication (Puppet Enterprise Only)
-
-#### Obtaining a Token
-
-**Method 1: Using Puppet Access**
+On the Puppetserver node, or on a node with PE CLient Tools installed and configured, autheticate with a Console user credential with proper RBAC authorization permissions (see below):
 
 ```bash
-# Request token (interactive)
+# Request token (defaul token lifetime... too short for normal use)
 puppet access login
 
-# Request token (non-interactive)
+# Request token (generate a token which lasts 1 year)
 puppet access login --lifetime 1y
 
-# View current token
+# View current token (add its content to PUPPETDB_TOKEN)
 puppet access show
 ```
-
-**Method 2: Using PuppetDB API**
-
-```bash
-# Generate token via API
-curl -X POST https://puppetdb.example.com:8081/pdb/admin/v1/token \
-  -H "Content-Type: application/json" \
-  -d '{"user": "padawi", "lifetime": "1y"}'
-```
-
-**Method 3: Using Puppet Enterprise Console**
-
-1. Log in to Puppet Enterprise Console
-2. Navigate to **Access Control** > **Users**
-3. Select or create user for Pabawi
-4. Generate API token
-5. Copy token for configuration
-
-**Note: This method is only available with Puppet Enterprise installations.**
 
 #### Configuring Token
 
@@ -400,7 +256,7 @@ PUPPETDB_TOKEN=your-token-here
 
 - Store token in environment variable, not in code
 - Use `.env` file with restricted permissions (600)
-- Rotate tokens regularly (recommended: every 90 days)
+- Rotate tokens regularly
 - Use dedicated service account for Pabawi
 - Grant minimum required permissions
 
@@ -414,30 +270,6 @@ Pabawi requires read-only access to:
 - `/pdb/query/v4/catalogs`
 - `/pdb/query/v4/events`
 
-### Combined SSL and Token Authentication (Puppet Enterprise Only)
-
-Most Puppet Enterprise production deployments use both SSL and token authentication:
-
-```bash
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-
-# SSL Configuration
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-PUPPETDB_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/padawi.pem
-PUPPETDB_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/padawi.pem
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-
-# Token Authentication
-PUPPETDB_TOKEN=your-token-here
-
-# Connection Settings
-PUPPETDB_TIMEOUT=30000
-PUPPETDB_RETRY_ATTEMPTS=3
-PUPPETDB_CACHE_TTL=300000
-```
 
 ## Testing the Connection
 
@@ -950,4 +782,4 @@ For PuppetDB integration issues:
 3. Review Pabawi logs with `LOG_LEVEL=debug`
 4. Test PuppetDB connectivity directly
 5. Consult PuppetDB documentation
-6. Contact your administrator or support team
+6. Che PuppetDB logs (`/var/log/puppetlabs/puppetdb/puppetdb.log`)

@@ -2,9 +2,18 @@ openapi: 3.0.3
 info:
   title: Pabawi - Unified Remote Execution Interface API
   description: |
-    REST API for Pabawi, a web-based interface for managing Bolt automation.
-    This API provides endpoints for managing inventory, executing commands and tasks,
-    gathering facts, running Puppet, installing packages, and viewing execution history.
+    REST API for Pabawi, a web-based interface for managing Bolt automation with integrated
+    PuppetDB, Puppetserver, and Hiera support. This API provides endpoints for managing 
+    inventory from multiple sources, executing commands and tasks, gathering facts, 
+    running Puppet, installing packages, viewing execution history, and analyzing Hiera data.
+
+    ## Integration Sources
+
+    The API supports multiple integration sources:
+    - **Bolt**: Direct execution and inventory management
+    - **PuppetDB**: Node inventory, facts, reports, catalogs, and events
+    - **Puppetserver**: CA inventory, facts, catalog compilation, and environments
+    - **Hiera**: Configuration data lookup and analysis
 
     ## Expert Mode
 
@@ -22,7 +31,7 @@ info:
     Server-Sent Events (SSE). After starting an execution, connect to the streaming
     endpoint to receive stdout, stderr, and status updates as they occur.
 
-  version: 0.1.0
+  version: 0.4.0
   contact:
     name: Pabawi Support
   license:
@@ -36,23 +45,31 @@ servers:
 
 tags:
   - name: Inventory
-    description: Node inventory management
+    description: Node inventory management from multiple sources
   - name: Facts
-    description: System facts gathering
+    description: System facts gathering from multiple sources
   - name: Commands
-    description: Command execution
+    description: Command execution via Bolt
   - name: Tasks
     description: Bolt task execution
   - name: Puppet
     description: Puppet run management
   - name: Packages
-    description: Package installation
+    description: Package installation via Bolt tasks
   - name: Executions
     description: Execution history and results
   - name: Streaming
     description: Real-time execution output via SSE
   - name: System
     description: System configuration and health
+  - name: Integrations
+    description: Integration status and management
+  - name: PuppetDB
+    description: PuppetDB integration endpoints
+  - name: Puppetserver
+    description: Puppetserver integration endpoints
+  - name: Hiera
+    description: Hiera data lookup and analysis
 
 paths:
   /health:
@@ -120,10 +137,42 @@ paths:
 
   /inventory:
     get:
-      summary: List all nodes
-      description: Retrieve all nodes from the Bolt inventory
+      summary: List all nodes from inventory sources
+      description: |
+        Retrieve all nodes from configured inventory sources (Bolt, PuppetDB, Puppetserver).
+        
+        Query parameters:
+        - sources: Comma-separated list of sources (e.g., "bolt,puppetdb,puppetserver") or "all"
+        - pql: PuppetDB PQL query for filtering (only applies when PuppetDB source is included)
+        - sortBy: Sort field ("name" or "source")
+        - sortOrder: Sort direction ("asc" or "desc")
       tags:
         - Inventory
+      parameters:
+        - name: sources
+          in: query
+          description: Comma-separated list of inventory sources
+          schema:
+            type: string
+            example: "bolt,puppetdb"
+        - name: pql
+          in: query
+          description: PuppetDB PQL query for filtering nodes
+          schema:
+            type: string
+            example: 'nodes[certname] { certname ~ "web" }'
+        - name: sortBy
+          in: query
+          description: Field to sort by
+          schema:
+            type: string
+            enum: [name, source]
+        - name: sortOrder
+          in: query
+          description: Sort direction
+          schema:
+            type: string
+            enum: [asc, desc]
       responses:
         '200':
           description: Inventory retrieved successfully
@@ -136,22 +185,508 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Node'
+                  sources:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        nodeCount:
+                          type: integer
+                        lastSync:
+                          type: string
+                          format: date-time
+                        status:
+                          type: string
+                          enum: [healthy, degraded, error]
+        '400':
+          description: Invalid query parameters (e.g., invalid PQL)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Bolt inventory not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-              example:
-                error:
-                  code: BOLT_CONFIG_MISSING
-                  message: Bolt inventory file not found
         '500':
           description: Server error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+
+  /inventory/sources:
+    get:
+      summary: List available inventory sources
+      description: Return available inventory sources and their connection status
+      tags:
+        - Inventory
+      responses:
+        '200':
+          description: Sources retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sources:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                          enum: [execution, information, both]
+                        status:
+                          type: string
+                          enum: [connected, disconnected, error]
+                        lastCheck:
+                          type: string
+                          format: date-time
+                        error:
+                          type: string
+
+  /integrations/status:
+    get:
+      summary: Get integration status
+      description: |
+        Return status for all configured integrations including connection health,
+        last check time, and error details if unhealthy.
+      tags:
+        - Integrations
+      parameters:
+        - name: refresh
+          in: query
+          description: Force fresh health check instead of using cache
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Integration status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          enum: [execution, information, both]
+                        status:
+                          type: string
+                          enum: [connected, degraded, error, not_configured]
+                        lastCheck:
+                          type: string
+                          format: date-time
+                        message:
+                          type: string
+                        details:
+                          type: object
+                        workingCapabilities:
+                          type: array
+                          items:
+                            type: string
+                        failingCapabilities:
+                          type: array
+                          items:
+                            type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+                  cached:
+                    type: boolean
+
+  /integrations/puppetdb/nodes:
+    get:
+      summary: List nodes from PuppetDB
+      description: Return all nodes from PuppetDB inventory with optional PQL filtering
+      tags:
+        - PuppetDB
+      parameters:
+        - name: query
+          in: query
+          description: PQL query for filtering nodes
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Nodes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+                  source:
+                    type: string
+                    example: puppetdb
+                  count:
+                    type: integer
+        '400':
+          description: Invalid PQL query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: PuppetDB not configured or not initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/puppetdb/nodes/{certname}:
+    get:
+      summary: Get node details from PuppetDB
+      description: Return specific node details from PuppetDB
+      tags:
+        - PuppetDB
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          description: Node certificate name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node details retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  node:
+                    $ref: '#/components/schemas/Node'
+                  source:
+                    type: string
+                    example: puppetdb
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/puppetdb/nodes/{certname}/facts:
+    get:
+      summary: Get node facts from PuppetDB
+      description: Return facts for a specific node from PuppetDB with categorization
+      tags:
+        - PuppetDB
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          description: Node certificate name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Facts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  facts:
+                    $ref: '#/components/schemas/Facts'
+                  source:
+                    type: string
+                    example: puppetdb
+
+  /integrations/puppetdb/nodes/{certname}/reports:
+    get:
+      summary: Get Puppet reports for a node
+      description: Return recent Puppet reports for a specific node from PuppetDB
+      tags:
+        - PuppetDB
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          description: Node certificate name
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of reports to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Reports retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PuppetReport'
+                  source:
+                    type: string
+                    example: puppetdb
+                  count:
+                    type: integer
+
+  /integrations/puppetdb/reports/summary:
+    get:
+      summary: Get reports summary statistics
+      description: Return summary statistics of recent Puppet reports across all nodes
+      tags:
+        - PuppetDB
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of reports to analyze
+          schema:
+            type: integer
+            default: 100
+        - name: hours
+          in: query
+          description: Number of hours to look back for reports
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Summary retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    $ref: '#/components/schemas/ReportsSummary'
+                  source:
+                    type: string
+                    example: puppetdb
+
+  /integrations/puppetserver/nodes:
+    get:
+      summary: List nodes from Puppetserver CA
+      description: Return all nodes from Puppetserver CA inventory
+      tags:
+        - Puppetserver
+      responses:
+        '200':
+          description: Nodes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Node'
+                  source:
+                    type: string
+                    example: puppetserver
+                  count:
+                    type: integer
+
+  /integrations/puppetserver/nodes/{certname}/status:
+    get:
+      summary: Get comprehensive node status
+      description: |
+        Return comprehensive node status from PuppetDB and Puppetserver including
+        last run timestamp, catalog version, run status, and activity categorization.
+      tags:
+        - Puppetserver
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          description: Node certificate name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    $ref: '#/components/schemas/NodeStatus'
+                  activityCategory:
+                    type: string
+                    enum: [active, inactive, never_checked_in]
+                  shouldHighlight:
+                    type: boolean
+                  secondsSinceLastCheckIn:
+                    type: integer
+                  source:
+                    type: string
+                    enum: [puppetdb, puppetserver]
+
+  /integrations/hiera/status:
+    get:
+      summary: Get Hiera integration status
+      description: Return status of the Hiera integration including configuration and health
+      tags:
+        - Hiera
+      responses:
+        '200':
+          description: Status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  configured:
+                    type: boolean
+                  healthy:
+                    type: boolean
+                  controlRepoPath:
+                    type: string
+                  lastScan:
+                    type: string
+                    format: date-time
+                  keyCount:
+                    type: integer
+                  fileCount:
+                    type: integer
+                  message:
+                    type: string
+
+  /integrations/hiera/reload:
+    post:
+      summary: Reload Hiera control repository
+      description: Reload control repository data and rescan for Hiera keys
+      tags:
+        - Hiera
+      responses:
+        '200':
+          description: Repository reloaded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+                  keyCount:
+                    type: integer
+                  fileCount:
+                    type: integer
+                  lastScan:
+                    type: string
+                    format: date-time
+
+  /integrations/hiera/keys:
+    get:
+      summary: List all Hiera keys
+      description: Return all discovered Hiera keys with pagination
+      tags:
+        - Hiera
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: pageSize
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            default: 50
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Keys retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/HieraKeyInfo'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  pageSize:
+                    type: integer
+                  totalPages:
+                    type: integer
+
+  /integrations/hiera/nodes/{nodeId}/keys/{key}:
+    get:
+      summary: Resolve Hiera key for node
+      description: Resolve a specific Hiera key for a node showing value and resolution path
+      tags:
+        - Hiera
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          description: Node identifier
+          schema:
+            type: string
+        - name: key
+          in: path
+          required: true
+          description: Hiera key name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Key resolved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodeId:
+                    type: string
+                  key:
+                    type: string
+                  resolvedValue:
+                    description: The resolved value for the key
+                  lookupMethod:
+                    type: string
+                  sourceFile:
+                    type: string
+                  hierarchyLevel:
+                    type: integer
+                  found:
+                    type: boolean
+                  allValues:
+                    type: array
+                    items: {}
+                  interpolatedVariables:
+                    type: array
+                    items:
+                      type: string
 
   /nodes/{id}:
     get:
@@ -621,7 +1156,7 @@ paths:
           description: Filter by execution type
           schema:
             type: string
-            enum: [command, task, facts]
+            enum: [command, task, facts, puppet, package]
         - name: status
           in: query
           description: Filter by execution status
@@ -814,6 +1349,203 @@ paths:
                 $ref: '#/components/schemas/Error'
         '500':
           description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /executions/{id}/re-execute:
+    post:
+      summary: Re-execute with preserved parameters
+      description: |
+        Trigger re-execution of a previous execution with preserved parameters.
+        Allows modification of parameters through request body.
+      tags:
+        - Executions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Original execution ID
+          schema:
+            type: string
+      requestBody:
+        description: Optional parameter modifications
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  enum: [command, task, facts, puppet, package]
+                targetNodes:
+                  type: array
+                  items:
+                    type: string
+                action:
+                  type: string
+                parameters:
+                  type: object
+                  additionalProperties: true
+                expertMode:
+                  type: boolean
+      responses:
+        '201':
+          description: Re-execution created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution:
+                    $ref: '#/components/schemas/ExecutionRecord'
+                  message:
+                    type: string
+        '404':
+          description: Original execution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /executions/{id}/original:
+    get:
+      summary: Get original execution for re-execution
+      description: Return the original execution that this re-execution is based on
+      tags:
+        - Executions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Re-execution ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Original execution retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  execution:
+                    $ref: '#/components/schemas/ExecutionRecord'
+        '404':
+          description: Execution not found or not a re-execution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /executions/{id}/re-executions:
+    get:
+      summary: Get all re-executions of an execution
+      description: Return all re-executions that were created from this execution
+      tags:
+        - Executions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Original execution ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Re-executions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExecutionRecord'
+                  count:
+                    type: integer
+
+  /executions/{id}/output:
+    get:
+      summary: Get complete execution output
+      description: |
+        Return complete stdout/stderr for an execution.
+        Primarily used in expert mode to retrieve full output.
+      tags:
+        - Executions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Execution ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Output retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  executionId:
+                    type: string
+                  command:
+                    type: string
+                  stdout:
+                    type: string
+                  stderr:
+                    type: string
+                  expertMode:
+                    type: boolean
+
+  /executions/queue/status:
+    get:
+      summary: Get execution queue status
+      description: Return current execution queue status including running and queued executions
+      tags:
+        - Executions
+      responses:
+        '200':
+          description: Queue status retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queue:
+                    type: object
+                    properties:
+                      running:
+                        type: integer
+                      queued:
+                        type: integer
+                      limit:
+                        type: integer
+                      available:
+                        type: integer
+                      queuedExecutions:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            type:
+                              type: string
+                            nodeId:
+                              type: string
+                            action:
+                              type: string
+                            enqueuedAt:
+                              type: string
+                              format: date-time
+                            waitTime:
+                              type: integer
+        '503':
+          description: Execution queue not configured
           content:
             application/json:
               schema:
@@ -1025,7 +1757,7 @@ components:
           type: string
         type:
           type: string
-          enum: [command, task, facts]
+          enum: [command, task, facts, puppet, package]
         targetNodes:
           type: array
           items:
@@ -1152,6 +1884,171 @@ components:
             endpoint: /api/nodes/node1/command
             method: POST
             requestId: req-abc123
+
+    PuppetReport:
+      type: object
+      properties:
+        hash:
+          type: string
+          description: Unique report hash
+        certname:
+          type: string
+          description: Node certificate name
+        puppet_version:
+          type: string
+        report_format:
+          type: integer
+        configuration_version:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        producer_timestamp:
+          type: string
+          format: date-time
+        receive_time:
+          type: string
+          format: date-time
+        transaction_uuid:
+          type: string
+        catalog_uuid:
+          type: string
+        code_id:
+          type: string
+        job_id:
+          type: string
+        cached_catalog_status:
+          type: string
+        status:
+          type: string
+          enum: [changed, unchanged, failed]
+        noop:
+          type: boolean
+        noop_pending:
+          type: boolean
+        environment:
+          type: string
+        logs:
+          type: array
+          items:
+            type: object
+        metrics:
+          type: object
+        resource_events:
+          type: object
+
+    PuppetReportDetail:
+      allOf:
+        - $ref: '#/components/schemas/PuppetReport'
+        - type: object
+          properties:
+            resource_events:
+              type: object
+              properties:
+                data:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                      timestamp:
+                        type: string
+                        format: date-time
+                      resource_type:
+                        type: string
+                      resource_title:
+                        type: string
+                      property:
+                        type: string
+                      new_value:
+                        description: New value for the property
+                      old_value:
+                        description: Previous value for the property
+                      message:
+                        type: string
+                      file:
+                        type: string
+                      line:
+                        type: integer
+                      containment_path:
+                        type: array
+                        items:
+                          type: string
+
+    ReportsSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total number of reports analyzed
+        failed:
+          type: integer
+          description: Number of failed reports
+        changed:
+          type: integer
+          description: Number of reports with changes
+        unchanged:
+          type: integer
+          description: Number of unchanged reports
+        noop:
+          type: integer
+          description: Number of noop reports
+        timeRange:
+          type: object
+          properties:
+            start:
+              type: string
+              format: date-time
+            end:
+              type: string
+              format: date-time
+
+    NodeStatus:
+      type: object
+      properties:
+        certname:
+          type: string
+        catalog_environment:
+          type: string
+        report_environment:
+          type: string
+        report_timestamp:
+          type: string
+          format: date-time
+        catalog_timestamp:
+          type: string
+          format: date-time
+        facts_timestamp:
+          type: string
+          format: date-time
+        latest_report_hash:
+          type: string
+        latest_report_status:
+          type: string
+          enum: [changed, unchanged, failed]
+        latest_report_noop:
+          type: boolean
+
+    HieraKeyInfo:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Hiera key name
+        locationCount:
+          type: integer
+          description: Number of locations where this key is defined
+        hasLookupOptions:
+          type: boolean
+          description: Whether the key has lookup options defined
+      example:
+        name: apache::port
+        locationCount: 3
+        hasLookupOptions: false
 
   securitySchemes:
     # Placeholder for future authentication

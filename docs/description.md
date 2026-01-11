@@ -67,21 +67,21 @@ The web interface provides the following pages:
 
 Add PuppetDB support for Inventory, Facts and reports. Implement plugin architecture for integrations.
 
-### Version 0.3.0 (Current)
+### Version 0.4.0 (Current)
 
-Complete plugin architecture migration for all integrations. Add Puppetserver support for certificate management, node status, and catalog compilation. Restructure UI navigation with dedicated Puppet page. Implement expert mode and comprehensive error handling.
+Add Hiera integration for hierarchical configuration data browsing and analysis. Remove puppetserver CA management functionality. Enhance plugin architecture with improved error handling and health monitoring.
 
 Key features:
 
-- Bolt fully migrated to plugin architecture
-- Puppetserver integration for CA and node management
-- Multi-source inventory with node linking
-- Unified facts display from all sources
-- Comprehensive logging and error handling
-- Restructured UI with Puppet page
-- Expert mode for troubleshooting
+- Hiera integration for configuration data exploration
+- Key usage analysis and classification
+- Hierarchical data resolution with fact interpolation
+- Code analysis for Puppet manifests and modules
+- Removal of certificate management functionality
+- Enhanced plugin architecture with better error handling
+- Improved health monitoring and graceful degradation
 
-### Version 0.4.0 (Planned)
+### Version 0.5.0 (Planned)
 
 Add Ansible support for Inventory, Facts and Executions. Implement workflows logic.
 

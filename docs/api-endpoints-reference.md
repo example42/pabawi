@@ -1,10 +1,10 @@
 # Pabawi API Endpoints Reference
 
-Version: 0.3.0
+Version: 0.4.0
 
 ## Quick Reference
 
-This document provides a quick reference table of all Pabawi API endpoints.
+This document provides a quick reference table of all Pabawi API endpoints based on the actual implementation.
 
 ## System Endpoints
 
@@ -34,7 +34,6 @@ This document provides a quick reference table of all Pabawi API endpoints.
 | GET | `/api/executions` | List execution history | No |
 | GET | `/api/executions/:id` | Get execution details | No |
 | GET | `/api/executions/:id/output` | Get complete execution output | No |
-| GET | `/api/executions/:id/command` | Get execution command line | No |
 | GET | `/api/executions/:id/original` | Get original execution for re-execution | No |
 | GET | `/api/executions/:id/re-executions` | Get all re-executions | No |
 | POST | `/api/executions/:id/re-execute` | Trigger re-execution | No |
@@ -79,6 +78,47 @@ This document provides a quick reference table of all Pabawi API endpoints.
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | POST | `/api/nodes/:id/facts` | Gather facts from node | No |
+
+## Hiera Endpoints
+
+### Hiera Status and Management
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/integrations/hiera/status` | Get Hiera integration status | No |
+| POST | `/api/integrations/hiera/reload` | Reload control repository data | No |
+
+### Hiera Key Discovery
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/integrations/hiera/keys` | List all discovered Hiera keys | No |
+| GET | `/api/integrations/hiera/keys/search` | Search for Hiera keys by partial name | No |
+| GET | `/api/integrations/hiera/keys/:key` | Get details for a specific Hiera key | No |
+
+### Hiera Node-Specific Data
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/integrations/hiera/nodes/:nodeId/data` | Get all Hiera data for a specific node | No |
+| GET | `/api/integrations/hiera/nodes/:nodeId/keys` | Get all Hiera keys for a specific node | No |
+| GET | `/api/integrations/hiera/nodes/:nodeId/keys/:key` | Resolve a specific Hiera key for a node | No |
+
+### Hiera Global Key Analysis
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/integrations/hiera/keys/:key/nodes` | Get key values across all nodes | No |
+
+### Hiera Code Analysis
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/integrations/hiera/analysis` | Get complete code analysis results | No |
+| GET | `/api/integrations/hiera/analysis/unused` | Get unused code report | No |
+| GET | `/api/integrations/hiera/analysis/lint` | Get lint issues with optional filtering | No |
+| GET | `/api/integrations/hiera/analysis/modules` | Get module update information | No |
+| GET | `/api/integrations/hiera/analysis/statistics` | Get usage statistics | No |
 
 ## PuppetDB Endpoints
 
@@ -126,12 +166,6 @@ This document provides a quick reference table of all Pabawi API endpoints.
 
 ## Puppetserver Endpoints
 
-| GET | `/api/integrations/puppetserver/certificates/:certname` | Get certificate details | Certificate |
-| POST | `/api/integrations/puppetserver/certificates/:certname/sign` | Sign certificate | Certificate |
-| DELETE | `/api/integrations/puppetserver/certificates/:certname` | Revoke certificate | Certificate |
-| POST | `/api/integrations/puppetserver/certificates/bulk-sign` | Bulk sign certificates | Certificate |
-| POST | `/api/integrations/puppetserver/certificates/bulk-revoke` | Bulk revoke certificates | Certificate |
-
 ### Puppetserver Nodes
 
 | Method | Endpoint | Description | Auth Required |
@@ -170,20 +204,20 @@ This document provides a quick reference table of all Pabawi API endpoints.
 ### By Integration
 
 - **Bolt**: 15 endpoints (inventory, commands, tasks, puppet, packages, facts)
+- **Hiera**: 15 endpoints (status, keys, node data, analysis, statistics)
 - **PuppetDB**: 12 endpoints (nodes, facts, reports, catalogs, events, admin)
-- **Puppetserver**: 18 endpoints (certificates, nodes, catalogs, environments, status)
+- **Puppetserver**: 15 endpoints (nodes, catalogs, environments, status)
 
 ### By HTTP Method
 
-- **GET**: 40 endpoints (read operations)
-- **POST**: 10 endpoints (write operations, executions)
-- **DELETE**: 1 endpoint (certificate revocation)
+- **GET**: 54 endpoints (read operations)
+- **POST**: 7 endpoints (write operations, executions)
 
 ### By Authentication
 
-- **No Auth**: 25 endpoints (Bolt operations, system endpoints)
+- **No Auth**: 37 endpoints (Bolt operations, Hiera operations, system endpoints)
 - **Token Auth**: 12 endpoints (PuppetDB operations)
-- **Certificate Auth**: 18 endpoints (Puppetserver operations)
+- **Certificate Auth**: 15 endpoints (Puppetserver operations)
 
 ## Response Formats
 
@@ -216,13 +250,20 @@ All endpoints return JSON responses with the following structure:
 |-----------|------|-------------|---------------------|
 | `limit` | integer | Maximum items to return | List endpoints |
 | `offset` | integer | Pagination offset | List endpoints |
-| `page` | integer | Page number | Execution history |
-| `pageSize` | integer | Items per page | Execution history |
+| `page` | integer | Page number | Execution history, Hiera endpoints |
+| `pageSize` | integer | Items per page | Execution history, Hiera endpoints |
 | `status` | string | Filter by status | Executions, events |
 | `type` | string | Filter by type | Executions |
-| `query` | string | PQL query | PuppetDB nodes |
+| `query` | string | PQL query or search term | PuppetDB nodes, Hiera search |
 | `refresh` | boolean | Force fresh data | Integration status |
 | `resourceType` | string | Filter by resource type | Catalogs, resources |
+| `filter` | string | Filter keys (used/unused/all) | Hiera node data |
+| `severity` | string | Filter by severity (comma-separated) | Hiera lint issues |
+| `types` | string | Filter by types (comma-separated) | Hiera lint issues |
+| `sources` | string | Comma-separated list of sources | Inventory |
+| `pql` | string | PuppetDB PQL query | Inventory |
+| `sortBy` | string | Sort field | Inventory |
+| `sortOrder` | string | Sort direction (asc/desc) | Inventory |
 
 ## Common Headers
 
@@ -239,6 +280,7 @@ All endpoints return JSON responses with the following structure:
 | Integration | Limit | Window |
 |-------------|-------|--------|
 | Bolt | None | - |
+| Hiera | None | - |
 | PuppetDB | 100 req/min | Per client |
 | Puppetserver | 50 req/min | Per client |
 
