@@ -144,7 +144,11 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0 \
     DATABASE_PATH=/data/executions.db \
-    BOLT_PROJECT_PATH=/bolt-project
+    BOLT_PROJECT_PATH=/bolt-project \
+    # Integration settings (disabled by default)
+    PUPPETDB_ENABLED=false \
+    PUPPETSERVER_ENABLED=false \
+    HIERA_ENABLED=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

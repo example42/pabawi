@@ -745,5 +745,5 @@ The plugin architecture is designed for easy extension:
 - [Integrations API](./integrations-api.md)
 - [Configuration Guide](./configuration.md)
 - [PuppetDB Integration Setup](./puppetdb-integration-setup.md)
-- [Puppetserver Setup](./PUPPETSERVER_SETUP.md)
+- [Puppetserver Setup](./uppetserver-integration-setup.md)
 - [Troubleshooting Guide](./troubleshooting.md)

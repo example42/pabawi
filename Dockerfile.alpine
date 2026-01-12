@@ -150,7 +150,11 @@ ENV NODE_ENV=production \
     FACTER_operatingsystem=Alpine \
     FACTER_osfamily=Linux \
     FACTER_kernel=Linux \
-    PUPPET_SKIP_OS_CHECK=true
+    PUPPET_SKIP_OS_CHECK=true \
+    # Integration settings (disabled by default)
+    PUPPETDB_ENABLED=false \
+    PUPPETSERVER_ENABLED=false \
+    HIERA_ENABLED=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

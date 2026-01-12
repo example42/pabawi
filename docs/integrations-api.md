@@ -974,5 +974,5 @@ X-RateLimit-Reset: 1642248060
 
 - [Main API Documentation](./api.md)
 - [PuppetDB Integration Setup](./puppetdb-integration-setup.md)
-- [Puppetserver Setup](./PUPPETSERVER_SETUP.md)
+- [Puppetserver Setup](./uppetserver-integration-setup.md)
 - [Configuration Guide](./configuration.md)

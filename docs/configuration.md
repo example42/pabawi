@@ -907,8 +907,12 @@ services:
       - /path/to/bolt-project:/bolt-project:ro
       # Mount database (persistent)
       - pabawi-data:/data
-      # Mount SSH keys (read-only)
+      # Mount SSL keys (read-only)
       - ~/.ssh:/root/.ssh:ro
+      # Mount SSL certificates for integrations (read-only)
+      - /path/to/ssl/certs:/ssl-certs:ro
+      # Mount Hiera control repository (read-only)
+      - /path/to/control-repo:/control-repo:ro
     environment:
       PORT: 3000
       HOST: 0.0.0.0
@@ -922,6 +926,38 @@ services:
       CACHE_INVENTORY_TTL: 60000
       CACHE_FACTS_TTL: 300000
       CONCURRENT_EXECUTION_LIMIT: 10
+      
+      # PuppetDB Integration
+      PUPPETDB_ENABLED: "true"
+      PUPPETDB_SERVER_URL: "https://puppetdb.example.com"
+      PUPPETDB_PORT: 8081
+      PUPPETDB_SSL_ENABLED: "true"
+      PUPPETDB_SSL_CA: "/ssl-certs/ca.pem"
+      PUPPETDB_SSL_CERT: "/ssl-certs/client.pem"
+      PUPPETDB_SSL_KEY: "/ssl-certs/client-key.pem"
+      PUPPETDB_TIMEOUT: 30000
+      PUPPETDB_CACHE_TTL: 300000
+      
+      # Puppetserver Integration
+      PUPPETSERVER_ENABLED: "true"
+      PUPPETSERVER_SERVER_URL: "https://puppet.example.com"
+      PUPPETSERVER_PORT: 8140
+      PUPPETSERVER_SSL_ENABLED: "true"
+      PUPPETSERVER_SSL_CA: "/ssl-certs/ca.pem"
+      PUPPETSERVER_SSL_CERT: "/ssl-certs/client.pem"
+      PUPPETSERVER_SSL_KEY: "/ssl-certs/client-key.pem"
+      PUPPETSERVER_TIMEOUT: 30000
+      PUPPETSERVER_CACHE_TTL: 300000
+      
+      # Hiera Integration
+      HIERA_ENABLED: "true"
+      HIERA_CONTROL_REPO_PATH: "/control-repo"
+      HIERA_CONFIG_PATH: "hiera.yaml"
+      HIERA_ENVIRONMENTS: '["production","staging"]'
+      HIERA_FACT_SOURCE_PREFER_PUPPETDB: "true"
+      HIERA_CACHE_ENABLED: "true"
+      HIERA_CACHE_TTL: 300000
+      
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
