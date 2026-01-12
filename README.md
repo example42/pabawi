@@ -1,8 +1,16 @@
 # Pabawi
 
-Version 0.4.0 - Unified Remote Execution Interface
-
-Pabawi is a general-purpose remote execution platform that integrates multiple infrastructure management tools including Puppet Bolt, PuppetDB, and Hiera. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.
+<table>
+<tr>
+<td width="150">
+  <img src="frontend/favicon/web-app-manifest-512x512.png" alt="Pabawi Logo" width="128" height="128">
+</td>
+<td>
+  <h3>Version 0.4.0 - Puppet And Bolt Awesome Web Interface</h3>
+  <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It currently provides integrations with Puppet, Bolt, PuppetDB, and Hiera. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.</p>
+</td>
+</tr>
+</table>
 
 ## Security Notice
 
@@ -421,45 +429,25 @@ ssh -L 3000:localhost:3000 user@your-workstation
 
 ## Screenshots
 
-### Multi-Source Inventory
+> **📸 [View Complete Screenshots Gallery](docs/screenshots.md)** - Comprehensive visual documentation of all Pabawi features and interfaces.
 
-View nodes from Bolt and PuppetDB with clear source attribution:
+### Dashboard and Inventory
 
-```
-[Screenshot: Inventory page showing nodes from multiple sources with source badges]
-```
+<img src="docs/screenshots/home-dashboard.png" alt="Home Dashboard" width="400"> <img src="docs/screenshots/inventory-page.png" alt="Inventory Page" width="400">
 
-### PuppetDB Integration
+*Home dashboard with integration status and node inventory with multi-source support*
 
-Access comprehensive Puppet data including facts, reports, catalogs, and events:
+### Node Management and Operations
 
-```
-[Screenshot: Node detail page with PuppetDB tabs showing reports and catalog]
-```
+<img src="docs/screenshots/node-detail-page.png" alt="Node Detail Page" width="400"> <img src="docs/screenshots/command-execution.png" alt="Command Execution" width="400">
 
-### Re-execution
+*Node detail interface and command execution with real-time results*
 
-Quickly repeat operations with preserved parameters:
+### Advanced Features
 
-```
-[Screenshot: Executions page with re-execute buttons]
-```
+<img src="docs/screenshots/execution-history.png" alt="Execution History" width="400"> <img src="docs/screenshots/expert-mode-output.png" alt="Expert Mode" width="400">
 
-### Expert Mode
-
-View complete command lines and full output for debugging:
-
-```
-[Screenshot: Expert mode showing full command line and output with search]
-```
-
-### Integration Status
-
-Monitor health of all configured integrations:
-
-```
-[Screenshot: Home page with integration status dashboard]
-```
+*Execution tracking with re-run capabilities and expert mode diagnostics*
 
 ## Environment Variables
 

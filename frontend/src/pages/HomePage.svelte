@@ -230,6 +230,13 @@
 <div class="container mx-auto px-4 py-8">
   <!-- Welcome Section -->
   <div class="mb-12 text-center">
+    <div class="flex justify-center mb-6">
+      <img 
+        src="/favicon/web-app-manifest-512x512.png" 
+        alt="Pabawi Logo" 
+        class="h-24 w-24"
+      />
+    </div>
     <h1 class="text-5xl font-bold text-gray-900 dark:text-white mb-4">
       Welcome to Pabawi
     </h1>
