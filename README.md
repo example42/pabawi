@@ -283,13 +283,11 @@ git commit --no-verify -m "message"
 
 ## Docker Deployment
 
+For comprehensive Docker deployment instructions including all integrations, see the [Docker Deployment Guide](docs/docker-deployment.md).
+
+### Quick Start
+
 ### Building the Docker Image
-
-```bash
-docker build -t padawi:latest .
-```
-
-### Running with Docker
 
 ```bash
 # Using the provided script
@@ -346,7 +344,13 @@ Access the application at <http://localhost:3000>
 ssh -L 3000:localhost:3000 user@your-workstation
 ```
 
+```bash
+docker build -t pabawi:latest .
+```
+
 ### Running with Docker Compose
+
+The docker-compose.yml file includes comprehensive configuration for all integrations:
 
 ```bash
 # Start the service
@@ -357,6 +361,54 @@ docker-compose logs -f
 
 # Stop the service
 docker-compose down
+```
+
+#### Enabling Integrations
+
+To enable integrations, create a `.env` file in the project root with your configuration:
+
+```env
+# PuppetDB Integration
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=https://puppetdb.example.com
+PUPPETDB_PORT=8081
+PUPPETDB_TOKEN=your-token-here
+PUPPETDB_SSL_ENABLED=true
+PUPPETDB_SSL_CA=/ssl-certs/ca.pem
+PUPPETDB_SSL_CERT=/ssl-certs/client.pem
+PUPPETDB_SSL_KEY=/ssl-certs/client-key.pem
+
+# Puppetserver Integration
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppet.example.com
+PUPPETSERVER_PORT=8140
+PUPPETSERVER_SSL_ENABLED=true
+PUPPETSERVER_SSL_CA=/ssl-certs/ca.pem
+PUPPETSERVER_SSL_CERT=/ssl-certs/client.pem
+PUPPETSERVER_SSL_KEY=/ssl-certs/client-key.pem
+
+# Hiera Integration
+HIERA_ENABLED=true
+HIERA_CONTROL_REPO_PATH=/control-repo
+HIERA_ENVIRONMENTS=["production","staging"]
+HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
+```
+
+#### Volume Mounts for Integrations
+
+Update the docker-compose.yml volumes section to include your SSL certificates and control repository:
+
+```yaml
+volumes:
+  # Existing mounts
+  - ./bolt-project:/bolt-project:ro
+  - ./data:/data
+  
+  # SSL certificates for PuppetDB/Puppetserver
+  - /path/to/ssl/certs:/ssl-certs:ro
+  
+  # Hiera control repository
+  - /path/to/control-repo:/control-repo:ro
 ```
 
 Access the application at <http://localhost:3000>
@@ -632,7 +684,7 @@ Special thanks to all contributors and the Puppet community.
 ### Integration Setup
 
 - [PuppetDB Integration Setup](docs/puppetdb-integration-setup.md) - PuppetDB configuration guide
-- [Puppetserver Setup](docs/PUPPETSERVER_SETUP.md) - Puppetserver configuration guide
+- [Puppetserver Setup](docs/uppetserver-integration-setup.md) - Puppetserver configuration guide
 - [PuppetDB API Documentation](docs/puppetdb-api.md) - PuppetDB-specific API endpoints
 
 ### Additional Resources

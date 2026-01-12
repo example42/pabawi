@@ -511,9 +511,9 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
   <div class="mt-8 text-center">
     <p class="text-gray-600 dark:text-gray-400">
       For detailed documentation, see <a
-        href="https://github.com/example42/pabawi/tree/main/docs/PUPPETSERVER_SETUP.md"
+        href="https://github.com/example42/pabawi/tree/main/docs/uppetserver-integration-setup.md"
         target="_blank"
-        class="text-blue-600 dark:text-blue-400 hover:underline">PUPPETSERVER_SETUP.md</a
+        class="text-blue-600 dark:text-blue-400 hover:underline">uppetserver-integration-setup.md</a
       >
     </p>
   </div>
