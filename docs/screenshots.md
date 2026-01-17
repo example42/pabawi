@@ -2,24 +2,11 @@
 
 This document provides visual documentation of the Pabawi web interface, showing key features and workflows for infrastructure management with Puppet Bolt.
 
-## Home Dashboard
-
-![Home Dashboard](screenshots/home-dashboard.png)
-
-**File:** `home-dashboard.png`
-
-The main dashboard provides an overview of your infrastructure and quick access to key features. This page displays:
-
-- Integration status indicators for PuppetDB, Puppetserver, and Hiera
-- Quick navigation to inventory, executions, and other main sections
-- System health and connectivity status
-- Recent activity summary
-
 ## Inventory Page
 
-![Inventory Page](screenshots/inventory-page.png)
+![Inventory Page](screenshots/inventory.png)
 
-**File:** `inventory-page.png`
+**File:** `inventory.png`
 
 The inventory page shows all nodes from your Bolt inventory with comprehensive filtering and search capabilities:
 
@@ -42,20 +29,7 @@ The node detail page is the central hub for all operations on a specific node:
 - **Facts Section**: System information gathering and display
 - **Operation Forms**: Command execution, task running, Puppet runs, package installation
 - **Execution History**: Recent operations performed on this node
-
-## Command Execution
-
-![Command Execution](screenshots/command-execution.png)
-
-**File:** `command-execution.png`
-
-The command execution interface allows running ad-hoc shell commands on target nodes:
-
-- **Command Input**: Text field with validation and whitelist checking
-- **Security Features**: Command whitelist enforcement for production safety
-- **Real-time Results**: Immediate display of stdout, stderr, and exit codes
-- **Execution Details**: Duration, timestamp, and status indicators
-- **Expert Mode**: Additional diagnostic information when enabled
+- **PuppetDB Integration**: Access to reports, catalogs, facts, and events when available
 
 ## Task Execution
 
@@ -70,48 +44,52 @@ The Bolt task execution interface provides access to predefined automation scrip
 - **Parameter Types**: Support for strings, integers, booleans, arrays, and hashes
 - **Validation**: Required field checking and type validation
 - **Task Documentation**: Descriptions and parameter details
+- **Real-time Results**: Immediate feedback on task execution
 
-## Puppet Run Interface
+## Puppet Reports
 
-![Puppet Run Interface](screenshots/puppet-run-interface.png)
+![Puppet Reports](screenshots/puppet-reports.png)
 
-**File:** `puppet-run-interface.png`
+**File:** `puppet-reports.png`
 
-The Puppet run interface enables executing Puppet agent runs with full configuration control:
+The Puppet reports interface displays detailed information from Puppet agent runs:
 
-- **Basic Options**: Tags and environment configuration
-- **Advanced Options**: Noop mode, debug mode, and additional Puppet agent flags
-- **Safety Features**: Dry-run capability with noop mode
-- **Configuration Override**: No-noop mode for overriding node settings
-- **Execution Control**: Clear action buttons and status indicators
+- **Report List**: Chronological list of Puppet runs with status indicators
+- **Resource Changes**: Summary of changed, failed, and unchanged resources
+- **Execution Metrics**: Timing information and performance data
+- **Resource Details**: Individual resource changes with before/after states
+- **Status Indicators**: Visual feedback for success, failures, and changes
+- **Time Information**: Timestamps and duration for each run
 
-## Execution History
+## Executions List
 
-![Execution History](screenshots/execution-history.png)
+![Executions List](screenshots/executions-list.png)
 
-**File:** `execution-history.png`
+**File:** `executions-list.png`
 
 The execution history page provides comprehensive tracking of all operations:
 
 - **Summary Statistics**: Total, successful, failed, and running executions
 - **Filtering Options**: Date range, status, target node, and search filters
 - **Execution List**: Detailed view of past operations with results
-- **Re-execution**: Quick repeat of previous operations with preserved parameters
+- **Operation Types**: Commands, tasks, Puppet runs, and package installations
+- **Status Indicators**: Visual feedback for success, failure, and in-progress operations
 - **Pagination**: Efficient handling of large execution histories
 
-## Expert Mode Output
+## Execution Details
 
-![Expert Mode Output](screenshots/expert-mode-output.png)
+![Execution Details](screenshots/execution-details.png)
 
-**File:** `expert-mode-output.png`
+**File:** `execution-details.png`
 
-Expert mode provides detailed diagnostic information for troubleshooting and auditing:
+Detailed view of individual execution results with comprehensive information:
 
-- **Full Command Lines**: Complete Bolt CLI commands executed
-- **Raw Output**: Unfiltered stdout and stderr from operations
+- **Execution Summary**: Status, duration, timestamp, and operation type
+- **Output Display**: Formatted stdout and stderr from operations
+- **Re-execution**: Quick repeat of operations with preserved or modified parameters
+- **Expert Mode**: Additional diagnostic information when enabled
+- **Full Command Lines**: Complete Bolt CLI commands executed (in expert mode)
 - **Request Tracking**: Unique request IDs for log correlation
-- **Detailed Diagnostics**: Additional context for debugging
-- **Search Functionality**: Find specific information in large outputs
 
 ## Usage Guidelines
 
@@ -126,14 +104,12 @@ All screenshots are stored in the `docs/screenshots/` directory and can be refer
 ### Screenshot Naming Convention
 
 Screenshots follow a descriptive naming pattern:
-- `home-dashboard.png` - Main application dashboard
-- `inventory-page.png` - Node inventory listing
-- `node-detail-page.png` - Individual node management
-- `command-execution.png` - Ad-hoc command interface
-- `task-execution.png` - Bolt task execution
-- `puppet-run-interface.png` - Puppet agent runs
-- `execution-history.png` - Operation tracking
-- `expert-mode-output.png` - Detailed diagnostics
+- `inventory.png` - Node inventory listing with search and filters
+- `node-detail-page.png` - Individual node management interface
+- `task-execution.png` - Bolt task execution with parameters
+- `puppet-reports.png` - Puppet run reports with resource changes
+- `executions-list.png` - Operation history and tracking
+- `execution-details.png` - Detailed execution results with re-run options
 
 ### Documentation Integration
 

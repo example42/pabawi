@@ -6,21 +6,62 @@
   <img src="frontend/favicon/web-app-manifest-512x512.png" alt="Pabawi Logo" width="128" height="128">
 </td>
 <td>
-  <h3>Version 0.4.0 - Puppet And Bolt Awesome Web Interface</h3>
+  <h3>Classic Infrastructures Command & Control Awesomeness</h3>
   <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It currently provides integrations with Puppet, Bolt, PuppetDB, and Hiera. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.</p>
 </td>
 </tr>
 </table>
 
+## Table of Contents
+
+- [Security Notice](#security-notice)
+- [Features](#features)
+  - [Core Capabilities](#core-capabilities)
+  - [Advanced Features](#advanced-features)
+- [Project Structure](#project-structure)
+- [Screenshots](#screenshots)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Development / Debugging](#development--debugging)
+- [Build](#build)
+- [Configuration](#configuration)
+  - [Basic Configuration](#basic-configuration)
+  - [Bolt Integration](#bolt-integration)
+  - [PuppetDB Integration](#puppetdb-integration)
+  - [PuppetServer Integration](#puppetserver-integration)
+  - [Hiera Integration](#hiera-integration)
+- [Testing](#testing)
+  - [Unit and Integration Tests](#unit-and-integration-tests)
+  - [End-to-End Tests](#end-to-end-tests)
+  - [Development Pre-commit Hooks](#development-pre-commit-hooks)
+- [Docker Deployment](#docker-deployment)
+  - [Quick Start](#quick-start)
+  - [Running with Docker Compose](#running-with-docker-compose)
+- [Troubleshooting](#troubleshooting)
+  - [Common Issues](#common-issues)
+- [Roadmap](#roadmap)
+  - [Planned Features](#planned-features)
+  - [Version History](#version-history)
+- [License](#license)
+- [Support](#support)
+  - [Documentation](#documentation)
+  - [Getting Help](#getting-help)
+- [Acknowledgments](#acknowledgments)
+- [Documentation](#documentation-1)
+  - [Getting Started](#getting-started)
+  - [API Reference](#api-reference)
+  - [Integration Setup](#integration-setup)
+  - [Additional Resources](#additional-resources)
+
 ## Security Notice
 
-**⚠️ IMPORTANT: Pabawi is designed for local use by Puppet administrators and developers on their workstations.**
+**⚠️ IMPORTANT: Currently Pabawi is designed for local use by Puppet administrators and developers on their workstations.**
 
 - **No Built-in Authentication**: Pabawi currently has no user authentication or authorization system
 - **Localhost Access Only**: The application should only be accessed via `localhost` or `127.0.0.1`
 - **Network Access Not Recommended**: Do not expose Pabawi directly to network access without external authentication
 - **Production Deployment**: If network access is required, use a reverse proxy (nginx, Apache) with proper authentication and SSL termination
-- **Privileged Operations**: Pabawi can execute commands and tasks on your infrastructure - restrict access accordingly
+- **Privileged Operations**: Pabawi can execute commands and tasks on your infrastructure, based on your Bolt configurations - restrict access accordingly
 
 For production or multi-user environments, implement external authentication through a reverse proxy before allowing network access.
 
@@ -28,10 +69,9 @@ For production or multi-user environments, implement external authentication thr
 
 ### Core Capabilities
 
-- **Multi-Source Inventory**: View and manage nodes from Bolt inventory, PuppetDB, and Puppetserver
+- **Multi-Source Inventory**: View and manage nodes from Bolt inventory and PuppetDB
 - **Command Execution**: Run ad-hoc commands on remote nodes with whitelist security
-- **Task Execution**: Execute Bolt tasks with parameter support
-- **Puppet Integration**: Trigger Puppet agent runs with full configuration control
+- **Task Execution**: Execute Bolt tasks with parameters automatic discovery
 - **Package Management**: Install and manage packages across your infrastructure
 - **Execution History**: Track all operations with detailed results and re-execution capability
 - **Dynamic Inventory**: Automatically discover nodes from PuppetDB
@@ -39,7 +79,7 @@ For production or multi-user environments, implement external authentication thr
 - **Puppet Reports**: Browse detailed Puppet run reports with metrics and resource changes
 - **Catalog Inspection**: Examine compiled Puppet catalogs and resource relationships
 - **Event Tracking**: Monitor individual resource changes and failures over time
-- **PQL Queries**: Filter nodes using PuppetDB Query Language
+- **Catalogs comprison**: Compare and show differences in catalogs from different environments
 - **Hiera Data Browser**: Explore hierarchical configuration data and key usage analysis
 
 ### Advanced Features
@@ -76,20 +116,57 @@ padawi/
 │   ├── package.json
 │   └── tsconfig.json
 ├── docs/              # Documentation
-│   ├── configuration.md
-│   ├── api.md
-│   ├── user-guide.md
-│   ├── puppetdb-integration-setup.md
-│   ├── puppetdb-api.md
-│   └── v0.2-features-guide.md
 └── package.json       # Root workspace configuration
 ```
+
+## Screenshots
+
+> **📸 [View Complete Screenshots Gallery](docs/screenshots.md)** - Comprehensive visual documentation of all Pabawi features and interfaces.
+
+### Inventory and Node detail page
+
+<img src="docs/screenshots/inventory.png" alt="Inventory Page" width="400"> <img src="docs/screenshots/node-detail-page.png" alt="Node Detail Page" width="400">
+
+*Node inventory with multi-source support and node detail interface for operations*
+
+### Task Execution and Detaila
+
+<img src="docs/screenshots/task-execution.png" alt="Task Execution" width="400"> <img src="docs/screenshots/execution-details.png" alt="Execution Details" width="400">
+
+*Bolt task execution interface and and detailed execution results with re-run capabilities*
+
+### Puppet reports and Bolt executions
+<img src="docs/screenshots/puppet-reports.png" alt="Puppet Reports" width="400">
+<img src="docs/screenshots/executions-list.png" alt="Executions List" width="400"> 
+
+*Puppet run reports with detailed metrics and Bolt Execution history with filtering *
 
 ## Prerequisites
 
 - Node.js 20+
 - npm 9+
-- Bolt CLI installed and configured
+- Contrainer engine (when used via container image)
+
+### Bolt Integration
+
+- Bolt CLI installed
+- A local bolt project directory
+- Eventual ssh keys used in Bolt configuration
+
+### PuppetDB Integration
+
+- Network access to PuppetDB port 8081
+- A local certificate signed the the PuppetCA used by PuppetDB
+
+### PuppetServer Integration
+
+- Network access to PuppetServer port 8140
+- A local certificate signed the the PuppetCA used by PuppetServer
+
+### Hiera Integration
+
+- A local copy of your control-repo, with eventual external modules in Puppetfile
+- If PuppetDB integration is not active, node facts files must be present on a local directory
 
 ## Installation
 
@@ -98,7 +175,7 @@ padawi/
 npm run install:all
 ```
 
-## Development
+## Development / debugging
 
 ```bash
 # Run backend (port 3000)
@@ -122,7 +199,7 @@ npm run dev:frontend
 - **Application**: <http://localhost:3000> (Frontend and API served together)
 - The backend serves the built frontend as static files
 
-**Network Access**: If you need to access Pabawi from other machines, use SSH port forwarding or implement a reverse proxy with proper authentication. Never expose Pabawi directly to the network without authentication.
+**Network Access**: If you need to access Pabawi from other machines, use SSH port forwarding or implement a reverse proxy with proper authentication. Do not expose Pabawi directly to the network without authentication.
 
 ## Build
 
@@ -135,50 +212,73 @@ npm run build
 
 ### Basic Configuration
 
-Copy `backend/.env.example` to `backend/.env` and configure:
+Copy `backend/.env.example` to `backend/.env` and configure the integrations you want, starting from general settings:
 
 ```env
-# Server Configuration
+# Pabawi General Configurations
 PORT=3000
-BOLT_PROJECT_PATH=.
 LOG_LEVEL=info
 DATABASE_PATH=./data/executions.db
+```
 
-# Security
+### Bolt integration
+
+```env
+# Bolt Related settings
+BOLT_PROJECT_PATH=.
 BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
 BOLT_COMMAND_WHITELIST=["ls","pwd","whoami"]
 BOLT_EXECUTION_TIMEOUT=300000
 ```
 
-### PuppetDB Integration (Optional)
+### PuppetDB Integration
 
 To enable PuppetDB integration, add to `backend/.env`:
 
 ```env
-# Enable PuppetDB
+# Enable and configure PuppetDB integration
 PUPPETDB_ENABLED=true
 PUPPETDB_SERVER_URL=https://puppetdb.example.com
 PUPPETDB_PORT=8081
 
-# Token based Authentication (Puppet Enterprise only - use certificates for Open Source Puppet)
+# Token based Authentication (Puppet Enterprise only)
 PUPPETDB_TOKEN=your-token-here
 
-# SSL Configuration
+# Certs based Authentication (Puppet Enterprise and Open Source Puppet)
 PUPPETDB_SSL_ENABLED=true
 PUPPETDB_SSL_CA=/path/to/ca.pem
 PUPPETDB_SSL_CERT=/path/to/cert.pem
 PUPPETDB_SSL_KEY=/path/to/key.pem
 PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-
-# Connection Settings
-PUPPETDB_TIMEOUT=30000
-PUPPETDB_RETRY_ATTEMPTS=3
-PUPPETDB_CACHE_TTL=300000
 ```
 
 See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md) for detailed configuration instructions.
 
-### Hiera Integration (Optional)
+### PuppetServer Integration
+
+To enable PuppetServer integration, add to `backend/.env`:
+
+```env
+# Enable and configure PuppetServer integration
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppet.example.com
+PUPPETSERVERT_PORT=8140
+
+# Token based Authentication (Puppet Enterprise only)
+PUPPETSERVER_TOKEN=your-token-here
+
+# Certs based Authentication (Puppet Enterprise and Open Source Puppet)
+PUPPETSERVER_SSL_ENABLED=true
+PUPPETSERVER_SSL_CA=/path/to/ca.pem
+PUPPETSERVER_SSL_CERT=/path/to/cert.pem
+PUPPETSERVER_SSL_KEY=/path/to/key.pem
+PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
+```
+
+See [PuppetServer Integration Setup Guide](docs/puppetserver-integration-setup.md) for detailed configuration instructions.
+
+
+### Hiera Integration
 
 To enable Hiera integration, add to `backend/.env`:
 
@@ -205,10 +305,6 @@ HIERA_CODE_ANALYSIS_ENABLED=true
 HIERA_CODE_ANALYSIS_LINT_ENABLED=true
 ```
 
-The Hiera integration requires:
-- A valid Puppet control repository with `hiera.yaml` configuration
-- Hieradata files in the configured data directories
-- Node facts (from PuppetDB or local files) for hierarchy interpolation
 
 ## Testing
 
@@ -240,11 +336,9 @@ npm run test:e2e:headed
 
 See [E2E Testing Guide](docs/e2e-testing.md) for detailed information about end-to-end testing.
 
-## Development Pre-commit Hooks
+### Development Pre-commit Hooks
 
 This project uses pre-commit hooks to ensure code quality and security before commits.
-
-### Setup
 
 ```bash
 # Install pre-commit (requires Python)
@@ -256,22 +350,7 @@ brew install pre-commit
 # Install the git hooks
 pre-commit install
 pre-commit install --hook-type commit-msg
-```
 
-### What Gets Checked
-
-- **Code Quality**: ESLint, TypeScript type checking
-- **Security**: Secret detection, private key detection
-- **File Checks**: Trailing whitespace, file size limits, merge conflicts
-- **Docker**: Dockerfile linting with hadolint
-- **Markdown**: Markdown linting and formatting
-- **Shell Scripts**: ShellCheck validation
-- **Commit Messages**: Conventional commit format enforcement
-- **Duplicate Files**: Prevents files with suffixes like `_fixed`, `_backup`, etc.
-
-### Manual Run
-
-```bash
 # Run all hooks on all files
 pre-commit run --all-files
 
@@ -281,8 +360,6 @@ pre-commit run eslint --all-files
 # Update hooks to latest versions
 pre-commit autoupdate
 ```
-
-### Bypassing Hooks (Use Sparingly)
 
 ```bash
 # Skip pre-commit hooks (not recommended)
@@ -295,66 +372,51 @@ For comprehensive Docker deployment instructions including all integrations, see
 
 ### Quick Start
 
-### Building the Docker Image
+### Running the Docker Image
 
 ```bash
-# Using the provided script
+# Using the provided script (adapt as needed)
 ./scripts/docker-run.sh
 
-# Or manually executing from your Bolt Project dir
+# Or, without the need to git clone, manually executing a command as follows:
 docker run -d \
-  --name padawi \
-  -p 3000:3000 \
-  -v $(pwd):/bolt-project:ro \
-  -v $(pwd)/data:/data \
-  -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false \
+  --name pabawi \
+  --user "$(id -u):1001" \ # Your user must be able to read all the mounted files
+  -p 127.0.0.1:3000:3000 \
+  --platform "amd64" \ # amd64 or arm64
+  -v "$(pwd):/bolt-project:ro" \
+  -v "$(pwd)/data:/data" \
+  -v "$(pwd)/certs:/certs" \ 
+  -v "$HOME/.ssh:/home/pabawi/.ssh" \
+  --env-file ./env \
   example42/padawi:latest
-```
-
-### Running with PuppetDB Integration
-
-```bash
-docker run -d \
-  --name padawi \
-  -p 3000:3000 \
-  -v $(pwd):/bolt-project:ro \
-  -v $(pwd)/data:/data \
-  -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false \
-  -e PUPPETDB_ENABLED=true \
-  -e PUPPETDB_SERVER_URL=https://puppetdb.example.com \
-  -e PUPPETDB_PORT=8081 \
-  -e PUPPETDB_TOKEN=your-token-here \
-  -e PUPPETDB_SSL_ENABLED=true \
-  example42/padawi:0.4.0
-```
-
-### Running with Hiera Integration
-
-```bash
-docker run -d \
-  --name padawi \
-  -p 3000:3000 \
-  -v $(pwd):/bolt-project:ro \
-  -v $(pwd)/control-repo:/control-repo:ro \
-  -v $(pwd)/data:/data \
-  -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false \
-  -e HIERA_ENABLED=true \
-  -e HIERA_CONTROL_REPO_PATH=/control-repo \
-  -e HIERA_FACT_SOURCE_PREFER_PUPPETDB=true \
-  example42/padawi:0.4.0
 ```
 
 Access the application at <http://localhost:3000>
 
-**⚠️ Security Note**: Only access via localhost. For remote access, use SSH port forwarding:
+** Important**: The amount of volume mounts is up to you and depends on where, in the host filesystem, are the files which are needed by the Pabawi instance running inside the container. Also, the paths referenced in your .env file must be relative to container file system.
+
+Examples:
+
+| Kind of data | Path on the host | Volume Mount option | Env setting |
+| ----------- | ---------------- | ------------------- | ----------- |
+| Bolt project dir | $HOME/bolt-project | -v "${HOME}/bolt-project:/bolt:ro" | BOLT_PROJECT_PATH=/bolt | 
+| Control Repo | $HOME/control-repo | -v "${HOME}/control-repo:/control-repo:ro" | HIERA_CONTROL_REPO_PATH=/control-repo | 
+| Pabawi Data | $HOME/pabawi/data | -v "${HOME}/pabawi/data:/data" | DATABASE_PATH=/data/pabawi.db | 
+| Puppet certs - Ca | $HOME/puppet/certs/ca.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETSERVER_SSL_CA=/certs/ca.pem | 
+| Puppet certs - Pabawi user cert | $HOME/puppet/certs/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_CERT=/certs/pabawi.pem | 
+| Puppet certs - Pabawi user key | $HOME/puppet/certs/private/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_KEY=/certs/pabawi.pem | 
+
+PUPPETSERVER_SSL_* settings can use the same paths of the relevant PUPPETDB_SSL_ ones.
+
+**⚠️ Security Note**: With current version is always better to expose access on;y via localhost. If you run pabawi on a remote node, use SSH port forwarding:
 ```bash
 # SSH port forwarding for remote access
-ssh -L 3000:localhost:3000 user@your-workstation
+ssh -L 3000:localhost:3000 user@your-pabawi-host
 ```
 
-```bash
-docker build -t pabawi:latest .
-```
+If you want to allow Pabawi access to different users, you should configure a reverse proxy with authentication.
+
 
 ### Running with Docker Compose
 
@@ -421,76 +483,6 @@ volumes:
 
 Access the application at <http://localhost:3000>
 
-**⚠️ Security Note**: Only access via localhost. For remote access, use SSH port forwarding:
-```bash
-# SSH port forwarding for remote access
-ssh -L 3000:localhost:3000 user@your-workstation
-```
-
-## Screenshots
-
-> **📸 [View Complete Screenshots Gallery](docs/screenshots.md)** - Comprehensive visual documentation of all Pabawi features and interfaces.
-
-### Dashboard and Inventory
-
-<img src="docs/screenshots/home-dashboard.png" alt="Home Dashboard" width="400"> <img src="docs/screenshots/inventory-page.png" alt="Inventory Page" width="400">
-
-*Home dashboard with integration status and node inventory with multi-source support*
-
-### Node Management and Operations
-
-<img src="docs/screenshots/node-detail-page.png" alt="Node Detail Page" width="400"> <img src="docs/screenshots/command-execution.png" alt="Command Execution" width="400">
-
-*Node detail interface and command execution with real-time results*
-
-### Advanced Features
-
-<img src="docs/screenshots/execution-history.png" alt="Execution History" width="400"> <img src="docs/screenshots/expert-mode-output.png" alt="Expert Mode" width="400">
-
-*Execution tracking with re-run capabilities and expert mode diagnostics*
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and configure as needed. Key variables:
-
-**Core Settings:**
-
-- `PORT`: Application port (default: 3000)
-- `BOLT_PROJECT_PATH`: Path to Bolt project directory
-- `BOLT_COMMAND_WHITELIST_ALLOW_ALL`: Allow all commands (default: false)
-- `BOLT_COMMAND_WHITELIST`: JSON array of allowed commands
-- `BOLT_EXECUTION_TIMEOUT`: Timeout in milliseconds (default: 300000)
-- `LOG_LEVEL`: Logging level (default: info)
-
-**PuppetDB Integration (Optional):**
-
-- `PUPPETDB_ENABLED`: Enable PuppetDB integration (default: false)
-- `PUPPETDB_SERVER_URL`: PuppetDB server URL
-- `PUPPETDB_PORT`: PuppetDB port (default: 8081)
-- `PUPPETDB_TOKEN`: Authentication token (Puppet Enterprise only)
-- `PUPPETDB_SSL_ENABLED`: Enable SSL (default: true)
-- `PUPPETDB_SSL_CA`: Path to CA certificate
-- `PUPPETDB_CACHE_TTL`: Cache duration in ms (default: 300000)
-
-**Hiera Integration (Optional):**
-
-- `HIERA_ENABLED`: Enable Hiera integration (default: false)
-- `HIERA_CONTROL_REPO_PATH`: Path to Puppet control repository
-- `HIERA_CONFIG_PATH`: Path to hiera.yaml (default: hiera.yaml)
-- `HIERA_ENVIRONMENTS`: JSON array of environments (default: ["production"])
-- `HIERA_FACT_SOURCE_PREFER_PUPPETDB`: Prefer PuppetDB for facts (default: true)
-- `HIERA_CACHE_ENABLED`: Enable caching (default: true)
-- `HIERA_CACHE_TTL`: Cache duration in ms (default: 300000)
-
-**Important:** Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use certificate-based authentication.
-
-See [Configuration Guide](docs/configuration.md) for complete reference.
-
-### Volume Mounts
-
-- `/bolt-project`: Mount your Bolt project directory (read-only)
-- `/control-repo`: Mount your Puppet control repository for Hiera integration (read-only, optional)
-- `/data`: Persistent storage for SQLite database
 
 ### Troubleshooting
 
@@ -549,57 +541,18 @@ If expert mode doesn't show complete output:
 
 See [Troubleshooting Guide](docs/troubleshooting.md) for more solutions.
 
-## Contributing
-
-We welcome contributions! Here's how you can help:
-
-### Reporting Issues
-
-- Use GitHub Issues for bug reports and feature requests
-- Include version information and configuration (sanitized)
-- Provide steps to reproduce issues
-- Enable expert mode and include relevant error details
-
-### Development
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Write tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-### Code Style
-
-- Follow TypeScript best practices
-- Use ESLint and Prettier configurations
-- Write meaningful commit messages
-- Add documentation for new features
-
-### Testing
-
-```bash
-# Run unit and integration tests
-npm test
-
-# Run E2E tests
-npm run test:e2e
-
-# Run specific test suite
-npm test --workspace=backend
-```
 
 ## Roadmap
 
 ### Planned Features
 
-- **Additional Integrations**: Ansible, Terraform, AWS CLI, Azure CLI, Kubernetes
-- **Advanced Querying**: Visual query builder for PQL
+- **Additional Integrations**: Ansible, Choria, Tiny Puppet
+- **Additional Integrations (to evaluate)**: Terraform, AWS CLI, Azure CLI, Kubernetes
 - **Scheduled Executions**: Cron-like scheduling for recurring tasks
-- **Webhooks**: Trigger actions based on external events
 - **Custom Dashboards**: User-configurable dashboard widgets
-- **RBAC**: Role-based access control
+- **RBAC**: Role-based access control and user/groups management
 - **Audit Logging**: Comprehensive audit trail
+- **CLI**: Command Line tool
 
 ### Version History
 
@@ -633,12 +586,6 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
    - Configuration (sanitized)
    - Steps to reproduce
    - Error messages and logs
-
-### Community
-
-- GitHub Issues: Bug reports and feature requests
-- GitHub Discussions: Questions and community support
-- Documentation: Comprehensive guides and references
 
 ## Acknowledgments
 
@@ -680,43 +627,3 @@ Special thanks to all contributors and the Puppet community.
 - [E2E Testing Guide](docs/e2e-testing.md) - End-to-end testing documentation
 - [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
 
-## Quick Start Guide
-
-### 1. Install Dependencies
-
-```bash
-npm run install:all
-```
-
-### 2. Configure Bolt Project
-
-Ensure you have a valid Bolt project with `inventory.yaml`:
-
-```yaml
-# bolt-project/inventory.yaml
-groups:
-  - name: linux-servers
-    targets:
-      - name: server-01
-        uri: server-01.example.com
-    config:
-      transport: ssh
-      ssh:
-        user: admin
-        private-key: ~/.ssh/id_rsa
-```
-
-### 3. Start Development Servers
-
-```bash
-# Terminal 1: Start backend
-npm run dev:backend
-
-# Terminal 2: Start frontend
-npm run dev:frontend
-```
-
-### 4. Access the Application
-
-- **Frontend**: <http://localhost:5173>
-- **Backend API**: <http://localhost:3000/api>
