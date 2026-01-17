@@ -9,6 +9,7 @@ export { default as ErrorAlert } from "./ErrorAlert.svelte";
 export { default as ErrorBoundary } from "./ErrorBoundary.svelte";
 export { default as EventsViewer } from "./EventsViewer.svelte";
 export { default as FactsViewer } from "./FactsViewer.svelte";
+export { default as GlobalFactsTab } from "./GlobalFactsTab.svelte";
 export { default as GlobalHieraTab } from "./GlobalHieraTab.svelte";
 export { default as HieraSetupGuide } from "./HieraSetupGuide.svelte";
 export { default as MultiSourceFactsViewer } from "./MultiSourceFactsViewer.svelte";

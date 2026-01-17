@@ -675,6 +675,22 @@ export class PuppetserverClient {
   }
 
   /**
+   * Environment API: Flush environment cache
+   * Uses DELETE method as per Puppet Server Admin API specification
+   * https://www.puppet.com/docs/puppet/7/server/admin-api/v1/environment-cache.html
+   *
+   * @param name - Environment name (optional - if not provided, flushes all environments)
+   * @returns Empty response (HTTP 204 No Content)
+   */
+  async flushEnvironmentCache(name?: string): Promise<void> {
+    const path = name
+      ? `/puppet-admin-api/v1/environment-cache?environment=${encodeURIComponent(name)}`
+      : `/puppet-admin-api/v1/environment-cache`;
+    
+    await this.delete(path);
+  }
+
+  /**
    * Generic GET request
    *
    * @param path - API path

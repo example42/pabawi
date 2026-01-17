@@ -45,12 +45,23 @@ export interface NodeStatus {
 }
 
 /**
+ * Puppet environment settings from Puppetserver API
+ */
+export interface EnvironmentSettings {
+  modulepath?: string[];
+  manifest?: string[];
+  environment_timeout?: number | string;
+  config_version?: string;
+}
+
+/**
  * Puppet environment
  */
 export interface Environment {
   name: string;
   last_deployed?: string;
   status?: "deployed" | "deploying" | "failed";
+  settings?: EnvironmentSettings;
 }
 
 /**

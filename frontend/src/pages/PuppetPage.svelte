@@ -11,9 +11,10 @@
   import PuppetDBAdmin from '../components/PuppetDBAdmin.svelte';
   import GlobalHieraTab from '../components/GlobalHieraTab.svelte';
   import CodeAnalysisTab from '../components/CodeAnalysisTab.svelte';
+  import GlobalFactsTab from '../components/GlobalFactsTab.svelte';
 
   // Tab types
-  type TabId = 'environments' | 'reports' | 'status' | 'admin' | 'hiera' | 'analysis';
+  type TabId = 'environments' | 'reports' | 'facts' | 'status' | 'admin' | 'hiera' | 'analysis';
 
   // State
   let activeTab = $state<TabId>('environments');
@@ -146,7 +147,7 @@
     const url = new URL(window.location.href);
     const tabParam = url.searchParams.get('tab') as TabId | null;
 
-    if (tabParam && ['environments', 'reports', 'status', 'admin', 'hiera', 'analysis'].includes(tabParam)) {
+    if (tabParam && ['environments', 'reports', 'facts', 'status', 'admin', 'hiera', 'analysis'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -222,7 +223,20 @@
         </div>
       </button>
 
-
+      <button
+        type="button"
+        onclick={() => switchTab('facts')}
+        class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors {activeTab === 'facts'
+          ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-400'
+          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
+      >
+        <div class="flex items-center gap-2">
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+          </svg>
+          Facts
+        </div>
+      </button>
 
       <button
         type="button"
@@ -309,7 +323,7 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           View and manage Puppet environments available on your Puppetserver.
         </p>
-        <EnvironmentSelector showDeployButton={true} />
+        <EnvironmentSelector showFlushButton={true} />
       </div>
     {/if}
 
@@ -355,6 +369,22 @@
       </div>
     {/if}
 
+    <!-- Facts Tab -->
+    {#if activeTab === 'facts'}
+      <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div class="mb-4 flex items-center gap-3">
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Node Facts</h2>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
+            PuppetDB
+          </span>
+        </div>
+        <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
+          Search for fact names and view their values across all nodes in your infrastructure.
+        </p>
+        <GlobalFactsTab />
+      </div>
+    {/if}
+
 
 
     <!-- Status Tab -->
@@ -377,7 +407,7 @@
     {#if activeTab === 'admin' && isPuppetDBActive}
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">PuppetDB Administration</h2>
+          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">PuppetDB Statistics</h2>
           <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
             PuppetDB
           </span>

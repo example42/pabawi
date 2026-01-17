@@ -961,6 +961,56 @@ export class PuppetserverService
   }
 
   /**
+   * Flush environment cache
+   * Uses DELETE method as per Puppet Server Admin API specification
+   * https://www.puppet.com/docs/puppet/7/server/admin-api/v1/environment-cache.html
+   *
+   * @param name - Environment name (optional - if not provided, flushes all environments)
+   * @returns Deployment result
+   */
+  async flushEnvironmentCache(name?: string): Promise<DeploymentResult> {
+    this.ensureInitialized();
+
+    try {
+      const client = this.client;
+      if (!client) {
+        throw new PuppetserverConnectionError(
+          "Puppetserver client not initialized",
+        );
+      }
+
+      await client.flushEnvironmentCache(name);
+
+      // Clear local cache for environments
+      this.cache.clear();
+      
+      const message = name 
+        ? `Flushed cache for environment '${name}'`
+        : "Flushed cache for all environments";
+      
+      this.log(message);
+
+      return {
+        environment: name ?? "all",
+        status: "success",
+        timestamp: new Date().toISOString(),
+        message,
+      };
+    } catch (error) {
+      const errorMessage = name
+        ? `Failed to flush cache for environment '${name}'`
+        : "Failed to flush cache for all environments";
+      
+      this.logError(errorMessage, error);
+      throw new EnvironmentDeploymentError(
+        errorMessage,
+        name ?? "all",
+        error,
+      );
+    }
+  }
+
+  /**
    * Transform facts from Puppetserver to normalized format
    *
    * Implements requirements 4.2, 4.3:
@@ -1261,6 +1311,27 @@ export class PuppetserverService
           // Extract any available metadata from the environment details
           if (typeof envDetails === "object" && envDetails !== null) {
             const details = envDetails as Record<string, unknown>;
+            
+            // Extract settings if available
+            let settings: Environment["settings"];
+            if (details.settings && typeof details.settings === "object") {
+              const settingsObj = details.settings as Record<string, unknown>;
+              settings = {
+                modulepath: Array.isArray(settingsObj.modulepath) 
+                  ? settingsObj.modulepath.filter((p): p is string => typeof p === "string")
+                  : undefined,
+                manifest: Array.isArray(settingsObj.manifest)
+                  ? settingsObj.manifest.filter((m): m is string => typeof m === "string")
+                  : undefined,
+                environment_timeout: typeof settingsObj.environment_timeout === "number" || typeof settingsObj.environment_timeout === "string"
+                  ? settingsObj.environment_timeout
+                  : undefined,
+                config_version: typeof settingsObj.config_version === "string"
+                  ? settingsObj.config_version
+                  : undefined,
+              };
+            }
+            
             return {
               name,
               last_deployed:
@@ -1271,6 +1342,7 @@ export class PuppetserverService
                 typeof details.status === "string"
                   ? (details.status as "deployed" | "deploying" | "failed")
                   : undefined,
+              settings,
             };
           }
 

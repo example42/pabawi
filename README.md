@@ -394,7 +394,7 @@ docker run -d \
 
 Access the application at <http://localhost:3000>
 
-** Important**: The amount of volume mounts is up to you and depends on where, in the host filesystem, are the files which are needed by the Pabawi instance running inside the container. Also, the paths referenced in your .env file must be relative to container file system.
+**Important**: The amount of volume mounts is up to you and depends on where, in the host filesystem, are the files which are needed by the Pabawi instance running inside the container. Also, the paths referenced in your .env file must be relative to container file system.
 
 Examples:
 
@@ -405,7 +405,7 @@ Examples:
 | Pabawi Data | $HOME/pabawi/data | -v "${HOME}/pabawi/data:/data" | DATABASE_PATH=/data/pabawi.db | 
 | Puppet certs - Ca | $HOME/puppet/certs/ca.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETSERVER_SSL_CA=/certs/ca.pem | 
 | Puppet certs - Pabawi user cert | $HOME/puppet/certs/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_CERT=/certs/pabawi.pem | 
-| Puppet certs - Pabawi user key | $HOME/puppet/certs/private/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_KEY=/certs/pabawi.pem | 
+| Puppet certs - Pabawi user key | $HOME/puppet/certs/private/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_KEY=/certs/private/pabawi.pem | 
 
 PUPPETSERVER_SSL_* settings can use the same paths of the relevant PUPPETDB_SSL_ ones.
 

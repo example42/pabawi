@@ -6,49 +6,13 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
 
-  // Archive info state
-  let archiveInfo = $state<any>(null);
-  let archiveLoading = $state(false);
-  let archiveError = $state<string | null>(null);
-
   // Summary stats state
   let summaryStats = $state<any>(null);
   let summaryStatsLoading = $state(false);
   let summaryStatsError = $state<string | null>(null);
 
-  // Fetch archive info
-  async function fetchArchiveInfo(): Promise<void> {
-    archiveLoading = true;
-    archiveError = null;
-
-    if (expertMode.enabled) {
-      console.log('[PuppetDBAdmin] Fetching archive info');
-      console.log('[PuppetDBAdmin] API endpoint: GET /api/integrations/puppetdb/admin/archive');
-    }
-
-    try {
-      const startTime = performance.now();
-      const data = await get<{ archive: any; source: string }>(
-        '/api/integrations/puppetdb/admin/archive',
-        { maxRetries: 2 }
-      );
-      const endTime = performance.now();
-
-      archiveInfo = data.archive;
-
-      if (expertMode.enabled) {
-        console.log('[PuppetDBAdmin] Archive info loaded successfully');
-        console.log('[PuppetDBAdmin] Response time:', Math.round(endTime - startTime), 'ms');
-        console.log('[PuppetDBAdmin] Data:', data);
-      }
-    } catch (err) {
-      archiveError = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error fetching archive info:', err);
-      showError('Failed to load PuppetDB archive info', archiveError);
-    } finally {
-      archiveLoading = false;
-    }
-  }
+  // Collapsible sections state
+  let expandedSections = $state<Record<string, boolean>>({});
 
   // Fetch summary stats
   async function fetchSummaryStats(): Promise<void> {
@@ -102,9 +66,26 @@
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   }
 
+  // Toggle section expansion
+  function toggleSection(key: string): void {
+    expandedSections[key] = !expandedSections[key];
+  }
+
+  // Check if content is too long (more than 500 characters)
+  function isContentLong(value: any): boolean {
+    const stringified = JSON.stringify(value, null, 2);
+    return stringified.length > 500;
+  }
+
+  // Get preview of content (first 200 characters)
+  function getPreview(value: any): string {
+    const stringified = JSON.stringify(value, null, 2);
+    if (stringified.length <= 200) return stringified;
+    return stringified.substring(0, 200) + '...';
+  }
+
   // On mount, fetch data
   onMount(() => {
-    fetchArchiveInfo();
     fetchSummaryStats();
   });
 </script>
@@ -123,7 +104,6 @@
             <div>
               <p class="font-medium">API Endpoints:</p>
               <ul class="ml-4 mt-1 list-disc space-y-1">
-                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /pdb/admin/v1/archive</code> - Archive information</li>
                 <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /pdb/admin/v1/summary-stats</code> - Database statistics (resource-intensive)</li>
               </ul>
             </div>
@@ -141,7 +121,7 @@
               <ul class="ml-4 mt-1 list-disc space-y-1">
                 <li>Check browser console for detailed API logs and response times</li>
                 <li>Verify PuppetDB is running: <code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">systemctl status puppetdb</code></li>
-                <li>Test endpoints directly: <code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">curl http://puppetdb:8080/pdb/admin/v1/archive</code></li>
+                <li>Test endpoints directly: <code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">curl http://puppetdb:8080/pdb/admin/v1/summary-stats</code></li>
                 <li>Review PuppetDB logs: <code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">/var/log/puppetlabs/puppetdb/puppetdb.log</code></li>
                 <li>Summary stats can take 30+ seconds on large databases</li>
               </ul>
@@ -151,65 +131,6 @@
       </div>
     </div>
   {/if}
-
-  <!-- Archive Info Section -->
-  <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-    <div class="mb-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Archive Information</h3>
-        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
-          PuppetDB Admin
-        </span>
-      </div>
-      <button
-        type="button"
-        onclick={fetchArchiveInfo}
-        disabled={archiveLoading}
-        class="inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 dark:bg-gray-700 dark:text-white dark:ring-gray-600 dark:hover:bg-gray-600"
-      >
-        <svg class="h-4 w-4 {archiveLoading ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-        </svg>
-        Refresh
-      </button>
-    </div>
-
-    {#if expertMode.enabled && !archiveLoading && !archiveError}
-      <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
-        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /pdb/admin/v1/archive</code>
-      </div>
-    {/if}
-
-    <p class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-      Information about PuppetDB's archive functionality and status.
-    </p>
-
-    {#if archiveLoading}
-      <div class="flex justify-center py-8">
-        <LoadingSpinner size="md" message="Loading archive info..." />
-      </div>
-    {:else if archiveError}
-      <ErrorAlert
-        message="Failed to load archive information"
-        details={archiveError}
-        onRetry={fetchArchiveInfo}
-      />
-    {:else if archiveInfo}
-      <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/50">
-        <pre class="overflow-x-auto text-sm text-gray-700 dark:text-gray-300">{JSON.stringify(archiveInfo, null, 2)}</pre>
-      </div>
-    {:else}
-      <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-        </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No archive info available</h3>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Archive information could not be retrieved.
-        </p>
-      </div>
-    {/if}
-  </div>
 
   <!-- Summary Stats Section -->
   <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -290,13 +211,44 @@
                 <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">
                   {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                 </dt>
-                <dd class="mt-1 text-lg font-semibold text-gray-900 dark:text-white">
+                <dd class="mt-1">
                   {#if typeof value === 'number'}
-                    {formatNumber(value)}
+                    <div class="text-lg font-semibold text-gray-900 dark:text-white">
+                      {formatNumber(value)}
+                    </div>
                   {:else if typeof value === 'object' && value !== null}
-                    <pre class="mt-2 overflow-x-auto text-xs text-gray-700 dark:text-gray-300">{JSON.stringify(value, null, 2)}</pre>
+                    {#if isContentLong(value)}
+                      <!-- Collapsible section for long content -->
+                      <div class="mt-2">
+                        <button
+                          type="button"
+                          onclick={() => toggleSection(key)}
+                          class="flex w-full items-center justify-between rounded-md bg-gray-100 px-3 py-2 text-left text-sm font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                        >
+                          <span>{expandedSections[key] ? 'Hide Details' : 'Show Details'}</span>
+                          <svg
+                            class="h-4 w-4 transition-transform {expandedSections[key] ? 'rotate-180' : ''}"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                        {#if expandedSections[key]}
+                          <pre class="mt-2 overflow-x-auto rounded-md bg-white p-3 text-xs text-gray-700 dark:bg-gray-900 dark:text-gray-300">{JSON.stringify(value, null, 2)}</pre>
+                        {:else}
+                          <pre class="mt-2 overflow-x-auto rounded-md bg-white p-3 text-xs text-gray-500 dark:bg-gray-900 dark:text-gray-400">{getPreview(value)}</pre>
+                        {/if}
+                      </div>
+                    {:else}
+                      <!-- Short content, display directly -->
+                      <pre class="mt-2 overflow-x-auto text-xs text-gray-700 dark:text-gray-300">{JSON.stringify(value, null, 2)}</pre>
+                    {/if}
                   {:else}
-                    {String(value)}
+                    <div class="text-lg font-semibold text-gray-900 dark:text-white">
+                      {String(value)}
+                    </div>
                   {/if}
                 </dd>
               </div>

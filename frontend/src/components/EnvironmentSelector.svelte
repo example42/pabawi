@@ -1,35 +1,44 @@
 <script lang="ts">
-  import { get, post } from '../lib/api';
+  import { get, del } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
+
+  interface EnvironmentSettings {
+    modulepath?: string[];
+    manifest?: string[];
+    environment_timeout?: number | string;
+    config_version?: string;
+  }
 
   interface Environment {
     name: string;
     last_deployed?: string;
     status?: 'deployed' | 'deploying' | 'failed';
+    settings?: EnvironmentSettings;
   }
 
   interface EnvironmentSelectorProps {
     selectedEnvironment?: string;
     onSelect?: (environment: string) => void;
-    showDeployButton?: boolean;
+    showFlushButton?: boolean;
   }
 
   let {
     selectedEnvironment = $bindable(),
     onSelect,
-    showDeployButton = false
+    showFlushButton = false
   }: EnvironmentSelectorProps = $props();
 
   // State
   let environments = $state<Environment[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let deployingEnvironment = $state<string | null>(null);
+  let flushingEnvironment = $state<string | null>(null);
   let confirmDialog = $state<{ show: boolean; environment?: string }>({
     show: false
   });
+  let expandedEnvironments = $state<Set<string>>(new Set());
 
   // Load environments
   async function loadEnvironments(): Promise<void> {
@@ -68,36 +77,47 @@
     }
   }
 
-  // Deploy environment
-  async function deployEnvironment(environmentName: string): Promise<void> {
+  // Toggle environment details
+  function toggleEnvironmentDetails(environmentName: string): void {
+    const newExpanded = new Set(expandedEnvironments);
+    if (newExpanded.has(environmentName)) {
+      newExpanded.delete(environmentName);
+    } else {
+      newExpanded.add(environmentName);
+    }
+    expandedEnvironments = newExpanded;
+  }
+
+  // Flush environment cache
+  async function flushEnvironmentCache(environmentName: string): Promise<void> {
     if (expertMode.enabled) {
-      console.log('[EnvironmentSelector] Deploying environment:', environmentName);
-      console.log('[EnvironmentSelector] API endpoint: POST /api/integrations/puppetserver/environments/' + environmentName + '/deploy');
+      console.log('[EnvironmentSelector] Flushing cache for environment:', environmentName);
+      console.log('[EnvironmentSelector] API endpoint: DELETE /api/integrations/puppetserver/environments/' + environmentName + '/cache');
     }
 
     try {
-      deployingEnvironment = environmentName;
+      flushingEnvironment = environmentName;
       const startTime = performance.now();
-      await post(`/api/integrations/puppetserver/environments/${environmentName}/deploy`);
+      await del(`/api/integrations/puppetserver/environments/${environmentName}/cache`);
       const endTime = performance.now();
 
       if (expertMode.enabled) {
-        console.log('[EnvironmentSelector] Environment deployed successfully');
+        console.log('[EnvironmentSelector] Environment cache flushed successfully');
         console.log('[EnvironmentSelector] Response time:', Math.round(endTime - startTime), 'ms');
       }
 
-      showSuccess('Environment deployed', `Successfully deployed environment: ${environmentName}`);
+      showSuccess('Cache flushed', `Successfully flushed cache for environment: ${environmentName}`);
       await loadEnvironments();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to deploy environment';
+      const message = err instanceof Error ? err.message : 'Failed to flush environment cache';
 
       if (expertMode.enabled) {
-        console.error('[EnvironmentSelector] Deploy failed:', err);
+        console.error('[EnvironmentSelector] Flush failed:', err);
       }
 
-      showError('Failed to deploy environment', message);
+      showError('Failed to flush environment cache', message);
     } finally {
-      deployingEnvironment = null;
+      flushingEnvironment = null;
     }
   }
 
@@ -114,7 +134,7 @@
   // Handle confirmation
   async function handleConfirm(): Promise<void> {
     if (confirmDialog.environment) {
-      await deployEnvironment(confirmDialog.environment);
+      await flushEnvironmentCache(confirmDialog.environment);
     }
     closeConfirmDialog();
   }
@@ -128,6 +148,14 @@
     } catch {
       return dateString;
     }
+  }
+
+  // Format timeout value
+  function formatTimeout(timeout?: number | string): string {
+    if (timeout === undefined || timeout === null) return 'Not set';
+    if (timeout === 'unlimited' || timeout === 0) return 'Unlimited';
+    if (typeof timeout === 'number') return `${timeout}s`;
+    return String(timeout);
   }
 
   // Get status badge color
@@ -230,28 +258,87 @@
                     </svg>
                   {/if}
                 </div>
-                <div class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                  <span class="font-medium">Last deployed:</span> {formatDate(env.last_deployed)}
-                </div>
               </button>
+
+              <!-- Environment Details Toggle -->
+              {#if env.settings}
+                <button
+                  type="button"
+                  onclick={() => toggleEnvironmentDetails(env.name)}
+                  class="mt-2 flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                >
+                  <svg 
+                    class="h-4 w-4 transition-transform {expandedEnvironments.has(env.name) ? 'rotate-90' : ''}" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    viewBox="0 0 24 24"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                  {expandedEnvironments.has(env.name) ? 'Hide' : 'Show'} details
+                </button>
+              {/if}
+
+              <!-- Expanded Environment Details -->
+              {#if expandedEnvironments.has(env.name) && env.settings}
+                <div class="mt-3 space-y-2 rounded-md bg-gray-50 p-3 text-sm dark:bg-gray-900/50">
+                  {#if env.settings.environment_timeout !== undefined}
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-700 dark:text-gray-300">Timeout:</span>
+                      <span class="text-gray-600 dark:text-gray-400">{formatTimeout(env.settings.environment_timeout)}</span>
+                    </div>
+                  {/if}
+                  
+                  {#if env.settings.modulepath && env.settings.modulepath.length > 0}
+                    <div>
+                      <span class="font-medium text-gray-700 dark:text-gray-300">Module Path:</span>
+                      <ul class="mt-1 space-y-1 text-gray-600 dark:text-gray-400">
+                        {#each env.settings.modulepath as path}
+                          <li class="truncate font-mono text-xs">{path}</li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {/if}
+                  
+                  {#if env.settings.manifest && env.settings.manifest.length > 0}
+                    <div>
+                      <span class="font-medium text-gray-700 dark:text-gray-300">Manifest:</span>
+                      <ul class="mt-1 space-y-1 text-gray-600 dark:text-gray-400">
+                        {#each env.settings.manifest as path}
+                          <li class="truncate font-mono text-xs">{path}</li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {/if}
+                  
+                  {#if env.settings.config_version}
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-700 dark:text-gray-300">Config Version:</span>
+                      <span class="truncate font-mono text-xs text-gray-600 dark:text-gray-400">{env.settings.config_version}</span>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             </div>
-            {#if showDeployButton}
+
+            {#if showFlushButton}
               <button
                 type="button"
                 onclick={() => showConfirmDialog(env.name)}
-                disabled={deployingEnvironment === env.name}
-                class="ml-4 inline-flex items-center gap-2 rounded-md bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={flushingEnvironment === env.name}
+                class="ml-4 inline-flex items-center gap-2 rounded-md bg-orange-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Flush environment cache to reload code changes"
               >
-                {#if deployingEnvironment === env.name}
+                {#if flushingEnvironment === env.name}
                   <svg class="h-4 w-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  Deploying...
+                  Flushing...
                 {:else}
                   <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  Deploy
+                  Flush Cache
                 {/if}
               </button>
             {/if}
@@ -284,21 +371,21 @@
         <div class="inline-block transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-lg sm:align-middle">
           <div class="bg-white px-4 pb-4 pt-5 dark:bg-gray-800 sm:p-6 sm:pb-4">
             <div class="sm:flex sm:items-start">
-              <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary-100 dark:bg-primary-900/20 sm:mx-0 sm:h-10 sm:w-10">
-                <svg class="h-6 w-6 text-primary-600 dark:text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/20 sm:mx-0 sm:h-10 sm:w-10">
+                <svg class="h-6 w-6 text-orange-600 dark:text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </div>
               <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
                 <h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white" id="modal-title">
-                  Deploy Environment
+                  Flush Environment Cache
                 </h3>
                 <div class="mt-2">
                   <p class="text-sm text-gray-500 dark:text-gray-400">
-                    Are you sure you want to deploy the <strong>{confirmDialog.environment}</strong> environment?
+                    Are you sure you want to flush the cache for the <strong>{confirmDialog.environment}</strong> environment?
                   </p>
                   <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                    This will trigger a deployment of the environment code to Puppetserver.
+                    This will force Puppet Server to reload all code and data for this environment on the next request.
                   </p>
                 </div>
               </div>
@@ -308,9 +395,9 @@
             <button
               type="button"
               onclick={handleConfirm}
-              class="inline-flex w-full justify-center rounded-md bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
+              class="inline-flex w-full justify-center rounded-md bg-orange-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
             >
-              Deploy
+              Flush Cache
             </button>
             <button
               type="button"
