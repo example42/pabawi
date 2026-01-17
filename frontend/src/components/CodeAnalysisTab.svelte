@@ -35,9 +35,19 @@
     fixable: boolean;
   }
 
+  interface IssueCounts {
+    bySeverity: {
+      error: number;
+      warning: number;
+      info: number;
+    };
+    byRule: Record<string, number>;
+    total: number;
+  }
+
   interface LintResponse {
     issues: LintIssue[];
-    counts: Record<string, number>;
+    counts: IssueCounts;
     total: number;
     page: number;
     pageSize: number;
@@ -567,15 +577,15 @@
         <!-- Summary -->
         <div class="grid grid-cols-3 gap-4">
           <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
-            <div class="text-2xl font-bold text-red-600 dark:text-red-400">{lintData.counts['error'] || 0}</div>
+            <div class="text-2xl font-bold text-red-600 dark:text-red-400">{lintData.counts.bySeverity.error}</div>
             <div class="text-sm text-red-700 dark:text-red-300">Errors</div>
           </div>
           <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-800 dark:bg-yellow-900/20">
-            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{lintData.counts['warning'] || 0}</div>
+            <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{lintData.counts.bySeverity.warning}</div>
             <div class="text-sm text-yellow-700 dark:text-yellow-300">Warnings</div>
           </div>
           <div class="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
-            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{lintData.counts['info'] || 0}</div>
+            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{lintData.counts.bySeverity.info}</div>
             <div class="text-sm text-blue-700 dark:text-blue-300">Info</div>
           </div>
         </div>

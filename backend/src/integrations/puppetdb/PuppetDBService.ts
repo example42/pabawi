@@ -2417,51 +2417,6 @@ export class PuppetDBService
   }
 
   /**
-   * Get PuppetDB archive information
-   *
-   * Queries the /pdb/admin/v1/archive endpoint to get archive status.
-   * This endpoint provides information about PuppetDB's archive functionality.
-   *
-   * @returns Archive information
-   */
-  async getArchiveInfo(): Promise<unknown> {
-    this.ensureInitialized();
-
-    try {
-      // Check cache first
-      const cacheKey = "admin:archive";
-      const cached = this.cache.get(cacheKey);
-      if (cached !== undefined) {
-        this.log("Returning cached archive info");
-        return cached;
-      }
-
-      // Query PuppetDB admin endpoint
-      const client = this.client;
-      if (!client) {
-        throw new PuppetDBConnectionError(
-          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
-        );
-      }
-
-      this.log("Querying PuppetDB archive endpoint");
-
-      const result = await this.executeWithResilience(async () => {
-        return await client.get("/pdb/admin/v1/archive");
-      });
-
-      // Cache the result with longer TTL (5 minutes) since archive info doesn't change often
-      this.cache.set(cacheKey, result, 300000);
-      this.log("Cached archive info for 5 minutes");
-
-      return result;
-    } catch (error) {
-      this.logError("Failed to get archive info", error);
-      throw error;
-    }
-  }
-
-  /**
    * Get PuppetDB summary statistics
    *
    * Queries the /pdb/admin/v1/summary-stats endpoint to get database statistics.

@@ -1325,77 +1325,6 @@ export function createIntegrationsRouter(
   );
 
   /**
-   * GET /api/integrations/puppetdb/admin/archive
-   * Return PuppetDB archive information
-   *
-   * Implements requirement 16.7: Display PuppetDB admin components
-   * Returns information about PuppetDB's archive functionality.
-   */
-  router.get(
-    "/puppetdb/admin/archive",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
-      if (!puppetDBService) {
-        res.status(503).json({
-          error: {
-            code: "PUPPETDB_NOT_CONFIGURED",
-            message: "PuppetDB integration is not configured",
-          },
-        });
-        return;
-      }
-
-      if (!puppetDBService.isInitialized()) {
-        res.status(503).json({
-          error: {
-            code: "PUPPETDB_NOT_INITIALIZED",
-            message: "PuppetDB integration is not initialized",
-          },
-        });
-        return;
-      }
-
-      try {
-        const archiveInfo = await puppetDBService.getArchiveInfo();
-
-        res.json({
-          archive: archiveInfo,
-          source: "puppetdb",
-        });
-      } catch (error) {
-        if (error instanceof PuppetDBAuthenticationError) {
-          res.status(401).json({
-            error: {
-              code: "PUPPETDB_AUTH_ERROR",
-              message: error.message,
-            },
-          });
-          return;
-        }
-
-        if (error instanceof PuppetDBConnectionError) {
-          res.status(503).json({
-            error: {
-              code: "PUPPETDB_CONNECTION_ERROR",
-              message: error.message,
-              details: error.details,
-            },
-          });
-          return;
-        }
-
-        // Unknown error
-        console.error("Error fetching archive info from PuppetDB:", error);
-        res.status(500).json({
-          error: {
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to fetch archive info from PuppetDB",
-          },
-        });
-      }
-    }),
-  );
-
-  /**
    * GET /api/integrations/puppetdb/admin/summary-stats
    * Return PuppetDB summary statistics
    *
@@ -2449,6 +2378,88 @@ export function createIntegrationsRouter(
           return;
         }
 
+        // Unknown error
+        console.error("Error deploying environment:", error);
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to deploy environment",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * DELETE /api/integrations/puppetserver/environments/:name/cache
+   * Flush environment cache for a specific environment
+   * Uses Puppet Server Admin API environment-cache endpoint
+   * https://www.puppet.com/docs/puppet/7/server/admin-api/v1/environment-cache.html
+   *
+   * Returns flush result with:
+   * - Flush status (success/failed)
+   * - Timestamp
+   * - Message
+   */
+  router.delete(
+    "/puppetserver/environments/:name/cache",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      if (!puppetserverService) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_CONFIGURED",
+            message: "Puppetserver integration is not configured",
+          },
+        });
+        return;
+      }
+
+      if (!puppetserverService.isInitialized()) {
+        res.status(503).json({
+          error: {
+            code: "PUPPETSERVER_NOT_INITIALIZED",
+            message: "Puppetserver integration is not initialized",
+          },
+        });
+        return;
+      }
+
+      try {
+        // Validate request parameters
+        const params = EnvironmentParamSchema.parse(req.params);
+        const name = params.name;
+
+        // Flush environment cache in Puppetserver
+        const result = await puppetserverService.flushEnvironmentCache(name);
+
+        res.json({
+          result,
+          source: "puppetserver",
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid environment name parameter",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof EnvironmentDeploymentError) {
+          res.status(400).json({
+            error: {
+              code: "ENVIRONMENT_CACHE_FLUSH_ERROR",
+              message: error.message,
+              environment: error.environment,
+              details: error.details,
+            },
+          });
+          return;
+        }
+
         if (error instanceof PuppetserverConfigurationError) {
           res.status(503).json({
             error: {
@@ -2472,11 +2483,11 @@ export function createIntegrationsRouter(
         }
 
         // Unknown error
-        console.error("Error deploying environment in Puppetserver:", error);
+        console.error("Error flushing environment cache:", error);
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to deploy environment in Puppetserver",
+            message: "Failed to flush environment cache",
           },
         });
       }

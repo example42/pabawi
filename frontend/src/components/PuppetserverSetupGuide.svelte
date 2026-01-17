@@ -41,46 +41,34 @@ PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
         path: "^/puppet/v3/node/([^/]+)$"
         type: regex
         method: get
-    }
-    allow: [ "$1", "pabawi" ]  # Add "pabawi" here
-    sort-order: 500
-    name: "puppetlabs node"
+    },
+    allow: [ "$1", "pabawi" ],  # Add "pabawi" here
+    sort-order: 500,
+    name: "puppetlabs node",
 }
 
-# 2. Find the "puppetlabs facts" rule and update it:
-{
-    match-request: {
-        path: "^/puppet/v3/facts/([^/]+)$"
-        type: regex
-        method: put
-    }
-    allow: [ "$1", "pabawi" ]  # Add "pabawi" here
-    sort-order: 500
-    name: "puppetlabs facts"
-}
-
-# 3. Add this new rule for catalog access (add after existing catalog rules):
+# 2. Find the "puppetlabs v3 catalog from agents" rule and update it:
 {
     match-request: {
         path: "^/puppet/v3/catalog/([^/]+)$"
         type: regex
         method: get
-    }
-    allow: [ "$1", "pabawi" ]
-    sort-order: 501
-    name: "pabawi catalog access"
+    },
+    allow: [ "$1", "pabawi" ],  # Add "pabawi" here
+    sort-order: 500,
+    name: "puppetlabs v3 catalog from agents",
 }
 
-# 4. Add this new rule for environment cache management:
+# 3. Add this new rule for environment cache management:
 {
     match-request: {
         path: "/puppet-admin-api/v1/environment-cache"
         type: path
         method: delete
-    }
-    allow: "pabawi"
-    sort-order: 500
-    name: "pabawi environment cache"
+    },
+    allow: "pabawi",
+    sort-order: 500,
+    name: "pabawi environment cache",
 }`;
 </script>
 

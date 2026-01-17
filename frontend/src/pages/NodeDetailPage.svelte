@@ -872,8 +872,30 @@
   }
 
   // Extract general info from facts
-  function extractGeneralInfo(): { os?: string; ip?: string; hostname?: string; kernel?: string; architecture?: string } {
-    const info: { os?: string; ip?: string; hostname?: string; kernel?: string; architecture?: string } = {};
+  function extractGeneralInfo(): { 
+    os?: string; 
+    ip?: string; 
+    hostname?: string; 
+    kernel?: string; 
+    architecture?: string;
+    puppetVersion?: string;
+    memory?: string;
+    cpuCount?: number;
+    uptime?: string;
+    disks?: string[];
+  } {
+    const info: { 
+      os?: string; 
+      ip?: string; 
+      hostname?: string; 
+      kernel?: string; 
+      architecture?: string;
+      puppetVersion?: string;
+      memory?: string;
+      cpuCount?: number;
+      uptime?: string;
+      disks?: string[];
+    } = {};
 
     // Try to get info from PuppetDB facts first (most reliable)
     if (puppetdbFacts?.facts) {
@@ -899,6 +921,23 @@
 
       // Architecture
       info.architecture = facts.architecture || facts.hardwaremodel;
+
+      // Puppet version
+      info.puppetVersion = facts.aio_agent_version;
+
+      // Memory
+      info.memory = facts.memory?.system?.total;
+
+      // CPU count
+      info.cpuCount = facts.processors?.count;
+
+      // Uptime
+      info.uptime = facts.system_uptime?.uptime;
+
+      // Disks - get first level keys from disks fact
+      if (facts.disks && typeof facts.disks === 'object') {
+        info.disks = Object.keys(facts.disks);
+      }
     }
 
     // Fallback to Bolt facts if PuppetDB facts not available
@@ -915,6 +954,14 @@
       info.hostname = info.hostname || boltFacts.hostname || boltFacts.fqdn;
       info.kernel = info.kernel || boltFacts.kernel;
       info.architecture = info.architecture || boltFacts.architecture;
+      info.puppetVersion = info.puppetVersion || boltFacts.aio_agent_version;
+      info.memory = info.memory || boltFacts.memory?.system?.total;
+      info.cpuCount = info.cpuCount || boltFacts.processors?.count;
+      info.uptime = info.uptime || boltFacts.system_uptime?.uptime;
+      
+      if (!info.disks && boltFacts.disks && typeof boltFacts.disks === 'object') {
+        info.disks = Object.keys(boltFacts.disks);
+      }
     }
 
     return info;
@@ -1086,6 +1133,36 @@
                 <div>
                   <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Architecture</dt>
                   <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.architecture}</dd>
+                </div>
+              {/if}
+              {#if generalInfo.puppetVersion}
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Puppet Version</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.puppetVersion}</dd>
+                </div>
+              {/if}
+              {#if generalInfo.memory}
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Memory</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.memory}</dd>
+                </div>
+              {/if}
+              {#if generalInfo.cpuCount}
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Number of CPUs</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.cpuCount}</dd>
+                </div>
+              {/if}
+              {#if generalInfo.uptime}
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Uptime</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.uptime}</dd>
+                </div>
+              {/if}
+              {#if generalInfo.disks && generalInfo.disks.length > 0}
+                <div>
+                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Disks</dt>
+                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.disks.join(', ')}</dd>
                 </div>
               {/if}
               {#if node.config.user}
