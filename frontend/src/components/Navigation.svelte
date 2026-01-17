@@ -36,11 +36,18 @@
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="flex h-16 items-center justify-between">
       <div class="flex items-center">
-        <div class="flex flex-shrink-0 items-baseline gap-2">
-          <h1 class="text-2xl font-bold text-primary-600 dark:text-primary-400">
-            Pabawi
-          </h1>
-          <span class="text-xs text-gray-500 dark:text-gray-400">v0.4.0</span>
+        <div class="flex flex-shrink-0 items-center gap-3">
+          <img 
+            src="/favicon/web-app-manifest-512x512.png" 
+            alt="Pabawi Logo" 
+            class="h-8 w-8"
+          />
+          <div class="flex items-baseline gap-2">
+            <h1 class="text-2xl font-bold text-primary-600 dark:text-primary-400">
+              Pabawi
+            </h1>
+            <span class="text-xs text-gray-500 dark:text-gray-400">v0.4.0</span>
+          </div>
         </div>
         <div class="ml-10 flex items-baseline space-x-4">
           {#each navItems as item}

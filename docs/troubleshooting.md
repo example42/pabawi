@@ -1,7 +1,5 @@
 # Pabawi Troubleshooting Guide
 
-Version: 0.1.0
-
 ## Overview
 
 This guide helps you diagnose and resolve common issues with Pabawi. It covers installation problems, configuration errors, Bolt integration issues, and runtime errors.
