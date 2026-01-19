@@ -3,8 +3,15 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import { get } from '../lib/api';
+  import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+
+  interface Props {
+    onDebugInfo?: (info: DebugInfo | null) => void;
+  }
+
+  let { onDebugInfo }: Props = $props();
 
   // Types based on backend Hiera types
   interface UnusedItem {
@@ -98,6 +105,19 @@
 
   interface StatisticsResponse {
     statistics: UsageStatistics;
+    _debug?: DebugInfo;
+  }
+
+  interface UnusedCodeReportResponse extends UnusedCodeReport {
+    _debug?: DebugInfo;
+  }
+
+  interface LintResponseWithDebug extends LintResponse {
+    _debug?: DebugInfo;
+  }
+
+  interface ModulesResponseWithDebug extends ModulesResponse {
+    _debug?: DebugInfo;
   }
 
   // State
@@ -126,6 +146,11 @@
         { maxRetries: 2 }
       );
       statistics = data.statistics;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       if (errorMessage.includes('not configured') || errorMessage.includes('503')) {
@@ -140,11 +165,16 @@
   // Fetch unused code
   async function fetchUnusedCode(): Promise<void> {
     try {
-      const data = await get<UnusedCodeReport>(
+      const data = await get<UnusedCodeReportResponse>(
         '/api/integrations/hiera/analysis/unused',
         { maxRetries: 2 }
       );
       unusedCode = data;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching unused code:', err);
@@ -159,8 +189,13 @@
       if (lintSeverityFilter.length > 0) {
         url += `&severity=${lintSeverityFilter.join(',')}`;
       }
-      const data = await get<LintResponse>(url, { maxRetries: 2 });
+      const data = await get<LintResponseWithDebug>(url, { maxRetries: 2 });
       lintData = data;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching lint issues:', err);
@@ -171,11 +206,16 @@
   // Fetch module updates
   async function fetchModuleUpdates(): Promise<void> {
     try {
-      const data = await get<ModulesResponse>(
+      const data = await get<ModulesResponseWithDebug>(
         '/api/integrations/hiera/analysis/modules',
         { maxRetries: 2 }
       );
       modulesData = data;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching module updates:', err);

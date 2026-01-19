@@ -15,6 +15,7 @@ import * as os from "os";
 import * as yaml from "yaml";
 import { HieraService, type HieraServiceConfig } from "../../../src/integrations/hiera/HieraService";
 import { IntegrationManager } from "../../../src/integrations/IntegrationManager";
+import { LoggerService } from "../../../src/services/LoggerService";
 import type { KeyNodeValues } from "../../../src/integrations/hiera/types";
 
 describe("Property 15: Node Grouping by Value", () => {
@@ -120,7 +121,7 @@ hierarchy:
     }
 
     // Create integration manager and service
-    const integrationManager = new IntegrationManager();
+    const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     const config: HieraServiceConfig = {
       controlRepoPath: tempDir,
@@ -172,7 +173,7 @@ hierarchy:
           fs.writeFileSync(path.join(tempDir, "hiera.yaml"), "version: 5\nhierarchy: []");
           fs.writeFileSync(path.join(tempDir, "data", "common.yaml"), "");
 
-          const integrationManager = new IntegrationManager();
+          const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
           const config: HieraServiceConfig = {
             controlRepoPath: tempDir,
             hieraConfigPath: "hiera.yaml",
@@ -230,7 +231,7 @@ hierarchy:
           fs.writeFileSync(path.join(tempDir, "hiera.yaml"), "version: 5\nhierarchy: []");
           fs.writeFileSync(path.join(tempDir, "data", "common.yaml"), "");
 
-          const integrationManager = new IntegrationManager();
+          const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
           const config: HieraServiceConfig = {
             controlRepoPath: tempDir,
             hieraConfigPath: "hiera.yaml",
@@ -292,7 +293,7 @@ hierarchy:
           fs.writeFileSync(path.join(tempDir, "hiera.yaml"), "version: 5\nhierarchy: []");
           fs.writeFileSync(path.join(tempDir, "data", "common.yaml"), "");
 
-          const integrationManager = new IntegrationManager();
+          const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
           const config: HieraServiceConfig = {
             controlRepoPath: tempDir,
             hieraConfigPath: "hiera.yaml",
@@ -348,7 +349,7 @@ hierarchy:
           fs.writeFileSync(path.join(tempDir, "hiera.yaml"), "version: 5\nhierarchy: []");
           fs.writeFileSync(path.join(tempDir, "data", "common.yaml"), "");
 
-          const integrationManager = new IntegrationManager();
+          const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
           const config: HieraServiceConfig = {
             controlRepoPath: tempDir,
             hieraConfigPath: "hiera.yaml",

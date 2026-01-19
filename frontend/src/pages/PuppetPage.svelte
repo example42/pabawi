@@ -12,6 +12,11 @@
   import GlobalHieraTab from '../components/GlobalHieraTab.svelte';
   import CodeAnalysisTab from '../components/CodeAnalysisTab.svelte';
   import GlobalFactsTab from '../components/GlobalFactsTab.svelte';
+  import IntegrationBadge from '../components/IntegrationBadge.svelte';
+  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import { integrationColors } from '../lib/integrationColors.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
+  import type { DebugInfo } from '../lib/api';
 
   // Tab types
   type TabId = 'environments' | 'reports' | 'facts' | 'status' | 'admin' | 'hiera' | 'analysis';
@@ -20,43 +25,16 @@
   let activeTab = $state<TabId>('environments');
   let loadedTabs = $state<Set<TabId>>(new Set(['environments']));
 
-  // Reports state
-  interface ReportMetrics {
-    resources: {
-      total: number;
-      skipped: number;
-      failed: number;
-      failed_to_restart: number;
-      changed: number;
-      corrective_change: number;
-      out_of_sync: number;
-    };
-    time: Record<string, number>;
-    events?: {
-      success: number;
-      failure: number;
-      noop?: number;
-      total: number;
-    };
-  }
-
-  interface Report {
-    certname: string;
-    hash: string;
-    environment: string;
-    status: 'unchanged' | 'changed' | 'failed';
-    noop: boolean;
-    start_time: string;
-    end_time: string;
-    metrics: ReportMetrics;
-  }
-
-  let reports = $state<Report[]>([]);
-  let reportsLoading = $state(false);
-  let reportsError = $state<string | null>(null);
-
   // Cache for loaded data
   let dataCache = $state<Record<TabId, any>>({});
+
+  // Debug info state for expert mode
+  let debugInfo = $state<DebugInfo | null>(null);
+
+  // Callback to receive debug info from child components
+  function handleDebugInfo(info: DebugInfo | null): void {
+    debugInfo = info;
+  }
 
   // Integration status
   let isPuppetDBActive = $state(false);
@@ -83,42 +61,15 @@
     }
   }
 
-  // Fetch all reports from PuppetDB
-  async function fetchAllReports(): Promise<void> {
-    // Check cache first
-    if (dataCache['reports']) {
-      reports = dataCache['reports'];
-      return;
-    }
-
-    reportsLoading = true;
-    reportsError = null;
-
-    try {
-      const data = await get<{ reports: Report[] }>(
-        '/api/integrations/puppetdb/reports?limit=100',
-        { maxRetries: 2 }
-      );
-
-      reports = data.reports || [];
-      dataCache['reports'] = reports;
-    } catch (err) {
-      reportsError = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error fetching reports:', err);
-      showError('Failed to load Puppet reports', reportsError);
-    } finally {
-      reportsLoading = false;
-    }
-  }
-
   // Handle report click - navigate to node detail page
-  function handleReportClick(report: Report): void {
+  function handleReportClick(report: { certname: string }): void {
     router.navigate(`/nodes/${report.certname}?tab=puppet-reports`);
   }
 
   // Switch tab and update URL
   function switchTab(tabId: TabId): void {
     activeTab = tabId;
+    debugInfo = null; // Clear debug info when switching tabs
 
     // Update URL with tab parameter
     const url = new URL(window.location.href);
@@ -135,10 +86,11 @@
   // Load data for a specific tab
   async function loadTabData(tabId: TabId): Promise<void> {
     switch (tabId) {
-      case 'reports':
-        await fetchAllReports();
-        break;
+      // 'reports' tab now loads its own data via PuppetReportsListView component
       // 'environments' loads its own data
+      // Other tabs load their own data
+      default:
+        break;
     }
   }
 
@@ -165,6 +117,10 @@
 
   // On mount
   onMount(() => {
+    debugInfo = null; // Clear debug info on mount
+    // Load integration colors
+    void integrationColors.loadColors();
+
     // Check integration status first
     void checkIntegrationStatus();
 
@@ -201,7 +157,13 @@
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
       >
         <div class="flex items-center gap-2">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-5 w-5"
+            style="color: {integrationColors.getColor('puppetserver').primary}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
           </svg>
           Environments
@@ -216,7 +178,13 @@
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
       >
         <div class="flex items-center gap-2">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-5 w-5"
+            style="color: {integrationColors.getColor('puppetdb').primary}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           Reports
@@ -231,7 +199,13 @@
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
       >
         <div class="flex items-center gap-2">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-5 w-5"
+            style="color: {integrationColors.getColor('puppetdb').primary}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
           </svg>
           Facts
@@ -246,7 +220,13 @@
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
       >
         <div class="flex items-center gap-2">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-5 w-5"
+            style="color: {integrationColors.getColor('puppetserver').primary}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
           </svg>
           Status
@@ -262,7 +242,13 @@
             : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
         >
           <div class="flex items-center gap-2">
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              class="h-5 w-5"
+              style="color: {integrationColors.getColor('puppetdb').primary}"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
@@ -279,13 +265,16 @@
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
       >
         <div class="flex items-center gap-2">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-5 w-5"
+            style="color: {integrationColors.getColor('hiera').primary}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
           </svg>
           Hiera
-          {#if isHieraActive}
-            <span class="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
-          {/if}
         </div>
       </button>
 
@@ -297,13 +286,16 @@
           : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
       >
         <div class="flex items-center gap-2">
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            class="h-5 w-5"
+            style="color: {integrationColors.getColor('hiera').primary}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
           </svg>
           Code Analysis
-          {#if isHieraActive}
-            <span class="inline-flex h-2 w-2 rounded-full bg-green-500"></span>
-          {/if}
         </div>
       </button>
     </nav>
@@ -316,14 +308,12 @@
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Environments</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-            Puppetserver
-          </span>
+          <IntegrationBadge integration="puppetserver" variant="badge" size="sm" />
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           View and manage Puppet environments available on your Puppetserver.
         </p>
-        <EnvironmentSelector showFlushButton={true} />
+        <EnvironmentSelector showFlushButton={true} onDebugInfo={handleDebugInfo} />
       </div>
     {/if}
 
@@ -332,40 +322,13 @@
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
-            PuppetDB
-          </span>
+          <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
-          View recent Puppet run reports from all nodes. Click on a report to view details.
+          View and filter recent Puppet run reports from all nodes. Click on a report to view details.
         </p>
 
-        {#if reportsLoading}
-          <div class="flex justify-center py-12">
-            <LoadingSpinner size="lg" message="Loading reports..." />
-          </div>
-        {:else if reportsError}
-          <ErrorAlert
-            message="Failed to load Puppet reports"
-            details={reportsError}
-            onRetry={fetchAllReports}
-          />
-        {:else if reports.length === 0}
-          <div class="rounded-lg border border-gray-200 bg-gray-50 p-8 text-center dark:border-gray-700 dark:bg-gray-900/50">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No reports found</h3>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              No Puppet run reports are available in PuppetDB.
-            </p>
-          </div>
-        {:else}
-          <PuppetReportsListView reports={reports} onReportClick={handleReportClick} />
-          <div class="mt-4 text-sm text-gray-600 dark:text-gray-400">
-            Showing {reports.length} most recent report{reports.length !== 1 ? 's' : ''}
-          </div>
-        {/if}
+        <PuppetReportsListView onReportClick={handleReportClick} showFilters={true} onDebugInfo={handleDebugInfo} />
       </div>
     {/if}
 
@@ -374,14 +337,12 @@
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Node Facts</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
-            PuppetDB
-          </span>
+          <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           Search for fact names and view their values across all nodes in your infrastructure.
         </p>
-        <GlobalFactsTab />
+        <GlobalFactsTab onDebugInfo={handleDebugInfo} />
       </div>
     {/if}
 
@@ -392,14 +353,12 @@
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppetserver Status</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-            Puppetserver
-          </span>
+          <IntegrationBadge integration="puppetserver" variant="badge" size="sm" />
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           View detailed status information, services, and metrics from your Puppetserver.
         </p>
-        <PuppetserverStatus />
+        <PuppetserverStatus onDebugInfo={handleDebugInfo} />
       </div>
     {/if}
 
@@ -408,14 +367,12 @@
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white">PuppetDB Statistics</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
-            PuppetDB
-          </span>
+          <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           View PuppetDB administrative information including archive status and database statistics.
         </p>
-        <PuppetDBAdmin />
+        <PuppetDBAdmin onDebugInfo={handleDebugInfo} />
       </div>
     {/if}
 
@@ -424,14 +381,12 @@
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Hiera Data</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400">
-            Control Repository
-          </span>
+          <IntegrationBadge integration="hiera" variant="badge" size="sm" />
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           Search for Hiera keys and see their resolved values across all nodes in your infrastructure.
         </p>
-        <GlobalHieraTab />
+        <GlobalHieraTab onDebugInfo={handleDebugInfo} />
       </div>
     {/if}
 
@@ -440,15 +395,20 @@
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
         <div class="mb-4 flex items-center gap-3">
           <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Code Analysis</h2>
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400">
-            Control Repository
-          </span>
+          <IntegrationBadge integration="hiera" variant="badge" size="sm" />
         </div>
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           Analyze your Puppet codebase for unused code, lint issues, and module updates.
         </p>
-        <CodeAnalysisTab />
+        <CodeAnalysisTab onDebugInfo={handleDebugInfo} />
       </div>
     {/if}
   </div>
+
+  <!-- Expert Mode Debug Panel -->
+  {#if expertMode.enabled && debugInfo}
+    <div class="mt-8">
+      <ExpertModeDebugPanel {debugInfo} />
+    </div>
+  {/if}
 </div>

@@ -7,8 +7,10 @@ import express, { type Express } from "express";
 import request from "supertest";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BasePlugin } from "../../src/integrations/BasePlugin";
+import { LoggerService } from "../../src/services/LoggerService";
 import { createIntegrationsRouter } from "../../src/routes/integrations";
 import { requestIdMiddleware } from "../../src/middleware";
+import { deduplicationMiddleware } from "../../src/middleware/deduplication";
 import type {
   IntegrationConfig,
   HealthStatus,
@@ -25,8 +27,8 @@ class MockInformationSource
 {
   private healthy: boolean;
 
-  constructor(name: string, healthy = true) {
-    super(name, "information");
+  constructor(name: string, healthy = true, logger: LoggerService) {
+    super(name, "information", logger);
     this.healthy = healthy;
   }
 
@@ -66,19 +68,24 @@ class MockInformationSource
 describe("Integration Status API", () => {
   let app: Express;
   let integrationManager: IntegrationManager;
+  let logger: LoggerService;
 
   beforeEach(async () => {
+    // Clear deduplication cache before each test to prevent cross-test contamination
+    deduplicationMiddleware.clear();
+
     // Create Express app
     app = express();
     app.use(express.json());
     app.use(requestIdMiddleware);
 
-    // Initialize integration manager
-    integrationManager = new IntegrationManager();
+    // Initialize logger and integration manager
+    logger = new LoggerService('error'); // Use error level to minimize test output
+    integrationManager = new IntegrationManager({ logger });
 
     // Register mock plugins
-    const plugin1 = new MockInformationSource("puppetdb", true);
-    const plugin2 = new MockInformationSource("bolt", true);
+    const plugin1 = new MockInformationSource("puppetdb", true, logger);
+    const plugin2 = new MockInformationSource("bolt", true, logger);
 
     const config1: IntegrationConfig = {
       enabled: true,
@@ -157,8 +164,9 @@ describe("Integration Status API", () => {
 
     it("should return error status for unhealthy integrations", async () => {
       // Create a new manager with an unhealthy plugin
-      const newManager = new IntegrationManager();
-      const unhealthyPlugin = new MockInformationSource("unhealthy", false);
+      const testLogger = new LoggerService('error');
+      const newManager = new IntegrationManager({ logger: testLogger });
+      const unhealthyPlugin = new MockInformationSource("unhealthy", false, testLogger);
 
       const config: IntegrationConfig = {
         enabled: true,
@@ -195,7 +203,7 @@ describe("Integration Status API", () => {
 
     it("should include unconfigured PuppetDB and Puppetserver when no integrations configured", async () => {
       // Create new manager with no plugins
-      const emptyManager = new IntegrationManager();
+      const emptyManager = new IntegrationManager({ logger: new LoggerService('error') });
       await emptyManager.initializePlugins();
 
       const testApp = express();

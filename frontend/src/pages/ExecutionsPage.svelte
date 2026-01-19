@@ -6,12 +6,15 @@
   import CommandOutput from '../components/CommandOutput.svelte';
   import RealtimeOutputViewer from '../components/RealtimeOutputViewer.svelte';
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
+  import IntegrationBadge from '../components/IntegrationBadge.svelte';
+  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
-  import { showError } from '../lib/toast.svelte';
+  import { showError, showSuccess } from '../lib/toast.svelte';
   import { ansiToHtml } from '../lib/ansiToHtml';
   import { expertMode } from '../lib/expertMode.svelte';
   import { useExecutionStream } from '../lib/executionStream.svelte';
+  import type { DebugInfo } from '../lib/api';
 
   interface ExecutionResult {
     id: string;
@@ -99,6 +102,9 @@
   let detailError = $state<string | null>(null);
   let executionStream = $state<ReturnType<typeof useExecutionStream> | null>(null);
 
+  // Debug info state for expert mode
+  let debugInfo = $state<DebugInfo | null>(null);
+
   // Fetch nodes for target filter
   async function fetchNodes(): Promise<void> {
     try {
@@ -115,6 +121,7 @@
   async function fetchExecutions(): Promise<void> {
     loading = true;
     error = null;
+    debugInfo = null; // Clear previous debug info
 
     try {
       const params = new URLSearchParams({
@@ -143,6 +150,7 @@
         executions: ExecutionResult[];
         pagination: PaginationInfo;
         summary: StatusCounts;
+        _debug?: DebugInfo;
       }>(`/api/executions?${params}`, {
         maxRetries: 2,
       });
@@ -150,6 +158,11 @@
       executions = data.executions || [];
       pagination = data.pagination || pagination;
       summary = data.summary || summary;
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo = data._debug;
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching executions:', err);
@@ -247,12 +260,17 @@
     detailError = null;
 
     try {
-      const data = await get<{ execution: ExecutionResult }>(
+      const data = await get<{ execution: ExecutionResult; _debug?: DebugInfo }>(
         `/api/executions/${executionId}`,
         { maxRetries: 2 }
       );
 
       selectedExecution = data.execution || data;
+
+      // Store debug info if present (for the detail view)
+      if (data._debug) {
+        debugInfo = data._debug;
+      }
     } catch (err) {
       detailError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching execution details:', err);
@@ -280,6 +298,38 @@
     }
   }
 
+  // Cancel execution
+  let cancelling = $state(false);
+
+  async function cancelExecution(executionId: string): Promise<void> {
+    if (cancelling) return;
+
+    cancelling = true;
+
+    try {
+      await fetch(`/api/executions/${executionId}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      // Refresh execution details
+      await fetchExecutionDetail(executionId);
+
+      // Refresh the list
+      await fetchExecutions();
+
+      showSuccess('Execution cancelled successfully');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to cancel execution';
+      console.error('Error cancelling execution:', err);
+      showError('Failed to cancel execution', errorMsg);
+    } finally {
+      cancelling = false;
+    }
+  }
+
   // Close execution detail modal
   function closeExecutionDetail(): void {
     // Disconnect streaming if active
@@ -301,8 +351,13 @@
     return { successCount, failureCount, duration };
   }
 
+  // Track previous expert mode state to detect changes
+  let previousExpertMode = $state(expertMode.enabled);
+
   // Fetch executions and nodes on mount
   onMount(() => {
+    debugInfo = null; // Clear debug info on mount
+    previousExpertMode = expertMode.enabled; // Initialize tracking
     fetchExecutions();
     fetchNodes();
 
@@ -319,6 +374,27 @@
       }
     }
   });
+
+  // Re-fetch when expert mode is toggled
+  $effect(() => {
+    const currentExpertMode = expertMode.enabled;
+
+    // Only react if expert mode actually changed
+    if (currentExpertMode !== previousExpertMode) {
+      if (currentExpertMode) {
+        // Expert mode was enabled, re-fetch to get debug info
+        if (!loading && executions.length > 0) {
+          void fetchExecutions();
+        }
+      } else {
+        // Expert mode was disabled, clear debug info
+        debugInfo = null;
+      }
+
+      // Update tracking variable
+      previousExpertMode = currentExpertMode;
+    }
+  });
 </script>
 
 <div class="container mx-auto px-4 py-8">
@@ -326,9 +402,12 @@
   <div class="mb-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-          Executions
-        </h1>
+        <div class="flex items-center gap-3">
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+            Executions
+          </h1>
+          <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+        </div>
         <p class="mt-2 text-gray-600 dark:text-gray-400">
           View and monitor execution history
         </p>
@@ -504,11 +583,6 @@
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Action
                 </th>
-                {#if expertMode.enabled}
-                  <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Command
-                  </th>
-                {/if}
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Targets
                 </th>
@@ -556,17 +630,6 @@
                       {execution.action}
                     </div>
                   </td>
-                  {#if expertMode.enabled}
-                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                      {#if execution.command}
-                        <div class="max-w-md truncate font-mono text-xs" title={execution.command}>
-                          {execution.command}
-                        </div>
-                      {:else}
-                        <span class="text-gray-400 dark:text-gray-600">-</span>
-                      {/if}
-                    </td>
-                  {/if}
                   <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                     <div class="flex flex-wrap gap-1">
                       {#each execution.targetNodes.slice(0, 2) as nodeId}
@@ -621,6 +684,13 @@
         {/if}
       </div>
     {/if}
+  {/if}
+
+  <!-- Expert Mode Debug Panel -->
+  {#if expertMode.enabled && debugInfo}
+    <div class="mt-8">
+      <ExpertModeDebugPanel {debugInfo} />
+    </div>
   {/if}
 </div>
 
@@ -744,16 +814,19 @@
             <!-- Execution Info -->
             <div class="mb-6">
               <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">Information</h4>
-              {#if selectedExecution.command}
-                <div class="mb-4">
-                  <CommandOutput boltCommand={selectedExecution.command} />
-                </div>
-              {/if}
               <dl class="grid gap-3 sm:grid-cols-2">
-                <div>
+                <div class="sm:col-span-2">
                   <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Action</dt>
                   <dd class="mt-1 text-sm text-gray-900 dark:text-white">{selectedExecution.action}</dd>
                 </div>
+                {#if selectedExecution.command}
+                  <div class="sm:col-span-2">
+                    <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Command</dt>
+                    <dd class="mt-1 text-sm font-mono text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 p-2 rounded border border-gray-200 dark:border-gray-700 overflow-x-auto">
+                      {selectedExecution.command}
+                    </dd>
+                  </div>
+                {/if}
                 <div>
                   <dt class="text-xs font-medium text-gray-500 dark:text-gray-400">Started At</dt>
                   <dd class="mt-1 text-sm text-gray-900 dark:text-white">{formatTimestamp(selectedExecution.startedAt)}</dd>
@@ -867,12 +940,31 @@
                 {/each}
               </div>
             </div>
+
+            <!-- Expert Mode Debug Panel (in modal) -->
+            {#if expertMode.enabled && debugInfo}
+              <div class="mt-6">
+                <ExpertModeDebugPanel {debugInfo} compact={false} insideModal={true} />
+              </div>
+            {/if}
           </div>
 
           <!-- Footer -->
           <div class="border-t border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900 sm:px-6">
             <div class="flex justify-between">
-              <ReExecutionButton execution={selectedExecution} size="md" variant="button" />
+              <div class="flex gap-2">
+                <ReExecutionButton execution={selectedExecution} size="md" variant="button" />
+                {#if selectedExecution.status === 'running'}
+                  <button
+                    type="button"
+                    class="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-red-600 dark:bg-gray-700 dark:text-red-400 dark:hover:bg-red-900/20"
+                    onclick={() => cancelExecution(selectedExecution.id)}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? 'Cancelling...' : 'Cancel Execution'}
+                  </button>
+                {/if}
+              </div>
               <button
                 type="button"
                 class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"

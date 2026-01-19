@@ -7,6 +7,7 @@ inclusion: always
 
 - Use latest stable versions of all libraries and dependencies
 - Leverage Context7 MCP server to verify compatibility before adding dependencies
+- Leverage Svelte MCP server to implement svelte changes following best practices
 - Justify each new dependency with clear business or technical value
 - Prefer well-maintained libraries with active communities
 - Document version constraints in project files
@@ -33,7 +34,6 @@ inclusion: always
 
 ## Documentation Approach
 
-- Maintain single comprehensive README covering all aspects including deployment
 - Reference official sources through MCP servers when available
 - Update documentation when upgrading dependencies
 - Keep documentation close to relevant code

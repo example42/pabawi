@@ -1,10 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { get } from '../lib/api';
+  import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
+
+  interface Props {
+    onDebugInfo?: (info: DebugInfo | null) => void;
+  }
+
+  let { onDebugInfo }: Props = $props();
 
   // State
   let servicesStatus = $state<any>(null);
@@ -33,10 +40,15 @@
 
     try {
       const startTime = performance.now();
-      const data = await get<{ services: any }>('/api/integrations/puppetserver/status/services');
+      const data = await get<{ services: any; _debug?: DebugInfo }>('/api/integrations/puppetserver/status/services');
       const endTime = performance.now();
 
       servicesStatus = data.services;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
 
       if (expertMode.enabled) {
         console.log('[PuppetserverStatus] Services status loaded successfully');
@@ -64,10 +76,15 @@
 
     try {
       const startTime = performance.now();
-      const data = await get<{ status: any }>('/api/integrations/puppetserver/status/simple');
+      const data = await get<{ status: any; _debug?: DebugInfo }>('/api/integrations/puppetserver/status/simple');
       const endTime = performance.now();
 
       simpleStatus = data.status;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
 
       if (expertMode.enabled) {
         console.log('[PuppetserverStatus] Simple status loaded successfully');
@@ -98,10 +115,15 @@
 
     try {
       const startTime = performance.now();
-      const data = await get<{ metrics: any }>('/api/integrations/puppetserver/metrics');
+      const data = await get<{ metrics: any; _debug?: DebugInfo }>('/api/integrations/puppetserver/metrics');
       const endTime = performance.now();
 
       metrics = data.metrics;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
 
       if (expertMode.enabled) {
         console.log('[PuppetserverStatus] Metrics loaded successfully');

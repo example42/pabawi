@@ -13,6 +13,7 @@
 import { performance } from 'perf_hooks';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
 import { NodeLinkingService } from '../../src/integrations/NodeLinkingService';
+import { LoggerService } from '../../src/services/LoggerService';
 import type { Node } from '../../src/integrations/types';
 
 interface PerformanceMetric {
@@ -225,7 +226,7 @@ async function runBottleneckAnalysis(): Promise<void> {
   console.log('Starting Performance Bottleneck Analysis...\n');
 
   const profiler = new PerformanceProfiler();
-  const integrationManager = new IntegrationManager();
+  const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
   const nodeLinkingService = new NodeLinkingService(integrationManager);
 
   // Test 1: Node generation

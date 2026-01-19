@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
+import { LoggerService } from "../../src/services/LoggerService";
 import { PuppetserverService } from "../../src/integrations/puppetserver/PuppetserverService";
 import { createIntegrationsRouter } from "../../src/routes/integrations";
 import { requestIdMiddleware } from "../../src/middleware";
@@ -254,8 +255,8 @@ describe("Puppetserver Node API", () => {
     app.use(express.json());
     app.use(requestIdMiddleware);
 
-    // Initialize integration manager
-    integrationManager = new IntegrationManager();
+    // Create integration manager
+    integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     // Create mock Puppetserver service
     puppetserverService = new MockPuppetserverService();
@@ -434,7 +435,7 @@ describe("Puppetserver Node API", () => {
       testApp.use(express.json());
       testApp.use(requestIdMiddleware);
 
-      const testManager = new IntegrationManager();
+      const testManager = new IntegrationManager({ logger: new LoggerService('error') });
       await testManager.initializePlugins();
 
       testApp.use(
@@ -454,7 +455,7 @@ describe("Puppetserver Node API", () => {
       testApp.use(express.json());
       testApp.use(requestIdMiddleware);
 
-      const testManager = new IntegrationManager();
+      const testManager = new IntegrationManager({ logger: new LoggerService('error') });
       await testManager.initializePlugins();
 
       testApp.use(
@@ -474,7 +475,7 @@ describe("Puppetserver Node API", () => {
       testApp.use(express.json());
       testApp.use(requestIdMiddleware);
 
-      const testManager = new IntegrationManager();
+      const testManager = new IntegrationManager({ logger: new LoggerService('error') });
       await testManager.initializePlugins();
 
       testApp.use(

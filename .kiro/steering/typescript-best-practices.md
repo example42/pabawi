@@ -1,6 +1,7 @@
 ---
 title: TypeScript Best Practices
-inclusion: always
+inclusion: fileMatch
+fileMatchPattern: '*.ts'
 ---
 
 ## Code Style

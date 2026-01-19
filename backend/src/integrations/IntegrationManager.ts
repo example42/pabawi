@@ -17,6 +17,7 @@ import type {
 } from "./types";
 import type { Node, Facts, ExecutionResult } from "../bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Health check cache entry
@@ -67,6 +68,7 @@ export class IntegrationManager {
   private informationSources = new Map<string, InformationSourcePlugin>();
   private initialized = false;
   private nodeLinkingService: NodeLinkingService;
+  private logger: LoggerService;
 
   // Health check scheduling
   private healthCheckCache = new Map<string, HealthCheckCacheEntry>();
@@ -77,11 +79,13 @@ export class IntegrationManager {
   constructor(options?: {
     healthCheckIntervalMs?: number;
     healthCheckCacheTTL?: number;
+    logger?: LoggerService;
   }) {
     this.healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 60000; // Default: 1 minute
     this.healthCheckCacheTTL = options?.healthCheckCacheTTL ?? 300000; // Default: 5 minutes
+    this.logger = options?.logger ?? new LoggerService();
     this.nodeLinkingService = new NodeLinkingService(this);
-    this.log("IntegrationManager created");
+    this.logger.info("IntegrationManager created", { component: "IntegrationManager" });
   }
 
   /**
@@ -116,7 +120,11 @@ export class IntegrationManager {
       );
     }
 
-    this.log(`Registered plugin: ${plugin.name} (${plugin.type})`);
+    this.logger.info(`Registered plugin: ${plugin.name} (${plugin.type})`, {
+      component: "IntegrationManager",
+      operation: "registerPlugin",
+      metadata: { pluginName: plugin.name, pluginType: plugin.type },
+    });
   }
 
   /**
@@ -130,22 +138,39 @@ export class IntegrationManager {
   async initializePlugins(): Promise<{ plugin: string; error: Error }[]> {
     const errors: { plugin: string; error: Error }[] = [];
 
-    this.log(`Initializing ${String(this.plugins.size)} plugins...`);
+    this.logger.info(`Initializing ${String(this.plugins.size)} plugins...`, {
+      component: "IntegrationManager",
+      operation: "initializePlugins",
+      metadata: { pluginCount: this.plugins.size },
+    });
 
     for (const [name, registration] of this.plugins) {
       try {
         await registration.plugin.initialize(registration.config);
-        this.log(`Initialized plugin: ${name}`);
+        this.logger.info(`Initialized plugin: ${name}`, {
+          component: "IntegrationManager",
+          operation: "initializePlugins",
+          metadata: { pluginName: name },
+        });
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         errors.push({ plugin: name, error: err });
-        this.logError(`Failed to initialize plugin '${name}'`, err);
+        this.logger.error(`Failed to initialize plugin '${name}'`, {
+          component: "IntegrationManager",
+          operation: "initializePlugins",
+          metadata: { pluginName: name },
+        }, err);
       }
     }
 
     this.initialized = true;
-    this.log(
+    this.logger.info(
       `Plugin initialization complete. ${String(errors.length)} errors.`,
+      {
+        component: "IntegrationManager",
+        operation: "initializePlugins",
+        metadata: { errorCount: errors.length },
+      }
     );
 
     return errors;
@@ -256,15 +281,28 @@ export class IntegrationManager {
    * @returns Aggregated inventory with source attribution
    */
   async getAggregatedInventory(): Promise<AggregatedInventory> {
-    this.log("=== Starting getAggregatedInventory ===");
-    this.log(
+    this.logger.debug("Starting getAggregatedInventory", {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+    });
+    this.logger.debug(
       `Total information sources registered: ${String(this.informationSources.size)}`,
+      {
+        component: "IntegrationManager",
+        operation: "getAggregatedInventory",
+        metadata: { sourceCount: this.informationSources.size },
+      }
     );
 
     // Log all registered information sources
     for (const [name, source] of this.informationSources.entries()) {
-      this.log(
-        `  - Source: ${name}, Type: ${source.type}, Initialized: ${String(source.isInitialized())}`,
+      this.logger.debug(
+        `Source: ${name}, Type: ${source.type}, Initialized: ${String(source.isInitialized())}`,
+        {
+          component: "IntegrationManager",
+          operation: "getAggregatedInventory",
+          metadata: { sourceName: name, sourceType: source.type, initialized: source.isInitialized() },
+        }
       );
     }
 
@@ -275,11 +313,19 @@ export class IntegrationManager {
     // Get inventory from all sources in parallel
     const inventoryPromises = Array.from(this.informationSources.entries()).map(
       async ([name, source]) => {
-        this.log(`Processing source: ${name}`);
+        this.logger.debug(`Processing source: ${name}`, {
+          component: "IntegrationManager",
+          operation: "getAggregatedInventory",
+          metadata: { sourceName: name },
+        });
 
         try {
           if (!source.isInitialized()) {
-            this.log(`Source '${name}' is not initialized - skipping`);
+            this.logger.warn(`Source '${name}' is not initialized - skipping`, {
+              component: "IntegrationManager",
+              operation: "getAggregatedInventory",
+              metadata: { sourceName: name },
+            });
             sources[name] = {
               nodeCount: 0,
               lastSync: now,
@@ -288,15 +334,28 @@ export class IntegrationManager {
             return [];
           }
 
-          this.log(`Calling getInventory() on source '${name}'`);
+          this.logger.debug(`Calling getInventory() on source '${name}'`, {
+            component: "IntegrationManager",
+            operation: "getAggregatedInventory",
+            metadata: { sourceName: name },
+          });
           const nodes = await source.getInventory();
-          this.log(`Source '${name}' returned ${String(nodes.length)} nodes`);
+          this.logger.debug(`Source '${name}' returned ${String(nodes.length)} nodes`, {
+            component: "IntegrationManager",
+            operation: "getAggregatedInventory",
+            metadata: { sourceName: name, nodeCount: nodes.length },
+          });
 
           // Log sample of nodes for debugging
           if (nodes.length > 0) {
             const sampleNode = nodes[0];
-            this.log(
+            this.logger.debug(
               `Sample node from '${name}': ${JSON.stringify(sampleNode).substring(0, 200)}`,
+              {
+                component: "IntegrationManager",
+                operation: "getAggregatedInventory",
+                metadata: { sourceName: name },
+              }
             );
           }
 
@@ -312,12 +371,22 @@ export class IntegrationManager {
             status: "healthy",
           };
 
-          this.log(
+          this.logger.debug(
             `Successfully processed ${String(nodes.length)} nodes from '${name}'`,
+            {
+              component: "IntegrationManager",
+              operation: "getAggregatedInventory",
+              metadata: { sourceName: name, nodeCount: nodes.length },
+            }
           );
           return nodesWithSource;
         } catch (error) {
-          this.logError(`Failed to get inventory from '${name}'`, error);
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.logger.error(`Failed to get inventory from '${name}'`, {
+            component: "IntegrationManager",
+            operation: "getAggregatedInventory",
+            metadata: { sourceName: name },
+          }, err);
           sources[name] = {
             nodeCount: 0,
             lastSync: now,
@@ -329,19 +398,35 @@ export class IntegrationManager {
     );
 
     const results = await Promise.all(inventoryPromises);
-    this.log(`Received results from ${String(results.length)} sources`);
+    this.logger.debug(`Received results from ${String(results.length)} sources`, {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { resultCount: results.length },
+    });
 
     // Flatten all nodes
     for (const nodes of results) {
-      this.log(`Adding ${String(nodes.length)} nodes to allNodes array`);
+      this.logger.debug(`Adding ${String(nodes.length)} nodes to allNodes array`, {
+        component: "IntegrationManager",
+        operation: "getAggregatedInventory",
+        metadata: { nodeCount: nodes.length },
+      });
       allNodes.push(...nodes);
     }
 
-    this.log(`Total nodes before deduplication: ${String(allNodes.length)}`);
+    this.logger.debug(`Total nodes before deduplication: ${String(allNodes.length)}`, {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { totalNodes: allNodes.length },
+    });
 
     // Deduplicate nodes by ID (prefer higher priority sources)
     const uniqueNodes = this.deduplicateNodes(allNodes);
-    this.log(`Total nodes after deduplication: ${String(uniqueNodes.length)}`);
+    this.logger.info(`Total nodes after deduplication: ${String(uniqueNodes.length)}`, {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { uniqueNodes: uniqueNodes.length },
+    });
 
     // Log source breakdown
     const sourceBreakdown: Record<string, number> = {};
@@ -350,12 +435,16 @@ export class IntegrationManager {
         (node as Node & { source?: string }).source ?? "unknown";
       sourceBreakdown[nodeSource] = (sourceBreakdown[nodeSource] ?? 0) + 1;
     }
-    this.log("Node breakdown by source:");
-    for (const [source, count] of Object.entries(sourceBreakdown)) {
-      this.log(`  - ${source}: ${String(count)} nodes`);
-    }
+    this.logger.debug("Node breakdown by source", {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { sourceBreakdown },
+    });
 
-    this.log("=== Completed getAggregatedInventory ===");
+    this.logger.debug("Completed getAggregatedInventory", {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+    });
 
     return {
       nodes: uniqueNodes,
@@ -401,7 +490,12 @@ export class IntegrationManager {
         node = inventory.find((n) => n.id === nodeId) ?? null;
         if (node) break;
       } catch (error) {
-        this.logError(`Failed to get node from '${source.name}'`, error);
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(`Failed to get node from '${source.name}'`, {
+          component: "IntegrationManager",
+          operation: "getNodeData",
+          metadata: { sourceName: source.name, nodeId },
+        }, err);
       }
     }
 
@@ -418,9 +512,15 @@ export class IntegrationManager {
           const nodeFacts = await source.getNodeFacts(nodeId);
           facts[name] = nodeFacts;
         } catch (error) {
-          this.logError(
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.logger.error(
             `Failed to get facts from '${name}' for node '${nodeId}'`,
-            error,
+            {
+              component: "IntegrationManager",
+              operation: "getNodeData",
+              metadata: { sourceName: name, nodeId },
+            },
+            err
           );
         }
       },
@@ -455,7 +555,10 @@ export class IntegrationManager {
       });
 
       if (allCached) {
-        this.log("Returning cached health check results");
+        this.logger.debug("Returning cached health check results", {
+          component: "IntegrationManager",
+          operation: "healthCheckAll",
+        });
         const cachedResults = new Map<string, HealthStatus>();
         for (const [name, entry] of this.healthCheckCache) {
           cachedResults.set(name, entry.status);
@@ -509,12 +612,23 @@ export class IntegrationManager {
    */
   startHealthCheckScheduler(): void {
     if (this.healthCheckInterval) {
-      this.log("Health check scheduler already running");
+      this.logger.info("Health check scheduler already running", {
+        component: "IntegrationManager",
+        operation: "startHealthCheckScheduler",
+      });
       return;
     }
 
-    this.log(
+    this.logger.info(
       `Starting health check scheduler (interval: ${String(this.healthCheckIntervalMs)}ms, TTL: ${String(this.healthCheckCacheTTL)}ms)`,
+      {
+        component: "IntegrationManager",
+        operation: "startHealthCheckScheduler",
+        metadata: {
+          intervalMs: this.healthCheckIntervalMs,
+          cacheTTL: this.healthCheckCacheTTL,
+        },
+      }
     );
 
     // Run initial health check
@@ -525,7 +639,10 @@ export class IntegrationManager {
       void this.healthCheckAll(false);
     }, this.healthCheckIntervalMs);
 
-    this.log("Health check scheduler started");
+    this.logger.info("Health check scheduler started", {
+      component: "IntegrationManager",
+      operation: "startHealthCheckScheduler",
+    });
   }
 
   /**
@@ -535,7 +652,10 @@ export class IntegrationManager {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = undefined;
-      this.log("Health check scheduler stopped");
+      this.logger.info("Health check scheduler stopped", {
+        component: "IntegrationManager",
+        operation: "stopHealthCheckScheduler",
+      });
     }
   }
 
@@ -544,7 +664,10 @@ export class IntegrationManager {
    */
   clearHealthCheckCache(): void {
     this.healthCheckCache.clear();
-    this.log("Health check cache cleared");
+    this.logger.debug("Health check cache cleared", {
+      component: "IntegrationManager",
+      operation: "clearHealthCheckCache",
+    });
   }
 
   /**
@@ -590,7 +713,11 @@ export class IntegrationManager {
     this.executionTools.delete(name);
     this.informationSources.delete(name);
 
-    this.log(`Unregistered plugin: ${name}`);
+    this.logger.info(`Unregistered plugin: ${name}`, {
+      component: "IntegrationManager",
+      operation: "unregisterPlugin",
+      metadata: { pluginName: name },
+    });
     return true;
   }
 
@@ -631,28 +758,4 @@ export class IntegrationManager {
     return Array.from(nodeMap.values());
   }
 
-  /**
-   * Log a message with manager context
-   *
-   * @param message - Message to log
-   */
-  private log(message: string): void {
-    // eslint-disable-next-line no-console
-    console.log("[IntegrationManager]", message);
-  }
-
-  /**
-   * Log an error with manager context
-   *
-   * @param message - Error message
-   * @param error - Error object
-   */
-  private logError(message: string, error: unknown): void {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error("[IntegrationManager]", `${message}: ${errorMessage}`);
-
-    if (error instanceof Error && error.stack) {
-      console.error(error.stack);
-    }
-  }
 }

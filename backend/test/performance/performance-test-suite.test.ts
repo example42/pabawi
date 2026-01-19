@@ -13,6 +13,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
+import { LoggerService } from '../../src/services/LoggerService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
 import { BoltPlugin } from '../../src/integrations/bolt/BoltPlugin';
@@ -133,7 +134,7 @@ describe('Performance Test Suite', () => {
   let nodeLinkingService: NodeLinkingService;
 
   beforeAll(() => {
-    integrationManager = new IntegrationManager();
+    integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
     nodeLinkingService = new NodeLinkingService(integrationManager);
   });
 

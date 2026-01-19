@@ -3,6 +3,7 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import { get } from '../lib/api';
+  import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { router } from '../lib/router.svelte';
@@ -35,6 +36,7 @@
     page: number;
     pageSize: number;
     totalPages: number;
+    _debug?: DebugInfo;
   }
 
   interface KeyNodesResponse {
@@ -45,7 +47,14 @@
     page: number;
     pageSize: number;
     totalPages: number;
+    _debug?: DebugInfo;
   }
+
+  interface Props {
+    onDebugInfo?: (info: DebugInfo | null) => void;
+  }
+
+  let { onDebugInfo }: Props = $props();
 
   // State
   let searchQuery = $state('');
@@ -75,6 +84,11 @@
         { maxRetries: 2 }
       );
       searchResults = data.keys;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       if (errorMessage.includes('not configured') || errorMessage.includes('503')) {
@@ -111,6 +125,11 @@
         { maxRetries: 2 }
       );
       keyNodeData = data;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       keyDataError = errorMessage;

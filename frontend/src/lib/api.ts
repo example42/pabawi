@@ -4,6 +4,7 @@
 
 import { expertMode } from './expertMode.svelte';
 import { showWarning } from './toast.svelte';
+import { logger } from './logger.svelte';
 
 export type ErrorType = 'connection' | 'authentication' | 'timeout' | 'validation' | 'not_found' | 'permission' | 'execution' | 'configuration' | 'unknown';
 
@@ -27,6 +28,152 @@ export interface ApiError {
   rawResponse?: unknown;
   executionContext?: unknown;
   boltCommand?: string;
+}
+
+/**
+ * Information about an API call made during request processing
+ */
+export interface ApiCallInfo {
+  /** API endpoint called */
+  endpoint: string;
+  /** HTTP method used */
+  method: string;
+  /** Duration of the API call in milliseconds */
+  duration: number;
+  /** HTTP status code returned */
+  status: number;
+  /** Whether the response was served from cache */
+  cached: boolean;
+}
+
+/**
+ * Information about an error that occurred during request processing
+ */
+export interface ErrorInfo {
+  /** Error message */
+  message: string;
+  /** Error stack trace (optional) */
+  stack?: string;
+  /** Error code (optional) */
+  code?: string;
+  /** Log level */
+  level: 'error';
+}
+
+/**
+ * Information about a warning that occurred during request processing
+ */
+export interface WarningInfo {
+  /** Warning message */
+  message: string;
+  /** Warning context (optional) */
+  context?: string;
+  /** Log level */
+  level: 'warn';
+}
+
+/**
+ * Information message from request processing
+ */
+export interface InfoMessage {
+  /** Info message */
+  message: string;
+  /** Info context (optional) */
+  context?: string;
+  /** Log level */
+  level: 'info';
+}
+
+/**
+ * Debug message from request processing
+ */
+export interface DebugMessage {
+  /** Debug message */
+  message: string;
+  /** Debug context (optional) */
+  context?: string;
+  /** Log level */
+  level: 'debug';
+}
+
+/**
+ * Performance metrics collected during request processing
+ */
+export interface PerformanceMetrics {
+  /** Memory usage in bytes */
+  memoryUsage: number;
+  /** CPU usage percentage */
+  cpuUsage: number;
+  /** Number of active connections */
+  activeConnections: number;
+  /** Cache statistics */
+  cacheStats: {
+    hits: number;
+    misses: number;
+    size: number;
+    hitRate: number;
+  };
+  /** Request statistics */
+  requestStats: {
+    total: number;
+    avgDuration: number;
+    p95Duration: number;
+    p99Duration: number;
+  };
+}
+
+/**
+ * Context information about the request
+ */
+export interface ContextInfo {
+  /** Request URL */
+  url: string;
+  /** HTTP method */
+  method: string;
+  /** Request headers */
+  headers: Record<string, string>;
+  /** Query parameters */
+  query: Record<string, string>;
+  /** User agent */
+  userAgent: string;
+  /** Client IP address */
+  ip: string;
+  /** Request timestamp */
+  timestamp: string;
+}
+
+/**
+ * Debug information attached to API responses when expert mode is enabled
+ */
+export interface DebugInfo {
+  /** ISO timestamp when the request was processed */
+  timestamp: string;
+  /** Unique identifier for the request */
+  requestId: string;
+  /** Integration name (bolt, puppetdb, puppetserver, hiera) */
+  integration?: string;
+  /** Operation or endpoint being executed */
+  operation: string;
+  /** Total duration of the operation in milliseconds */
+  duration: number;
+  /** List of API calls made during request processing */
+  apiCalls?: ApiCallInfo[];
+  /** Whether the response was served from cache */
+  cacheHit?: boolean;
+  /** List of errors that occurred during request processing */
+  errors?: ErrorInfo[];
+  /** List of warnings that occurred during request processing */
+  warnings?: WarningInfo[];
+  /** List of info messages from request processing */
+  info?: InfoMessage[];
+  /** List of debug messages from request processing */
+  debug?: DebugMessage[];
+  /** Performance metrics */
+  performance?: PerformanceMetrics;
+  /** Request context information */
+  context?: ContextInfo;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
 }
 
 export interface ApiResponse<T> {
@@ -186,11 +333,26 @@ export async function fetchWithRetry<T = unknown>(
 
   let lastError: Error | null = null;
 
+  // Generate correlation ID for this request
+  const correlationId = logger.generateCorrelationId();
+  logger.setCorrelationId(correlationId);
+
+  // Log API request initiation
+  const requestStartTime = performance.now();
+  logger.info('API', 'fetch', `Initiating ${options?.method || 'GET'} request`, {
+    url,
+    method: options?.method || 'GET',
+    correlationId,
+  });
+
   // Add expert mode header if enabled
   const headers = new Headers(options?.headers);
   if (expertMode.enabled) {
     headers.set('X-Expert-Mode', 'true');
   }
+
+  // Add correlation ID header
+  headers.set('X-Correlation-ID', correlationId);
 
   // Create abort controller for timeout if specified
   let timeoutId: number | undefined;
@@ -215,17 +377,47 @@ export async function fetchWithRetry<T = unknown>(
   try {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
+        const fetchStartTime = performance.now();
         const response = await fetch(url, requestOptions);
+        const fetchDuration = performance.now() - fetchStartTime;
+
+        // Log response received
+        logger.debug('API', 'fetch', `Response received`, {
+          url,
+          status: response.status,
+          duration: fetchDuration,
+          attempt: attempt + 1,
+        });
 
         // If response is OK, parse and return data
         if (response.ok) {
-          return await response.json() as T;
+          const data = await response.json() as T;
+          const totalDuration = performance.now() - requestStartTime;
+
+          logger.info('API', 'fetch', `Request completed successfully`, {
+            url,
+            status: response.status,
+            duration: totalDuration,
+            attempts: attempt + 1,
+          });
+
+          logger.clearCorrelationId();
+          return data;
         }
 
         // Check if status is retryable
         if (attempt < maxRetries && isRetryableStatus(response.status, retryableStatuses)) {
           const error = await parseErrorResponse(response);
           lastError = new Error(error.message);
+
+          logger.warn('API', 'fetch', `Request failed, retrying`, {
+            url,
+            status: response.status,
+            error: error.message,
+            attempt: attempt + 1,
+            maxRetries,
+          });
+
           onRetry(attempt + 1, lastError);
 
           // Show retry notification in UI
@@ -243,16 +435,37 @@ export async function fetchWithRetry<T = unknown>(
 
         // Non-retryable error, throw immediately
         const error = await parseErrorResponse(response);
+        const totalDuration = performance.now() - requestStartTime;
+
+        logger.error('API', 'fetch', `Request failed`, new Error(error.message), {
+          url,
+          status: response.status,
+          error: error.message,
+          duration: totalDuration,
+          attempts: attempt + 1,
+        });
+
+        logger.clearCorrelationId();
         throw new Error(error.message);
       } catch (error) {
         // Check if request was aborted
         if (error instanceof Error && error.name === 'AbortError') {
+          logger.warn('API', 'fetch', 'Request aborted', { url });
+          logger.clearCorrelationId();
           throw error; // Don't retry aborted requests
         }
 
         // Network errors are retryable
         if (attempt < maxRetries && isNetworkError(error)) {
           lastError = error as Error;
+
+          logger.warn('API', 'fetch', 'Network error, retrying', {
+            url,
+            error: lastError.message,
+            attempt: attempt + 1,
+            maxRetries,
+          });
+
           onRetry(attempt + 1, lastError);
 
           // Show retry notification in UI
@@ -269,11 +482,25 @@ export async function fetchWithRetry<T = unknown>(
         }
 
         // Non-retryable error or max retries reached
+        const totalDuration = performance.now() - requestStartTime;
+        logger.error('API', 'fetch', 'Request failed with error', error as Error, {
+          url,
+          duration: totalDuration,
+          attempts: attempt + 1,
+        });
+        logger.clearCorrelationId();
         throw error;
       }
     }
 
     // Max retries reached
+    const totalDuration = performance.now() - requestStartTime;
+    logger.error('API', 'fetch', 'Request failed after max retries', lastError ?? undefined, {
+      url,
+      duration: totalDuration,
+      attempts: maxRetries + 1,
+    });
+    logger.clearCorrelationId();
     throw lastError ?? new Error('Request failed after maximum retries');
   } finally {
     // Clear timeout if it was set

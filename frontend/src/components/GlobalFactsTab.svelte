@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { get } from '../lib/api';
+  import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
@@ -15,6 +16,12 @@
     certname: string;
     facts: Record<string, unknown>;
   }
+
+  interface Props {
+    onDebugInfo?: (info: DebugInfo | null) => void;
+  }
+
+  let { onDebugInfo }: Props = $props();
 
   // Common facts that users frequently search for (using modern fact names)
   const COMMON_FACTS = [
@@ -70,8 +77,13 @@
 
     try {
       // Get nodes from inventory but filter to only PuppetDB nodes
-      const data = await get<{ nodes: Node[] }>('/api/inventory?sources=puppetdb', { maxRetries: 2 });
+      const data = await get<{ nodes: Node[]; _debug?: DebugInfo }>('/api/inventory?sources=puppetdb', { maxRetries: 2 });
       nodes = data.nodes || [];
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
     } catch (err) {
       nodesError = err instanceof Error ? err.message : 'Failed to load nodes';
       console.error('Error fetching nodes:', err);
@@ -89,14 +101,19 @@
 
     try {
       // Use PuppetDB only (Puppetserver would be too slow)
-      const data = await get<{ facts: Record<string, unknown> }>(
+      const data = await get<{ facts: Record<string, unknown>; _debug?: DebugInfo }>(
         `/api/integrations/puppetdb/nodes/${certname}/facts`,
         { maxRetries: 1, showRetryNotifications: false }
       );
-      
+
       // Create new Map for reactivity
       factsData = new Map(factsData).set(certname, data.facts || {});
-      
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
+
       // Remove from errors if it was there
       if (factsErrors.has(certname)) {
         factsErrors = new Map(factsErrors);
@@ -104,7 +121,7 @@
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load facts';
-      
+
       // Create new Map for reactivity
       factsErrors = new Map(factsErrors).set(certname, errorMsg);
     } finally {
@@ -119,7 +136,7 @@
     if (trimmed && !selectedFacts.includes(trimmed)) {
       selectedFacts = [...selectedFacts, trimmed];
       customFactInput = '';
-      
+
       // Fetch facts for all nodes (not just filtered ones)
       nodes.forEach(node => {
         void fetchNodeFacts(node.id);
@@ -149,22 +166,22 @@
   // Get fact value for a node (supports nested facts like os.name)
   function getFactValue(certname: string, factName: string): string {
     const data = factsData.get(certname);
-    
+
     if (!data) {
       return '-';
     }
-    
+
     // The facts are nested inside a "facts" property
     const facts = (data as { facts?: Record<string, unknown> }).facts;
-    
+
     if (!facts) {
       return '-';
     }
-    
+
     // Handle nested facts (e.g., "os.name" -> facts.os.name)
     const parts = factName.split('.');
     let value: unknown = facts;
-    
+
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       if (value && typeof value === 'object' && part in value) {
@@ -173,7 +190,7 @@
         return '-';
       }
     }
-    
+
     if (value === null || value === undefined) return '-';
     if (typeof value === 'string') return value;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -197,12 +214,12 @@
   <!-- Fact Selection Section -->
   <div class="mb-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
     <h3 class="mb-3 text-lg font-semibold text-gray-900 dark:text-white">Select Facts to Display</h3>
-    
+
     <!-- Common Facts -->
     <div class="mb-4">
-      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+      <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
         Common Facts
-      </label>
+      </div>
       <div class="flex flex-wrap gap-2">
         {#each COMMON_FACTS as fact}
           <button
@@ -222,11 +239,12 @@
 
     <!-- Custom Fact Input -->
     <div class="mb-4">
-      <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label for="custom-fact-input" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
         Custom Fact Name
       </label>
       <div class="flex gap-2">
         <input
+          id="custom-fact-input"
           type="text"
           bind:value={customFactInput}
           onkeydown={handleKeydown}
@@ -247,9 +265,9 @@
     <!-- Selected Facts -->
     {#if selectedFacts.length > 0}
       <div>
-        <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <div class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
           Selected Facts ({selectedFacts.length})
-        </label>
+        </div>
         <div class="flex flex-wrap gap-2">
           {#each selectedFacts as fact}
             <span class="inline-flex items-center gap-1.5 rounded-md bg-primary-100 px-3 py-1.5 text-sm font-medium text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
@@ -355,8 +373,8 @@
                       <span class="truncate">{node.name}</span>
                       {#if node.source}
                         <span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium
-                          {node.source === 'puppetdb' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 
-                           node.source === 'puppetserver' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 
+                          {node.source === 'puppetdb' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' :
+                           node.source === 'puppetserver' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
                            'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}">
                           {node.source}
                         </span>

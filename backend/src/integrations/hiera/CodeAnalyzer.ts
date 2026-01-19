@@ -27,6 +27,7 @@ import { PuppetfileParser } from "./PuppetfileParser";
 import type { PuppetfileParseResult } from "./PuppetfileParser";
 import { ForgeClient } from "./ForgeClient";
 import type { ModuleUpdateCheckResult } from "./ForgeClient";
+import { LoggerService } from "../../services/LoggerService";
 
 /**
  * Cache entry for analysis results
@@ -105,6 +106,7 @@ export class CodeAnalyzer {
   private config: CodeAnalysisConfig;
   private hieraScanner: HieraScanner | null = null;
   private integrationManager: IntegrationManager | null = null;
+  private logger: LoggerService;
 
   // Cache storage
   private analysisCache: AnalysisCacheEntry<CodeAnalysisResult> | null = null;
@@ -123,6 +125,7 @@ export class CodeAnalyzer {
     this.controlRepoPath = controlRepoPath;
     this.config = config;
     this.forgeClient = new ForgeClient();
+    this.logger = new LoggerService();
   }
 
   /**
@@ -1185,17 +1188,16 @@ export class CodeAnalyzer {
    * Log a message with analyzer context
    */
   private log(message: string, level: "info" | "warn" | "error" = "info"): void {
-    const prefix = "[CodeAnalyzer]";
+    const metadata = { component: "CodeAnalyzer", operation: "log" };
     switch (level) {
       case "warn":
-        console.warn(prefix, message);
+        this.logger.warn(message, metadata);
         break;
       case "error":
-        console.error(prefix, message);
+        this.logger.error(message, metadata);
         break;
       default:
-        // eslint-disable-next-line no-console
-        console.log(prefix, message);
+        this.logger.info(message, metadata);
     }
   }
 

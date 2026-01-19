@@ -10,6 +10,7 @@ import express, { type Express } from 'express';
 import { createIntegrationsRouter } from '../../src/routes/integrations';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import type { IntegrationConfig } from '../../src/integrations/types';
+import { expertModeMiddleware } from '../../src/middleware/expertMode';
 
 describe('PuppetDB Events API Integration', () => {
   let app: Express;
@@ -19,6 +20,7 @@ describe('PuppetDB Events API Integration', () => {
     // Create a test app
     app = express();
     app.use(express.json());
+    app.use(expertModeMiddleware);
 
     // Create PuppetDB service (will not be initialized without config)
     puppetDBService = new PuppetDBService();
@@ -136,6 +138,39 @@ describe('PuppetDB Events API Integration', () => {
 
       // Invalid limit should be ignored, using default
       expect(response.body).toHaveProperty('error');
+    });
+  });
+
+  describe('Expert mode', () => {
+    it('should include debug info when expert mode is enabled', async () => {
+      const response = await request(app)
+        .get('/api/integrations/puppetdb/nodes/test-node/events')
+        .set('X-Expert-Mode', 'true')
+        .expect(503);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body).toHaveProperty('_debug');
+      expect(response.body._debug).toHaveProperty('timestamp');
+      expect(response.body._debug).toHaveProperty('requestId');
+      expect(response.body._debug).toHaveProperty('operation');
+      expect(response.body._debug.operation).toBe('GET /api/integrations/puppetdb/nodes/:certname/events');
+      expect(response.body._debug).toHaveProperty('duration');
+      expect(response.body._debug).toHaveProperty('warnings');
+      expect(response.body._debug.warnings).toBeInstanceOf(Array);
+      expect(response.body._debug.warnings.length).toBeGreaterThan(0);
+      expect(response.body._debug.warnings[0]).toHaveProperty('message');
+      expect(response.body._debug.warnings[0].message).toContain('PuppetDB integration is not initialized');
+      expect(response.body._debug).toHaveProperty('performance');
+      expect(response.body._debug).toHaveProperty('context');
+    });
+
+    it('should not include debug info when expert mode is disabled', async () => {
+      const response = await request(app)
+        .get('/api/integrations/puppetdb/nodes/test-node/events')
+        .expect(503);
+
+      expect(response.body).toHaveProperty('error');
+      expect(response.body).not.toHaveProperty('_debug');
     });
   });
 });

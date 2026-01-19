@@ -17,75 +17,113 @@ import { createPackagesRouter } from "./routes/packages";
 import { createStreamingRouter } from "./routes/streaming";
 import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
+import { createDebugRouter } from "./routes/debug";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
-import { errorHandler, requestIdMiddleware } from "./middleware";
+import { errorHandler, requestIdMiddleware, expertModeMiddleware } from "./middleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import { BoltPlugin } from "./integrations/bolt";
 import type { IntegrationConfig } from "./integrations/types";
+import { LoggerService } from "./services/LoggerService";
+import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 
 /**
  * Initialize and start the application
  */
 async function startServer(): Promise<Express> {
+  // Create logger early for startup logging
+  const logger = new LoggerService();
+
   try {
     // Load configuration
-    console.warn("Loading configuration...");
+    logger.info("Loading configuration...", {
+      component: "Server",
+      operation: "startServer",
+    });
     const configService = new ConfigService();
     const config = configService.getConfig();
 
-    console.warn(`Configuration loaded successfully`);
-    console.warn(`- Host: ${config.host}`);
-    console.warn(`- Port: ${String(config.port)}`);
-    console.warn(`- Bolt Project Path: ${config.boltProjectPath}`);
-    console.warn(`- Database Path: ${config.databasePath}`);
-    console.warn(`- Execution Timeout: ${String(config.executionTimeout)}ms`);
-    console.warn(
-      `- Command Whitelist Allow All: ${String(config.commandWhitelist.allowAll)}`,
-    );
-    console.warn(
-      `- Command Whitelist Count: ${String(config.commandWhitelist.whitelist.length)}`,
-    );
+    logger.info("Configuration loaded successfully", {
+      component: "Server",
+      operation: "startServer",
+      metadata: {
+        host: config.host,
+        port: config.port,
+        boltProjectPath: config.boltProjectPath,
+        databasePath: config.databasePath,
+        executionTimeout: config.executionTimeout,
+        commandWhitelistAllowAll: config.commandWhitelist.allowAll,
+        commandWhitelistCount: config.commandWhitelist.whitelist.length,
+      },
+    });
 
     // Validate Bolt configuration (non-blocking)
-    console.warn("Validating Bolt configuration...");
+    logger.info("Validating Bolt configuration...", {
+      component: "Server",
+      operation: "startServer",
+    });
     const boltValidator = new BoltValidator(config.boltProjectPath);
     try {
       boltValidator.validate();
-      console.warn("Bolt configuration validated successfully");
+      logger.info("Bolt configuration validated successfully", {
+        component: "Server",
+        operation: "startServer",
+      });
     } catch (error) {
       if (error instanceof BoltValidationError) {
-        console.warn(`Bolt validation failed: ${error.message}`);
-        if (error.details) {
-          console.warn(`Details: ${error.details}`);
-        }
-        if (error.missingFiles.length > 0) {
-          console.warn(`Missing files: ${error.missingFiles.join(", ")}`);
-        }
-        console.warn("Server will continue to start, but Bolt operations may be limited");
+        logger.warn(`Bolt validation failed: ${error.message}`, {
+          component: "Server",
+          operation: "startServer",
+          metadata: {
+            details: error.details,
+            missingFiles: error.missingFiles,
+          },
+        });
+        logger.warn("Server will continue to start, but Bolt operations may be limited", {
+          component: "Server",
+          operation: "startServer",
+        });
       } else {
-        console.warn(`Unexpected error during Bolt validation: ${String(error)}`);
-        console.warn("Server will continue to start, but Bolt operations may be limited");
+        logger.warn(`Unexpected error during Bolt validation: ${String(error)}`, {
+          component: "Server",
+          operation: "startServer",
+        });
+        logger.warn("Server will continue to start, but Bolt operations may be limited", {
+          component: "Server",
+          operation: "startServer",
+        });
       }
     }
 
     // Initialize database
-    console.warn("Initializing database...");
+    logger.info("Initializing database...", {
+      component: "Server",
+      operation: "startServer",
+    });
     const databaseService = new DatabaseService(config.databasePath);
     await databaseService.initialize();
-    console.warn("Database initialized successfully");
+    logger.info("Database initialized successfully", {
+      component: "Server",
+      operation: "startServer",
+    });
 
     // Initialize Bolt service
-    console.warn("Initializing Bolt service...");
+    logger.info("Initializing Bolt service...", {
+      component: "Server",
+      operation: "startServer",
+    });
     const boltService = new BoltService(
       config.boltProjectPath,
       config.executionTimeout,
       config.cache,
     );
-    console.warn("Bolt service initialized successfully");
+    logger.info("Bolt service initialized successfully", {
+      component: "Server",
+      operation: "startServer",
+    });
 
     // Defer package task validation to avoid blocking startup
     // Validation will occur on-demand when package operations are requested
@@ -95,19 +133,22 @@ async function startServer(): Promise<Express> {
         for (const packageTask of config.packageTasks) {
           const task = tasks.find((t) => t.name === packageTask.name);
           if (task) {
-            console.warn(
-              `✓ Package task '${packageTask.name}' (${packageTask.label}) is available`,
-            );
+            logger.info(`✓ Package task '${packageTask.name}' (${packageTask.label}) is available`, {
+              component: "Server",
+              operation: "validatePackageTasks",
+            });
           } else {
-            console.warn(
-              `✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`,
-            );
+            logger.warn(`✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`, {
+              component: "Server",
+              operation: "validatePackageTasks",
+            });
           }
         }
       } catch (error) {
-        console.warn(
-          `WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+        logger.warn(`WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "validatePackageTasks",
+        });
       }
     })();
 
@@ -123,31 +164,50 @@ async function startServer(): Promise<Express> {
 
     // Initialize streaming execution manager
     const streamingManager = new StreamingExecutionManager(config.streaming);
-    console.warn("Streaming execution manager initialized successfully");
-    console.warn(`- Buffer interval: ${String(config.streaming.bufferMs)}ms`);
-    console.warn(
-      `- Max output size: ${String(config.streaming.maxOutputSize)} bytes`,
-    );
-    console.warn(
-      `- Max line length: ${String(config.streaming.maxLineLength)} characters`,
-    );
+    logger.info("Streaming execution manager initialized successfully", {
+      component: "Server",
+      operation: "startServer",
+      metadata: {
+        bufferMs: config.streaming.bufferMs,
+        maxOutputSize: config.streaming.maxOutputSize,
+        maxLineLength: config.streaming.maxLineLength,
+      },
+    });
 
     // Initialize execution queue
     const executionQueue = new ExecutionQueue(
       config.executionQueue.concurrentLimit,
       config.executionQueue.maxQueueSize,
     );
-    console.warn("Execution queue initialized successfully");
-    console.warn(
-      `- Concurrent execution limit: ${String(config.executionQueue.concurrentLimit)}`,
-    );
-    console.warn(
-      `- Maximum queue size: ${String(config.executionQueue.maxQueueSize)}`,
-    );
+    logger.info("Execution queue initialized successfully", {
+      component: "Server",
+      operation: "startServer",
+      metadata: {
+        concurrentLimit: config.executionQueue.concurrentLimit,
+        maxQueueSize: config.executionQueue.maxQueueSize,
+      },
+    });
 
     // Initialize integration manager
-    console.warn("Initializing integration manager...");
-    const integrationManager = new IntegrationManager();
+    logger.info("Initializing integration manager...", {
+      component: "Server",
+      operation: "startServer",
+    });
+
+    // Logger already created at the top of the function
+    logger.info(`LoggerService initialized with level: ${logger.getLevel()}`, {
+      component: "Server",
+      operation: "startServer",
+    });
+
+    // Create shared PerformanceMonitorService instance for all plugins
+    const performanceMonitor = new PerformanceMonitorService();
+    logger.info("PerformanceMonitorService initialized", {
+      component: "Server",
+      operation: "startServer",
+    });
+
+    const integrationManager = new IntegrationManager({ logger });
 
     // Initialize Bolt integration only if configured
     let boltPlugin: BoltPlugin | undefined;
@@ -170,14 +230,22 @@ async function startServer(): Promise<Express> {
       boltConfigured = hasInventory || hasBoltProject;
     }
 
-    console.warn("=== Bolt Integration Setup ===");
-    console.warn(`Bolt configured: ${String(boltConfigured)}`);
-    console.warn(`Bolt project path: ${boltProjectPath || 'not set'}`);
+    logger.info("=== Bolt Integration Setup ===", {
+      component: "Server",
+      operation: "initializeBolt",
+      metadata: {
+        configured: boltConfigured,
+        projectPath: boltProjectPath || 'not set',
+      },
+    });
 
     if (boltConfigured) {
-      console.warn("Registering Bolt integration...");
+      logger.info("Registering Bolt integration...", {
+        component: "Server",
+        operation: "initializeBolt",
+      });
       try {
-        boltPlugin = new BoltPlugin(boltService);
+        boltPlugin = new BoltPlugin(boltService, logger, performanceMonitor);
         const boltConfig: IntegrationConfig = {
           enabled: true,
           name: "bolt",
@@ -188,19 +256,27 @@ async function startServer(): Promise<Express> {
           priority: 5, // Lower priority than PuppetDB
         };
         integrationManager.registerPlugin(boltPlugin, boltConfig);
-        console.warn("Bolt integration registered successfully");
-        console.warn(`- Project Path: ${config.boltProjectPath}`);
+        logger.info("Bolt integration registered successfully", {
+          component: "Server",
+          operation: "initializeBolt",
+          metadata: { projectPath: config.boltProjectPath },
+        });
       } catch (error) {
-        console.warn(
-          `WARNING: Failed to initialize Bolt integration: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+        logger.warn(`WARNING: Failed to initialize Bolt integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeBolt",
+        });
         boltPlugin = undefined;
       }
     } else {
-      console.warn(
-        "Bolt integration not configured - skipping registration",
-      );
-      console.warn("Set BOLT_PROJECT_PATH to a valid project directory to enable Bolt integration");
+      logger.warn("Bolt integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeBolt",
+      });
+      logger.info("Set BOLT_PROJECT_PATH to a valid project directory to enable Bolt integration", {
+        component: "Server",
+        operation: "initializeBolt",
+      });
     }
 
     // Initialize PuppetDB integration only if configured
@@ -209,9 +285,12 @@ async function startServer(): Promise<Express> {
     const puppetDBConfigured = !!puppetDBConfig?.serverUrl;
 
     if (puppetDBConfigured) {
-      console.warn("Initializing PuppetDB integration...");
+      logger.info("Initializing PuppetDB integration...", {
+        component: "Server",
+        operation: "initializePuppetDB",
+      });
       try {
-        puppetDBService = new PuppetDBService();
+        puppetDBService = new PuppetDBService(logger, performanceMonitor);
         const integrationConfig: IntegrationConfig = {
           enabled: puppetDBConfig.enabled,
           name: "puppetdb",
@@ -222,24 +301,27 @@ async function startServer(): Promise<Express> {
 
         integrationManager.registerPlugin(puppetDBService, integrationConfig);
 
-        console.warn("PuppetDB integration registered and enabled");
-        console.warn(`- Server URL: ${puppetDBConfig.serverUrl}`);
-        console.warn(
-          `- SSL enabled: ${String(puppetDBConfig.ssl?.enabled ?? false)}`,
-        );
-        console.warn(
-          `- Authentication: ${puppetDBConfig.token ? "configured" : "not configured"}`,
-        );
+        logger.info("PuppetDB integration registered and enabled", {
+          component: "Server",
+          operation: "initializePuppetDB",
+          metadata: {
+            serverUrl: puppetDBConfig.serverUrl,
+            sslEnabled: puppetDBConfig.ssl?.enabled ?? false,
+            hasAuthentication: !!puppetDBConfig.token,
+          },
+        });
       } catch (error) {
-        console.warn(
-          `WARNING: Failed to initialize PuppetDB integration: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+        logger.warn(`WARNING: Failed to initialize PuppetDB integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializePuppetDB",
+        });
         puppetDBService = undefined;
       }
     } else {
-      console.warn(
-        "PuppetDB integration not configured - skipping registration",
-      );
+      logger.warn("PuppetDB integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializePuppetDB",
+      });
     }
 
     // Initialize Puppetserver integration only if configured
@@ -247,17 +329,26 @@ async function startServer(): Promise<Express> {
     const puppetserverConfig = config.integrations.puppetserver;
     const puppetserverConfigured = !!puppetserverConfig?.serverUrl;
 
-    console.warn("=== Puppetserver Integration Setup ===");
-    console.warn(`Puppetserver configured: ${String(puppetserverConfigured)}`);
-    console.warn(
-      `Puppetserver config: ${JSON.stringify(puppetserverConfig, null, 2)}`,
-    );
+    logger.debug("=== Puppetserver Integration Setup ===", {
+      component: "Server",
+      operation: "initializePuppetserver",
+      metadata: {
+        configured: puppetserverConfigured,
+        config: puppetserverConfig,
+      },
+    });
 
     if (puppetserverConfigured) {
-      console.warn("Initializing Puppetserver integration...");
+      logger.info("Initializing Puppetserver integration...", {
+        component: "Server",
+        operation: "initializePuppetserver",
+      });
       try {
-        puppetserverService = new PuppetserverService();
-        console.warn("PuppetserverService instance created");
+        puppetserverService = new PuppetserverService(logger, performanceMonitor);
+        logger.debug("PuppetserverService instance created", {
+          component: "Server",
+          operation: "initializePuppetserver",
+        });
 
         const integrationConfig: IntegrationConfig = {
           enabled: puppetserverConfig.enabled,
@@ -267,58 +358,78 @@ async function startServer(): Promise<Express> {
           priority: 8, // Lower priority than PuppetDB (10), higher than Bolt (5)
         };
 
-        console.warn(
-          `Registering Puppetserver plugin with config: ${JSON.stringify(integrationConfig, null, 2)}`,
-        );
+        logger.debug("Registering Puppetserver plugin", {
+          component: "Server",
+          operation: "initializePuppetserver",
+          metadata: { config: integrationConfig },
+        });
         integrationManager.registerPlugin(
           puppetserverService,
           integrationConfig,
         );
 
-        console.warn("Puppetserver integration registered successfully");
-        console.warn(`- Enabled: ${String(puppetserverConfig.enabled)}`);
-        console.warn(`- Server URL: ${puppetserverConfig.serverUrl}`);
-        console.warn(`- Port: ${String(puppetserverConfig.port)}`);
-        console.warn(
-          `- SSL enabled: ${String(puppetserverConfig.ssl?.enabled ?? false)}`,
-        );
-        console.warn(
-          `- Authentication: ${puppetserverConfig.token ? "token configured" : "no token"}`,
-        );
-        console.warn(`- Priority: 8`);
+        logger.info("Puppetserver integration registered successfully", {
+          component: "Server",
+          operation: "initializePuppetserver",
+          metadata: {
+            enabled: puppetserverConfig.enabled,
+            serverUrl: puppetserverConfig.serverUrl,
+            port: puppetserverConfig.port,
+            sslEnabled: puppetserverConfig.ssl?.enabled ?? false,
+            hasAuthentication: !!puppetserverConfig.token,
+            priority: 8,
+          },
+        });
       } catch (error) {
-        console.warn(
-          `WARNING: Failed to initialize Puppetserver integration: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+        logger.warn(`WARNING: Failed to initialize Puppetserver integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializePuppetserver",
+        });
         if (error instanceof Error && error.stack) {
-          console.warn(error.stack);
+          logger.error("Puppetserver initialization error stack", {
+            component: "Server",
+            operation: "initializePuppetserver",
+          }, error);
         }
         puppetserverService = undefined;
       }
     } else {
-      console.warn(
-        "Puppetserver integration not configured - skipping registration",
-      );
+      logger.warn("Puppetserver integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializePuppetserver",
+      });
     }
-    console.warn("=== End Puppetserver Integration Setup ===");
+    logger.debug("=== End Puppetserver Integration Setup ===", {
+      component: "Server",
+      operation: "initializePuppetserver",
+    });
 
     // Initialize Hiera integration only if configured
     let hieraPlugin: HieraPlugin | undefined;
     const hieraConfig = config.integrations.hiera;
     const hieraConfigured = !!hieraConfig?.controlRepoPath;
 
-    console.warn("=== Hiera Integration Setup ===");
-    console.warn(`Hiera configured: ${String(hieraConfigured)}`);
-    console.warn(
-      `Hiera config: ${JSON.stringify(hieraConfig, null, 2)}`,
-    );
+    logger.debug("=== Hiera Integration Setup ===", {
+      component: "Server",
+      operation: "initializeHiera",
+      metadata: {
+        configured: hieraConfigured,
+        config: hieraConfig,
+      },
+    });
 
     if (hieraConfigured) {
-      console.warn("Initializing Hiera integration...");
+      logger.info("Initializing Hiera integration...", {
+        component: "Server",
+        operation: "initializeHiera",
+      });
       try {
-        hieraPlugin = new HieraPlugin();
+        hieraPlugin = new HieraPlugin(logger, performanceMonitor);
         hieraPlugin.setIntegrationManager(integrationManager);
-        console.warn("HieraPlugin instance created");
+        logger.debug("HieraPlugin instance created", {
+          component: "Server",
+          operation: "initializeHiera",
+        });
 
         const integrationConfig: IntegrationConfig = {
           enabled: hieraConfig.enabled,
@@ -328,80 +439,121 @@ async function startServer(): Promise<Express> {
           priority: 6, // Lower priority than Puppetserver (8), higher than Bolt (5)
         };
 
-        console.warn(
-          `Registering Hiera plugin with config: ${JSON.stringify(integrationConfig, null, 2)}`,
-        );
+        logger.debug("Registering Hiera plugin", {
+          component: "Server",
+          operation: "initializeHiera",
+          metadata: { config: integrationConfig },
+        });
         integrationManager.registerPlugin(
           hieraPlugin,
           integrationConfig,
         );
 
-        console.warn("Hiera integration registered successfully");
-        console.warn(`- Enabled: ${String(hieraConfig.enabled)}`);
-        console.warn(`- Control Repo Path: ${hieraConfig.controlRepoPath}`);
-        console.warn(`- Hiera Config Path: ${hieraConfig.hieraConfigPath}`);
-        console.warn(`- Priority: 6`);
+        logger.info("Hiera integration registered successfully", {
+          component: "Server",
+          operation: "initializeHiera",
+          metadata: {
+            enabled: hieraConfig.enabled,
+            controlRepoPath: hieraConfig.controlRepoPath,
+            hieraConfigPath: hieraConfig.hieraConfigPath,
+            priority: 6,
+          },
+        });
       } catch (error) {
-        console.warn(
-          `WARNING: Failed to initialize Hiera integration: ${error instanceof Error ? error.message : "Unknown error"}`,
-        );
+        logger.warn(`WARNING: Failed to initialize Hiera integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeHiera",
+        });
         if (error instanceof Error && error.stack) {
-          console.warn(error.stack);
+          logger.error("Hiera initialization error stack", {
+            component: "Server",
+            operation: "initializeHiera",
+          }, error);
         }
         hieraPlugin = undefined;
       }
     } else {
-      console.warn(
-        "Hiera integration not configured - skipping registration",
-      );
-      console.warn("Set HIERA_CONTROL_REPO_PATH to a valid control repository to enable Hiera integration");
+      logger.warn("Hiera integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeHiera",
+      });
+      logger.info("Set HIERA_CONTROL_REPO_PATH to a valid control repository to enable Hiera integration", {
+        component: "Server",
+        operation: "initializeHiera",
+      });
     }
-    console.warn("=== End Hiera Integration Setup ===");
+    logger.debug("=== End Hiera Integration Setup ===", {
+      component: "Server",
+      operation: "initializeHiera",
+    });
 
     // Initialize all registered plugins
-    console.warn("=== Initializing All Integration Plugins ===");
-    console.warn(
-      `Total plugins registered: ${String(integrationManager.getPluginCount())}`,
-    );
+    logger.info("=== Initializing All Integration Plugins ===", {
+      component: "Server",
+      operation: "initializePlugins",
+      metadata: {
+        totalPlugins: integrationManager.getPluginCount(),
+      },
+    });
 
     // Log all registered plugins before initialization
     const allPlugins = integrationManager.getAllPlugins();
-    console.warn("Registered plugins:");
+    logger.info("Registered plugins:", {
+      component: "Server",
+      operation: "initializePlugins",
+    });
     for (const registration of allPlugins) {
-      console.warn(
-        `  - ${registration.plugin.name} (${registration.plugin.type})`,
-      );
-      console.warn(`    Enabled: ${String(registration.config.enabled)}`);
-      console.warn(`    Priority: ${String(registration.config.priority)}`);
+      logger.info(`  - ${registration.plugin.name} (${registration.plugin.type})`, {
+        component: "Server",
+        operation: "initializePlugins",
+        metadata: {
+          enabled: registration.config.enabled,
+          priority: registration.config.priority,
+        },
+      });
     }
 
     const initErrors = await integrationManager.initializePlugins();
 
     if (initErrors.length > 0) {
-      console.warn(
-        `Integration initialization completed with ${String(initErrors.length)} error(s):`,
-      );
+      logger.warn(`Integration initialization completed with ${String(initErrors.length)} error(s):`, {
+        component: "Server",
+        operation: "initializePlugins",
+      });
       for (const { plugin, error } of initErrors) {
-        console.warn(`  - ${plugin}: ${error.message}`);
-        if (error.stack) {
-          console.warn(error.stack);
-        }
+        logger.error(`  - ${plugin}: ${error.message}`, {
+          component: "Server",
+          operation: "initializePlugins",
+        }, error);
       }
     } else {
-      console.warn("All integrations initialized successfully");
+      logger.info("All integrations initialized successfully", {
+        component: "Server",
+        operation: "initializePlugins",
+      });
     }
 
     // Log information sources after initialization
-    console.warn("Information sources after initialization:");
+    logger.info("Information sources after initialization:", {
+      component: "Server",
+      operation: "initializePlugins",
+    });
     const infoSources = integrationManager.getAllInformationSources();
     for (const source of infoSources) {
-      console.warn(
-        `  - ${source.name}: initialized=${String(source.isInitialized())}`,
-      );
+      logger.info(`  - ${source.name}: initialized=${String(source.isInitialized())}`, {
+        component: "Server",
+        operation: "initializePlugins",
+      });
     }
 
-    console.warn("Integration manager initialized successfully");
-    console.warn("=== End Integration Plugin Initialization ===");
+    logger.info("Integration manager initialized successfully", {
+      component: "Server",
+      operation: "initializePlugins",
+    });
+    logger.info("=== End Integration Plugin Initialization ===", {
+      component: "Server",
+      operation: "initializePlugins",
+    });
 
     // Make integration manager available globally for cross-service access
     (global as Record<string, unknown>).integrationManager = integrationManager;
@@ -410,7 +562,10 @@ async function startServer(): Promise<Express> {
     if (integrationManager.getPluginCount() > 0) {
       const startScheduler = integrationManager.startHealthCheckScheduler.bind(integrationManager);
       startScheduler();
-      console.warn("Integration health check scheduler started");
+      logger.info("Integration health check scheduler started", {
+        component: "Server",
+        operation: "startServer",
+      });
     }
 
     // Create Express app
@@ -428,21 +583,37 @@ async function startServer(): Promise<Express> {
     // Request ID middleware - adds unique ID to each request
     app.use(requestIdMiddleware);
 
+    // Expert mode middleware - detects expert mode from request header
+    app.use(expertModeMiddleware);
+
     // Request logging middleware
     app.use((req: Request, res: Response, next) => {
-      const timestamp = new Date().toISOString();
       const startTime = Date.now();
 
-      console.warn(
-        `[${timestamp}] [${req.id ?? "unknown"}] ${req.method} ${req.path}`,
-      );
+      logger.debug(`${req.method} ${req.path}`, {
+        component: "Server",
+        operation: "requestLogger",
+        metadata: {
+          requestId: req.id,
+          method: req.method,
+          path: req.path,
+        },
+      });
 
       // Log response when finished
       res.on("finish", () => {
         const duration = Date.now() - startTime;
-        console.warn(
-          `[${timestamp}] [${req.id ?? "unknown"}] ${req.method} ${req.path} - ${String(res.statusCode)} (${String(duration)}ms)`,
-        );
+        logger.debug(`${req.method} ${req.path} - ${String(res.statusCode)} (${String(duration)}ms)`, {
+          component: "Server",
+          operation: "requestLogger",
+          metadata: {
+            requestId: req.id,
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            duration,
+          },
+        });
       });
 
       next();
@@ -556,6 +727,10 @@ async function startServer(): Promise<Express> {
       "/api/integrations/hiera",
       createHieraRouter(integrationManager),
     );
+    app.use(
+      "/api/debug",
+      createDebugRouter(),
+    );
 
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");
@@ -572,19 +747,30 @@ async function startServer(): Promise<Express> {
 
     // Start server
     const server = app.listen(config.port, config.host, () => {
-      console.warn(
-        `Backend server running on ${config.host}:${String(config.port)}`,
-      );
+      logger.info(`Backend server running on ${config.host}:${String(config.port)}`, {
+        component: "Server",
+        operation: "startServer",
+        metadata: {
+          host: config.host,
+          port: config.port,
+        },
+      });
     });
 
     // Graceful shutdown
     process.on("SIGTERM", () => {
-      console.warn("SIGTERM received, shutting down gracefully...");
+      logger.info("SIGTERM received, shutting down gracefully...", {
+        component: "Server",
+        operation: "shutdown",
+      });
       streamingManager.cleanup();
       integrationManager.stopHealthCheckScheduler();
       server.close(() => {
         void databaseService.close().then(() => {
-          console.warn("Server closed");
+          logger.info("Server closed", {
+            component: "Server",
+            operation: "shutdown",
+          });
           process.exit(0);
         });
       });
@@ -592,17 +778,21 @@ async function startServer(): Promise<Express> {
 
     return app;
   } catch (error: unknown) {
-    console.error("Failed to start server:", error);
-    if (error instanceof Error) {
-      console.error(error.message);
-    }
+    logger.error("Failed to start server", {
+      component: "Server",
+      operation: "startServer",
+    }, error instanceof Error ? error : undefined);
     process.exit(1);
   }
 }
 
 // Start the server
 startServer().catch((error: unknown) => {
-  console.error("Unhandled error during startup:", error);
+  const logger = new LoggerService();
+  logger.error("Unhandled error during startup", {
+    component: "Server",
+    operation: "main",
+  }, error instanceof Error ? error : undefined);
   process.exit(1);
 });
 

@@ -2,6 +2,7 @@
   import StatusBadge from './StatusBadge.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
+  import IntegrationBadge from './IntegrationBadge.svelte';
 
   interface NodeStatus {
     certname: string;
@@ -145,9 +146,7 @@
   <div class="mb-4 flex items-center justify-between">
     <div class="flex items-center gap-3">
       <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Node Status</h2>
-      <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
-        Puppetserver
-      </span>
+      <IntegrationBadge integration="puppetserver" variant="badge" size="sm" />
     </div>
     {#if onRefresh}
       <button

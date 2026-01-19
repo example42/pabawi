@@ -15,6 +15,7 @@ import type {
   HieraFileInfo,
   LookupOptions,
 } from "./types";
+import { LoggerService } from "../../services/LoggerService";
 
 /**
  * Result of scanning a single file
@@ -41,11 +42,13 @@ export class HieraScanner {
   private fileWatcher: fs.FSWatcher | null = null;
   private changeCallbacks: FileChangeCallback[] = [];
   private isWatching = false;
+  private logger: LoggerService;
 
   constructor(controlRepoPath: string, hieradataPath = "data") {
     this.controlRepoPath = controlRepoPath;
     this.hieradataPath = hieradataPath;
     this.keyIndex = this.createEmptyIndex();
+    this.logger = new LoggerService();
   }
 
   /**
@@ -62,7 +65,11 @@ export class HieraScanner {
     this.keyIndex = this.createEmptyIndex();
 
     if (!fs.existsSync(fullPath)) {
-      console.warn(`[HieraScanner] Hieradata path does not exist: ${fullPath}`);
+      this.logger.warn(`[HieraScanner] Hieradata path does not exist: ${fullPath}`, {
+        component: "HieraScanner",
+        operation: "scan",
+        metadata: { fullPath },
+      });
       return this.keyIndex;
     }
 
@@ -145,7 +152,11 @@ export class HieraScanner {
       const fullPath = this.resolvePath(dataPath);
 
       if (!fs.existsSync(fullPath)) {
-        console.warn(`[HieraScanner] Hieradata path does not exist: ${fullPath}`);
+        this.logger.warn(`[HieraScanner] Hieradata path does not exist: ${fullPath}`, {
+          component: "HieraScanner",
+          operation: "scanMultiplePaths",
+          metadata: { fullPath },
+        });
         continue;
       }
 
@@ -211,7 +222,11 @@ export class HieraScanner {
     const fullPath = this.resolvePath(this.hieradataPath);
 
     if (!fs.existsSync(fullPath)) {
-      console.warn(`[HieraScanner] Cannot watch non-existent path: ${fullPath}`);
+      this.logger.warn(`[HieraScanner] Cannot watch non-existent path: ${fullPath}`, {
+        component: "HieraScanner",
+        operation: "startWatching",
+        metadata: { fullPath },
+      });
       return;
     }
 
@@ -227,7 +242,10 @@ export class HieraScanner {
       );
       this.isWatching = true;
     } catch (error) {
-      console.error(`[HieraScanner] Failed to start file watcher: ${this.getErrorMessage(error)}`);
+      this.logger.error(`[HieraScanner] Failed to start file watcher: ${this.getErrorMessage(error)}`, {
+        component: "HieraScanner",
+        operation: "startWatching",
+      }, error instanceof Error ? error : undefined);
     }
   }
 
@@ -255,7 +273,11 @@ export class HieraScanner {
     try {
       entries = fs.readdirSync(dirPath, { withFileTypes: true });
     } catch (error) {
-      console.warn(`[HieraScanner] Failed to read directory ${dirPath}: ${this.getErrorMessage(error)}`);
+      this.logger.warn(`[HieraScanner] Failed to read directory ${dirPath}: ${this.getErrorMessage(error)}`, {
+        component: "HieraScanner",
+        operation: "scanDirectory",
+        metadata: { dirPath },
+      });
       return;
     }
 
@@ -281,7 +303,11 @@ export class HieraScanner {
     const result = this.scanFileContent(filePath, relativePath);
 
     if (!result.success) {
-      console.warn(`[HieraScanner] Failed to scan file ${relativePath}: ${result.error ?? 'Unknown error'}`);
+      this.logger.warn(`[HieraScanner] Failed to scan file ${relativePath}: ${result.error ?? 'Unknown error'}`, {
+        component: "HieraScanner",
+        operation: "scanDirectory",
+        metadata: { relativePath, error: result.error },
+      });
       return;
     }
 
@@ -652,7 +678,10 @@ export class HieraScanner {
       try {
         callback(changedFiles);
       } catch (error) {
-        console.error(`[HieraScanner] Error in change callback: ${this.getErrorMessage(error)}`);
+        this.logger.error(`[HieraScanner] Error in change callback: ${this.getErrorMessage(error)}`, {
+          component: "HieraScanner",
+          operation: "notifyChangeCallbacks",
+        }, error instanceof Error ? error : undefined);
       }
     }
   }

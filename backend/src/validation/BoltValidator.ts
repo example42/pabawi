@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "fs";
 import { join } from "path";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Validation errors for Bolt configuration
@@ -20,9 +21,11 @@ export class BoltValidationError extends Error {
  */
 export class BoltValidator {
   private boltProjectPath: string;
+  private logger: LoggerService;
 
   constructor(boltProjectPath: string) {
     this.boltProjectPath = boltProjectPath;
+    this.logger = new LoggerService();
   }
 
   /**
@@ -66,17 +69,19 @@ export class BoltValidator {
 
     if (!existsSync(boltProjectYaml) && !existsSync(boltProjectYml)) {
       // This is a warning, not an error
-      console.warn(
-        "Warning: bolt-project.yaml not found. Using default Bolt configuration.",
-      );
+      this.logger.warn("bolt-project.yaml not found. Using default Bolt configuration.", {
+        component: "BoltValidator",
+        operation: "validate",
+      });
     }
 
     // Check for modules directory (optional)
     const modulesDir = join(this.boltProjectPath, "modules");
     if (!existsSync(modulesDir)) {
-      console.warn(
-        "Warning: modules directory not found. Task execution may be limited.",
-      );
+      this.logger.warn("modules directory not found. Task execution may be limited.", {
+        component: "BoltValidator",
+        operation: "validate",
+      });
     }
 
     // If there are missing required files, throw error

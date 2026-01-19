@@ -5,8 +5,12 @@
   import IntegrationStatus from '../components/IntegrationStatus.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
   import PuppetReportsSummary from '../components/PuppetReportsSummary.svelte';
+  import IntegrationBadge from '../components/IntegrationBadge.svelte';
+  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
+  import { expertMode } from '../lib/expertMode.svelte';
+  import type { DebugInfo } from '../lib/api';
 
   interface Node {
     id: string;
@@ -89,15 +93,22 @@
   let puppetReportsTimeRange = $state(1); // Default to 1 hour
   let isPuppetDBActive = $state(false);
 
+  // Debug info state for expert mode
+  let debugInfo = $state<DebugInfo | null>(null);
+
   async function fetchInventory(): Promise<void> {
     loading = true;
     error = null;
+    debugInfo = null; // Clear previous debug info
 
     try {
-      console.log('[HomePage] Fetching inventory...');
-      const data = await get<{ nodes: Node[] }>('/api/inventory');
-      console.log('[HomePage] Inventory loaded:', data.nodes?.length, 'nodes');
+      const data = await get<{ nodes: Node[]; _debug?: DebugInfo }>('/api/inventory');
       nodes = data.nodes || [];
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo = data._debug;
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load inventory';
       console.error('[HomePage] Error fetching inventory:', err);
@@ -114,15 +125,12 @@
 
     try {
       const url = refresh ? '/api/integrations/status?refresh=true' : '/api/integrations/status';
-      console.log('[HomePage] Fetching integration status...');
       const data = await get<IntegrationStatusResponse>(url);
-      console.log('[HomePage] Integration status loaded:', data.integrations?.length, 'integrations');
       integrations = data.integrations || [];
 
       // Check if PuppetDB is active
       const puppetDB = integrations.find(i => i.name === 'puppetdb');
       isPuppetDBActive = puppetDB?.status === 'connected';
-      console.log('[HomePage] PuppetDB active:', isPuppetDBActive);
 
       // Fetch Puppet reports if PuppetDB is active
       if (isPuppetDBActive) {
@@ -145,9 +153,7 @@
 
     try {
       const timeParam = hours ? `?hours=${hours}` : '';
-      console.log('[HomePage] Fetching Puppet reports summary...', hours ? `(last ${hours}h)` : '');
       const data = await get<{ summary: PuppetReportsSummaryData }>(`/api/integrations/puppetdb/reports/summary${timeParam}`);
-      console.log('[HomePage] Puppet reports summary loaded:', data.summary);
       puppetReports = data.summary;
     } catch (err) {
       puppetReportsError = err instanceof Error ? err.message : 'Failed to load Puppet reports';
@@ -175,9 +181,7 @@
     executionsError = null;
 
     try {
-      console.log('[HomePage] Fetching recent executions...');
       const data = await get<ExecutionsResponse>('/api/executions?pageSize=10&page=1');
-      console.log('[HomePage] Executions loaded:', data.executions?.length, 'executions, summary:', data.summary);
       executions = data.executions || [];
       executionsSummary = data.summary;
     } catch (err) {
@@ -220,6 +224,7 @@
   }
 
   onMount(() => {
+    debugInfo = null; // Clear debug info on mount
     // Fetch inventory, integration status, and recent executions
     void fetchInventory();
     void fetchIntegrationStatus();
@@ -231,9 +236,9 @@
   <!-- Welcome Section -->
   <div class="mb-12 text-center">
     <div class="flex justify-center mb-6">
-      <img 
-        src="/favicon/web-app-manifest-512x512.png" 
-        alt="Pabawi Logo" 
+      <img
+        src="/favicon/web-app-manifest-512x512.png"
+        alt="Pabawi Logo"
         class="h-24 w-24"
       />
     </div>
@@ -353,9 +358,13 @@
   <!-- Inventory Preview -->
   <div class="mb-8">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-        Inventory Nodes
-      </h2>
+      <div class="flex items-center gap-3">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Inventory Nodes
+        </h2>
+        <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+        <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+      </div>
       <button
         type="button"
         class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -424,9 +433,12 @@
   <!-- Recent Executions -->
   <div class="mb-12">
     <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-        Recent Executions
-      </h2>
+      <div class="flex items-center gap-3">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Recent Executions
+        </h2>
+        <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+      </div>
       <button
         type="button"
         class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -522,4 +534,11 @@
       </div>
     {/if}
   </div>
+
+  <!-- Expert Mode Debug Panel -->
+  {#if expertMode.enabled && debugInfo}
+    <div class="mt-8">
+      <ExpertModeDebugPanel {debugInfo} />
+    </div>
+  {/if}
 </div>

@@ -9,6 +9,7 @@
 
 import type { ModuleUpdate } from "./types";
 import type { ParsedModule } from "./PuppetfileParser";
+import { LoggerService } from "../../services/LoggerService";
 
 /**
  * Puppet Forge module information
@@ -117,11 +118,13 @@ export class ForgeClient {
   private timeout: number;
   private userAgent: string;
   private securityAdvisories = new Map<string, SecurityAdvisory[]>();
+  private logger: LoggerService;
 
   constructor(config: ForgeClientConfig = {}) {
     this.baseUrl = config.baseUrl ?? DEFAULT_FORGE_URL;
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
     this.userAgent = config.userAgent ?? DEFAULT_USER_AGENT;
+    this.logger = new LoggerService();
 
     // Initialize with known advisories
     this.loadKnownAdvisories();
@@ -495,17 +498,16 @@ export class ForgeClient {
    * Log a message
    */
   private log(message: string, level: "info" | "warn" | "error" = "info"): void {
-    const prefix = "[ForgeClient]";
+    const metadata = { component: "ForgeClient", operation: "log" };
     switch (level) {
       case "warn":
-        console.warn(prefix, message);
+        this.logger.warn(message, metadata);
         break;
       case "error":
-        console.error(prefix, message);
+        this.logger.error(message, metadata);
         break;
       default:
-        // eslint-disable-next-line no-console
-        console.log(prefix, message);
+        this.logger.info(message, metadata);
     }
   }
 }

@@ -10,6 +10,8 @@ import type {
   IntegrationConfig,
   HealthStatus,
 } from "./types";
+import { LoggerService } from "../services/LoggerService";
+import { PerformanceMonitorService } from "../services/PerformanceMonitorService";
 
 /**
  * Abstract base class for integration plugins
@@ -18,21 +20,28 @@ import type {
  * - Configuration management
  * - Initialization state tracking
  * - Basic health check implementation
- * - Logging helpers
+ * - Centralized logging via LoggerService
+ * - Performance monitoring via PerformanceMonitorService
  */
 export abstract class BasePlugin implements IntegrationPlugin {
   protected config: IntegrationConfig;
   protected initialized = false;
   protected lastHealthCheck?: HealthStatus;
+  protected logger: LoggerService;
+  protected performanceMonitor: PerformanceMonitorService;
 
   /**
    * Create a new base plugin instance
    * @param name - Plugin name
    * @param type - Plugin type
+   * @param logger - Logger service instance (optional, creates default if not provided)
+   * @param performanceMonitor - Performance monitor service instance (optional, creates default if not provided)
    */
   constructor(
     public readonly name: string,
     public readonly type: "execution" | "information" | "both",
+    logger?: LoggerService,
+    performanceMonitor?: PerformanceMonitorService,
   ) {
     // Initialize with default config
     this.config = {
@@ -41,6 +50,11 @@ export abstract class BasePlugin implements IntegrationPlugin {
       type,
       config: {},
     };
+    // Create a default logger if none provided (for backward compatibility)
+    // This will be removed once all plugins are migrated to pass LoggerService
+    this.logger = logger ?? new LoggerService();
+    // Create a default performance monitor if none provided
+    this.performanceMonitor = performanceMonitor ?? new PerformanceMonitorService();
   }
 
   /**
@@ -57,13 +71,21 @@ export abstract class BasePlugin implements IntegrationPlugin {
     this.config = config;
 
     if (!config.enabled) {
-      this.log("Plugin is disabled in configuration");
+      this.logger.info("Plugin is disabled in configuration", {
+        component: "BasePlugin",
+        integration: this.name,
+        operation: "initialize",
+      });
       return;
     }
 
     await this.performInitialization();
     this.initialized = true;
-    this.log("Plugin initialized successfully");
+    this.logger.info("Plugin initialized successfully", {
+      component: "BasePlugin",
+      integration: this.name,
+      operation: "initialize",
+    });
   }
 
   /**
@@ -190,24 +212,18 @@ export abstract class BasePlugin implements IntegrationPlugin {
    *
    * @param message - Message to log
    * @param level - Log level
+   * @param operation - Optional operation name
    */
   protected log(
     message: string,
-    level: "info" | "warn" | "error" = "info",
+    level: "info" | "warn" | "error" | "debug" = "info",
+    operation?: string,
   ): void {
-    const prefix = `[${this.name}]`;
-
-    switch (level) {
-      case "error":
-        console.error(prefix, message);
-        break;
-      case "warn":
-        console.warn(prefix, message);
-        break;
-      default:
-        // eslint-disable-next-line no-console
-        console.log(prefix, message);
-    }
+    this.logger[level](message, {
+      component: "BasePlugin",
+      integration: this.name,
+      operation,
+    });
   }
 
   /**
@@ -215,16 +231,17 @@ export abstract class BasePlugin implements IntegrationPlugin {
    *
    * @param message - Error message
    * @param error - Error object
+   * @param operation - Optional operation name
    */
-  protected logError(message: string, error: unknown): void {
+  protected logError(message: string, error: unknown, operation?: string): void {
+    const errorObj = error instanceof Error ? error : undefined;
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
 
-    this.log(`${message}: ${errorMessage}`, "error");
-
-    if (errorStack) {
-      console.error(errorStack);
-    }
+    this.logger.error(`${message}: ${errorMessage}`, {
+      component: "BasePlugin",
+      integration: this.name,
+      operation,
+    }, errorObj);
   }
 
   /**

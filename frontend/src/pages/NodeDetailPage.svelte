@@ -20,10 +20,13 @@
   import NodeStatus from '../components/NodeStatus.svelte';
   import CatalogComparison from '../components/CatalogComparison.svelte';
   import NodeHieraTab from '../components/NodeHieraTab.svelte';
+  import IntegrationBadge from '../components/IntegrationBadge.svelte';
+  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
+  import type { DebugInfo } from '../lib/api';
 
   interface Props {
     params?: { id: string };
@@ -168,17 +171,25 @@
   // Cache for loaded data
   let dataCache = $state<Record<TabId, any>>({});
 
+  // Debug info state for expert mode - store per tab
+  let debugInfo = $state<Record<string, DebugInfo>>({});
+
   // Fetch node details
   async function fetchNode(): Promise<void> {
     loading = true;
     error = null;
 
     try {
-      const data = await get<{ node: Node }>(`/api/nodes/${nodeId}`, {
+      const data = await get<{ node: Node; _debug?: DebugInfo }>(`/api/nodes/${nodeId}`, {
         maxRetries: 2,
       });
 
       node = data.node;
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo['overview'] = data._debug;
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching node:', err);
@@ -309,12 +320,17 @@
     executionsError = null;
 
     try {
-      const data = await get<{ executions: ExecutionResult[] }>(
+      const data = await get<{ executions: ExecutionResult[]; _debug?: DebugInfo }>(
         `/api/executions?targetNode=${nodeId}&pageSize=10`,
         { maxRetries: 2 }
       );
 
       executions = data.executions || [];
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo['actions'] = data._debug;
+      }
     } catch (err) {
       executionsError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching executions:', err);
@@ -349,13 +365,18 @@
     puppetReportsError = null;
 
     try {
-      const data = await get<{ reports: any[] }>(
+      const data = await get<{ reports: any[]; _debug?: DebugInfo }>(
         `/api/integrations/puppetdb/nodes/${nodeId}/reports`,
         { maxRetries: 2 }
       );
 
       puppetReports = data.reports || [];
       dataCache['puppet-reports'] = puppetReports;
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo['puppet-reports'] = data._debug;
+      }
     } catch (err) {
       puppetReportsError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching Puppet reports:', err);
@@ -379,11 +400,11 @@
     try {
       // Fetch both catalog metadata and resources in parallel
       const [catalogData, resourcesData] = await Promise.all([
-        get<{ catalog: any }>(
+        get<{ catalog: any; _debug?: DebugInfo }>(
           `/api/integrations/puppetdb/nodes/${nodeId}/catalog`,
           { maxRetries: 2 }
         ),
-        get<{ resources: Record<string, any[]> }>(
+        get<{ resources: Record<string, any[]>; _debug?: DebugInfo }>(
           `/api/integrations/puppetdb/nodes/${nodeId}/resources`,
           { maxRetries: 2 }
         )
@@ -403,6 +424,11 @@
         resources: resourcesArray
       };
       dataCache['catalog'] = catalog;
+
+      // Store debug info if present (prefer catalog debug info)
+      if (catalogData._debug) {
+        debugInfo['catalog'] = catalogData._debug;
+      }
     } catch (err) {
       catalogError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching catalog:', err);
@@ -435,7 +461,7 @@
     try {
       // Add timeout to prevent hanging (requirement 10.4)
       // Default limit of 100 events is applied by backend (requirement 10.3)
-      const data = await get<{ events: any[] }>(
+      const data = await get<{ events: any[]; _debug?: DebugInfo }>(
         `/api/integrations/puppetdb/nodes/${nodeId}/events?limit=100`,
         {
           maxRetries: 1, // Reduce retries for events to fail faster
@@ -452,11 +478,13 @@
       events = data.events || [];
       dataCache['events'] = events;
 
-      console.log(`Loaded ${events.length} events for node ${nodeId}`);
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo['events'] = data._debug;
+      }
     } catch (err) {
       // Ignore abort errors (user cancelled)
       if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Events request was cancelled');
         return;
       }
 
@@ -500,7 +528,7 @@
     managedResourcesError = null;
 
     try {
-      const data = await get<{ resources: Record<string, any[]> }>(
+      const data = await get<{ resources: Record<string, any[]>; _debug?: DebugInfo }>(
         `/api/integrations/puppetdb/nodes/${nodeId}/resources`,
         { maxRetries: 2 }
       );
@@ -508,7 +536,10 @@
       managedResources = data.resources || {};
       dataCache['managed-resources'] = managedResources;
 
-      console.log(`Loaded managed resources for node ${nodeId}`);
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo['managed-resources'] = data._debug;
+      }
     } catch (err) {
       managedResourcesError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching managed resources:', err);
@@ -530,13 +561,18 @@
     nodeStatusError = null;
 
     try {
-      const data = await get<{ status: any }>(
+      const data = await get<{ status: any; _debug?: DebugInfo }>(
         `/api/integrations/puppetserver/nodes/${nodeId}/status`,
         { maxRetries: 2 }
       );
 
       nodeStatus = data.status;
       dataCache['node-status'] = nodeStatus;
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo['node-status'] = data._debug;
+      }
     } catch (err) {
       nodeStatusError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching node status:', err);
@@ -586,13 +622,18 @@
     puppetdbFactsError = null;
 
     try {
-      const data = await get<{ facts: any }>(
+      const data = await get<{ facts: any; _debug?: DebugInfo }>(
         `/api/integrations/puppetdb/nodes/${nodeId}/facts`,
         { maxRetries: 2 }
       );
 
       puppetdbFacts = data.facts;
       dataCache['puppetdb-facts'] = puppetdbFacts;
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo['facts'] = data._debug;
+      }
     } catch (err) {
       puppetdbFactsError = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error fetching PuppetDB facts:', err);
@@ -811,13 +852,6 @@
   function getSourceBadge(source: 'bolt' | 'puppetdb'): string {
     return source === 'bolt' ? 'Bolt' : 'PuppetDB';
   }
-
-  function getSourceBadgeClass(source: 'bolt' | 'puppetdb'): string {
-    return source === 'bolt'
-      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
-      : 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
-  }
-
   // Check for re-execution parameters in sessionStorage
   function checkReExecutionParams(): void {
     // Check for command re-execution
@@ -872,11 +906,11 @@
   }
 
   // Extract general info from facts
-  function extractGeneralInfo(): { 
-    os?: string; 
-    ip?: string; 
-    hostname?: string; 
-    kernel?: string; 
+  function extractGeneralInfo(): {
+    os?: string;
+    ip?: string;
+    hostname?: string;
+    kernel?: string;
     architecture?: string;
     puppetVersion?: string;
     memory?: string;
@@ -884,11 +918,11 @@
     uptime?: string;
     disks?: string[];
   } {
-    const info: { 
-      os?: string; 
-      ip?: string; 
-      hostname?: string; 
-      kernel?: string; 
+    const info: {
+      os?: string;
+      ip?: string;
+      hostname?: string;
+      kernel?: string;
       architecture?: string;
       puppetVersion?: string;
       memory?: string;
@@ -958,7 +992,7 @@
       info.memory = info.memory || boltFacts.memory?.system?.total;
       info.cpuCount = info.cpuCount || boltFacts.processors?.count;
       info.uptime = info.uptime || boltFacts.system_uptime?.uptime;
-      
+
       if (!info.disks && boltFacts.disks && typeof boltFacts.disks === 'object') {
         info.disks = Object.keys(boltFacts.disks);
       }
@@ -1082,13 +1116,10 @@
             <div class="mb-4 flex items-center justify-between">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">General Information</h2>
               <div class="flex items-center gap-2">
-                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
-                  {getSourceBadge('bolt')}
-                </span>
+                <IntegrationBadge integration="bolt" variant="badge" size="sm" />
                 {#if generalInfo.os || generalInfo.ip}
-                  <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                    Facts
-                  </span>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">+</span>
+                  <IntegrationBadge integration="puppetdb" variant="label" size="sm" />
                 {/if}
               </div>
             </div>
@@ -1198,9 +1229,7 @@
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="mb-4 flex items-center justify-between">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Latest Puppet Runs</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                {getSourceBadge('puppetdb')}
-              </span>
+              <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
             </div>
             {#if !puppetReports}
               <p class="text-sm text-gray-500 dark:text-gray-400">
@@ -1327,9 +1356,7 @@
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="mb-4 flex items-center justify-between">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Latest Executions</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
-                {getSourceBadge('bolt')}
-              </span>
+              <IntegrationBadge integration="bolt" variant="badge" size="sm" />
             </div>
             {#if executionsLoading}
               <div class="flex justify-center py-4">
@@ -1373,28 +1400,40 @@
               </div>
             {/if}
           </div>
+
+          <!-- Expert Mode Debug Panel for Overview Tab -->
+          {#if expertMode.enabled && debugInfo['overview']}
+            <ExpertModeDebugPanel debugInfo={debugInfo['overview']} />
+          {/if}
         </div>
       {/if}
 
       <!-- Facts Tab -->
       {#if activeTab === 'facts'}
-        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <div class="mb-4">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              View facts from multiple sources with timestamps and categorization
-            </p>
+        <div class="space-y-6">
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-4">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                View facts from multiple sources with timestamps and categorization
+              </p>
+            </div>
+
+            <MultiSourceFactsViewer
+              boltFacts={facts}
+              boltLoading={factsLoading}
+              boltError={factsError}
+              onGatherBoltFacts={gatherFacts}
+              puppetdbFacts={puppetdbFacts}
+              puppetdbLoading={puppetdbFactsLoading}
+              puppetdbError={puppetdbFactsError}
+            />
           </div>
 
-          <MultiSourceFactsViewer
-            boltFacts={facts}
-            boltLoading={factsLoading}
-            boltError={factsError}
-            onGatherBoltFacts={gatherFacts}
-            puppetdbFacts={puppetdbFacts}
-            puppetdbLoading={puppetdbFactsLoading}
-            puppetdbError={puppetdbFactsError}
-          />
+          <!-- Expert Mode Debug Panel for Facts Tab -->
+          {#if expertMode.enabled && debugInfo['facts']}
+            <ExpertModeDebugPanel debugInfo={debugInfo['facts']} />
+          {/if}
         </div>
       {/if}
 
@@ -1411,7 +1450,10 @@
 
           <!-- Command Execution Section -->
     <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Command</h2>
+      <div class="mb-4 flex items-center gap-3">
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Execute Command</h2>
+        <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+      </div>
 
       <!-- Available Commands Display -->
       {#if commandWhitelist}
@@ -1524,7 +1566,10 @@
 
           <!-- Task Execution Section -->
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h2 class="mb-4 text-xl font-semibold text-gray-900 dark:text-white">Execute Task</h2>
+            <div class="mb-4 flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Execute Task</h2>
+              <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+            </div>
 
             <TaskRunInterface
               nodeId={nodeId}
@@ -1538,9 +1583,7 @@
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="mb-4 flex items-center gap-3">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Execution History</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
-                {getSourceBadge('bolt')}
-              </span>
+              <IntegrationBadge integration="bolt" variant="badge" size="sm" />
             </div>
 
             {#if executionsLoading}
@@ -1637,6 +1680,11 @@
             </div>
             {/if}
           </div>
+
+          <!-- Expert Mode Debug Panel for Actions Tab -->
+          {#if expertMode.enabled && debugInfo['actions']}
+            <ExpertModeDebugPanel debugInfo={debugInfo['actions']} />
+          {/if}
         </div>
       {/if}
 
@@ -1693,86 +1741,103 @@
 
           <!-- Catalog Sub-Tab -->
           {#if activePuppetSubTab === 'catalog'}
-            <!-- Source Badge Header -->
-            <div class="mb-4 flex items-center gap-3">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                {getSourceBadge('puppetdb')}
-              </span>
-            </div>
+            <div class="space-y-6">
+              <!-- Source Badge Header -->
+              <div class="mb-4 flex items-center gap-3">
+                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog</h2>
+                <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+              </div>
 
-            {#if catalogLoading}
-              <div class="flex justify-center py-12">
-                <LoadingSpinner size="lg" message="Loading catalog..." />
-              </div>
-            {:else if catalogError}
-              <ErrorAlert
-                message="Failed to load catalog"
-                details={catalogError}
-                onRetry={fetchCatalog}
-              />
-            {:else if !catalog}
-              <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
-                <p class="text-gray-500 dark:text-gray-400">
-                  No catalog found for this node.
-                </p>
-              </div>
-            {:else}
-              <CatalogViewer catalog={catalog} />
-            {/if}
+              {#if catalogLoading}
+                <div class="flex justify-center py-12">
+                  <LoadingSpinner size="lg" message="Loading catalog..." />
+                </div>
+              {:else if catalogError}
+                <ErrorAlert
+                  message="Failed to load catalog"
+                  details={catalogError}
+                  onRetry={fetchCatalog}
+                />
+              {:else if !catalog}
+                <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
+                  <p class="text-gray-500 dark:text-gray-400">
+                    No catalog found for this node.
+                  </p>
+                </div>
+              {:else}
+                <CatalogViewer catalog={catalog} />
+              {/if}
+
+              <!-- Expert Mode Debug Panel for Catalog Sub-Tab -->
+              {#if expertMode.enabled && debugInfo['catalog']}
+                <ExpertModeDebugPanel debugInfo={debugInfo['catalog']} />
+              {/if}
+            </div>
           {/if}
 
           <!-- Events Sub-Tab -->
           {#if activePuppetSubTab === 'events'}
-            <!-- Source Badge Header -->
-            <div class="mb-4 flex items-center gap-3">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Events</h2>
-              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                {getSourceBadge('puppetdb')}
-              </span>
-            </div>
+            <div class="space-y-6">
+              <!-- Source Badge Header -->
+              <div class="mb-4 flex items-center gap-3">
+                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Events</h2>
+                <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+              </div>
 
-            {#if eventsLoading}
-              <div class="rounded-lg border border-gray-200 bg-white p-8 dark:border-gray-700 dark:bg-gray-800">
-                <div class="flex flex-col items-center gap-4 py-8">
-                  <LoadingSpinner size="lg" message="Loading events..." />
-                  <p class="text-sm text-gray-600 dark:text-gray-400">
-                    This may take a moment for nodes with many events...
-                  </p>
-                  <button
-                    type="button"
-                    onclick={cancelEventsLoading}
-                    class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                  >
-                    Cancel
-                  </button>
+              {#if eventsLoading}
+                <div class="rounded-lg border border-gray-200 bg-white p-8 dark:border-gray-700 dark:bg-gray-800">
+                  <div class="flex flex-col items-center gap-4 py-8">
+                    <LoadingSpinner size="lg" message="Loading events..." />
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
+                      This may take a moment for nodes with many events...
+                    </p>
+                    <button
+                      type="button"
+                      onclick={cancelEventsLoading}
+                      class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-              </div>
-            {:else if eventsError}
-              <ErrorAlert
-                message="Failed to load events"
-                details={eventsError}
-                onRetry={fetchEvents}
-              />
-            {:else if events.length === 0}
-              <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
-                <p class="text-gray-500 dark:text-gray-400">
-                  No events found for this node.
-                </p>
-              </div>
-            {:else}
-              <EventsViewer events={events} />
-            {/if}
+              {:else if eventsError}
+                <ErrorAlert
+                  message="Failed to load events"
+                  details={eventsError}
+                  onRetry={fetchEvents}
+                />
+              {:else if events.length === 0}
+                <div class="rounded-lg border border-gray-200 bg-white p-8 text-center dark:border-gray-700 dark:bg-gray-800">
+                  <p class="text-gray-500 dark:text-gray-400">
+                    No events found for this node.
+                  </p>
+                </div>
+              {:else}
+                <EventsViewer events={events} />
+              {/if}
+
+              <!-- Expert Mode Debug Panel for Events Sub-Tab -->
+              {#if expertMode.enabled && debugInfo['events']}
+                <ExpertModeDebugPanel debugInfo={debugInfo['events']} />
+              {/if}
+            </div>
           {/if}
 
           <!-- Node Status Sub-Tab -->
           {#if activePuppetSubTab === 'node-status'}
-            <NodeStatus
-              status={nodeStatus}
-              loading={nodeStatusLoading}
-              error={nodeStatusError}
-              onRefresh={fetchNodeStatus}
-            />
+            <div class="space-y-6">
+              <NodeStatus
+                status={nodeStatus}
+                loading={nodeStatusLoading}
+                error={nodeStatusError}
+                onRefresh={fetchNodeStatus}
+              />
+
+              <!-- Expert Mode Debug Panel for Node Status Sub-Tab -->
+              {#if expertMode.enabled && debugInfo['node-status']}
+                <ExpertModeDebugPanel debugInfo={debugInfo['node-status']} />
+              {/if}
+            </div>
           {/if}
 
           <!-- Catalog Compilation Sub-Tab -->
@@ -1780,9 +1845,7 @@
             <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
               <div class="mb-4 flex items-center gap-3">
                 <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog Compilation</h2>
-                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
-                  Puppetserver
-                </span>
+                <IntegrationBadge integration="puppetserver" variant="badge" size="sm" />
               </div>
 
               <CatalogComparison certname={nodeId} />
@@ -1796,9 +1859,7 @@
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-3">
                   <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
-                  <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                    {getSourceBadge('puppetdb')}
-                  </span>
+                  <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
                 </div>
                 {#if selectedReport}
                   <button
@@ -1837,29 +1898,39 @@
                   onReportClick={(report) => selectedReport = report}
                 />
               {/if}
+
+              <!-- Expert Mode Debug Panel for Puppet Reports Sub-Tab -->
+              {#if expertMode.enabled && debugInfo['puppet-reports']}
+                <ExpertModeDebugPanel debugInfo={debugInfo['puppet-reports']} />
+              {/if}
             </div>
           {/if}
 
           <!-- Managed Resources Sub-Tab -->
           {#if activePuppetSubTab === 'managed-resources'}
-            <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <div class="mb-4 flex items-center gap-3">
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Managed Resources</h2>
-                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-                  {getSourceBadge('puppetdb')}
-                </span>
-              </div>
-              <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
-                View all resources managed by Puppet on this node, organized by resource type.
-              </p>
+            <div class="space-y-6">
+              <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                <div class="mb-4 flex items-center gap-3">
+                  <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Managed Resources</h2>
+                  <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+                </div>
+                <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
+                  View all resources managed by Puppet on this node, organized by resource type.
+                </p>
 
-              <ManagedResourcesViewer
-                certname={nodeId}
-                resources={managedResources}
-                loading={managedResourcesLoading}
-                error={managedResourcesError}
-                onRetry={fetchManagedResources}
-              />
+                <ManagedResourcesViewer
+                  certname={nodeId}
+                  resources={managedResources}
+                  loading={managedResourcesLoading}
+                  error={managedResourcesError}
+                  onRetry={fetchManagedResources}
+                />
+              </div>
+
+              <!-- Expert Mode Debug Panel for Managed Resources Sub-Tab -->
+              {#if expertMode.enabled && debugInfo['managed-resources']}
+                <ExpertModeDebugPanel debugInfo={debugInfo['managed-resources']} />
+              {/if}
             </div>
           {/if}
         </div>
@@ -1867,18 +1938,25 @@
 
       <!-- Hiera Tab -->
       {#if activeTab === 'hiera'}
-        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <div class="mb-4 flex items-center gap-3">
-            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Hiera Data</h2>
-            <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400">
-              Hiera
-            </span>
-          </div>
-          <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
-            View Hiera configuration data for this node, including resolved values from all hierarchy levels.
-          </p>
+        <div class="space-y-6">
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-4 flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Hiera Data</h2>
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400">
+                Hiera
+              </span>
+            </div>
+            <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
+              View Hiera configuration data for this node, including resolved values from all hierarchy levels.
+            </p>
 
-          <NodeHieraTab nodeId={nodeId} />
+            <NodeHieraTab nodeId={nodeId} />
+          </div>
+
+          <!-- Expert Mode Debug Panel for Hiera Tab -->
+          {#if expertMode.enabled && debugInfo['hiera']}
+            <ExpertModeDebugPanel debugInfo={debugInfo['hiera']} />
+          {/if}
         </div>
       {/if}
 

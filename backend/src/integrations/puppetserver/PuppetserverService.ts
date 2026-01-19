@@ -15,6 +15,8 @@ import type { InformationSourcePlugin, HealthStatus } from "../types";
 import type { Node, Facts } from "../../bolt/types";
 import type { PuppetserverConfig } from "../../config/schema";
 import { PuppetserverClient } from "./PuppetserverClient";
+import type { LoggerService } from "../../services/LoggerService";
+import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 import type {
   NodeStatus,
   Environment,
@@ -99,8 +101,8 @@ export class PuppetserverService
   /**
    * Create a new Puppetserver service
    */
-  constructor() {
-    super("puppetserver", "information");
+  constructor(logger?: LoggerService, performanceMonitor?: PerformanceMonitorService) {
+    super("puppetserver", "information", logger, performanceMonitor);
   }
 
   /**
@@ -631,6 +633,7 @@ export class PuppetserverService
     certname: string,
     environment: string,
   ): Promise<Catalog> {
+    const complete = this.performanceMonitor.startTimer('puppetserver:compileCatalog');
     this.ensureInitialized();
 
     try {
@@ -640,11 +643,13 @@ export class PuppetserverService
         this.log(
           `Returning cached catalog for node '${certname}' in environment '${environment}'`,
         );
+        complete({ cached: true, certname, environment });
         return cached as Catalog;
       }
 
       const client = this.client;
       if (!client) {
+        complete({ error: 'client not initialized' });
         throw new PuppetserverConnectionError(
           "Puppetserver client not initialized",
         );
@@ -671,6 +676,7 @@ export class PuppetserverService
       const result = await client.compileCatalog(certname, environment, facts);
 
       if (!result) {
+        complete({ error: 'no result', certname, environment });
         throw new CatalogCompilationError(
           `Failed to compile catalog for '${certname}' in environment '${environment}'`,
           certname,
@@ -686,10 +692,12 @@ export class PuppetserverService
         `Cached catalog for node '${certname}' in environment '${environment}' for ${String(this.cacheTTL)}ms`,
       );
 
+      complete({ cached: false, certname, environment, resourceCount: catalog.resources.length });
       return catalog;
     } catch (error) {
       // If already a CatalogCompilationError, re-throw as-is
       if (error instanceof CatalogCompilationError) {
+        complete({ error: 'compilation error', certname, environment });
         throw error;
       }
 
@@ -701,6 +709,7 @@ export class PuppetserverService
           `Catalog compilation failed for '${certname}' in environment '${environment}' with ${String(compilationErrors.length)} error(s)`,
           error,
         );
+        complete({ error: 'compilation errors', certname, environment, errorCount: compilationErrors.length });
         throw new CatalogCompilationError(
           `Failed to compile catalog for '${certname}' in environment '${environment}': ${compilationErrors[0]}`,
           certname,
@@ -715,6 +724,7 @@ export class PuppetserverService
         `Failed to compile catalog for node '${certname}' in environment '${environment}'`,
         error,
       );
+      complete({ error: error instanceof Error ? error.message : String(error), certname, environment });
       throw new CatalogCompilationError(
         `Failed to compile catalog for '${certname}' in environment '${environment}'`,
         certname,
@@ -983,11 +993,11 @@ export class PuppetserverService
 
       // Clear local cache for environments
       this.cache.clear();
-      
-      const message = name 
+
+      const message = name
         ? `Flushed cache for environment '${name}'`
         : "Flushed cache for all environments";
-      
+
       this.log(message);
 
       return {
@@ -1000,7 +1010,7 @@ export class PuppetserverService
       const errorMessage = name
         ? `Failed to flush cache for environment '${name}'`
         : "Failed to flush cache for all environments";
-      
+
       this.logError(errorMessage, error);
       throw new EnvironmentDeploymentError(
         errorMessage,
@@ -1311,13 +1321,13 @@ export class PuppetserverService
           // Extract any available metadata from the environment details
           if (typeof envDetails === "object" && envDetails !== null) {
             const details = envDetails as Record<string, unknown>;
-            
+
             // Extract settings if available
             let settings: Environment["settings"];
             if (details.settings && typeof details.settings === "object") {
               const settingsObj = details.settings as Record<string, unknown>;
               settings = {
-                modulepath: Array.isArray(settingsObj.modulepath) 
+                modulepath: Array.isArray(settingsObj.modulepath)
                   ? settingsObj.modulepath.filter((p): p is string => typeof p === "string")
                   : undefined,
                 manifest: Array.isArray(settingsObj.manifest)
@@ -1331,7 +1341,7 @@ export class PuppetserverService
                   : undefined,
               };
             }
-            
+
             return {
               name,
               last_deployed:

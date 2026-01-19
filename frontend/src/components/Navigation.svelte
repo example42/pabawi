@@ -37,16 +37,16 @@
     <div class="flex h-16 items-center justify-between">
       <div class="flex items-center">
         <div class="flex flex-shrink-0 items-center gap-3">
-          <img 
-            src="/favicon/web-app-manifest-512x512.png" 
-            alt="Pabawi Logo" 
+          <img
+            src="/favicon/web-app-manifest-512x512.png"
+            alt="Pabawi Logo"
             class="h-8 w-8"
           />
           <div class="flex items-baseline gap-2">
             <h1 class="text-2xl font-bold text-primary-600 dark:text-primary-400">
               Pabawi
             </h1>
-            <span class="text-xs text-gray-500 dark:text-gray-400">v0.4.0</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">v0.5.0</span>
           </div>
         </div>
         <div class="ml-10 flex items-baseline space-x-4">
@@ -110,15 +110,6 @@
             ></span>
           </button>
         </label>
-
-        {#if expertMode.enabled}
-          <div class="flex items-center gap-1 rounded-md bg-amber-100 dark:bg-amber-900/30 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            <span>Expert</span>
-          </div>
-        {/if}
       </div>
     </div>
   </div>

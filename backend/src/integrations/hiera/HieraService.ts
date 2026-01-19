@@ -19,6 +19,7 @@ import { HieraResolver } from "./HieraResolver";
 import type { CatalogAwareResolveOptions } from "./HieraResolver";
 import { FactService } from "./FactService";
 import { CatalogCompiler } from "./CatalogCompiler";
+import { LoggerService } from "../../services/LoggerService";
 import type {
   HieraConfig,
   HieraKey,
@@ -69,6 +70,7 @@ export class HieraService {
   private factService: FactService;
   private catalogCompiler: CatalogCompiler | null = null;
   private integrationManager: IntegrationManager;
+  private logger: LoggerService;
 
   private config: HieraServiceConfig;
   private hieraConfig: HieraConfig | null = null;
@@ -91,6 +93,7 @@ export class HieraService {
   ) {
     this.integrationManager = integrationManager;
     this.config = config;
+    this.logger = new LoggerService();
 
     // Initialize components
     this.parser = new HieraParser(config.controlRepoPath);
@@ -1111,17 +1114,16 @@ export class HieraService {
    * @param level - Log level (info, warn, error)
    */
   private log(message: string, level: "info" | "warn" | "error" = "info"): void {
-    const prefix = "[HieraService]";
+    const metadata = { component: "HieraService", operation: "log" };
     switch (level) {
       case "warn":
-        console.warn(prefix, message);
+        this.logger.warn(message, metadata);
         break;
       case "error":
-        console.error(prefix, message);
+        this.logger.error(message, metadata);
         break;
       default:
-        // eslint-disable-next-line no-console
-        console.log(prefix, message);
+        this.logger.info(message, metadata);
     }
   }
 

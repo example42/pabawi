@@ -17,6 +17,8 @@ import {
   type PaginatedResponse,
 } from "../integrations/hiera/types";
 import { asyncHandler } from "./asyncHandler";
+import { LoggerService } from "../services/LoggerService";
+import { ExpertModeService } from "../services/ExpertModeService";
 
 /**
  * Request validation schemas
@@ -159,6 +161,7 @@ function paginate<T>(
  */
 export function createHieraRouter(integrationManager: IntegrationManager): Router {
   const router = Router();
+  const logger = new LoggerService();
 
 
   // ============================================================================
@@ -173,36 +176,131 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.get(
     "/status",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
-      const hieraPlugin = getHieraPlugin(integrationManager);
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
 
-      if (!hieraPlugin) {
-        res.json({
-          enabled: false,
-          configured: false,
-          healthy: false,
-          message: "Hiera integration is not configured",
-        });
-        return;
-      }
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/status', requestId, 0)
+        : null;
 
-      const healthStatus = await hieraPlugin.healthCheck();
-      const hieraConfig = hieraPlugin.getHieraConfig();
-      const validationResult = hieraPlugin.getValidationResult();
-
-      res.json({
-        enabled: hieraPlugin.isEnabled(),
-        configured: true,
-        healthy: healthStatus.healthy,
-        controlRepoPath: hieraConfig?.controlRepoPath,
-        lastScan: healthStatus.details?.lastScanTime as string | undefined,
-        keyCount: healthStatus.details?.keyCount as number | undefined,
-        fileCount: healthStatus.details?.fileCount as number | undefined,
-        message: healthStatus.message,
-        errors: validationResult?.errors,
-        warnings: validationResult?.warnings,
-        structure: validationResult?.structure,
+      logger.info("Fetching Hiera integration status", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getStatus",
       });
+
+      try {
+        const hieraPlugin = getHieraPlugin(integrationManager);
+
+        if (!hieraPlugin) {
+          if (debugInfo) {
+            expertModeService.addWarning(debugInfo, {
+              message: "Hiera integration is not configured",
+              context: "HIERA_CONTROL_REPO_PATH environment variable not set",
+              level: 'warn',
+            });
+            debugInfo.duration = Date.now() - startTime;
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const responseData = {
+            enabled: false,
+            configured: false,
+            healthy: false,
+            message: "Hiera integration is not configured",
+          };
+
+          res.json(debugInfo ? expertModeService.attachDebugInfo(responseData, debugInfo) : responseData);
+          return;
+        }
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Checking Hiera plugin health status",
+            level: 'debug',
+          });
+        }
+
+        const healthStatus = await hieraPlugin.healthCheck();
+        const hieraConfig = hieraPlugin.getHieraConfig();
+        const validationResult = hieraPlugin.getValidationResult();
+
+        const duration = Date.now() - startTime;
+
+        logger.info("Hiera status fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getStatus",
+          metadata: { healthy: healthStatus.healthy, keyCount: healthStatus.details?.keyCount, duration },
+        });
+
+        const responseData = {
+          enabled: hieraPlugin.isEnabled(),
+          configured: true,
+          healthy: healthStatus.healthy,
+          controlRepoPath: hieraConfig?.controlRepoPath,
+          lastScan: healthStatus.details?.lastScanTime as string | undefined,
+          keyCount: healthStatus.details?.keyCount as number | undefined,
+          fileCount: healthStatus.details?.fileCount as number | undefined,
+          message: healthStatus.message,
+          errors: validationResult?.errors,
+          warnings: validationResult?.warnings,
+          structure: validationResult?.structure,
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'healthy', healthStatus.healthy);
+          expertModeService.addMetadata(debugInfo, 'keyCount', healthStatus.details?.keyCount);
+          expertModeService.addInfo(debugInfo, {
+            message: `Hiera integration is ${healthStatus.healthy ? 'healthy' : 'unhealthy'}`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        logger.error("Error fetching Hiera status", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getStatus",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Error fetching Hiera status: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch Hiera status",
+          },
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
+      }
     })
   );
 
@@ -214,32 +312,113 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.post(
     "/reload",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('POST /api/integrations/hiera/reload', requestId, 0)
+        : null;
+
+      logger.info("Reloading Hiera control repository", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "reload",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Starting control repository reload",
+            level: 'debug',
+          });
+        }
+
         await hieraPlugin.reload();
 
         const healthStatus = await hieraPlugin.healthCheck();
+        const duration = Date.now() - startTime;
 
-        res.json({
+        logger.info("Control repository reloaded successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "reload",
+          metadata: { keyCount: healthStatus.details?.keyCount, fileCount: healthStatus.details?.fileCount, duration },
+        });
+
+        const responseData = {
           success: true,
           message: "Control repository reloaded successfully",
           keyCount: healthStatus.details?.keyCount as number | undefined,
           fileCount: healthStatus.details?.fileCount as number | undefined,
           lastScan: healthStatus.details?.lastScanTime as string | undefined,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'keyCount', healthStatus.details?.keyCount);
+          expertModeService.addMetadata(debugInfo, 'fileCount', healthStatus.details?.fileCount);
+          expertModeService.addInfo(debugInfo, {
+            message: `Reloaded ${healthStatus.details?.keyCount} keys from ${healthStatus.details?.fileCount} files`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to reload control repository", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "reload",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to reload control repository: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.PARSE_ERROR,
             message: `Failed to reload control repository: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -257,14 +436,47 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/keys",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/keys', requestId, 0)
+        : null;
+
+      logger.info("Fetching all Hiera keys", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getAllKeys",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
         const paginationParams = PaginationQuerySchema.parse(req.query);
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Fetching key index from Hiera plugin",
+            context: JSON.stringify({ page: paginationParams.page, pageSize: paginationParams.pageSize }),
+            level: 'debug',
+          });
+        }
+
         const keyIndex = await hieraPlugin.getAllKeys();
 
         // Convert Map to array of HieraKeyInfo
@@ -287,20 +499,71 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           paginationParams.pageSize
         );
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Hiera keys fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getAllKeys",
+          metadata: { totalKeys: paginatedResult.total, page: paginatedResult.page, duration },
+        });
+
+        const responseData = {
           keys: paginatedResult.data,
           total: paginatedResult.total,
           page: paginatedResult.page,
           pageSize: paginatedResult.pageSize,
           totalPages: paginatedResult.totalPages,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'totalKeys', paginatedResult.total);
+          expertModeService.addMetadata(debugInfo, 'page', paginatedResult.page);
+          expertModeService.addInfo(debugInfo, {
+            message: `Retrieved ${paginatedResult.data.length} keys (page ${paginatedResult.page} of ${paginatedResult.totalPages})`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to get Hiera keys", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getAllKeys",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get Hiera keys: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
             message: `Failed to get Hiera keys: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -314,9 +577,33 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/keys/search",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/keys/search', requestId, 0)
+        : null;
+
+      logger.info("Searching Hiera keys", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "searchKeys",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
@@ -324,6 +611,14 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
         const searchParams = SearchQuerySchema.parse(req.query);
         const paginationParams = PaginationQuerySchema.parse(req.query);
         const query = searchParams.q ?? searchParams.query ?? "";
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Searching for keys matching query",
+            context: JSON.stringify({ query, page: paginationParams.page, pageSize: paginationParams.pageSize }),
+            level: 'debug',
+          });
+        }
 
         const hieraService = hieraPlugin.getHieraService();
         const matchingKeys = await hieraService.searchKeys(query);
@@ -342,21 +637,72 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           paginationParams.pageSize
         );
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Hiera key search completed", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "searchKeys",
+          metadata: { query, matchCount: paginatedResult.total, duration },
+        });
+
+        const responseData = {
           keys: paginatedResult.data,
           query,
           total: paginatedResult.total,
           page: paginatedResult.page,
           pageSize: paginatedResult.pageSize,
           totalPages: paginatedResult.totalPages,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'query', query);
+          expertModeService.addMetadata(debugInfo, 'matchCount', paginatedResult.total);
+          expertModeService.addInfo(debugInfo, {
+            message: `Found ${paginatedResult.total} keys matching query "${query}"`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to search Hiera keys", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "searchKeys",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to search Hiera keys: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
             message: `Failed to search Hiera keys: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -370,52 +716,184 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/keys/:key",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/keys/:key', requestId, 0)
+        : null;
+
+      logger.info("Fetching Hiera key details", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getKeyDetails",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
         const params = KeyNameParamSchema.parse(req.params);
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Fetching key details from Hiera service",
+            context: JSON.stringify({ key: params.key }),
+            level: 'debug',
+          });
+        }
+
         const hieraService = hieraPlugin.getHieraService();
         const key = await hieraService.getKey(params.key);
 
         if (!key) {
-          res.status(404).json({
+          const duration = Date.now() - startTime;
+
+          logger.warn("Hiera key not found", {
+            component: "HieraRouter",
+            integration: "hiera",
+            operation: "getKeyDetails",
+            metadata: { key: params.key, duration },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'hiera');
+            expertModeService.addWarning(debugInfo, {
+              message: `Key '${params.key}' not found`,
+              context: `Searched for key: ${params.key}`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
               message: `Key '${params.key}' not found`,
             },
-          });
+          };
+
+          res.status(404).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Hiera key details fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getKeyDetails",
+          metadata: { key: params.key, locationCount: key.locations.length, duration },
+        });
+
+        const responseData = {
           key: {
             name: key.name,
             locations: key.locations,
             lookupOptions: key.lookupOptions,
           },
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'key', params.key);
+          expertModeService.addMetadata(debugInfo, 'locationCount', key.locations.length);
+          expertModeService.addInfo(debugInfo, {
+            message: `Retrieved key '${params.key}' with ${key.locations.length} locations`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
-          res.status(400).json({
+          logger.warn("Invalid key parameter", {
+            component: "HieraRouter",
+            integration: "hiera",
+            operation: "getKeyDetails",
+            metadata: { errors: error.errors },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'hiera');
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid key parameter",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "INVALID_REQUEST",
               message: "Invalid key parameter",
               details: error.errors,
             },
-          });
+          };
+
+          res.status(400).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
-        res.status(500).json({
+        logger.error("Failed to get key details", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getKeyDetails",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get key details: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
             message: `Failed to get key details: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -434,17 +912,49 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/nodes/:nodeId/data",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/nodes/:nodeId/data', requestId, 0)
+        : null;
+
+      logger.info("Fetching node Hiera data", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getNodeData",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
         const params = NodeIdParamSchema.parse(req.params);
         const filterParams = KeyFilterQuerySchema.parse(req.query);
-        const hieraService = hieraPlugin.getHieraService();
 
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Fetching Hiera data for node",
+            context: JSON.stringify({ nodeId: params.nodeId, filter: filterParams.filter }),
+            level: 'debug',
+          });
+        }
+
+        const hieraService = hieraPlugin.getHieraService();
         const nodeData = await hieraService.getNodeHieraData(params.nodeId);
 
         // Convert Map to array of resolution info
@@ -476,7 +986,16 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
         const factService = hieraService.getFactService();
         const factSource = await factService.getFactSource(params.nodeId);
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Node Hiera data fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getNodeData",
+          metadata: { nodeId: params.nodeId, keyCount: keysArray.length, filter: filterParams.filter, duration },
+        });
+
+        const responseData = {
           nodeId: nodeData.nodeId,
           keys: keysArray,
           usedKeys: Array.from(nodeData.usedKeys),
@@ -484,25 +1003,91 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           factSource,
           totalKeys: keysArray.length,
           hierarchyFiles: nodeData.hierarchyFiles,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'nodeId', params.nodeId);
+          expertModeService.addMetadata(debugInfo, 'keyCount', keysArray.length);
+          expertModeService.addMetadata(debugInfo, 'filter', filterParams.filter);
+          expertModeService.addInfo(debugInfo, {
+            message: `Retrieved ${keysArray.length} keys for node ${params.nodeId}`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
-          res.status(400).json({
+          logger.warn("Invalid request parameters", {
+            component: "HieraRouter",
+            integration: "hiera",
+            operation: "getNodeData",
+            metadata: { errors: error.errors },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'hiera');
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid request parameters",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "INVALID_REQUEST",
               message: "Invalid request parameters",
               details: error.errors,
             },
-          });
+          };
+
+          res.status(400).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
-        res.status(500).json({
+        logger.error("Failed to get node Hiera data", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getNodeData",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get node Hiera data: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
             message: `Failed to get node Hiera data: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -516,9 +1101,33 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/nodes/:nodeId/keys",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/nodes/:nodeId/keys', requestId, 0)
+        : null;
+
+      logger.info("Fetching node Hiera keys", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getNodeKeys",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
@@ -526,8 +1135,16 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
         const params = NodeIdParamSchema.parse(req.params);
         const paginationParams = PaginationQuerySchema.parse(req.query);
         const filterParams = KeyFilterQuerySchema.parse(req.query);
-        const hieraService = hieraPlugin.getHieraService();
 
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Fetching Hiera keys for node",
+            context: JSON.stringify({ nodeId: params.nodeId, filter: filterParams.filter, page: paginationParams.page }),
+            level: 'debug',
+          });
+        }
+
+        const hieraService = hieraPlugin.getHieraService();
         const nodeData = await hieraService.getNodeHieraData(params.nodeId);
 
         // Convert Map to array of resolution info
@@ -562,32 +1179,106 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           paginationParams.pageSize
         );
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Node Hiera keys fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getNodeKeys",
+          metadata: { nodeId: params.nodeId, keyCount: paginatedResult.total, page: paginatedResult.page, duration },
+        });
+
+        const responseData = {
           nodeId: params.nodeId,
           keys: paginatedResult.data,
           total: paginatedResult.total,
           page: paginatedResult.page,
           pageSize: paginatedResult.pageSize,
           totalPages: paginatedResult.totalPages,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'nodeId', params.nodeId);
+          expertModeService.addMetadata(debugInfo, 'keyCount', paginatedResult.total);
+          expertModeService.addInfo(debugInfo, {
+            message: `Retrieved ${paginatedResult.data.length} keys for node ${params.nodeId} (page ${paginatedResult.page} of ${paginatedResult.totalPages})`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
-          res.status(400).json({
+          logger.warn("Invalid request parameters", {
+            component: "HieraRouter",
+            integration: "hiera",
+            operation: "getNodeKeys",
+            metadata: { errors: error.errors },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'hiera');
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid request parameters",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "INVALID_REQUEST",
               message: "Invalid request parameters",
               details: error.errors,
             },
-          });
+          };
+
+          res.status(400).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
-        res.status(500).json({
+        logger.error("Failed to get node keys", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getNodeKeys",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get node keys: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
             message: `Failed to get node keys: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -601,19 +1292,60 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/nodes/:nodeId/keys/:key",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/nodes/:nodeId/keys/:key', requestId, 0)
+        : null;
+
+      logger.info("Resolving Hiera key for node", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "resolveKey",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
         const params = NodeKeyParamSchema.parse(req.params);
-        const hieraService = hieraPlugin.getHieraService();
 
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Resolving key for node",
+            context: JSON.stringify({ nodeId: params.nodeId, key: params.key }),
+            level: 'debug',
+          });
+        }
+
+        const hieraService = hieraPlugin.getHieraService();
         const resolution = await hieraService.resolveKey(params.nodeId, params.key);
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Hiera key resolved successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "resolveKey",
+          metadata: { nodeId: params.nodeId, key: params.key, found: resolution.found, duration },
+        });
+
+        const responseData = {
           nodeId: params.nodeId,
           key: resolution.key,
           resolvedValue: resolution.resolvedValue,
@@ -623,25 +1355,91 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           allValues: resolution.allValues,
           interpolatedVariables: resolution.interpolatedVariables,
           found: resolution.found,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'nodeId', params.nodeId);
+          expertModeService.addMetadata(debugInfo, 'key', params.key);
+          expertModeService.addMetadata(debugInfo, 'found', resolution.found);
+          expertModeService.addInfo(debugInfo, {
+            message: `Resolved key '${params.key}' for node ${params.nodeId}: ${resolution.found ? 'found' : 'not found'}`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
-          res.status(400).json({
+          logger.warn("Invalid request parameters", {
+            component: "HieraRouter",
+            integration: "hiera",
+            operation: "resolveKey",
+            metadata: { errors: error.errors },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'hiera');
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid request parameters",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "INVALID_REQUEST",
               message: "Invalid request parameters",
               details: error.errors,
             },
-          });
+          };
+
+          res.status(400).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
-        res.status(500).json({
+        logger.error("Failed to resolve key", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "resolveKey",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to resolve key: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
             message: `Failed to resolve key: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -660,15 +1458,48 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/keys/:key/nodes",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/keys/:key/nodes', requestId, 0)
+        : null;
+
+      logger.info("Fetching key values across all nodes", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getKeyAcrossNodes",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
         const params = KeyNameParamSchema.parse(req.params);
         const paginationParams = PaginationQuerySchema.parse(req.query);
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Fetching key values across all nodes",
+            context: JSON.stringify({ key: params.key, page: paginationParams.page }),
+            level: 'debug',
+          });
+        }
+
         const hieraService = hieraPlugin.getHieraService();
 
         // Get key values across all nodes
@@ -684,7 +1515,16 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           paginationParams.pageSize
         );
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Key values across nodes fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getKeyAcrossNodes",
+          metadata: { key: params.key, nodeCount: paginatedResult.total, uniqueValues: Object.keys(groupedByValue).length, duration },
+        });
+
+        const responseData = {
           key: params.key,
           nodes: paginatedResult.data,
           groupedByValue,
@@ -692,25 +1532,91 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           page: paginatedResult.page,
           pageSize: paginatedResult.pageSize,
           totalPages: paginatedResult.totalPages,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'key', params.key);
+          expertModeService.addMetadata(debugInfo, 'nodeCount', paginatedResult.total);
+          expertModeService.addMetadata(debugInfo, 'uniqueValues', Object.keys(groupedByValue).length);
+          expertModeService.addInfo(debugInfo, {
+            message: `Retrieved key '${params.key}' across ${paginatedResult.total} nodes with ${Object.keys(groupedByValue).length} unique values`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
-          res.status(400).json({
+          logger.warn("Invalid key parameter", {
+            component: "HieraRouter",
+            integration: "hiera",
+            operation: "getKeyAcrossNodes",
+            metadata: { errors: error.errors },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'hiera');
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid key parameter",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "INVALID_REQUEST",
               message: "Invalid key parameter",
               details: error.errors,
             },
-          });
+          };
+
+          res.status(400).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
-        res.status(500).json({
+        logger.error("Failed to get key values across nodes", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getKeyAcrossNodes",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get key values across nodes: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.RESOLUTION_ERROR,
             message: `Failed to get key values across nodes: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -727,31 +1633,111 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.get(
     "/analysis",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/analysis', requestId, 0)
+        : null;
+
+      logger.info("Fetching complete code analysis", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getAnalysis",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Running code analysis",
+            level: 'debug',
+          });
+        }
+
         const codeAnalyzer = hieraPlugin.getCodeAnalyzer();
         const analysisResult = await codeAnalyzer.analyze();
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Code analysis completed successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getAnalysis",
+          metadata: { duration },
+        });
+
+        const responseData = {
           unusedCode: analysisResult.unusedCode,
           lintIssues: analysisResult.lintIssues,
           moduleUpdates: analysisResult.moduleUpdates,
           statistics: analysisResult.statistics,
           analyzedAt: analysisResult.analyzedAt,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addInfo(debugInfo, {
+            message: `Analysis completed at ${analysisResult.analyzedAt}`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to get code analysis", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getAnalysis",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get code analysis: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.ANALYSIS_ERROR,
             message: `Failed to get code analysis: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -764,19 +1750,64 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.get(
     "/analysis/unused",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/analysis/unused', requestId, 0)
+        : null;
+
+      logger.info("Fetching unused code report", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getUnusedCode",
+      });
+
       await Promise.resolve(); // Satisfy linter requirement for await in async function
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Retrieving unused code from analyzer",
+            level: 'debug',
+          });
+        }
+
         const codeAnalyzer = hieraPlugin.getCodeAnalyzer();
         const unusedCode = codeAnalyzer.getUnusedCode();
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Unused code report fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getUnusedCode",
+          metadata: {
+            unusedClasses: unusedCode.unusedClasses.length,
+            unusedDefinedTypes: unusedCode.unusedDefinedTypes.length,
+            unusedHieraKeys: unusedCode.unusedHieraKeys.length,
+            duration
+          },
+        });
+
+        const responseData = {
           unusedClasses: unusedCode.unusedClasses,
           unusedDefinedTypes: unusedCode.unusedDefinedTypes,
           unusedHieraKeys: unusedCode.unusedHieraKeys,
@@ -785,14 +1816,57 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
             definedTypes: unusedCode.unusedDefinedTypes.length,
             hieraKeys: unusedCode.unusedHieraKeys.length,
           },
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'unusedClasses', unusedCode.unusedClasses.length);
+          expertModeService.addMetadata(debugInfo, 'unusedDefinedTypes', unusedCode.unusedDefinedTypes.length);
+          expertModeService.addMetadata(debugInfo, 'unusedHieraKeys', unusedCode.unusedHieraKeys.length);
+          expertModeService.addInfo(debugInfo, {
+            message: `Found ${unusedCode.unusedClasses.length} unused classes, ${unusedCode.unusedDefinedTypes.length} unused defined types, ${unusedCode.unusedHieraKeys.length} unused Hiera keys`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to get unused code report", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getUnusedCode",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get unused code report: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.ANALYSIS_ERROR,
             message: `Failed to get unused code report: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -806,16 +1880,49 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
   router.get(
     "/analysis/lint",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/analysis/lint', requestId, 0)
+        : null;
+
+      logger.info("Fetching lint issues", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getLintIssues",
+      });
+
       await Promise.resolve(); // Satisfy linter requirement for await in async function
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
         const filterParams = LintFilterQuerySchema.parse(req.query);
         const paginationParams = PaginationQuerySchema.parse(req.query);
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Retrieving and filtering lint issues",
+            context: JSON.stringify({ severity: filterParams.severity, types: filterParams.types, page: paginationParams.page }),
+            level: 'debug',
+          });
+        }
+
         const codeAnalyzer = hieraPlugin.getCodeAnalyzer();
 
         let lintIssues = codeAnalyzer.getLintIssues();
@@ -838,21 +1945,72 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           paginationParams.pageSize
         );
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Lint issues fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getLintIssues",
+          metadata: { totalIssues: paginatedResult.total, page: paginatedResult.page, duration },
+        });
+
+        const responseData = {
           issues: paginatedResult.data,
           counts: issueCounts,
           total: paginatedResult.total,
           page: paginatedResult.page,
           pageSize: paginatedResult.pageSize,
           totalPages: paginatedResult.totalPages,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'totalIssues', paginatedResult.total);
+          expertModeService.addMetadata(debugInfo, 'issueCounts', issueCounts);
+          expertModeService.addInfo(debugInfo, {
+            message: `Retrieved ${paginatedResult.total} lint issues`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to get lint issues", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getLintIssues",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get lint issues: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.ANALYSIS_ERROR,
             message: `Failed to get lint issues: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -865,14 +2023,45 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.get(
     "/analysis/modules",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/analysis/modules', requestId, 0)
+        : null;
+
+      logger.info("Fetching module update information", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getModuleUpdates",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Checking for module updates",
+            level: 'debug',
+          });
+        }
+
         const codeAnalyzer = hieraPlugin.getCodeAnalyzer();
         const moduleUpdates = await codeAnalyzer.getModuleUpdates();
 
@@ -887,7 +2076,21 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           (m) => m.hasSecurityAdvisory
         );
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Module updates fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getModuleUpdates",
+          metadata: {
+            totalModules: moduleUpdates.length,
+            withUpdates: modulesWithUpdates.length,
+            withSecurityAdvisories: modulesWithSecurityAdvisories.length,
+            duration
+          },
+        });
+
+        const responseData = {
           modules: moduleUpdates,
           summary: {
             total: moduleUpdates.length,
@@ -897,14 +2100,57 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           },
           modulesWithUpdates,
           modulesWithSecurityAdvisories,
-        });
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addMetadata(debugInfo, 'totalModules', moduleUpdates.length);
+          expertModeService.addMetadata(debugInfo, 'withUpdates', modulesWithUpdates.length);
+          expertModeService.addMetadata(debugInfo, 'withSecurityAdvisories', modulesWithSecurityAdvisories.length);
+          expertModeService.addInfo(debugInfo, {
+            message: `Found ${modulesWithUpdates.length} modules with updates (${modulesWithSecurityAdvisories.length} with security advisories)`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to get module updates", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getModuleUpdates",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get module updates: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.ANALYSIS_ERROR,
             message: `Failed to get module updates: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );
@@ -917,27 +2163,107 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
    */
   router.get(
     "/analysis/statistics",
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/hiera/analysis/statistics', requestId, 0)
+        : null;
+
+      logger.info("Fetching usage statistics", {
+        component: "HieraRouter",
+        integration: "hiera",
+        operation: "getUsageStatistics",
+      });
+
       const hieraPlugin = getHieraPlugin(integrationManager);
 
       if (!checkHieraAvailability(hieraPlugin, res)) {
+        if (debugInfo) {
+          expertModeService.addError(debugInfo, {
+            message: "Hiera integration is not available",
+            level: 'error',
+          });
+          debugInfo.duration = Date.now() - startTime;
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
         return;
       }
 
       try {
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Retrieving usage statistics from analyzer",
+            level: 'debug',
+          });
+        }
+
         const codeAnalyzer = hieraPlugin.getCodeAnalyzer();
         const statistics = await codeAnalyzer.getUsageStatistics();
 
-        res.json({
-          statistics,
+        const duration = Date.now() - startTime;
+
+        logger.info("Usage statistics fetched successfully", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getUsageStatistics",
+          metadata: { duration },
         });
+
+        const responseData = {
+          statistics,
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addInfo(debugInfo, {
+            message: "Retrieved usage statistics",
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
-        res.status(500).json({
+        const duration = Date.now() - startTime;
+
+        logger.error("Failed to get usage statistics", {
+          component: "HieraRouter",
+          integration: "hiera",
+          operation: "getUsageStatistics",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'hiera');
+          expertModeService.addError(debugInfo, {
+            message: `Failed to get usage statistics: ${error instanceof Error ? error.message : String(error)}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: HIERA_ERROR_CODES.ANALYSIS_ERROR,
             message: `Failed to get usage statistics: ${error instanceof Error ? error.message : String(error)}`,
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     })
   );

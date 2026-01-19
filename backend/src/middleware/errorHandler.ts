@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { ErrorHandlingService, type ExecutionContext } from "../errors";
+import { LoggerService } from "../services/LoggerService";
 
 // Extend Express Request to include custom properties
 declare global {
@@ -47,18 +48,18 @@ export function errorHandler(
 
   // In development, also log to console for easier debugging
   if (process.env.NODE_ENV === "development") {
-    console.error("\n=== Error Details for Developers ===");
-    console.error(`Type: ${errorResponse.error.type}`);
-    console.error(`Code: ${errorResponse.error.code}`);
-    console.error(`Message: ${errorResponse.error.message}`);
-    console.error(`Actionable: ${errorResponse.error.actionableMessage}`);
-    if (errorResponse.error.troubleshooting) {
-      console.error("\nTroubleshooting Steps:");
-      errorResponse.error.troubleshooting.steps.forEach((step, i) => {
-        console.error(`  ${String(i + 1)}. ${step}`);
-      });
-    }
-    console.error("====================================\n");
+    const logger = new LoggerService();
+    logger.debug("=== Error Details for Developers ===", {
+      component: "ErrorHandler",
+      operation: "errorHandler",
+      metadata: {
+        type: errorResponse.error.type,
+        code: errorResponse.error.code,
+        message: errorResponse.error.message,
+        actionable: errorResponse.error.actionableMessage,
+        troubleshootingSteps: errorResponse.error.troubleshooting?.steps,
+      },
+    });
   }
 
   // Sanitize sensitive data even in expert mode

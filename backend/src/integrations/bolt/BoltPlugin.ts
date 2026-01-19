@@ -15,6 +15,8 @@ import type {
 } from "../types";
 import type { BoltService } from "../../bolt/BoltService";
 import type { ExecutionResult, Node, Facts } from "../../bolt/types";
+import type { LoggerService } from "../../services/LoggerService";
+import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 
 /**
  * Bolt Plugin
@@ -28,8 +30,8 @@ export class BoltPlugin
   readonly type = "both" as const;
   private boltService: BoltService;
 
-  constructor(boltService: BoltService) {
-    super("bolt", "both");
+  constructor(boltService: BoltService, logger?: LoggerService, performanceMonitor?: PerformanceMonitorService) {
+    super("bolt", "both", logger, performanceMonitor);
     this.boltService = boltService;
   }
 
@@ -37,15 +39,21 @@ export class BoltPlugin
    * Perform plugin-specific initialization
    */
   protected async performInitialization(): Promise<void> {
+    const complete = this.performanceMonitor.startTimer('bolt:initialization');
+
     try {
       // Verify Bolt is accessible by checking inventory
       await this.boltService.getInventory();
       this.log("Bolt is accessible and inventory loaded");
+
+      complete({ success: true });
     } catch (error) {
       this.logError("Failed to verify Bolt accessibility during initialization", error);
       // Don't throw error during initialization - let health checks handle this
       // This allows the server to start even if Bolt is not properly configured
       this.log("Bolt plugin initialized with configuration issues - will report in health checks");
+
+      complete({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -59,6 +67,7 @@ export class BoltPlugin
   protected async performHealthCheck(): Promise<
     Omit<HealthStatus, "lastCheck">
   > {
+    const complete = this.performanceMonitor.startTimer('bolt:healthCheck');
     const fs = await import("fs");
     const path = await import("path");
 
@@ -98,6 +107,7 @@ export class BoltPlugin
       });
 
       if (!boltAvailable) {
+        complete({ available: false });
         return {
           healthy: false,
           message: "Bolt command is not available. Please install Puppet Bolt.",
@@ -120,6 +130,7 @@ export class BoltPlugin
 
       // If no project-specific configuration exists, report as degraded
       if (!hasInventory && !hasBoltProject) {
+        complete({ available: true, configured: false });
         return {
           healthy: false,
           message: "Bolt project configuration is missing. Using global configuration as fallback.",
@@ -134,6 +145,7 @@ export class BoltPlugin
 
       // If inventory is missing but bolt-project exists, report as degraded
       if (!hasInventory) {
+        complete({ available: true, configured: true, degraded: true });
         return {
           healthy: false,
           degraded: true,
@@ -150,6 +162,7 @@ export class BoltPlugin
       // Try to load inventory as a final health check
       const inventory = await this.boltService.getInventory();
 
+      complete({ available: true, configured: true, nodeCount: inventory.length });
       return {
         healthy: true,
         message: `Bolt is properly configured. ${String(inventory.length)} nodes in inventory.`,
@@ -164,6 +177,7 @@ export class BoltPlugin
       const errorMessage =
         error instanceof Error ? error.message : String(error);
 
+      complete({ error: errorMessage });
       return {
         healthy: false,
         message: `Bolt health check failed: ${errorMessage}`,
@@ -182,7 +196,10 @@ export class BoltPlugin
    * @returns Execution result
    */
   async executeAction(action: Action): Promise<ExecutionResult> {
+    const complete = this.performanceMonitor.startTimer('bolt:executeAction');
+
     if (!this.initialized) {
+      complete({ error: 'not initialized' });
       throw new Error("Bolt plugin not initialized");
     }
 
@@ -192,6 +209,7 @@ export class BoltPlugin
       : action.target;
 
     if (!target) {
+      complete({ error: 'no target' });
       throw new Error("No target specified for action");
     }
 
@@ -204,33 +222,48 @@ export class BoltPlugin
         }
       | undefined;
 
-    // Map action to appropriate Bolt service method
-    switch (action.type) {
-      case "command":
-        return this.boltService.runCommand(
-          target,
-          action.action,
-          streamingCallback,
-        );
+    try {
+      // Map action to appropriate Bolt service method
+      let result: ExecutionResult;
 
-      case "task":
-        return this.boltService.runTask(
-          target,
-          action.action,
-          action.parameters,
-          streamingCallback,
-        );
+      switch (action.type) {
+        case "command":
+          result = await this.boltService.runCommand(
+            target,
+            action.action,
+            streamingCallback,
+          );
+          break;
 
-      case "script":
-        throw new Error("Script execution not yet implemented");
+        case "task":
+          result = await this.boltService.runTask(
+            target,
+            action.action,
+            action.parameters,
+            streamingCallback,
+          );
+          break;
 
-      case "plan":
-        throw new Error("Plan execution not yet implemented");
+        case "script":
+          complete({ error: 'script not implemented' });
+          throw new Error("Script execution not yet implemented");
 
-      default: {
-        const exhaustiveCheck: never = action.type;
-        throw new Error(`Unsupported action type: ${String(exhaustiveCheck)}`);
+        case "plan":
+          complete({ error: 'plan not implemented' });
+          throw new Error("Plan execution not yet implemented");
+
+        default: {
+          const exhaustiveCheck: never = action.type;
+          complete({ error: 'unsupported action type' });
+          throw new Error(`Unsupported action type: ${String(exhaustiveCheck)}`);
+        }
       }
+
+      complete({ actionType: action.type, status: result.status });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
     }
   }
 
@@ -280,11 +313,21 @@ export class BoltPlugin
    * @returns Array of nodes
    */
   async getInventory(): Promise<Node[]> {
+    const complete = this.performanceMonitor.startTimer('bolt:getInventory');
+
     if (!this.initialized) {
+      complete({ error: 'not initialized' });
       throw new Error("Bolt plugin not initialized");
     }
 
-    return await this.boltService.getInventory();
+    try {
+      const inventory = await this.boltService.getInventory();
+      complete({ nodeCount: inventory.length });
+      return inventory;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
   }
 
   /**
@@ -294,11 +337,21 @@ export class BoltPlugin
    * @returns Node facts
    */
   async getNodeFacts(nodeId: string): Promise<Facts> {
+    const complete = this.performanceMonitor.startTimer('bolt:getNodeFacts');
+
     if (!this.initialized) {
+      complete({ error: 'not initialized' });
       throw new Error("Bolt plugin not initialized");
     }
 
-    return await this.boltService.gatherFacts(nodeId);
+    try {
+      const facts = await this.boltService.gatherFacts(nodeId);
+      complete({ nodeId });
+      return facts;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error), nodeId });
+      throw error;
+    }
   }
 
   /**
@@ -312,15 +365,26 @@ export class BoltPlugin
    * @returns Data of the requested type
    */
   async getNodeData(nodeId: string, dataType: string): Promise<unknown> {
+    const complete = this.performanceMonitor.startTimer('bolt:getNodeData');
+
     if (!this.initialized) {
+      complete({ error: 'not initialized' });
       throw new Error("Bolt plugin not initialized");
     }
 
     // Bolt only supports facts data type
     if (dataType === "facts") {
-      return await this.boltService.gatherFacts(nodeId);
+      try {
+        const facts = await this.boltService.gatherFacts(nodeId);
+        complete({ nodeId, dataType });
+        return facts;
+      } catch (error) {
+        complete({ error: error instanceof Error ? error.message : String(error), nodeId, dataType });
+        throw error;
+      }
     }
 
+    complete({ error: 'unsupported data type', nodeId, dataType });
     throw new Error(`Bolt does not support data type: ${dataType}`);
   }
 

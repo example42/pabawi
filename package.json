@@ -1,6 +1,6 @@
 {
   "name": "pabawi",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Pabawi - Web interface for Bolt automation tool",
   "private": true,
   "workspaces": [
@@ -39,6 +39,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.56.1",
+    "baseline-browser-mapping": "^2.9.15",
     "eslint": "^9.39.1",
     "markdownlint-cli2": "^0.19.1",
     "playwright": "^1.56.1",

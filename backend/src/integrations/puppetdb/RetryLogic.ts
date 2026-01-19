@@ -5,6 +5,8 @@
  * Implements exponential backoff to avoid overwhelming failing services.
  */
 
+import { LoggerService } from "../../services/LoggerService";
+
 /**
  * Configuration for retry logic
  */
@@ -191,6 +193,7 @@ export function createPuppetDBRetryConfig(
   maxAttempts = 3,
   initialDelay = 1000,
 ): RetryConfig {
+  const logger = new LoggerService();
   return {
     maxAttempts,
     initialDelay,
@@ -201,9 +204,11 @@ export function createPuppetDBRetryConfig(
     onRetry: (attempt, delay, error): void => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[PuppetDB] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`,
-      );
+      logger.warn(`[PuppetDB] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`, {
+        component: "RetryLogic",
+        operation: "createPuppetDBRetryConfig",
+        metadata: { attempt, delay, errorMessage },
+      });
     },
   };
 }
@@ -219,6 +224,7 @@ export function createPuppetserverRetryConfig(
   maxAttempts = 3,
   initialDelay = 1000,
 ): RetryConfig {
+  const logger = new LoggerService();
   return {
     maxAttempts,
     initialDelay,
@@ -229,9 +235,11 @@ export function createPuppetserverRetryConfig(
     onRetry: (attempt, delay, error): void => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[Puppetserver] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`,
-      );
+      logger.warn(`[Puppetserver] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`, {
+        component: "RetryLogic",
+        operation: "createPuppetserverRetryConfig",
+        metadata: { attempt, delay, errorMessage },
+      });
     },
   };
 }
@@ -249,6 +257,7 @@ export function createIntegrationRetryConfig(
   maxAttempts = 3,
   initialDelay = 1000,
 ): RetryConfig {
+  const logger = new LoggerService();
   return {
     maxAttempts,
     initialDelay,
@@ -259,9 +268,11 @@ export function createIntegrationRetryConfig(
     onRetry: (attempt, delay, error): void => {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[${integrationName}] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`,
-      );
+      logger.warn(`[${integrationName}] Retry attempt ${String(attempt)} after ${String(delay)}ms due to: ${errorMessage}`, {
+        component: "RetryLogic",
+        operation: "createIntegrationRetryConfig",
+        metadata: { integrationName, attempt, delay, errorMessage },
+      });
     },
   };
 }

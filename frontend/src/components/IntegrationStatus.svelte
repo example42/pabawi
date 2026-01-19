@@ -2,6 +2,7 @@
   import StatusBadge from './StatusBadge.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { integrationColors } from '../lib/integrationColors.svelte';
 
   interface IntegrationStatus {
     name: string;
@@ -12,11 +13,6 @@
     details?: unknown;
     workingCapabilities?: string[];
     failingCapabilities?: string[];
-    // Expert mode fields
-    endpoint?: string;
-    lastError?: string;
-    connectionAttempts?: number;
-    responseTime?: number;
   }
 
   interface Props {
@@ -139,6 +135,77 @@
     };
   }
 
+  // Get PuppetDB-specific details for display
+  function getPuppetDBDetails(integration: IntegrationStatus): {
+    baseUrl?: string;
+    hasAuth?: boolean;
+    hasSSL?: boolean;
+    circuitState?: string;
+    error?: string;
+    errors?: string[];
+  } | null {
+    if (integration.name !== 'puppetdb' || !integration.details) {
+      return null;
+    }
+    const details = integration.details as Record<string, unknown>;
+    return {
+      baseUrl: typeof details.baseUrl === 'string' ? details.baseUrl : undefined,
+      hasAuth: typeof details.hasAuth === 'boolean' ? details.hasAuth : undefined,
+      hasSSL: typeof details.hasSSL === 'boolean' ? details.hasSSL : undefined,
+      circuitState: typeof details.circuitState === 'string' ? details.circuitState : undefined,
+      error: typeof details.error === 'string' ? details.error : undefined,
+      errors: Array.isArray(details.errors) ? details.errors as string[] : undefined,
+    };
+  }
+
+  // Get Puppetserver-specific details for display
+  function getPuppetserverDetails(integration: IntegrationStatus): {
+    baseUrl?: string;
+    hasTokenAuth?: boolean;
+    hasCertAuth?: boolean;
+    hasSSL?: boolean;
+    error?: string;
+    errors?: string[];
+  } | null {
+    if (integration.name !== 'puppetserver' || !integration.details) {
+      return null;
+    }
+    const details = integration.details as Record<string, unknown>;
+    return {
+      baseUrl: typeof details.baseUrl === 'string' ? details.baseUrl : undefined,
+      hasTokenAuth: typeof details.hasTokenAuth === 'boolean' ? details.hasTokenAuth : undefined,
+      hasCertAuth: typeof details.hasCertAuth === 'boolean' ? details.hasCertAuth : undefined,
+      hasSSL: typeof details.hasSSL === 'boolean' ? details.hasSSL : undefined,
+      error: typeof details.error === 'string' ? details.error : undefined,
+      errors: Array.isArray(details.errors) ? details.errors as string[] : undefined,
+    };
+  }
+
+  // Get Bolt-specific details for display
+  function getBoltDetails(integration: IntegrationStatus): {
+    nodeCount?: number;
+    projectPath?: string;
+    hasInventory?: boolean;
+    hasBoltProject?: boolean;
+    missingFiles?: string[];
+    usingGlobalConfig?: boolean;
+    error?: string;
+  } | null {
+    if (integration.name !== 'bolt' || !integration.details) {
+      return null;
+    }
+    const details = integration.details as Record<string, unknown>;
+    return {
+      nodeCount: typeof details.nodeCount === 'number' ? details.nodeCount : undefined,
+      projectPath: typeof details.projectPath === 'string' ? details.projectPath : undefined,
+      hasInventory: typeof details.hasInventory === 'boolean' ? details.hasInventory : undefined,
+      hasBoltProject: typeof details.hasBoltProject === 'boolean' ? details.hasBoltProject : undefined,
+      missingFiles: Array.isArray(details.missingFiles) ? details.missingFiles as string[] : undefined,
+      usingGlobalConfig: typeof details.usingGlobalConfig === 'boolean' ? details.usingGlobalConfig : undefined,
+      error: typeof details.error === 'string' ? details.error : undefined,
+    };
+  }
+
   // Get integration-specific troubleshooting steps
   function getTroubleshootingSteps(integration: IntegrationStatus): string[] {
     if (integration.name === 'hiera') {
@@ -235,6 +302,55 @@
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   }
+
+  // Get icon background color based on integration and status
+  function getIconBackgroundColor(integrationName: string, status: string): string {
+    // Only use integration colors for connected status
+    if (status === 'connected') {
+      const color = integrationColors.getColor(integrationName);
+      return color.light;
+    }
+
+    // Use status-based colors for other states
+    switch (status) {
+      case 'degraded':
+        return 'bg-yellow-100 dark:bg-yellow-900/20';
+      case 'not_configured':
+        return 'bg-gray-100 dark:bg-gray-700';
+      case 'error':
+      case 'disconnected':
+        return 'bg-red-100 dark:bg-red-900/20';
+      default:
+        return 'bg-gray-100 dark:bg-gray-700';
+    }
+  }
+
+  // Get icon text color based on integration and status
+  function getIconTextColor(integrationName: string, status: string): string {
+    // Only use integration colors for connected status
+    if (status === 'connected') {
+      const color = integrationColors.getColor(integrationName);
+      return color.primary;
+    }
+
+    // Use status-based colors for other states
+    switch (status) {
+      case 'degraded':
+        return 'text-yellow-600 dark:text-yellow-400';
+      case 'not_configured':
+        return 'text-gray-600 dark:text-gray-400';
+      case 'error':
+      case 'disconnected':
+        return 'text-red-600 dark:text-red-400';
+      default:
+        return 'text-gray-600 dark:text-gray-400';
+    }
+  }
+
+  // Load integration colors on mount
+  $effect(() => {
+    integrationColors.loadColors();
+  });
 </script>
 
 <div class="space-y-4">
@@ -307,15 +423,16 @@
           <div class="flex items-start justify-between">
             <div class="flex items-center gap-3">
               <div
-                class="flex h-10 w-10 items-center justify-center rounded-lg {integration.status === 'connected'
-                  ? 'bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400'
-                  : integration.status === 'degraded'
-                    ? 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-400'
-                    : integration.status === 'not_configured'
-                      ? 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
-                      : 'bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400'}"
+                class="flex h-10 w-10 items-center justify-center rounded-lg {getIconBackgroundColor(integration.name, integration.status)}"
+                style={integration.status === 'connected' ? `background-color: ${integrationColors.getColor(integration.name).light}` : ''}
               >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg
+                  class="h-5 w-5 {getIconTextColor(integration.name, integration.status)}"
+                  style={integration.status === 'connected' ? `color: ${integrationColors.getColor(integration.name).primary}` : ''}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
@@ -524,169 +641,414 @@
 
             <!-- Expert Mode Information -->
             {#if expertMode.enabled}
-              <div class="mt-3 space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+              <div class="mt-3 space-y-2 rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
                 <div class="flex items-center gap-2">
-                  <svg class="h-4 w-4 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg class="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <h5 class="text-xs font-semibold text-amber-900 dark:text-amber-200">Expert Mode Details</h5>
+                  <h5 class="text-xs font-semibold text-blue-900 dark:text-blue-200">Expert Mode Details</h5>
                 </div>
 
-                {#if integration.endpoint}
-                  <div class="text-xs">
-                    <span class="font-medium text-amber-800 dark:text-amber-300">Endpoint:</span>
-                    <code class="ml-1 rounded bg-amber-100 px-1 py-0.5 text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">{integration.endpoint}</code>
-                  </div>
-                {/if}
+                <!-- Integration-specific expert mode details -->
 
-                <!-- Hiera-specific expert mode details -->
+                <!-- Hiera integration -->
                 {#if integration.name === 'hiera'}
                   {@const hieraDetails = getHieraDetails(integration)}
-                  {#if hieraDetails?.controlRepoPath}
-                    <div class="text-xs">
-                      <span class="font-medium text-amber-800 dark:text-amber-300">Control Repo:</span>
-                      <code class="ml-1 rounded bg-amber-100 px-1 py-0.5 text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">{hieraDetails.controlRepoPath}</code>
-                    </div>
-                  {/if}
 
-                  <!-- Diagnostic status indicators -->
-                  <div class="mt-2 grid grid-cols-2 gap-2">
-                    {#if hieraDetails?.controlRepoAccessible !== undefined}
-                      <div class="flex items-center gap-1 text-xs">
-                        {#if hieraDetails.controlRepoAccessible}
-                          <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span class="text-amber-700 dark:text-amber-300">Repo accessible</span>
-                        {:else}
-                          <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          <span class="text-red-600 dark:text-red-400">Repo inaccessible</span>
-                        {/if}
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Set HIERA_CONTROL_REPO_PATH environment variable</li>
+                        <li>Point to your Puppet control repository root</li>
+                        <li>Ensure hiera.yaml exists in the repository</li>
+                        <li>Create hieradata directory (data/, hieradata/, or hiera/)</li>
+                        <li>Optionally configure PuppetDB for fact resolution</li>
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- Always show control repo path if available -->
+                    {#if hieraDetails?.controlRepoPath}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Control Repo:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{hieraDetails.controlRepoPath}</code>
                       </div>
                     {/if}
-                    {#if hieraDetails?.hieraConfigValid !== undefined}
-                      <div class="flex items-center gap-1 text-xs">
-                        {#if hieraDetails.hieraConfigValid}
-                          <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span class="text-amber-700 dark:text-amber-300">hiera.yaml valid</span>
-                        {:else}
-                          <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                          <span class="text-red-600 dark:text-red-400">hiera.yaml invalid</span>
-                        {/if}
-                      </div>
-                    {/if}
-                    {#if hieraDetails?.factSourceAvailable !== undefined}
-                      <div class="flex items-center gap-1 text-xs">
-                        {#if hieraDetails.factSourceAvailable}
-                          <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span class="text-amber-700 dark:text-amber-300">Facts available</span>
-                        {:else}
-                          <svg class="h-3 w-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <span class="text-yellow-600 dark:text-yellow-400">No fact source</span>
-                        {/if}
-                      </div>
-                    {/if}
-                  </div>
 
-                  {#if hieraDetails?.lastScanTime}
-                    <div class="text-xs">
-                      <span class="font-medium text-amber-800 dark:text-amber-300">Last Scan:</span>
-                      <span class="ml-1 text-amber-700 dark:text-amber-300">{hieraDetails.lastScanTime}</span>
-                    </div>
-                  {/if}
-                  {#if hieraDetails?.keyCount !== undefined}
-                    <div class="text-xs">
-                      <span class="font-medium text-amber-800 dark:text-amber-300">Total Keys:</span>
-                      <span class="ml-1 text-amber-700 dark:text-amber-300">{hieraDetails.keyCount}</span>
-                    </div>
-                  {/if}
-                  {#if hieraDetails?.fileCount !== undefined}
-                    <div class="text-xs">
-                      <span class="font-medium text-amber-800 dark:text-amber-300">Total Files:</span>
-                      <span class="ml-1 text-amber-700 dark:text-amber-300">{hieraDetails.fileCount}</span>
-                    </div>
-                  {/if}
-
-                  <!-- Repository structure in expert mode -->
-                  {#if hieraDetails?.structure}
-                    <details class="mt-2">
-                      <summary class="cursor-pointer text-xs font-medium text-amber-800 dark:text-amber-300">
-                        Repository Structure
-                      </summary>
-                      <div class="mt-2 grid grid-cols-2 gap-1 text-xs">
-                        {#each Object.entries(hieraDetails.structure) as [key, value]}
-                          <div class="flex items-center gap-1">
-                            {#if value}
+                    <!-- Diagnostic status indicators -->
+                    {#if hieraDetails?.controlRepoAccessible !== undefined || hieraDetails?.hieraConfigValid !== undefined || hieraDetails?.factSourceAvailable !== undefined}
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        {#if hieraDetails?.controlRepoAccessible !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if hieraDetails.controlRepoAccessible}
                               <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                               </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Repo accessible</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              <span class="text-red-600 dark:text-red-400">Repo inaccessible</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if hieraDetails?.hieraConfigValid !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if hieraDetails.hieraConfigValid}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">hiera.yaml valid</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              <span class="text-red-600 dark:text-red-400">hiera.yaml invalid</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if hieraDetails?.factSourceAvailable !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if hieraDetails.factSourceAvailable}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Facts available</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span class="text-yellow-600 dark:text-yellow-400">No fact source</span>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    {#if hieraDetails?.lastScanTime}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Last Scan:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{hieraDetails.lastScanTime}</span>
+                      </div>
+                    {/if}
+                    {#if hieraDetails?.keyCount !== undefined}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Total Keys:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{hieraDetails.keyCount}</span>
+                      </div>
+                    {/if}
+                    {#if hieraDetails?.fileCount !== undefined}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Total Files:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{hieraDetails.fileCount}</span>
+                      </div>
+                    {/if}
+
+                    <!-- Repository structure in expert mode -->
+                    {#if hieraDetails?.structure}
+                      <details class="mt-2">
+                        <summary class="cursor-pointer text-xs font-medium text-blue-800 dark:text-blue-300">
+                          Repository Structure
+                        </summary>
+                        <div class="mt-2 grid grid-cols-2 gap-1 text-xs">
+                          {#each Object.entries(hieraDetails.structure) as [key, value]}
+                            <div class="flex items-center gap-1">
+                              {#if value}
+                                <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                              {:else}
+                                <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                                </svg>
+                              {/if}
+                              <span class="text-blue-700 dark:text-blue-300">{key.replace(/^has/, '').replace(/([A-Z])/g, ' $1').trim()}</span>
+                            </div>
+                          {/each}
+                        </div>
+                      </details>
+                    {/if}
+
+                    <!-- Warnings in expert mode -->
+                    {#if hieraDetails?.warnings && hieraDetails.warnings.length > 0}
+                      <div class="mt-2 rounded-md bg-yellow-100 p-2 dark:bg-yellow-900/30">
+                        <p class="text-xs font-medium text-yellow-800 dark:text-yellow-200">⚠️ Warnings:</p>
+                        <ul class="mt-1 list-inside list-disc space-y-1 pl-2">
+                          {#each hieraDetails.warnings as warning}
+                            <li class="text-xs text-yellow-700 dark:text-yellow-300">{warning}</li>
+                          {/each}
+                        </ul>
+                      </div>
+                    {/if}
+                  {/if}
+
+                <!-- PuppetDB integration -->
+                {:else if integration.name === 'puppetdb'}
+                  {@const puppetdbDetails = getPuppetDBDetails(integration)}
+
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Set PUPPETDB_URL environment variable</li>
+                        <li>Configure SSL certificates if using HTTPS</li>
+                        <li>Optionally set authentication token</li>
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- Always show base URL if available -->
+                    {#if puppetdbDetails?.baseUrl}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Base URL:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{puppetdbDetails.baseUrl}</code>
+                      </div>
+                    {/if}
+
+                    <!-- Connection details -->
+                    {#if puppetdbDetails?.circuitState || puppetdbDetails?.hasSSL !== undefined || puppetdbDetails?.hasAuth !== undefined}
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        {#if puppetdbDetails?.circuitState}
+                          <div class="flex items-center gap-1 text-xs col-span-2">
+                            <span class="font-medium text-blue-800 dark:text-blue-300">Circuit:</span>
+                            <span class="text-blue-700 dark:text-blue-300">{puppetdbDetails.circuitState}</span>
+                          </div>
+                        {/if}
+                        {#if puppetdbDetails?.hasSSL !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if puppetdbDetails.hasSSL}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">SSL enabled</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span class="text-yellow-600 dark:text-yellow-400">No SSL</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if puppetdbDetails?.hasAuth !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if puppetdbDetails.hasAuth}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Authenticated</span>
                             {:else}
                               <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
                               </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No auth</span>
                             {/if}
-                            <span class="text-amber-700 dark:text-amber-300">{key.replace(/^has/, '').replace(/([A-Z])/g, ' $1').trim()}</span>
                           </div>
-                        {/each}
+                        {/if}
                       </div>
-                    </details>
+                    {/if}
+
+                    <!-- Error details - consistent format -->
+                    {#if puppetdbDetails?.error || (puppetdbDetails?.errors && puppetdbDetails.errors.length > 0)}
+                      <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
+                        <p class="text-xs font-medium text-red-800 dark:text-red-200">Errors:</p>
+                        <ul class="mt-1 list-inside list-disc space-y-1 pl-2">
+                          {#if puppetdbDetails?.error}
+                            <li class="text-xs text-red-700 dark:text-red-300">{puppetdbDetails.error}</li>
+                          {/if}
+                          {#if puppetdbDetails?.errors}
+                            {#each puppetdbDetails.errors as error}
+                              <li class="text-xs text-red-700 dark:text-red-300">{error}</li>
+                            {/each}
+                          {/if}
+                        </ul>
+                      </div>
+                    {/if}
                   {/if}
 
-                  <!-- Warnings in expert mode -->
-                  {#if hieraDetails?.warnings && hieraDetails.warnings.length > 0}
-                    <div class="mt-2 rounded-md bg-yellow-100 p-2 dark:bg-yellow-900/30">
-                      <p class="text-xs font-medium text-yellow-800 dark:text-yellow-200">⚠️ Warnings:</p>
-                      <ul class="mt-1 list-inside list-disc space-y-1 pl-2">
-                        {#each hieraDetails.warnings as warning}
-                          <li class="text-xs text-yellow-700 dark:text-yellow-300">{warning}</li>
-                        {/each}
+                <!-- Puppetserver integration -->
+                {:else if integration.name === 'puppetserver'}
+                  {@const puppetserverDetails = getPuppetserverDetails(integration)}
+
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Set PUPPETSERVER_URL environment variable</li>
+                        <li>Configure certificate or token authentication</li>
+                        <li>Ensure SSL certificates are properly configured</li>
                       </ul>
                     </div>
+                  {:else}
+                    <!-- Always show base URL if available -->
+                    {#if puppetserverDetails?.baseUrl}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Base URL:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{puppetserverDetails.baseUrl}</code>
+                      </div>
+                    {/if}
+
+                    <!-- Authentication details -->
+                    {#if puppetserverDetails?.hasSSL !== undefined || puppetserverDetails?.hasTokenAuth !== undefined || puppetserverDetails?.hasCertAuth !== undefined}
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        {#if puppetserverDetails?.hasSSL !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if puppetserverDetails.hasSSL}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">SSL enabled</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span class="text-yellow-600 dark:text-yellow-400">No SSL</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if puppetserverDetails?.hasTokenAuth !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if puppetserverDetails.hasTokenAuth}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Token auth</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No token</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if puppetserverDetails?.hasCertAuth !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if puppetserverDetails.hasCertAuth}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Cert auth</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No cert</span>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Error details - consistent format -->
+                    {#if puppetserverDetails?.error || (puppetserverDetails?.errors && puppetserverDetails.errors.length > 0)}
+                      <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
+                        <p class="text-xs font-medium text-red-800 dark:text-red-200">Errors:</p>
+                        <ul class="mt-1 list-inside list-disc space-y-1 pl-2">
+                          {#if puppetserverDetails?.error}
+                            <li class="text-xs text-red-700 dark:text-red-300">{puppetserverDetails.error}</li>
+                          {/if}
+                          {#if puppetserverDetails?.errors}
+                            {#each puppetserverDetails.errors as error}
+                              <li class="text-xs text-red-700 dark:text-red-300">{error}</li>
+                            {/each}
+                          {/if}
+                        </ul>
+                      </div>
+                    {/if}
                   {/if}
-                {/if}
 
-                {#if integration.responseTime !== undefined}
-                  <div class="text-xs">
-                    <span class="font-medium text-amber-800 dark:text-amber-300">Response Time:</span>
-                    <span class="ml-1 text-amber-700 dark:text-amber-300">{integration.responseTime}ms</span>
-                  </div>
-                {/if}
+                <!-- Bolt integration -->
+                {:else if integration.name === 'bolt'}
+                  {@const boltDetails = getBoltDetails(integration)}
 
-                {#if integration.connectionAttempts !== undefined}
-                  <div class="text-xs">
-                    <span class="font-medium text-amber-800 dark:text-amber-300">Connection Attempts:</span>
-                    <span class="ml-1 text-amber-700 dark:text-amber-300">{integration.connectionAttempts}</span>
-                  </div>
-                {/if}
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Install Puppet Bolt CLI</li>
+                        <li>Create bolt-project.yaml in project directory</li>
+                        <li>Create inventory.yaml with target nodes</li>
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- Always show project path if available -->
+                    {#if boltDetails?.projectPath}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Project Path:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{boltDetails.projectPath}</code>
+                      </div>
+                    {/if}
 
-                {#if integration.lastError}
-                  <div class="text-xs">
-                    <span class="font-medium text-amber-800 dark:text-amber-300">Last Error:</span>
-                    <pre class="mt-1 overflow-x-auto rounded bg-amber-100 p-2 text-xs text-amber-900 dark:bg-amber-900/50 dark:text-amber-100">{integration.lastError}</pre>
-                  </div>
-                {/if}
+                    {#if boltDetails?.nodeCount !== undefined}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Nodes in Inventory:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{boltDetails.nodeCount}</span>
+                      </div>
+                    {/if}
 
-                <!-- Integration-specific troubleshooting -->
-                {#if getTroubleshootingSteps(integration).length > 0}
-                  {@const troubleshootingSteps = getTroubleshootingSteps(integration)}
-                  <div class="pt-2 text-xs text-amber-700 dark:text-amber-300">
-                    <p class="font-medium">🔧 Troubleshooting:</p>
-                    <ul class="mt-1 list-inside list-disc space-y-1 pl-2">
-                      {#each troubleshootingSteps as step}
-                        <li>{step}</li>
-                      {/each}
-                    </ul>
-                  </div>
+                    <!-- Configuration status -->
+                    {#if boltDetails?.hasInventory !== undefined || boltDetails?.hasBoltProject !== undefined || boltDetails?.usingGlobalConfig}
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        {#if boltDetails?.hasInventory !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if boltDetails.hasInventory}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Has inventory</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              <span class="text-red-600 dark:text-red-400">No inventory</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if boltDetails?.hasBoltProject !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if boltDetails.hasBoltProject}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Has project config</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span class="text-yellow-600 dark:text-yellow-400">No project config</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if boltDetails?.usingGlobalConfig}
+                          <div class="flex items-center gap-1 text-xs col-span-2">
+                            <svg class="h-3 w-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <span class="text-yellow-600 dark:text-yellow-400">Using global config</span>
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Missing files warning -->
+                    {#if boltDetails?.missingFiles && boltDetails.missingFiles.length > 0}
+                      <div class="mt-2 rounded-md bg-yellow-100 p-2 dark:bg-yellow-900/30">
+                        <p class="text-xs font-medium text-yellow-800 dark:text-yellow-200">Missing Files:</p>
+                        <ul class="mt-1 list-inside list-disc space-y-1 pl-2">
+                          {#each boltDetails.missingFiles as file}
+                            <li class="text-xs text-yellow-700 dark:text-yellow-300">{file}</li>
+                          {/each}
+                        </ul>
+                      </div>
+                    {/if}
+
+                    <!-- Error details - consistent format -->
+                    {#if boltDetails?.error}
+                      <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
+                        <p class="text-xs font-medium text-red-800 dark:text-red-200">Error:</p>
+                        <p class="mt-1 text-xs text-red-700 dark:text-red-300">{boltDetails.error}</p>
+                      </div>
+                    {/if}
+                  {/if}
                 {/if}
               </div>
             {/if}
