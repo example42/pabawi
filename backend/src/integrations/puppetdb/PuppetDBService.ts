@@ -18,6 +18,8 @@ import {
   PuppetDBConnectionError,
   PuppetDBQueryError,
 } from "./PuppetDBClient";
+import type { LoggerService } from "../../services/LoggerService";
+import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 
 // PQL parsing types
 interface PqlExpression {
@@ -164,8 +166,8 @@ export class PuppetDBService
   /**
    * Create a new PuppetDB service
    */
-  constructor() {
-    super("puppetdb", "information");
+  constructor(logger?: LoggerService, performanceMonitor?: PerformanceMonitorService) {
+    super("puppetdb", "information", logger, performanceMonitor);
   }
 
   /**
@@ -502,6 +504,7 @@ export class PuppetDBService
    * @returns Array of nodes
    */
   async getInventory(pqlQuery?: string): Promise<Node[]> {
+    const complete = this.performanceMonitor.startTimer('puppetdb:getInventory');
     this.ensureInitialized();
 
     try {
@@ -517,12 +520,14 @@ export class PuppetDBService
       const cached = this.cache.get(cacheKey);
       if (Array.isArray(cached)) {
         this.log(`Returning cached inventory (${String(cached.length)} nodes)`);
+        complete({ cached: true, nodeCount: cached.length });
         return cached as Node[];
       }
 
       // Query PuppetDB
       const client = this.client;
       if (!client) {
+        complete({ error: 'client not initialized' });
         throw new PuppetDBConnectionError(
           "PuppetDB client not initialized. Ensure initialize() was called successfully.",
         );
@@ -572,6 +577,7 @@ export class PuppetDBService
           "Unexpected response format from PuppetDB endpoint",
           "warn",
         );
+        complete({ nodeCount: 0 });
         return [];
       }
 
@@ -592,9 +598,11 @@ export class PuppetDBService
         `Cached inventory (${String(nodes.length)} nodes) for ${String(this.cacheTTL)}ms`,
       );
 
+      complete({ cached: false, nodeCount: nodes.length });
       return nodes;
     } catch (error) {
       this.logError("Failed to get inventory from PuppetDB", error);
+      complete({ error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }

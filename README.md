@@ -626,4 +626,3 @@ Special thanks to all contributors and the Puppet community.
 
 - [E2E Testing Guide](docs/e2e-testing.md) - End-to-end testing documentation
 - [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
-

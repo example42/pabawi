@@ -7,6 +7,8 @@ import { BoltInventoryNotFoundError } from "../bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
+import { LoggerService } from "../services/LoggerService";
+import { ExpertModeService } from "../services/ExpertModeService";
 
 /**
  * Request validation schemas
@@ -30,6 +32,7 @@ export function createCommandsRouter(
   streamingManager?: StreamingExecutionManager,
 ): Router {
   const router = Router();
+  const logger = new LoggerService();
 
   /**
    * POST /api/nodes/:id/command
@@ -38,13 +41,44 @@ export function createCommandsRouter(
   router.post(
     "/:id/command",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      // Create debug info once at the start if expert mode is enabled
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('POST /api/nodes/:id/command', requestId, 0)
+        : null;
+
+      logger.info("Processing command execution request", {
+        component: "CommandsRouter",
+        integration: "bolt",
+        operation: "executeCommand",
+        metadata: { nodeId: req.params.id },
+      });
+
       try {
         // Validate request parameters and body
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Validating request parameters",
+            level: 'debug',
+          });
+        }
+
         const params = NodeIdParamSchema.parse(req.params);
         const body = CommandExecutionBodySchema.parse(req.body);
         const nodeId = params.id;
         const command = body.command;
         const expertMode = body.expertMode ?? false;
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Verifying node exists in inventory",
+            context: JSON.stringify({ nodeId }),
+            level: 'debug',
+          });
+        }
 
         // Verify node exists in inventory using IntegrationManager
         const aggregatedInventory =
@@ -54,30 +88,91 @@ export function createCommandsRouter(
         );
 
         if (!node) {
-          res.status(404).json({
+          logger.warn("Node not found in inventory", {
+            component: "CommandsRouter",
+            integration: "bolt",
+            operation: "executeCommand",
+            metadata: { nodeId },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = Date.now() - startTime;
+            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.addWarning(debugInfo, {
+              message: `Node '${nodeId}' not found in inventory`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "INVALID_NODE_ID",
               message: `Node '${nodeId}' not found in inventory`,
             },
-          });
+          };
+
+          res.status(404).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
         // Validate command against whitelist
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Validating command against whitelist",
+            context: JSON.stringify({ command }),
+            level: 'debug',
+          });
+        }
+
         try {
           commandWhitelistService.validateCommand(command);
         } catch (error) {
           if (error instanceof CommandNotAllowedError) {
-            res.status(403).json({
+            logger.warn("Command not allowed", {
+              component: "CommandsRouter",
+              integration: "bolt",
+              operation: "executeCommand",
+              metadata: { command, reason: error.reason },
+            });
+
+            if (debugInfo) {
+              debugInfo.duration = Date.now() - startTime;
+              expertModeService.setIntegration(debugInfo, 'bolt');
+              expertModeService.addWarning(debugInfo, {
+                message: `Command not allowed: ${error.message}`,
+                context: error.reason,
+                level: 'warn',
+              });
+              debugInfo.performance = expertModeService.collectPerformanceMetrics();
+              debugInfo.context = expertModeService.collectRequestContext(req);
+            }
+
+            const errorResponse = {
               error: {
                 code: "COMMAND_NOT_ALLOWED",
                 message: error.message,
                 details: error.reason,
               },
-            });
+            };
+
+            res.status(403).json(
+              debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+            );
             return;
           }
           throw error;
+        }
+
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Creating execution record",
+            context: JSON.stringify({ nodeId, command, expertMode }),
+            level: 'debug',
+          });
         }
 
         // Create initial execution record
@@ -90,6 +185,21 @@ export function createCommandsRouter(
           results: [],
           expertMode,
         });
+
+        logger.info("Execution record created, starting command execution", {
+          component: "CommandsRouter",
+          integration: "bolt",
+          operation: "executeCommand",
+          metadata: { executionId, nodeId, command },
+        });
+
+        if (debugInfo) {
+          expertModeService.addInfo(debugInfo, {
+            message: "Execution record created, starting command execution",
+            context: JSON.stringify({ executionId, nodeId, command }),
+            level: 'info',
+          });
+        }
 
         // Execute command asynchronously using IntegrationManager
         // We don't await here to return immediately with execution ID
@@ -138,7 +248,12 @@ export function createCommandsRouter(
               streamingManager.emitComplete(executionId, result);
             }
           } catch (error) {
-            console.error("Error executing command:", error);
+            logger.error("Error executing command", {
+              component: "CommandsRouter",
+              integration: "bolt",
+              operation: "executeCommand",
+              metadata: { executionId, nodeId, command },
+            }, error instanceof Error ? error : undefined);
 
             const errorMessage =
               error instanceof Error ? error.message : "Unknown error";
@@ -165,42 +280,141 @@ export function createCommandsRouter(
           }
         })();
 
+        const duration = Date.now() - startTime;
+
+        logger.info("Command execution request accepted", {
+          component: "CommandsRouter",
+          integration: "bolt",
+          operation: "executeCommand",
+          metadata: { executionId, nodeId, command, duration },
+        });
+
         // Return execution ID and initial status immediately
-        res.status(202).json({
+        const responseData = {
           executionId,
           status: "running",
           message: "Command execution started",
-        });
+        };
+
+        // Attach debug info if expert mode is enabled
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
+          expertModeService.addMetadata(debugInfo, 'executionId', executionId);
+          expertModeService.addMetadata(debugInfo, 'nodeId', nodeId);
+          expertModeService.addMetadata(debugInfo, 'command', command);
+          expertModeService.addInfo(debugInfo, {
+            message: "Command execution started",
+            context: JSON.stringify({ executionId, nodeId, command }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(202).json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.status(202).json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
-          res.status(400).json({
+          logger.warn("Request validation failed", {
+            component: "CommandsRouter",
+            integration: "bolt",
+            operation: "executeCommand",
+            metadata: { errors: error.errors },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.addWarning(debugInfo, {
+              message: "Request validation failed",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "INVALID_REQUEST",
               message: "Request validation failed",
               details: error.errors,
             },
-          });
+          };
+
+          res.status(400).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
         if (error instanceof BoltInventoryNotFoundError) {
-          res.status(404).json({
+          logger.error("Bolt configuration missing", {
+            component: "CommandsRouter",
+            integration: "bolt",
+            operation: "executeCommand",
+          }, error);
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.addError(debugInfo, {
+              message: `Bolt configuration missing: ${error.message}`,
+              stack: error.stack,
+              level: 'error',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
             error: {
               code: "BOLT_CONFIG_MISSING",
               message: error.message,
             },
-          });
+          };
+
+          res.status(404).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
           return;
         }
 
         // Unknown error
-        console.error("Error processing command execution request:", error);
-        res.status(500).json({
+        logger.error("Error processing command execution request", {
+          component: "CommandsRouter",
+          integration: "bolt",
+          operation: "executeCommand",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
+          expertModeService.addError(debugInfo, {
+            message: `Error processing command execution request: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
           error: {
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to process command execution request",
           },
-        });
+        };
+
+        res.status(500).json(
+          debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+        );
       }
     }),
   );

@@ -2,6 +2,7 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import FactsViewer from './FactsViewer.svelte';
+  import IntegrationBadge from './IntegrationBadge.svelte';
   import { getUserFriendlyErrorMessage, isNotConfiguredError } from '../lib/multiSourceFetch';
 
   interface Props {
@@ -112,29 +113,7 @@
     return new Date(timestamp).toLocaleString();
   }
 
-  // Get source badge class
-  function getSourceBadgeClass(source: SourceType): string {
-    switch (source) {
-      case 'bolt':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
-      case 'puppetdb':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
-    }
-  }
 
-  // Get source label
-  function getSourceLabel(source: SourceType): string {
-    switch (source) {
-      case 'bolt':
-        return 'Bolt';
-      case 'puppetdb':
-        return 'PuppetDB';
-      default:
-        return 'Unknown';
-    }
-  }
 
   // Check if any facts are available
   const hasAnyFacts = $derived(
@@ -326,15 +305,13 @@
       <!-- Current Source Indicator -->
       <div class="flex items-center gap-2">
         <span class="text-sm text-gray-600 dark:text-gray-400">Viewing facts from:</span>
-        <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium {
-          activeSource === 'all'
-            ? 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
-            : activeSource === 'bolt'
-            ? getSourceBadgeClass('bolt')
-            : getSourceBadgeClass('puppetdb')
-        }">
-          {activeSource === 'all' ? 'All Sources' : activeSource === 'bolt' ? 'Bolt' : 'PuppetDB'}
-        </span>
+        {#if activeSource === 'all'}
+          <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400">
+            All Sources
+          </span>
+        {:else}
+          <IntegrationBadge integration={activeSource} variant="badge" size="sm" />
+        {/if}
       </div>
 
       <!-- View Mode and Export Actions -->
@@ -397,9 +374,7 @@
     <!-- Bolt Facts Card -->
     <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <div class="mb-2 flex items-center justify-between">
-        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('bolt')}">
-          {getSourceLabel('bolt')}
-        </span>
+        <IntegrationBadge integration="bolt" variant="badge" size="sm" />
         {#if onGatherBoltFacts}
           <button
             type="button"
@@ -438,9 +413,7 @@
     <!-- PuppetDB Facts Card -->
     <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <div class="mb-2 flex items-center justify-between">
-        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {getSourceBadgeClass('puppetdb')}">
-          {getSourceLabel('puppetdb')}
-        </span>
+        <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
       </div>
       {#if puppetdbLoading}
         <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">

@@ -1,6 +1,11 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { router } from '../lib/router.svelte';
   import { PuppetserverSetupGuide, PuppetdbSetupGuide, BoltSetupGuide, HieraSetupGuide } from '../components';
+  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
+  import { get } from '../lib/api';
+  import type { DebugInfo } from '../lib/api';
 
   interface Props {
     params?: { integration: string };
@@ -10,9 +15,45 @@
 
   const integration = $derived(params?.integration || '');
 
+  // Debug info state for expert mode
+  let debugInfo = $state<DebugInfo | null>(null);
+
   function goBack(): void {
     router.navigate('/');
   }
+
+  async function fetchIntegrationStatus(): Promise<void> {
+    // Only fetch if expert mode is enabled
+    if (!expertMode.enabled) {
+      return;
+    }
+
+    try {
+      const data = await get<{ integrations: unknown[]; _debug?: DebugInfo }>('/api/integrations/status');
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo = data._debug;
+      }
+    } catch (err) {
+      console.error('[IntegrationSetupPage] Error fetching integration status:', err);
+      // Don't show error to user - this is just for debug info
+    }
+  }
+
+  onMount(() => {
+    debugInfo = null; // Clear debug info on mount
+    void fetchIntegrationStatus(); // Fetch integration status for debug info
+  });
+
+  // Re-fetch when expert mode is toggled
+  $effect(() => {
+    if (expertMode.enabled) {
+      void fetchIntegrationStatus();
+    } else {
+      debugInfo = null;
+    }
+  });
 </script>
 
 {#if integration === 'puppetserver'}
@@ -34,6 +75,13 @@
       Back to Home
     </button>
     <PuppetserverSetupGuide />
+
+    <!-- Expert Mode Debug Panel -->
+    {#if expertMode.enabled && debugInfo}
+      <div class="mt-8">
+        <ExpertModeDebugPanel {debugInfo} compact={true} />
+      </div>
+    {/if}
   </div>
 {:else if integration === 'puppetdb'}
   <!-- Use the dedicated PuppetDB setup guide component -->
@@ -54,6 +102,13 @@
       Back to Home
     </button>
     <PuppetdbSetupGuide />
+
+    <!-- Expert Mode Debug Panel -->
+    {#if expertMode.enabled && debugInfo}
+      <div class="mt-8">
+        <ExpertModeDebugPanel {debugInfo} compact={true} />
+      </div>
+    {/if}
   </div>
 {:else if integration === 'bolt'}
   <!-- Use the dedicated Bolt setup guide component -->
@@ -74,6 +129,13 @@
       Back to Home
     </button>
     <BoltSetupGuide />
+
+    <!-- Expert Mode Debug Panel -->
+    {#if expertMode.enabled && debugInfo}
+      <div class="mt-8">
+        <ExpertModeDebugPanel {debugInfo} compact={true} />
+      </div>
+    {/if}
   </div>
 {:else if integration === 'hiera'}
   <!-- Use the dedicated Hiera setup guide component -->
@@ -94,6 +156,13 @@
       Back to Home
     </button>
     <HieraSetupGuide />
+
+    <!-- Expert Mode Debug Panel -->
+    {#if expertMode.enabled && debugInfo}
+      <div class="mt-8">
+        <ExpertModeDebugPanel {debugInfo} compact={true} />
+      </div>
+    {/if}
   </div>
 {:else}
   <!-- Generic setup guide for other integrations -->
@@ -161,5 +230,12 @@
         </div>
       </div>
     </div>
+
+    <!-- Expert Mode Debug Panel -->
+    {#if expertMode.enabled && debugInfo}
+      <div class="mt-8">
+        <ExpertModeDebugPanel {debugInfo} compact={true} />
+      </div>
+    {/if}
   </div>
 {/if}

@@ -14,6 +14,7 @@ import request from "supertest";
 import express, { type Express } from "express";
 import { createIntegrationsRouter } from "../../src/routes/integrations";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
+import { LoggerService } from "../../src/services/LoggerService";
 import { PuppetserverService } from "../../src/integrations/puppetserver/PuppetserverService";
 import type { PuppetserverConfig } from "../../src/config/schema";
 
@@ -24,7 +25,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
 
   beforeAll(async () => {
     // Create integration manager
-    integrationManager = new IntegrationManager();
+    integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     // Create mock Puppetserver service
     puppetserverService = new PuppetserverService();

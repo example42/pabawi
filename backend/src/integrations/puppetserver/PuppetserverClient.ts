@@ -17,6 +17,7 @@ import {
 } from "./errors";
 import { CircuitBreaker } from "../puppetdb/CircuitBreaker";
 import { withRetry, type RetryConfig } from "../puppetdb/RetryLogic";
+import { LoggerService } from "../../services/LoggerService";
 
 /**
  * Query parameters for Puppetserver API requests
@@ -53,6 +54,7 @@ export class PuppetserverClient {
   private timeout: number;
   private circuitBreaker: CircuitBreaker;
   private retryConfig: RetryConfig;
+  private logger: LoggerService;
 
   /**
    * Create a new Puppetserver client
@@ -60,6 +62,7 @@ export class PuppetserverClient {
    * @param config - Client configuration
    */
   constructor(config: PuppetserverClientConfig) {
+    this.logger = new LoggerService();
     // Parse and validate server URL
     const url = new URL(config.serverUrl);
     const port = config.port ?? (url.protocol === "https:" ? 8140 : 8080);
@@ -79,19 +82,27 @@ export class PuppetserverClient {
       resetTimeout: 60000,
       timeout: this.timeout,
       onStateChange: (oldState, newState): void => {
-        console.warn(
-          `[Puppetserver] Circuit breaker: ${oldState} -> ${newState}`,
-        );
+        this.logger.warn(`Circuit breaker state change: ${oldState} -> ${newState}`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "circuitBreaker",
+          metadata: { oldState, newState },
+        });
       },
       onOpen: (failureCount): void => {
-        console.error(
-          `[Puppetserver] Circuit breaker opened after ${String(failureCount)} failures`,
-        );
+        this.logger.error(`Circuit breaker opened after ${String(failureCount)} failures`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "circuitBreaker",
+          metadata: { failureCount },
+        });
       },
       onClose: (): void => {
-        console.warn(
-          "[Puppetserver] Circuit breaker closed - service recovered",
-        );
+        this.logger.info("Circuit breaker closed - service recovered", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "circuitBreaker",
+        });
       },
     });
 
@@ -110,9 +121,12 @@ export class PuppetserverClient {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         const category = this.categorizeError(error);
-        console.warn(
-          `[Puppetserver] Retry attempt ${String(attempt)}/${String(retryAttempts)} after ${String(delay)}ms due to ${category} error: ${errorMessage}`,
-        );
+        this.logger.warn(`Retry attempt ${String(attempt)}/${String(retryAttempts)} after ${String(delay)}ms`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "retry",
+          metadata: { attempt, delay, category, errorMessage },
+        });
       },
     };
   }
@@ -187,16 +201,18 @@ export class PuppetserverClient {
    */
   async getStatus(certname: string): Promise<unknown> {
     // Debug logging for status retrieval
-    if (process.env.LOG_LEVEL === "debug") {
-      console.warn("[Puppetserver] getStatus() called", {
+    this.logger.debug("getStatus() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "getStatus",
+      metadata: {
         certname,
         endpoint: `/puppet/v3/status/${certname}`,
         baseUrl: this.baseUrl,
         hasToken: !!this.token,
         hasCertAuth: !!this.httpsAgent,
-        timestamp: new Date().toISOString(),
-      });
-    }
+      },
+    });
 
     // Validate certname (requirement 5.2)
     if (!certname || certname.trim() === "") {
@@ -205,11 +221,12 @@ export class PuppetserverClient {
         "INVALID_CERTNAME",
         { certname },
       );
-      console.error("[Puppetserver] getStatus() validation failed", {
-        error: error.message,
-        certname,
-        timestamp: new Date().toISOString(),
-      });
+      this.logger.error("getStatus() validation failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getStatus",
+        metadata: { certname },
+      }, error);
       throw error;
     }
 
@@ -219,20 +236,22 @@ export class PuppetserverClient {
 
       // Log successful response (requirement 5.5)
       if (result === null) {
-        console.warn(
-          "[Puppetserver] getStatus() returned null - node not found (requirement 5.4)",
-          {
+        this.logger.warn("getStatus() returned null - node not found", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getStatus",
+          metadata: {
             certname,
             endpoint: `/puppet/v3/status/${certname}`,
-            message:
-              "Node has not checked in with Puppetserver yet or status data is not available",
-            timestamp: new Date().toISOString(),
+            message: "Node has not checked in with Puppetserver yet or status data is not available",
           },
-        );
-      } else if (process.env.LOG_LEVEL === "debug") {
-        console.warn(
-          "[Puppetserver] getStatus() response received successfully (requirement 5.3)",
-          {
+        });
+      } else {
+        this.logger.debug("getStatus() response received successfully", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getStatus",
+          metadata: {
             certname,
             resultType: typeof result,
             hasReportTimestamp:
@@ -251,43 +270,41 @@ export class PuppetserverClient {
               result && typeof result === "object"
                 ? Object.keys(result).slice(0, 10)
                 : undefined,
-            timestamp: new Date().toISOString(),
           },
-        );
+        });
       }
 
       return result;
     } catch (error) {
       // Log detailed error information (requirement 5.5)
-      console.error("[Puppetserver] getStatus() failed", {
-        certname,
-        endpoint: `/puppet/v3/status/${certname}`,
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-        errorDetails:
-          error instanceof PuppetserverError ? error.details : undefined,
-        statusCode:
-          error instanceof PuppetserverError
-            ? (error.details as { status?: number }).status
-            : undefined,
-        timestamp: new Date().toISOString(),
-      });
+      this.logger.error("getStatus() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getStatus",
+        metadata: {
+          certname,
+          endpoint: `/puppet/v3/status/${certname}`,
+          statusCode:
+            error instanceof PuppetserverError
+              ? (error.details as { status?: number }).status
+              : undefined,
+        },
+      }, error instanceof Error ? error : undefined);
 
       // Handle 404 gracefully - node may not have status yet (requirement 5.4)
       if (
         error instanceof PuppetserverError &&
         (error.details as { status?: number }).status === 404
       ) {
-        console.warn(
-          `[Puppetserver] Status not found for node '${certname}' (404) - node may not have checked in yet (requirement 5.4)`,
-          {
+        this.logger.warn(`Status not found for node '${certname}' (404) - node may not have checked in yet`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getStatus",
+          metadata: {
             certname,
-            suggestion:
-              "The node needs to run 'puppet agent -t' at least once to generate status data",
-            timestamp: new Date().toISOString(),
+            suggestion: "The node needs to run 'puppet agent -t' at least once to generate status data",
           },
-        );
+        });
         return null;
       }
 
@@ -314,15 +331,20 @@ export class PuppetserverClient {
     environment: string,
     facts?: Record<string, unknown>,
   ): Promise<unknown> {
-    console.warn("[Puppetserver] compileCatalog() called", {
-      certname,
-      environment,
-      hasFacts: !!facts,
-      factCount: facts ? Object.keys(facts).length : 0,
-      endpoint: `/puppet/v3/catalog/${certname}`,
-      baseUrl: this.baseUrl,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
+    this.logger.debug("compileCatalog() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "compileCatalog",
+      metadata: {
+        certname,
+        environment,
+        hasFacts: !!facts,
+        factCount: facts ? Object.keys(facts).length : 0,
+        endpoint: `/puppet/v3/catalog/${certname}`,
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+      },
     });
 
     // Validate inputs
@@ -332,11 +354,12 @@ export class PuppetserverClient {
         "INVALID_CERTNAME",
         { certname, environment },
       );
-      console.error("[Puppetserver] compileCatalog() validation failed", {
-        error: error.message,
-        certname,
-        environment,
-      });
+      this.logger.error("compileCatalog() validation failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "compileCatalog",
+        metadata: { certname, environment },
+      }, error);
       throw error;
     }
 
@@ -346,11 +369,12 @@ export class PuppetserverClient {
         "INVALID_ENVIRONMENT",
         { certname, environment },
       );
-      console.error("[Puppetserver] compileCatalog() validation failed", {
-        error: error.message,
-        certname,
-        environment,
-      });
+      this.logger.error("compileCatalog() validation failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "compileCatalog",
+        metadata: { certname, environment },
+      }, error);
       throw error;
     }
 
@@ -376,80 +400,82 @@ export class PuppetserverClient {
 
       // Log successful response
       if (result === null) {
-        console.warn(
-          "[Puppetserver] compileCatalog() returned null - catalog compilation may have failed",
-          {
+        this.logger.warn("compileCatalog() returned null - catalog compilation may have failed", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "compileCatalog",
+          metadata: { certname, environment, endpoint: `/puppet/v3/catalog/${certname}` },
+        });
+      } else {
+        this.logger.debug("compileCatalog() response received", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "compileCatalog",
+          metadata: {
             certname,
             environment,
-            endpoint: `/puppet/v3/catalog/${certname}`,
+            resultType: typeof result,
+            hasResources:
+              result &&
+              typeof result === "object" &&
+              "resources" in result &&
+              Array.isArray((result as { resources?: unknown[] }).resources),
+            resourceCount:
+              result &&
+              typeof result === "object" &&
+              "resources" in result &&
+              Array.isArray((result as { resources?: unknown[] }).resources)
+                ? (result as { resources: unknown[] }).resources.length
+                : undefined,
+            hasEdges:
+              result &&
+              typeof result === "object" &&
+              "edges" in result &&
+              Array.isArray((result as { edges?: unknown[] }).edges),
+            edgeCount:
+              result &&
+              typeof result === "object" &&
+              "edges" in result &&
+              Array.isArray((result as { edges?: unknown[] }).edges)
+                ? (result as { edges: unknown[] }).edges.length
+                : undefined,
+            catalogVersion:
+              result && typeof result === "object" && "version" in result
+                ? (result as { version?: string }).version
+                : undefined,
+            catalogEnvironment:
+              result && typeof result === "object" && "environment" in result
+                ? (result as { environment?: string }).environment
+                : undefined,
+            sampleKeys:
+              result && typeof result === "object" && !Array.isArray(result)
+                ? Object.keys(result).slice(0, 10)
+                : undefined,
           },
-        );
-      } else {
-        console.warn("[Puppetserver] compileCatalog() response received", {
-          certname,
-          environment,
-          resultType: typeof result,
-          hasResources:
-            result &&
-            typeof result === "object" &&
-            "resources" in result &&
-            Array.isArray((result as { resources?: unknown[] }).resources),
-          resourceCount:
-            result &&
-            typeof result === "object" &&
-            "resources" in result &&
-            Array.isArray((result as { resources?: unknown[] }).resources)
-              ? (result as { resources: unknown[] }).resources.length
-              : undefined,
-          hasEdges:
-            result &&
-            typeof result === "object" &&
-            "edges" in result &&
-            Array.isArray((result as { edges?: unknown[] }).edges),
-          edgeCount:
-            result &&
-            typeof result === "object" &&
-            "edges" in result &&
-            Array.isArray((result as { edges?: unknown[] }).edges)
-              ? (result as { edges: unknown[] }).edges.length
-              : undefined,
-          catalogVersion:
-            result && typeof result === "object" && "version" in result
-              ? (result as { version?: string }).version
-              : undefined,
-          catalogEnvironment:
-            result && typeof result === "object" && "environment" in result
-              ? (result as { environment?: string }).environment
-              : undefined,
-          sampleKeys:
-            result && typeof result === "object" && !Array.isArray(result)
-              ? Object.keys(result).slice(0, 10)
-              : undefined,
         });
       }
 
       return result;
     } catch (error) {
       // Log detailed error information
-      console.error("[Puppetserver] compileCatalog() failed", {
-        certname,
-        environment,
-        endpoint: `/puppet/v3/catalog/${certname}`,
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-        errorDetails:
-          error instanceof PuppetserverError ? error.details : undefined,
-      });
+      this.logger.error("compileCatalog() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "compileCatalog",
+        metadata: { certname, environment, endpoint: `/puppet/v3/catalog/${certname}` },
+      }, error instanceof Error ? error : undefined);
 
       // Handle 404 gracefully - node may not exist
       if (
         error instanceof PuppetserverError &&
         (error.details as { status?: number }).status === 404
       ) {
-        console.warn(
-          `[Puppetserver] Catalog compilation failed for node '${certname}' in environment '${environment}' (404) - node may not exist or environment may not be configured`,
-        );
+        this.logger.warn(`Catalog compilation failed for node '${certname}' in environment '${environment}' (404) - node may not exist or environment may not be configured`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "compileCatalog",
+          metadata: { certname, environment },
+        });
         return null;
       }
 
@@ -470,12 +496,17 @@ export class PuppetserverClient {
    * @returns Node facts or null if not found
    */
   async getFacts(certname: string): Promise<unknown> {
-    console.warn("[Puppetserver] getFacts() called", {
-      certname,
-      endpoint: `/puppet/v3/facts/${certname}`,
-      baseUrl: this.baseUrl,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
+    this.logger.debug("getFacts() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "getFacts",
+      metadata: {
+        certname,
+        endpoint: `/puppet/v3/facts/${certname}`,
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+      },
     });
 
     // Validate certname
@@ -485,10 +516,12 @@ export class PuppetserverClient {
         "INVALID_CERTNAME",
         { certname },
       );
-      console.error("[Puppetserver] getFacts() validation failed", {
-        error: error.message,
-        certname,
-      });
+      this.logger.error("getFacts() validation failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getFacts",
+        metadata: { certname },
+      }, error);
       throw error;
     }
 
@@ -497,62 +530,66 @@ export class PuppetserverClient {
 
       // Log successful response
       if (result === null) {
-        console.warn(
-          "[Puppetserver] getFacts() returned null - node not found",
-          {
-            certname,
-            endpoint: `/puppet/v3/facts/${certname}`,
-          },
-        );
+        this.logger.warn("getFacts() returned null - node not found", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getFacts",
+          metadata: { certname, endpoint: `/puppet/v3/facts/${certname}` },
+        });
       } else {
-        console.warn("[Puppetserver] getFacts() response received", {
-          certname,
-          resultType: typeof result,
-          hasValues: result && typeof result === "object" && "values" in result,
-          valuesCount:
-            result &&
-            typeof result === "object" &&
-            "values" in result &&
-            typeof (result as { values?: unknown }).values === "object" &&
-            (result as { values?: unknown }).values !== null
-              ? Object.keys(
-                  (result as { values: Record<string, unknown> }).values,
-                ).length
-              : undefined,
-          sampleKeys:
-            result &&
-            typeof result === "object" &&
-            "values" in result &&
-            typeof (result as { values?: unknown }).values === "object" &&
-            (result as { values?: unknown }).values !== null
-              ? Object.keys(
-                  (result as { values: Record<string, unknown> }).values,
-                ).slice(0, 10)
-              : undefined,
+        this.logger.debug("getFacts() response received", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getFacts",
+          metadata: {
+            certname,
+            resultType: typeof result,
+            hasValues: result && typeof result === "object" && "values" in result,
+            valuesCount:
+              result &&
+              typeof result === "object" &&
+              "values" in result &&
+              typeof (result as { values?: unknown }).values === "object" &&
+              (result as { values?: unknown }).values !== null
+                ? Object.keys(
+                    (result as { values: Record<string, unknown> }).values,
+                  ).length
+                : undefined,
+            sampleKeys:
+              result &&
+              typeof result === "object" &&
+              "values" in result &&
+              typeof (result as { values?: unknown }).values === "object" &&
+              (result as { values?: unknown }).values !== null
+                ? Object.keys(
+                    (result as { values: Record<string, unknown> }).values,
+                  ).slice(0, 10)
+                : undefined,
+          },
         });
       }
 
       return result;
     } catch (error) {
       // Log detailed error information
-      console.error("[Puppetserver] getFacts() failed", {
-        certname,
-        endpoint: `/puppet/v3/facts/${certname}`,
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-        errorDetails:
-          error instanceof PuppetserverError ? error.details : undefined,
-      });
+      this.logger.error("getFacts() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getFacts",
+        metadata: { certname, endpoint: `/puppet/v3/facts/${certname}` },
+      }, error instanceof Error ? error : undefined);
 
       // Handle 404 gracefully - node may not have facts yet
       if (
         error instanceof PuppetserverError &&
         (error.details as { status?: number }).status === 404
       ) {
-        console.warn(
-          `[Puppetserver] Facts not found for node '${certname}' (404) - node may not have checked in yet`,
-        );
+        this.logger.warn(`Facts not found for node '${certname}' (404) - node may not have checked in yet`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getFacts",
+          metadata: { certname },
+        });
         return null;
       }
 
@@ -572,11 +609,16 @@ export class PuppetserverClient {
    * @returns List of environments
    */
   async getEnvironments(): Promise<unknown> {
-    console.warn("[Puppetserver] getEnvironments() called", {
-      endpoint: "/puppet/v3/environments",
-      baseUrl: this.baseUrl,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
+    this.logger.debug("getEnvironments() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "getEnvironments",
+      metadata: {
+        endpoint: "/puppet/v3/environments",
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+      },
     });
 
     try {
@@ -584,67 +626,72 @@ export class PuppetserverClient {
 
       // Log successful response
       if (result === null) {
-        console.warn(
-          "[Puppetserver] getEnvironments() returned null - no environments configured",
-          {
-            endpoint: "/puppet/v3/environments",
-          },
-        );
+        this.logger.warn("getEnvironments() returned null - no environments configured", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getEnvironments",
+          metadata: { endpoint: "/puppet/v3/environments" },
+        });
       } else {
-        console.warn("[Puppetserver] getEnvironments() response received", {
-          resultType: Array.isArray(result) ? "array" : typeof result,
-          arrayLength: Array.isArray(result) ? result.length : undefined,
-          hasEnvironmentsProperty:
-            result && typeof result === "object" && "environments" in result,
-          environmentsCount:
-            result &&
-            typeof result === "object" &&
-            "environments" in result &&
-            Array.isArray((result as { environments?: unknown[] }).environments)
-              ? (result as { environments: unknown[] }).environments.length
-              : undefined,
-          sampleKeys:
-            result && typeof result === "object" && !Array.isArray(result)
-              ? Object.keys(result).slice(0, 10)
-              : undefined,
-          sampleData:
-            Array.isArray(result) && result.length > 0
-              ? JSON.stringify(result[0]).substring(0, 200)
-              : result &&
-                  typeof result === "object" &&
-                  "environments" in result &&
-                  Array.isArray(
-                    (result as { environments?: unknown[] }).environments,
-                  ) &&
-                  (result as { environments: unknown[] }).environments.length >
-                    0
-                ? JSON.stringify(
-                    (result as { environments: unknown[] }).environments[0],
-                  ).substring(0, 200)
+        this.logger.debug("getEnvironments() response received", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getEnvironments",
+          metadata: {
+            resultType: Array.isArray(result) ? "array" : typeof result,
+            arrayLength: Array.isArray(result) ? result.length : undefined,
+            hasEnvironmentsProperty:
+              result && typeof result === "object" && "environments" in result,
+            environmentsCount:
+              result &&
+              typeof result === "object" &&
+              "environments" in result &&
+              Array.isArray((result as { environments?: unknown[] }).environments)
+                ? (result as { environments: unknown[] }).environments.length
                 : undefined,
+            sampleKeys:
+              result && typeof result === "object" && !Array.isArray(result)
+                ? Object.keys(result).slice(0, 10)
+                : undefined,
+            sampleData:
+              Array.isArray(result) && result.length > 0
+                ? JSON.stringify(result[0]).substring(0, 200)
+                : result &&
+                    typeof result === "object" &&
+                    "environments" in result &&
+                    Array.isArray(
+                      (result as { environments?: unknown[] }).environments,
+                    ) &&
+                    (result as { environments: unknown[] }).environments.length >
+                      0
+                  ? JSON.stringify(
+                      (result as { environments: unknown[] }).environments[0],
+                    ).substring(0, 200)
+                  : undefined,
+          },
         });
       }
 
       return result;
     } catch (error) {
       // Log detailed error information
-      console.error("[Puppetserver] getEnvironments() failed", {
-        endpoint: "/puppet/v3/environments",
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-        errorDetails:
-          error instanceof PuppetserverError ? error.details : undefined,
-      });
+      this.logger.error("getEnvironments() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getEnvironments",
+        metadata: { endpoint: "/puppet/v3/environments" },
+      }, error instanceof Error ? error : undefined);
 
       // Handle 404 gracefully - no environments configured
       if (
         error instanceof PuppetserverError &&
         (error.details as { status?: number }).status === 404
       ) {
-        console.warn(
-          "[Puppetserver] Environments endpoint not found (404) - Puppetserver may not have environments configured or endpoint may not be available",
-        );
+        this.logger.warn("Environments endpoint not found (404) - Puppetserver may not have environments configured or endpoint may not be available", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getEnvironments",
+        });
         return null;
       }
 
@@ -686,7 +733,7 @@ export class PuppetserverClient {
     const path = name
       ? `/puppet-admin-api/v1/environment-cache?environment=${encodeURIComponent(name)}`
       : `/puppet-admin-api/v1/environment-cache`;
-    
+
     await this.delete(path);
   }
 
@@ -772,14 +819,19 @@ export class PuppetserverClient {
     body?: unknown,
   ): Promise<unknown> {
     // Log request details
-    console.warn(`[Puppetserver] ${method} ${url}`, {
-      method,
-      url,
-      hasBody: !!body,
-      bodyPreview: body ? JSON.stringify(body).substring(0, 200) : undefined,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
-      timeout: this.timeout,
+    this.logger.debug(`${method} ${url}`, {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "request",
+      metadata: {
+        method,
+        url,
+        hasBody: !!body,
+        bodyPreview: body ? JSON.stringify(body).substring(0, 200) : undefined,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+        timeout: this.timeout,
+      },
     });
 
     // Wrap the request in circuit breaker and retry logic
@@ -1007,14 +1059,19 @@ export class PuppetserverClient {
     }
 
     // Log error with all available information
-    console.error(`[Puppetserver] ${category} error during ${method} ${url}:`, {
-      message: errorMessage,
-      category,
-      statusCode,
-      responseBody: responseBody ? responseBody.substring(0, 500) : undefined,
-      endpoint: url,
-      method,
-    });
+    this.logger.error(`${category} error during ${method} ${url}`, {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "logError",
+      metadata: {
+        message: errorMessage,
+        category,
+        statusCode,
+        responseBody: responseBody ? responseBody.substring(0, 500) : undefined,
+        endpoint: url,
+        method,
+      },
+    }, error instanceof Error ? error : undefined);
   }
 
   /**
@@ -1044,13 +1101,18 @@ export class PuppetserverClient {
       }
 
       // Log request headers (without sensitive data)
-      console.warn(`[Puppetserver] Request headers for ${method} ${url}`, {
-        Accept: headers.Accept,
-        "Content-Type": headers["Content-Type"],
-        hasAuthToken: !!headers["X-Authentication"],
-        authTokenLength: headers["X-Authentication"]
-          ? headers["X-Authentication"].length
-          : undefined,
+      this.logger.debug(`Request headers for ${method} ${url}`, {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "fetchWithTimeout",
+        metadata: {
+          Accept: headers.Accept,
+          "Content-Type": headers["Content-Type"],
+          hasAuthToken: !!headers["X-Authentication"],
+          authTokenLength: headers["X-Authentication"]
+            ? headers["X-Authentication"].length
+            : undefined,
+        },
       });
 
       const options: https.RequestOptions = {
@@ -1146,27 +1208,34 @@ export class PuppetserverClient {
     method: string,
   ): Promise<unknown> {
     // Log response status
-    console.warn(`[Puppetserver] Response ${method} ${url}`, {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      headers: {
-        contentType: response.headers.get("content-type"),
-        contentLength: response.headers.get("content-length"),
+    this.logger.debug(`Response ${method} ${url}`, {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "handleResponse",
+      metadata: {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: {
+          contentType: response.headers.get("content-type"),
+          contentLength: response.headers.get("content-length"),
+        },
       },
     });
 
     // Handle authentication errors
     if (response.status === 401 || response.status === 403) {
       const errorText = await response.text();
-      console.error(
-        `[Puppetserver] Authentication error (${String(response.status)}) for ${method} ${url}:`,
-        {
+      this.logger.error(`Authentication error (${String(response.status)}) for ${method} ${url}`, {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "handleResponse",
+        metadata: {
           status: response.status,
           statusText: response.statusText,
           body: errorText.substring(0, 500),
         },
-      );
+      });
       throw new PuppetserverAuthenticationError(
         "Authentication failed. Check your Puppetserver token or certificate configuration.",
         {
@@ -1181,23 +1250,27 @@ export class PuppetserverClient {
 
     // Handle not found
     if (response.status === 404) {
-      console.warn(
-        `[Puppetserver] Resource not found (404) for ${method} ${url}`,
-      );
+      this.logger.warn(`Resource not found (404) for ${method} ${url}`, {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "handleResponse",
+      });
       return null;
     }
 
     // Handle other errors
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(
-        `[Puppetserver] HTTP error (${String(response.status)}) for ${method} ${url}:`,
-        {
+      this.logger.error(`HTTP error (${String(response.status)}) for ${method} ${url}`, {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "handleResponse",
+        metadata: {
           status: response.status,
           statusText: response.statusText,
           body: errorText.substring(0, 500),
         },
-      );
+      });
       throw new PuppetserverError(
         `Puppetserver API error: ${response.statusText}`,
         `HTTP_${String(response.status)}`,
@@ -1218,13 +1291,15 @@ export class PuppetserverClient {
     if (contentType.includes("text/plain") || url.includes("/status/v1/simple")) {
       const text = await response.text();
 
-      console.warn(
-        `[Puppetserver] Successfully parsed text response for ${method} ${url}`,
-        {
+      this.logger.debug(`Successfully parsed text response for ${method} ${url}`, {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "handleResponse",
+        metadata: {
           dataType: "text",
           responseText: text.substring(0, 100),
         },
-      );
+      });
 
       return text;
     }
@@ -1234,9 +1309,11 @@ export class PuppetserverClient {
       const data = await response.json();
 
       // Log successful response data summary
-      console.warn(
-        `[Puppetserver] Successfully parsed JSON response for ${method} ${url}`,
-        {
+      this.logger.debug(`Successfully parsed JSON response for ${method} ${url}`, {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "handleResponse",
+        metadata: {
           dataType: Array.isArray(data) ? "array" : typeof data,
           arrayLength: Array.isArray(data) ? data.length : undefined,
           objectKeys:
@@ -1244,7 +1321,7 @@ export class PuppetserverClient {
               ? Object.keys(data).slice(0, 10)
               : undefined,
         },
-      );
+      });
 
       return data;
     } catch (error) {
@@ -1252,28 +1329,34 @@ export class PuppetserverClient {
       try {
         const text = await response.text();
         if (!text || text.trim() === "") {
-          console.warn(
-            `[Puppetserver] Empty response for ${method} ${url}, returning null`,
-          );
+          this.logger.warn(`Empty response for ${method} ${url}, returning null`, {
+            component: "PuppetserverClient",
+            integration: "puppetserver",
+            operation: "handleResponse",
+          });
           return null;
         }
 
-        console.warn(
-          `[Puppetserver] JSON parsing failed, returning as text for ${method} ${url}`,
-          {
+        this.logger.warn(`JSON parsing failed, returning as text for ${method} ${url}`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "handleResponse",
+          metadata: {
             responseText: text.substring(0, 100),
           },
-        );
+        });
 
         return text;
       } catch (textError) {
-        console.error(
-          `[Puppetserver] Failed to parse response for ${method} ${url}:`,
-          {
+        this.logger.error(`Failed to parse response for ${method} ${url}`, {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "handleResponse",
+          metadata: {
             jsonError: error instanceof Error ? error.message : String(error),
             textError: textError instanceof Error ? textError.message : String(textError),
           },
-        );
+        });
         throw new PuppetserverError(
           "Failed to parse Puppetserver response",
           "PARSE_ERROR",
@@ -1292,38 +1375,48 @@ export class PuppetserverClient {
    * @returns Services status information
    */
   async getServicesStatus(): Promise<unknown> {
-    console.warn("[Puppetserver] getServicesStatus() called", {
-      endpoint: "/status/v1/services",
-      baseUrl: this.baseUrl,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
+    this.logger.debug("getServicesStatus() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "getServicesStatus",
+      metadata: {
+        endpoint: "/status/v1/services",
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+      },
     });
 
     try {
       const result = await this.get("/status/v1/services");
 
-      console.warn("[Puppetserver] getServicesStatus() response received", {
-        resultType: typeof result,
-        hasServices:
-          result && typeof result === "object" && Object.keys(result).length > 0,
-        serviceCount:
-          result && typeof result === "object"
-            ? Object.keys(result).length
-            : undefined,
-        sampleKeys:
-          result && typeof result === "object"
-            ? Object.keys(result).slice(0, 5)
-            : undefined,
+      this.logger.debug("getServicesStatus() response received", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getServicesStatus",
+        metadata: {
+          resultType: typeof result,
+          hasServices:
+            result && typeof result === "object" && Object.keys(result).length > 0,
+          serviceCount:
+            result && typeof result === "object"
+              ? Object.keys(result).length
+              : undefined,
+          sampleKeys:
+            result && typeof result === "object"
+              ? Object.keys(result).slice(0, 5)
+              : undefined,
+        },
       });
 
       return result;
     } catch (error) {
-      console.error("[Puppetserver] getServicesStatus() failed", {
-        endpoint: "/status/v1/services",
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-      });
+      this.logger.error("getServicesStatus() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getServicesStatus",
+        metadata: { endpoint: "/status/v1/services" },
+      }, error instanceof Error ? error : undefined);
       throw error;
     }
   }
@@ -1337,29 +1430,39 @@ export class PuppetserverClient {
    * @returns Simple status (typically "running" or error message)
    */
   async getSimpleStatus(): Promise<unknown> {
-    console.warn("[Puppetserver] getSimpleStatus() called", {
-      endpoint: "/status/v1/simple",
-      baseUrl: this.baseUrl,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
+    this.logger.debug("getSimpleStatus() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "getSimpleStatus",
+      metadata: {
+        endpoint: "/status/v1/simple",
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+      },
     });
 
     try {
       const result = await this.get("/status/v1/simple");
 
-      console.warn("[Puppetserver] getSimpleStatus() response received", {
-        resultType: typeof result,
-        result: result,
+      this.logger.debug("getSimpleStatus() response received", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getSimpleStatus",
+        metadata: {
+          resultType: typeof result,
+          result: result,
+        },
       });
 
       return result;
     } catch (error) {
-      console.error("[Puppetserver] getSimpleStatus() failed", {
-        endpoint: "/status/v1/simple",
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-      });
+      this.logger.error("getSimpleStatus() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getSimpleStatus",
+        metadata: { endpoint: "/status/v1/simple" },
+      }, error instanceof Error ? error : undefined);
       throw error;
     }
   }
@@ -1373,33 +1476,43 @@ export class PuppetserverClient {
    * @returns Admin API information
    */
   async getAdminApiInfo(): Promise<unknown> {
-    console.warn("[Puppetserver] getAdminApiInfo() called", {
-      endpoint: "/puppet-admin-api/v1",
-      baseUrl: this.baseUrl,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
+    this.logger.debug("getAdminApiInfo() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "getAdminApiInfo",
+      metadata: {
+        endpoint: "/puppet-admin-api/v1",
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+      },
     });
 
     try {
       const result = await this.get("/puppet-admin-api/v1");
 
-      console.warn("[Puppetserver] getAdminApiInfo() response received", {
-        resultType: typeof result,
-        hasInfo: result && typeof result === "object",
-        sampleKeys:
-          result && typeof result === "object"
-            ? Object.keys(result).slice(0, 10)
-            : undefined,
+      this.logger.debug("getAdminApiInfo() response received", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getAdminApiInfo",
+        metadata: {
+          resultType: typeof result,
+          hasInfo: result && typeof result === "object",
+          sampleKeys:
+            result && typeof result === "object"
+              ? Object.keys(result).slice(0, 10)
+              : undefined,
+        },
       });
 
       return result;
     } catch (error) {
-      console.error("[Puppetserver] getAdminApiInfo() failed", {
-        endpoint: "/puppet-admin-api/v1",
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-      });
+      this.logger.error("getAdminApiInfo() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getAdminApiInfo",
+        metadata: { endpoint: "/puppet-admin-api/v1" },
+      }, error instanceof Error ? error : undefined);
       throw error;
     }
   }
@@ -1415,13 +1528,18 @@ export class PuppetserverClient {
    * @returns Metrics data
    */
   async getMetrics(mbean?: string): Promise<unknown> {
-    console.warn("[Puppetserver] getMetrics() called", {
-      endpoint: "/metrics/v2",
-      mbean,
-      baseUrl: this.baseUrl,
-      hasToken: !!this.token,
-      hasCertAuth: !!this.httpsAgent,
-      warning: "This endpoint can be resource-intensive",
+    this.logger.debug("getMetrics() called", {
+      component: "PuppetserverClient",
+      integration: "puppetserver",
+      operation: "getMetrics",
+      metadata: {
+        endpoint: "/metrics/v2",
+        mbean,
+        baseUrl: this.baseUrl,
+        hasToken: !!this.token,
+        hasCertAuth: !!this.httpsAgent,
+        warning: "This endpoint can be resource-intensive",
+      },
     });
 
     try {
@@ -1445,14 +1563,24 @@ export class PuppetserverClient {
             const result = await this.get("/metrics/v2", params);
             metricsData[mbeanPattern] = result;
           } catch (error) {
-            console.warn(`[Puppetserver] Failed to get metrics for ${mbeanPattern}:`, error);
+            this.logger.warn(`Failed to get metrics for ${mbeanPattern}`, {
+              component: "PuppetserverClient",
+              integration: "puppetserver",
+              operation: "getMetrics",
+              metadata: { mbeanPattern },
+            });
             metricsData[mbeanPattern] = { error: error instanceof Error ? error.message : String(error) };
           }
         }
 
-        console.warn("[Puppetserver] getMetrics() comprehensive response received", {
-          mbeanCount: Object.keys(metricsData).length,
-          mbeans: Object.keys(metricsData),
+        this.logger.debug("getMetrics() comprehensive response received", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getMetrics",
+          metadata: {
+            mbeanCount: Object.keys(metricsData).length,
+            mbeans: Object.keys(metricsData),
+          },
         });
 
         return metricsData;
@@ -1461,26 +1589,30 @@ export class PuppetserverClient {
         const params: QueryParams = { mbean };
         const result = await this.get("/metrics/v2", params);
 
-        console.warn("[Puppetserver] getMetrics() response received", {
-          resultType: typeof result,
-          mbean,
-          hasMetrics: result && typeof result === "object",
-          sampleKeys:
-            result && typeof result === "object"
-              ? Object.keys(result).slice(0, 10)
-              : undefined,
+        this.logger.debug("getMetrics() response received", {
+          component: "PuppetserverClient",
+          integration: "puppetserver",
+          operation: "getMetrics",
+          metadata: {
+            resultType: typeof result,
+            mbean,
+            hasMetrics: result && typeof result === "object",
+            sampleKeys:
+              result && typeof result === "object"
+                ? Object.keys(result).slice(0, 10)
+                : undefined,
+          },
         });
 
         return result;
       }
     } catch (error) {
-      console.error("[Puppetserver] getMetrics() failed", {
-        endpoint: "/metrics/v2",
-        mbean,
-        error: error instanceof Error ? error.message : String(error),
-        errorType:
-          error instanceof Error ? error.constructor.name : typeof error,
-      });
+      this.logger.error("getMetrics() failed", {
+        component: "PuppetserverClient",
+        integration: "puppetserver",
+        operation: "getMetrics",
+        metadata: { endpoint: "/metrics/v2", mbean },
+      }, error instanceof Error ? error : undefined);
       throw error;
     }
   }

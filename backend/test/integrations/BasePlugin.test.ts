@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { BasePlugin } from '../../src/integrations/BasePlugin';
+import { LoggerService } from '../../src/services/LoggerService';
 import type { IntegrationConfig, HealthStatus } from '../../src/integrations/types';
 
 /**
@@ -14,8 +15,8 @@ class MockPlugin extends BasePlugin {
   public healthCheckCalled = false;
   public shouldFailHealthCheck = false;
 
-  constructor(name: string, type: 'execution' | 'information' | 'both') {
-    super(name, type);
+  constructor(name: string, type: 'execution' | 'information' | 'both', logger: LoggerService) {
+    super(name, type, logger);
   }
 
   protected async performInitialization(): Promise<void> {
@@ -39,9 +40,11 @@ class MockPlugin extends BasePlugin {
 describe('BasePlugin', () => {
   let plugin: MockPlugin;
   let config: IntegrationConfig;
+  let logger: LoggerService;
 
   beforeEach(() => {
-    plugin = new MockPlugin('test-plugin', 'information');
+    logger = new LoggerService('error'); // Use error level to minimize test output
+    plugin = new MockPlugin('test-plugin', 'information', logger);
     config = {
       enabled: true,
       name: 'test-plugin',

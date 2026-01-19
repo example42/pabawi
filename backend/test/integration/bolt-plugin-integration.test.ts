@@ -14,6 +14,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BoltPlugin } from "../../src/integrations/bolt/BoltPlugin";
 import { BoltService } from "../../src/bolt/BoltService";
+import { LoggerService } from "../../src/services/LoggerService";
 import type { IntegrationConfig, Action } from "../../src/integrations/types";
 import type { Node } from "../../src/bolt/types";
 
@@ -84,10 +85,11 @@ describe("Bolt Plugin Integration", () => {
     boltService = new BoltService(boltProjectPath);
 
     // Create BoltPlugin
-    boltPlugin = new BoltPlugin(boltService);
+    const logger = new LoggerService('error');
+    boltPlugin = new BoltPlugin(boltService, logger);
 
     // Create IntegrationManager and register Bolt plugin
-    integrationManager = new IntegrationManager();
+    integrationManager = new IntegrationManager({ logger });
 
     const config: IntegrationConfig = {
       enabled: true,
@@ -439,9 +441,10 @@ describe("Bolt Plugin Integration", () => {
   describe("Plugin lifecycle", () => {
     it("should handle plugin unregistration", () => {
       // Test unregistration logic regardless of Bolt availability
-      const tempManager = new IntegrationManager();
+      const tempLogger = new LoggerService('error');
+      const tempManager = new IntegrationManager({ logger: tempLogger });
       const tempBoltService = new BoltService("./bolt-project");
-      const tempPlugin = new BoltPlugin(tempBoltService);
+      const tempPlugin = new BoltPlugin(tempBoltService, tempLogger);
 
       const config: IntegrationConfig = {
         enabled: true,
@@ -470,11 +473,12 @@ describe("Bolt Plugin Integration", () => {
         return;
       }
 
-      const tempManager = new IntegrationManager();
+      const tempLogger = new LoggerService('error');
+      const tempManager = new IntegrationManager({ logger: tempLogger });
 
       // Register Bolt
       const tempBoltService = new BoltService("./bolt-project");
-      const tempBoltPlugin = new BoltPlugin(tempBoltService);
+      const tempBoltPlugin = new BoltPlugin(tempBoltService, tempLogger);
       tempManager.registerPlugin(tempBoltPlugin, {
         enabled: true,
         name: "bolt",

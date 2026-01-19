@@ -17,6 +17,7 @@ import {
   BoltTaskNotFoundError,
   BoltTaskParameterError,
 } from "./types";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Streaming callback for real-time output
@@ -43,6 +44,7 @@ export class BoltService {
   private readonly defaultTimeout: number;
   private readonly boltProjectPath: string;
   private taskListCache: Task[] | null = null;
+  private logger: LoggerService;
 
   // Cache configuration
   private readonly inventoryTtl: number;
@@ -57,6 +59,7 @@ export class BoltService {
     defaultTimeout = 300000,
     cacheConfig?: { inventoryTtl?: number; factsTtl?: number },
   ) {
+    this.logger = new LoggerService();
     this.boltProjectPath = boltProjectPath;
     this.defaultTimeout = defaultTimeout;
     this.inventoryTtl = cacheConfig?.inventoryTtl ?? 30000; // 30 seconds default
@@ -1202,7 +1205,11 @@ export class BoltService {
       const task = this.parseTaskData(jsonOutput);
       return task;
     } catch (error) {
-      console.error(`Error fetching details for task ${taskName}:`, error);
+      this.logger.error(`Error fetching details for task ${taskName}`, {
+        component: "BoltService",
+        operation: "getTaskDetails",
+        metadata: { taskName },
+      }, error instanceof Error ? error : undefined);
       return null;
     }
   }

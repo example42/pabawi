@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BasePlugin } from "../../src/integrations/BasePlugin";
+import { LoggerService } from "../../src/services/LoggerService";
 import type {
   IntegrationConfig,
   HealthStatus,
@@ -26,8 +27,8 @@ class MockInformationSource
   public shouldFailInventory = false;
   public shouldFailFacts = false;
 
-  constructor(name: string, nodes: Node[] = []) {
-    super(name, "information");
+  constructor(name: string, nodes: Node[] = [], logger: LoggerService) {
+    super(name, "information", logger);
     this.nodes = nodes;
   }
 
@@ -72,8 +73,8 @@ class MockInformationSource
  * Mock execution tool plugin for testing
  */
 class MockExecutionTool extends BasePlugin implements ExecutionToolPlugin {
-  constructor(name: string) {
-    super(name, "execution");
+  constructor(name: string, logger: LoggerService) {
+    super(name, "execution", logger);
   }
 
   protected async performInitialization(): Promise<void> {
@@ -111,14 +112,16 @@ class MockExecutionTool extends BasePlugin implements ExecutionToolPlugin {
 
 describe("IntegrationManager", () => {
   let manager: IntegrationManager;
+  let logger: LoggerService;
 
   beforeEach(() => {
-    manager = new IntegrationManager();
+    logger = new LoggerService('error'); // Use error level to minimize test output
+    manager = new IntegrationManager({ logger });
   });
 
   describe("plugin registration", () => {
     it("should register an information source plugin", () => {
-      const plugin = new MockInformationSource("test-source");
+      const plugin = new MockInformationSource("test-source", [], logger);
       const config: IntegrationConfig = {
         enabled: true,
         name: "test-source",
@@ -133,7 +136,7 @@ describe("IntegrationManager", () => {
     });
 
     it("should register an execution tool plugin", () => {
-      const plugin = new MockExecutionTool("test-tool");
+      const plugin = new MockExecutionTool("test-tool", logger);
       const config: IntegrationConfig = {
         enabled: true,
         name: "test-tool",
@@ -148,8 +151,8 @@ describe("IntegrationManager", () => {
     });
 
     it("should throw error when registering duplicate plugin", () => {
-      const plugin1 = new MockInformationSource("test-source");
-      const plugin2 = new MockInformationSource("test-source");
+      const plugin1 = new MockInformationSource("test-source", [], logger);
+      const plugin2 = new MockInformationSource("test-source", [], logger);
       const config: IntegrationConfig = {
         enabled: true,
         name: "test-source",
@@ -165,8 +168,8 @@ describe("IntegrationManager", () => {
     });
 
     it("should register multiple plugins", () => {
-      const source = new MockInformationSource("source");
-      const tool = new MockExecutionTool("tool");
+      const source = new MockInformationSource("source", [], logger);
+      const tool = new MockExecutionTool("tool", logger);
 
       manager.registerPlugin(source, {
         enabled: true,
@@ -190,8 +193,8 @@ describe("IntegrationManager", () => {
 
   describe("plugin initialization", () => {
     it("should initialize all registered plugins", async () => {
-      const plugin1 = new MockInformationSource("source1");
-      const plugin2 = new MockInformationSource("source2");
+      const plugin1 = new MockInformationSource("source1", [], logger);
+      const plugin2 = new MockInformationSource("source2", [], logger);
 
       manager.registerPlugin(plugin1, {
         enabled: true,
@@ -216,8 +219,8 @@ describe("IntegrationManager", () => {
     });
 
     it("should continue initialization even if some plugins fail", async () => {
-      const goodPlugin = new MockInformationSource("good");
-      const badPlugin = new MockInformationSource("bad");
+      const goodPlugin = new MockInformationSource("good", [], logger);
+      const badPlugin = new MockInformationSource("bad", [], logger);
 
       // Override performInitialization to throw error
       badPlugin.performInitialization = async () => {
@@ -255,8 +258,8 @@ describe("IntegrationManager", () => {
     });
 
     it("should get all plugins", () => {
-      const source = new MockInformationSource("source");
-      const tool = new MockExecutionTool("tool");
+      const source = new MockInformationSource("source", [], logger);
+      const tool = new MockExecutionTool("tool", logger);
 
       manager.registerPlugin(source, {
         enabled: true,
@@ -279,7 +282,7 @@ describe("IntegrationManager", () => {
 
   describe("plugin unregistration", () => {
     it("should unregister a plugin", () => {
-      const plugin = new MockInformationSource("test-source");
+      const plugin = new MockInformationSource("test-source", [], logger);
       manager.registerPlugin(plugin, {
         enabled: true,
         name: "test-source",
@@ -302,7 +305,7 @@ describe("IntegrationManager", () => {
 
   describe("action execution", () => {
     it("should execute action using specified tool", async () => {
-      const tool = new MockExecutionTool("test-tool");
+      const tool = new MockExecutionTool("test-tool", logger);
       manager.registerPlugin(tool, {
         enabled: true,
         name: "test-tool",
@@ -336,7 +339,7 @@ describe("IntegrationManager", () => {
     });
 
     it("should throw error when tool not initialized", async () => {
-      const tool = new MockExecutionTool("test-tool");
+      const tool = new MockExecutionTool("test-tool", logger);
       manager.registerPlugin(tool, {
         enabled: false,
         name: "test-tool",
@@ -379,8 +382,8 @@ describe("IntegrationManager", () => {
         },
       ];
 
-      const source1 = new MockInformationSource("source1", nodes1);
-      const source2 = new MockInformationSource("source2", nodes2);
+      const source1 = new MockInformationSource("source1", nodes1, logger);
+      const source2 = new MockInformationSource("source2", nodes2, logger);
 
       manager.registerPlugin(source1, {
         enabled: true,
@@ -419,8 +422,8 @@ describe("IntegrationManager", () => {
         },
       ];
 
-      const goodSource = new MockInformationSource("good", nodes);
-      const badSource = new MockInformationSource("bad", []);
+      const goodSource = new MockInformationSource("good", nodes, logger);
+      const badSource = new MockInformationSource("bad", [], logger);
       badSource.shouldFailInventory = true;
 
       manager.registerPlugin(goodSource, {
@@ -455,8 +458,8 @@ describe("IntegrationManager", () => {
         config: {},
       };
 
-      const source1 = new MockInformationSource("source1", [node]);
-      const source2 = new MockInformationSource("source2", [node]);
+      const source1 = new MockInformationSource("source1", [node], logger);
+      const source2 = new MockInformationSource("source2", [node], logger);
 
       manager.registerPlugin(source1, {
         enabled: true,
@@ -511,7 +514,7 @@ describe("IntegrationManager", () => {
         },
       };
 
-      const source = new MockInformationSource("source", [node]);
+      const source = new MockInformationSource("source", [node], logger);
       source.facts.set("node1", facts);
 
       manager.registerPlugin(source, {
@@ -531,7 +534,7 @@ describe("IntegrationManager", () => {
     });
 
     it("should throw error when node not found", async () => {
-      const source = new MockInformationSource("source", []);
+      const source = new MockInformationSource("source", [], logger);
 
       manager.registerPlugin(source, {
         enabled: true,
@@ -556,7 +559,7 @@ describe("IntegrationManager", () => {
         config: {},
       };
 
-      const source = new MockInformationSource("source", [node]);
+      const source = new MockInformationSource("source", [node], logger);
       source.shouldFailFacts = true;
 
       manager.registerPlugin(source, {
@@ -577,8 +580,8 @@ describe("IntegrationManager", () => {
 
   describe("health check aggregation", () => {
     it("should aggregate health checks from all plugins", async () => {
-      const source = new MockInformationSource("source");
-      const tool = new MockExecutionTool("tool");
+      const source = new MockInformationSource("source", [], logger);
+      const tool = new MockExecutionTool("tool", logger);
 
       manager.registerPlugin(source, {
         enabled: true,
@@ -604,7 +607,7 @@ describe("IntegrationManager", () => {
     });
 
     it("should handle health check failures", async () => {
-      const source = new MockInformationSource("source");
+      const source = new MockInformationSource("source", [], logger);
 
       // Override performHealthCheck to throw error
       source.performHealthCheck = async () => {
@@ -630,7 +633,7 @@ describe("IntegrationManager", () => {
     });
 
     it("should cache health check results when requested", async () => {
-      const source = new MockInformationSource("source");
+      const source = new MockInformationSource("source", [], logger);
       let healthCheckCount = 0;
 
       // Override performHealthCheck to count calls
@@ -663,7 +666,7 @@ describe("IntegrationManager", () => {
     });
 
     it("should clear health check cache", async () => {
-      const source = new MockInformationSource("source");
+      const source = new MockInformationSource("source", [], logger);
 
       manager.registerPlugin(source, {
         enabled: true,
@@ -686,7 +689,7 @@ describe("IntegrationManager", () => {
 
   describe("health check scheduler", () => {
     it("should start and stop health check scheduler", () => {
-      const source = new MockInformationSource("source");
+      const source = new MockInformationSource("source", [], logger);
 
       manager.registerPlugin(source, {
         enabled: true,
@@ -706,7 +709,7 @@ describe("IntegrationManager", () => {
     });
 
     it("should not start scheduler twice", () => {
-      const source = new MockInformationSource("source");
+      const source = new MockInformationSource("source", [], logger);
 
       manager.registerPlugin(source, {
         enabled: true,

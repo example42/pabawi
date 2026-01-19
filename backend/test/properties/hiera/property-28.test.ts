@@ -15,6 +15,7 @@ import * as os from "os";
 import * as yaml from "yaml";
 import { HieraService, type HieraServiceConfig } from "../../../src/integrations/hiera/HieraService";
 import { IntegrationManager } from "../../../src/integrations/IntegrationManager";
+import { LoggerService } from "../../../src/services/LoggerService";
 
 describe("Property 28: Cache Correctness", () => {
   const propertyTestConfig = {
@@ -92,7 +93,7 @@ hierarchy:
     }
 
     // Create integration manager and service with caching enabled
-    const integrationManager = new IntegrationManager();
+    const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     const config: HieraServiceConfig = {
       controlRepoPath: tempDir,

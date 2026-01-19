@@ -7,6 +7,7 @@
 
 import type { Node } from "../bolt/types";
 import type { IntegrationManager } from "./IntegrationManager";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Linked node with source attribution
@@ -42,7 +43,11 @@ export interface LinkedNodeData {
  * Links nodes from multiple sources based on matching identifiers (certname, hostname, etc.)
  */
 export class NodeLinkingService {
-  constructor(private integrationManager: IntegrationManager) {}
+  private logger: LoggerService;
+
+  constructor(private integrationManager: IntegrationManager) {
+    this.logger = new LoggerService();
+  }
 
   /**
    * Link nodes from multiple sources based on matching identifiers
@@ -203,7 +208,11 @@ export class NodeLinkingService {
           ...additionalData,
         };
       } catch (error) {
-        console.error(`Failed to get data from ${sourceName}:`, error);
+        this.logger.error(`Failed to get data from ${sourceName}`, {
+          component: "NodeLinkingService",
+          operation: "getLinkedNodeData",
+          metadata: { sourceName, nodeId },
+        }, error instanceof Error ? error : undefined);
       }
     }
 

@@ -495,7 +495,7 @@ class profile::unused {
   // Create a file with trailing whitespace for lint testing
   const lintTestManifest = `
 class profile::lint_test {
-  # This line has trailing spaces   
+  # This line has trailing spaces
   notify { 'test': }
 }
 `;

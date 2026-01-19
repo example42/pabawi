@@ -1,5 +1,6 @@
 <script lang="ts">
   import { get, del } from '../lib/api';
+  import type { DebugInfo } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
@@ -22,12 +23,14 @@
     selectedEnvironment?: string;
     onSelect?: (environment: string) => void;
     showFlushButton?: boolean;
+    onDebugInfo?: (info: DebugInfo | null) => void;
   }
 
   let {
     selectedEnvironment = $bindable(),
     onSelect,
-    showFlushButton = false
+    showFlushButton = false,
+    onDebugInfo
   }: EnvironmentSelectorProps = $props();
 
   // State
@@ -51,10 +54,15 @@
       loading = true;
       error = null;
       const startTime = performance.now();
-      const data = await get<{ environments: Environment[]; source: string; count: number }>('/api/integrations/puppetserver/environments');
+      const data = await get<{ environments: Environment[]; source: string; count: number; _debug?: DebugInfo }>('/api/integrations/puppetserver/environments');
       const endTime = performance.now();
 
       environments = data.environments;
+
+      // Pass debug info to parent
+      if (onDebugInfo && data._debug) {
+        onDebugInfo(data._debug);
+      }
 
       if (expertMode.enabled) {
         console.log('[EnvironmentSelector] Loaded', environments.length, 'environments');
@@ -267,10 +275,10 @@
                   onclick={() => toggleEnvironmentDetails(env.name)}
                   class="mt-2 flex items-center gap-1 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
                 >
-                  <svg 
-                    class="h-4 w-4 transition-transform {expandedEnvironments.has(env.name) ? 'rotate-90' : ''}" 
-                    fill="none" 
-                    stroke="currentColor" 
+                  <svg
+                    class="h-4 w-4 transition-transform {expandedEnvironments.has(env.name) ? 'rotate-90' : ''}"
+                    fill="none"
+                    stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -288,7 +296,7 @@
                       <span class="text-gray-600 dark:text-gray-400">{formatTimeout(env.settings.environment_timeout)}</span>
                     </div>
                   {/if}
-                  
+
                   {#if env.settings.modulepath && env.settings.modulepath.length > 0}
                     <div>
                       <span class="font-medium text-gray-700 dark:text-gray-300">Module Path:</span>
@@ -299,7 +307,7 @@
                       </ul>
                     </div>
                   {/if}
-                  
+
                   {#if env.settings.manifest && env.settings.manifest.length > 0}
                     <div>
                       <span class="font-medium text-gray-700 dark:text-gray-300">Manifest:</span>
@@ -310,7 +318,7 @@
                       </ul>
                     </div>
                   {/if}
-                  
+
                   {#if env.settings.config_version}
                     <div class="flex justify-between">
                       <span class="font-medium text-gray-700 dark:text-gray-300">Config Version:</span>

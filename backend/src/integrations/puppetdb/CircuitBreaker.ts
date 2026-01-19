@@ -10,6 +10,8 @@
  * - HALF_OPEN: Testing if service has recovered
  */
 
+import { LoggerService } from "../../services/LoggerService";
+
 /**
  * Circuit breaker state
  */
@@ -79,6 +81,7 @@ export class CircuitBreaker {
   private lastFailureTime?: number;
   private lastSuccessTime?: number;
   private openedAt?: number;
+  private logger: LoggerService;
 
   /**
    * Create a new circuit breaker
@@ -86,6 +89,7 @@ export class CircuitBreaker {
    * @param config - Circuit breaker configuration
    */
   constructor(private config: CircuitBreakerConfig) {
+    this.logger = new LoggerService();
     if (config.failureThreshold < 1) {
       throw new Error("Failure threshold must be at least 1");
     }
@@ -232,10 +236,11 @@ export class CircuitBreaker {
     this.state = newState;
 
     // Log state transition
-    // eslint-disable-next-line no-console
-    console.log(
-      `[CircuitBreaker] State transition: ${oldState} -> ${newState}`,
-    );
+    this.logger.info(`[CircuitBreaker] State transition: ${oldState} -> ${newState}`, {
+      component: "CircuitBreaker",
+      operation: "transitionTo",
+      metadata: { oldState, newState },
+    });
 
     // Invoke callback
     if (this.config.onStateChange) {
@@ -345,22 +350,30 @@ export function createPuppetDBCircuitBreaker(
   resetTimeout = 60000,
   timeout?: number,
 ): CircuitBreaker {
+  const logger = new LoggerService();
   return new CircuitBreaker({
     failureThreshold,
     resetTimeout,
     timeout,
     onStateChange: (oldState, newState): void => {
-      // eslint-disable-next-line no-console
-      console.log(`[PuppetDB] Circuit breaker: ${oldState} -> ${newState}`);
+      logger.info(`[PuppetDB] Circuit breaker: ${oldState} -> ${newState}`, {
+        component: "CircuitBreaker",
+        operation: "createPuppetDBCircuitBreaker",
+        metadata: { oldState, newState },
+      });
     },
     onOpen: (failureCount): void => {
-      console.error(
-        `[PuppetDB] Circuit breaker opened after ${String(failureCount)} failures`,
-      );
+      logger.error(`[PuppetDB] Circuit breaker opened after ${String(failureCount)} failures`, {
+        component: "CircuitBreaker",
+        operation: "createPuppetDBCircuitBreaker",
+        metadata: { failureCount },
+      });
     },
     onClose: (): void => {
-      // eslint-disable-next-line no-console
-      console.log("[PuppetDB] Circuit breaker closed - service recovered");
+      logger.info("[PuppetDB] Circuit breaker closed - service recovered", {
+        component: "CircuitBreaker",
+        operation: "createPuppetDBCircuitBreaker",
+      });
     },
   });
 }

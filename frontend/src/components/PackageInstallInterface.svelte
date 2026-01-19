@@ -6,6 +6,7 @@
   import StatusBadge from './StatusBadge.svelte';
   import CommandOutput from './CommandOutput.svelte';
   import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
+  import IntegrationBadge from './IntegrationBadge.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
@@ -263,8 +264,9 @@
     class="flex w-full items-center justify-between text-left"
     onclick={() => expanded = !expanded}
   >
-    <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+    <h2 class="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
       Install Software
+      <IntegrationBadge integration="bolt" variant="badge" size="sm" />
     </h2>
     <svg
       class="h-5 w-5 transform text-gray-500 transition-transform dark:text-gray-400"

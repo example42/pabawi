@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Execution context for error tracking
@@ -57,6 +58,12 @@ export interface ErrorResponse {
  * Service for formatting errors with expert mode support
  */
 export class ErrorHandlingService {
+  private logger: LoggerService;
+
+  constructor() {
+    this.logger = new LoggerService();
+  }
+
   /**
    * Generate a unique request ID for error correlation
    */
@@ -580,27 +587,16 @@ export class ErrorHandlingService {
    * @param context - Execution context
    */
   public logError(error: Error, context: ExecutionContext): void {
-    const timestamp = new Date().toISOString();
-    console.error(
-      `[${timestamp}] Error in ${context.method} ${context.endpoint}`,
-    );
-    console.error(`Request ID: ${context.requestId}`);
-    console.error(`Error: ${error.message}`);
-    console.error(`Stack: ${error.stack ?? "No stack trace"}`);
-
-    if (context.nodeId) {
-      console.error(`Node ID: ${context.nodeId}`);
-    }
-
-    if (context.boltCommand) {
-      console.error(`Bolt Command: ${context.boltCommand}`);
-    }
-
-    if (context.additionalData) {
-      console.error(
-        `Additional Data: ${JSON.stringify(context.additionalData)}`,
-      );
-    }
+    this.logger.error(`Error in ${context.method} ${context.endpoint}`, {
+      component: "ErrorHandlingService",
+      operation: "logError",
+      metadata: {
+        requestId: context.requestId,
+        nodeId: context.nodeId,
+        boltCommand: context.boltCommand,
+        additionalData: context.additionalData,
+      },
+    }, error);
   }
 
   /**

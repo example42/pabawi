@@ -17,6 +17,7 @@ import * as path from "path";
 import type { IntegrationManager } from "../IntegrationManager";
 import type { InformationSourcePlugin } from "../types";
 import type { Facts, FactResult, LocalFactFile, FactSourceConfig } from "./types";
+import { LoggerService } from "../../services/LoggerService";
 
 /**
  * FactService
@@ -28,6 +29,7 @@ export class FactService {
   private integrationManager: IntegrationManager;
   private localFactsPath?: string;
   private preferPuppetDB: boolean;
+  private logger: LoggerService;
 
   /**
    * Create a new FactService
@@ -42,6 +44,7 @@ export class FactService {
     this.integrationManager = integrationManager;
     this.localFactsPath = config?.localFactsPath;
     this.preferPuppetDB = config?.preferPuppetDB ?? true;
+    this.logger = new LoggerService();
   }
 
   /**
@@ -459,17 +462,16 @@ export class FactService {
    * @param level - Log level
    */
   private log(message: string, level: "info" | "warn" | "error" = "info"): void {
-    const prefix = "[FactService]";
+    const metadata = { component: "FactService", operation: "log" };
     switch (level) {
       case "warn":
-        console.warn(prefix, message);
+        this.logger.warn(message, metadata);
         break;
       case "error":
-        console.error(prefix, message);
+        this.logger.error(message, metadata);
         break;
       default:
-        // eslint-disable-next-line no-console
-        console.log(prefix, message);
+        this.logger.info(message, metadata);
     }
   }
 }

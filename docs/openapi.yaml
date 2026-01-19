@@ -3,8 +3,8 @@ info:
   title: Pabawi - Unified Remote Execution Interface API
   description: |
     REST API for Pabawi, a web-based interface for managing Bolt automation with integrated
-    PuppetDB, Puppetserver, and Hiera support. This API provides endpoints for managing 
-    inventory from multiple sources, executing commands and tasks, gathering facts, 
+    PuppetDB, Puppetserver, and Hiera support. This API provides endpoints for managing
+    inventory from multiple sources, executing commands and tasks, gathering facts,
     running Puppet, installing packages, viewing execution history, and analyzing Hiera data.
 
     ## Integration Sources
@@ -140,7 +140,7 @@ paths:
       summary: List all nodes from inventory sources
       description: |
         Retrieve all nodes from configured inventory sources (Bolt, PuppetDB, Puppetserver).
-        
+
         Query parameters:
         - sources: Comma-separated list of sources (e.g., "bolt,puppetdb,puppetserver") or "all"
         - pql: PuppetDB PQL query for filtering (only applies when PuppetDB source is included)

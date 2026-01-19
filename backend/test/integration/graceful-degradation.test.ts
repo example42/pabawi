@@ -16,6 +16,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { createIntegrationsRouter } from '../../src/routes/integrations';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
+import { LoggerService } from '../../src/services/LoggerService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import type { PuppetDBConfig } from '../../src/config/schema';
 
@@ -30,7 +31,7 @@ describe('Graceful Degradation', () => {
     app.use(express.json());
 
     // Create integration manager
-    integrationManager = new IntegrationManager();
+    integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     // Initialize PuppetDB if configured (optional for these tests)
     const puppetdbConfig = process.env.PUPPETDB_SERVER_URL

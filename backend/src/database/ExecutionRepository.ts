@@ -212,8 +212,17 @@ export class ExecutionRepository {
     try {
       await this.run(sql, params);
     } catch (error) {
+      // Provide detailed error information for debugging
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorDetails = {
+        operation: "update",
+        executionId: id,
+        fields: Object.keys(updates),
+        sqlError: errorMessage,
+      };
+
       throw new Error(
-        `Failed to update execution record: ${error instanceof Error ? error.message : "Unknown error"}`,
+        `Failed to update execution record: ${errorMessage} (Details: ${JSON.stringify(errorDetails)})`,
       );
     }
   }

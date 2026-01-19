@@ -11,6 +11,7 @@
 import type { IntegrationManager } from "../IntegrationManager";
 import type { InformationSourcePlugin } from "../types";
 import type { CatalogCompilationConfig, Facts } from "./types";
+import { LoggerService } from "../../services/LoggerService";
 
 /**
  * Compiled catalog result with extracted variables
@@ -53,6 +54,7 @@ export class CatalogCompiler {
   private integrationManager: IntegrationManager;
   private config: CatalogCompilationConfig;
   private cache = new Map<string, CatalogCacheEntry>();
+  private logger: LoggerService;
 
   constructor(
     integrationManager: IntegrationManager,
@@ -60,6 +62,7 @@ export class CatalogCompiler {
   ) {
     this.integrationManager = integrationManager;
     this.config = config;
+    this.logger = new LoggerService();
   }
 
   /**
@@ -475,17 +478,16 @@ export class CatalogCompiler {
    * Log a message
    */
   private log(message: string, level: "info" | "warn" | "error" = "info"): void {
-    const prefix = "[CatalogCompiler]";
+    const metadata = { component: "CatalogCompiler", operation: "log" };
     switch (level) {
       case "warn":
-        console.warn(prefix, message);
+        this.logger.warn(message, metadata);
         break;
       case "error":
-        console.error(prefix, message);
+        this.logger.error(message, metadata);
         break;
       default:
-        // eslint-disable-next-line no-console
-        console.log(prefix, message);
+        this.logger.info(message, metadata);
     }
   }
 }

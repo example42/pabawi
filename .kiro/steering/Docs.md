@@ -33,8 +33,10 @@ inclusion: always
 2. **Do not create summary markdown files** after completing work unless the user specifically asks for them
 3. When generating analysis, notes, or working documents, place them in `/.kiro/` subdirectories
 4. When identifying bugs, lints, or tasks, document them in `/.kiro/todo/`
-5. Keep `/docs` clean - only update existing documentation or add new docs when explicitly instructed
+5. Keep `/docs` clean - add new docs when explicitly instructed
 6. Avoid creating duplicate documentation across directories
+7. When changes are done in code, if necesssary, update the relevant docs
+
 
 ## When to Update `/docs`
 
@@ -42,6 +44,7 @@ inclusion: always
 - Fixing errors or outdated information in existing docs
 - Adding new features that require user-facing documentation
 - Updating API specifications or configuration guides
+- Code or interface changes which relate to topics discussed in docs
 
 ## When to Use `/.kiro`
 

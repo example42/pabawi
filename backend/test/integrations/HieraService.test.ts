@@ -11,6 +11,7 @@ import * as path from "path";
 import * as os from "os";
 import { HieraService, type HieraServiceConfig } from "../../src/integrations/hiera/HieraService";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
+import { LoggerService } from "../../src/services/LoggerService";
 
 describe("HieraService", () => {
   let service: HieraService;
@@ -26,7 +27,7 @@ describe("HieraService", () => {
     createTestControlRepo(testDir);
 
     // Create integration manager
-    integrationManager = new IntegrationManager();
+    integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     // Create service config
     config = {

@@ -13,6 +13,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
+import { LoggerService } from '../../src/services/LoggerService';
 import { BoltPlugin } from '../../src/integrations/bolt/BoltPlugin';
 import { BoltService } from '../../src/bolt/BoltService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
@@ -26,7 +27,7 @@ describe('Comprehensive Integration Test Suite', () => {
   let nodeLinkingService: NodeLinkingService;
 
   beforeEach(() => {
-    integrationManager = new IntegrationManager();
+    integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
     nodeLinkingService = new NodeLinkingService(integrationManager);
     vi.clearAllMocks();
   });

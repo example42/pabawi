@@ -22,6 +22,8 @@ import type { IntegrationManager } from "../IntegrationManager";
 import { HieraService } from "./HieraService";
 import type { HieraServiceConfig } from "./HieraService";
 import { CodeAnalyzer } from "./CodeAnalyzer";
+import type { LoggerService } from "../../services/LoggerService";
+import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 import type {
   HieraPluginConfig,
   HieraHealthStatus,
@@ -68,8 +70,8 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
   /**
    * Create a new HieraPlugin instance
    */
-  constructor() {
-    super("hiera", "information");
+  constructor(logger?: LoggerService, performanceMonitor?: PerformanceMonitorService) {
+    super("hiera", "information", logger, performanceMonitor);
   }
 
   /**
@@ -554,11 +556,22 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
     key: string,
     environment?: string
   ): Promise<HieraResolution> {
+    const complete = this.performanceMonitor.startTimer('hiera:resolveKey');
     this.ensureInitialized();
+
     if (!this.hieraService) {
+      complete({ error: 'service not initialized' });
       throw new Error("HieraService is not initialized");
     }
-    return this.hieraService.resolveKey(nodeId, key, environment);
+
+    try {
+      const result = await this.hieraService.resolveKey(nodeId, key, environment);
+      complete({ nodeId, key, environment, found: result.found });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error), nodeId, key });
+      throw error;
+    }
   }
 
   /**
@@ -568,11 +581,22 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    * @returns Node Hiera data
    */
   async getNodeHieraData(nodeId: string): Promise<NodeHieraData> {
+    const complete = this.performanceMonitor.startTimer('hiera:getNodeHieraData');
     this.ensureInitialized();
+
     if (!this.hieraService) {
+      complete({ error: 'service not initialized' });
       throw new Error("HieraService is not initialized");
     }
-    return this.hieraService.getNodeHieraData(nodeId);
+
+    try {
+      const result = await this.hieraService.getNodeHieraData(nodeId);
+      complete({ nodeId, keyCount: result.keys.size });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error), nodeId });
+      throw error;
+    }
   }
 
   /**
@@ -582,11 +606,22 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    * @returns Array of key values for each node
    */
   async getKeyValuesAcrossNodes(key: string): Promise<KeyNodeValues[]> {
+    const complete = this.performanceMonitor.startTimer('hiera:getKeyValuesAcrossNodes');
     this.ensureInitialized();
+
     if (!this.hieraService) {
+      complete({ error: 'service not initialized' });
       throw new Error("HieraService is not initialized");
     }
-    return this.hieraService.getKeyValuesAcrossNodes(key);
+
+    try {
+      const result = await this.hieraService.getKeyValuesAcrossNodes(key);
+      complete({ key, nodeCount: result.length });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error), key });
+      throw error;
+    }
   }
 
   /**
@@ -595,11 +630,22 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    * @returns Code analysis result
    */
   async getCodeAnalysis(): Promise<CodeAnalysisResult> {
+    const complete = this.performanceMonitor.startTimer('hiera:getCodeAnalysis');
     this.ensureInitialized();
+
     if (!this.codeAnalyzer) {
+      complete({ error: 'analyzer not initialized' });
       throw new Error("CodeAnalyzer is not initialized");
     }
-    return this.codeAnalyzer.analyze();
+
+    try {
+      const result = await this.codeAnalyzer.analyze();
+      complete({ issueCount: result.lintIssues.length });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
   }
 
 

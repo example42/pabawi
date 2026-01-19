@@ -12,6 +12,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { createIntegrationsRouter } from '../../src/routes/integrations';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
+import { LoggerService } from '../../src/services/LoggerService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
 import { BoltPlugin } from '../../src/integrations/bolt/BoltPlugin';
@@ -56,7 +57,7 @@ describe('API Performance Tests', () => {
     app.use(express.json());
 
     // Create integration manager
-    integrationManager = new IntegrationManager();
+    integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     // Create services (not initialized, will return 503)
     const puppetDBService = new PuppetDBService();

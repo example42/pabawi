@@ -2,9 +2,13 @@
   import { onMount } from 'svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
+  import IntegrationBadge from '../components/IntegrationBadge.svelte';
+  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
+  import { expertMode } from '../lib/expertMode.svelte';
+  import type { DebugInfo } from '../lib/api';
 
   interface Node {
     id: string;
@@ -48,6 +52,9 @@
   let pqlError = $state<string | null>(null);
   let showPqlInput = $state(false);
   let selectedPqlTemplate = $state('');
+
+  // Debug info state for expert mode
+  let debugInfo = $state<DebugInfo | null>(null);
 
   // Placeholder text to avoid Svelte expression parsing issues
   const placeholderText = 'Example: nodes[certname] { certname = "node1.example.com" }';
@@ -200,6 +207,7 @@
     loading = true;
     error = null;
     pqlError = null;
+    debugInfo = null; // Clear previous debug info
 
     try {
       // Build query parameters
@@ -216,15 +224,17 @@
 
       const url = `/api/inventory${params.toString() ? `?${params.toString()}` : ''}`;
 
-      const data = await get<InventoryResponse>(url, {
+      const data = await get<InventoryResponse & { _debug?: DebugInfo }>(url, {
         maxRetries: 2,
-        onRetry: (attempt) => {
-          console.log(`Retrying inventory fetch (attempt ${attempt})...`);
-        },
       });
 
       nodes = data.nodes || [];
       sources = data.sources || {};
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo = data._debug;
+      }
 
       // Show success toast only on retry success
       if (error) {
@@ -327,20 +337,6 @@
     }
   }
 
-  // Get source badge color
-  function getSourceColor(source: string): string {
-    switch (source) {
-      case 'bolt':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-      case 'puppetdb':
-        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
-      case 'puppetserver':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
-    }
-  }
-
   // Get source display name
   function getSourceDisplayName(source: string): string {
     switch (source) {
@@ -350,6 +346,8 @@
         return 'PuppetDB';
       case 'puppetserver':
         return 'Puppetserver';
+      case 'hiera':
+        return 'Hiera';
       default:
         return source.charAt(0).toUpperCase() + source.slice(1);
     }
@@ -367,6 +365,7 @@
 
   // Fetch inventory on mount
   onMount(() => {
+    debugInfo = null; // Clear debug info on mount
     fetchInventory();
   });
 </script>
@@ -376,9 +375,13 @@
   <div class="mb-6">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-          Inventory
-        </h1>
+        <div class="flex items-center gap-3">
+          <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+            Inventory
+          </h1>
+          <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+          <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+        </div>
         <p class="mt-2 text-gray-600 dark:text-gray-400">
           Manage and monitor your infrastructure nodes
         </p>
@@ -664,14 +667,10 @@
                   <!-- Display all sources for linked nodes (Requirement 3.3) -->
                   {#if node.sources && node.sources.length > 0}
                     {#each node.sources as source}
-                      <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(source)}">
-                        {getSourceDisplayName(source)}
-                      </span>
+                      <IntegrationBadge integration={source} variant="badge" size="sm" />
                     {/each}
                   {:else}
-                    <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
-                      {getSourceDisplayName(node.source || 'bolt')}
-                    </span>
+                    <IntegrationBadge integration={node.source || 'bolt'} variant="badge" size="sm" />
                   {/if}
                 </div>
               </div>
@@ -733,15 +732,11 @@
                     {#if node.sources && node.sources.length > 0}
                       <div class="flex flex-wrap gap-1">
                         {#each node.sources as source}
-                          <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(source)}">
-                            {getSourceDisplayName(source)}
-                          </span>
+                          <IntegrationBadge integration={source} variant="badge" size="sm" />
                         {/each}
                       </div>
                     {:else}
-                      <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getSourceColor(node.source || 'bolt')}">
-                        {getSourceDisplayName(node.source || 'bolt')}
-                      </span>
+                      <IntegrationBadge integration={node.source || 'bolt'} variant="badge" size="sm" />
                     {/if}
                   </td>
                   <td class="whitespace-nowrap px-6 py-4 text-sm">
@@ -762,5 +757,12 @@
         </div>
       {/if}
     {/if}
+  {/if}
+
+  <!-- Expert Mode Debug Panel -->
+  {#if expertMode.enabled && debugInfo}
+    <div class="mt-8">
+      <ExpertModeDebugPanel {debugInfo} />
+    </div>
   {/if}
 </div>

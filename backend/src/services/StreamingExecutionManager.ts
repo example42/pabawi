@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import type { StreamingConfig } from "../config/schema";
+import { LoggerService } from "./LoggerService";
 
 /**
  * Event types for streaming execution output
@@ -66,6 +67,7 @@ export class StreamingExecutionManager {
   private buffers: Map<string, BufferedOutput>;
   private executionTracking: Map<string, ExecutionTracking>;
   private config: StreamingConfig;
+  private logger: LoggerService;
 
   constructor(config: StreamingConfig) {
     this.subscribers = new Map();
@@ -73,6 +75,7 @@ export class StreamingExecutionManager {
     this.buffers = new Map();
     this.executionTracking = new Map();
     this.config = config;
+    this.logger = new LoggerService();
     this.startHeartbeat();
   }
 
@@ -86,10 +89,11 @@ export class StreamingExecutionManager {
           try {
             subscriber.response.write(": heartbeat\n\n");
           } catch (error) {
-            console.error(
-              `Failed to send heartbeat to subscriber for execution ${executionId}:`,
-              error,
-            );
+            this.logger.error(`Failed to send heartbeat to subscriber for execution ${executionId}`, {
+              component: "StreamingExecutionManager",
+              operation: "startHeartbeat",
+              metadata: { executionId },
+            }, error instanceof Error ? error : undefined);
             // Remove dead connection
             this.unsubscribe(executionId, subscriber.response);
           }
@@ -134,9 +138,14 @@ export class StreamingExecutionManager {
     const executionSubscribers = this.subscribers.get(executionId);
     if (executionSubscribers) {
       executionSubscribers.add(subscriber);
-      console.error(
-        `New subscriber for execution ${executionId}. Total subscribers: ${executionSubscribers.size.toString()}`,
-      );
+      this.logger.debug(`New subscriber for execution ${executionId}`, {
+        component: "StreamingExecutionManager",
+        operation: "subscribe",
+        metadata: {
+          executionId,
+          totalSubscribers: executionSubscribers.size,
+        },
+      });
     }
 
     // Handle client disconnect
@@ -169,9 +178,14 @@ export class StreamingExecutionManager {
     for (const subscriber of subscribers) {
       if (subscriber.response === response) {
         subscribers.delete(subscriber);
-        console.error(
-          `Subscriber disconnected from execution ${executionId}. Remaining subscribers: ${subscribers.size.toString()}`,
-        );
+        this.logger.debug(`Subscriber disconnected from execution ${executionId}`, {
+          component: "StreamingExecutionManager",
+          operation: "unsubscribe",
+          metadata: {
+            executionId,
+            remainingSubscribers: subscribers.size,
+          },
+        });
         break;
       }
     }
@@ -179,9 +193,11 @@ export class StreamingExecutionManager {
     // Clean up empty subscriber sets
     if (subscribers.size === 0) {
       this.subscribers.delete(executionId);
-      console.error(
-        `No more subscribers for execution ${executionId}, cleaning up`,
-      );
+      this.logger.debug(`No more subscribers for execution ${executionId}, cleaning up`, {
+        component: "StreamingExecutionManager",
+        operation: "unsubscribe",
+        metadata: { executionId },
+      });
     }
   }
 
@@ -212,10 +228,11 @@ export class StreamingExecutionManager {
       try {
         this.emitToSubscriber(subscriber, fullEvent);
       } catch (error) {
-        console.error(
-          `Failed to emit event to subscriber for execution ${executionId}:`,
-          error,
-        );
+        this.logger.error(`Failed to emit event to subscriber for execution ${executionId}`, {
+          component: "StreamingExecutionManager",
+          operation: "emit",
+          metadata: { executionId },
+        }, error instanceof Error ? error : undefined);
         deadSubscribers.push(subscriber);
       }
     }
@@ -533,10 +550,11 @@ export class StreamingExecutionManager {
       try {
         subscriber.response.end();
       } catch (error) {
-        console.error(
-          `Failed to close connection for execution ${executionId}:`,
-          error,
-        );
+        this.logger.error(`Failed to close connection for execution ${executionId}`, {
+          component: "StreamingExecutionManager",
+          operation: "closeAllConnections",
+          metadata: { executionId },
+        }, error instanceof Error ? error : undefined);
       }
     }
 
@@ -550,7 +568,11 @@ export class StreamingExecutionManager {
     this.buffers.delete(executionId);
     this.executionTracking.delete(executionId);
 
-    console.error(`Closed all connections for execution ${executionId}`);
+    this.logger.debug(`Closed all connections for execution ${executionId}`, {
+      component: "StreamingExecutionManager",
+      operation: "closeAllConnections",
+      metadata: { executionId },
+    });
   }
 
   /**

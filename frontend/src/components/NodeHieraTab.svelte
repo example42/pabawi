@@ -2,7 +2,9 @@
   import { onMount } from 'svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
+  import ExpertModeDebugPanel from './ExpertModeDebugPanel.svelte';
   import { get } from '../lib/api';
+  import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
 
@@ -43,6 +45,7 @@
     warnings?: string[];
     hierarchyFiles: HierarchyFileInfo[];
     totalKeys: number;
+    _debug?: DebugInfo;
   }
 
   interface Props {
@@ -60,6 +63,7 @@
   let classificationMode = $state<'found' | 'classes'>('found');
   let expandedKeys = $state<Set<string>>(new Set());
   let selectedKey = $state<HieraResolutionInfo | null>(null);
+  let debugInfo = $state<DebugInfo | null>(null);
 
   // Fetch Hiera data for the node
   async function fetchHieraData(): Promise<void> {
@@ -72,6 +76,11 @@
         { maxRetries: 2 }
       );
       hieraData = data;
+
+      // Store debug info if present
+      if (data._debug) {
+        debugInfo = data._debug;
+      }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred';
       // Check if it's a "not configured" error
@@ -725,6 +734,13 @@
           </div>
         </div>
       </div>
+    </div>
+  {/if}
+
+  <!-- Expert Mode Debug Panel -->
+  {#if expertMode.enabled && debugInfo}
+    <div class="mt-6">
+      <ExpertModeDebugPanel {debugInfo} />
     </div>
   {/if}
 </div>

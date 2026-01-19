@@ -7,6 +7,8 @@ import type {
 import { type ExecutionFilters } from "../database/ExecutionRepository";
 import type { ExecutionQueue } from "../services/ExecutionQueue";
 import { asyncHandler } from "./asyncHandler";
+import { LoggerService } from "../services/LoggerService";
+import { ExpertModeService } from "../services/ExpertModeService";
 
 /**
  * Request validation schemas
@@ -45,6 +47,7 @@ export function createExecutionsRouter(
   executionQueue?: ExecutionQueue,
 ): Router {
   const router = Router();
+  const logger = new LoggerService();
 
   /**
    * GET /api/executions
@@ -53,9 +56,31 @@ export function createExecutionsRouter(
   router.get(
     "/",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Fetching executions list", {
+        component: "ExecutionsRouter",
+        operation: "getExecutions",
+      });
+
       try {
         // Validate and parse query parameters
         const query = ExecutionFiltersQuerySchema.parse(req.query);
+
+        logger.debug("Processing executions list request", {
+          component: "ExecutionsRouter",
+          operation: "getExecutions",
+          metadata: {
+            filters: {
+              type: query.type,
+              status: query.status,
+              targetNode: query.targetNode
+            },
+            pagination: { page: query.page, pageSize: query.pageSize }
+          },
+        });
 
         // Build filters
         const filters: ExecutionFilters = {
@@ -75,7 +100,19 @@ export function createExecutionsRouter(
         // Get status counts for summary
         const statusCounts = await executionRepository.countByStatus();
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Executions list fetched successfully", {
+          component: "ExecutionsRouter",
+          operation: "getExecutions",
+          metadata: {
+            count: executions.length,
+            duration,
+            statusCounts
+          },
+        });
+
+        const responseData = {
           executions,
           pagination: {
             page: query.page,
@@ -83,9 +120,54 @@ export function createExecutionsRouter(
             hasMore: executions.length === query.pageSize,
           },
           summary: statusCounts,
-        });
+        };
+
+        // Handle expert mode response
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Executions list fetched successfully",
+            context: JSON.stringify({ count: executions.length, statusCounts }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
+          logger.warn("Invalid query parameters for executions list", {
+            component: "ExecutionsRouter",
+            operation: "getExecutions",
+            metadata: { errors: error.errors },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid query parameters",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(400).json({
             error: {
               code: "INVALID_REQUEST",
@@ -97,7 +179,27 @@ export function createExecutionsRouter(
         }
 
         // Unknown error
-        console.error("Error fetching executions:", error);
+        logger.error("Error fetching executions", {
+          component: "ExecutionsRouter",
+          operation: "getExecutions",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to fetch executions",
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -115,15 +217,53 @@ export function createExecutionsRouter(
   router.get(
     "/:id",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Fetching execution details", {
+        component: "ExecutionsRouter",
+        operation: "getExecutionById",
+        metadata: { executionId: req.params.id },
+      });
+
       try {
         // Validate request parameters
         const params = ExecutionIdParamSchema.parse(req.params);
         const executionId = params.id;
 
+        logger.debug("Processing execution details request", {
+          component: "ExecutionsRouter",
+          operation: "getExecutionById",
+          metadata: { executionId },
+        });
+
         // Get execution by ID
         const execution = await executionRepository.findById(executionId);
 
         if (!execution) {
+          logger.warn("Execution not found", {
+            component: "ExecutionsRouter",
+            operation: "getExecutionById",
+            metadata: { executionId },
+          });
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: `Execution '${executionId}' not found`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(404).json({
             error: {
               code: "EXECUTION_NOT_FOUND",
@@ -133,9 +273,62 @@ export function createExecutionsRouter(
           return;
         }
 
-        res.json({ execution });
+        const duration = Date.now() - startTime;
+
+        logger.info("Execution details fetched successfully", {
+          component: "ExecutionsRouter",
+          operation: "getExecutionById",
+          metadata: { executionId, duration },
+        });
+
+        const responseData = { execution };
+
+        // Handle expert mode response
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Execution details fetched successfully",
+            context: JSON.stringify({ executionId }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
+          logger.warn("Invalid execution ID parameter", {
+            component: "ExecutionsRouter",
+            operation: "getExecutionById",
+            metadata: { errors: error.errors },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid execution ID parameter",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(400).json({
             error: {
               code: "INVALID_REQUEST",
@@ -147,7 +340,27 @@ export function createExecutionsRouter(
         }
 
         // Unknown error
-        console.error("Error fetching execution details:", error);
+        logger.error("Error fetching execution details", {
+          component: "ExecutionsRouter",
+          operation: "getExecutionById",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to fetch execution details",
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -165,10 +378,26 @@ export function createExecutionsRouter(
   router.get(
     "/:id/original",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Fetching original execution", {
+        component: "ExecutionsRouter",
+        operation: "getOriginalExecution",
+        metadata: { executionId: req.params.id },
+      });
+
       try {
         // Validate request parameters
         const params = ExecutionIdParamSchema.parse(req.params);
         const executionId = params.id;
+
+        logger.debug("Processing original execution request", {
+          component: "ExecutionsRouter",
+          operation: "getOriginalExecution",
+          metadata: { executionId },
+        });
 
         // Get the original execution
         const originalExecution =
@@ -178,6 +407,28 @@ export function createExecutionsRouter(
           // Check if the execution exists at all
           const execution = await executionRepository.findById(executionId);
           if (!execution) {
+            logger.warn("Execution not found", {
+              component: "ExecutionsRouter",
+              operation: "getOriginalExecution",
+              metadata: { executionId },
+            });
+
+            const duration = Date.now() - startTime;
+
+            if (req.expertMode) {
+              const debugInfo = expertModeService.createDebugInfo(
+                'GET /api/executions/:id/original',
+                requestId,
+                duration
+              );
+              expertModeService.addWarning(debugInfo, {
+                message: `Execution '${executionId}' not found`,
+                level: 'warn',
+              });
+              debugInfo.performance = expertModeService.collectPerformanceMetrics();
+              debugInfo.context = expertModeService.collectRequestContext(req);
+            }
+
             res.status(404).json({
               error: {
                 code: "EXECUTION_NOT_FOUND",
@@ -188,6 +439,28 @@ export function createExecutionsRouter(
           }
 
           // Execution exists but is not a re-execution
+          logger.warn("Execution is not a re-execution", {
+            component: "ExecutionsRouter",
+            operation: "getOriginalExecution",
+            metadata: { executionId },
+          });
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id/original',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: `Execution '${executionId}' is not a re-execution`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(404).json({
             error: {
               code: "NOT_A_RE_EXECUTION",
@@ -197,9 +470,62 @@ export function createExecutionsRouter(
           return;
         }
 
-        res.json({ execution: originalExecution });
+        const duration = Date.now() - startTime;
+
+        logger.info("Original execution fetched successfully", {
+          component: "ExecutionsRouter",
+          operation: "getOriginalExecution",
+          metadata: { executionId, originalExecutionId: originalExecution.id, duration },
+        });
+
+        const responseData = { execution: originalExecution };
+
+        // Handle expert mode response
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id/original',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Original execution fetched successfully",
+            context: JSON.stringify({ executionId, originalExecutionId: originalExecution.id }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
+          logger.warn("Invalid execution ID parameter", {
+            component: "ExecutionsRouter",
+            operation: "getOriginalExecution",
+            metadata: { errors: error.errors },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id/original',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid execution ID parameter",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(400).json({
             error: {
               code: "INVALID_REQUEST",
@@ -211,7 +537,27 @@ export function createExecutionsRouter(
         }
 
         // Unknown error
-        console.error("Error fetching original execution:", error);
+        logger.error("Error fetching original execution", {
+          component: "ExecutionsRouter",
+          operation: "getOriginalExecution",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id/original',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to fetch original execution",
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -229,14 +575,52 @@ export function createExecutionsRouter(
   router.get(
     "/:id/re-executions",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Fetching re-executions", {
+        component: "ExecutionsRouter",
+        operation: "getReExecutions",
+        metadata: { executionId: req.params.id },
+      });
+
       try {
         // Validate request parameters
         const params = ExecutionIdParamSchema.parse(req.params);
         const executionId = params.id;
 
+        logger.debug("Processing re-executions request", {
+          component: "ExecutionsRouter",
+          operation: "getReExecutions",
+          metadata: { executionId },
+        });
+
         // Check if the execution exists
         const execution = await executionRepository.findById(executionId);
         if (!execution) {
+          logger.warn("Execution not found", {
+            component: "ExecutionsRouter",
+            operation: "getReExecutions",
+            metadata: { executionId },
+          });
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id/re-executions',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: `Execution '${executionId}' not found`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(404).json({
             error: {
               code: "EXECUTION_NOT_FOUND",
@@ -250,12 +634,65 @@ export function createExecutionsRouter(
         const reExecutions =
           await executionRepository.findReExecutions(executionId);
 
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Re-executions fetched successfully", {
+          component: "ExecutionsRouter",
+          operation: "getReExecutions",
+          metadata: { executionId, count: reExecutions.length, duration },
+        });
+
+        const responseData = {
           executions: reExecutions,
           count: reExecutions.length,
-        });
+        };
+
+        // Handle expert mode response
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id/re-executions',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Re-executions fetched successfully",
+            context: JSON.stringify({ executionId, count: reExecutions.length }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
+          logger.warn("Invalid execution ID parameter", {
+            component: "ExecutionsRouter",
+            operation: "getReExecutions",
+            metadata: { errors: error.errors },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id/re-executions',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid execution ID parameter",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(400).json({
             error: {
               code: "INVALID_REQUEST",
@@ -267,7 +704,27 @@ export function createExecutionsRouter(
         }
 
         // Unknown error
-        console.error("Error fetching re-executions:", error);
+        logger.error("Error fetching re-executions", {
+          component: "ExecutionsRouter",
+          operation: "getReExecutions",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id/re-executions',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to fetch re-executions",
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -285,15 +742,53 @@ export function createExecutionsRouter(
   router.post(
     "/:id/re-execute",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Creating re-execution", {
+        component: "ExecutionsRouter",
+        operation: "createReExecution",
+        metadata: { executionId: req.params.id },
+      });
+
       try {
         // Validate request parameters
         const params = ExecutionIdParamSchema.parse(req.params);
         const executionId = params.id;
 
+        logger.debug("Processing re-execution request", {
+          component: "ExecutionsRouter",
+          operation: "createReExecution",
+          metadata: { executionId, hasModifications: Object.keys(req.body).length > 0 },
+        });
+
         // Get the original execution
         const originalExecution =
           await executionRepository.findById(executionId);
         if (!originalExecution) {
+          logger.warn("Execution not found for re-execution", {
+            component: "ExecutionsRouter",
+            operation: "createReExecution",
+            metadata: { executionId },
+          });
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'POST /api/executions/:id/re-execute',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: `Execution '${executionId}' not found`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(404).json({
             error: {
               code: "EXECUTION_NOT_FOUND",
@@ -321,6 +816,16 @@ export function createExecutionsRouter(
           expertMode: modifications.expertMode ?? originalExecution.expertMode,
         };
 
+        logger.debug("Creating re-execution with parameters", {
+          component: "ExecutionsRouter",
+          operation: "createReExecution",
+          metadata: {
+            executionId,
+            type: newExecution.type,
+            targetNodesCount: newExecution.targetNodes?.length ?? 0,
+          },
+        });
+
         // Create the re-execution with reference to original
         const newExecutionId = await executionRepository.createReExecution(
           executionId,
@@ -331,12 +836,69 @@ export function createExecutionsRouter(
         const createdExecution =
           await executionRepository.findById(newExecutionId);
 
-        res.status(201).json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Re-execution created successfully", {
+          component: "ExecutionsRouter",
+          operation: "createReExecution",
+          metadata: {
+            originalExecutionId: executionId,
+            newExecutionId,
+            duration,
+          },
+        });
+
+        const responseData = {
           execution: createdExecution,
           message: "Re-execution created successfully",
-        });
+        };
+
+        // Handle expert mode response
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'POST /api/executions/:id/re-execute',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Re-execution created successfully",
+            context: JSON.stringify({ originalExecutionId: executionId, newExecutionId }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(201).json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.status(201).json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
+          logger.warn("Invalid request parameters for re-execution", {
+            component: "ExecutionsRouter",
+            operation: "createReExecution",
+            metadata: { errors: error.errors },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'POST /api/executions/:id/re-execute',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid request parameters",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(400).json({
             error: {
               code: "INVALID_REQUEST",
@@ -348,7 +910,27 @@ export function createExecutionsRouter(
         }
 
         // Unknown error
-        console.error("Error creating re-execution:", error);
+        logger.error("Error creating re-execution", {
+          component: "ExecutionsRouter",
+          operation: "createReExecution",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'POST /api/executions/:id/re-execute',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to create re-execution",
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -367,7 +949,37 @@ export function createExecutionsRouter(
   router.get(
     "/queue/status",
     asyncHandler((_req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = _req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Fetching queue status", {
+        component: "ExecutionsRouter",
+        operation: "getQueueStatus",
+      });
+
       if (!executionQueue) {
+        logger.warn("Execution queue not configured", {
+          component: "ExecutionsRouter",
+          operation: "getQueueStatus",
+        });
+
+        const duration = Date.now() - startTime;
+
+        if (_req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/queue/status',
+            requestId,
+            duration
+          );
+          expertModeService.addWarning(debugInfo, {
+            message: "Execution queue is not configured",
+            level: 'warn',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(_req);
+        }
+
         res.status(503).json({
           error: {
             code: "QUEUE_NOT_AVAILABLE",
@@ -378,8 +990,25 @@ export function createExecutionsRouter(
       }
 
       try {
+        logger.debug("Retrieving queue status", {
+          component: "ExecutionsRouter",
+          operation: "getQueueStatus",
+        });
+
         const status = executionQueue.getStatus();
-        res.json({
+        const duration = Date.now() - startTime;
+
+        logger.info("Queue status retrieved successfully", {
+          component: "ExecutionsRouter",
+          operation: "getQueueStatus",
+          metadata: {
+            running: status.running,
+            queued: status.queued,
+            duration,
+          },
+        });
+
+        const responseData = {
           queue: {
             running: status.running,
             queued: status.queued,
@@ -394,10 +1023,55 @@ export function createExecutionsRouter(
               waitTime: Date.now() - exec.enqueuedAt.getTime(),
             })),
           },
-        });
+        };
+
+        // Handle expert mode response
+        if (_req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/queue/status',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Queue status retrieved successfully",
+            context: JSON.stringify({ running: status.running, queued: status.queued }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(_req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
+
         return Promise.resolve();
       } catch (error) {
-        console.error("Error fetching queue status:", error);
+        const duration = Date.now() - startTime;
+
+        logger.error("Error fetching queue status", {
+          component: "ExecutionsRouter",
+          operation: "getQueueStatus",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (_req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/queue/status',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to fetch queue status",
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(_req);
+        }
+
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
@@ -417,15 +1091,53 @@ export function createExecutionsRouter(
   router.get(
     "/:id/output",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Fetching execution output", {
+        component: "ExecutionsRouter",
+        operation: "getExecutionOutput",
+        metadata: { executionId: req.params.id },
+      });
+
       try {
         // Validate request parameters
         const params = ExecutionIdParamSchema.parse(req.params);
         const executionId = params.id;
 
+        logger.debug("Processing execution output request", {
+          component: "ExecutionsRouter",
+          operation: "getExecutionOutput",
+          metadata: { executionId },
+        });
+
         // Get execution by ID
         const execution = await executionRepository.findById(executionId);
 
         if (!execution) {
+          logger.warn("Execution not found for output retrieval", {
+            component: "ExecutionsRouter",
+            operation: "getExecutionOutput",
+            metadata: { executionId },
+          });
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id/output',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: `Execution '${executionId}' not found`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(404).json({
             error: {
               code: "EXECUTION_NOT_FOUND",
@@ -435,16 +1147,78 @@ export function createExecutionsRouter(
           return;
         }
 
+        const duration = Date.now() - startTime;
+
+        logger.info("Execution output fetched successfully", {
+          component: "ExecutionsRouter",
+          operation: "getExecutionOutput",
+          metadata: {
+            executionId,
+            hasStdout: !!execution.stdout,
+            hasStderr: !!execution.stderr,
+            duration,
+          },
+        });
+
         // Return output data
-        res.json({
+        const responseData = {
           executionId: execution.id,
           command: execution.command,
           stdout: execution.stdout ?? "",
           stderr: execution.stderr ?? "",
           expertMode: execution.expertMode ?? false,
-        });
+        };
+
+        // Handle expert mode response
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id/output',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Execution output fetched successfully",
+            context: JSON.stringify({
+              executionId,
+              hasStdout: !!execution.stdout,
+              hasStderr: !!execution.stderr,
+            }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+
         if (error instanceof z.ZodError) {
+          logger.warn("Invalid execution ID parameter for output", {
+            component: "ExecutionsRouter",
+            operation: "getExecutionOutput",
+            metadata: { errors: error.errors },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'GET /api/executions/:id/output',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid execution ID parameter",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
           res.status(400).json({
             error: {
               code: "INVALID_REQUEST",
@@ -456,13 +1230,310 @@ export function createExecutionsRouter(
         }
 
         // Unknown error
-        console.error("Error fetching execution output:", error);
+        logger.error("Error fetching execution output", {
+          component: "ExecutionsRouter",
+          operation: "getExecutionOutput",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/executions/:id/output',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to fetch execution output",
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
         res.status(500).json({
           error: {
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch execution output",
           },
         });
+      }
+    }),
+  );
+
+  /**
+   * POST /api/executions/:id/cancel
+   * Cancel or abort a running/stuck execution
+   */
+  router.post(
+    "/:id/cancel",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Cancelling execution", {
+        component: "ExecutionsRouter",
+        operation: "cancelExecution",
+        metadata: { executionId: req.params.id },
+      });
+
+      try {
+        // Validate request parameters
+        const params = ExecutionIdParamSchema.parse(req.params);
+        const executionId = params.id;
+
+        logger.debug("Processing execution cancellation request", {
+          component: "ExecutionsRouter",
+          operation: "cancelExecution",
+          metadata: { executionId },
+        });
+
+        // Get execution by ID
+        const execution = await executionRepository.findById(executionId);
+
+        if (!execution) {
+          logger.warn("Execution not found for cancellation", {
+            component: "ExecutionsRouter",
+            operation: "cancelExecution",
+            metadata: { executionId },
+          });
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'POST /api/executions/:id/cancel',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: `Execution '${executionId}' not found`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          res.status(404).json({
+            error: {
+              code: "EXECUTION_NOT_FOUND",
+              message: `Execution '${executionId}' not found`,
+            },
+          });
+          return;
+        }
+
+        // Check if execution is already completed
+        if (execution.status !== 'running') {
+          logger.warn("Cannot cancel non-running execution", {
+            component: "ExecutionsRouter",
+            operation: "cancelExecution",
+            metadata: { executionId, status: execution.status },
+          });
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'POST /api/executions/:id/cancel',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: `Execution '${executionId}' is not running (status: ${execution.status})`,
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          res.status(400).json({
+            error: {
+              code: "INVALID_STATUS",
+              message: `Cannot cancel execution with status '${execution.status}'`,
+            },
+          });
+          return;
+        }
+
+        // Try to cancel from queue if it's queued
+        let cancelledFromQueue = false;
+        if (executionQueue) {
+          cancelledFromQueue = executionQueue.cancel(executionId);
+        }
+
+        // Update execution status to failed with cancellation message
+        try {
+          await executionRepository.update(executionId, {
+            status: 'failed',
+            completedAt: new Date().toISOString(),
+            error: 'Execution cancelled by user',
+          });
+        } catch (dbError) {
+          // Database error - likely a constraint violation
+          logger.error("Database error while cancelling execution", {
+            component: "ExecutionsRouter",
+            operation: "cancelExecution",
+            metadata: { executionId },
+          }, dbError instanceof Error ? dbError : undefined);
+
+          const duration = Date.now() - startTime;
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'POST /api/executions/:id/cancel',
+              requestId,
+              duration
+            );
+            expertModeService.addError(debugInfo, {
+              message: "Database error while updating execution status",
+              context: JSON.stringify({
+                executionId,
+                attemptedStatus: 'failed',
+                error: dbError instanceof Error ? dbError.message : String(dbError),
+              }),
+              stack: dbError instanceof Error ? dbError.stack : undefined,
+              level: 'error',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+
+            res.status(500).json(expertModeService.attachDebugInfo({
+              error: {
+                code: "DATABASE_ERROR",
+                message: "Failed to update execution status in database",
+                details: dbError instanceof Error ? dbError.message : String(dbError),
+              },
+            }, debugInfo));
+          } else {
+            res.status(500).json({
+              error: {
+                code: "DATABASE_ERROR",
+                message: "Failed to update execution status in database",
+              },
+            });
+          }
+          return;
+        }
+
+        const duration = Date.now() - startTime;
+
+        logger.info("Execution cancelled successfully", {
+          component: "ExecutionsRouter",
+          operation: "cancelExecution",
+          metadata: {
+            executionId,
+            cancelledFromQueue,
+            duration,
+          },
+        });
+
+        const responseData = {
+          message: "Execution cancelled successfully",
+          executionId,
+          cancelledFromQueue,
+        };
+
+        // Handle expert mode response
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'POST /api/executions/:id/cancel',
+            requestId,
+            duration
+          );
+
+          expertModeService.addInfo(debugInfo, {
+            message: "Execution cancelled successfully",
+            context: JSON.stringify({ executionId, cancelledFromQueue }),
+            level: 'info',
+          });
+
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        if (error instanceof z.ZodError) {
+          logger.warn("Invalid execution ID parameter for cancellation", {
+            component: "ExecutionsRouter",
+            operation: "cancelExecution",
+            metadata: { errors: error.errors },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              'POST /api/executions/:id/cancel',
+              requestId,
+              duration
+            );
+            expertModeService.addWarning(debugInfo, {
+              message: "Invalid execution ID parameter",
+              context: JSON.stringify(error.errors),
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid execution ID parameter",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        // Unknown error
+        logger.error("Error cancelling execution", {
+          component: "ExecutionsRouter",
+          operation: "cancelExecution",
+          metadata: {
+            duration,
+            errorType: error instanceof Error ? error.constructor.name : typeof error,
+          },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'POST /api/executions/:id/cancel',
+            requestId,
+            duration
+          );
+          expertModeService.addError(debugInfo, {
+            message: "Failed to cancel execution",
+            context: JSON.stringify({
+              errorType: error instanceof Error ? error.constructor.name : typeof error,
+              errorMessage: error instanceof Error ? error.message : String(error),
+            }),
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(500).json(expertModeService.attachDebugInfo({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to cancel execution",
+              details: error instanceof Error ? error.message : String(error),
+            },
+          }, debugInfo));
+        } else {
+          res.status(500).json({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to cancel execution",
+            },
+          });
+        }
       }
     }),
   );

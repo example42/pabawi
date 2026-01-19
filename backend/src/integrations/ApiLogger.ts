@@ -10,6 +10,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Log level for API logging
@@ -82,10 +83,12 @@ export interface ApiErrorLog {
 export class ApiLogger {
   private integration: string;
   private logLevel: ApiLogLevel;
+  private logger: LoggerService;
 
   constructor(integration: string, logLevel: ApiLogLevel = "info") {
     this.integration = integration;
     this.logLevel = logLevel;
+    this.logger = new LoggerService();
   }
 
   /**
@@ -141,20 +144,24 @@ export class ApiLogger {
 
     // Log at appropriate level
     if (this.shouldLog("debug")) {
-      console.warn(
-        `[${this.integration}] API Request [${correlationId}]:`,
-        JSON.stringify(requestLog, null, 2),
-      );
+      this.logger.debug(`[${this.integration}] API Request [${correlationId}]: ${JSON.stringify(requestLog, null, 2)}`, {
+        component: "ApiLogger",
+        operation: "logRequest",
+        metadata: { integration: this.integration, correlationId, method, endpoint },
+      });
     } else if (this.shouldLog("info")) {
-      console.warn(
-        `[${this.integration}] API Request [${correlationId}]: ${method} ${endpoint}`,
-        {
+      this.logger.info(`[${this.integration}] API Request [${correlationId}]: ${method} ${endpoint}`, {
+        component: "ApiLogger",
+        operation: "logRequest",
+        metadata: {
+          integration: this.integration,
+          correlationId,
           url,
           hasBody: !!options.body,
           hasAuth: options.authentication?.type !== "none",
           queryParams: options.queryParams,
         },
-      );
+      });
     }
   }
 
@@ -201,37 +208,47 @@ export class ApiLogger {
 
     // Log at appropriate level based on response status
     if (response.status >= 500) {
-      console.error(
-        `[${this.integration}] API Response [${correlationId}]: ${method} ${endpoint} - ${String(response.status)} ${response.statusText}`,
-        {
+      this.logger.error(`[${this.integration}] API Response [${correlationId}]: ${method} ${endpoint} - ${String(response.status)} ${response.statusText}`, {
+        component: "ApiLogger",
+        operation: "logResponse",
+        metadata: {
+          integration: this.integration,
+          correlationId,
           status: response.status,
           duration: `${String(duration)}ms`,
           bodyPreview: responseLog.bodyPreview,
         },
-      );
+      });
     } else if (response.status >= 400) {
-      console.warn(
-        `[${this.integration}] API Response [${correlationId}]: ${method} ${endpoint} - ${String(response.status)} ${response.statusText}`,
-        {
+      this.logger.warn(`[${this.integration}] API Response [${correlationId}]: ${method} ${endpoint} - ${String(response.status)} ${response.statusText}`, {
+        component: "ApiLogger",
+        operation: "logResponse",
+        metadata: {
+          integration: this.integration,
+          correlationId,
           status: response.status,
           duration: `${String(duration)}ms`,
           bodyPreview: responseLog.bodyPreview,
         },
-      );
+      });
     } else if (this.shouldLog("debug")) {
-      console.warn(
-        `[${this.integration}] API Response [${correlationId}]:`,
-        JSON.stringify(responseLog, null, 2),
-      );
+      this.logger.debug(`[${this.integration}] API Response [${correlationId}]: ${JSON.stringify(responseLog, null, 2)}`, {
+        component: "ApiLogger",
+        operation: "logResponse",
+        metadata: { integration: this.integration, correlationId },
+      });
     } else if (this.shouldLog("info")) {
-      console.warn(
-        `[${this.integration}] API Response [${correlationId}]: ${method} ${endpoint} - ${String(response.status)} ${response.statusText}`,
-        {
+      this.logger.info(`[${this.integration}] API Response [${correlationId}]: ${method} ${endpoint} - ${String(response.status)} ${response.statusText}`, {
+        component: "ApiLogger",
+        operation: "logResponse",
+        metadata: {
+          integration: this.integration,
+          correlationId,
           status: response.status,
           duration: `${String(duration)}ms`,
           bodyPreview: responseLog.bodyPreview,
         },
-      );
+      });
     }
   }
 
@@ -278,22 +295,26 @@ export class ApiLogger {
       duration,
     };
 
-    console.error(
-      `[${this.integration}] API Error [${correlationId}]: ${method} ${endpoint} - ${error.message}`,
-      {
+    this.logger.error(`[${this.integration}] API Error [${correlationId}]: ${method} ${endpoint} - ${error.message}`, {
+      component: "ApiLogger",
+      operation: "logError",
+      metadata: {
+        integration: this.integration,
+        correlationId,
         errorType: error.type,
         category: error.category,
         statusCode: error.statusCode,
         duration: `${String(duration)}ms`,
         detailsPreview: this.createBodyPreview(error.details),
       },
-    );
+    });
 
     if (this.shouldLog("debug")) {
-      console.error(
-        `[${this.integration}] API Error Details [${correlationId}]:`,
-        JSON.stringify(errorLog, null, 2),
-      );
+      this.logger.debug(`[${this.integration}] API Error Details [${correlationId}]: ${JSON.stringify(errorLog, null, 2)}`, {
+        component: "ApiLogger",
+        operation: "logError",
+        metadata: { integration: this.integration, correlationId },
+      });
     }
   }
 
