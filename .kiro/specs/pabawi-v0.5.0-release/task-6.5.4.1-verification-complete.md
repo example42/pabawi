@@ -59,17 +59,17 @@ Completed comprehensive verification of all route files to identify any remainin
      - GET /api/tasks
      - GET /api/tasks/by-module
      - POST /api/nodes/:id/task
-   
+
    - **commands.ts** (1 route):
      - POST /api/nodes/:id/command
-   
+
    - **facts.ts** (1 route):
      - POST /api/nodes/:id/facts
-   
+
    - **packages.ts** (2 routes):
      - GET /api/package-tasks
      - POST /api/nodes/:id/install-package
-   
+
    - **hiera.ts** (13 routes):
      - GET /api/hiera/status
      - POST /api/hiera/reload
@@ -85,11 +85,11 @@ Completed comprehensive verification of all route files to identify any remainin
      - GET /api/hiera/analysis/lint
      - GET /api/hiera/analysis/modules
      - GET /api/hiera/analysis/statistics
-   
+
    - **streaming.ts** (2 routes):
      - GET /api/streaming/:id/stream
      - GET /api/streaming/stats
-   
+
    - **executions.ts** (6 routes):
      - GET /api/executions
      - GET /api/executions/:id
@@ -98,7 +98,7 @@ Completed comprehensive verification of all route files to identify any remainin
      - POST /api/executions/:id/re-execute
      - GET /api/executions/queue/status
      - GET /api/executions/:id/output
-   
+
    - **puppet.ts** (1 route):
      - POST /api/nodes/:id/puppet-run
 

@@ -7,12 +7,14 @@ This document provides a comprehensive checklist for ensuring expert mode covera
 ## Design Principles
 
 ### On-Page Expert Mode View (Compact)
+
 - Shows errors (red), warnings (yellow/orange), info (blue)
 - Consistent color coding using integration colors where applicable
 - "Show Details" button to open full popup
 - Minimal, non-intrusive display
 
 ### Expert Mode Popup (Full)
+
 - Complete debug information including debug-level logs
 - Performance metrics (memory, CPU, cache stats, request stats)
 - Contextual troubleshooting data:
@@ -25,6 +27,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
 - Formatted for easy sharing with support/AI
 
 ### Backend Requirements
+
 - All endpoints use LoggerService for consistent logging
 - All endpoints collect and attach debug info when expert mode enabled
 - All endpoints include performance metrics in debug info
@@ -35,6 +38,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
 ### ✓ = Implemented | ○ = Not Yet Implemented
 
 ### HomePage (`frontend/src/pages/HomePage.svelte`)
+
 - [ ] ○ Integration status section
   - [ ] ○ Compact debug panel
   - [ ] ○ Full popup with context
@@ -46,6 +50,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Full popup with context
 
 ### InventoryPage (`frontend/src/pages/InventoryPage.svelte`)
+
 - [ ] ○ Inventory list section
   - [ ] ○ Compact debug panel
   - [ ] ○ Full popup with context
@@ -57,6 +62,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Full popup with context
 
 ### NodeDetailPage (`frontend/src/pages/NodeDetailPage.svelte`)
+
 - [ ] ○ Node status tab
   - [ ] ○ Compact debug panel
   - [ ] ○ Full popup with context
@@ -77,6 +83,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Full popup with context
 
 ### PuppetPage (`frontend/src/pages/PuppetPage.svelte`)
+
 - [ ] ○ Reports list section
   - [ ] ○ Compact debug panel
   - [ ] ○ Full popup with context
@@ -88,6 +95,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Full popup with context
 
 ### ExecutionsPage (`frontend/src/pages/ExecutionsPage.svelte`)
+
 - [ ] ○ Executions list section
   - [ ] ○ Compact debug panel
   - [ ] ○ Full popup with context
@@ -99,6 +107,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Full popup with context
 
 ### IntegrationSetupPage (`frontend/src/pages/IntegrationSetupPage.svelte`)
+
 - [ ] ○ Integration health checks section
   - [ ] ○ Compact debug panel
   - [ ] ○ Full popup with context
@@ -111,6 +120,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
 ### ✓ = Implemented | ○ = Not Yet Implemented
 
 ### Integration Routes (`backend/src/routes/integrations.ts`)
+
 - [ ] ○ GET /api/integrations/status
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -125,6 +135,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Inventory Routes (`backend/src/routes/inventory.ts`)
+
 - [ ] ○ GET /api/inventory
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -139,6 +150,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Puppet Routes (`backend/src/routes/puppet.ts`)
+
 - [ ] ○ GET /api/puppet/reports
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -161,6 +173,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Facts Routes (`backend/src/routes/facts.ts`)
+
 - [ ] ○ GET /api/facts/:nodeId
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -171,6 +184,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Hiera Routes (`backend/src/routes/hiera.ts`)
+
 - [ ] ○ GET /api/hiera/:nodeId
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -181,6 +195,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Executions Routes (`backend/src/routes/executions.ts`)
+
 - [ ] ○ GET /api/executions
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -195,6 +210,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Tasks Routes (`backend/src/routes/tasks.ts`)
+
 - [ ] ○ POST /api/tasks/execute
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -205,12 +221,14 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Commands Routes (`backend/src/routes/commands.ts`)
+
 - [ ] ○ POST /api/commands/execute
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
   - [ ] ○ Proper error handling
 
 ### Packages Routes (`backend/src/routes/packages.ts`)
+
 - [ ] ○ POST /api/packages/install
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -221,6 +239,7 @@ This document provides a comprehensive checklist for ensuring expert mode covera
   - [ ] ○ Proper error handling
 
 ### Streaming Routes (`backend/src/routes/streaming.ts`)
+
 - [ ] ○ GET /api/streaming/execution/:id
   - [ ] ○ LoggerService logging (error, warn, info, debug)
   - [ ] ○ Debug info with performance metrics
@@ -229,18 +248,21 @@ This document provides a comprehensive checklist for ensuring expert mode covera
 ## Component Updates Required
 
 ### ExpertModeService Enhancements
+
 - [ ] ○ Add performance metrics collection method
 - [ ] ○ Add request context collection method
 - [ ] ○ Update DebugInfo interface with warnings, info, debug arrays
 - [ ] ○ Add performance and context fields to DebugInfo
 
 ### ExpertModeDebugPanel Component
+
 - [ ] ○ Implement compact mode (on-page view)
 - [ ] ○ Implement full mode (popup view)
 - [ ] ○ Consistent color coding (errors=red, warnings=yellow, info=blue)
 - [ ] ○ "Show Details" button in compact mode
 
 ### ExpertModeCopyButton Component
+
 - [ ] ○ Add performance metrics option
 - [ ] ○ Add browser information option
 - [ ] ○ Add cookies and storage option
@@ -249,11 +271,13 @@ This document provides a comprehensive checklist for ensuring expert mode covera
 ## Testing Requirements
 
 ### Property Tests
+
 - [ ] ○ Property 7: Expert Mode Page Coverage
 - [ ] ○ Property 8: Debug Info Color Consistency
 - [ ] ○ Property 9: Backend Logging Completeness
 
 ### Unit Tests
+
 - [ ] ○ ExpertModeService performance metrics collection
 - [ ] ○ ExpertModeService context collection
 - [ ] ○ ExpertModeDebugPanel compact vs full modes

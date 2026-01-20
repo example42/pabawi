@@ -353,7 +353,10 @@
                   </p>
                 </div>
               {:else}
-                {#each keyNodeData.groupedByValue as group, index (group.valueString)}
+                {#each keyNodeData.groupedByValue as group, index (index)}
+                  {@const nodesWithThisValue = keyNodeData.nodes.filter(n => group.nodes.includes(n.nodeId))}
+                  {@const sourceFiles = [...new Set(nodesWithThisValue.map(n => n.sourceFile).filter(Boolean))]}
+                  {@const hierarchyLevels = [...new Set(nodesWithThisValue.map(n => n.hierarchyLevel).filter(Boolean))]}
                   <div class="rounded-lg border border-gray-200 dark:border-gray-700">
                     <!-- Value Header -->
                     <div class="border-b border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
@@ -367,6 +370,31 @@
                           </span>
                         </div>
                       </div>
+
+                      <!-- Source Files and Hierarchy Info -->
+                      {#if sourceFiles.length > 0}
+                        <div class="mt-2 space-y-1">
+                          {#each sourceFiles as sourceFile}
+                            <div class="flex items-start gap-2 text-xs">
+                              <svg class="h-4 w-4 text-purple-600 dark:text-purple-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <span class="font-mono text-gray-700 dark:text-gray-300 break-all">{sourceFile}</span>
+                            </div>
+                          {/each}
+                          {#if hierarchyLevels.length > 0 && hierarchyLevels[0]}
+                            <div class="flex items-center gap-2 text-xs">
+                              <svg class="h-4 w-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                              </svg>
+                              <span class="text-gray-600 dark:text-gray-400">
+                                Level: <span class="font-medium text-gray-700 dark:text-gray-300">{hierarchyLevels.join(', ')}</span>
+                              </span>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
+
                       <div class="mt-2 rounded-lg bg-white p-2 dark:bg-gray-800">
                         {#if isComplexValue(group.value)}
                           <pre class="overflow-x-auto font-mono text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{formatValue(group.value)}</pre>
@@ -379,7 +407,7 @@
                     <!-- Nodes List -->
                     <div class="p-3">
                       <div class="flex flex-wrap gap-2">
-                        {#each group.nodes as nodeId (nodeId)}
+                        {#each group.nodes as nodeId, nodeIndex (`${index}-${nodeIndex}`)}
                           <button
                             type="button"
                             class="inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
@@ -415,7 +443,7 @@
                   </div>
                   <div class="p-3">
                     <div class="flex flex-wrap gap-2">
-                      {#each keyNodeData.nodes.filter(n => !n.found) as node (node.nodeId)}
+                      {#each keyNodeData.nodes.filter(n => !n.found) as node, nodeIndex (`notfound-${nodeIndex}`)}
                         <button
                           type="button"
                           class="inline-flex items-center rounded-lg px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-gray-600 transition-colors"

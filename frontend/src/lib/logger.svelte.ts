@@ -155,10 +155,8 @@ class FrontendLogger {
     if (this.shouldSendToBackend()) {
       this.pendingLogs.push(entry);
       this.scheduleBackendSync();
-    }
 
-    // Also log to console in development
-    if (import.meta.env.DEV) {
+      // Also log to console when expert mode is enabled
       const consoleMethod = entry.level === 'error' ? 'error'
         : entry.level === 'warn' ? 'warn'
         : entry.level === 'debug' ? 'debug'

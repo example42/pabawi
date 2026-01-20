@@ -176,6 +176,18 @@ export interface DebugInfo {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Labeled debug info for displaying multiple debug blocks
+ */
+export interface LabeledDebugInfo {
+  /** Human-readable label for this debug block */
+  label: string;
+  /** The debug information */
+  debugInfo: DebugInfo;
+  /** Optional component name that generated this debug info */
+  component?: string;
+}
+
 export interface ApiResponse<T> {
   data?: T;
   error?: ApiError;

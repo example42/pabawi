@@ -16,7 +16,8 @@ The `GET /api/integrations/puppetdb/nodes/:certname/facts` route was already cor
 
 The route properly implements all required expert mode features:
 
-1. ✅ **Creates debugInfo once at start**: 
+1. ✅ **Creates debugInfo once at start**:
+
    ```typescript
    const debugInfo = req.expertMode 
      ? expertModeService.createDebugInfo('GET /api/integrations/puppetdb/nodes/:certname/facts', requestId, 0)
@@ -30,12 +31,14 @@ The route properly implements all required expert mode features:
    - Error responses: `res.status(XXX).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse)`
 
 4. ✅ **Includes performance metrics and context**:
+
    ```typescript
    debugInfo.performance = expertModeService.collectPerformanceMetrics();
    debugInfo.context = expertModeService.collectRequestContext(req);
    ```
 
 5. ✅ **Captures external API errors with full stack traces**:
+
    ```typescript
    expertModeService.addError(debugInfo, {
      message: `PuppetDB connection error: ${error.message}`,
@@ -89,6 +92,7 @@ All tests passed: 5/5
 ## Validation
 
 The implementation follows the reference pattern from:
+
 - Primary: `GET /api/inventory` (backend/src/routes/inventory.ts)
 - Alternative: `GET /api/integrations/puppetdb/reports/summary`
 

@@ -10,7 +10,7 @@ Configure Pabawi to integrate with PuppetDB for dynamic inventory discovery, nod
 - [Quick Start](#quick-start)
 - [Configuration Options](#configuration-options)
 - [SSL/TLS Setup](#ssltls-setup)
-- [Authentication Setup](#authentication-setup)
+- [Token Authentication (Puppet Enterprise Only)](#token-authentication-puppet-enterprise-only)
 - [Testing the Connection](#testing-the-connection)
 - [Troubleshooting](#troubleshooting)
 - [Security Best Practices](#security-best-practices)
@@ -22,6 +22,7 @@ Configure Pabawi to integrate with PuppetDB for dynamic inventory discovery, nod
 - SSL certificates signed by Puppetserver CA or authentication token (Puppet Enterprise only)
 
 Test connectivity:
+
 ```bash
 curl https://puppetdb.example.com:8081/pdb/meta/v1/version
 ```
@@ -223,7 +224,6 @@ puppetserver ca sign --certname pabawi
 
 The script automatically updates your `.env` file with the certificate paths.
 
-
 ## Token Authentication (Puppet Enterprise Only)
 
 **Important: Token-based authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use certificate-based authentication.**
@@ -269,7 +269,6 @@ Pabawi requires read-only access to:
 - `/pdb/query/v4/reports`
 - `/pdb/query/v4/catalogs`
 - `/pdb/query/v4/events`
-
 
 ## Testing the Connection
 

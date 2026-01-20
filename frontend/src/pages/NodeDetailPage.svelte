@@ -18,6 +18,7 @@
   import ManagedResourcesViewer from '../components/ManagedResourcesViewer.svelte';
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
   import NodeStatus from '../components/NodeStatus.svelte';
+  import PuppetRunChart from '../components/PuppetRunChart.svelte';
   import CatalogComparison from '../components/CatalogComparison.svelte';
   import NodeHieraTab from '../components/NodeHieraTab.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
@@ -26,7 +27,7 @@
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
-  import type { DebugInfo } from '../lib/api';
+  import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   interface Props {
     params?: { id: string };
@@ -155,6 +156,31 @@
   let nodeStatusLoading = $state(false);
   let nodeStatusError = $state<string | null>(null);
 
+  // Puppet run history state
+  interface RunHistoryData {
+    date: string;
+    success: number;
+    failed: number;
+    changed: number;
+    unchanged: number;
+  }
+
+  interface NodeRunHistory {
+    nodeId: string;
+    history: RunHistoryData[];
+    summary: {
+      totalRuns: number;
+      successRate: number;
+      avgDuration: number;
+      lastRun: string;
+    };
+  }
+
+  let runHistory = $state<NodeRunHistory | null>(null);
+  let runHistoryLoading = $state(false);
+  let runHistoryError = $state<string | null>(null);
+  let runHistoryLastUpdate = $state<Date | null>(null);
+
   // Puppetserver facts removed per task 16 requirements
   // let puppetserverFacts = $state<any | null>(null);
   // let puppetserverFactsLoading = $state(false);
@@ -171,8 +197,26 @@
   // Cache for loaded data
   let dataCache = $state<Record<TabId, any>>({});
 
-  // Debug info state for expert mode - store per tab
-  let debugInfo = $state<Record<string, DebugInfo>>({});
+  // Debug info state for expert mode - support multiple debug blocks
+  let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
+
+  // Callback to receive debug info from API calls
+  function handleDebugInfo(label: string, info: DebugInfo | null): void {
+    if (info) {
+      // Add or update debug info for this label
+      const existingIndex = debugInfoBlocks.findIndex(block => block.label === label);
+      if (existingIndex >= 0) {
+        // Update existing block
+        debugInfoBlocks[existingIndex] = { label, debugInfo: info };
+      } else {
+        // Add new block
+        debugInfoBlocks = [...debugInfoBlocks, { label, debugInfo: info }];
+      }
+    } else {
+      // Remove debug info for this label
+      debugInfoBlocks = debugInfoBlocks.filter(block => block.label !== label);
+    }
+  }
 
   // Fetch node details
   async function fetchNode(): Promise<void> {
@@ -188,7 +232,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo['overview'] = data._debug;
+        handleDebugInfo('Node Details', data._debug);
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -329,7 +373,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo['actions'] = data._debug;
+        handleDebugInfo('Execution History', data._debug);
       }
     } catch (err) {
       executionsError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -375,7 +419,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo['puppet-reports'] = data._debug;
+        handleDebugInfo('Puppet Reports', data._debug);
       }
     } catch (err) {
       puppetReportsError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -427,7 +471,10 @@
 
       // Store debug info if present (prefer catalog debug info)
       if (catalogData._debug) {
-        debugInfo['catalog'] = catalogData._debug;
+        handleDebugInfo('Catalog', catalogData._debug);
+      }
+      if (resourcesData._debug) {
+        handleDebugInfo('Catalog Resources', resourcesData._debug);
       }
     } catch (err) {
       catalogError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -480,7 +527,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo['events'] = data._debug;
+        handleDebugInfo('Events', data._debug);
       }
     } catch (err) {
       // Ignore abort errors (user cancelled)
@@ -538,7 +585,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo['managed-resources'] = data._debug;
+        handleDebugInfo('Managed Resources', data._debug);
       }
     } catch (err) {
       managedResourcesError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -571,7 +618,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo['node-status'] = data._debug;
+        handleDebugInfo('Node Status', data._debug);
       }
     } catch (err) {
       nodeStatusError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -579,6 +626,45 @@
       // Don't show error toast - display inline error instead
     } finally {
       nodeStatusLoading = false;
+    }
+  }
+
+  // Lazy load Puppet Run History
+  async function fetchRunHistory(days = 7): Promise<void> {
+    // Check cache first
+    const cacheKey = `run-history-${days}`;
+    if (dataCache[cacheKey]) {
+      runHistory = dataCache[cacheKey];
+      return;
+    }
+
+    runHistoryLoading = true;
+    runHistoryError = null;
+
+    try {
+      const data = await get<NodeRunHistory & { _debug?: DebugInfo }>(
+        `/api/puppet/nodes/${nodeId}/history?days=${days}`,
+        { maxRetries: 2 }
+      );
+
+      runHistory = {
+        nodeId: data.nodeId,
+        history: data.history,
+        summary: data.summary,
+      };
+      dataCache[cacheKey] = runHistory;
+      runHistoryLastUpdate = new Date();
+
+      // Store debug info if present
+      if (data._debug) {
+        handleDebugInfo('Run History', data._debug);
+      }
+    } catch (err) {
+      runHistoryError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching run history:', err);
+      // Don't show error toast - display inline error instead
+    } finally {
+      runHistoryLoading = false;
     }
   }
 
@@ -632,7 +718,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo['facts'] = data._debug;
+        handleDebugInfo('PuppetDB Facts', data._debug);
       }
     } catch (err) {
       puppetdbFactsError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -685,11 +771,11 @@
   }
 
   // Get status badge status based on report status and config retrieval time
-  function getStatusBadgeStatus(status: string, configRetrievalTime?: number): 'success' | 'failed' | 'partial' {
+  function getStatusBadgeStatus(status: string, configRetrievalTime?: number): 'success' | 'failed' | 'changed' {
     if (configRetrievalTime === 0) return 'failed';
 
     if (status === 'failed') return 'failed';
-    if (status === 'changed') return 'partial';
+    if (status === 'changed') return 'changed';
     return 'success';
   }
 
@@ -725,6 +811,7 @@
   // Switch tab and update URL
   function switchTab(tabId: TabId): void {
     activeTab = tabId;
+    debugInfoBlocks = []; // Clear debug info when switching tabs
 
     // Update URL with tab parameter (preserves browser history)
     const url = new URL(window.location.href);
@@ -748,6 +835,7 @@
   // Switch puppet sub-tab and update URL
   function switchPuppetSubTab(subTabId: PuppetSubTabId): void {
     activePuppetSubTab = subTabId;
+    debugInfoBlocks = []; // Clear debug info when switching sub-tabs
 
     // Update URL with subtab parameter
     const url = new URL(window.location.href);
@@ -795,6 +883,7 @@
     switch (subTabId) {
       case 'node-status':
         await fetchNodeStatus();
+        await fetchRunHistory(); // Also load run history for visualization
         break;
       case 'catalog-compilation':
         await fetchEnvironments();
@@ -1006,6 +1095,7 @@
 
   // On mount
   onMount(() => {
+    debugInfoBlocks = []; // Clear debug info blocks on mount
     fetchNode();
     fetchExecutions();
     fetchCommandWhitelist();
@@ -1400,11 +1490,6 @@
               </div>
             {/if}
           </div>
-
-          <!-- Expert Mode Debug Panel for Overview Tab -->
-          {#if expertMode.enabled && debugInfo['overview']}
-            <ExpertModeDebugPanel debugInfo={debugInfo['overview']} />
-          {/if}
         </div>
       {/if}
 
@@ -1429,11 +1514,6 @@
               puppetdbError={puppetdbFactsError}
             />
           </div>
-
-          <!-- Expert Mode Debug Panel for Facts Tab -->
-          {#if expertMode.enabled && debugInfo['facts']}
-            <ExpertModeDebugPanel debugInfo={debugInfo['facts']} />
-          {/if}
         </div>
       {/if}
 
@@ -1680,11 +1760,6 @@
             </div>
             {/if}
           </div>
-
-          <!-- Expert Mode Debug Panel for Actions Tab -->
-          {#if expertMode.enabled && debugInfo['actions']}
-            <ExpertModeDebugPanel debugInfo={debugInfo['actions']} />
-          {/if}
         </div>
       {/if}
 
@@ -1767,11 +1842,6 @@
               {:else}
                 <CatalogViewer catalog={catalog} />
               {/if}
-
-              <!-- Expert Mode Debug Panel for Catalog Sub-Tab -->
-              {#if expertMode.enabled && debugInfo['catalog']}
-                <ExpertModeDebugPanel debugInfo={debugInfo['catalog']} />
-              {/if}
             </div>
           {/if}
 
@@ -1815,11 +1885,6 @@
               {:else}
                 <EventsViewer events={events} />
               {/if}
-
-              <!-- Expert Mode Debug Panel for Events Sub-Tab -->
-              {#if expertMode.enabled && debugInfo['events']}
-                <ExpertModeDebugPanel debugInfo={debugInfo['events']} />
-              {/if}
             </div>
           {/if}
 
@@ -1833,10 +1898,73 @@
                 onRefresh={fetchNodeStatus}
               />
 
-              <!-- Expert Mode Debug Panel for Node Status Sub-Tab -->
-              {#if expertMode.enabled && debugInfo['node-status']}
-                <ExpertModeDebugPanel debugInfo={debugInfo['node-status']} />
-              {/if}
+              <!-- Puppet Run History Chart -->
+              <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+                {#if runHistoryLoading}
+                  <div class="flex items-center justify-center py-12">
+                    <LoadingSpinner />
+                  </div>
+                {:else if runHistoryError}
+                  <ErrorAlert
+                    message="Failed to load run history"
+                    details={runHistoryError}
+                    onRetry={() => fetchRunHistory()}
+                  />
+                {:else if runHistory}
+                  <div class="mb-4 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <h3 class="text-lg font-semibold">Puppet Run History (Last 7 Days)</h3>
+                      {#if runHistoryLastUpdate}
+                        <span class="text-sm text-gray-500 dark:text-gray-400">
+                          Last updated: {runHistoryLastUpdate.toLocaleTimeString()}
+                        </span>
+                      {/if}
+                    </div>
+                    <button
+                      type="button"
+                      onclick={() => {
+                        // Clear cache to force refresh
+                        delete dataCache['run-history-7'];
+                        fetchRunHistory();
+                      }}
+                      class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-white dark:ring-gray-600 dark:hover:bg-gray-600"
+                      disabled={runHistoryLoading}
+                    >
+                      {runHistoryLoading ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </div>
+                  <PuppetRunChart
+                    data={runHistory.history}
+                    title=""
+                  />
+
+                  <!-- Summary Statistics -->
+                  <div class="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                      <div class="text-sm text-gray-500 dark:text-gray-400">Total Runs</div>
+                      <div class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">
+                        {runHistory.summary.totalRuns}
+                      </div>
+                    </div>
+                    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                      <div class="text-sm text-gray-500 dark:text-gray-400">Success Rate</div>
+                      <div class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">
+                        {runHistory.summary.successRate.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                      <div class="text-sm text-gray-500 dark:text-gray-400">Avg Duration</div>
+                      <div class="mt-1 text-2xl font-semibold text-gray-900 dark:text-white">
+                        {runHistory.summary.avgDuration.toFixed(1)}s
+                      </div>
+                    </div>
+                  </div>
+                {:else}
+                  <div class="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+                    No run history available
+                  </div>
+                {/if}
+              </div>
             </div>
           {/if}
 
@@ -1898,11 +2026,6 @@
                   onReportClick={(report) => selectedReport = report}
                 />
               {/if}
-
-              <!-- Expert Mode Debug Panel for Puppet Reports Sub-Tab -->
-              {#if expertMode.enabled && debugInfo['puppet-reports']}
-                <ExpertModeDebugPanel debugInfo={debugInfo['puppet-reports']} />
-              {/if}
             </div>
           {/if}
 
@@ -1926,11 +2049,6 @@
                   onRetry={fetchManagedResources}
                 />
               </div>
-
-              <!-- Expert Mode Debug Panel for Managed Resources Sub-Tab -->
-              {#if expertMode.enabled && debugInfo['managed-resources']}
-                <ExpertModeDebugPanel debugInfo={debugInfo['managed-resources']} />
-              {/if}
             </div>
           {/if}
         </div>
@@ -1952,14 +2070,21 @@
 
             <NodeHieraTab nodeId={nodeId} />
           </div>
-
-          <!-- Expert Mode Debug Panel for Hiera Tab -->
-          {#if expertMode.enabled && debugInfo['hiera']}
-            <ExpertModeDebugPanel debugInfo={debugInfo['hiera']} />
-          {/if}
         </div>
       {/if}
 
+    </div>
+  {/if}
+
+  <!-- Unified Expert Mode Debug Panel - Shows all debug blocks from current tab -->
+  {#if expertMode.enabled && debugInfoBlocks.length > 0}
+    <div class="mt-8 space-y-4">
+      {#each debugInfoBlocks as block (block.label)}
+        <div>
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
+          <ExpertModeDebugPanel debugInfo={block.debugInfo} />
+        </div>
+      {/each}
     </div>
   {/if}
 </div>

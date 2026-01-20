@@ -3,8 +3,6 @@ title: User Interaction Guidelines
 inclusion: always
 ---
 
-# User Interaction Guidelines
-
 ## Clarification First
 
 - When requests are ambiguous or unclear, always ask for clarification before proceeding

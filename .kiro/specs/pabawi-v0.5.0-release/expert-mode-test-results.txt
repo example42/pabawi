@@ -1,0 +1,428 @@
+Expert Mode Manual Testing Results
+Generated: Mon Jan 19 21:43:51 CET 2026
+Base URL: http://localhost:3000
+========================================
+
+=== Inventory Routes ===
+Testing: GET /api/inventory (Get all inventory)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/inventory/sources (Get inventory sources)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/inventory/nonexistent-node (Get nonexistent node)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✗ Error response missing errors array
+  ✓ Expert mode disabled: _debug field absent
+
+=== PuppetDB Routes ===
+Testing: GET /api/integrations/puppetdb/nodes (Get all nodes)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/nodes/test-node (Get node details)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/nodes/test-node/facts (Get node facts)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/nodes/test-node/resources (Get node resources)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/nodes/test-node/reports (Get node reports)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/reports/invalid-hash (Get report by hash)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+Testing: GET /api/integrations/puppetdb/reports/summary (Get reports summary (REFERENCE))
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/nodes/test-node/catalog (Get node catalog)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/events?report_hash=invalid (Get events)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+Testing: GET /api/integrations/puppetdb/admin/summary-stats (Get admin summary stats)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetdb/metrics (Get metrics)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+=== Puppetserver Routes ===
+Testing: GET /api/integrations/puppetserver/environments (Get environments)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetserver/environments/production/classes (Get environment classes)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+Testing: GET /api/integrations/puppetserver/environments/production/modules (Get environment modules)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+Testing: POST /api/integrations/puppetserver/catalog/compile (Compile catalog)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot POST /api/integrations/puppetserver/catalog/compile</pre>
+</body>
+</html>
+
+Testing: GET /api/integrations/puppetserver/nodes (Get all nodes)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetserver/nodes/test-node (Get node details)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✗ Error response missing errors array
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/integrations/puppetserver/nodes/test-node/catalog (Get node catalog)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+Testing: POST /api/integrations/puppetserver/catalog/compare (Compare catalogs)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+=== Hiera Routes ===
+Testing: GET /api/integrations/hiera/scan (Scan Hiera files)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+Testing: POST /api/integrations/hiera/lookup (Lookup Hiera key)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot POST /api/integrations/hiera/lookup</pre>
+</body>
+</html>
+
+=== Execution Routes ===
+Testing: GET /api/executions (Get all executions)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/executions/999999 (Get nonexistent execution)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✗ Error response missing errors array
+  ✓ Expert mode disabled: _debug field absent
+
+=== Task Routes ===
+Testing: POST /api/nodes/test-node/task (Execute task)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✗ Error response missing errors array
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/tasks (Get all tasks)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Expert mode disabled: _debug field absent
+
+Testing: GET /api/tasks/nonexistent::task (Get nonexistent task)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+=== Command Routes ===
+Testing: POST /api/nodes/test-node/command (Execute command)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✗ Error response missing errors array
+  ✓ Expert mode disabled: _debug field absent
+
+=== Package Routes ===
+Testing: POST /api/nodes/test-node/packages/install (Install package)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot POST /api/nodes/test-node/packages/install</pre>
+</body>
+</html>
+
+Testing: POST /api/nodes/test-node/packages/uninstall (Uninstall package)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot POST /api/nodes/test-node/packages/uninstall</pre>
+</body>
+</html>
+
+=== Facts Routes ===
+Testing: POST /api/nodes/test-node/facts (Collect facts)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✓ Error response includes errors array (1 errors)
+  ✓ Expert mode disabled: _debug field absent
+
+=== Puppet Routes ===
+Testing: POST /api/nodes/test-node/puppet-run (Run Puppet)
+  ✓ Expert mode enabled: _debug field present
+  ✓ Debug info has required fields (timestamp, operation, duration)
+  ✗ Error response missing errors array
+  ✓ Expert mode disabled: _debug field absent
+
+=== Streaming Routes ===
+Testing: GET /api/streaming/executions/999999 (Get execution stream)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+Testing: POST /api/streaming/executions/999999/cancel (Cancel execution)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Error</title>
+</head>
+<body>
+<pre>Cannot POST /api/streaming/executions/999999/cancel</pre>
+</body>
+</html>
+
+=== Status Routes ===
+Testing: GET /api/integrations/ (Get integration status)
+  ✗ Invalid JSON response
+  Response: <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pabawi</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/assets/favicon-B-6weZIJ.ico">
+    <link rel="icon" type="image/png" sizes="96x96" href="/assets/favicon-96x96-KzTnNO2a.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-CKleRhKd.png">
+    <link rel="manifest" href="/assets/site-DGWt2i2_.webmanifest">
+    <script type="module" crossorigin src="/assets/index-DTTf-kC-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-bUfWgZaL.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
+
+
+========================================
+Testing Summary
+========================================
+Total routes tested: 37
+[0;32mPassed: 16[0m
+[0;31mFailed: 21[0m
+
+[0;31mSome tests failed. See expert-mode-test-results.txt for details.[0m

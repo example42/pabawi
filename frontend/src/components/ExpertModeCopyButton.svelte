@@ -1,6 +1,7 @@
 <script lang="ts">
   import { showSuccess, showError } from '../lib/toast.svelte';
   import type { DebugInfo } from '../lib/api';
+  import type { LogEntry } from '../lib/logger.svelte';
 
   interface FrontendDebugInfo {
     renderTime?: number;
@@ -21,6 +22,7 @@
     data: unknown;
     debugInfo?: DebugInfo;
     frontendInfo?: FrontendDebugInfo;
+    frontendLogs?: LogEntry[];
     label?: string;
     includeContext?: boolean;
     includePerformance?: boolean;
@@ -34,6 +36,7 @@
     data,
     debugInfo,
     frontendInfo,
+    frontendLogs = [],
     label = 'Show Details',
     includeContext = true,
     includePerformance = true,
@@ -298,7 +301,7 @@
     const currentLocalStorage = includeStorage ? (frontendInfo?.localStorage || collectLocalStorage()) : undefined;
     const currentSessionStorage = includeStorage ? (frontendInfo?.sessionStorage || collectSessionStorage()) : undefined;
 
-    if (frontendInfo || currentBrowserInfo || currentCookies || currentLocalStorage || currentSessionStorage) {
+    if (frontendInfo || currentBrowserInfo || currentCookies || currentLocalStorage || currentSessionStorage || frontendLogs.length > 0) {
       sections.push('--- FRONTEND INFORMATION ---');
       sections.push('');
 
@@ -318,6 +321,42 @@
         sections.push(`  Language: ${currentBrowserInfo.language}`);
         sections.push(`  Viewport: ${currentBrowserInfo.viewport.width}x${currentBrowserInfo.viewport.height}`);
         sections.push(`  User Agent: ${currentBrowserInfo.userAgent}`);
+      }
+
+      // Frontend Logs
+      if (frontendLogs.length > 0) {
+        sections.push('');
+        sections.push('Frontend Logs:');
+        sections.push('');
+
+        // Sort logs by timestamp (newest first)
+        const sortedLogs = [...frontendLogs].sort((a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        sortedLogs.forEach((log, index) => {
+          sections.push(`  ${index + 1}. [${log.level.toUpperCase()}] ${log.timestamp}`);
+          sections.push(`     Component: ${log.component}`);
+          sections.push(`     Operation: ${log.operation}`);
+          sections.push(`     Message: ${log.message}`);
+
+          if (log.correlationId) {
+            sections.push(`     Correlation ID: ${log.correlationId}`);
+          }
+
+          if (log.metadata && Object.keys(log.metadata).length > 0) {
+            sections.push(`     Metadata: ${JSON.stringify(log.metadata)}`);
+          }
+
+          if (log.stackTrace) {
+            sections.push(`     Stack Trace:`);
+            log.stackTrace.split('\n').forEach(line => {
+              sections.push(`       ${line}`);
+            });
+          }
+
+          sections.push('');
+        });
       }
 
       if (currentCookies && Object.keys(currentCookies).length > 0) {

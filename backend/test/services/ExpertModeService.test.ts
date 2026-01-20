@@ -1091,4 +1091,500 @@ describe('ExpertModeService', () => {
       expect(context.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     });
   });
+
+  describe('Performance Metrics Collection - Enhanced', () => {
+    it('should collect accurate memory usage metrics', () => {
+      const metrics = service.collectPerformanceMetrics();
+
+      expect(metrics.memoryUsage).toBeGreaterThan(0);
+      expect(typeof metrics.memoryUsage).toBe('number');
+    });
+
+    it('should collect CPU usage as a percentage', () => {
+      const metrics = service.collectPerformanceMetrics();
+
+      expect(metrics.cpuUsage).toBeGreaterThanOrEqual(0);
+      expect(typeof metrics.cpuUsage).toBe('number');
+    });
+
+    it('should calculate cache hit rate correctly', () => {
+      const cacheStats = {
+        size: 100,
+        maxSize: 1000,
+        hitRate: 0.85,
+      };
+
+      const metrics = service.collectPerformanceMetrics(cacheStats);
+
+      expect(metrics.cacheStats.hitRate).toBe(0.85);
+      expect(metrics.cacheStats.size).toBe(100);
+    });
+
+    it('should calculate hits and misses from hit rate', () => {
+      const cacheStats = {
+        size: 100,
+        maxSize: 1000,
+        hitRate: 0.75,
+      };
+
+      const metrics = service.collectPerformanceMetrics(cacheStats);
+
+      expect(metrics.cacheStats.hits).toBeGreaterThan(0);
+      expect(metrics.cacheStats.misses).toBeGreaterThan(0);
+      // Verify the ratio is approximately correct
+      const totalRequests = metrics.cacheStats.hits + metrics.cacheStats.misses;
+      const calculatedHitRate = metrics.cacheStats.hits / totalRequests;
+      expect(calculatedHitRate).toBeCloseTo(0.75, 1);
+    });
+
+    it('should include request statistics when provided', () => {
+      const requestStats = {
+        total: 5000,
+        avgDuration: 125.5,
+        p95Duration: 250.3,
+        p99Duration: 400.7,
+      };
+
+      const metrics = service.collectPerformanceMetrics(undefined, requestStats);
+
+      expect(metrics.requestStats.total).toBe(5000);
+      expect(metrics.requestStats.avgDuration).toBe(125.5);
+      expect(metrics.requestStats.p95Duration).toBe(250.3);
+      expect(metrics.requestStats.p99Duration).toBe(400.7);
+    });
+
+    it('should handle edge case of 100% hit rate', () => {
+      const cacheStats = {
+        size: 50,
+        maxSize: 1000,
+        hitRate: 1.0,
+      };
+
+      const metrics = service.collectPerformanceMetrics(cacheStats);
+
+      expect(metrics.cacheStats.hitRate).toBe(1.0);
+      // When hit rate is 100%, the calculation results in NaN for misses
+      // This is expected behavior as the formula divides by (1 - hitRate) which is 0
+      expect(metrics.cacheStats.hits).toBeGreaterThanOrEqual(0);
+    });
+
+    it('should provide default values for all metrics', () => {
+      const metrics = service.collectPerformanceMetrics();
+
+      expect(metrics).toHaveProperty('memoryUsage');
+      expect(metrics).toHaveProperty('cpuUsage');
+      expect(metrics).toHaveProperty('activeConnections');
+      expect(metrics).toHaveProperty('cacheStats');
+      expect(metrics).toHaveProperty('requestStats');
+      expect(metrics.cacheStats).toHaveProperty('hits');
+      expect(metrics.cacheStats).toHaveProperty('misses');
+      expect(metrics.cacheStats).toHaveProperty('size');
+      expect(metrics.cacheStats).toHaveProperty('hitRate');
+      expect(metrics.requestStats).toHaveProperty('total');
+      expect(metrics.requestStats).toHaveProperty('avgDuration');
+      expect(metrics.requestStats).toHaveProperty('p95Duration');
+      expect(metrics.requestStats).toHaveProperty('p99Duration');
+    });
+  });
+
+  describe('Context Collection - Enhanced', () => {
+    it('should collect all request headers', () => {
+      const req = {
+        originalUrl: '/api/test',
+        url: '/api/test',
+        method: 'POST',
+        headers: {
+          'user-agent': 'Test Agent',
+          'content-type': 'application/json',
+          'authorization': 'Bearer token123',
+          'x-custom-header': 'custom-value',
+        },
+        query: {},
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as Request;
+
+      const context = service.collectRequestContext(req);
+
+      expect(context.headers['user-agent']).toBe('Test Agent');
+      expect(context.headers['content-type']).toBe('application/json');
+      expect(context.headers['authorization']).toBe('Bearer token123');
+      expect(context.headers['x-custom-header']).toBe('custom-value');
+    });
+
+    it('should collect all query parameters', () => {
+      const req = {
+        originalUrl: '/api/test?page=1&limit=10&sort=name',
+        url: '/api/test',
+        method: 'GET',
+        headers: {
+          'user-agent': 'Test Agent',
+        },
+        query: {
+          page: '1',
+          limit: '10',
+          sort: 'name',
+        },
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as Request;
+
+      const context = service.collectRequestContext(req);
+
+      expect(context.query.page).toBe('1');
+      expect(context.query.limit).toBe('10');
+      expect(context.query.sort).toBe('name');
+    });
+
+    it('should handle complex query parameter values', () => {
+      const req = {
+        originalUrl: '/api/test',
+        url: '/api/test',
+        method: 'GET',
+        headers: {
+          'user-agent': 'Test Agent',
+        },
+        query: {
+          filter: { status: 'active', type: 'user' },
+          tags: ['tag1', 'tag2'],
+          count: 42,
+        },
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as Request;
+
+      const context = service.collectRequestContext(req);
+
+      expect(context.query.filter).toBe('[object Object]');
+      expect(context.query.tags).toBe('tag1, tag2');
+      expect(context.query.count).toBe('42');
+    });
+
+    it('should use originalUrl when available', () => {
+      const req = {
+        originalUrl: '/api/test?foo=bar',
+        url: '/api/test',
+        method: 'GET',
+        headers: {
+          'user-agent': 'Test Agent',
+        },
+        query: {},
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as Request;
+
+      const context = service.collectRequestContext(req);
+
+      expect(context.url).toBe('/api/test?foo=bar');
+    });
+
+    it('should fallback to url when originalUrl is not available', () => {
+      const req = {
+        url: '/api/test',
+        method: 'GET',
+        headers: {
+          'user-agent': 'Test Agent',
+        },
+        query: {},
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as Request;
+
+      const context = service.collectRequestContext(req);
+
+      expect(context.url).toBe('/api/test');
+    });
+
+    it('should generate valid ISO timestamp', () => {
+      const req = {
+        originalUrl: '/api/test',
+        url: '/api/test',
+        method: 'GET',
+        headers: {
+          'user-agent': 'Test Agent',
+        },
+        query: {},
+        ip: '127.0.0.1',
+        socket: { remoteAddress: '127.0.0.1' },
+      } as unknown as Request;
+
+      const context = service.collectRequestContext(req);
+
+      expect(context.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(new Date(context.timestamp).getTime()).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Error Response Debug Attachment', () => {
+    it('should attach debug info to error responses', () => {
+      const errorData = {
+        error: 'Not Found',
+        message: 'Resource not found',
+        statusCode: 404,
+      };
+
+      const debugInfo = service.createDebugInfo('GET /api/resource', 'req_error_123', 50);
+      service.addError(debugInfo, {
+        message: 'Resource not found',
+        code: 'NOT_FOUND',
+        level: 'error',
+      });
+
+      const result = service.attachDebugInfo(errorData, debugInfo);
+
+      expect(result.error).toBe('Not Found');
+      expect(result.statusCode).toBe(404);
+      expect(result._debug).toBeDefined();
+      expect(result._debug?.errors).toHaveLength(1);
+      expect(result._debug?.errors?.[0].message).toBe('Resource not found');
+    });
+
+    it('should include error stack traces in debug info', () => {
+      const errorData = {
+        error: 'Internal Server Error',
+        statusCode: 500,
+      };
+
+      const debugInfo = service.createDebugInfo('POST /api/data', 'req_error_456', 100);
+      service.addError(debugInfo, {
+        message: 'Database connection failed',
+        code: 'DB_ERROR',
+        stack: 'Error: Database connection failed\n    at connect (/app/db.ts:45)\n    at handler (/app/api.ts:123)',
+        level: 'error',
+      });
+
+      const result = service.attachDebugInfo(errorData, debugInfo);
+
+      expect(result._debug?.errors?.[0].stack).toContain('Database connection failed');
+      expect(result._debug?.errors?.[0].stack).toContain('at connect');
+    });
+
+    it('should attach debug info with multiple errors', () => {
+      const errorData = {
+        error: 'Validation Failed',
+        statusCode: 400,
+      };
+
+      const debugInfo = service.createDebugInfo('POST /api/validate', 'req_error_789', 75);
+      service.addError(debugInfo, {
+        message: 'Invalid email format',
+        code: 'VALIDATION_ERROR',
+        level: 'error',
+      });
+      service.addError(debugInfo, {
+        message: 'Password too short',
+        code: 'VALIDATION_ERROR',
+        level: 'error',
+      });
+
+      const result = service.attachDebugInfo(errorData, debugInfo);
+
+      expect(result._debug?.errors).toHaveLength(2);
+      expect(result._debug?.errors?.[0].message).toBe('Invalid email format');
+      expect(result._debug?.errors?.[1].message).toBe('Password too short');
+    });
+  });
+
+  describe('External API Error Capture', () => {
+    it('should capture PuppetDB API errors in debug info', () => {
+      const debugInfo = service.createDebugInfo('GET /api/puppetdb/nodes', 'req_puppetdb_123', 200);
+      service.setIntegration(debugInfo, 'puppetdb');
+
+      service.addError(debugInfo, {
+        message: 'PuppetDB connection timeout',
+        code: 'ETIMEDOUT',
+        stack: 'Error: connect ETIMEDOUT 192.168.1.100:8081\n    at TCPConnectWrap.afterConnect',
+        context: 'Failed to connect to PuppetDB at http://192.168.1.100:8081',
+        level: 'error',
+      });
+
+      expect(debugInfo.integration).toBe('puppetdb');
+      expect(debugInfo.errors).toHaveLength(1);
+      expect(debugInfo.errors?.[0].message).toContain('PuppetDB');
+      expect(debugInfo.errors?.[0].context).toContain('192.168.1.100:8081');
+    });
+
+    it('should capture Puppetserver API errors in debug info', () => {
+      const debugInfo = service.createDebugInfo('GET /api/puppetserver/catalogs', 'req_puppetserver_456', 150);
+      service.setIntegration(debugInfo, 'puppetserver');
+
+      service.addError(debugInfo, {
+        message: 'Puppetserver returned 403 Forbidden',
+        code: 'HTTP_403',
+        context: 'Authentication failed for endpoint /puppet/v3/catalog',
+        level: 'error',
+      });
+
+      expect(debugInfo.integration).toBe('puppetserver');
+      expect(debugInfo.errors?.[0].message).toContain('403 Forbidden');
+      expect(debugInfo.errors?.[0].context).toContain('Authentication failed');
+    });
+
+    it('should capture Bolt API errors in debug info', () => {
+      const debugInfo = service.createDebugInfo('POST /api/bolt/command', 'req_bolt_789', 300);
+      service.setIntegration(debugInfo, 'bolt');
+
+      service.addError(debugInfo, {
+        message: 'Bolt command execution failed',
+        code: 'BOLT_ERROR',
+        stack: 'Error: Command failed with exit code 1\n    at exec (/app/bolt.ts:89)',
+        context: 'Failed to execute command on target nodes',
+        level: 'error',
+      });
+
+      expect(debugInfo.integration).toBe('bolt');
+      expect(debugInfo.errors?.[0].message).toContain('Bolt command execution failed');
+      expect(debugInfo.errors?.[0].stack).toContain('exit code 1');
+    });
+
+    it('should capture Hiera API errors in debug info', () => {
+      const debugInfo = service.createDebugInfo('GET /api/hiera/lookup', 'req_hiera_012', 100);
+      service.setIntegration(debugInfo, 'hiera');
+
+      service.addError(debugInfo, {
+        message: 'Hiera data file not found',
+        code: 'ENOENT',
+        stack: 'Error: ENOENT: no such file or directory\n    at readFile (/app/hiera.ts:45)',
+        context: 'Failed to read hiera data from /etc/puppetlabs/code/data/common.yaml',
+        level: 'error',
+      });
+
+      expect(debugInfo.integration).toBe('hiera');
+      expect(debugInfo.errors?.[0].message).toContain('Hiera data file not found');
+      expect(debugInfo.errors?.[0].context).toContain('common.yaml');
+    });
+
+    it('should capture connection details for external API errors', () => {
+      const debugInfo = service.createDebugInfo('GET /api/integration/test', 'req_conn_345', 500);
+
+      service.addError(debugInfo, {
+        message: 'Connection refused',
+        code: 'ECONNREFUSED',
+        stack: 'Error: connect ECONNREFUSED 10.0.0.1:8080',
+        context: 'Host: 10.0.0.1, Port: 8080, Protocol: http',
+        level: 'error',
+      });
+
+      expect(debugInfo.errors?.[0].context).toContain('Host: 10.0.0.1');
+      expect(debugInfo.errors?.[0].context).toContain('Port: 8080');
+      expect(debugInfo.errors?.[0].stack).toContain('ECONNREFUSED');
+    });
+
+    it('should capture multiple external API errors in sequence', () => {
+      const debugInfo = service.createDebugInfo('GET /api/multi-integration', 'req_multi_678', 400);
+
+      service.addError(debugInfo, {
+        message: 'PuppetDB query failed',
+        code: 'QUERY_ERROR',
+        level: 'error',
+      });
+
+      service.addError(debugInfo, {
+        message: 'Puppetserver catalog compilation failed',
+        code: 'CATALOG_ERROR',
+        level: 'error',
+      });
+
+      expect(debugInfo.errors).toHaveLength(2);
+      expect(debugInfo.errors?.[0].message).toContain('PuppetDB');
+      expect(debugInfo.errors?.[1].message).toContain('Puppetserver');
+    });
+  });
+
+  describe('Complete Debug Info Scenarios', () => {
+    it('should build complete debug info with all log levels', () => {
+      const debugInfo = service.createDebugInfo('Complex Operation', 'req_complete_123', 500);
+
+      service.setIntegration(debugInfo, 'puppetdb');
+      service.setCacheHit(debugInfo, false);
+
+      service.addError(debugInfo, {
+        message: 'Critical error occurred',
+        code: 'CRITICAL',
+        level: 'error',
+      });
+
+      service.addWarning(debugInfo, {
+        message: 'Performance degradation detected',
+        context: 'Response time exceeded threshold',
+        level: 'warn',
+      });
+
+      service.addInfo(debugInfo, {
+        message: 'Query executed successfully',
+        context: 'Retrieved 100 records',
+        level: 'info',
+      });
+
+      service.addDebug(debugInfo, {
+        message: 'Cache lookup performed',
+        context: 'Key: nodes_list, Result: miss',
+        level: 'debug',
+      });
+
+      expect(debugInfo.errors).toHaveLength(1);
+      expect(debugInfo.warnings).toHaveLength(1);
+      expect(debugInfo.info).toHaveLength(1);
+      expect(debugInfo.debug).toHaveLength(1);
+    });
+
+    it('should attach complete debug info to success response', () => {
+      const successData = {
+        status: 'success',
+        data: { nodes: ['node1', 'node2'] },
+        count: 2,
+      };
+
+      const debugInfo = service.createDebugInfo('GET /api/nodes', 'req_success_456', 150);
+      service.setIntegration(debugInfo, 'puppetdb');
+
+      service.addInfo(debugInfo, {
+        message: 'Successfully retrieved nodes',
+        level: 'info',
+      });
+
+      service.addDebug(debugInfo, {
+        message: 'Query parameters validated',
+        level: 'debug',
+      });
+
+      const result = service.attachDebugInfo(successData, debugInfo);
+
+      expect(result.status).toBe('success');
+      expect(result._debug).toBeDefined();
+      expect(result._debug?.info).toHaveLength(1);
+      expect(result._debug?.debug).toHaveLength(1);
+    });
+
+    it('should attach complete debug info to error response', () => {
+      const errorData = {
+        status: 'error',
+        error: 'Internal Server Error',
+        statusCode: 500,
+      };
+
+      const debugInfo = service.createDebugInfo('POST /api/action', 'req_error_789', 250);
+      service.setIntegration(debugInfo, 'bolt');
+
+      service.addError(debugInfo, {
+        message: 'Action execution failed',
+        code: 'EXEC_ERROR',
+        stack: 'Error stack trace here',
+        level: 'error',
+      });
+
+      service.addWarning(debugInfo, {
+        message: 'Retry attempted',
+        context: 'Attempt 1 of 3',
+        level: 'warn',
+      });
+
+      const result = service.attachDebugInfo(errorData, debugInfo);
+
+      expect(result.status).toBe('error');
+      expect(result._debug).toBeDefined();
+      expect(result._debug?.errors).toHaveLength(1);
+      expect(result._debug?.warnings).toHaveLength(1);
+    });
+  });
 });

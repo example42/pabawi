@@ -385,6 +385,7 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
       status: "connected",
       message: "Hiera integration is healthy",
       details: {
+        controlRepoPath: this.hieraConfig.controlRepoPath,
         controlRepoAccessible: true,
         hieraConfigValid,
         factSourceAvailable: true, // Will be checked via FactService

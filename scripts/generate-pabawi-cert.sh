@@ -88,6 +88,7 @@ load_env() {
         print_status "Loading environment from $ENV_FILE"
         # Export variables from .env file
         set -a
+        # shellcheck source=/dev/null
         source "$ENV_FILE"
         set +a
     else
@@ -150,9 +151,12 @@ create_cert_dirs() {
     fi
 
     # Create directories for certificate files
-    local cert_dir=$(dirname "$CERT_FILE")
-    local key_dir=$(dirname "$KEY_FILE")
-    local ca_dir=$(dirname "$CA_FILE")
+    local cert_dir
+    local key_dir
+    local ca_dir
+    cert_dir=$(dirname "$CERT_FILE")
+    key_dir=$(dirname "$KEY_FILE")
+    ca_dir=$(dirname "$CA_FILE")
 
     mkdir -p "$cert_dir" "$key_dir" "$ca_dir"
 
@@ -190,7 +194,8 @@ generate_private_key() {
 # Function to create OpenSSL configuration
 create_openssl_config() {
     local certname="$1"
-    local config_file="$(dirname "$CERT_FILE")/${certname}.conf"
+    local config_file
+    config_file="$(dirname "$CERT_FILE")/${certname}.conf"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would create OpenSSL config: $config_file"
@@ -213,7 +218,8 @@ EOF
 # Function to generate CSR
 generate_csr() {
     local certname="$1"
-    local csr_file="$(dirname "$CERT_FILE")/${certname}.csr"
+    local csr_file
+    csr_file="$(dirname "$CERT_FILE")/${certname}.csr"
 
     if [[ "$DRY_RUN" == "true" ]]; then
         print_status "[DRY RUN] Would generate CSR: $csr_file"
@@ -382,8 +388,10 @@ verify_certificate() {
 
     # Verify private key matches certificate
     if [[ -f "$KEY_FILE" ]]; then
-        local cert_modulus=$(openssl x509 -noout -modulus -in "$CERT_FILE" | openssl md5)
-        local key_modulus=$(openssl rsa -noout -modulus -in "$KEY_FILE" | openssl md5)
+        local cert_modulus
+        local key_modulus
+        cert_modulus=$(openssl x509 -noout -modulus -in "$CERT_FILE" | openssl md5)
+        key_modulus=$(openssl rsa -noout -modulus -in "$KEY_FILE" | openssl md5)
 
         if [[ "$cert_modulus" == "$key_modulus" ]]; then
             print_success "✅ Private key matches certificate"

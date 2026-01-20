@@ -26,6 +26,7 @@ The route follows the correct expert mode pattern:
 ### Key Implementation Features
 
 **Success Path** (line 472):
+
 ```typescript
 if (debugInfo) {
   debugInfo.duration = duration;
@@ -50,6 +51,7 @@ if (debugInfo) {
 Created comprehensive test suite: `backend/test/integration/puppetdb-node-detail.test.ts`
 
 All tests pass ✅:
+
 - ✅ Returns node details when node exists
 - ✅ Returns 404 when node does not exist
 - ✅ Includes debug info when expert mode is enabled
@@ -59,6 +61,7 @@ All tests pass ✅:
 ### Logging Coverage
 
 The route properly logs at all levels:
+
 - **INFO**: "Fetching node details from PuppetDB"
 - **DEBUG**: "Querying PuppetDB for node details" (with certname context)
 - **WARN**: "Node not found in PuppetDB" (when node doesn't exist)
@@ -67,6 +70,7 @@ The route properly logs at all levels:
 ### Expert Mode Coverage
 
 When expert mode is enabled, the response includes:
+
 - ✅ `operation`: "GET /api/integrations/puppetdb/nodes/:certname"
 - ✅ `integration`: "puppetdb"
 - ✅ `duration`: Request duration in milliseconds
@@ -85,4 +89,5 @@ When expert mode is enabled, the response includes:
 ## Next Steps
 
 Continue with the next route in task 6.5.4.1:
+
 - `GET /api/integrations/puppetdb/nodes/:certname/facts`

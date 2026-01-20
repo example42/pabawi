@@ -1,6 +1,7 @@
 # Routes Refactoring Plan
 
 ## Current State
+
 - Single file: `backend/src/routes/integrations.ts` (5197 lines)
 - Contains routes for: colors, status, PuppetDB (13 routes), Puppetserver (13 routes)
 
@@ -20,19 +21,23 @@ backend/src/routes/
 ## Route Distribution
 
 ### integrations.ts (Main Router)
+
 - Import and mount sub-routers
 - Export createIntegrationsRouter function
 - ~50-100 lines
 
 ### integrations/colors.ts
+
 - GET /api/integrations/colors
 - ~100 lines
 
 ### integrations/status.ts
+
 - GET /api/integrations/status
 - ~300 lines
 
 ### integrations/puppetdb.ts (13 routes)
+
 - GET /api/integrations/puppetdb/nodes
 - GET /api/integrations/puppetdb/nodes/:certname
 - GET /api/integrations/puppetdb/nodes/:certname/facts
@@ -47,6 +52,7 @@ backend/src/routes/
 - ~2000 lines
 
 ### integrations/puppetserver.ts (13 routes)
+
 - GET /api/integrations/puppetserver/nodes
 - GET /api/integrations/puppetserver/nodes/:certname
 - GET /api/integrations/puppetserver/nodes/:certname/status
@@ -66,6 +72,7 @@ backend/src/routes/
 ## Shared Utilities
 
 Create `backend/src/routes/integrations/utils.ts` for:
+
 - Validation schemas (CertnameParamSchema, etc.)
 - Helper functions (handleExpertModeResponse, captureError, captureWarning)
 - Common imports

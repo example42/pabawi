@@ -3,7 +3,7 @@
 const STORAGE_KEY = "pabawi_report_filters";
 
 export interface ReportFilters {
-  status?: ('success' | 'failed' | 'changed' | 'unchanged')[];
+  status?: ('unchanged' | 'changed' | 'failed')[];
   minDuration?: number;
   minCompileTime?: number;
   minTotalResources?: number;
@@ -23,7 +23,7 @@ class ReportFilterStore {
   setFilter(key: keyof ReportFilters, value: unknown): void {
     // Type-safe assignment based on key
     if (key === 'status' && (Array.isArray(value) || value === undefined)) {
-      this.filters[key] = value as ('success' | 'failed' | 'changed' | 'unchanged')[] | undefined;
+      this.filters[key] = value as ('unchanged' | 'changed' | 'failed')[] | undefined;
     } else if ((key === 'minDuration' || key === 'minCompileTime' || key === 'minTotalResources') &&
                (typeof value === 'number' || value === undefined)) {
       this.filters[key] = value as number | undefined;

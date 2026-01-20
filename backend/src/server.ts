@@ -13,11 +13,13 @@ import { createCommandsRouter } from "./routes/commands";
 import { createTasksRouter } from "./routes/tasks";
 import { createExecutionsRouter } from "./routes/executions";
 import { createPuppetRouter } from "./routes/puppet";
+import { createPuppetHistoryRouter } from "./routes/puppetHistory";
 import { createPackagesRouter } from "./routes/packages";
 import { createStreamingRouter } from "./routes/streaming";
 import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
+import configRouter from "./routes/config";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware, expertModeMiddleware } from "./middleware";
@@ -29,6 +31,7 @@ import { BoltPlugin } from "./integrations/bolt";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
+import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
 
 /**
  * Initialize and start the application
@@ -558,6 +561,16 @@ async function startServer(): Promise<Express> {
     // Make integration manager available globally for cross-service access
     (global as Record<string, unknown>).integrationManager = integrationManager;
 
+    // Initialize PuppetRunHistoryService if PuppetDB is available
+    let puppetRunHistoryService: PuppetRunHistoryService | undefined;
+    if (puppetDBService) {
+      puppetRunHistoryService = new PuppetRunHistoryService(puppetDBService, logger);
+      logger.info("PuppetRunHistoryService initialized successfully", {
+        component: "Server",
+        operation: "startServer",
+      });
+    }
+
     // Start health check scheduler for integrations
     if (integrationManager.getPluginCount() > 0) {
       const startScheduler = integrationManager.startHealthCheckScheduler.bind(integrationManager);
@@ -646,6 +659,9 @@ async function startServer(): Promise<Express> {
       });
     });
 
+    // Config routes (UI settings, etc.)
+    app.use("/api/config", configRouter);
+
     // API Routes
     app.use(
       "/api/inventory",
@@ -677,6 +693,13 @@ async function startServer(): Promise<Express> {
       "/api/nodes",
       createPuppetRouter(boltService, executionRepository, streamingManager),
     );
+    // Add puppet history routes if PuppetDB is available
+    if (puppetRunHistoryService) {
+      app.use(
+        "/api/puppet",
+        createPuppetHistoryRouter(puppetRunHistoryService),
+      );
+    }
     app.use(
       "/api",
       createPackagesRouter(

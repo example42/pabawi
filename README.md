@@ -136,10 +136,11 @@ padawi/
 *Bolt task execution interface and and detailed execution results with re-run capabilities*
 
 ### Puppet reports and Bolt executions
-<img src="docs/screenshots/puppet-reports.png" alt="Puppet Reports" width="400">
-<img src="docs/screenshots/executions-list.png" alt="Executions List" width="400"> 
 
-*Puppet run reports with detailed metrics and Bolt Execution history with filtering *
+<img src="docs/screenshots/puppet-reports.png" alt="Puppet Reports" width="400">
+<img src="docs/screenshots/executions-list.png" alt="Executions List" width="400">
+
+*Puppet run reports with detailed metrics and Bolt Execution history with filtering*
 
 ## Prerequisites
 
@@ -277,7 +278,6 @@ PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
 
 See [PuppetServer Integration Setup Guide](docs/puppetserver-integration-setup.md) for detailed configuration instructions.
 
-
 ### Hiera Integration
 
 To enable Hiera integration, add to `backend/.env`:
@@ -304,7 +304,6 @@ HIERA_CACHE_MAX_ENTRIES=10000
 HIERA_CODE_ANALYSIS_ENABLED=true
 HIERA_CODE_ANALYSIS_LINT_ENABLED=true
 ```
-
 
 ## Testing
 
@@ -400,23 +399,23 @@ Examples:
 
 | Kind of data | Path on the host | Volume Mount option | Env setting |
 | ----------- | ---------------- | ------------------- | ----------- |
-| Bolt project dir | $HOME/bolt-project | -v "${HOME}/bolt-project:/bolt:ro" | BOLT_PROJECT_PATH=/bolt | 
-| Control Repo | $HOME/control-repo | -v "${HOME}/control-repo:/control-repo:ro" | HIERA_CONTROL_REPO_PATH=/control-repo | 
-| Pabawi Data | $HOME/pabawi/data | -v "${HOME}/pabawi/data:/data" | DATABASE_PATH=/data/pabawi.db | 
-| Puppet certs - Ca | $HOME/puppet/certs/ca.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETSERVER_SSL_CA=/certs/ca.pem | 
-| Puppet certs - Pabawi user cert | $HOME/puppet/certs/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_CERT=/certs/pabawi.pem | 
-| Puppet certs - Pabawi user key | $HOME/puppet/certs/private/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_KEY=/certs/private/pabawi.pem | 
+| Bolt project dir | $HOME/bolt-project | -v "${HOME}/bolt-project:/bolt:ro" | BOLT_PROJECT_PATH=/bolt |
+| Control Repo | $HOME/control-repo | -v "${HOME}/control-repo:/control-repo:ro" | HIERA_CONTROL_REPO_PATH=/control-repo |
+| Pabawi Data | $HOME/pabawi/data | -v "${HOME}/pabawi/data:/data" | DATABASE_PATH=/data/pabawi.db |
+| Puppet certs - Ca | $HOME/puppet/certs/ca.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETSERVER_SSL_CA=/certs/ca.pem |
+| Puppet certs - Pabawi user cert | $HOME/puppet/certs/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_CERT=/certs/pabawi.pem |
+| Puppet certs - Pabawi user key | $HOME/puppet/certs/private/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_KEY=/certs/private/pabawi.pem |
 
 PUPPETSERVER_SSL_* settings can use the same paths of the relevant PUPPETDB_SSL_ ones.
 
 **⚠️ Security Note**: With current version is always better to expose access on;y via localhost. If you run pabawi on a remote node, use SSH port forwarding:
+
 ```bash
 # SSH port forwarding for remote access
 ssh -L 3000:localhost:3000 user@your-pabawi-host
 ```
 
 If you want to allow Pabawi access to different users, you should configure a reverse proxy with authentication.
-
 
 ### Running with Docker Compose
 
@@ -483,7 +482,6 @@ volumes:
 
 Access the application at <http://localhost:3000>
 
-
 ### Troubleshooting
 
 ### Common Issues
@@ -540,7 +538,6 @@ If expert mode doesn't show complete output:
 4. For historical executions, only those run in v0.2.0+ have full output
 
 See [Troubleshooting Guide](docs/troubleshooting.md) for more solutions.
-
 
 ## Roadmap
 

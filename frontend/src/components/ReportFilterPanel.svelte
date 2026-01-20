@@ -14,12 +14,11 @@
   let minCompileTime = $state<number | undefined>(reportFilters.filters.minCompileTime);
   let minTotalResources = $state<number | undefined>(reportFilters.filters.minTotalResources);
 
-  // Status options
+  // Status options (matching PuppetDB report statuses)
   const statusOptions = [
-    { value: 'success', label: 'Success', color: 'green' },
-    { value: 'failed', label: 'Failed', color: 'red' },
+    { value: 'unchanged', label: 'Unchanged', color: 'gray' },
     { value: 'changed', label: 'Changed', color: 'blue' },
-    { value: 'unchanged', label: 'Unchanged', color: 'gray' }
+    { value: 'failed', label: 'Failed', color: 'red' }
   ];
 
   // Calculate active filter count
@@ -48,7 +47,7 @@
   const applyFilters = () => {
     // Update status filter
     if (statusFilters.size > 0) {
-      reportFilters.setFilter('status', Array.from(statusFilters) as ('success' | 'failed' | 'changed' | 'unchanged')[]);
+      reportFilters.setFilter('status', Array.from(statusFilters) as ('unchanged' | 'changed' | 'failed')[]);
     } else {
       reportFilters.setFilter('status', undefined);
     }
@@ -144,55 +143,58 @@
       </div>
     </div>
 
-    <!-- Duration Filter -->
-    <div>
-      <label for="min-duration" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Minimum Duration (seconds)
-      </label>
-      <input
-        id="min-duration"
-        type="number"
-        min="0"
-        step="1"
-        class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400"
-        placeholder="e.g., 60"
-        bind:value={minDuration}
-        oninput={applyFilters}
-      />
-    </div>
+    <!-- Numeric Filters - Single Row -->
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <!-- Duration Filter -->
+      <div>
+        <label for="min-duration" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Minimum Duration (seconds)
+        </label>
+        <input
+          id="min-duration"
+          type="number"
+          min="0"
+          step="1"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400"
+          placeholder="e.g., 60"
+          bind:value={minDuration}
+          oninput={applyFilters}
+        />
+      </div>
 
-    <!-- Compile Time Filter -->
-    <div>
-      <label for="min-compile-time" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Minimum Compile Time (seconds)
-      </label>
-      <input
-        id="min-compile-time"
-        type="number"
-        min="0"
-        step="1"
-        class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400"
-        placeholder="e.g., 10"
-        bind:value={minCompileTime}
-        oninput={applyFilters}
-      />
-    </div>
+      <!-- Compile Time Filter -->
+      <div>
+        <label for="min-compile-time" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Minimum Compile Time (seconds)
+        </label>
+        <input
+          id="min-compile-time"
+          type="number"
+          min="0"
+          step="1"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400"
+          placeholder="e.g., 10"
+          bind:value={minCompileTime}
+          oninput={applyFilters}
+        />
+      </div>
 
-    <!-- Total Resources Filter -->
-    <div>
-      <label for="min-total-resources" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Minimum Total Resources
-      </label>
-      <input
-        id="min-total-resources"
-        type="number"
-        min="0"
-        step="1"
-        class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400"
-        placeholder="e.g., 100"
-        bind:value={minTotalResources}
-        oninput={applyFilters}
-      />
+      <!-- Total Resources Filter -->
+      <div>
+        <label for="min-total-resources" class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+          Minimum Total Resources
+        </label>
+        <input
+          id="min-total-resources"
+          type="number"
+          min="0"
+          step="1"
+          class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-primary-400 dark:focus:ring-primary-400"
+          placeholder="e.g., 100"
+          bind:value={minTotalResources}
+          oninput={applyFilters}
+        />
+      </div>
     </div>
   </div>
 </div>

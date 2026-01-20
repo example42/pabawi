@@ -216,12 +216,14 @@ router.get(
 ## Logging Levels
 
 ### error
+
 - Authentication failures
 - Connection errors
 - Unexpected exceptions
 - Service failures
 
 ### warn
+
 - Service not configured
 - Service not initialized
 - Validation errors
@@ -229,11 +231,13 @@ router.get(
 - Resource not found (404)
 
 ### info
+
 - Request received
 - Operation completed successfully
 - Major state changes
 
 ### debug
+
 - Operation parameters
 - Intermediate results
 - Cache hits/misses
@@ -244,6 +248,7 @@ router.get(
 ### When Expert Mode is Enabled
 
 The response includes:
+
 - `_debug` object with:
   - `timestamp`: ISO timestamp
   - `requestId`: Unique request identifier
@@ -273,6 +278,7 @@ The response includes:
 ## Implementation Status
 
 ### Completed Routes
+
 - `/api/integrations/colors` - ✅ Full logging and expert mode
 - `/api/integrations/status` - ✅ Full logging and expert mode
 - `/api/integrations/puppetdb/nodes` - ✅ Full logging and expert mode
@@ -281,6 +287,7 @@ The response includes:
 - `/api/integrations/puppetdb/reports` - ✅ Expert mode only
 
 ### Remaining Routes (23 routes)
+
 All remaining routes in `backend/src/routes/integrations.ts` need to follow the same pattern:
 
 1. Add `const startTime = Date.now();` at the beginning
@@ -296,6 +303,7 @@ All remaining routes in `backend/src/routes/integrations.ts` need to follow the 
 ## Next Steps
 
 Apply this pattern to all remaining routes in:
+
 - `backend/src/routes/integrations.ts` (23 routes remaining)
 - `backend/src/routes/inventory.ts`
 - `backend/src/routes/puppet.ts`

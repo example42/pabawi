@@ -228,11 +228,13 @@ export default router;
 ## Benefits of Migration
 
 ### Lines of Code Reduction
+
 - **Before**: ~120 lines
 - **After**: ~60 lines
 - **Reduction**: 50% fewer lines
 
 ### Improvements
+
 1. **No duplicate cache implementation** - Uses shared `SimpleCache`
 2. **No duplicate pagination logic** - Uses `paginateArray()` and `sendPaginatedResponse()`
 3. **No duplicate error handling** - Uses `logAndSendError()`
@@ -241,6 +243,7 @@ export default router;
 6. **Easier to maintain** - Changes to utilities affect all routes
 
 ### Testing Benefits
+
 - Utilities are tested independently
 - Route tests can focus on business logic
 - Mock utilities for isolated testing
@@ -248,6 +251,7 @@ export default router;
 ## Step-by-Step Migration Guide
 
 ### 1. Import Utilities
+
 ```typescript
 import {
   SimpleCache,
@@ -260,6 +264,7 @@ import {
 ```
 
 ### 2. Replace Cache Implementation
+
 ```typescript
 // Before
 class SimpleCache { /* ... */ }
@@ -273,6 +278,7 @@ const cache = new SimpleCache<YourDataType>({
 ```
 
 ### 3. Replace Pagination Logic
+
 ```typescript
 // Before
 const offset = (page - 1) * pageSize;
@@ -289,6 +295,7 @@ sendPaginatedResponse(res, result.data, page, pageSize, result.pagination.totalI
 ```
 
 ### 4. Replace Error Handling
+
 ```typescript
 // Before
 catch (error) {
@@ -307,6 +314,7 @@ catch (error) {
 ```
 
 ### 5. Test the Migration
+
 ```bash
 npm test -- --run --silent
 ```
@@ -314,6 +322,7 @@ npm test -- --run --silent
 ## Common Patterns
 
 ### Pattern 1: Cache + Pagination
+
 ```typescript
 const cacheKey = buildCacheKey("resource", id, page, pageSize);
 const cached = cache.get(cacheKey);
@@ -331,6 +340,7 @@ sendPaginatedResponse(res, result.data, page, pageSize, result.pagination.totalI
 ```
 
 ### Pattern 2: Error Handling with Custom Codes
+
 ```typescript
 try {
   // ... route logic
@@ -344,6 +354,7 @@ try {
 ```
 
 ### Pattern 3: Success Responses
+
 ```typescript
 import { sendSuccess, sendCreated, sendNotFound } from "../utils";
 
@@ -360,6 +371,7 @@ sendNotFound(res, "Resource", resourceId);
 ## Conclusion
 
 The migration to consolidated utilities:
+
 - Reduces code duplication by 50%
 - Improves consistency across the codebase
 - Makes maintenance easier

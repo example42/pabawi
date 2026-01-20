@@ -1,16 +1,19 @@
 # Bug: Stale Debug Info Persisting Across Navigation and Tab Switches
 
 ## Status
+
 ✅ **FIXED** - 2026-01-19
 
 ## Problem Description
 
 When expert mode is enabled, debug information (`debugInfo`) was persisting across:
+
 1. Page navigation (e.g., from Inventory → Home → Node Detail)
 2. Tab switches within a page (e.g., switching tabs in NodeDetailPage or PuppetPage)
 3. Data refreshes (e.g., clicking refresh or applying filters)
 
 This caused:
+
 - **Incorrect URLs** displayed in debug panel (showing previous request URL)
 - **Stale error messages** from previous requests
 - **Confusing debug data** that didn't match current page content
@@ -19,6 +22,7 @@ This caused:
 ## Root Cause
 
 The `debugInfo` state variable was declared as `$state<DebugInfo | null>(null)` in each page component, but was **never explicitly cleared** when:
+
 - Component mounted (page navigation)
 - New data was fetched
 - Tabs were switched
@@ -37,7 +41,9 @@ This meant old debug info would persist until a new request with `_debug` field 
 Added `debugInfo = null` at strategic points:
 
 ### 1. In `onMount()` lifecycle hook
+
 Clears debug info when navigating to a page:
+
 ```typescript
 onMount(() => {
   debugInfo = null; // Clear debug info on mount
@@ -46,7 +52,9 @@ onMount(() => {
 ```
 
 ### 2. At start of fetch functions
+
 Clears debug info before making new API requests:
+
 ```typescript
 async function fetchInventory(): Promise<void> {
   loading = true;
@@ -57,7 +65,9 @@ async function fetchInventory(): Promise<void> {
 ```
 
 ### 3. In tab switching functions
+
 Clears debug info when switching tabs:
+
 ```typescript
 function switchTab(tabId: TabId): void {
   activeTab = tabId;
@@ -97,6 +107,7 @@ function switchTab(tabId: TabId): void {
 ## Testing
 
 To verify the fix:
+
 1. Enable expert mode
 2. Navigate to Inventory page and trigger an error
 3. Navigate to Home page - debug info should be cleared
@@ -112,6 +123,7 @@ To verify the fix:
 ## Prevention
 
 For future pages with expert mode:
+
 - Always clear `debugInfo` in `onMount()`
 - Always clear `debugInfo` at the start of fetch functions
 - Always clear `debugInfo` in tab/view switching functions

@@ -14,16 +14,17 @@
   import GlobalFactsTab from '../components/GlobalFactsTab.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import PuppetRunChart from '../components/PuppetRunChart.svelte';
   import { integrationColors } from '../lib/integrationColors.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
-  import type { DebugInfo } from '../lib/api';
+  import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   // Tab types
-  type TabId = 'environments' | 'reports' | 'facts' | 'status' | 'admin' | 'hiera' | 'analysis';
+  type TabId = 'reports' | 'environments' | 'facts' | 'status' | 'admin' | 'hiera' | 'analysis';
 
   // State
-  let activeTab = $state<TabId>('environments');
-  let loadedTabs = $state<Set<TabId>>(new Set(['environments']));
+  let activeTab = $state<TabId>('reports');
+  let loadedTabs = $state<Set<TabId>>(new Set(['reports']));
 
   // Cache for loaded data
   let dataCache = $state<Record<TabId, any>>({});
@@ -31,9 +32,37 @@
   // Debug info state for expert mode
   let debugInfo = $state<DebugInfo | null>(null);
 
+  // Aggregated run history state
+  interface RunHistoryData {
+    date: string;
+    success: number;
+    failed: number;
+    changed: number;
+    unchanged: number;
+  }
+
+  let aggregatedRunHistory = $state<RunHistoryData[]>([]);
+  let runHistoryLoading = $state(false);
+  let runHistoryError = $state<string | null>(null);
+
   // Callback to receive debug info from child components
-  function handleDebugInfo(info: DebugInfo | null): void {
-    debugInfo = info;
+  let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
+
+  function handleDebugInfo(label: string, info: DebugInfo | null): void {
+    if (info) {
+      // Add or update debug info for this label
+      const existingIndex = debugInfoBlocks.findIndex(block => block.label === label);
+      if (existingIndex >= 0) {
+        // Update existing block
+        debugInfoBlocks[existingIndex] = { label, debugInfo: info };
+      } else {
+        // Add new block
+        debugInfoBlocks = [...debugInfoBlocks, { label, debugInfo: info }];
+      }
+    } else {
+      // Remove debug info for this label
+      debugInfoBlocks = debugInfoBlocks.filter(block => block.label !== label);
+    }
   }
 
   // Integration status
@@ -56,8 +85,41 @@
       isPuppetDBActive = puppetDB?.status === 'connected';
       isPuppetserverActive = puppetserver?.status === 'connected';
       isHieraActive = hiera?.status === 'connected';
+
+      // Fetch run history if PuppetDB is active and we're on the reports tab
+      if (isPuppetDBActive && activeTab === 'reports') {
+        void fetchAggregatedRunHistory();
+      }
     } catch (err) {
       console.error('Error checking integration status:', err);
+    }
+  }
+
+  // Fetch aggregated run history
+  async function fetchAggregatedRunHistory(days = 7): Promise<void> {
+    runHistoryLoading = true;
+    runHistoryError = null;
+
+    try {
+      const data = await get<RunHistoryData[] | { history: RunHistoryData[]; _debug?: DebugInfo }>(`/api/puppet/history?days=${days}`);
+
+      // Handle both array response (normal mode) and object response (expert mode)
+      if (Array.isArray(data)) {
+        aggregatedRunHistory = data;
+      } else {
+        aggregatedRunHistory = data.history;
+
+        // Store debug info if present
+        if (data._debug) {
+          handleDebugInfo('Puppet Run History', data._debug);
+        }
+      }
+    } catch (err) {
+      runHistoryError = err instanceof Error ? err.message : 'Failed to load run history';
+      console.error('Error fetching aggregated run history:', err);
+      aggregatedRunHistory = [];
+    } finally {
+      runHistoryLoading = false;
     }
   }
 
@@ -69,7 +131,7 @@
   // Switch tab and update URL
   function switchTab(tabId: TabId): void {
     activeTab = tabId;
-    debugInfo = null; // Clear debug info when switching tabs
+    debugInfoBlocks = []; // Clear debug info when switching tabs
 
     // Update URL with tab parameter
     const url = new URL(window.location.href);
@@ -80,6 +142,11 @@
     if (!loadedTabs.has(tabId)) {
       loadedTabs.add(tabId);
       loadTabData(tabId);
+    }
+
+    // Fetch run history when switching to reports tab
+    if (tabId === 'reports' && isPuppetDBActive) {
+      void fetchAggregatedRunHistory();
     }
   }
 
@@ -99,7 +166,7 @@
     const url = new URL(window.location.href);
     const tabParam = url.searchParams.get('tab') as TabId | null;
 
-    if (tabParam && ['environments', 'reports', 'facts', 'status', 'admin', 'hiera', 'analysis'].includes(tabParam)) {
+    if (tabParam && ['reports', 'environments', 'facts', 'status', 'admin', 'hiera', 'analysis'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -117,7 +184,7 @@
 
   // On mount
   onMount(() => {
-    debugInfo = null; // Clear debug info on mount
+    debugInfoBlocks = []; // Clear debug info on mount
     // Load integration colors
     void integrationColors.loadColors();
 
@@ -151,27 +218,6 @@
     <nav class="-mb-px flex space-x-8" aria-label="Tabs">
       <button
         type="button"
-        onclick={() => switchTab('environments')}
-        class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors {activeTab === 'environments'
-          ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-400'
-          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
-      >
-        <div class="flex items-center gap-2">
-          <svg
-            class="h-5 w-5"
-            style="color: {integrationColors.getColor('puppetserver').primary}"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-          </svg>
-          Environments
-        </div>
-      </button>
-
-      <button
-        type="button"
         onclick={() => switchTab('reports')}
         class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors {activeTab === 'reports'
           ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-400'
@@ -188,6 +234,27 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
           Reports
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onclick={() => switchTab('environments')}
+        class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium transition-colors {activeTab === 'environments'
+          ? 'border-primary-500 text-primary-600 dark:border-primary-400 dark:text-primary-400'
+          : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300'}"
+      >
+        <div class="flex items-center gap-2">
+          <svg
+            class="h-5 w-5"
+            style="color: {integrationColors.getColor('puppetserver').primary}"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+          </svg>
+          Environments
         </div>
       </button>
 
@@ -303,6 +370,43 @@
 
   <!-- Tab Content -->
   <div class="tab-content">
+    <!-- Reports Tab -->
+    {#if activeTab === 'reports'}
+      <div class="space-y-6">
+        <!-- Run History Chart -->
+        {#if isPuppetDBActive}
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-4 flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Run History</h2>
+              <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+            </div>
+            {#if runHistoryLoading}
+              <div class="flex items-center justify-center py-12">
+                <LoadingSpinner size="lg" />
+              </div>
+            {:else if runHistoryError}
+              <ErrorAlert message={runHistoryError} />
+            {:else}
+              <PuppetRunChart data={aggregatedRunHistory} title="" />
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Reports List -->
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-4 flex items-center gap-3">
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
+            <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+          </div>
+          <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
+            View and filter recent Puppet run reports from all nodes. Click on a report to view details.
+          </p>
+
+          <PuppetReportsListView onReportClick={handleReportClick} showFilters={true} onDebugInfo={(info) => handleDebugInfo('Puppet Reports', info)} />
+        </div>
+      </div>
+    {/if}
+
     <!-- Environments Tab -->
     {#if activeTab === 'environments'}
       <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -313,22 +417,7 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           View and manage Puppet environments available on your Puppetserver.
         </p>
-        <EnvironmentSelector showFlushButton={true} onDebugInfo={handleDebugInfo} />
-      </div>
-    {/if}
-
-    <!-- Reports Tab -->
-    {#if activeTab === 'reports'}
-      <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div class="mb-4 flex items-center gap-3">
-          <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
-          <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
-        </div>
-        <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
-          View and filter recent Puppet run reports from all nodes. Click on a report to view details.
-        </p>
-
-        <PuppetReportsListView onReportClick={handleReportClick} showFilters={true} onDebugInfo={handleDebugInfo} />
+        <EnvironmentSelector showFlushButton={true} onDebugInfo={(info) => handleDebugInfo('Puppet Environments', info)} />
       </div>
     {/if}
 
@@ -342,7 +431,7 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           Search for fact names and view their values across all nodes in your infrastructure.
         </p>
-        <GlobalFactsTab onDebugInfo={handleDebugInfo} />
+        <GlobalFactsTab onDebugInfo={(info) => handleDebugInfo('Node Facts', info)} />
       </div>
     {/if}
 
@@ -358,7 +447,7 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           View detailed status information, services, and metrics from your Puppetserver.
         </p>
-        <PuppetserverStatus onDebugInfo={handleDebugInfo} />
+        <PuppetserverStatus onDebugInfo={(info) => handleDebugInfo('Puppetserver Status', info)} />
       </div>
     {/if}
 
@@ -372,7 +461,7 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           View PuppetDB administrative information including archive status and database statistics.
         </p>
-        <PuppetDBAdmin onDebugInfo={handleDebugInfo} />
+        <PuppetDBAdmin onDebugInfo={(info) => handleDebugInfo('PuppetDB Statistics', info)} />
       </div>
     {/if}
 
@@ -386,7 +475,7 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           Search for Hiera keys and see their resolved values across all nodes in your infrastructure.
         </p>
-        <GlobalHieraTab onDebugInfo={handleDebugInfo} />
+        <GlobalHieraTab onDebugInfo={(info) => handleDebugInfo('Hiera Data', info)} />
       </div>
     {/if}
 
@@ -400,15 +489,20 @@
         <p class="mb-6 text-sm text-gray-600 dark:text-gray-400">
           Analyze your Puppet codebase for unused code, lint issues, and module updates.
         </p>
-        <CodeAnalysisTab onDebugInfo={handleDebugInfo} />
+        <CodeAnalysisTab onDebugInfo={(info) => handleDebugInfo('Code Analysis', info)} />
       </div>
     {/if}
   </div>
 
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && debugInfo}
-    <div class="mt-8">
-      <ExpertModeDebugPanel {debugInfo} />
+  {#if expertMode.enabled && debugInfoBlocks.length > 0}
+    <div class="mt-8 space-y-4">
+      {#each debugInfoBlocks as block (block.label)}
+        <div>
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
+          <ExpertModeDebugPanel debugInfo={block.debugInfo} />
+        </div>
+      {/each}
     </div>
   {/if}
 </div>

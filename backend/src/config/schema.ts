@@ -49,6 +49,15 @@ export const CacheConfigSchema = z.object({
 export type CacheConfig = z.infer<typeof CacheConfigSchema>;
 
 /**
+ * UI configuration schema
+ */
+export const UIConfigSchema = z.object({
+  showHomePageRunChart: z.boolean().default(true), // Show aggregated run chart on home page
+});
+
+export type UIConfig = z.infer<typeof UIConfigSchema>;
+
+/**
  * Execution queue configuration schema
  */
 export const ExecutionQueueConfigSchema = z.object({
@@ -285,6 +294,7 @@ export const AppConfigSchema = z.object({
   cache: CacheConfigSchema,
   executionQueue: ExecutionQueueConfigSchema,
   integrations: IntegrationsConfigSchema.default({}),
+  ui: UIConfigSchema.default({ showHomePageRunChart: true }),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

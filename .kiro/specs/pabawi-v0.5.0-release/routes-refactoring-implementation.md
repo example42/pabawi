@@ -1,6 +1,7 @@
 # Routes Refactoring Implementation Guide
 
 ## Current State Analysis
+
 - **File**: `backend/src/routes/integrations.ts`
 - **Size**: 5,198 lines
 - **Routes**: 27 total
@@ -25,13 +26,17 @@ backend/src/routes/
 ## Completed Files
 
 ### ✅ utils.ts
+
 Contains:
+
 - All validation schemas (CertnameParamSchema, ReportParamsSchema, etc.)
 - Helper functions (handleExpertModeResponse, captureError, captureWarning)
 - createLogger function
 
 ### ✅ colors.ts  
+
 Contains:
+
 - GET /colors route
 - Fully functional with expert mode support
 
@@ -40,15 +45,18 @@ Contains:
 ### 1. Create status.ts
 
 **Route to extract**:
+
 - GET /status (with deduplication middleware)
 
 **Dependencies**:
+
 - IntegrationManager (passed as parameter)
 - PuppetDBService (optional, passed as parameter)
 - PuppetserverService (optional, passed as parameter)
 - requestDeduplication middleware
 
 **Function signature**:
+
 ```typescript
 export function createStatusRouter(
   integrationManager: IntegrationManager,
@@ -62,6 +70,7 @@ export function createStatusRouter(
 ### 2. Create puppetdb.ts
 
 **Routes to extract** (11 total):
+
 1. GET /puppetdb/nodes
 2. GET /puppetdb/nodes/:certname
 3. GET /puppetdb/nodes/:certname/facts
@@ -75,12 +84,14 @@ export function createStatusRouter(
 11. GET /puppetdb/admin/summary-stats
 
 **Dependencies**:
+
 - PuppetDBService (required, passed as parameter)
 - All error types from puppetdb module
 - requestDeduplication middleware (for some routes)
 - All schemas from utils.ts
 
 **Function signature**:
+
 ```typescript
 export function createPuppetDBRouter(
   puppetDBService: PuppetDBService,
@@ -92,6 +103,7 @@ export function createPuppetDBRouter(
 ### 3. Create puppetserver.ts
 
 **Routes to extract** (14 total):
+
 1. GET /puppetserver/nodes
 2. GET /puppetserver/nodes/:certname
 3. GET /puppetserver/nodes/:certname/status
@@ -108,11 +120,13 @@ export function createPuppetDBRouter(
 14. GET /puppetserver/metrics
 
 **Dependencies**:
+
 - PuppetserverService (required, passed as parameter)
 - All error types from puppetserver/errors module
 - All schemas from utils.ts
 
 **Function signature**:
+
 ```typescript
 export function createPuppetserverRouter(
   puppetserverService: PuppetserverService,
@@ -124,6 +138,7 @@ export function createPuppetserverRouter(
 ### 4. Update main integrations.ts
 
 **New structure**:
+
 ```typescript
 import { Router } from "express";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
@@ -179,22 +194,28 @@ export function createIntegrationsRouter(
 ## Important Notes
 
 ### Route Path Changes
+
 When moving routes to sub-routers, the paths change:
+
 - **Before**: `router.get("/puppetdb/nodes", ...)`
 - **After**: `router.get("/nodes", ...)` (in puppetdb.ts)
 
 The `/puppetdb` prefix is added when mounting: `router.use("/puppetdb", createPuppetDBRouter(...))`
 
 ### Middleware Handling
+
 - `requestDeduplication` middleware should be applied to specific routes, not the entire sub-router
 - Keep middleware imports in the files where they're used
 
 ### Expert Mode
+
 - All routes should maintain their current expert mode implementation
 - The recently updated `/puppetdb/nodes/:certname/reports` route has the complete pattern
 
 ### Testing
+
 After refactoring, verify:
+
 - All 1104 tests still pass
 - No TypeScript compilation errors
 - API endpoints respond correctly
