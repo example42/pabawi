@@ -1,6 +1,6 @@
 # Pabawi Configuration Guide
 
-Version: 0.1.0
+Version: 0.5.0
 
 ## Overview
 
@@ -77,13 +77,14 @@ All configuration is managed through environment variables. You can set these in
 
 - **Type:** Enum (`error`, `warn`, `info`, `debug`)
 - **Default:** `info`
-- **Description:** Logging verbosity level
+- **Description:** Logging verbosity level for backend services
 - **Example:** `LOG_LEVEL=debug`
 - **Notes:**
   - `error`: Only log errors
   - `warn`: Log warnings and errors
   - `info`: Log informational messages, warnings, and errors (recommended for production)
   - `debug`: Log all messages including debug information (useful for troubleshooting)
+- **New in v0.5.0:** Centralized logging system with consistent log levels across all integration modules
 
 #### DATABASE_PATH
 
@@ -324,6 +325,62 @@ Configure execution queue and concurrency limits.
   - Executions beyond this limit are rejected with an error
   - Prevents unbounded queue growth
   - Should be set based on expected workload and acceptable wait times
+
+### UI Configuration
+
+Configure user interface features and behavior.
+
+#### UI_SHOW_HOME_PAGE_RUN_CHART
+
+- **Type:** Boolean (`true` or `false`)
+- **Default:** `true`
+- **Description:** Show aggregated Puppet run history chart on the home page
+- **Example:** `UI_SHOW_HOME_PAGE_RUN_CHART=false`
+- **Notes:**
+  - When enabled, displays a 7-day aggregated run history chart for all nodes on the home page
+  - Requires PuppetDB integration to be enabled and active
+  - Chart data is fetched on page load and refreshed every 5 minutes
+  - Disable if data collection takes too long or to reduce API load
+  - Individual node run history charts on node detail pages are not affected by this setting
+- **New in v0.5.0:** Puppet run visualization feature
+
+### Expert Mode Configuration
+
+**Enhanced in v0.5.0**: Expert mode now includes unified logging, frontend log collection, and comprehensive debugging information.
+
+Expert mode provides detailed diagnostic information for troubleshooting. When enabled, API responses include:
+
+- Full error stack traces
+- Request and correlation IDs
+- Frontend logs with automatic sensitive data obfuscation
+- Backend debug information
+- Performance metrics (memory, CPU, cache stats)
+- External API error details
+- Complete request lifecycle visibility
+
+**Enabling Expert Mode:**
+
+- Via UI: Toggle "Expert Mode" in the navigation bar
+- Via API: Include `X-Expert-Mode: true` header in requests
+- Via Request Body: Set `expertMode: true` in request body
+
+**Frontend Logger Configuration:**
+
+Frontend logs are automatically collected when expert mode is enabled:
+
+- **Buffer Size:** 100 log entries (circular buffer)
+- **Sync Throttle:** 1 request per second to backend
+- **TTL:** 5 minutes in-memory storage on backend
+- **Obfuscation:** Automatic sensitive data obfuscation (passwords, tokens, API keys)
+- **Correlation IDs:** Link frontend actions to backend processing
+
+**Security Considerations:**
+
+- Expert mode may expose internal system details
+- Only enable for trusted users in production
+- Frontend logs are obfuscated but may still contain sensitive context
+- Backend stores logs in-memory only (no persistent storage)
+- Automatic cleanup after 5 minutes
 
 ## Bolt Project Requirements
 
@@ -1308,19 +1365,5 @@ Before deploying to production:
 - [ ] Streaming limits configured
 - [ ] Log level appropriate for environment
 - [ ] Expert mode disabled in production (or restricted)
-
-## Additional Resources
-
-- [Bolt Documentation](https://puppet.com/docs/bolt/)
-- [Pabawi API Documentation](./api.md)
-- [Pabawi User Guide](./user-guide.md) (coming soon)
-- [Troubleshooting Guide](./troubleshooting.md) (coming soon)
-
-## Support
-
-For configuration assistance:
-
-1. Check this guide and the troubleshooting section
-2. Enable expert mode for detailed error information
-3. Review server logs for configuration errors
-4. Consult the Bolt documentation for Bolt-specific issues
+- [ ] UI features configured (run chart visibility)
+- [ ] Integration colors displaying correctly

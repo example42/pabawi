@@ -1,6 +1,6 @@
 # Pabawi API Documentation
 
-Version: 0.4.0
+Version: 0.5.0
 
 ## Overview
 
@@ -17,6 +17,9 @@ The Pabawi API provides a RESTful interface for managing infrastructure automati
 - Query PuppetDB for reports, catalogs, and events
 - Compare catalogs across environments
 - Browse Hiera data and key usage analysis
+- Filter puppet reports by status, duration, compile time, and resources (v0.5.0)
+- View puppet run history visualizations (v0.5.0)
+- Access comprehensive debugging information via Expert Mode (v0.5.0)
 
 ## Integration Support
 
@@ -37,7 +40,6 @@ For detailed integration-specific API documentation, see:
 ```text
 http://localhost:3000/api
 ```
-
 
 ## Error Handling
 
@@ -71,7 +73,7 @@ All error responses follow a consistent format:
 
 ### Expert Mode Error Response
 
-When expert mode is enabled, errors include additional fields:
+When expert mode is enabled (via `X-Expert-Mode: true` header), errors include additional fields for comprehensive debugging:
 
 ```json
 {
@@ -81,6 +83,7 @@ When expert mode is enabled, errors include additional fields:
     "details": "Connection timeout",
     "stackTrace": "Error: Bolt command failed\n    at BoltService.runCommand...",
     "requestId": "req-abc123",
+    "correlationId": "corr-xyz789",
     "timestamp": "2024-01-01T00:00:00.000Z",
     "rawResponse": "Error: Connection timeout after 30s",
     "executionContext": {
@@ -88,9 +91,59 @@ When expert mode is enabled, errors include additional fields:
       "method": "POST",
       "requestId": "req-abc123"
     }
+  },
+  "_debug": {
+    "timestamp": "2024-01-01T00:00:00.000Z",
+    "requestId": "req-abc123",
+    "correlationId": "corr-xyz789",
+    "operation": "command-execution",
+    "duration": 30123,
+    "errors": [
+      {
+        "message": "Connection timeout after 30s",
+        "stack": "Error: Connection timeout...",
+        "level": "error"
+      }
+    ],
+    "warnings": [],
+    "info": [
+      {
+        "message": "Attempting connection to node1",
+        "level": "info"
+      }
+    ],
+    "frontendLogs": [
+      {
+        "timestamp": "2024-01-01T00:00:00.000Z",
+        "level": "info",
+        "component": "CommandForm",
+        "operation": "submit",
+        "message": "Submitting command execution",
+        "correlationId": "corr-xyz789"
+      }
+    ],
+    "performance": {
+      "memoryUsage": 125829120,
+      "cpuUsage": 45.2,
+      "activeConnections": 12,
+      "cacheStats": {
+        "hits": 145,
+        "misses": 23,
+        "size": 168,
+        "hitRate": 0.863
+      }
+    }
   }
 }
 ```
+
+**New in v0.5.0**: Expert mode now includes:
+
+- Frontend logs with correlation IDs
+- Performance metrics (memory, CPU, cache stats)
+- Complete request lifecycle visibility
+- External API error details
+- Timeline view of frontend and backend logs
 
 ## Endpoints
 

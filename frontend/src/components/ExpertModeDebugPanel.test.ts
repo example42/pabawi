@@ -580,4 +580,611 @@ describe('ExpertModeDebugPanel Component', () => {
       expect(screen.getByText('Debug (1)')).toBeTruthy();
     });
   });
+
+  describe('Color Consistency', () => {
+    it('should display errors in red color scheme', async () => {
+      const debugInfoWithErrors: DebugInfo = {
+        ...mockDebugInfo,
+        errors: [
+          { message: 'Test error', level: 'error' },
+        ],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithErrors,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      // Check the h4 element inside the button for color classes
+      const errorsHeading = screen.getByText(/^Errors \(1\)$/i);
+      expect(errorsHeading.className).toContain('text-red');
+    });
+
+    it('should display warnings in yellow color scheme', async () => {
+      const debugInfoWithWarnings: DebugInfo = {
+        ...mockDebugInfo,
+        warnings: [
+          { message: 'Test warning', level: 'warn' },
+        ],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithWarnings,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      // Check the h4 element inside the button for color classes
+      const warningsHeading = screen.getByText(/^Warnings \(1\)$/i);
+      expect(warningsHeading.className).toContain('text-yellow');
+    });
+
+    it('should display info in blue color scheme', async () => {
+      const debugInfoWithInfo: DebugInfo = {
+        ...mockDebugInfo,
+        info: [
+          { message: 'Test info', level: 'info' },
+        ],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithInfo,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      // Check the h4 element inside the button for color classes
+      const infoHeading = screen.getByText(/^Info \(1\)$/i);
+      expect(infoHeading.className).toContain('text-blue');
+    });
+
+    it('should display debug in gray color scheme', async () => {
+      const debugInfoWithDebug: DebugInfo = {
+        ...mockDebugInfo,
+        debug: [
+          { message: 'Test debug', level: 'debug' },
+        ],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithDebug,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      // Check the h4 element inside the button for color classes
+      const debugHeading = screen.getByText(/^Debug \(1\)$/i);
+      expect(debugHeading.className).toContain('text-gray');
+    });
+
+    it('should maintain color consistency in compact mode', () => {
+      const debugInfoWithMessages: DebugInfo = {
+        ...mockDebugInfo,
+        errors: [{ message: 'Error', level: 'error' }],
+        warnings: [{ message: 'Warning', level: 'warn' }],
+        info: [{ message: 'Info', level: 'info' }],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithMessages,
+          compact: true,
+        },
+      });
+
+      const errorBadge = screen.getByText('1 Error');
+      const warningBadge = screen.getByText('1 Warning');
+      const infoBadge = screen.getByText('1 Info');
+
+      expect(errorBadge.className).toContain('bg-red');
+      expect(warningBadge.className).toContain('bg-yellow');
+      expect(infoBadge.className).toContain('bg-blue');
+    });
+  });
+
+  describe('Performance Metrics Display', () => {
+    it('should display performance metrics section', async () => {
+      const debugInfoWithPerformance: DebugInfo = {
+        ...mockDebugInfo,
+        performance: {
+          memoryUsage: 104857600,
+          cpuUsage: 25.5,
+          activeConnections: 10,
+          cacheStats: {
+            hits: 80,
+            misses: 20,
+            size: 100,
+            hitRate: 0.8,
+          },
+          requestStats: {
+            total: 1000,
+            avgDuration: 150,
+            p95Duration: 300,
+            p99Duration: 450,
+          },
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithPerformance,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      expect(screen.getByText('Performance Metrics')).toBeTruthy();
+    });
+
+    it('should format memory usage correctly', async () => {
+      const debugInfoWithPerformance: DebugInfo = {
+        ...mockDebugInfo,
+        performance: {
+          memoryUsage: 104857600, // 100 MB
+          cpuUsage: 25.5,
+          activeConnections: 10,
+          cacheStats: {
+            hits: 80,
+            misses: 20,
+            size: 100,
+            hitRate: 0.8,
+          },
+          requestStats: {
+            total: 1000,
+            avgDuration: 150,
+            p95Duration: 300,
+            p99Duration: 450,
+          },
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithPerformance,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const performanceButton = screen.getByRole('button', { name: /Performance Metrics/i });
+      await fireEvent.click(performanceButton);
+
+      expect(screen.getByText('Memory Usage')).toBeTruthy();
+      expect(screen.getByText('100.00 MB')).toBeTruthy();
+    });
+
+    it('should display CPU usage as percentage', async () => {
+      const debugInfoWithPerformance: DebugInfo = {
+        ...mockDebugInfo,
+        performance: {
+          memoryUsage: 104857600,
+          cpuUsage: 42.75,
+          activeConnections: 10,
+          cacheStats: {
+            hits: 80,
+            misses: 20,
+            size: 100,
+            hitRate: 0.8,
+          },
+          requestStats: {
+            total: 1000,
+            avgDuration: 150,
+            p95Duration: 300,
+            p99Duration: 450,
+          },
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithPerformance,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const performanceButton = screen.getByRole('button', { name: /Performance Metrics/i });
+      await fireEvent.click(performanceButton);
+
+      expect(screen.getByText('CPU Usage')).toBeTruthy();
+      expect(screen.getByText('42.75%')).toBeTruthy();
+    });
+
+    it('should display cache statistics', async () => {
+      const debugInfoWithPerformance: DebugInfo = {
+        ...mockDebugInfo,
+        performance: {
+          memoryUsage: 104857600,
+          cpuUsage: 25.5,
+          activeConnections: 10,
+          cacheStats: {
+            hits: 80,
+            misses: 20,
+            size: 100,
+            hitRate: 0.8,
+          },
+          requestStats: {
+            total: 1000,
+            avgDuration: 150,
+            p95Duration: 300,
+            p99Duration: 450,
+          },
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithPerformance,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const performanceButton = screen.getByRole('button', { name: /Performance Metrics/i });
+      await fireEvent.click(performanceButton);
+
+      expect(screen.getByText('Cache Hit Rate')).toBeTruthy();
+      expect(screen.getByText('80.0%')).toBeTruthy();
+      expect(screen.getByText('Cache Size')).toBeTruthy();
+      expect(screen.getByText('100 items')).toBeTruthy();
+    });
+
+    it('should display request statistics', async () => {
+      const debugInfoWithPerformance: DebugInfo = {
+        ...mockDebugInfo,
+        performance: {
+          memoryUsage: 104857600,
+          cpuUsage: 25.5,
+          activeConnections: 10,
+          cacheStats: {
+            hits: 80,
+            misses: 20,
+            size: 100,
+            hitRate: 0.8,
+          },
+          requestStats: {
+            total: 1000,
+            avgDuration: 150.5,
+            p95Duration: 300.2,
+            p99Duration: 450.8,
+          },
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithPerformance,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const performanceButton = screen.getByRole('button', { name: /Performance Metrics/i });
+      await fireEvent.click(performanceButton);
+
+      expect(screen.getByText('Avg Request Duration')).toBeTruthy();
+      expect(screen.getByText('151ms')).toBeTruthy();
+    });
+  });
+
+  describe('Request Context Display', () => {
+    it('should display request context section', async () => {
+      const debugInfoWithContext: DebugInfo = {
+        ...mockDebugInfo,
+        context: {
+          url: '/api/test',
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          query: {
+            page: '1',
+          },
+          userAgent: 'Mozilla/5.0',
+          ip: '192.168.1.1',
+          timestamp: '2024-01-15T10:30:00.000Z',
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithContext,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      expect(screen.getByText('Request Context')).toBeTruthy();
+    });
+
+    it('should display URL and method', async () => {
+      const debugInfoWithContext: DebugInfo = {
+        ...mockDebugInfo,
+        context: {
+          url: '/api/nodes?filter=active',
+          method: 'POST',
+          headers: {},
+          query: {},
+          userAgent: 'Test Agent',
+          ip: '10.0.0.1',
+          timestamp: '2024-01-15T10:30:00.000Z',
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithContext,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const contextButton = screen.getByRole('button', { name: /Request Context/i });
+      await fireEvent.click(contextButton);
+
+      expect(screen.getByText('URL')).toBeTruthy();
+      expect(screen.getByText('/api/nodes?filter=active')).toBeTruthy();
+      expect(screen.getByText('Method')).toBeTruthy();
+      expect(screen.getByText('POST')).toBeTruthy();
+    });
+
+    it('should display user agent and IP', async () => {
+      const debugInfoWithContext: DebugInfo = {
+        ...mockDebugInfo,
+        context: {
+          url: '/api/test',
+          method: 'GET',
+          headers: {},
+          query: {},
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          ip: '203.0.113.42',
+          timestamp: '2024-01-15T10:30:00.000Z',
+        },
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithContext,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const contextButton = screen.getByRole('button', { name: /Request Context/i });
+      await fireEvent.click(contextButton);
+
+      expect(screen.getByText('User Agent')).toBeTruthy();
+      expect(screen.getByText('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBeTruthy();
+      expect(screen.getByText('IP Address')).toBeTruthy();
+      expect(screen.getByText('203.0.113.42')).toBeTruthy();
+    });
+  });
+
+  describe('Timeline View', () => {
+    it('should display timeline view section', async () => {
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: mockDebugInfo,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      expect(screen.getByText(/Timeline View/)).toBeTruthy();
+    });
+
+    it('should show timeline entry count', async () => {
+      const debugInfoWithLogs: DebugInfo = {
+        ...mockDebugInfo,
+        errors: [{ message: 'Error 1', level: 'error' }],
+        warnings: [{ message: 'Warning 1', level: 'warn' }],
+        info: [{ message: 'Info 1', level: 'info' }],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithLogs,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      // Should show count of all log entries (3 backend logs)
+      expect(screen.getByText(/Timeline View \(3 entries\)/)).toBeTruthy();
+    });
+
+    it('should display timeline filter buttons', async () => {
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: mockDebugInfo,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const timelineButton = screen.getByRole('button', { name: /Timeline View/i });
+      await fireEvent.click(timelineButton);
+
+      expect(screen.getByRole('button', { name: 'All' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Errors' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Warnings' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Info' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Debug' })).toBeTruthy();
+    });
+
+    it('should display search input in timeline', async () => {
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: mockDebugInfo,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      const timelineButton = screen.getByRole('button', { name: /Timeline View/i });
+      await fireEvent.click(timelineButton);
+
+      const searchInput = screen.getByPlaceholderText('Search logs...');
+      expect(searchInput).toBeTruthy();
+    });
+  });
+
+  describe('Compact vs Full Mode', () => {
+    it('should render differently in compact mode', () => {
+      const { container: compactContainer } = render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: mockDebugInfo,
+          compact: true,
+        },
+      });
+
+      const { container: fullContainer } = render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: mockDebugInfo,
+          compact: false,
+        },
+      });
+
+      expect(compactContainer.innerHTML).not.toBe(fullContainer.innerHTML);
+    });
+
+    it('should not show expandable sections in compact mode', () => {
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: mockDebugInfo,
+          compact: true,
+        },
+      });
+
+      // Should not have expandable header button
+      expect(screen.queryByRole('button', { name: /Expert Mode Debug Information/i })).toBeFalsy();
+    });
+
+    it('should show expandable sections in full mode', () => {
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: mockDebugInfo,
+          compact: false,
+        },
+      });
+
+      // Should have expandable header button
+      expect(screen.getByRole('button', { name: /Expert Mode Debug Information/i })).toBeTruthy();
+    });
+
+    it('should limit displayed messages in compact mode', () => {
+      const debugInfoWithManyMessages: DebugInfo = {
+        ...mockDebugInfo,
+        errors: [
+          { message: 'Error 1', level: 'error' },
+          { message: 'Error 2', level: 'error' },
+          { message: 'Error 3', level: 'error' },
+          { message: 'Error 4', level: 'error' },
+        ],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithManyMessages,
+          compact: true,
+        },
+      });
+
+      // Should show first 2 errors
+      expect(screen.getByText('Error 1')).toBeTruthy();
+      expect(screen.getByText('Error 2')).toBeTruthy();
+      // Should show "+2 more errors" message
+      expect(screen.getByText('+2 more errors')).toBeTruthy();
+      // Should not show Error 3 and Error 4 directly
+      expect(screen.queryByText('Error 3')).toBeFalsy();
+      expect(screen.queryByText('Error 4')).toBeFalsy();
+    });
+  });
+
+  describe('All Log Levels Display', () => {
+    it('should display all log levels when present', async () => {
+      const debugInfoWithAllLevels: DebugInfo = {
+        ...mockDebugInfo,
+        errors: [{ message: 'Error message', level: 'error' }],
+        warnings: [{ message: 'Warning message', level: 'warn' }],
+        info: [{ message: 'Info message', level: 'info' }],
+        debug: [{ message: 'Debug message', level: 'debug' }],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithAllLevels,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      expect(screen.getByText('Errors (1)')).toBeTruthy();
+      expect(screen.getByText('Warnings (1)')).toBeTruthy();
+      expect(screen.getByText('Info (1)')).toBeTruthy();
+      expect(screen.getByText('Debug (1)')).toBeTruthy();
+    });
+
+    it('should expand and show all log level contents', async () => {
+      const debugInfoWithAllLevels: DebugInfo = {
+        ...mockDebugInfo,
+        errors: [{ message: 'Error message', level: 'error' }],
+        warnings: [{ message: 'Warning message', level: 'warn' }],
+        info: [{ message: 'Info message', level: 'info' }],
+        debug: [{ message: 'Debug message', level: 'debug' }],
+      };
+
+      render(ExpertModeDebugPanel, {
+        props: {
+          debugInfo: debugInfoWithAllLevels,
+        },
+      });
+
+      const header = screen.getByRole('button', { name: /Expert Mode Debug Information/i });
+      await fireEvent.click(header);
+
+      // Expand each section - use more specific queries
+      const errorsButton = screen.getByRole('button', { name: /^Errors \(1\)$/i });
+      await fireEvent.click(errorsButton);
+      expect(screen.getByText('Error message')).toBeTruthy();
+
+      const warningsButton = screen.getByRole('button', { name: /^Warnings \(1\)$/i });
+      await fireEvent.click(warningsButton);
+      expect(screen.getByText('Warning message')).toBeTruthy();
+
+      const infoButton = screen.getByRole('button', { name: /^Info \(1\)$/i });
+      await fireEvent.click(infoButton);
+      expect(screen.getByText('Info message')).toBeTruthy();
+
+      const debugButton = screen.getByRole('button', { name: /^Debug \(1\)$/i });
+      await fireEvent.click(debugButton);
+      expect(screen.getByText('Debug message')).toBeTruthy();
+    });
+  });
 });

@@ -507,26 +507,74 @@
               </div>
             {/if}
 
-            <!-- Hiera-specific connected status details -->
-            {#if integration.name === 'hiera' && integration.status === 'connected'}
-              {@const hieraDetails = getHieraDetails(integration)}
-              {#if hieraDetails}
-                <div class="mt-3 grid grid-cols-2 gap-2">
-                  {#if hieraDetails.keyCount !== undefined}
+            <!-- Integration-specific connected status details -->
+            {#if integration.status === 'connected'}
+              <!-- Hiera integration -->
+              {#if integration.name === 'hiera'}
+                {@const hieraDetails = getHieraDetails(integration)}
+                {#if hieraDetails}
+                  <div class="mt-3 space-y-2">
+                    {#if hieraDetails.controlRepoPath}
+                      <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
+                        <p class="text-xs text-green-600 dark:text-green-400">
+                          <span class="font-semibold">Control Repo:</span> {hieraDetails.controlRepoPath}
+                        </p>
+                      </div>
+                    {/if}
+                    <div class="grid grid-cols-2 gap-2">
+                      {#if hieraDetails.keyCount !== undefined}
+                        <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
+                          <p class="text-xs text-green-600 dark:text-green-400">
+                            <span class="font-semibold">{hieraDetails.keyCount}</span> keys
+                          </p>
+                        </div>
+                      {/if}
+                      {#if hieraDetails.fileCount !== undefined}
+                        <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
+                          <p class="text-xs text-green-600 dark:text-green-400">
+                            <span class="font-semibold">{hieraDetails.fileCount}</span> files
+                          </p>
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+                {/if}
+              <!-- PuppetDB integration -->
+              {:else if integration.name === 'puppetdb'}
+                {@const puppetdbDetails = getPuppetDBDetails(integration)}
+                {#if puppetdbDetails?.baseUrl}
+                  <div class="mt-3">
                     <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
                       <p class="text-xs text-green-600 dark:text-green-400">
-                        <span class="font-semibold">{hieraDetails.keyCount}</span> keys
+                        <span class="font-semibold">Endpoint:</span> {puppetdbDetails.baseUrl}
                       </p>
                     </div>
-                  {/if}
-                  {#if hieraDetails.fileCount !== undefined}
+                  </div>
+                {/if}
+              <!-- Puppetserver integration -->
+              {:else if integration.name === 'puppetserver'}
+                {@const puppetserverDetails = getPuppetserverDetails(integration)}
+                {#if puppetserverDetails?.baseUrl}
+                  <div class="mt-3">
                     <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
                       <p class="text-xs text-green-600 dark:text-green-400">
-                        <span class="font-semibold">{hieraDetails.fileCount}</span> files
+                        <span class="font-semibold">Endpoint:</span> {puppetserverDetails.baseUrl}
                       </p>
                     </div>
-                  {/if}
-                </div>
+                  </div>
+                {/if}
+              <!-- Bolt integration -->
+              {:else if integration.name === 'bolt'}
+                {@const boltDetails = getBoltDetails(integration)}
+                {#if boltDetails?.projectPath}
+                  <div class="mt-3">
+                    <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
+                      <p class="text-xs text-green-600 dark:text-green-400">
+                        <span class="font-semibold">Project:</span> {boltDetails.projectPath}
+                      </p>
+                    </div>
+                  </div>
+                {/if}
               {/if}
             {/if}
 

@@ -157,6 +157,7 @@ export function createPuppetRouter(
         const node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
 
         if (!node) {
+          const duration = Date.now() - startTime;
           logger.warn("Node not found in inventory", {
             component: "PuppetRouter",
             integration: "bolt",
@@ -164,26 +165,32 @@ export function createPuppetRouter(
             metadata: { nodeId },
           });
 
-          // Capture warning in expert mode
+          const errorResponse = {
+            error: {
+              code: "INVALID_NODE_ID",
+              message: `Node '${nodeId}' not found in inventory`,
+            },
+          };
+
+          // Capture warning and attach debug info in expert mode
           if (req.expertMode) {
             const debugInfo = expertModeService.createDebugInfo(
               'POST /api/nodes/:id/puppet-run',
               requestId,
-              Date.now() - startTime
+              duration
             );
             expertModeService.addWarning(debugInfo, {
               message: "Node not found in inventory",
               context: `Node '${nodeId}' not found in inventory`,
               level: 'warn',
             });
-          }
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
 
-          res.status(404).json({
-            error: {
-              code: "INVALID_NODE_ID",
-              message: `Node '${nodeId}' not found in inventory`,
-            },
-          });
+            res.status(404).json(expertModeService.attachDebugInfo(errorResponse, debugInfo));
+          } else {
+            res.status(404).json(errorResponse);
+          }
           return;
         }
 

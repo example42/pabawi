@@ -8,7 +8,7 @@
   import { get } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
-  import type { DebugInfo } from '../lib/api';
+  import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   interface Node {
     id: string;
@@ -53,8 +53,26 @@
   let showPqlInput = $state(false);
   let selectedPqlTemplate = $state('');
 
-  // Debug info state for expert mode
-  let debugInfo = $state<DebugInfo | null>(null);
+  // Debug info state for expert mode - support multiple debug blocks
+  let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
+
+  // Callback to receive debug info from API calls
+  function handleDebugInfo(label: string, info: DebugInfo | null): void {
+    if (info) {
+      // Add or update debug info for this label
+      const existingIndex = debugInfoBlocks.findIndex(block => block.label === label);
+      if (existingIndex >= 0) {
+        // Update existing block
+        debugInfoBlocks[existingIndex] = { label, debugInfo: info };
+      } else {
+        // Add new block
+        debugInfoBlocks = [...debugInfoBlocks, { label, debugInfo: info }];
+      }
+    } else {
+      // Remove debug info for this label
+      debugInfoBlocks = debugInfoBlocks.filter(block => block.label !== label);
+    }
+  }
 
   // Placeholder text to avoid Svelte expression parsing issues
   const placeholderText = 'Example: nodes[certname] { certname = "node1.example.com" }';
@@ -207,7 +225,6 @@
     loading = true;
     error = null;
     pqlError = null;
-    debugInfo = null; // Clear previous debug info
 
     try {
       // Build query parameters
@@ -233,7 +250,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo = data._debug;
+        handleDebugInfo('Inventory', data._debug);
       }
 
       // Show success toast only on retry success
@@ -365,7 +382,7 @@
 
   // Fetch inventory on mount
   onMount(() => {
-    debugInfo = null; // Clear debug info on mount
+    debugInfoBlocks = []; // Clear debug info blocks on mount
     fetchInventory();
   });
 </script>
@@ -760,9 +777,15 @@
   {/if}
 
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && debugInfo}
-    <div class="mt-8">
-      <ExpertModeDebugPanel {debugInfo} />
+  <!-- Expert Mode Debug Panel -->
+  {#if expertMode.enabled && debugInfoBlocks.length > 0}
+    <div class="mt-8 space-y-4">
+      {#each debugInfoBlocks as block (block.label)}
+        <div>
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
+          <ExpertModeDebugPanel debugInfo={block.debugInfo} />
+        </div>
+      {/each}
     </div>
   {/if}
 </div>

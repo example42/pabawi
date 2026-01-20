@@ -133,11 +133,11 @@
     return seconds > 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`;
   }
 
-  function getStatusBadgeStatus(status: string, configRetrievalTime?: number): 'success' | 'failed' | 'partial' {
+  function getStatusBadgeStatus(status: string, configRetrievalTime?: number): 'success' | 'failed' | 'changed' {
     if (configRetrievalTime === 0) return 'failed';
 
     if (status === 'failed') return 'failed';
-    if (status === 'changed') return 'partial';
+    if (status === 'changed') return 'changed';
     return 'success';
   }
 

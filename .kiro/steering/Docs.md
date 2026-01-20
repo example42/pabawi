@@ -37,7 +37,6 @@ inclusion: always
 6. Avoid creating duplicate documentation across directories
 7. When changes are done in code, if necesssary, update the relevant docs
 
-
 ## When to Update `/docs`
 
 - User explicitly requests documentation updates

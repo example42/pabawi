@@ -2,7 +2,7 @@
 
 ## Problem
 
-After the routes refactoring, the inventory page shows no nodes and the home page shows "no integration configured". 
+After the routes refactoring, the inventory page shows no nodes and the home page shows "no integration configured".
 
 ## Root Cause
 
@@ -22,9 +22,10 @@ curl "http://localhost:3000/api/inventory?_t=$(date +%s)"
 
 ## Solution
 
-The cache is in-memory and will be cleared when the backend restarts. 
+The cache is in-memory and will be cleared when the backend restarts.
 
 ### Option 1: Restart Backend (Recommended)
+
 ```bash
 # Stop the backend process (Ctrl+C if running in terminal)
 # Or kill the process
@@ -36,9 +37,11 @@ npm run dev
 ```
 
 ### Option 2: Wait for Cache Expiration
+
 The cache TTL is 60 seconds, so the stale data will expire automatically after 1 minute.
 
 ### Option 3: Add Cache Clear Endpoint (Future Enhancement)
+
 Add an admin endpoint to clear the deduplication cache:
 
 ```typescript

@@ -51,6 +51,7 @@ This document demonstrates the various ways to use the `ExpertModeCopyButton` co
 ```
 
 This will include backend performance metrics such as:
+
 - Memory usage
 - CPU usage
 - Active connections
@@ -68,6 +69,7 @@ This will include backend performance metrics such as:
 ```
 
 This will automatically collect and include:
+
 - Browser platform
 - Browser language
 - Viewport dimensions
@@ -98,6 +100,7 @@ This will automatically collect all cookies from `document.cookie` and include t
 ```
 
 This will automatically collect and include:
+
 - All localStorage items
 - All sessionStorage items
 
@@ -121,6 +124,7 @@ Long values (>100 characters) are automatically truncated for readability.
 ```
 
 This configuration is ideal for support requests as it includes:
+
 - Backend debug information (errors, warnings, info, debug messages)
 - API call details
 - Performance metrics
@@ -143,6 +147,7 @@ But excludes potentially sensitive information like cookies and storage.
 ```
 
 This will only include:
+
 - Basic debug information (timestamp, request ID, operation, duration)
 - Errors, warnings, info, and debug messages
 - API call details
@@ -300,6 +305,7 @@ The component automatically respects the expert mode state. When expert mode is 
 ## Accessibility
 
 The component includes proper ARIA labels and keyboard support:
+
 - The button has an `aria-label` attribute matching the label text
 - The copy icon is marked with `aria-hidden="true"` to avoid confusion for screen readers
 - The button is fully keyboard accessible (Tab to focus, Enter/Space to activate)

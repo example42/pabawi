@@ -459,6 +459,12 @@ export class ConfigService {
       // Parse integrations configuration
       const integrations = this.parseIntegrationsConfig();
 
+      // Parse UI configuration
+      const ui = {
+        showHomePageRunChart:
+          process.env.UI_SHOW_HOME_PAGE_RUN_CHART !== "false",
+      };
+
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
@@ -475,6 +481,7 @@ export class ConfigService {
         cache,
         executionQueue,
         integrations,
+        ui,
       };
 
       // Validate with Zod schema
@@ -625,5 +632,12 @@ export class ConfigService {
       return hiera as typeof hiera & { enabled: true };
     }
     return null;
+  }
+
+  /**
+   * Get UI configuration
+   */
+  public getUIConfig(): typeof this.config.ui {
+    return this.config.ui;
   }
 }

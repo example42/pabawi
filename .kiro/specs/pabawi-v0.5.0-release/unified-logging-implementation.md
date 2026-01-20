@@ -9,6 +9,7 @@ This document describes the implementation of a unified logging system that span
 ### Frontend Logger (`frontend/src/lib/logger.svelte.ts`)
 
 **Features:**
+
 - Structured logging with levels: debug, info, warn, error
 - Automatic data obfuscation for sensitive fields (passwords, tokens, secrets, etc.)
 - Circular buffer (100 entries) for recent logs
@@ -18,6 +19,7 @@ This document describes the implementation of a unified logging system that span
 - Persists configuration in localStorage
 
 **Sensitive Data Patterns:**
+
 - `/password/i`
 - `/token/i`
 - `/secret/i`
@@ -33,6 +35,7 @@ All matching fields are replaced with `***` in logs.
 ### Backend Debug Endpoint (`backend/src/routes/debug.ts`)
 
 **Endpoints:**
+
 - `POST /api/debug/frontend-logs` - Receive batch of frontend logs
 - `GET /api/debug/frontend-logs/:correlationId` - Get logs for correlation ID
 - `GET /api/debug/frontend-logs` - List all correlation IDs
@@ -40,6 +43,7 @@ All matching fields are replaced with `***` in logs.
 - `DELETE /api/debug/frontend-logs` - Clear all logs
 
 **Storage:**
+
 - In-memory Map<correlationId, LogEntry[]>
 - Max 100 correlation IDs
 - Max age: 5 minutes
@@ -48,6 +52,7 @@ All matching fields are replaced with `***` in logs.
 ### API Integration (`frontend/src/lib/api.ts`)
 
 **Enhanced with:**
+
 - Correlation ID generation for each request
 - Automatic logging of request initiation, responses, errors, retries
 - Correlation ID sent as `X-Correlation-ID` header
@@ -57,6 +62,7 @@ All matching fields are replaced with `***` in logs.
 ### Expert Mode Service Enhancement (`backend/src/services/ExpertModeService.ts`)
 
 **New Features:**
+
 - `addFrontendLogs()` method to attach frontend logs to debug info
 - `FrontendLogEntry` interface added to `DebugInfo`
 - Frontend logs automatically included when correlation ID matches
@@ -64,6 +70,7 @@ All matching fields are replaced with `***` in logs.
 ### Middleware Enhancement (`backend/src/middleware/expertMode.ts`)
 
 **New Features:**
+
 - Extracts `X-Correlation-ID` header
 - Stores in `req.correlationId` for route handlers
 - Available alongside `req.expertMode` flag
@@ -315,17 +322,20 @@ router.post('/api/bolt/tasks/run', async (req, res) => {
 ## Benefits
 
 ### For Users
+
 - One-click debug info copy for support tickets
 - Visual timeline of what happened
 - Clear error messages with context
 
 ### For Developers
+
 - Full request lifecycle visibility
 - Easy correlation between frontend actions and backend processing
 - Performance bottleneck identification
 - Unified logging pattern across stack
 
 ### For Support
+
 - Complete context for bug reports
 - Reproducible issues with full state
 - No need for screen sharing to debug

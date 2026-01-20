@@ -863,32 +863,39 @@ export function createInventoryRouter(
         }
 
         if (!node) {
+          const duration = Date.now() - startTime;
           logger.warn("Node not found in inventory", {
             component: "InventoryRouter",
             operation: "getNode",
             metadata: { nodeId },
           });
 
-          // Capture warning in expert mode (already exists below, but ensuring consistency)
+          const errorResponse = {
+            error: {
+              code: "INVALID_NODE_ID",
+              message: `Node '${nodeId}' not found in inventory`,
+            },
+          };
+
+          // Attach debug info if expert mode is enabled
           if (req.expertMode) {
             const debugInfo = expertModeService.createDebugInfo(
               'GET /api/inventory/:id',
               requestId,
-              Date.now() - startTime
+              duration
             );
             expertModeService.addWarning(debugInfo, {
               message: `Node '${nodeId}' not found in inventory`,
               context: `Searched for node with ID or name: ${nodeId}`,
               level: 'warn',
             });
-          }
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
 
-          res.status(404).json({
-            error: {
-              code: "INVALID_NODE_ID",
-              message: `Node '${nodeId}' not found in inventory`,
-            },
-          });
+            res.status(404).json(expertModeService.attachDebugInfo(errorResponse, debugInfo));
+          } else {
+            res.status(404).json(errorResponse);
+          }
           return;
         }
 

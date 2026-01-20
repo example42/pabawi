@@ -82,9 +82,9 @@
   let eventFilter = $state<'all' | 'success' | 'failure' | 'noop' | 'skipped'>('all');
 
   // Computed values
-  const statusBadgeStatus = $derived<'success' | 'failed' | 'partial'>(
+  const statusBadgeStatus = $derived<'success' | 'failed' | 'changed'>(
     report.status === 'failed' ? 'failed' :
-    report.status === 'changed' ? 'partial' :
+    report.status === 'changed' ? 'changed' :
     'success'
   );
 

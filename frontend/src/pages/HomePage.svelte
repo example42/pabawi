@@ -5,12 +5,13 @@
   import IntegrationStatus from '../components/IntegrationStatus.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
   import PuppetReportsSummary from '../components/PuppetReportsSummary.svelte';
+  import PuppetRunChart from '../components/PuppetRunChart.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { expertMode } from '../lib/expertMode.svelte';
-  import type { DebugInfo } from '../lib/api';
+  import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   interface Node {
     id: string;
@@ -93,13 +94,58 @@
   let puppetReportsTimeRange = $state(1); // Default to 1 hour
   let isPuppetDBActive = $state(false);
 
-  // Debug info state for expert mode
-  let debugInfo = $state<DebugInfo | null>(null);
+  // UI configuration state
+  let showHomePageRunChart = $state(true); // Default to true
+
+  // Aggregated run history state
+  interface RunHistoryData {
+    date: string;
+    success: number;
+    failed: number;
+    changed: number;
+    unchanged: number;
+  }
+
+  let aggregatedRunHistory = $state<RunHistoryData[]>([]);
+  let runHistoryLoading = $state(false);
+  let runHistoryError = $state<string | null>(null);
+  let runHistoryLastUpdate = $state<Date | null>(null);
+
+  // Debug info state for expert mode - support multiple debug blocks
+  let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
+
+  // Callback to receive debug info from API calls
+  function handleDebugInfo(label: string, info: DebugInfo | null): void {
+    if (info) {
+      // Add or update debug info for this label
+      const existingIndex = debugInfoBlocks.findIndex(block => block.label === label);
+      if (existingIndex >= 0) {
+        // Update existing block
+        debugInfoBlocks[existingIndex] = { label, debugInfo: info };
+      } else {
+        // Add new block
+        debugInfoBlocks = [...debugInfoBlocks, { label, debugInfo: info }];
+      }
+    } else {
+      // Remove debug info for this label
+      debugInfoBlocks = debugInfoBlocks.filter(block => block.label !== label);
+    }
+  }
+
+  async function fetchUIConfig(): Promise<void> {
+    try {
+      const data = await get<{ ui: { showHomePageRunChart: boolean } }>('/api/config/ui');
+      showHomePageRunChart = data.ui.showHomePageRunChart;
+    } catch (err) {
+      console.error('[HomePage] Error fetching UI config:', err);
+      // Keep default value on error
+      showHomePageRunChart = true;
+    }
+  }
 
   async function fetchInventory(): Promise<void> {
     loading = true;
     error = null;
-    debugInfo = null; // Clear previous debug info
 
     try {
       const data = await get<{ nodes: Node[]; _debug?: DebugInfo }>('/api/inventory');
@@ -107,7 +153,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        debugInfo = data._debug;
+        handleDebugInfo('Inventory', data._debug);
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load inventory';
@@ -125,8 +171,13 @@
 
     try {
       const url = refresh ? '/api/integrations/status?refresh=true' : '/api/integrations/status';
-      const data = await get<IntegrationStatusResponse>(url);
+      const data = await get<IntegrationStatusResponse & { _debug?: DebugInfo }>(url);
       integrations = data.integrations || [];
+
+      // Store debug info if present
+      if (data._debug) {
+        handleDebugInfo('Integration Status', data._debug);
+      }
 
       // Check if PuppetDB is active
       const puppetDB = integrations.find(i => i.name === 'puppetdb');
@@ -153,8 +204,13 @@
 
     try {
       const timeParam = hours ? `?hours=${hours}` : '';
-      const data = await get<{ summary: PuppetReportsSummaryData }>(`/api/integrations/puppetdb/reports/summary${timeParam}`);
+      const data = await get<{ summary: PuppetReportsSummaryData; _debug?: DebugInfo }>(`/api/integrations/puppetdb/reports/summary${timeParam}`);
       puppetReports = data.summary;
+
+      // Store debug info if present
+      if (data._debug) {
+        handleDebugInfo('Puppet Reports Summary', data._debug);
+      }
     } catch (err) {
       puppetReportsError = err instanceof Error ? err.message : 'Failed to load Puppet reports';
       console.error('[HomePage] Error fetching Puppet reports:', err);
@@ -176,14 +232,49 @@
     void fetchPuppetReports(hours);
   }
 
+  async function fetchAggregatedRunHistory(days = 7): Promise<void> {
+    runHistoryLoading = true;
+    runHistoryError = null;
+
+    try {
+      const data = await get<RunHistoryData[] | { history: RunHistoryData[]; _debug?: DebugInfo }>(`/api/puppet/history?days=${days}`);
+
+      // Handle both array response (normal mode) and object response (expert mode)
+      if (Array.isArray(data)) {
+        aggregatedRunHistory = data;
+      } else {
+        aggregatedRunHistory = data.history;
+
+        // Store debug info if present
+        if (data._debug) {
+          handleDebugInfo('Aggregated Run History', data._debug);
+        }
+      }
+
+      runHistoryLastUpdate = new Date();
+    } catch (err) {
+      runHistoryError = err instanceof Error ? err.message : 'Failed to load run history';
+      console.error('[HomePage] Error fetching aggregated run history:', err);
+      // Set empty array on error
+      aggregatedRunHistory = [];
+    } finally {
+      runHistoryLoading = false;
+    }
+  }
+
   async function fetchRecentExecutions(): Promise<void> {
     executionsLoading = true;
     executionsError = null;
 
     try {
-      const data = await get<ExecutionsResponse>('/api/executions?pageSize=10&page=1');
+      const data = await get<ExecutionsResponse & { _debug?: DebugInfo }>('/api/executions?pageSize=10&page=1');
       executions = data.executions || [];
       executionsSummary = data.summary;
+
+      // Store debug info if present
+      if (data._debug) {
+        handleDebugInfo('Recent Executions', data._debug);
+      }
     } catch (err) {
       executionsError = err instanceof Error ? err.message : 'Failed to load recent executions';
       console.error('[HomePage] Error fetching recent executions:', err);
@@ -224,11 +315,35 @@
   }
 
   onMount(() => {
-    debugInfo = null; // Clear debug info on mount
+    debugInfoBlocks = []; // Clear debug info blocks on mount
+    // Fetch UI configuration first
+    void fetchUIConfig();
     // Fetch inventory, integration status, and recent executions
     void fetchInventory();
     void fetchIntegrationStatus();
     void fetchRecentExecutions();
+
+    // Fetch aggregated run history if PuppetDB is active and chart is enabled
+    // This will be called after integration status is fetched
+    void (async () => {
+      // Wait for integration status to be fetched
+      await fetchIntegrationStatus();
+      if (isPuppetDBActive && showHomePageRunChart) {
+        await fetchAggregatedRunHistory();
+      }
+    })();
+
+    // Set up polling for run history updates (every 5 minutes)
+    const runHistoryPollInterval = setInterval(() => {
+      if (isPuppetDBActive && showHomePageRunChart && !runHistoryLoading) {
+        void fetchAggregatedRunHistory();
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    // Cleanup on unmount
+    return () => {
+      clearInterval(runHistoryPollInterval);
+    };
   });
 </script>
 
@@ -353,6 +468,52 @@
         onTimeRangeChange={handleTimeRangeChange}
       />
     </div>
+
+    <!-- Aggregated Puppet Run History Chart (only show if PuppetDB is active and enabled in config) -->
+    {#if isPuppetDBActive && showHomePageRunChart}
+      <div class="mb-12">
+        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          {#if runHistoryLoading}
+            <div class="flex items-center justify-center py-12">
+              <LoadingSpinner />
+            </div>
+          {:else if runHistoryError}
+            <ErrorAlert
+              message="Failed to load run history"
+              details={runHistoryError}
+              onRetry={() => fetchAggregatedRunHistory()}
+            />
+          {:else if aggregatedRunHistory.length > 0}
+            <div class="mb-4 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <h3 class="text-lg font-semibold">Aggregated Puppet Run History (All Nodes - Last 7 Days)</h3>
+                {#if runHistoryLastUpdate}
+                  <span class="text-sm text-gray-500 dark:text-gray-400">
+                    Last updated: {runHistoryLastUpdate.toLocaleTimeString()}
+                  </span>
+                {/if}
+              </div>
+              <button
+                type="button"
+                onclick={() => fetchAggregatedRunHistory()}
+                class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-white dark:ring-gray-600 dark:hover:bg-gray-600"
+                disabled={runHistoryLoading}
+              >
+                {runHistoryLoading ? 'Refreshing...' : 'Refresh'}
+              </button>
+            </div>
+            <PuppetRunChart
+              data={aggregatedRunHistory}
+              title=""
+            />
+          {:else}
+            <div class="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
+              No run history available
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
   {/if}
 
   <!-- Inventory Preview -->
@@ -536,9 +697,14 @@
   </div>
 
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && debugInfo}
-    <div class="mt-8">
-      <ExpertModeDebugPanel {debugInfo} />
+  {#if expertMode.enabled && debugInfoBlocks.length > 0}
+    <div class="mt-8 space-y-4">
+      {#each debugInfoBlocks as block (block.label)}
+        <div>
+          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
+          <ExpertModeDebugPanel debugInfo={block.debugInfo} />
+        </div>
+      {/each}
     </div>
   {/if}
 </div>

@@ -11,12 +11,14 @@ This document describes the code consolidation work completed for task 5.7, whic
 **Problem**: Duplicate error handling logic across all route handlers with inconsistent formatting.
 
 **Examples of duplication**:
+
 - Zod validation error handling repeated in every route
 - Generic error response formatting duplicated across routes
 - Console.error + res.status(500).json pattern repeated 50+ times
 - Error message extraction logic duplicated
 
 **Solution**: Created `backend/src/utils/errorHandling.ts` with:
+
 - `sendValidationError()` - Handle Zod validation errors consistently
 - `sendErrorResponse()` - Send formatted error responses
 - `logAndSendError()` - Log and send error in one call
@@ -29,12 +31,14 @@ This document describes the code consolidation work completed for task 5.7, whic
 **Problem**: Duplicate SimpleCache class implementations in PuppetDBService and PuppetserverService with identical logic.
 
 **Examples of duplication**:
+
 - SimpleCache class duplicated in 2 services
 - Cache entry interface duplicated
 - Cache validation logic duplicated
 - TTL checking logic duplicated
 
 **Solution**: Created `backend/src/utils/caching.ts` with:
+
 - `SimpleCache<T>` - Generic cache class with TTL support
 - `CacheEntry<T>` - Standard cache entry interface
 - `isCacheValid()` - Check if cache entry is expired
@@ -46,12 +50,14 @@ This document describes the code consolidation work completed for task 5.7, whic
 **Problem**: Duplicate response formatting and pagination logic across route handlers.
 
 **Examples of duplication**:
+
 - Pagination calculation repeated in multiple routes
 - Response formatting duplicated
 - Success/error response structures inconsistent
 - Not found responses formatted differently
 
 **Solution**: Created `backend/src/utils/apiResponse.ts` with:
+
 - `sendSuccess()` - Send success responses consistently
 - `sendPaginatedResponse()` - Send paginated responses
 - `paginateArray()` - Paginate arrays with metadata
@@ -64,6 +70,7 @@ This document describes the code consolidation work completed for task 5.7, whic
 ### Error Handling
 
 **Before**:
+
 ```typescript
 try {
   // ... route logic
@@ -93,6 +100,7 @@ try {
 ```
 
 **After**:
+
 ```typescript
 import { logAndSendError, ERROR_CODES } from "../utils";
 
@@ -106,6 +114,7 @@ try {
 ### Caching
 
 **Before** (duplicated in PuppetDBService and PuppetserverService):
+
 ```typescript
 class SimpleCache {
   private cache = new Map<string, CacheEntry<unknown>>();
@@ -132,6 +141,7 @@ class SimpleCache {
 ```
 
 **After**:
+
 ```typescript
 import { SimpleCache } from "../utils";
 
@@ -151,6 +161,7 @@ this.cache.set(cacheKey, data);
 ### API Responses
 
 **Before**:
+
 ```typescript
 // Pagination calculation duplicated
 const offset = (page - 1) * pageSize;
@@ -169,6 +180,7 @@ res.json({
 ```
 
 **After**:
+
 ```typescript
 import { paginateArray, sendPaginatedResponse } from "../utils";
 
@@ -179,11 +191,13 @@ sendPaginatedResponse(res, result.data, page, pageSize, result.pagination.totalI
 ## Migration Strategy
 
 ### Phase 1: Immediate Benefits (No Migration Required)
+
 - New code can immediately use the utilities
 - Utilities are available for import across the codebase
 - No breaking changes to existing code
 
 ### Phase 2: Gradual Migration (Future Work)
+
 Routes and services can be migrated incrementally:
 
 1. **High-priority routes** (most frequently used):
@@ -217,17 +231,20 @@ For each file being migrated:
 ## Benefits
 
 ### Code Quality
+
 - **Reduced duplication**: Eliminates 100+ lines of duplicate code
 - **Consistency**: All errors and responses formatted the same way
 - **Maintainability**: Changes to error handling/caching only need to be made in one place
 - **Type safety**: Generic types ensure type safety across the codebase
 
 ### Developer Experience
+
 - **Easier to write new code**: Import utilities instead of copying patterns
 - **Easier to understand**: Clear, documented utility functions
 - **Easier to test**: Utilities can be unit tested independently
 
 ### Performance
+
 - **Optimized caching**: LRU eviction prevents memory leaks
 - **Consistent TTL handling**: No more cache inconsistencies
 - **Better error handling**: Async errors handled properly
@@ -264,19 +281,23 @@ Potential additional consolidations:
 ### Files with Duplicate Patterns (Can be migrated)
 
 **Error Handling** (50+ files):
+
 - All files in `backend/src/routes/`
 - All integration plugin files
 - `backend/src/services/StreamingExecutionManager.ts`
 
 **Caching** (2 files):
+
 - `backend/src/integrations/puppetdb/PuppetDBService.ts`
 - `backend/src/integrations/puppetserver/PuppetserverService.ts`
 
 **API Responses** (20+ files):
+
 - All files in `backend/src/routes/`
 - Files with pagination logic
 
 ### Estimated Impact
+
 - **Lines of code reduced**: 200-300 lines when fully migrated
 - **Files affected**: 50+ files can benefit from utilities
 - **Maintenance burden**: Significantly reduced

@@ -64,12 +64,14 @@ const INTEGRATION_COLORS = {
 ```
 
 **Color Usage:**
+
 - **Primary**: Main color for badges, labels, and integration dots
 - **Light**: Background color for highlighted sections and badge backgrounds
 - **Dark**: Hover states, active states, and text on light backgrounds
 
 **Integration Status Display (Home Page Only):**
 The home page displays integration status with colored icons showing connection state:
+
 - **Connected**: Integration icon in full color with checkmark
 - **Degraded**: Integration icon in warning color (yellow/orange) with alert symbol
 - **Error**: Integration icon in error color (red) with X symbol
@@ -490,12 +492,14 @@ Every frontend page section that makes backend API calls must include:
 #### Backend Routes Requiring Expert Mode & Logging
 
 All routes must implement:
+
 - Consistent logging using LoggerService
 - Debug info attachment when expert mode enabled
 - Performance metrics collection
 - Proper error/warning/info logging
 
 Routes to update:
+
 1. `/api/integrations/*` - Integration status and health
 2. `/api/inventory/*` - Inventory and node data
 3. `/api/puppet/*` - Puppet reports and catalogs
@@ -697,6 +701,7 @@ interface FrontendLogEntry {
 **Storage:** `localStorage` key `pabawi_logger_config`
 
 **Default Values:**
+
 ```typescript
 {
   logLevel: 'info',
@@ -708,6 +713,7 @@ interface FrontendLogEntry {
 ```
 
 **Security Features:**
+
 - Automatic obfuscation of sensitive data (passwords, tokens, API keys, secrets, auth headers)
 - In-memory only storage on backend (5 min TTL)
 - Only syncs when expert mode enabled
@@ -730,6 +736,7 @@ interface IntegrationColors {
 ```
 
 **Actual Color Values (Implemented):**
+
 ```typescript
 {
   bolt: {
@@ -908,7 +915,6 @@ interface NodeRunHistory {
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system—essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
 
-
 ### Property 1: Integration Color Consistency
 
 *For any* UI element that displays integration-attributed data, all elements associated with the same integration should use the same color values (primary, light, dark) consistently across labels, badges, tabs, and status indicators.
@@ -1064,6 +1070,7 @@ Both approaches are complementary and necessary for comprehensive coverage. Unit
 ### Property-Based Testing Configuration
 
 Each property test will:
+
 - Run a minimum of 100 iterations to ensure adequate coverage
 - Include a comment tag referencing the design document property
 - Use the format: `// Feature: pabawi-v0.5.0-release, Property N: [property title]`
@@ -1369,7 +1376,8 @@ During implementation of Phase 2 (Expert Mode), several critical issues were dis
 
 **Problem**: The utility functions `captureError()` and `captureWarning()` in `backend/src/routes/integrations/utils.ts` create debug information but do NOT attach it to responses. This means routes using these utilities send error responses without the `_debug` field, making external API errors invisible on the frontend.
 
-**Impact**: 
+**Impact**:
+
 - Users cannot see underlying reasons for external API failures
 - Error messages, stack traces, and connection details are lost
 - Expert mode is ineffective for troubleshooting external integration issues
@@ -1379,11 +1387,13 @@ During implementation of Phase 2 (Expert Mode), several critical issues were dis
 #### Issue 2: Incomplete Route Coverage
 
 **Current State**:
+
 - ✅ 5/58 routes (8.6%) properly implement expert mode with all log levels
 - ⚠️ 11 routes use broken utility functions (need complete rewrite)
 - ❌ 42 routes have NO expert mode implementation
 
 **Reference Implementation**: The route `GET /api/integrations/puppetdb/reports/summary` (lines 800-900 in `backend/src/routes/integrations/puppetdb.ts`) demonstrates the CORRECT pattern:
+
 1. Create debugInfo at start if expert mode enabled
 2. Add info/debug messages during processing
 3. Add errors/warnings in catch blocks
@@ -1549,6 +1559,7 @@ During implementation of Phase 2 (Expert Mode), several critical issues were dis
 ### Alerting
 
 Consider implementing alerts for:
+
 - Integration health check failures
 - High error rates (> 5%)
 - Slow response times (> 2s)

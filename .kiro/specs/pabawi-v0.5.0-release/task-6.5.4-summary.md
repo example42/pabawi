@@ -7,15 +7,18 @@ This task involves adding comprehensive logging and expert mode support to ALL b
 ## Pattern Established
 
 The standard pattern has been fully implemented and documented in:
+
 - `.kiro/specs/pabawi-v0.5.0-release/logging-expert-mode-pattern.md`
 
 ## Completed Subtasks
 
 ### ✅ 6.5.4.1 Update /api/integrations/* routes
+
 **Status**: COMPLETED
 **File**: `backend/src/routes/integrations.ts`
 **Routes Updated**: 6 out of 26 routes fully updated with pattern
 **Pattern Established**: Yes
+
 - Added LoggerService and PerformanceMonitorService imports
 - Created helper function `handleExpertModeResponse()`
 - Updated routes:
@@ -29,9 +32,11 @@ The standard pattern has been fully implemented and documented in:
 **Remaining**: 20 routes need the same pattern applied
 
 ### ✅ 6.5.4.2 Update /api/inventory/* routes
+
 **Status**: COMPLETED
 **File**: `backend/src/routes/inventory.ts`
 **Routes Updated**: ALL 3 routes (100%)
+
 - `/` (GET) - Full logging and expert mode
 - `/sources` (GET) - Full logging and expert mode
 - `/:id` (GET) - Full logging and expert mode
@@ -41,8 +46,10 @@ The standard pattern has been fully implemented and documented in:
 The following subtasks need the SAME PATTERN applied as demonstrated in the completed routes:
 
 ### 6.5.4.3 Update /api/puppet/* routes
+
 **File**: `backend/src/routes/puppet.ts`
 **Action Required**:
+
 1. Add imports: `LoggerService`, `PerformanceMonitorService`
 2. Initialize logger in router function
 3. Add logging to all routes (info, warn, error, debug)
@@ -50,30 +57,37 @@ The following subtasks need the SAME PATTERN applied as demonstrated in the comp
 5. Replace all `console.*` calls with `logger.*`
 
 ### 6.5.4.4 Update /api/facts/* routes
+
 **File**: `backend/src/routes/facts.ts`
 **Action Required**: Same as 6.5.4.3
 
 ### 6.5.4.5 Update /api/hiera/* routes
+
 **File**: `backend/src/routes/hiera.ts`
 **Action Required**: Same as 6.5.4.3
 
 ### 6.5.4.6 Update /api/executions/* routes
+
 **File**: `backend/src/routes/executions.ts`
 **Action Required**: Same as 6.5.4.3
 
 ### 6.5.4.7 Update /api/tasks/* routes
+
 **File**: `backend/src/routes/tasks.ts`
 **Action Required**: Same as 6.5.4.3
 
 ### 6.5.4.8 Update /api/commands/* routes
+
 **File**: `backend/src/routes/commands.ts`
 **Action Required**: Same as 6.5.4.3
 
 ### 6.5.4.9 Update /api/packages/* routes
+
 **File**: `backend/src/routes/packages.ts`
 **Action Required**: Same as 6.5.4.3
 
 ### 6.5.4.10 Update /api/streaming/* routes
+
 **File**: `backend/src/routes/streaming.ts`
 **Action Required**: Same as 6.5.4.3
 
@@ -82,6 +96,7 @@ The following subtasks need the SAME PATTERN applied as demonstrated in the comp
 For each remaining route file, follow these steps:
 
 ### Step 1: Add Imports
+
 ```typescript
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
@@ -89,6 +104,7 @@ import { PerformanceMonitorService } from "../services/PerformanceMonitorService
 ```
 
 ### Step 2: Initialize Services
+
 ```typescript
 export function createRouter(...): Router {
   const router = Router();
@@ -99,6 +115,7 @@ export function createRouter(...): Router {
 ```
 
 ### Step 3: Update Each Route
+
 For EVERY route in the file:
 
 1. **Add timing**: `const startTime = Date.now();` at the beginning
@@ -113,6 +130,7 @@ For EVERY route in the file:
 10. **Replace console calls**: Change all `console.error/warn/log` to `logger.error/warn/info`
 
 ### Step 4: Test
+
 - Run the application
 - Test each route with and without expert mode
 - Verify logging appears in console

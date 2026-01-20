@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { DebugInfo } from '../lib/api';
+  import type { LogEntry } from '../lib/logger.svelte';
   import ExpertModeCopyButton from './ExpertModeCopyButton.svelte';
+  import { logger } from '../lib/logger.svelte';
 
   interface FrontendDebugInfo {
     renderTime?: number;
@@ -38,12 +40,120 @@
   let showContext = $state(false);
   let showMetadata = $state(false);
   let showFrontendInfo = $state(false);
+  let showTimeline = $state(false);
+
+  // Timeline view state
+  let timelineSearchQuery = $state('');
+  let timelineFilterLevel = $state<'all' | 'error' | 'warn' | 'info' | 'debug'>('all');
 
   // Count messages by type
   const errorCount = $derived(debugInfo.errors?.length || 0);
   const warningCount = $derived(debugInfo.warnings?.length || 0);
   const infoCount = $derived(debugInfo.info?.length || 0);
   const debugCount = $derived(debugInfo.debug?.length || 0);
+
+  // Get frontend logs from logger
+  const frontendLogs = $derived(logger.getLogs());
+
+  // Timeline entry type
+  interface TimelineEntry {
+    timestamp: string;
+    level: 'error' | 'warn' | 'info' | 'debug';
+    source: 'frontend' | 'backend';
+    message: string;
+    context?: string;
+    metadata?: Record<string, unknown>;
+    stackTrace?: string;
+  }
+
+  // Combine frontend and backend logs into timeline
+  const timelineEntries = $derived.by(() => {
+    const entries: TimelineEntry[] = [];
+
+    // Add frontend logs
+    frontendLogs.forEach(log => {
+      entries.push({
+        timestamp: log.timestamp,
+        level: log.level,
+        source: 'frontend',
+        message: `[${log.component}] ${log.operation}: ${log.message}`,
+        metadata: log.metadata,
+        stackTrace: log.stackTrace,
+      });
+    });
+
+    // Add backend errors
+    debugInfo.errors?.forEach(error => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'error',
+        source: 'backend',
+        message: error.message,
+        context: error.code,
+        stackTrace: error.stack,
+      });
+    });
+
+    // Add backend warnings
+    debugInfo.warnings?.forEach(warning => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'warn',
+        source: 'backend',
+        message: warning.message,
+        context: warning.context,
+      });
+    });
+
+    // Add backend info
+    debugInfo.info?.forEach(info => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'info',
+        source: 'backend',
+        message: info.message,
+        context: info.context,
+      });
+    });
+
+    // Add backend debug
+    debugInfo.debug?.forEach(debug => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'debug',
+        source: 'backend',
+        message: debug.message,
+        context: debug.context,
+      });
+    });
+
+    // Sort by timestamp (newest first)
+    return entries.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  });
+
+  // Filtered timeline entries based on search and level filter
+  const filteredTimelineEntries = $derived.by(() => {
+    let filtered = timelineEntries;
+
+    // Apply level filter
+    if (timelineFilterLevel !== 'all') {
+      filtered = filtered.filter(entry => entry.level === timelineFilterLevel);
+    }
+
+    // Apply search filter
+    if (timelineSearchQuery.trim()) {
+      const query = timelineSearchQuery.toLowerCase();
+      filtered = filtered.filter(entry =>
+        entry.message.toLowerCase().includes(query) ||
+        entry.context?.toLowerCase().includes(query) ||
+        JSON.stringify(entry.metadata || {}).toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  });
 
   // Format duration for display
   const formatDuration = (ms: number): string => {
@@ -676,12 +786,193 @@
           </div>
         {/if}
 
+        <!-- Timeline View Section -->
+        <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between text-left"
+            onclick={() => showTimeline = !showTimeline}
+          >
+            <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+              Timeline View ({timelineEntries.length} entries)
+            </h4>
+            <svg
+              class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showTimeline ? 'rotate-180' : ''}"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {#if showTimeline}
+            <div class="mt-3 space-y-3">
+              <!-- Timeline Filters -->
+              <div class="flex flex-col sm:flex-row gap-2">
+                <!-- Search Input -->
+                <div class="flex-1">
+                  <input
+                    type="text"
+                    bind:value={timelineSearchQuery}
+                    placeholder="Search logs..."
+                    class="w-full rounded-md border border-blue-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
+                  />
+                </div>
+
+                <!-- Level Filter -->
+                <div class="flex gap-1">
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'all'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'all' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60'}"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'error'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'error' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-300 dark:hover:bg-red-900/60'}"
+                  >
+                    Errors
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'warn'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'warn' ? 'bg-yellow-600 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-300 dark:hover:bg-yellow-900/60'}"
+                  >
+                    Warnings
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'info'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'info' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60'}"
+                  >
+                    Info
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'debug'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'debug' ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+                  >
+                    Debug
+                  </button>
+                </div>
+              </div>
+
+              <!-- Timeline Entries -->
+              <div class="space-y-2 max-h-96 overflow-y-auto">
+                {#if filteredTimelineEntries.length === 0}
+                  <div class="rounded-md bg-gray-100 p-4 text-center text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                    No log entries match your filters
+                  </div>
+                {:else}
+                  {#each filteredTimelineEntries as entry}
+                    <div class="rounded-md border p-3 {
+                      entry.level === 'error' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20' :
+                      entry.level === 'warn' ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20' :
+                      entry.level === 'info' ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20' :
+                      'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'
+                    }">
+                      <!-- Entry Header -->
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                          <!-- Level Badge -->
+                          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium shrink-0 {
+                            entry.level === 'error' ? 'bg-red-600 text-white' :
+                            entry.level === 'warn' ? 'bg-yellow-600 text-white' :
+                            entry.level === 'info' ? 'bg-blue-600 text-white' :
+                            'bg-gray-600 text-white'
+                          }">
+                            {entry.level.toUpperCase()}
+                          </span>
+
+                          <!-- Source Badge -->
+                          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium shrink-0 {
+                            entry.source === 'frontend' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' :
+                            'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                          }">
+                            {entry.source}
+                          </span>
+
+                          <!-- Timestamp -->
+                          <span class="text-xs text-gray-600 dark:text-gray-400 font-mono truncate">
+                            {formatTimestamp(entry.timestamp)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Entry Message -->
+                      <div class="mt-2 text-sm {
+                        entry.level === 'error' ? 'text-red-900 dark:text-red-100' :
+                        entry.level === 'warn' ? 'text-yellow-900 dark:text-yellow-100' :
+                        entry.level === 'info' ? 'text-blue-900 dark:text-blue-100' :
+                        'text-gray-900 dark:text-gray-100'
+                      }">
+                        {entry.message}
+                      </div>
+
+                      <!-- Entry Context -->
+                      {#if entry.context}
+                        <div class="mt-1 text-xs {
+                          entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
+                          entry.level === 'warn' ? 'text-yellow-700 dark:text-yellow-300' :
+                          entry.level === 'info' ? 'text-blue-700 dark:text-blue-300' :
+                          'text-gray-700 dark:text-gray-300'
+                        }">
+                          Context: {entry.context}
+                        </div>
+                      {/if}
+
+                      <!-- Entry Metadata -->
+                      {#if entry.metadata && Object.keys(entry.metadata).length > 0}
+                        <details class="mt-2">
+                          <summary class="cursor-pointer text-xs {
+                            entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
+                            entry.level === 'warn' ? 'text-yellow-700 dark:text-yellow-300' :
+                            entry.level === 'info' ? 'text-blue-700 dark:text-blue-300' :
+                            'text-gray-700 dark:text-gray-300'
+                          } hover:underline">
+                            Show metadata
+                          </summary>
+                          <pre class="mt-1 overflow-x-auto rounded p-2 text-xs {
+                            entry.level === 'error' ? 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100' :
+                            entry.level === 'warn' ? 'bg-yellow-100 text-yellow-900 dark:bg-yellow-950 dark:text-yellow-100' :
+                            entry.level === 'info' ? 'bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-100' :
+                            'bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100'
+                          }">{JSON.stringify(entry.metadata, null, 2)}</pre>
+                        </details>
+                      {/if}
+
+                      <!-- Stack Trace -->
+                      {#if entry.stackTrace}
+                        <details class="mt-2">
+                          <summary class="cursor-pointer text-xs {
+                            entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
+                            'text-gray-700 dark:text-gray-300'
+                          } hover:underline">
+                            Show stack trace
+                          </summary>
+                          <pre class="mt-1 overflow-x-auto rounded p-2 text-xs {
+                            entry.level === 'error' ? 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100' :
+                            'bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100'
+                          }">{entry.stackTrace}</pre>
+                        </details>
+                      {/if}
+                    </div>
+                  {/each}
+                {/if}
+              </div>
+            </div>
+          {/if}
+        </div>
+
         <!-- Copy Button -->
         <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
           <ExpertModeCopyButton
             data={responseData}
             {debugInfo}
             {frontendInfo}
+            frontendLogs={frontendLogs}
             label="Show Details"
             includeContext={true}
             includePerformance={true}

@@ -7,6 +7,7 @@ A comprehensive frontend + backend logging system with deep expert mode integrat
 ## Components Created
 
 ### 1. Frontend Logger Service
+
 **File:** `frontend/src/lib/logger.svelte.ts`
 
 - Structured logging (debug, info, warn, error)
@@ -18,6 +19,7 @@ A comprehensive frontend + backend logging system with deep expert mode integrat
 - localStorage persistence
 
 ### 2. Backend Debug Routes
+
 **File:** `backend/src/routes/debug.ts`
 
 - POST `/api/debug/frontend-logs` - Receive frontend log batches
@@ -27,6 +29,7 @@ A comprehensive frontend + backend logging system with deep expert mode integrat
 - In-memory storage with automatic cleanup (5 min TTL, 100 ID max)
 
 ### 3. Enhanced API Client
+
 **File:** `frontend/src/lib/api.ts`
 
 - Generates correlation IDs for each request
@@ -35,6 +38,7 @@ A comprehensive frontend + backend logging system with deep expert mode integrat
 - Captures performance timing
 
 ### 4. Enhanced Expert Mode Service
+
 **File:** `backend/src/services/ExpertModeService.ts`
 
 - New `FrontendLogEntry` interface
@@ -42,6 +46,7 @@ A comprehensive frontend + backend logging system with deep expert mode integrat
 - Frontend logs included in `_debug` responses
 
 ### 5. Enhanced Middleware
+
 **File:** `backend/src/middleware/expertMode.ts`
 
 - Extracts `X-Correlation-ID` header
@@ -49,6 +54,7 @@ A comprehensive frontend + backend logging system with deep expert mode integrat
 - Available to all route handlers
 
 ### 6. Server Integration
+
 **File:** `backend/src/server.ts`
 
 - Debug router mounted at `/api/debug`
@@ -57,18 +63,21 @@ A comprehensive frontend + backend logging system with deep expert mode integrat
 ## Key Features
 
 ### Security
+
 ✅ Automatic sensitive data obfuscation  
 ✅ In-memory only storage (no database persistence)  
 ✅ Automatic cleanup (5 min TTL)  
 ✅ Only sends logs when expert mode enabled  
 
 ### Performance
+
 ✅ Throttled backend sync (1 req/sec max)  
 ✅ Circular buffer prevents memory growth  
 ✅ No impact when expert mode disabled  
 ✅ Logs flushed on page unload  
 
 ### Developer Experience
+
 ✅ Unified logging API across frontend/backend  
 ✅ Correlation IDs link frontend actions to backend processing  
 ✅ Full request lifecycle visibility  
@@ -95,6 +104,7 @@ User Action → Frontend Logger → Circular Buffer
 ## Next Steps
 
 ### Phase 1: Complete (This Session)
+
 - ✅ Frontend logger service
 - ✅ Backend debug endpoint
 - ✅ API integration
@@ -103,12 +113,14 @@ User Action → Frontend Logger → Circular Buffer
 - ✅ Server integration
 
 ### Phase 2: UI Enhancement (Next)
+
 - ⏳ Update `ExpertModeDebugPanel` with timeline view
 - ⏳ Add filtering by log level
 - ⏳ Add search functionality
 - ⏳ Enhanced copy functionality with full context
 
 ### Phase 3: Testing & Documentation
+
 - ⏳ End-to-end testing
 - ⏳ Performance testing
 - ⏳ Update user documentation
@@ -117,6 +129,7 @@ User Action → Frontend Logger → Circular Buffer
 ## Usage Examples
 
 ### Frontend Component
+
 ```typescript
 import { logger } from '../lib/logger.svelte';
 
@@ -127,6 +140,7 @@ logger.info('TaskRunInterface', 'runTask', 'Starting task', {
 ```
 
 ### Backend Route
+
 ```typescript
 import { getFrontendLogs } from "../routes/debug";
 
@@ -139,16 +153,19 @@ if (req.expertMode && req.correlationId) {
 ## Benefits
 
 **For Debugging:**
+
 - See exactly what happened from user click to backend response
 - Identify performance bottlenecks (frontend vs backend)
 - Full error context with stack traces
 
 **For Support:**
+
 - Users can copy complete debug info for tickets
 - Reproducible issues with full state snapshot
 - No screen sharing needed for basic debugging
 
 **For Development:**
+
 - Consistent logging pattern across stack
 - Easy to add logging to new features
 - Automatic sensitive data protection
@@ -158,6 +175,7 @@ if (req.expertMode && req.correlationId) {
 All configuration stored in localStorage:
 
 **Logger Config:** `pabawi_logger_config`
+
 ```json
 {
   "logLevel": "info",
@@ -169,6 +187,7 @@ All configuration stored in localStorage:
 ```
 
 **Expert Mode:** `pabawi_expert_mode`
+
 ```json
 {
   "enabled": false
@@ -178,12 +197,14 @@ All configuration stored in localStorage:
 ## Files Modified/Created
 
 ### Created
+
 - `frontend/src/lib/logger.svelte.ts` (new)
 - `backend/src/routes/debug.ts` (new)
 - `.kiro/specs/pabawi-v0.5.0-release/unified-logging-implementation.md` (new)
 - `.kiro/specs/pabawi-v0.5.0-release/logging-integration-summary.md` (new)
 
 ### Modified
+
 - `frontend/src/lib/api.ts` (enhanced with logging & correlation IDs)
 - `backend/src/services/ExpertModeService.ts` (added frontend log support)
 - `backend/src/middleware/expertMode.ts` (added correlation ID extraction)
@@ -193,24 +214,28 @@ All configuration stored in localStorage:
 ## Architecture Decisions
 
 ### Why In-Memory Storage?
+
 - Fast access
 - No database bloat
 - Auto-cleanup on restart
 - Sufficient for debugging (5 min window)
 
 ### Why Throttling?
+
 - Prevents overwhelming backend
 - Batches logs efficiently
 - Minimal network overhead
 - No impact on user experience
 
 ### Why Correlation IDs?
+
 - Links frontend actions to backend processing
 - Enables timeline view
 - Supports distributed tracing patterns
 - Future-proof for microservices
 
 ### Why Obfuscation?
+
 - Prevents accidental credential leaks
 - Safe to copy/paste debug info
 - Complies with security best practices
@@ -219,6 +244,7 @@ All configuration stored in localStorage:
 ## Conclusion
 
 We've successfully implemented a unified logging system that:
+
 - Spans frontend and backend
 - Integrates deeply with expert mode
 - Protects sensitive data automatically

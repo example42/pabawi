@@ -104,6 +104,7 @@ All screenshots are stored in the `docs/screenshots/` directory and can be refer
 ### Screenshot Naming Convention
 
 Screenshots follow a descriptive naming pattern:
+
 - `inventory.png` - Node inventory listing with search and filters
 - `node-detail-page.png` - Individual node management interface
 - `task-execution.png` - Bolt task execution with parameters
@@ -135,6 +136,7 @@ When updating screenshots:
 ### Multi-Source Integration
 
 Screenshots demonstrate Pabawi's ability to integrate data from multiple sources:
+
 - Bolt inventory for node management
 - PuppetDB for comprehensive system information
 - Puppetserver for certificate and configuration management
@@ -143,6 +145,7 @@ Screenshots demonstrate Pabawi's ability to integrate data from multiple sources
 ### Security Features
 
 Visual elements showing security implementations:
+
 - Command whitelist enforcement
 - Noop mode for safe testing
 - Expert mode for detailed auditing
@@ -151,6 +154,7 @@ Visual elements showing security implementations:
 ### User Experience
 
 Interface design principles visible in screenshots:
+
 - Clean, intuitive navigation
 - Responsive design for different screen sizes
 - Real-time feedback and status indicators
@@ -160,6 +164,7 @@ Interface design principles visible in screenshots:
 ### Performance Optimization
 
 Screenshots show performance features:
+
 - Virtual scrolling for large inventories
 - Real-time search and filtering
 - Efficient data loading and caching
@@ -177,6 +182,7 @@ Screenshots show performance features:
 ### Browser Compatibility
 
 Screenshots captured using modern web browsers with:
+
 - JavaScript enabled
 - CSS Grid and Flexbox support
 - WebSocket support for real-time features
@@ -185,6 +191,7 @@ Screenshots captured using modern web browsers with:
 ### Responsive Design
 
 Interface adapts to different screen sizes:
+
 - Desktop: Full feature set with multi-column layouts
 - Tablet: Optimized touch interface with collapsible sections
 - Mobile: Streamlined interface with essential features
@@ -200,6 +207,7 @@ If the interface doesn't match these screenshots:
 5. **Network**: Ensure connectivity to backend services
 
 For additional help, see:
+
 - [Troubleshooting Guide](troubleshooting.md)
 - [Configuration Guide](configuration.md)
 - [User Guide](user-guide.md)

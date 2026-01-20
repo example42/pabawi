@@ -53,9 +53,11 @@ Successfully updated the GET /api/integrations/puppetdb/nodes/:certname/reports 
 ## Pattern Compliance
 
 The implementation follows the established pattern from the completed route:
+
 - GET /api/integrations/puppetdb/reports/summary
 
 All log levels are now properly captured:
+
 - ✅ `logger.error()` → `expertModeService.addError()`
 - ✅ `logger.warn()` → `expertModeService.addWarning()`
 - ✅ `logger.info()` → `expertModeService.addInfo()`
@@ -78,4 +80,5 @@ All log levels are now properly captured:
 ## Next Steps
 
 This route is now complete. The next route to update is:
+
 - GET /api/integrations/puppetdb/nodes/:certname/reports/:hash

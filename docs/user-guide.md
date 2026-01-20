@@ -1,6 +1,6 @@
 # Pabawi User Guide
 
-Version: 0.1.0
+Version: 0.5.0
 
 ## Overview
 
@@ -18,8 +18,11 @@ Pabawi is a web-based interface for the Bolt automation tool that allows you to 
 - [Running Puppet](#running-puppet)
 - [Installing Packages](#installing-packages)
 - [Viewing Execution History](#viewing-execution-history)
+- [Integration Color Coding](#integration-color-coding)
 - [Expert Mode](#expert-mode)
 - [Realtime Streaming Output](#realtime-streaming-output)
+- [Puppet Reports Filtering](#puppet-reports-filtering)
+- [Puppet Run Visualization](#puppet-run-visualization)
 - [Tips and Best Practices](#tips-and-best-practices)
 
 ## Getting Started
@@ -1476,7 +1479,85 @@ Error:
 - Check database configuration
 - Verify data retention policy
 
+## Integration Color Coding
+
+**New in v0.5.0**: Pabawi now uses a consistent color coding system to help you quickly identify which integration provides specific data. Each integration has a unique color that appears throughout the interface.
+
+### Integration Colors
+
+Each integration has three color variants for different UI contexts:
+
+- **Bolt**: Bright orange (#FFAE1A) - Puppet logo color
+- **PuppetDB**: Violet/purple (#9063CD) - Puppet logo color
+- **Puppetserver**: Dark blue (#2E3A87) - Puppet logo color
+- **Hiera**: Dark red (#C1272D)
+
+### Where You'll See Integration Colors
+
+#### Integration Badges
+
+Integration badges appear throughout the interface to indicate data sources:
+
+- **Dot variant**: Small colored dot next to labels
+- **Label variant**: Colored text label with integration name
+- **Badge variant**: Colored badge with icon and name
+
+**Example locations:**
+
+- Node detail page tabs (Facts, Hiera, Catalog)
+- Inventory page source indicators
+- Home page integration status
+- Report source indicators
+
+#### Integration Status (Home Page)
+
+The home page displays integration status with colored icons:
+
+- **Connected**: Integration icon in full color with checkmark
+- **Degraded**: Integration icon in warning color (yellow/orange) with alert symbol
+- **Error**: Integration icon in error color (red) with X symbol
+- **Not Configured**: Integration icon in gray with info symbol
+
+#### Tab Indicators
+
+When viewing node details, tabs show colored dots indicating the data source:
+
+- **Facts tab**: May show Bolt (orange) or PuppetDB (purple) dot
+- **Hiera tab**: Shows Hiera (red) dot
+- **Catalog tab**: Shows PuppetDB (purple) or Puppetserver (blue) dot
+- **Reports tab**: Shows PuppetDB (purple) dot
+
+### Multi-Source Data
+
+When data can come from multiple sources, you'll see multiple integration badges:
+
+**Example: Node Facts**
+
+```
+Facts (Bolt • PuppetDB)
+```
+
+This indicates facts can be gathered from either Bolt or PuppetDB.
+
+### Benefits of Color Coding
+
+1. **Quick Identification**: Instantly see which integration provides data
+2. **Troubleshooting**: Identify integration-specific issues faster
+3. **Data Source Awareness**: Understand where information comes from
+4. **Visual Consistency**: Consistent colors across all pages and components
+
+### Accessibility
+
+Integration colors are chosen for:
+
+- **Sufficient contrast**: All colors meet WCAG AA standards
+- **Color blindness**: Colors are distinguishable for common types of color blindness
+- **Text labels**: Colors are always accompanied by text labels
+- **Icon support**: Icons provide additional visual cues beyond color
+
 ## Expert Mode
+
+**Enhanced in v0.5.0**: Expert Mode now provides comprehensive debugging information including frontend logs, backend debug info, performance metrics, and full request lifecycle visibility.
 
 Expert Mode is a powerful feature that provides detailed diagnostic information, making it invaluable for troubleshooting complex issues and understanding exactly what Pabawi is doing behind the scenes.
 
@@ -1486,9 +1567,12 @@ Expert Mode enhances the interface with additional technical details:
 
 - Full error stack traces
 - Raw Bolt CLI commands
-- Request IDs for log correlation
+- Request IDs and correlation IDs for log correlation
 - Detailed execution context
 - Raw API responses
+- Frontend and backend logs with timeline view
+- Performance metrics and monitoring data
+- External API error details (PuppetDB, Puppetserver, Bolt, Hiera)
 - Additional diagnostic information
 
 ### When to Use Expert Mode
@@ -2205,6 +2289,336 @@ Once expert mode is enabled:
 - Can view stream from history page
 - Historical executions show final output
 - Request ID links stream to history
+
+## Puppet Reports Filtering
+
+**New in v0.5.0**: Advanced filtering capabilities allow you to quickly find specific puppet reports based on status, duration, compile time, and resource count.
+
+### Overview
+
+The report filtering feature helps you analyze puppet runs by narrowing down large report lists to specific scenarios. Filters can be combined and persist across page navigation during your session.
+
+### Available Filters
+
+#### Status Filter
+
+Filter reports by their execution status:
+
+- **Success**: Runs that completed without errors
+- **Failed**: Runs that encountered errors
+- **Changed**: Runs that made changes to the system
+- **Unchanged**: Runs that made no changes
+
+**Multi-select**: You can select multiple statuses to see reports matching any of them.
+
+#### Duration Filter
+
+Filter reports by minimum run duration (in seconds):
+
+- Shows only reports that took longer than the specified time
+- Useful for identifying slow puppet runs
+- Example: Set to 60 to see runs taking more than 1 minute
+
+#### Compile Time Filter
+
+Filter reports by minimum catalog compilation time (in seconds):
+
+- Shows only reports with compilation time exceeding the threshold
+- Helps identify catalog compilation performance issues
+- Example: Set to 30 to see runs with slow catalog compilation
+
+#### Total Resources Filter
+
+Filter reports by minimum number of resources managed:
+
+- Shows only reports managing more than the specified number of resources
+- Useful for identifying nodes with large catalogs
+- Example: Set to 100 to see nodes managing many resources
+
+### Using Filters
+
+#### Accessing the Filter Panel
+
+**On Puppet Reports Page:**
+
+1. Navigate to the Puppet page
+2. Locate the "Filters" panel above the report list
+3. The panel shows all available filter options
+
+**On Home Page:**
+
+1. The home page puppet reports block includes a compact filter panel
+2. Same filtering capabilities as the full page
+
+#### Applying Filters
+
+1. **Select Status:**
+   - Click the status dropdown
+   - Check one or more status options
+   - Reports update automatically
+
+2. **Set Duration Threshold:**
+   - Enter minimum duration in seconds
+   - Press Enter or click outside the field
+   - Reports filter to show only longer runs
+
+3. **Set Compile Time Threshold:**
+   - Enter minimum compile time in seconds
+   - Press Enter or click outside the field
+   - Reports filter accordingly
+
+4. **Set Resource Count Threshold:**
+   - Enter minimum resource count
+   - Press Enter or click outside the field
+   - Reports filter to show nodes with more resources
+
+#### Combining Filters
+
+- Multiple filters work together (AND logic)
+- A report must match ALL active filters to be shown
+- Example: "Failed runs taking more than 60 seconds"
+
+#### Active Filter Indicator
+
+- A badge shows the number of active filters
+- Example: "3 filters active"
+- Helps you know when filters are applied
+
+#### Clearing Filters
+
+1. Click the "Clear Filters" button
+2. All filters reset to default (no filtering)
+3. Full report list displays
+
+### Filter Persistence
+
+**Session Persistence:**
+
+- Filter settings persist while you navigate the application
+- Navigate away and return - filters remain active
+- Filters clear when you close the browser or end your session
+- Not stored in localStorage (session only)
+
+**Per-Page Filters:**
+
+- Home page and Puppet page maintain separate filter states
+- Allows different filter configurations for different views
+
+### Troubleshooting Filters
+
+**Problem: "No results found"**
+
+- Filters may be too restrictive
+- Try relaxing one or more filter criteria
+- Check if reports exist that match your criteria
+- Clear all filters to see full list
+
+**Problem: "Filters not persisting"**
+
+- Filters only persist during your session
+- Closing browser clears filters
+- This is by design for security and privacy
+
+**Problem: "Filter values not applying"**
+
+- Ensure you press Enter after typing values
+- Or click outside the input field
+- Check that values are valid numbers
+
+## Puppet Run Visualization
+
+### Overview
+
+Puppet run visualizations provide graphical representations of puppet run history, showing the distribution of run statuses over time. Charts are available for individual nodes and aggregated across all nodes.
+
+### Chart Types
+
+#### Node-Specific Chart
+
+**Location**: Node Detail Page → Node Status Tab
+
+**Shows:**
+
+- Puppet run history for the specific node
+- Last 7 days of runs by default
+- Status breakdown (success, failed, changed, unchanged)
+- Daily aggregation of runs
+
+**Use Cases:**
+
+- Monitor individual node health
+- Identify patterns in node behavior
+- Track changes over time for a specific node
+- Troubleshoot recurring issues on a node
+
+#### Aggregated Chart
+
+**Location**: Home Page → Puppet Reports Block
+
+**Shows:**
+
+- Puppet run history across all nodes
+- Last 7 days of runs by default
+- Total run counts by status
+- Overall infrastructure health at a glance
+
+**Use Cases:**
+
+- Monitor overall infrastructure health
+- Identify widespread issues
+- Track deployment impacts
+- Capacity planning and trend analysis
+
+**Configuration**: The home page chart can be disabled via the `UI_SHOW_HOME_PAGE_RUN_CHART` environment variable if needed.
+
+### Chart Features
+
+#### Visual Elements
+
+**Bar Chart Display:**
+
+- Each bar represents one day
+- Bar height shows total number of runs
+- Colors indicate run status:
+  - **Green**: Successful runs
+  - **Red**: Failed runs
+  - **Blue**: Runs with changes
+  - **Gray**: Unchanged runs
+
+**Stacked Bars:**
+
+- Bars are stacked to show status distribution
+- Easy to see proportion of each status
+- Total height shows total runs per day
+
+#### Interactive Features
+
+**Tooltips:**
+
+- Hover over any bar to see details
+- Shows exact counts for each status
+- Displays date for the bar
+- Example: "Jan 15: 45 success, 3 failed, 12 changed"
+
+**Responsive Design:**
+
+- Charts adjust to container width
+- Works on different screen sizes
+- Maintains readability on mobile devices
+- Scales appropriately for large displays
+
+#### Summary Statistics
+
+Below each chart, summary statistics show:
+
+- **Total Runs**: Total number of runs in the period
+- **Success Rate**: Percentage of successful runs
+- **Average Duration**: Average run duration
+- **Last Run**: Timestamp of most recent run
+
+### Using the Visualizations
+
+#### Viewing Node-Specific History
+
+1. Navigate to a node's detail page
+2. Click the "Node Status" tab
+3. Scroll to the "Puppet Run History" section
+4. View the 7-day chart
+
+**Interpreting the Chart:**
+
+- Look for patterns in failures
+- Identify days with many changes
+- Spot unusual activity
+- Compare to known events (deployments, changes)
+
+#### Viewing Aggregated History
+
+1. Go to the Home page
+2. Locate the "Puppet Reports" block
+3. View the aggregated chart at the top
+
+**Interpreting the Chart:**
+
+- Monitor overall infrastructure health
+- Identify widespread issues affecting multiple nodes
+- Track deployment impacts across the infrastructure
+- Spot trends over time
+
+#### Chart Updates
+
+**Automatic Refresh:**
+
+- Charts update when new report data is available
+- Refresh occurs every 5 minutes automatically
+- Visual indicator shows when chart updates
+- No manual refresh needed
+
+**Manual Refresh:**
+
+- Refresh the page to update immediately
+- Or wait for automatic refresh
+- Useful after making changes
+
+### Visualization Best Practices
+
+**Regular Monitoring:**
+
+- Check charts daily for anomalies
+- Compare current trends to historical patterns
+- Investigate sudden changes in failure rates
+- Track success rate over time
+
+**Correlation with Events:**
+
+- Compare chart data to deployment schedules
+- Correlate failures with infrastructure changes
+- Track impact of configuration changes
+- Document significant events
+
+**Proactive Management:**
+
+- Set informal thresholds for acceptable failure rates
+- Investigate when success rate drops below threshold
+- Use charts to identify nodes needing attention
+- Plan maintenance based on run patterns
+
+**Troubleshooting:**
+
+- Use charts to identify when issues started
+- Compare node-specific charts to aggregated view
+- Identify if issues are node-specific or widespread
+- Track resolution effectiveness over time
+
+### Troubleshooting Visualizations
+
+**Problem: "Chart not displaying"**
+
+- Ensure PuppetDB integration is enabled and connected
+- Verify reports exist for the time period
+- Check browser console for errors
+- Try refreshing the page
+
+**Problem: "No data in chart"**
+
+- No puppet runs in the last 7 days
+- PuppetDB may not have report data
+- Check PuppetDB connectivity
+- Verify puppet agents are running
+
+**Problem: "Chart shows unexpected data"**
+
+- Verify date range is correct
+- Check if filters are applied
+- Ensure PuppetDB data is up to date
+- Compare with raw report data
+
+**Problem: "Chart not updating"**
+
+- Wait for automatic refresh (5 minutes)
+- Manually refresh the page
+- Check network connectivity
+- Verify PuppetDB is accessible
 
 ## Tips and Best Practices
 

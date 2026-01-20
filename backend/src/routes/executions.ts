@@ -249,6 +249,12 @@ export function createExecutionsRouter(
           });
 
           const duration = Date.now() - startTime;
+          const errorResponse = {
+            error: {
+              code: "EXECUTION_NOT_FOUND",
+              message: `Execution '${executionId}' not found`,
+            },
+          };
 
           if (req.expertMode) {
             const debugInfo = expertModeService.createDebugInfo(
@@ -262,14 +268,11 @@ export function createExecutionsRouter(
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
             debugInfo.context = expertModeService.collectRequestContext(req);
-          }
 
-          res.status(404).json({
-            error: {
-              code: "EXECUTION_NOT_FOUND",
-              message: `Execution '${executionId}' not found`,
-            },
-          });
+            res.status(404).json(expertModeService.attachDebugInfo(errorResponse, debugInfo));
+          } else {
+            res.status(404).json(errorResponse);
+          }
           return;
         }
 

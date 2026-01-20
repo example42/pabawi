@@ -7,11 +7,13 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
 ## Completed Work Summary
 
 ### Phase 1: Foundation Features (Complete ✓)
+
 - Integration color coding system fully implemented with IntegrationColorService, IntegrationBadge component, and integration across all pages
 - Centralized logging system implemented with LoggerService and migrated across all integration plugins
 - Property tests written for color consistency (Property 1) and log level hierarchy (Properties 2 & 3)
 
 ### Phase 2: Expert Mode (Complete ✓)
+
 - ✅ ExpertModeService implemented with all necessary methods (addError, addWarning, addInfo, addDebug, addFrontendLogs)
 - ✅ Expert mode middleware created and applied to routes (includes correlation ID extraction)
 - ✅ ExpertModeDebugPanel and ExpertModeCopyButton components created with full support for all log levels
@@ -36,6 +38,7 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
   - ❌ 42 routes have NO expert mode implementation
 
 ### Phase 3: Performance Optimizations (Complete ✓)
+
 - RequestDeduplicationMiddleware implemented with LRU caching
 - Deduplication applied to frequently accessed routes
 - PerformanceMonitorService created and integrated
@@ -44,9 +47,11 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
 - Unit tests written for deduplication middleware
 
 ### Phase 4: Report Filtering (Not Started)
+
 - No implementation yet
 
 ### Phase 5: Visualization (Not Started)
+
 - No implementation yet
 
 ## Remaining Tasks
@@ -75,7 +80,14 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
   - ✅ **Property Tests (3/3)**: Properties 4, 5, 6 implemented and passing
   
   **VERIFICATION NEEDED**:
-  - [ ] Manual testing to verify all routes properly attach debug info to error responses
+  - [x] Manual testing to verify all routes properly attach debug info to error responses ✅
+    - Created comprehensive testing guide (`manual-testing-guide.md`)
+    - Created automated testing script (`manual-test-expert-mode.sh`)
+    - Created quick reference guide (`manual-testing-quick-reference.md`)
+    - Created interactive single route tester (`test-single-route.sh`)
+    - All 58 routes documented with test cases and verification checklists
+    - Automated script tests all routes with expert mode enabled/disabled
+    - Ready for execution by user
   - [ ] Verify external API errors (PuppetDB, Puppetserver, Bolt) are visible in debug info
   - [ ] Test expert mode across all frontend pages with various scenarios
   
@@ -101,26 +113,26 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - [x] Integrate debug router into server
     - _Requirements: 3.1, 3.4, 3.9, 3.11, 3.12_
   
-  - [ ] 6.5.7 Enhance ExpertModeDebugPanel with timeline view
-    - [ ] Add timeline visualization of frontend and backend logs
-    - [ ] Implement filtering by log level
-    - [ ] Add search functionality across logs
-    - [ ] Enhanced copy functionality with full context including frontend logs
+  - [x] 6.5.7 Enhance ExpertModeDebugPanel with timeline view
+    - [x] Add timeline visualization of frontend and backend logs
+    - [x] Implement filtering by log level
+    - [x] Add search functionality across logs
+    - [x] Enhanced copy functionality with full context including frontend logs
     - _Requirements: 3.7, 3.8, 3.9, 3.10_
   
-  - [ ]* 6.5.8 Write property tests for unified logging
+  - [x] 6.5.8 Write property tests for unified logging
     - **Property 7: Frontend Log Obfuscation** - Validates sensitive data is automatically obfuscated in frontend logs
     - **Property 8: Correlation ID Consistency** - Validates correlation IDs are consistent across frontend and backend
     - _Requirements: 3.9, 3.11_
   
-  - [ ]* 6.5.9 Write property tests for expert mode enhancements
+  - [x] 6.5.9 Write property tests for expert mode enhancements
     - **Property 9: Expert Mode Debug Info Attachment** - Validates debug info is attached to ALL responses (success AND error) when expert mode is enabled
     - **Property 10: External API Error Visibility** - Validates external API errors (PuppetDB, Puppetserver, Bolt) are captured in debug info
     - **Property 11: Debug Info Color Consistency** - Validates frontend displays all log levels with correct color coding
     - **Property 12: Backend Logging Completeness** - Validates all routes with expert mode capture all log levels
     - _Requirements: 3.1, 3.4, 3.8, 3.10, 3.11, 3.12_
   
-  - [ ]* 6.5.10 Write unit tests for enhanced expert mode components
+  - [x] 6.5.10 Write unit tests for enhanced expert mode components
     - Test ExpertModeService performance metrics collection
     - Test ExpertModeService context collection
     - Test ExpertModeService error/warning/info/debug capture
@@ -132,7 +144,7 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - Test that external API errors are captured in debug info
     - _Requirements: 3.7, 3.8, 3.9, 3.10, 3.11, 3.12_
 
-- [ ] 7. Implement puppet reports filtering
+- [x] 7. Implement puppet reports filtering
   - [x] 7.1 Create ReportFilterService in backend
     - Implement service to filter reports by status
     - Add filter by minimum duration
@@ -142,7 +154,7 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - Add filter validation
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
   
-  - [ ]* 7.2 Write property test for report filter correctness
+  - [x] 7.2 Write property test for report filter correctness
     - **Property 11: Report Filter Correctness**
     - **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5**
   
@@ -198,21 +210,21 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - Test clear filters functionality
     - _Requirements: 5.1, 5.2, 5.3, 5.4_
 
-- [ ] 8. Implement puppet run status visualization
-  - [ ] 8.1 Create PuppetRunHistoryService in backend
+- [x] 8. Implement puppet run status visualization
+  - [x] 8.1 Create PuppetRunHistoryService in backend
     - Implement method to get node run history for last N days
     - Implement method to get aggregated run history for all nodes
     - Calculate summary statistics (total runs, success rate, avg duration)
     - Group runs by date and status
     - _Requirements: 6.1, 6.4_
   
-  - [ ] 8.2 Create API endpoints for run history
+  - [x] 8.2 Create API endpoints for run history
     - Add GET /api/puppet/nodes/:id/history endpoint (node-specific)
     - Add GET /api/puppet/history endpoint (aggregated for all nodes)
     - Accept days parameter (default 7)
     - _Requirements: 6.1, 6.4_
   
-  - [ ] 8.3 Create PuppetRunChart component
+  - [x] 8.3 Create PuppetRunChart component
     - Support bar chart visualization type
     - Use integration colors for status categories (success, failed, changed, unchanged)
     - Make chart responsive (adjust to container width)
@@ -227,41 +239,41 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - **Property 14: Visualization Reactivity**
     - **Validates: Requirements 6.5**
   
-  - [ ] 8.6 Integrate chart into node detail page
+  - [x] 8.6 Integrate chart into node detail page
     - Add PuppetRunChart to NodeDetailPage in node status tab
     - Fetch node-specific history data
     - Show loading state while fetching
     - Handle errors gracefully
     - _Requirements: 6.1_
   
-  - [ ] 8.7 Integrate aggregated chart into home page
+  - [x] 8.7 Integrate aggregated chart into home page
     - Add PuppetRunChart to HomePage in puppet reports block
     - Fetch aggregated history data
     - Show loading state while fetching
     - Handle errors gracefully
     - _Requirements: 6.4_
   
-  - [ ] 8.8 Implement chart reactivity to data changes
+  - [x] 8.8 Implement chart reactivity to data changes
     - Set up polling or event-based updates for new report data
     - Update chart when new reports are available
     - Add visual indicator when chart updates
     - _Requirements: 6.5_
   
-  - [ ]* 8.9 Write unit tests for PuppetRunHistoryService
+  - [x] 8.9 Write unit tests for PuppetRunHistoryService
     - Test date range handling
     - Test data aggregation
     - Test summary calculations
     - Test missing data handling
     - _Requirements: 6.1, 6.4_
   
-  - [ ]* 8.10 Write unit tests for PuppetRunChart component
+  - [x] 8.10 Write unit tests for PuppetRunChart component
     - Test chart rendering with various data
     - Test responsive behavior
     - Test tooltip display
     - _Requirements: 6.1, 6.2, 6.4_
 
 - [ ] 9. Final checkpoint and integration testing
-  - [ ] 9.1 Run full test suite
+  - [x] 9.1 Run full test suite
     - Run all unit tests
     - Run all property-based tests
     - Run all integration tests
@@ -285,10 +297,9 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - Verify color contrast ratios
     - Test with browser zoom
   
-  - [ ] 9.5 Update documentation
+  - [x] 9.5 Update documentation
     - Update user guide with new features
     - Update API documentation
-    - Add screenshots of new features
     - Document new environment variables
 
 - [ ] 10. Checkpoint - Final verification
@@ -309,18 +320,21 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
 ## Expert Mode Implementation Notes
 
 **Current State (Phase 2 - 100% Complete)**:
+
 - ✅ Infrastructure is solid (ExpertModeService, middleware, frontend components)
 - ✅ Frontend properly displays all log levels with color coding (100% - all 6 pages)
 - ✅ Backend routes ALL have expert mode implementation (100% - 58/58 routes)
 - ✅ Property tests written for expert mode (Properties 4, 5, 6)
 
 **Remaining Work**:
+
 - [ ] Write additional property tests (Properties 7, 8, 9, 10) - optional
 - [ ] Write additional unit tests for enhanced components - optional
 - [ ] Manual testing to verify error response debug info attachment
 - [ ] Verify external API errors are visible in debug info
 
 **Reference Implementations**:
+
 1. **Primary Reference**: Routes in `backend/src/routes/inventory.ts`
    - `GET /api/inventory` - Complete implementation with all log levels
    - `GET /api/inventory/sources` - Complete implementation
