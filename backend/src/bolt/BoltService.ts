@@ -1167,12 +1167,14 @@ export class BoltService {
                 errorMessage += `\n\nOutput:\n${valueObj._output.trim()}`;
               }
 
-              nodeResult.error = errorMessage ?? "Task execution failed";
+              nodeResult.error = errorMessage || "Task execution failed";
             } else if (!nodeResult.error) {
               // If no _error object but task failed, use _output as error
-              nodeResult.error = typeof valueObj._output === "string" && valueObj._output.trim()
-                ? valueObj._output.trim()
-                : "Task execution failed";
+              if (typeof valueObj._output === "string" && valueObj._output.trim()) {
+                nodeResult.error = valueObj._output.trim();
+              } else {
+                nodeResult.error = "Task execution failed";
+              }
             }
           }
         }

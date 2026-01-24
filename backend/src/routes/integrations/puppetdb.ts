@@ -148,6 +148,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'nodeCount', nodes.length);
           expertModeService.addMetadata(debugInfo, 'hasQuery', !!pqlQuery);
           expertModeService.addInfo(debugInfo, {
@@ -173,6 +174,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid query parameters for PuppetDB nodes",
               context: JSON.stringify(error.errors),
@@ -203,6 +205,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -232,6 +235,8 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
+            expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -263,6 +268,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB query error: ${error.message}`,
               stack: error.stack,
@@ -294,6 +300,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching PuppetDB inventory: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -462,6 +469,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addInfo(debugInfo, {
             message: "Successfully fetched node details from PuppetDB",
@@ -486,6 +494,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid certname parameter",
               context: JSON.stringify(error.errors),
@@ -516,6 +525,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -545,6 +555,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -576,6 +587,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching node details from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -729,6 +741,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addInfo(debugInfo, {
             message: "Successfully fetched node facts from PuppetDB",
@@ -753,6 +766,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid certname parameter",
               context: JSON.stringify(error.errors),
@@ -783,6 +797,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -812,6 +827,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -842,6 +858,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB query error: ${error.message}`,
               stack: error.stack,
@@ -874,6 +891,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Node not found in PuppetDB",
               context: error.message,
@@ -904,6 +922,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching facts from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -1063,6 +1082,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'limit', limit);
           expertModeService.addMetadata(debugInfo, 'hours', hours);
           expertModeService.addInfo(debugInfo, {
@@ -1088,6 +1108,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid query parameters for reports summary",
               context: JSON.stringify(error.errors),
@@ -1118,6 +1139,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: "PuppetDB authentication error",
               stack: error.stack,
@@ -1147,6 +1169,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: "PuppetDB connection error",
               stack: error.stack,
@@ -1177,6 +1200,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: "PuppetDB query error",
               stack: error.stack,
@@ -1208,6 +1232,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: "Error fetching reports summary from PuppetDB",
             stack: error instanceof Error ? error.stack : undefined,
@@ -1423,6 +1448,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'limit', limit);
           expertModeService.addMetadata(debugInfo, 'offset', offset);
           expertModeService.addMetadata(debugInfo, 'totalReports', allReports.length);
@@ -1434,7 +1460,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
             expertModeService.addMetadata(debugInfo, 'filters', filters);
           }
           expertModeService.addInfo(debugInfo, {
-            message: `Successfully fetched and filtered reports from PuppetDB (${reports.length}/${allReports.length} after filtering, page ${Math.floor(offset / limit) + 1})`,
+            message: `Successfully fetched and filtered reports from PuppetDB (${String(reports.length)}/${String(allReports.length)} after filtering, page ${String(Math.floor(offset / limit) + 1)})`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1456,6 +1482,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid request parameters for reports",
               context: JSON.stringify(error.errors),
@@ -1488,6 +1515,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid filter parameters for reports",
               context: error.message,
@@ -1517,6 +1545,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -1546,6 +1575,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -1576,6 +1606,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching all reports from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -1739,13 +1770,14 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addMetadata(debugInfo, 'reportCount', reports.length);
           expertModeService.addMetadata(debugInfo, 'limit', limit);
           expertModeService.addMetadata(debugInfo, 'offset', offset);
           expertModeService.addMetadata(debugInfo, 'hasMore', hasMore);
           expertModeService.addInfo(debugInfo, {
-            message: `Successfully fetched node reports from PuppetDB (page ${Math.floor(offset / limit) + 1})`,
+            message: `Successfully fetched node reports from PuppetDB (page ${String(Math.floor(offset / limit) + 1)})`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1767,6 +1799,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid request parameters for node reports",
               context: JSON.stringify(error.errors),
@@ -1797,6 +1830,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -1826,6 +1860,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -1856,6 +1891,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB query error: ${error.message}`,
               stack: error.stack,
@@ -1887,6 +1923,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching reports from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2102,6 +2139,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addMetadata(debugInfo, 'hash', hash);
           expertModeService.addInfo(debugInfo, {
@@ -2127,6 +2165,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid request parameters for report details",
               context: JSON.stringify(error.errors),
@@ -2157,6 +2196,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -2186,6 +2226,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -2216,6 +2257,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB query error: ${error.message}`,
               stack: error.stack,
@@ -2247,6 +2289,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching report from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2450,6 +2493,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addMetadata(debugInfo, 'certname', certname);
             expertModeService.addMetadata(debugInfo, 'resourceType', resourceType);
@@ -2482,6 +2526,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addInfo(debugInfo, {
             message: "Successfully fetched catalog from PuppetDB",
@@ -2506,6 +2551,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid request parameters for catalog",
               context: JSON.stringify(error.errors),
@@ -2536,6 +2582,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -2565,6 +2612,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -2595,6 +2643,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB query error: ${error.message}`,
               stack: error.stack,
@@ -2626,6 +2675,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching catalog from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2786,6 +2836,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addMetadata(debugInfo, 'typeCount', typeCount);
           expertModeService.addMetadata(debugInfo, 'totalResources', totalResources);
@@ -2812,6 +2863,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid request parameters for resources",
               context: JSON.stringify(error.errors),
@@ -2842,6 +2894,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -2871,6 +2924,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -2901,6 +2955,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB query error: ${error.message}`,
               stack: error.stack,
@@ -2932,6 +2987,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching resources from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -3137,6 +3193,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addMetadata(debugInfo, 'eventCount', events.length);
           expertModeService.addMetadata(debugInfo, 'hasFilters', Object.keys(filters).length > 0);
@@ -3163,6 +3220,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid request parameters for events",
               context: JSON.stringify(error.errors),
@@ -3193,6 +3251,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -3222,6 +3281,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -3252,6 +3312,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB query error: ${error.message}`,
               stack: error.stack,
@@ -3283,6 +3344,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching events from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -3435,6 +3497,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'resourceIntensive', true);
           expertModeService.addInfo(debugInfo, {
             message: "Successfully fetched PuppetDB summary stats",
@@ -3458,6 +3521,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB authentication error: ${error.message}`,
               stack: error.stack,
@@ -3487,6 +3551,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
             expertModeService.addError(debugInfo, {
               message: `PuppetDB connection error: ${error.message}`,
               stack: error.stack,
@@ -3518,6 +3583,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addError(debugInfo, {
             message: `Error fetching summary stats from PuppetDB: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,

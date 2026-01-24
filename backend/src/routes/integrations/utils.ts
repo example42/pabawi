@@ -178,7 +178,7 @@ export const handleExpertModeResponse = (
  */
 export const captureError = (
   _req: Request,
-  _error: Error | unknown,
+  _error: Error,
   _message: string,
   _operation: string,
   _duration: number

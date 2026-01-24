@@ -41,10 +41,10 @@ export interface PaginatedResponse<T> {
  * @param data - Response data
  * @param status - HTTP status code (default: 200)
  */
-export function sendSuccess<T>(
+export function sendSuccess(
   res: Response,
-  data: T,
-  status: number = 200
+  data: unknown,
+  status = 200
 ): void {
   res.status(status).json(data);
 }
@@ -61,7 +61,7 @@ export function sendSuccessMessage(
   res: Response,
   message: string,
   data?: unknown,
-  status: number = 200
+  status = 200
 ): void {
   const response: Record<string, unknown> = { message };
   if (data !== undefined) {
@@ -79,9 +79,9 @@ export function sendSuccessMessage(
  * @param pageSize - Items per page
  * @param totalItems - Total number of items
  */
-export function sendPaginatedResponse<T>(
+export function sendPaginatedResponse(
   res: Response,
-  data: T[],
+  data: unknown[],
   page: number,
   pageSize: number,
   totalItems: number
@@ -155,7 +155,7 @@ export function paginateArray<T>(
 export function validatePagination(
   page: number,
   pageSize: number,
-  maxPageSize: number = 100
+  maxPageSize = 100
 ): { page: number; pageSize: number } {
   // Ensure page is at least 1
   const validPage = Math.max(1, Math.floor(page));
@@ -218,9 +218,9 @@ export function sendNotFound(
  * @param data - Created resource data
  * @param message - Optional success message
  */
-export function sendCreated<T>(
+export function sendCreated(
   res: Response,
-  data: T,
+  data: unknown,
   message?: string
 ): void {
   const response: Record<string, unknown> = { data };

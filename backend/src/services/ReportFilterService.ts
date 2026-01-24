@@ -6,7 +6,7 @@
  * and minimum total resources. All filters use AND logic when combined.
  */
 
-import { Report } from "../integrations/puppetdb/types";
+import type { Report } from "../integrations/puppetdb/types";
 
 /**
  * Filter criteria for Puppet reports

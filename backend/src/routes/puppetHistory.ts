@@ -65,7 +65,7 @@ export function createPuppetHistoryRouter(
         metadata: { nodeId: req.params.id, days: req.query.days },
       });
 
-      let debugInfo = expertModeService.createDebugInfo(
+      const debugInfo = expertModeService.createDebugInfo(
         "GET /api/puppet/nodes/:id/history",
         requestId,
         0
@@ -274,7 +274,7 @@ export function createPuppetHistoryRouter(
         metadata: { days: req.query.days },
       });
 
-      let debugInfo = expertModeService.createDebugInfo(
+      const debugInfo = expertModeService.createDebugInfo(
         "GET /api/puppet/history",
         requestId,
         0

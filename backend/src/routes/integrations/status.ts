@@ -238,7 +238,7 @@ export function createStatusRouter(
           expertModeService.addMetadata(debugInfo, 'integrationCount', integrations.length);
           expertModeService.setCacheHit(debugInfo, !refresh);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved status for ${integrations.length} integrations`,
+            message: `Retrieved status for ${String(integrations.length)} integrations`,
             level: 'info',
           });
 

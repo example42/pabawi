@@ -113,6 +113,7 @@ describe('PuppetDBService - Reports with href metrics', () => {
       '["=", "certname", "test-node.example.com"]',
       {
         limit: 10,
+        offset: 0,
         order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
       }
     );

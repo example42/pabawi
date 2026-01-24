@@ -63,6 +63,7 @@ describe("PuppetDB Reports Filtering", () => {
     mockPuppetDBService = {
       isInitialized: () => true,
       getAllReports: async () => mockReports,
+      getTotalReportsCount: async () => mockReports.length,
     } as unknown as PuppetDBService;
 
     // Create Express app with routes

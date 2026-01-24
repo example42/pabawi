@@ -374,10 +374,12 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'hiera');
-          expertModeService.addMetadata(debugInfo, 'keyCount', healthStatus.details?.keyCount);
-          expertModeService.addMetadata(debugInfo, 'fileCount', healthStatus.details?.fileCount);
+          const keyCount: number = healthStatus.details?.keyCount ?? 0;
+          const fileCount: number = healthStatus.details?.fileCount ?? 0;
+          expertModeService.addMetadata(debugInfo, 'keyCount', keyCount.toString());
+          expertModeService.addMetadata(debugInfo, 'fileCount', fileCount.toString());
           expertModeService.addInfo(debugInfo, {
-            message: `Reloaded ${healthStatus.details?.keyCount} keys from ${healthStatus.details?.fileCount} files`,
+            message: `Reloaded ${String(keyCount)} keys from ${String(fileCount)} files`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -519,10 +521,10 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'hiera');
-          expertModeService.addMetadata(debugInfo, 'totalKeys', paginatedResult.total);
-          expertModeService.addMetadata(debugInfo, 'page', paginatedResult.page);
+          expertModeService.addMetadata(debugInfo, 'totalKeys', String(paginatedResult.total));
+          expertModeService.addMetadata(debugInfo, 'page', String(paginatedResult.page));
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved ${paginatedResult.data.length} keys (page ${paginatedResult.page} of ${paginatedResult.totalPages})`,
+            message: `Retrieved ${String(paginatedResult.data.length)} keys (page ${String(paginatedResult.page)} of ${String(paginatedResult.totalPages)})`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -661,7 +663,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'query', query);
           expertModeService.addMetadata(debugInfo, 'matchCount', paginatedResult.total);
           expertModeService.addInfo(debugInfo, {
-            message: `Found ${paginatedResult.total} keys matching query "${query}"`,
+            message: `Found ${String(paginatedResult.total)} keys matching query "${query}"`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -818,7 +820,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'key', params.key);
           expertModeService.addMetadata(debugInfo, 'locationCount', key.locations.length);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved key '${params.key}' with ${key.locations.length} locations`,
+            message: `Retrieved key '${params.key}' with ${String(key.locations.length)} locations`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1012,7 +1014,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'keyCount', keysArray.length);
           expertModeService.addMetadata(debugInfo, 'filter', filterParams.filter);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved ${keysArray.length} keys for node ${params.nodeId}`,
+            message: `Retrieved ${String(keysArray.length)} keys for node ${params.nodeId}`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1203,7 +1205,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'nodeId', params.nodeId);
           expertModeService.addMetadata(debugInfo, 'keyCount', paginatedResult.total);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved ${paginatedResult.data.length} keys for node ${params.nodeId} (page ${paginatedResult.page} of ${paginatedResult.totalPages})`,
+            message: `Retrieved ${String(paginatedResult.data.length)} keys for node ${params.nodeId} (page ${String(paginatedResult.page)} of ${String(paginatedResult.totalPages)})`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1541,7 +1543,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'nodeCount', paginatedResult.total);
           expertModeService.addMetadata(debugInfo, 'uniqueValues', Object.keys(groupedByValue).length);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved key '${params.key}' across ${paginatedResult.total} nodes with ${Object.keys(groupedByValue).length} unique values`,
+            message: `Retrieved key '${params.key}' across ${String(paginatedResult.total)} nodes with ${String(Object.keys(groupedByValue).length)} unique values`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1825,7 +1827,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'unusedDefinedTypes', unusedCode.unusedDefinedTypes.length);
           expertModeService.addMetadata(debugInfo, 'unusedHieraKeys', unusedCode.unusedHieraKeys.length);
           expertModeService.addInfo(debugInfo, {
-            message: `Found ${unusedCode.unusedClasses.length} unused classes, ${unusedCode.unusedDefinedTypes.length} unused defined types, ${unusedCode.unusedHieraKeys.length} unused Hiera keys`,
+            message: `Found ${String(unusedCode.unusedClasses.length)} unused classes, ${String(unusedCode.unusedDefinedTypes.length)} unused defined types, ${String(unusedCode.unusedHieraKeys.length)} unused Hiera keys`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1969,7 +1971,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'totalIssues', paginatedResult.total);
           expertModeService.addMetadata(debugInfo, 'issueCounts', issueCounts);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved ${paginatedResult.total} lint issues`,
+            message: `Retrieved ${String(paginatedResult.total)} lint issues`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -2109,7 +2111,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           expertModeService.addMetadata(debugInfo, 'withUpdates', modulesWithUpdates.length);
           expertModeService.addMetadata(debugInfo, 'withSecurityAdvisories', modulesWithSecurityAdvisories.length);
           expertModeService.addInfo(debugInfo, {
-            message: `Found ${modulesWithUpdates.length} modules with updates (${modulesWithSecurityAdvisories.length} with security advisories)`,
+            message: `Found ${String(modulesWithUpdates.length)} modules with updates (${String(modulesWithSecurityAdvisories.length)} with security advisories)`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();

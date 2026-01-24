@@ -135,7 +135,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           expertModeService.addInfo(debugInfo, {
-            message: `Successfully fetched ${nodes.length} nodes from Puppetserver`,
+            message: `Successfully fetched ${String(nodes.length)} nodes from Puppetserver`,
             context: JSON.stringify({ nodeCount: nodes.length }),
             level: 'info',
           });
@@ -149,6 +149,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addMetadata(debugInfo, 'nodeCount', nodes.length);
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
@@ -161,6 +162,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -172,6 +174,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error fetching nodes: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -405,6 +408,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -416,6 +420,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -427,6 +432,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error fetching node: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -792,6 +798,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addMetadata(debugInfo, 'activityCategory', activityCategory);
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -806,6 +813,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -1035,6 +1043,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -1046,6 +1055,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -1299,6 +1309,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -1310,6 +1321,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -1579,6 +1591,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -1590,6 +1603,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -1821,7 +1835,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           expertModeService.addInfo(debugInfo, {
-            message: `Successfully fetched ${environments.length} environments from Puppetserver`,
+            message: `Successfully fetched ${String(environments.length)} environments from Puppetserver`,
             context: JSON.stringify({ environmentCount: environments.length }),
             level: 'info',
           });
@@ -1835,6 +1849,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addMetadata(debugInfo, 'environmentCount', environments.length);
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
@@ -1847,6 +1862,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2083,6 +2099,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -2094,6 +2111,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2321,6 +2339,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -2332,6 +2351,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2542,6 +2562,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -2553,6 +2574,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2791,6 +2813,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -2802,6 +2825,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -2996,6 +3020,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -3007,6 +3032,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -3201,6 +3227,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
           res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
@@ -3212,6 +3239,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,
@@ -3428,6 +3456,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addMetadata(debugInfo, 'mbean, resourceIntensive', true);
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
           debugInfo.context = expertModeService.collectRequestContext(req);
@@ -3440,6 +3469,7 @@ export function createPuppetserverRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetserver');
           expertModeService.addError(debugInfo, {
             message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
             stack: error instanceof Error ? error.stack : undefined,

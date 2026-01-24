@@ -98,7 +98,7 @@ export function sendErrorResponse(
   res: Response,
   error: unknown,
   defaultCode: string = ERROR_CODES.INTERNAL_SERVER_ERROR,
-  defaultStatus: number = 500
+  defaultStatus = 500
 ): void {
   // Handle Zod validation errors
   if (isZodError(error)) {
@@ -125,10 +125,10 @@ export function logAndSendError(
   error: unknown,
   context: string,
   defaultCode: string = ERROR_CODES.INTERNAL_SERVER_ERROR,
-  defaultStatus: number = 500
+  defaultStatus = 500
 ): void {
   const logger = new LoggerService();
-  logger.error(`${context}`, {
+  logger.error(context, {
     component: "ErrorHandling",
     operation: "logAndSendError",
     metadata: { context, defaultCode, defaultStatus },

@@ -24,6 +24,8 @@ const PuppetRunBodySchema = z.object({
   expertMode: z.boolean().optional(),
 });
 
+type PuppetRunBody = z.infer<typeof PuppetRunBodySchema>;
+
 /**
  * Create Puppet router
  */
@@ -122,13 +124,13 @@ export function createPuppetRouter(
           );
           expertModeService.addDebug(debugInfo, {
             message: "Validating request parameters",
-            context: JSON.stringify({ params: req.params, body: req.body }),
+            context: JSON.stringify({ params: req.params, body: req.body as unknown }),
             level: 'debug',
           });
         }
 
         const params = NodeIdParamSchema.parse(req.params);
-        const body = PuppetRunBodySchema.parse(req.body);
+        const body: PuppetRunBody = PuppetRunBodySchema.parse(req.body);
         const nodeId = params.id;
 
         // Verify node exists in inventory

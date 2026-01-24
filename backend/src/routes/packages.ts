@@ -96,7 +96,7 @@ export function createPackagesRouter(
       expertModeService.setIntegration(debugInfo, 'bolt');
       expertModeService.addMetadata(debugInfo, 'taskCount', packageTasks.length);
       expertModeService.addInfo(debugInfo, {
-        message: `Retrieved ${packageTasks.length} package tasks`,
+        message: `Retrieved ${String(packageTasks.length)} package tasks`,
         level: 'info',
       });
 
