@@ -17,8 +17,8 @@ vi.mock('../lib/sessionStorage', () => ({
 
 describe('PuppetReportsListView - Node Detail Page Pagination', () => {
   const mockReports = Array.from({ length: 5 }, (_, i) => ({
-    certname: `node${i}.example.com`,
-    hash: `hash${i}`,
+    certname: `node${String(i)}.example.com`,
+    hash: `hash${String(i)}`,
     environment: 'production',
     status: 'changed' as const,
     noop: false,
@@ -174,7 +174,6 @@ describe('PuppetReportsListView - Node Detail Page Pagination', () => {
 
   it('3.1.4 - should share page size preference across views', async () => {
     const mockLoadPageSize = vi.mocked(sessionStorage.loadPageSize);
-    const mockSavePageSize = vi.mocked(sessionStorage.savePageSize);
 
     // Set initial page size
     mockLoadPageSize.mockReturnValue(200);

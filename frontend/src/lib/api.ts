@@ -341,7 +341,7 @@ export async function fetchWithRetry<T = unknown>(
   });
   const timeout = retryOptions?.timeout;
   const signal = retryOptions?.signal;
-  const showRetryNotifications = retryOptions?.showRetryNotifications ?? DEFAULT_RETRY_OPTIONS.showRetryNotifications ?? true;
+  const showRetryNotifications = retryOptions?.showRetryNotifications ?? DEFAULT_RETRY_OPTIONS.showRetryNotifications;
 
   let lastError: Error | null = null;
 
@@ -351,9 +351,9 @@ export async function fetchWithRetry<T = unknown>(
 
   // Log API request initiation
   const requestStartTime = performance.now();
-  logger.info('API', 'fetch', `Initiating ${options?.method || 'GET'} request`, {
+  logger.info('API', 'fetch', `Initiating ${options?.method ?? 'GET'} request`, {
     url,
-    method: options?.method || 'GET',
+    method: options?.method ?? 'GET',
     correlationId,
   });
 

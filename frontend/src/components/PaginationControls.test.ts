@@ -57,7 +57,8 @@ describe('PaginationControls', () => {
         },
       });
 
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      const select = screen.getByRole('combobox');
+      if (!(select instanceof HTMLSelectElement)) throw new Error('Expected HTMLSelectElement');
       const options = Array.from(select.options).map((opt) => opt.value);
 
       expect(options).toEqual(['50', '100', '150']);
@@ -80,8 +81,9 @@ describe('PaginationControls', () => {
         },
       });
 
-      const previousButton = screen.getByRole('button', { name: /previous/i }) as HTMLButtonElement;
-      expect(previousButton.disabled).toBe(true);
+      const previousButton = screen.getByRole('button', { name: /previous/i });
+      expect(previousButton).toBeInstanceOf(HTMLButtonElement);
+      expect((previousButton as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('should enable Previous button when not on first page', () => {
@@ -99,8 +101,9 @@ describe('PaginationControls', () => {
         },
       });
 
-      const previousButton = screen.getByRole('button', { name: /previous/i }) as HTMLButtonElement;
-      expect(previousButton.disabled).toBe(false);
+      const previousButton = screen.getByRole('button', { name: /previous/i });
+      expect(previousButton).toBeInstanceOf(HTMLButtonElement);
+      expect((previousButton as HTMLButtonElement).disabled).toBe(false);
     });
 
     it('should disable Next button when no more pages', () => {
@@ -118,8 +121,9 @@ describe('PaginationControls', () => {
         },
       });
 
-      const nextButton = screen.getByRole('button', { name: /next/i }) as HTMLButtonElement;
-      expect(nextButton.disabled).toBe(true);
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      expect(nextButton).toBeInstanceOf(HTMLButtonElement);
+      expect((nextButton as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('should enable Next button when hasMore is true', () => {
@@ -137,8 +141,9 @@ describe('PaginationControls', () => {
         },
       });
 
-      const nextButton = screen.getByRole('button', { name: /next/i }) as HTMLButtonElement;
-      expect(nextButton.disabled).toBe(false);
+      const nextButton = screen.getByRole('button', { name: /next/i });
+      expect(nextButton).toBeInstanceOf(HTMLButtonElement);
+      expect((nextButton as HTMLButtonElement).disabled).toBe(false);
     });
   });
 
@@ -368,11 +373,13 @@ describe('PaginationControls', () => {
         },
       });
 
-      const previousButton = screen.getByRole('button', { name: /previous/i }) as HTMLButtonElement;
-      const nextButton = screen.getByRole('button', { name: /next/i }) as HTMLButtonElement;
+      const previousButton = screen.getByRole('button', { name: /previous/i });
+      const nextButton = screen.getByRole('button', { name: /next/i });
 
-      expect(previousButton.disabled).toBe(true);
-      expect(nextButton.disabled).toBe(true);
+      expect(previousButton).toBeInstanceOf(HTMLButtonElement);
+      expect(nextButton).toBeInstanceOf(HTMLButtonElement);
+      expect((previousButton as HTMLButtonElement).disabled).toBe(true);
+      expect((nextButton as HTMLButtonElement).disabled).toBe(true);
     });
   });
 });

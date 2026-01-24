@@ -73,7 +73,7 @@ class FrontendLogger {
       ? localStorage.getItem('pabawi_logger_config')
       : null;
 
-    this.config = stored ? { ...DEFAULT_CONFIG, ...JSON.parse(stored) } : DEFAULT_CONFIG;
+    this.config = stored ? { ...DEFAULT_CONFIG, ...(JSON.parse(stored) as Partial<LoggerConfig>) } : DEFAULT_CONFIG;
 
     // Auto-enable backend sync when expert mode is enabled
     // We'll check expert mode state on each log operation instead of using $effect
@@ -157,15 +157,11 @@ class FrontendLogger {
       this.scheduleBackendSync();
 
       // Also log to console when expert mode is enabled
-      const consoleMethod = entry.level === 'error' ? 'error'
-        : entry.level === 'warn' ? 'warn'
-        : entry.level === 'debug' ? 'debug'
-        : 'log';
-
-      console[consoleMethod](
-        `[${entry.component}] ${entry.operation}: ${entry.message}`,
-        entry.metadata || ''
-      );
+      if (entry.level === 'error') {
+        console.error(`[${entry.component}] ${entry.operation}: ${entry.message}`, entry.metadata ?? '');
+      } else if (entry.level === 'warn') {
+        console.warn(`[${entry.component}] ${entry.operation}: ${entry.message}`, entry.metadata ?? '');
+      }
     }
   }
 
@@ -186,7 +182,7 @@ class FrontendLogger {
   /**
    * Send pending logs to backend
    */
-  private async sendLogsToBackend(): Promise<void> {
+  private sendLogsToBackend(): void {
     if (this.pendingLogs.length === 0) {
       return;
     }
@@ -194,28 +190,32 @@ class FrontendLogger {
     const logsToSend = [...this.pendingLogs];
     this.pendingLogs = [];
 
-    try {
-      await fetch('/api/debug/frontend-logs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          logs: logsToSend,
-          browserInfo: this.getBrowserInfo(),
-        }),
-      });
-    } catch (error) {
+    fetch('/api/debug/frontend-logs', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        logs: logsToSend,
+        browserInfo: this.getBrowserInfo(),
+      }),
+    }).catch((error: unknown) => {
       // Failed to send logs - add back to buffer but don't retry
       // to avoid infinite loops
       console.warn('Failed to send logs to backend:', error);
-    }
+    });
   }
 
   /**
    * Get browser information for context
    */
-  private getBrowserInfo() {
+  private getBrowserInfo(): {
+    userAgent: string;
+    language: string;
+    platform: string;
+    viewport: { width: number; height: number };
+    url: string;
+  } | null {
     if (typeof window === 'undefined') {
       return null;
     }
@@ -223,13 +223,31 @@ class FrontendLogger {
     return {
       userAgent: navigator.userAgent,
       language: navigator.language,
-      platform: navigator.platform,
+      platform: this.getPlatform(),
       viewport: {
         width: window.innerWidth,
         height: window.innerHeight,
       },
       url: window.location.href,
     };
+  }
+
+  /**
+   * Get platform information using modern API with fallback
+   */
+  private getPlatform(): string {
+    // Use modern userAgentData API if available
+    if ('userAgentData' in navigator && navigator.userAgentData) {
+      return (navigator.userAgentData as { platform?: string }).platform ?? 'unknown';
+    }
+    // Fallback to userAgent parsing
+    const ua = navigator.userAgent;
+    if (ua.includes('Win')) return 'Windows';
+    if (ua.includes('Mac')) return 'macOS';
+    if (ua.includes('Linux')) return 'Linux';
+    if (ua.includes('Android')) return 'Android';
+    if (ua.includes('iOS') || ua.includes('iPhone') || ua.includes('iPad')) return 'iOS';
+    return 'unknown';
   }
 
   /**
@@ -280,7 +298,7 @@ class FrontendLogger {
       operation,
       message,
       metadata: metadata ? this.obfuscateData(metadata) as Record<string, unknown> : undefined,
-      correlationId: this.currentCorrelationId || undefined,
+      correlationId: this.currentCorrelationId ?? undefined,
     };
 
     this.addToBuffer(entry);
@@ -304,7 +322,7 @@ class FrontendLogger {
       operation,
       message,
       metadata: metadata ? this.obfuscateData(metadata) as Record<string, unknown> : undefined,
-      correlationId: this.currentCorrelationId || undefined,
+      correlationId: this.currentCorrelationId ?? undefined,
     };
 
     this.addToBuffer(entry);
@@ -328,7 +346,7 @@ class FrontendLogger {
       operation,
       message,
       metadata: metadata ? this.obfuscateData(metadata) as Record<string, unknown> : undefined,
-      correlationId: this.currentCorrelationId || undefined,
+      correlationId: this.currentCorrelationId ?? undefined,
     };
 
     this.addToBuffer(entry);
@@ -353,7 +371,7 @@ class FrontendLogger {
       operation,
       message,
       metadata: metadata ? this.obfuscateData(metadata) as Record<string, unknown> : undefined,
-      correlationId: this.currentCorrelationId || undefined,
+      correlationId: this.currentCorrelationId ?? undefined,
       stackTrace: error?.stack,
     };
 
@@ -399,12 +417,12 @@ class FrontendLogger {
   /**
    * Flush pending logs immediately (useful before page unload)
    */
-  public async flush(): Promise<void> {
+  public flush(): void {
     if (this.throttleTimer !== null) {
       window.clearTimeout(this.throttleTimer);
       this.throttleTimer = null;
     }
-    await this.sendLogsToBackend();
+    this.sendLogsToBackend();
   }
 }
 

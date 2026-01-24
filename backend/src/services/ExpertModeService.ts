@@ -489,8 +489,9 @@ export class ExpertModeService {
         query[key] = value.filter(v => typeof v === 'string').join(', ');
       } else if (typeof value === 'number' || typeof value === 'boolean') {
         query[key] = String(value);
-      } else if (typeof value === 'object' && value !== null) {
-        query[key] = String(value);
+      } else if (value !== undefined) {
+        // For ParsedQs objects or other complex types, serialize to JSON
+        query[key] = JSON.stringify(value);
       }
     });
 
