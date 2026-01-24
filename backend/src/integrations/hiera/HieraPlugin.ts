@@ -12,6 +12,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { parse as parseYaml } from "yaml";
 import { BasePlugin } from "../BasePlugin";
 import type {
   InformationSourcePlugin,
@@ -190,6 +191,64 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
 
 
   /**
+   * Extract datadir paths from hiera.yaml configuration
+   *
+   * @param hieraYamlPath - Path to hiera.yaml file
+   * @returns Array of datadir paths found in the configuration
+   */
+  private extractDatadirsFromHieraConfig(hieraYamlPath: string): string[] {
+    const datadirs: string[] = [];
+
+    try {
+      const content = fs.readFileSync(hieraYamlPath, "utf-8");
+      const config = parseYaml(content);
+
+      if (config && typeof config === "object") {
+        const configObj = config as Record<string, unknown>;
+
+        // Check hierarchy for datadir values
+        if (configObj.hierarchy && Array.isArray(configObj.hierarchy)) {
+          for (const level of configObj.hierarchy) {
+            if (level && typeof level === "object") {
+              const levelObj = level as Record<string, unknown>;
+              if (levelObj.datadir && typeof levelObj.datadir === "string") {
+                // Remove any interpolation variables like %{environment}
+                const cleanDatadir = levelObj.datadir.replace(/%\{[^}]+\}/g, "").trim();
+                if (cleanDatadir && !datadirs.includes(cleanDatadir)) {
+                  datadirs.push(cleanDatadir);
+                }
+              }
+            }
+          }
+        }
+
+        // Also check for default_datadir or defaults.datadir at the root level
+        if (configObj.default_datadir && typeof configObj.default_datadir === "string") {
+          const cleanDatadir = configObj.default_datadir.replace(/%\{[^}]+\}/g, "").trim();
+          if (cleanDatadir && !datadirs.includes(cleanDatadir)) {
+            datadirs.push(cleanDatadir);
+          }
+        }
+
+        // Check defaults.datadir
+        if (configObj.defaults && typeof configObj.defaults === "object") {
+          const defaultsObj = configObj.defaults as Record<string, unknown>;
+          if (defaultsObj.datadir && typeof defaultsObj.datadir === "string") {
+            const cleanDatadir = defaultsObj.datadir.replace(/%\{[^}]+\}/g, "").trim();
+            if (cleanDatadir && !datadirs.includes(cleanDatadir)) {
+              datadirs.push(cleanDatadir);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      this.log(`Failed to parse hiera.yaml for datadir extraction: ${this.getErrorMessage(error)}`, "warn");
+    }
+
+    return datadirs;
+  }
+
+  /**
    * Validate control repository structure
    *
    * Checks that the path exists, is accessible, and contains expected Puppet structure.
@@ -237,17 +296,35 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
       errors.push(`hiera.yaml not found at: ${hieraYamlPath}`);
     }
 
-    // Check for hieradata directory (common locations)
-    const hieradataPaths = ["data", "hieradata", "hiera"];
-    for (const hieradataDir of hieradataPaths) {
-      const hieradataPath = path.join(controlRepoPath, hieradataDir);
-      if (fs.existsSync(hieradataPath) && fs.statSync(hieradataPath).isDirectory()) {
-        structure.hasHieradataDir = true;
-        break;
+    // Check for hieradata directory using actual hiera.yaml configuration
+    // Parse hiera.yaml to get the actual datadir paths
+    const hieradataDirs = this.extractDatadirsFromHieraConfig(hieraYamlPath);
+
+    if (hieradataDirs.length > 0) {
+      // Check if any of the configured datadirs exist
+      for (const hieradataDir of hieradataDirs) {
+        const hieradataPath = path.join(controlRepoPath, hieradataDir);
+        if (fs.existsSync(hieradataPath) && fs.statSync(hieradataPath).isDirectory()) {
+          structure.hasHieradataDir = true;
+          break;
+        }
       }
-    }
-    if (!structure.hasHieradataDir) {
-      warnings.push("No hieradata directory found (checked: data, hieradata, hiera)");
+      if (!structure.hasHieradataDir) {
+        warnings.push(`No hieradata directory found (checked configured paths: ${hieradataDirs.join(", ")})`);
+      }
+    } else {
+      // Fallback to common locations if hiera.yaml couldn't be parsed
+      const hieradataPaths = ["data", "hieradata", "hiera"];
+      for (const hieradataDir of hieradataPaths) {
+        const hieradataPath = path.join(controlRepoPath, hieradataDir);
+        if (fs.existsSync(hieradataPath) && fs.statSync(hieradataPath).isDirectory()) {
+          structure.hasHieradataDir = true;
+          break;
+        }
+      }
+      if (!structure.hasHieradataDir) {
+        warnings.push("No hieradata directory found (checked common locations: data, hieradata, hiera)");
+      }
     }
 
     // Check for manifests directory (optional but common)
@@ -385,7 +462,6 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
       status: "connected",
       message: "Hiera integration is healthy",
       details: {
-        controlRepoPath: this.hieraConfig.controlRepoPath,
         controlRepoAccessible: true,
         hieraConfigValid,
         factSourceAvailable: true, // Will be checked via FactService
@@ -399,7 +475,10 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
     return {
       healthy: healthStatus.healthy,
       message: healthStatus.message,
-      details: healthStatus.details as Record<string, unknown>,
+      details: {
+        ...healthStatus.details,
+        controlRepoPath: this.hieraConfig.controlRepoPath,
+      } as Record<string, unknown>,
     };
   }
 

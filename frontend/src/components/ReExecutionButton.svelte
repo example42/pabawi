@@ -44,13 +44,13 @@
             const nodeId = targetNodes[0];
             // Store command in sessionStorage for pre-filling
             sessionStorage.setItem('reExecuteCommand', execution.action);
-            router.navigate(`/nodes/${nodeId}?tab=overview`);
+            router.navigate(`/nodes/${nodeId}?tab=actions`);
           } else {
             // For multiple nodes, we'd need a multi-node command interface
             // For now, navigate to first node
             const nodeId = targetNodes[0];
             sessionStorage.setItem('reExecuteCommand', execution.action);
-            router.navigate(`/nodes/${nodeId}?tab=overview`);
+            router.navigate(`/nodes/${nodeId}?tab=actions`);
           }
           break;
 
@@ -63,7 +63,7 @@
               taskName: execution.action,
               parameters: execution.parameters || {}
             }));
-            router.navigate(`/nodes/${nodeId}?tab=overview`);
+            router.navigate(`/nodes/${nodeId}?tab=actions`);
           } else {
             // For multiple nodes, navigate to first node
             const nodeId = targetNodes[0];
@@ -71,7 +71,7 @@
               taskName: execution.action,
               parameters: execution.parameters || {}
             }));
-            router.navigate(`/nodes/${nodeId}?tab=overview`);
+            router.navigate(`/nodes/${nodeId}?tab=actions`);
           }
           break;
 
@@ -82,7 +82,7 @@
             sessionStorage.setItem('reExecutePuppet', JSON.stringify({
               parameters: execution.parameters || {}
             }));
-            router.navigate(`/nodes/${nodeId}?tab=overview`);
+            router.navigate(`/nodes/${nodeId}?tab=actions`);
           }
           break;
 
@@ -93,7 +93,7 @@
             sessionStorage.setItem('reExecutePackage', JSON.stringify({
               parameters: execution.parameters || {}
             }));
-            router.navigate(`/nodes/${nodeId}?tab=overview`);
+            router.navigate(`/nodes/${nodeId}?tab=actions`);
           }
           break;
 

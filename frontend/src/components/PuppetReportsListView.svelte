@@ -3,9 +3,11 @@
   import IntegrationBadge from './IntegrationBadge.svelte';
   import ReportFilterPanel from './ReportFilterPanel.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
+  import PaginationControls from './PaginationControls.svelte';
   import { reportFilters } from '../lib/reportFilters.svelte';
   import { get } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
+  import { loadPageSize, savePageSize } from '../lib/sessionStorage';
 
   interface ReportMetrics {
     resources: {
@@ -43,9 +45,16 @@
     showFilters?: boolean; // Show filter panel (only for all-reports view)
     certname?: string; // Optional: fetch reports for specific node
     onDebugInfo?: (info: DebugInfo | null) => void;
+    enablePagination?: boolean; // Enable pagination controls (default: true when fetching internally)
   }
 
-  let { reports: externalReports, onReportClick, showFilters = false, certname, onDebugInfo }: Props = $props();
+  let { reports: externalReports, onReportClick, showFilters = false, certname, onDebugInfo, enablePagination }: Props = $props();
+
+  // Pagination state
+  let currentPage = $state(1);
+  let pageSize = $state(loadPageSize());
+  let totalCount = $state(0);
+  let hasMore = $state(false);
 
   // State for reports (only used when fetching internally)
   let internalReports = $state<Report[]>([]);
@@ -56,10 +65,17 @@
   // Use external reports if provided, otherwise use internal reports
   const reports = $derived(externalReports ?? internalReports);
 
-  // Only fetch if no external reports provided and showFilters is true (all-reports view)
-  const shouldFetch = $derived(!externalReports && showFilters);
+  // Only fetch if no external reports provided and (showFilters is true OR certname is provided)
+  const shouldFetch = $derived(!externalReports && (showFilters || !!certname));
 
-  // Fetch reports with filters
+  // Show pagination if enabled explicitly or if fetching internally with pagination
+  const showPagination = $derived(
+    enablePagination !== undefined
+      ? enablePagination
+      : (shouldFetch && totalCount > pageSize)
+  );
+
+  // Fetch reports with filters and pagination
   async function fetchReports(): Promise<void> {
     if (!shouldFetch) return;
 
@@ -71,8 +87,12 @@
       // Build query string from filters
       const filters = reportFilters.getFilters();
       const queryParams = new URLSearchParams();
-      queryParams.set('limit', '100');
 
+      // Pagination parameters
+      queryParams.set('limit', pageSize.toString());
+      queryParams.set('offset', ((currentPage - 1) * pageSize).toString());
+
+      // Filter parameters
       if (filters.status && filters.status.length > 0) {
         queryParams.set('status', filters.status.join(','));
       }
@@ -91,9 +111,25 @@
         ? `/api/integrations/puppetdb/nodes/${certname}/reports${queryString ? `?${queryString}` : ''}`
         : `/api/integrations/puppetdb/reports${queryString ? `?${queryString}` : ''}`;
 
-      const data = await get<{ reports: Report[]; _debug?: DebugInfo }>(url, { maxRetries: 2 });
+      const data = await get<{
+        reports: Report[];
+        count: number;
+        totalCount: number;
+        hasMore: boolean;
+        _debug?: DebugInfo
+      }>(url, { maxRetries: 2 });
 
       internalReports = data.reports || [];
+      totalCount = data.totalCount || 0;
+      hasMore = data.hasMore || false;
+
+      // If we're on a page that no longer exists (e.g., after filters reduce results), reset to page 1
+      if (internalReports.length === 0 && currentPage > 1 && totalCount > 0) {
+        currentPage = 1;
+        // Re-fetch with page 1
+        await fetchReports();
+        return;
+      }
 
       if (data._debug) {
         debugInfo = data._debug;
@@ -110,14 +146,35 @@
     }
   }
 
-  // Handle filter changes
-  function handleFilterChange(): void {
+  // Handle pagination changes
+  function handlePageChange(page: number): void {
+    currentPage = page;
     fetchReports();
   }
 
+  function handlePageSizeChange(size: number): void {
+    pageSize = size;
+    currentPage = 1; // Reset to page 1 when changing page size
+    savePageSize(size); // Persist to session storage
+    fetchReports();
+  }
+
+  function resetPagination(): void {
+    currentPage = 1;
+    fetchReports();
+  }
+
+  // Handle filter changes
+  function handleFilterChange(): void {
+    resetPagination();
+  }
+
   // Initial fetch (only if shouldFetch is true)
+  // Use untrack to prevent re-running when state changes
+  let initialized = $state(false);
   $effect(() => {
-    if (shouldFetch) {
+    if (shouldFetch && !initialized) {
+      initialized = true;
       fetchReports();
     }
   });
@@ -191,9 +248,13 @@
           <h3 class="text-sm font-medium text-gray-900 dark:text-white">Puppet Reports</h3>
           <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
         </div>
-        {#if !loading && reports.length > 0}
+        {#if !loading && totalCount > 0}
           <div class="text-sm text-gray-600 dark:text-gray-400">
-            Showing {reports.length} report{reports.length !== 1 ? 's' : ''}
+            {#if showPagination}
+              Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCount)} of {totalCount} report{totalCount !== 1 ? 's' : ''}
+            {:else}
+              Showing {reports.length} report{reports.length !== 1 ? 's' : ''}
+            {/if}
           </div>
         {/if}
       </div>
@@ -237,7 +298,14 @@
 
     <!-- Reports Table -->
     {:else}
-      <div class="overflow-x-auto">
+      <div class="relative overflow-x-auto">
+        <!-- Loading overlay during page transitions -->
+        {#if loading}
+          <div class="absolute inset-0 z-10 flex items-center justify-center bg-white/75 dark:bg-gray-800/75">
+            <LoadingSpinner size="md" />
+          </div>
+        {/if}
+
         <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead class="bg-gray-50 dark:bg-gray-900">
             <tr>
@@ -339,6 +407,18 @@
           </tbody>
         </table>
       </div>
+    {/if}
+
+    <!-- Pagination Controls -->
+    {#if showPagination && !loading && !error}
+      <PaginationControls
+        currentPage={currentPage}
+        pageSize={pageSize}
+        totalCount={totalCount}
+        hasMore={hasMore}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
+      />
     {/if}
   </div>
 </div>

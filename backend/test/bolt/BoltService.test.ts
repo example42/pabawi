@@ -1024,3 +1024,216 @@ describe("BoltService - listTasks", () => {
     expect(result[0].modulePath).toBe("");
   });
 });
+
+
+describe("BoltService - Task Error Output Extraction", () => {
+  let boltService: BoltService;
+
+  beforeEach(() => {
+    boltService = new BoltService("/test/bolt/project", 300000);
+  });
+
+  it("should extract _output and _error from failed task execution", () => {
+    const executionId = "test-exec-123";
+    const nodeId = "test-node";
+    const taskName = "tp::info";
+    const parameters = undefined;
+    const startTime = Date.now();
+    const endTime = startTime + 1000;
+
+    // Mock Bolt JSON output for a failed task with _output and _error
+    const mockOutput = {
+      items: [
+        {
+          target: "test-node",
+          action: "task",
+          object: "tp::info",
+          status: "failure",
+          value: {
+            _output: "/tmp/67760305-a3b1-42c1-846a-ef5fd2ba6f72/info.sh: line 8: /usr/local/bin/tp: Permission denied\n",
+            _error: {
+              kind: "puppetlabs.tasks/task-error",
+              issue_code: "TASK_ERROR",
+              msg: "The task failed with exit code 126",
+              details: {
+                exit_code: 126
+              }
+            }
+          }
+        }
+      ],
+      target_count: 1,
+      elapsed_time: 1
+    };
+
+    // Test the private transformTaskOutput method
+    const result = (boltService as any).transformTaskOutput(
+      executionId,
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime,
+    );
+
+    expect(result).toBeDefined();
+    expect(result.id).toBe(executionId);
+    expect(result.type).toBe("task");
+    expect(result.status).toBe("failed");
+    expect(result.results).toHaveLength(1);
+
+    const nodeResult = result.results[0];
+    expect(nodeResult.nodeId).toBe(nodeId);
+    expect(nodeResult.status).toBe("failed");
+
+    // Verify that _output is extracted to output.stdout
+    expect(nodeResult.output).toBeDefined();
+    expect(nodeResult.output?.stdout).toContain("Permission denied");
+    expect(nodeResult.output?.stdout).toContain("/usr/local/bin/tp");
+
+    // Verify that exit code is extracted
+    expect(nodeResult.output?.exitCode).toBe(126);
+
+    // Verify that error message includes both the error message and output
+    expect(nodeResult.error).toBeDefined();
+    expect(nodeResult.error).toContain("The task failed with exit code 126");
+    expect(nodeResult.error).toContain("exit code 126");
+    expect(nodeResult.error).toContain("Permission denied");
+  });
+
+  it("should handle failed task with only _output (no _error object)", () => {
+    const executionId = "test-exec-456";
+    const nodeId = "test-node";
+    const taskName = "test::task";
+    const parameters = undefined;
+    const startTime = Date.now();
+    const endTime = startTime + 1000;
+
+    // Mock Bolt JSON output for a failed task with only _output
+    const mockOutput = {
+      items: [
+        {
+          target: "test-node",
+          status: "failure",
+          value: {
+            _output: "Command failed: file not found\n"
+          }
+        }
+      ]
+    };
+
+    const result = (boltService as any).transformTaskOutput(
+      executionId,
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime,
+    );
+
+    expect(result.status).toBe("failed");
+    const nodeResult = result.results[0];
+
+    // Verify that _output is used as error message when no _error object exists
+    expect(nodeResult.error).toBe("Command failed: file not found");
+    expect(nodeResult.output?.stdout).toContain("Command failed: file not found");
+  });
+
+  it("should handle failed task with only _error (no _output field)", () => {
+    const executionId = "test-exec-connection";
+    const nodeId = "test-node";
+    const taskName = "tp::info";
+    const parameters = undefined;
+    const startTime = Date.now();
+    const endTime = startTime + 1000;
+
+    // Mock Bolt JSON output for a failed task with only _error (connection error case)
+    const mockOutput = {
+      items: [
+        {
+          target: "ubuntu2404.test.example42.com",
+          action: "task",
+          object: null,
+          status: "failure",
+          value: {
+            _error: {
+              details: {},
+              kind: "puppetlabs.tasks/task_file_error",
+              msg: "Could not copy file to /tmp/580bed87-238f-487b-b4e5-75c0d7e0b690/info.sh: scp: Connection closed\r\n",
+              issue_code: "COPY_ERROR"
+            }
+          }
+        }
+      ],
+      target_count: 1,
+      elapsed_time: 0
+    };
+
+    const result = (boltService as any).transformTaskOutput(
+      executionId,
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime,
+    );
+
+    expect(result.status).toBe("failed");
+    const nodeResult = result.results[0];
+
+    // Verify that _error.msg is extracted
+    expect(nodeResult.error).toBeDefined();
+    expect(nodeResult.error).toContain("Could not copy file");
+    expect(nodeResult.error).toContain("Connection closed");
+    expect(nodeResult.error).toContain("puppetlabs.tasks/task_file_error");
+
+    // Verify that error message is also shown as output for visibility
+    expect(nodeResult.output).toBeDefined();
+    expect(nodeResult.output?.stdout).toContain("Could not copy file");
+  });
+
+  it("should handle successful task execution without _output or _error", () => {
+    const executionId = "test-exec-789";
+    const nodeId = "test-node";
+    const taskName = "test::task";
+    const parameters = undefined;
+    const startTime = Date.now();
+    const endTime = startTime + 1000;
+
+    // Mock Bolt JSON output for a successful task
+    const mockOutput = {
+      items: [
+        {
+          target: "test-node",
+          status: "success",
+          value: {
+            result: "success",
+            data: "some data"
+          }
+        }
+      ]
+    };
+
+    const result = (boltService as any).transformTaskOutput(
+      executionId,
+      nodeId,
+      taskName,
+      parameters,
+      mockOutput,
+      startTime,
+      endTime,
+    );
+
+    expect(result.status).toBe("success");
+    const nodeResult = result.results[0];
+    expect(nodeResult.status).toBe("success");
+    expect(nodeResult.error).toBeUndefined();
+    expect(nodeResult.value).toEqual({
+      result: "success",
+      data: "some data"
+    });
+  });
+});

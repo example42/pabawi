@@ -1112,10 +1112,75 @@ export class BoltService {
         // Extract task result value
         if (itemObj.value !== undefined) {
           nodeResult.value = itemObj.value;
+
+          // For failed tasks, extract _output and _error from value object
+          if (status === "failed" && typeof itemObj.value === "object" && itemObj.value !== null) {
+            const valueObj = itemObj.value as Record<string, unknown>;
+
+            // Extract _output field (contains actual command output)
+            if (typeof valueObj._output === "string" && valueObj._output.trim()) {
+              nodeResult.output = {
+                stdout: valueObj._output,
+                stderr: "",
+              };
+            }
+
+            // Extract _error field (contains structured error information)
+            if (typeof valueObj._error === "object" && valueObj._error !== null) {
+              const errorObj = valueObj._error as Record<string, unknown>;
+
+              // Build comprehensive error message
+              let errorMessage = "";
+
+              if (typeof errorObj.msg === "string") {
+                errorMessage = errorObj.msg;
+              } else if (typeof errorObj.message === "string") {
+                errorMessage = errorObj.message;
+              }
+
+              // Include error kind/type if available
+              if (typeof errorObj.kind === "string") {
+                errorMessage = `[${errorObj.kind}] ${errorMessage}`;
+              }
+
+              // Include exit code if available
+              if (typeof errorObj.details === "object" && errorObj.details !== null) {
+                const details = errorObj.details as Record<string, unknown>;
+                if (typeof details.exit_code === "number") {
+                  if (!nodeResult.output) {
+                    nodeResult.output = { stdout: "", stderr: "" };
+                  }
+                  nodeResult.output.exitCode = details.exit_code;
+                  errorMessage += ` (exit code ${details.exit_code})`;
+                }
+              }
+
+              // If there's an error message but no _output, display the error message as output too
+              // This handles cases like connection errors where the error message IS the useful output
+              if (errorMessage && !nodeResult.output && typeof valueObj._output !== "string") {
+                nodeResult.output = {
+                  stdout: errorMessage,
+                  stderr: "",
+                };
+              }
+
+              // Include _output in error message if present and different from error message
+              if (typeof valueObj._output === "string" && valueObj._output.trim()) {
+                errorMessage += `\n\nOutput:\n${valueObj._output.trim()}`;
+              }
+
+              nodeResult.error = errorMessage || "Task execution failed";
+            } else if (!nodeResult.error) {
+              // If no _error object but task failed, use _output as error
+              nodeResult.error = typeof valueObj._output === "string" && valueObj._output.trim()
+                ? valueObj._output.trim()
+                : "Task execution failed";
+            }
+          }
         }
 
-        // Extract error message if present
-        if (typeof itemObj.error === "object" && itemObj.error !== null) {
+        // Extract error message from top-level error field if present (fallback)
+        if (!nodeResult.error && typeof itemObj.error === "object" && itemObj.error !== null) {
           const errorObj = itemObj.error as Record<string, unknown>;
           nodeResult.error =
             typeof errorObj.msg === "string"

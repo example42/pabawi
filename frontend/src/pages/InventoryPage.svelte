@@ -56,6 +56,15 @@
   // Debug info state for expert mode - support multiple debug blocks
   let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
 
+  // Sorted debug blocks in chronological order (newest first)
+  const sortedDebugInfoBlocks = $derived.by(() => {
+    return [...debugInfoBlocks].sort((a, b) => {
+      const timeA = new Date(a.debugInfo.timestamp).getTime();
+      const timeB = new Date(b.debugInfo.timestamp).getTime();
+      return timeB - timeA; // Newest first
+    });
+  });
+
   // Callback to receive debug info from API calls
   function handleDebugInfo(label: string, info: DebugInfo | null): void {
     if (info) {
@@ -778,9 +787,9 @@
 
   <!-- Expert Mode Debug Panel -->
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && debugInfoBlocks.length > 0}
+  {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}
     <div class="mt-8 space-y-4">
-      {#each debugInfoBlocks as block (block.label)}
+      {#each sortedDebugInfoBlocks as block (block.label)}
         <div>
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
           <ExpertModeDebugPanel debugInfo={block.debugInfo} />

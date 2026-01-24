@@ -182,6 +182,8 @@ function hideTooltip() {
 
             <!-- Bar group for hover -->
             <g
+              role="button"
+              tabindex="0"
               class="bar-group cursor-pointer"
               onmouseenter={(e) => showTooltip(e, d)}
               onmouseleave={hideTooltip}

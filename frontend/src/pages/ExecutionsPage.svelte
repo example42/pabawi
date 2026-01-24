@@ -8,6 +8,7 @@
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import ExecutionList from '../components/ExecutionList.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
@@ -360,17 +361,22 @@
     previousExpertMode = expertMode.enabled; // Initialize tracking
     fetchExecutions();
     fetchNodes();
+  });
 
-    // Check if there's an execution ID in the query params
-    const executionId = router.query.get('id');
-    if (executionId) {
-      // Find the execution in the list or fetch it directly
-      const execution = executions.find(e => e.id === executionId);
-      if (execution) {
-        openExecutionDetail(execution);
-      } else {
-        // Fetch the execution details directly
-        fetchExecutionDetail(executionId);
+  // Check for execution ID in query params after executions are loaded
+  $effect(() => {
+    // Only run if we have executions loaded and not currently loading
+    if (!loading && executions.length > 0) {
+      const executionId = router.query.get('id');
+      if (executionId && !selectedExecution) {
+        // Find the execution in the list
+        const execution = executions.find(e => e.id === executionId);
+        if (execution) {
+          openExecutionDetail(execution);
+        } else {
+          // Fetch the execution details directly if not in the list
+          fetchExecutionDetail(executionId);
+        }
       }
     }
   });
@@ -572,105 +578,11 @@
       </div>
     {:else}
       <!-- Executions Table -->
-      <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800">
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead class="bg-gray-50 dark:bg-gray-900">
-              <tr>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Type
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Action
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Targets
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Status
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Started
-                </th>
-                <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Duration
-                </th>
-                <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-              {#each executions as execution (execution.id)}
-                <tr
-                  class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                  role="button"
-                  tabindex="0"
-                  onclick={() => openExecutionDetail(execution)}
-                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openExecutionDetail(execution); } }}
-                >
-                  <td class="whitespace-nowrap px-6 py-4 text-sm">
-                    <div class="flex items-center gap-2">
-                      <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(execution.type)}">
-                        {getTypeLabel(execution.type)}
-                      </span>
-                      {#if execution.status === 'running'}
-                        <span class="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 dark:bg-blue-900/20 dark:text-blue-400" title="Execution is running">
-                          <span class="relative flex h-2 w-2">
-                            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75"></span>
-                            <span class="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
-                          </span>
-                          Live
-                        </span>
-                      {/if}
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                    <div class="max-w-xs truncate" title={execution.action}>
-                      {execution.action}
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                    <div class="flex flex-wrap gap-1">
-                      {#each execution.targetNodes.slice(0, 2) as nodeId}
-                        <button
-                          type="button"
-                          class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
-                          onclick={(e) => {
-                            e.stopPropagation();
-                            navigateToNode(nodeId);
-                          }}
-                        >
-                          {nodeId}
-                        </button>
-                      {/each}
-                      {#if execution.targetNodes.length > 2}
-                        <span class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
-                          +{execution.targetNodes.length - 2} more
-                        </span>
-                      {/if}
-                    </div>
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm">
-                    <StatusBadge status={execution.status} size="sm" />
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                    {formatTimestamp(execution.startedAt)}
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-right text-sm text-gray-600 dark:text-gray-400">
-                    {formatDuration(execution.startedAt, execution.completedAt)}
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-right text-sm" onclick={(e) => e.stopPropagation()}>
-                    <div class="flex items-center justify-end gap-2">
-                      <ReExecutionButton execution={execution} size="sm" variant="icon" />
-                    </div>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ExecutionList
+        {executions}
+        onExecutionClick={openExecutionDetail}
+        showTargets={true}
+      />
 
       <!-- Pagination Info -->
       <div class="mt-4 flex items-center justify-between">
@@ -715,6 +627,7 @@
       <div
         class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-4xl"
         role="document"
+        onclick={(e) => e.stopPropagation()}
       >
         {#if loadingDetail}
           <!-- Loading State -->
@@ -894,18 +807,23 @@
                     </div>
 
                     <!-- Node Content -->
-                    <div class="px-4 py-3">
+                    <div class="px-4 py-3 space-y-3">
                       {#if result.error}
                         <div class="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
                           <p class="text-sm font-medium text-red-800 dark:text-red-200">Error:</p>
-                          <p class="mt-1 text-sm text-red-700 dark:text-red-300">{result.error}</p>
+                          <p class="mt-1 text-sm text-red-700 dark:text-red-300 whitespace-pre-wrap">{result.error}</p>
                         </div>
-                      {:else if result.output}
-                        <CommandOutput
-                          stdout={result.output.stdout}
-                          stderr={result.output.stderr}
-                          exitCode={result.output.exitCode}
-                        />
+                      {/if}
+
+                      {#if result.output && (result.output.stdout || result.output.stderr)}
+                        <div>
+                          <h5 class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">Output:</h5>
+                          <CommandOutput
+                            stdout={result.output.stdout}
+                            stderr={result.output.stderr}
+                            exitCode={result.output.exitCode}
+                          />
+                        </div>
                       {:else if result.value !== undefined}
                         <div>
                           <div class="mb-2 flex items-center justify-between">
@@ -932,7 +850,9 @@
                             <pre class="overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100">{JSON.stringify(result.value, null, 2)}</pre>
                           {/if}
                         </div>
-                      {:else}
+                      {/if}
+
+                      {#if !result.error && !result.output && result.value === undefined}
                         <p class="text-sm text-gray-500 dark:text-gray-400">No output</p>
                       {/if}
                     </div>

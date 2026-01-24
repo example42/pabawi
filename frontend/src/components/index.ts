@@ -8,6 +8,7 @@ export { default as EnvironmentSelector } from "./EnvironmentSelector.svelte";
 export { default as ErrorAlert } from "./ErrorAlert.svelte";
 export { default as ErrorBoundary } from "./ErrorBoundary.svelte";
 export { default as EventsViewer } from "./EventsViewer.svelte";
+export { default as ExecutionList } from "./ExecutionList.svelte";
 export { default as ExpertModeDebugPanel } from "./ExpertModeDebugPanel.svelte";
 export { default as ExpertModeCopyButton } from "./ExpertModeCopyButton.svelte";
 export { default as FactsViewer } from "./FactsViewer.svelte";
@@ -22,6 +23,7 @@ export { default as ManagedResourcesViewer } from "./ManagedResourcesViewer.svel
 export { default as Navigation } from "./Navigation.svelte";
 export { default as NodeHieraTab } from "./NodeHieraTab.svelte";
 export { default as NodeStatus } from "./NodeStatus.svelte";
+export { default as PaginationControls } from "./PaginationControls.svelte";
 export { default as PuppetDBAdmin } from "./PuppetDBAdmin.svelte";
 export { default as PuppetOutputViewer } from "./PuppetOutputViewer.svelte";
 export { default as PuppetReportsSummary } from "./PuppetReportsSummary.svelte";

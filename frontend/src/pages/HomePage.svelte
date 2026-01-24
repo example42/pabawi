@@ -8,6 +8,7 @@
   import PuppetRunChart from '../components/PuppetRunChart.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import ExecutionList from '../components/ExecutionList.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -113,6 +114,15 @@
 
   // Debug info state for expert mode - support multiple debug blocks
   let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
+
+  // Sorted debug blocks in chronological order (newest first)
+  const sortedDebugInfoBlocks = $derived.by(() => {
+    return [...debugInfoBlocks].sort((a, b) => {
+      const timeA = new Date(a.debugInfo.timestamp).getTime();
+      const timeB = new Date(b.debugInfo.timestamp).getTime();
+      return timeB - timeA; // Newest first
+    });
+  });
 
   // Callback to receive debug info from API calls
   function handleDebugInfo(label: string, info: DebugInfo | null): void {
@@ -286,32 +296,6 @@
 
   function handleRefreshIntegrations(): void {
     void fetchIntegrationStatus(true);
-  }
-
-  function formatTimestamp(timestamp: string): string {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
-  }
-
-  function getExecutionTypeLabel(type: string): string {
-    const labels: Record<string, string> = {
-      command: 'Command',
-      task: 'Task',
-      facts: 'Facts',
-      puppet: 'Puppet Run',
-      package: 'Package Install'
-    };
-    return labels[type] || type;
   }
 
   onMount(() => {
@@ -633,73 +617,18 @@
         </p>
       </div>
     {:else}
-      <div class="bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-            <thead class="bg-gray-50 dark:bg-gray-900">
-              <tr>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Type
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Action
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Targets
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Time
-                </th>
-                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {#each executions as execution (execution.id)}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                  <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                    {getExecutionTypeLabel(execution.type)}
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                    <div class="max-w-xs truncate" title={execution.action}>
-                      {execution.action}
-                    </div>
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {execution.targetNodes.length} {execution.targetNodes.length === 1 ? 'node' : 'nodes'}
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap">
-                    <StatusBadge status={execution.status} />
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                    {formatTimestamp(execution.startedAt)}
-                  </td>
-                  <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      type="button"
-                      class="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                      onclick={() => router.navigate(`/executions?id=${execution.id}`)}
-                    >
-                      View Details
-                    </button>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <ExecutionList
+        {executions}
+        onExecutionClick={(execution) => router.navigate(`/executions?id=${execution.id}`)}
+        showTargets={true}
+      />
     {/if}
   </div>
 
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && debugInfoBlocks.length > 0}
+  {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}
     <div class="mt-8 space-y-4">
-      {#each debugInfoBlocks as block (block.label)}
+      {#each sortedDebugInfoBlocks as block (block.label)}
         <div>
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
           <ExpertModeDebugPanel debugInfo={block.debugInfo} />

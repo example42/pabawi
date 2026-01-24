@@ -14,7 +14,7 @@
     "dev:fullstack": "npm run build:frontend && npm run copy:frontend && npm run dev:backend",
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
-    "build": "npm run build:frontend && npm run build:backend",
+    "build": "npm run build:frontend && npm run copy:frontend && npm run build:backend",
     "copy:frontend": "rm -rf backend/public && cp -r frontend/dist backend/public",
     "test": "npm run test --workspace=backend && npm run test --workspace=frontend",
     "test:e2e": "playwright test",
@@ -36,6 +36,9 @@
   "author": "",
   "license": "Apache-2.0",
   "type": "module",
+  "overrides": {
+    "tar": "7.5.6"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.56.1",

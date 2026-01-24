@@ -805,14 +805,15 @@ export class PuppetDBService
    *
    * @param nodeId - Node identifier (certname)
    * @param limit - Maximum number of reports to return (default: 10)
+   * @param offset - Number of reports to skip for pagination (default: 0)
    * @returns Array of reports sorted by timestamp (newest first)
    */
-  async getNodeReports(nodeId: string, limit = 10): Promise<Report[]> {
+  async getNodeReports(nodeId: string, limit = 10, offset = 0): Promise<Report[]> {
     this.ensureInitialized();
 
     try {
       // Check cache first
-      const cacheKey = `reports:${nodeId}:${String(limit)}`;
+      const cacheKey = `reports:${nodeId}:${String(limit)}:${String(offset)}`;
       const cached = this.cache.get(cacheKey);
       if (Array.isArray(cached)) {
         this.log(`Returning cached reports for node '${nodeId}'`);
@@ -832,13 +833,14 @@ export class PuppetDBService
       const pqlQuery = `["=", "certname", "${nodeId}"]`;
 
       this.log(
-        `Querying PuppetDB reports for node '${nodeId}' with limit ${String(limit)}`,
+        `Querying PuppetDB reports for node '${nodeId}' with limit ${String(limit)}, offset ${String(offset)}`,
       );
       this.log(`PQL Query: ${pqlQuery}`);
 
       const result = await this.executeWithResilience(async () => {
         return await client.query("pdb/query/v4/reports", pqlQuery, {
           limit: limit,
+          offset: offset,
           order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
         });
       });
@@ -2348,14 +2350,15 @@ export class PuppetDBService
   /**
    * Get all recent reports across all nodes
    * @param limit - Maximum number of reports to return (default: 100)
+   * @param offset - Number of reports to skip for pagination (default: 0)
    * @returns Array of reports sorted by timestamp (newest first)
    */
-  async getAllReports(limit = 100): Promise<Report[]> {
+  async getAllReports(limit = 100, offset = 0): Promise<Report[]> {
     this.ensureInitialized();
 
     try {
       // Check cache first
-      const cacheKey = `reports:all:${String(limit)}`;
+      const cacheKey = `reports:all:${String(limit)}:${String(offset)}`;
       const cached = this.cache.get(cacheKey);
       if (Array.isArray(cached)) {
         this.log("Returning cached all reports");
@@ -2370,11 +2373,12 @@ export class PuppetDBService
         );
       }
 
-      this.log(`Querying PuppetDB for all recent reports (limit: ${String(limit)})`);
+      this.log(`Querying PuppetDB for all recent reports (limit: ${String(limit)}, offset: ${String(offset)})`);
 
       const result = await this.executeWithResilience(async () => {
         return await client.query("pdb/query/v4/reports", undefined, {
           limit: limit,
+          offset: offset,
           order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
         });
       });
@@ -2420,6 +2424,61 @@ export class PuppetDBService
       return reports;
     } catch (error) {
       this.logError("Failed to get all reports", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get total count of reports (optionally filtered)
+   * @param filters - Optional filters to apply before counting
+   * @returns Total number of reports matching the filters
+   */
+  async getTotalReportsCount(filters?: Record<string, unknown>): Promise<number> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `reports:count:${JSON.stringify(filters ?? {})}`;
+      const cached = this.cache.get(cacheKey);
+      if (typeof cached === 'number') {
+        this.log("Returning cached reports count");
+        return cached;
+      }
+
+      // Query PuppetDB for reports count
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      this.log(`Querying PuppetDB for total reports count`);
+
+      // PuppetDB doesn't have a direct count endpoint, so we need to fetch all reports
+      // and count them. For filtered counts, we'll need to apply filters after fetching.
+      // This is not ideal for performance but matches PuppetDB's API limitations.
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/reports", undefined, {
+          limit: 10000, // Set a high limit to get accurate count
+          order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
+        });
+      });
+
+      if (!Array.isArray(result)) {
+        this.log("Unexpected response format from PuppetDB reports endpoint", "warn");
+        return 0;
+      }
+
+      const count = result.length;
+      this.log(`Total reports count: ${String(count)}`);
+
+      // Cache the result with shorter TTL (30 seconds)
+      this.cache.set(cacheKey, count, 30000);
+
+      return count;
+    } catch (error) {
+      this.logError("Failed to get total reports count", error);
       throw error;
     }
   }
