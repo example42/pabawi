@@ -102,7 +102,7 @@ export function createDebugRouter(): Router {
    */
   router.post(
     '/frontend-logs',
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler((req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
       logger.info('Receiving frontend logs', {
@@ -112,7 +112,7 @@ export function createDebugRouter(): Router {
 
       const batch = req.body as FrontendLogBatch;
 
-      if (!batch.logs || !Array.isArray(batch.logs)) {
+      if (!Array.isArray(batch.logs)) {
         logger.warn('Invalid frontend log batch', {
           component: 'DebugRouter',
           operation: 'receiveFrontendLogs',
@@ -128,13 +128,16 @@ export function createDebugRouter(): Router {
 
       // Store logs by correlation ID
       for (const log of batch.logs) {
-        const correlationId = log.correlationId || 'unknown';
+        const correlationId = log.correlationId ?? 'unknown';
 
         if (!frontendLogStore.has(correlationId)) {
           frontendLogStore.set(correlationId, []);
         }
 
-        frontendLogStore.get(correlationId)!.push(log);
+        const logs = frontendLogStore.get(correlationId);
+        if (logs) {
+          logs.push(log);
+        }
 
         // Also log to backend logger for unified logging
         const logMethod = log.level === 'error' ? 'error'
@@ -178,7 +181,7 @@ export function createDebugRouter(): Router {
    */
   router.get(
     '/frontend-logs/:correlationId',
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler((req: Request, res: Response): Promise<void> => {
       const { correlationId } = req.params;
 
       logger.debug('Retrieving frontend logs', {
