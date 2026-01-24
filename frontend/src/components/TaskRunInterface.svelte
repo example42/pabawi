@@ -83,10 +83,7 @@
   let executionResult = $state<ExecutionResult | null>(null);
   let parameterFormRef = $state<TaskParameterForm | null>(null);
   let executionStream = $state<ExecutionStream | null>(null);
-
-  // Execution history state
-  let executionHistory = $state<ExecutionResult[]>([]);
-  let historyLoading = $state(false);
+  let lastExecutionId = $state<string | null>(null);
 
   // Computed
   const modules = $derived(Object.keys(tasksByModule).sort());
@@ -166,6 +163,7 @@
     taskParameters = {};
     executionError = null;
     executionResult = null;
+    lastExecutionId = null;
 
     if (onTaskSelect) {
       onTaskSelect(task);
@@ -198,6 +196,7 @@
     executionError = null;
     executionResult = null;
     executionStream = null;
+    lastExecutionId = null;
 
     try {
       showInfo('Executing task...');
@@ -213,6 +212,7 @@
       );
 
       const executionId = data.executionId;
+      lastExecutionId = executionId;
 
       // If expert mode is enabled, create a stream for real-time output
       if (expertMode.enabled) {
@@ -221,8 +221,6 @@
             // Fetch final execution result
             pollExecutionResult(executionId);
             showSuccess('Task executed successfully');
-            // Refresh execution history
-            fetchExecutionHistory();
           },
           onError: (error) => {
             executionError = error;
@@ -234,8 +232,6 @@
         // Poll for execution result (non-streaming)
         await pollExecutionResult(executionId);
         showSuccess('Task executed successfully');
-        // Refresh execution history
-        fetchExecutionHistory();
       }
     } catch (err) {
       executionError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -284,39 +280,10 @@
     executionError = 'Execution timed out';
   }
 
-  // Fetch execution history for selected task
-  async function fetchExecutionHistory(): Promise<void> {
-    if (!selectedTask) return;
-
-    historyLoading = true;
-
-    try {
-      const data = await get<{ executions: ExecutionResult[] }>(
-        `/api/executions?targetNode=${nodeId}&action=${encodeURIComponent(selectedTask.name)}&pageSize=5`,
-        { maxRetries: 2 }
-      );
-
-      executionHistory = data.executions || [];
-    } catch (err) {
-      console.error('Error fetching execution history:', err);
-    } finally {
-      historyLoading = false;
-    }
-  }
-
   // Format timestamp
   function formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
   }
-
-  // Watch for selected task changes to fetch history
-  $effect(() => {
-    if (selectedTask) {
-      fetchExecutionHistory();
-    } else {
-      executionHistory = [];
-    }
-  });
 
   // Pre-select task if initial task name is provided
   function preselectTask(): void {
@@ -570,7 +537,33 @@
         <!-- Execution Error -->
         {#if executionError}
           <div class="mt-4">
-            <ErrorAlert message="Task execution failed" details={executionError} />
+            <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+              <div class="flex items-start gap-3">
+                <svg class="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-red-800 dark:text-red-200">Task execution failed</h3>
+                  <p class="mt-1 text-sm text-red-700 dark:text-red-300">{executionError}</p>
+                  {#if lastExecutionId}
+                    <div class="mt-3">
+                      <a
+                        href="/executions?id={lastExecutionId}"
+                        class="inline-flex items-center gap-1.5 text-sm font-medium text-red-700 hover:text-red-800 dark:text-red-300 dark:hover:text-red-200 underline"
+                      >
+                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        View full execution details
+                      </a>
+                      <span class="ml-2 text-xs text-red-600 dark:text-red-400">
+                        (ID: {lastExecutionId.substring(0, 8)}...)
+                      </span>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+            </div>
           </div>
         {/if}
 
@@ -599,45 +592,33 @@
                     <pre class="text-sm text-gray-900 dark:text-gray-100 overflow-x-auto">{JSON.stringify(result.value, null, 2)}</pre>
                   </div>
                 {/if}
+                {#if result.output && (result.output.stdout || result.output.stderr)}
+                  <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900">
+                    {#if result.output.stdout}
+                      <div class="mb-2">
+                        <h6 class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">Output:</h6>
+                        <pre class="text-sm text-gray-900 dark:text-gray-100 overflow-x-auto whitespace-pre-wrap">{result.output.stdout}</pre>
+                      </div>
+                    {/if}
+                    {#if result.output.stderr}
+                      <div>
+                        <h6 class="text-xs font-semibold text-red-700 dark:text-red-300 mb-1">Error Output:</h6>
+                        <pre class="text-sm text-red-900 dark:text-red-100 overflow-x-auto whitespace-pre-wrap">{result.output.stderr}</pre>
+                      </div>
+                    {/if}
+                    {#if result.output.exitCode !== undefined}
+                      <div class="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                        Exit code: <span class="font-mono">{result.output.exitCode}</span>
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
                 {#if result.error}
                   <div class="mt-2">
-                    <ErrorAlert message="Execution error" details={result.error} />
+                    <ErrorAlert message="Task execution failed" details={result.error} />
                   </div>
                 {/if}
               {/each}
-            {/if}
-          </div>
-        {/if}
-
-        <!-- Execution History -->
-        {#if executionHistory.length > 0}
-          <div class="mt-6 border-t border-gray-200 pt-4 dark:border-gray-700">
-            <h5 class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">
-              Recent Executions
-            </h5>
-
-            {#if historyLoading}
-              <div class="flex justify-center py-2">
-                <LoadingSpinner size="sm" />
-              </div>
-            {:else}
-              <div class="space-y-2">
-                {#each executionHistory as execution}
-                  <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
-                    <div class="flex items-center gap-3">
-                      <StatusBadge status={execution.status} size="sm" />
-                      <span class="text-gray-600 dark:text-gray-400">
-                        {formatTimestamp(execution.startedAt)}
-                      </span>
-                    </div>
-                    {#if execution.completedAt}
-                      <span class="text-xs text-gray-500 dark:text-gray-500">
-                        {Math.round((new Date(execution.completedAt).getTime() - new Date(execution.startedAt).getTime()) / 1000)}s
-                      </span>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
             {/if}
           </div>
         {/if}

@@ -1327,6 +1327,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         // Get query parameters
         const queryParams = ReportsQuerySchema.parse(req.query);
         const limit = queryParams.limit || 100;
+        const offset = queryParams.offset || 0;
 
         // Build filter object from query parameters
         const filters: ReportFilters = {};
@@ -1346,13 +1347,16 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
             message: "Querying PuppetDB for all reports",
-            context: JSON.stringify({ limit, filters }),
+            context: JSON.stringify({ limit, offset, filters }),
             level: 'debug',
           });
         }
 
-        // Get all reports from PuppetDB
-        const allReports = await puppetDBService.getAllReports(limit);
+        // Get total count for pagination
+        const totalCount = await puppetDBService.getTotalReportsCount();
+
+        // Get reports from PuppetDB with pagination
+        const allReports = await puppetDBService.getAllReports(limit, offset);
 
         // Apply filters if any are specified
         const reportFilterService = new ReportFilterService();
@@ -1360,6 +1364,34 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         const reports = hasFilters
           ? reportFilterService.filterReports(allReports, filters)
           : allReports;
+
+        // When filters are applied, we need to calculate the filtered total count
+        // This is a limitation of applying filters client-side after fetching from PuppetDB
+        let filteredTotalCount = totalCount;
+        let actualHasMore = false;
+
+        if (hasFilters) {
+          // If filtering reduced results significantly, we can't accurately determine total count
+          // without fetching all reports. For now, use hasMore based on whether we got results.
+          if (reports.length === 0 && offset > 0) {
+            // No results on this page after filtering - likely past the end of filtered results
+            actualHasMore = false;
+            filteredTotalCount = offset; // Approximate
+          } else if (reports.length < limit && (offset + limit) < totalCount) {
+            // Got fewer results than requested, but there are more unfiltered results
+            // Keep hasMore true to allow fetching next page
+            actualHasMore = true;
+            filteredTotalCount = totalCount; // Can't determine exact count
+          } else {
+            // Calculate hasMore based on unfiltered count (best we can do)
+            actualHasMore = (offset + limit) < totalCount;
+            filteredTotalCount = totalCount;
+          }
+        } else {
+          // No filters - use simple calculation
+          actualHasMore = (offset + reports.length) < totalCount;
+          filteredTotalCount = totalCount;
+        }
 
         const duration = Date.now() - startTime;
 
@@ -1371,6 +1403,9 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
             totalReports: allReports.length,
             filteredReports: reports.length,
             filtersApplied: hasFilters,
+            totalCount: filteredTotalCount,
+            offset,
+            hasMore: actualHasMore,
             duration
           },
         });
@@ -1379,7 +1414,9 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           reports,
           source: "puppetdb",
           count: reports.length,
-          totalCount: allReports.length,
+          totalCount: filteredTotalCount,
+          offset,
+          hasMore: actualHasMore,
           filtersApplied: hasFilters,
         };
 
@@ -1387,14 +1424,17 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'puppetdb');
           expertModeService.addMetadata(debugInfo, 'limit', limit);
+          expertModeService.addMetadata(debugInfo, 'offset', offset);
           expertModeService.addMetadata(debugInfo, 'totalReports', allReports.length);
           expertModeService.addMetadata(debugInfo, 'filteredReports', reports.length);
+          expertModeService.addMetadata(debugInfo, 'totalCount', filteredTotalCount);
+          expertModeService.addMetadata(debugInfo, 'hasMore', actualHasMore);
           expertModeService.addMetadata(debugInfo, 'filtersApplied', hasFilters);
           if (hasFilters) {
             expertModeService.addMetadata(debugInfo, 'filters', filters);
           }
           expertModeService.addInfo(debugInfo, {
-            message: `Successfully fetched and filtered reports from PuppetDB (${reports.length}/${allReports.length} after filtering)`,
+            message: `Successfully fetched and filtered reports from PuppetDB (${reports.length}/${allReports.length} after filtering, page ${Math.floor(offset / limit) + 1})`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -1655,37 +1695,45 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         const queryParams = ReportsQuerySchema.parse(req.query);
         const certname = params.certname;
         const limit = queryParams.limit;
+        const offset = queryParams.offset || 0;
 
         logger.debug("Querying PuppetDB for node reports", {
           component: "PuppetDBRouter",
           integration: "puppetdb",
           operation: "getNodeReports",
-          metadata: { certname, limit },
+          metadata: { certname, limit, offset },
         });
 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
             message: "Querying PuppetDB for node reports",
-            context: JSON.stringify({ certname, limit }),
+            context: JSON.stringify({ certname, limit, offset }),
             level: 'debug',
           });
         }
 
-        // Get reports from PuppetDB
-        const reports = await puppetDBService.getNodeReports(certname, limit);
+        // Get reports from PuppetDB with pagination
+        const reports = await puppetDBService.getNodeReports(certname, limit, offset);
+
+        // Calculate hasMore - if we got exactly 'limit' reports, there might be more
+        // This is a simple heuristic; a more accurate approach would require a separate count query
+        const hasMore = reports.length === limit;
+
         const duration = Date.now() - startTime;
 
         logger.info("Successfully fetched node reports from PuppetDB", {
           component: "PuppetDBRouter",
           integration: "puppetdb",
           operation: "getNodeReports",
-          metadata: { certname, reportCount: reports.length, duration },
+          metadata: { certname, reportCount: reports.length, offset, hasMore, duration },
         });
 
         const responseData = {
           reports,
           source: "puppetdb",
           count: reports.length,
+          offset,
+          hasMore,
         };
 
         if (debugInfo) {
@@ -1694,8 +1742,10 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           expertModeService.addMetadata(debugInfo, 'certname', certname);
           expertModeService.addMetadata(debugInfo, 'reportCount', reports.length);
           expertModeService.addMetadata(debugInfo, 'limit', limit);
+          expertModeService.addMetadata(debugInfo, 'offset', offset);
+          expertModeService.addMetadata(debugInfo, 'hasMore', hasMore);
           expertModeService.addInfo(debugInfo, {
-            message: "Successfully fetched node reports from PuppetDB",
+            message: `Successfully fetched node reports from PuppetDB (page ${Math.floor(offset / limit) + 1})`,
             level: 'info',
           });
           debugInfo.performance = expertModeService.collectPerformanceMetrics();

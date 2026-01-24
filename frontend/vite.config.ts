@@ -14,6 +14,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true
-  }
+    sourcemap: true,
+    chunkSizeWarningLimit: 1000
+  },
+  // Set public directory to serve static assets
+  publicDir: 'public'
 });

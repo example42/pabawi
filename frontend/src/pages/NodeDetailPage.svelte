@@ -23,6 +23,7 @@
   import NodeHieraTab from '../components/NodeHieraTab.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import ExecutionList from '../components/ExecutionList.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -137,6 +138,8 @@
   let puppetReportsLoading = $state(false);
   let puppetReportsError = $state<string | null>(null);
   let selectedReport = $state<any | null>(null);
+  let selectedReportLoading = $state(false);
+  let selectedReportError = $state<string | null>(null);
 
   let catalog = $state<any | null>(null);
   let catalogLoading = $state(false);
@@ -199,6 +202,15 @@
 
   // Debug info state for expert mode - support multiple debug blocks
   let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
+
+  // Sorted debug blocks in chronological order (newest first)
+  const sortedDebugInfoBlocks = $derived.by(() => {
+    return [...debugInfoBlocks].sort((a, b) => {
+      const timeA = new Date(a.debugInfo.timestamp).getTime();
+      const timeB = new Date(b.debugInfo.timestamp).getTime();
+      return timeB - timeA; // Newest first
+    });
+  });
 
   // Callback to receive debug info from API calls
   function handleDebugInfo(label: string, info: DebugInfo | null): void {
@@ -397,7 +409,7 @@
     }
   }
 
-  // Lazy load Puppet Reports
+  // Lazy load Puppet Reports (for overview - limited to 5)
   async function fetchPuppetReports(): Promise<void> {
     // Check cache first
     if (dataCache['puppet-reports']) {
@@ -410,7 +422,7 @@
 
     try {
       const data = await get<{ reports: any[]; _debug?: DebugInfo }>(
-        `/api/integrations/puppetdb/nodes/${nodeId}/reports`,
+        `/api/integrations/puppetdb/nodes/${nodeId}/reports?limit=5`,
         { maxRetries: 2 }
       );
 
@@ -419,7 +431,7 @@
 
       // Store debug info if present
       if (data._debug) {
-        handleDebugInfo('Puppet Reports', data._debug);
+        handleDebugInfo('Puppet Reports (Overview)', data._debug);
       }
     } catch (err) {
       puppetReportsError = err instanceof Error ? err.message : 'An unknown error occurred';
@@ -427,6 +439,33 @@
       showError('Failed to load Puppet reports', puppetReportsError);
     } finally {
       puppetReportsLoading = false;
+    }
+  }
+
+  // Fetch full report details including events and logs
+  async function fetchReportDetails(report: any): Promise<void> {
+    selectedReportLoading = true;
+    selectedReportError = null;
+    selectedReport = null;
+
+    try {
+      const data = await get<{ report: any; _debug?: DebugInfo }>(
+        `/api/integrations/puppetdb/nodes/${nodeId}/reports/${report.hash}`,
+        { maxRetries: 2 }
+      );
+
+      selectedReport = data.report;
+
+      // Store debug info if present
+      if (data._debug) {
+        handleDebugInfo('Report Details', data._debug);
+      }
+    } catch (err) {
+      selectedReportError = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error('Error fetching report details:', err);
+      showError('Failed to load report details', selectedReportError);
+    } finally {
+      selectedReportLoading = false;
     }
   }
 
@@ -1093,14 +1132,23 @@
   // Derived general info
   let generalInfo = $derived(extractGeneralInfo());
 
+  // Watch for URL query parameter changes (for re-execution and tab switching)
+  $effect(() => {
+    // Access router.currentQuery to make this effect reactive to URL changes
+    const _ = router.query;
+
+    // When URL changes, read the tab and check for re-execution params
+    // This handles both initial load and navigation to the same node with different params
+    readTabFromURL();
+    checkReExecutionParams();
+  });
+
   // On mount
   onMount(() => {
     debugInfoBlocks = []; // Clear debug info blocks on mount
     fetchNode();
     fetchExecutions();
     fetchCommandWhitelist();
-    readTabFromURL();
-    checkReExecutionParams();
 
     // Load overview tab data if it's the active tab
     if (activeTab === 'overview') {
@@ -1425,7 +1473,7 @@
                   </table>
                 </div>
               </div>
-              {#if puppetReports.length > 5}
+              {#if puppetReports.length >= 5}
                 <div class="mt-4">
                   <button
                     type="button"
@@ -1435,7 +1483,7 @@
                       switchPuppetSubTab('puppet-reports');
                     }}
                   >
-                    View all {puppetReports.length} runs →
+                    View all runs →
                   </button>
                 </div>
               {/if}
@@ -1459,35 +1507,21 @@
                 No executions found for this node.
               </p>
             {:else}
-              <div class="space-y-2">
-                {#each executions.slice(0, 5) as execution}
-                  <div class="flex items-center justify-between rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                    <div class="flex items-center gap-3">
-                      <StatusBadge status={execution.status} size="sm" />
-                      <div>
-                        <div class="text-sm font-medium text-gray-900 dark:text-white">{execution.type}</div>
-                        <div class="text-xs text-gray-500 dark:text-gray-400">{execution.action}</div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                      onclick={() => router.navigate('/executions')}
-                    >
-                      View details →
-                    </button>
-                  </div>
-                {/each}
-                {#if executions.length > 5}
-                  <button
-                    type="button"
-                    class="w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                    onclick={() => switchTab('actions')}
-                  >
-                    View all executions →
-                  </button>
-                {/if}
-              </div>
+              <ExecutionList
+                executions={executions.slice(0, 5)}
+                currentNodeId={nodeId}
+                onExecutionClick={(execution) => router.navigate(`/executions?id=${execution.id}`)}
+                showTargets={false}
+              />
+              {#if executions.length > 5}
+                <button
+                  type="button"
+                  class="mt-4 w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                  onclick={() => switchTab('actions')}
+                >
+                  View all executions →
+                </button>
+              {/if}
             {/if}
           </div>
         </div>
@@ -1618,13 +1652,18 @@
         </div>
       {:else if commandResult}
         <!-- Static output for completed executions or when expert mode is disabled -->
-        <div class="mt-4">
+        <div class="mt-4 space-y-3">
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Result:</h3>
           <div class="mb-2">
             <StatusBadge status={commandResult.status} />
           </div>
           {#if commandResult.results.length > 0}
             {#each commandResult.results as result}
+              {#if result.error}
+                <div class="mt-2">
+                  <ErrorAlert message="Execution error" details={result.error} />
+                </div>
+              {/if}
               {#if result.output}
                 <CommandOutput
                   stdout={result.output.stdout}
@@ -1632,11 +1671,6 @@
                   exitCode={result.output.exitCode}
                   boltCommand={commandResult.command}
                 />
-              {/if}
-              {#if result.error}
-                <div class="mt-2">
-                  <ErrorAlert message="Execution error" details={result.error} />
-                </div>
               {/if}
             {/each}
           {/if}
@@ -1677,87 +1711,12 @@
                 No executions found for this node.
               </p>
             {:else}
-            <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
-              <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead class="bg-gray-50 dark:bg-gray-900">
-                  <tr>
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Type
-                    </th>
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Action
-                    </th>
-                    {#if expertMode.enabled}
-                      <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                        Command
-                      </th>
-                    {/if}
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Status
-                    </th>
-                    <th scope="col" class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Started
-                    </th>
-                    <th scope="col" class="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                  {#each executions as execution}
-                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
-                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-900 dark:text-white cursor-pointer" onclick={() => router.navigate('/executions')}>
-                        {execution.type}
-                      </td>
-                      <td class="px-4 py-3 text-sm text-gray-900 dark:text-white cursor-pointer" onclick={() => router.navigate('/executions')}>
-                        <div class="max-w-xs truncate">{execution.action}</div>
-                      </td>
-                      {#if expertMode.enabled}
-                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 cursor-pointer" onclick={() => router.navigate('/executions')}>
-                          {#if execution.command}
-                            <div class="max-w-md truncate font-mono text-xs" title={execution.command}>
-                              {execution.command}
-                            </div>
-                          {:else}
-                            <span class="text-gray-400 dark:text-gray-600">-</span>
-                          {/if}
-                        </td>
-                      {/if}
-                      <td class="whitespace-nowrap px-4 py-3 text-sm cursor-pointer" onclick={() => router.navigate('/executions')}>
-                        <StatusBadge status={execution.status} size="sm" />
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                        <button
-                          type="button"
-                          class="text-left hover:text-blue-600 dark:hover:text-blue-400"
-                          onclick={() => router.navigate('/executions')}
-                        >
-                          {formatTimestamp(execution.startedAt)}
-                        </button>
-                      </td>
-                      <td class="whitespace-nowrap px-4 py-3 text-sm text-gray-600 dark:text-gray-400" onclick={(e) => e.stopPropagation()}>
-                        <div class="flex items-center justify-end gap-2">
-                          <ReExecutionButton execution={execution} currentNodeId={nodeId} size="sm" variant="icon" />
-                          <button
-                            type="button"
-                            class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                            onclick={(e) => {
-                              e.stopPropagation();
-                              router.navigate('/executions');
-                            }}
-                            title="View execution details"
-                          >
-                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
+              <ExecutionList
+                {executions}
+                currentNodeId={nodeId}
+                onExecutionClick={(execution) => router.navigate(`/executions?id=${execution.id}`)}
+                showTargets={false}
+              />
             {/if}
           </div>
         </div>
@@ -1989,11 +1948,16 @@
                   <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Puppet Reports</h2>
                   <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
                 </div>
-                {#if selectedReport}
+                {#if selectedReport || selectedReportLoading}
                   <button
                     type="button"
                     class="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                    onclick={() => selectedReport = null}
+                    onclick={() => {
+                      selectedReport = null;
+                      selectedReportError = null;
+                      selectedReportLoading = false;
+                    }}
+                    disabled={selectedReportLoading}
                   >
                     ← Back to list
                   </button>
@@ -2016,14 +1980,32 @@
                     No Puppet reports found for this node.
                   </p>
                 </div>
+              {:else if selectedReportLoading}
+                <!-- Loading report details -->
+                <div class="flex justify-center py-12">
+                  <LoadingSpinner size="lg" message="Loading report details..." />
+                </div>
+              {:else if selectedReportError}
+                <!-- Error loading report details -->
+                <ErrorAlert
+                  message="Failed to load report details"
+                  details={selectedReportError}
+                  onRetry={() => {
+                    if (selectedReport) {
+                      fetchReportDetails(selectedReport);
+                    }
+                  }}
+                />
               {:else if selectedReport}
                 <!-- Detailed view of selected report -->
                 <ReportViewer report={selectedReport} />
               {:else}
-                <!-- Compact list view -->
+                <!-- Compact list view with pagination -->
                 <PuppetReportsListView
-                  reports={puppetReports}
-                  onReportClick={(report) => selectedReport = report}
+                  certname={nodeId}
+                  onReportClick={fetchReportDetails}
+                  onDebugInfo={(info) => handleDebugInfo('Puppet Reports', info)}
+                  enablePagination={true}
                 />
               {/if}
             </div>
@@ -2077,9 +2059,9 @@
   {/if}
 
   <!-- Unified Expert Mode Debug Panel - Shows all debug blocks from current tab -->
-  {#if expertMode.enabled && debugInfoBlocks.length > 0}
+  {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}
     <div class="mt-8 space-y-4">
-      {#each debugInfoBlocks as block (block.label)}
+      {#each sortedDebugInfoBlocks as block (block.label)}
         <div>
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
           <ExpertModeDebugPanel debugInfo={block.debugInfo} />

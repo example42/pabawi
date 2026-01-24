@@ -75,10 +75,11 @@ export class BoltValidator {
       });
     }
 
-    // Check for modules directory (optional)
+    // Check for modules directory (optional, can be 'modules' or '.modules')
     const modulesDir = join(this.boltProjectPath, "modules");
-    if (!existsSync(modulesDir)) {
-      this.logger.warn("modules directory not found. Task execution may be limited.", {
+    const hiddenModulesDir = join(this.boltProjectPath, ".modules");
+    if (!existsSync(modulesDir) && !existsSync(hiddenModulesDir)) {
+      this.logger.warn("modules or .modules directory not found. Task execution may be limited.", {
         component: "BoltValidator",
         operation: "validate",
       });
@@ -128,15 +129,25 @@ export class BoltValidator {
 
   /**
    * Get the modules directory path
+   * Checks for both 'modules' and '.modules' directories
    */
   public getModulesPath(): string {
-    return join(this.boltProjectPath, "modules");
+    const modulesDir = join(this.boltProjectPath, "modules");
+    const hiddenModulesDir = join(this.boltProjectPath, ".modules");
+
+    // Prefer .modules if it exists, otherwise return modules path
+    if (existsSync(hiddenModulesDir)) {
+      return hiddenModulesDir;
+    }
+    return modulesDir;
   }
 
   /**
-   * Check if modules directory exists
+   * Check if modules directory exists (either 'modules' or '.modules')
    */
   public hasModules(): boolean {
-    return existsSync(this.getModulesPath());
+    const modulesDir = join(this.boltProjectPath, "modules");
+    const hiddenModulesDir = join(this.boltProjectPath, ".modules");
+    return existsSync(modulesDir) || existsSync(hiddenModulesDir);
   }
 }

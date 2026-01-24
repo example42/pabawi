@@ -88,7 +88,7 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - All 58 routes documented with test cases and verification checklists
     - Automated script tests all routes with expert mode enabled/disabled
     - Ready for execution by user
-  - [ ] Verify external API errors (PuppetDB, Puppetserver, Bolt) are visible in debug info
+  - [x] Verify external API errors (PuppetDB, Puppetserver, Bolt) are visible in debug info
   - [ ] Test expert mode across all frontend pages with various scenarios
   
   ---
@@ -302,7 +302,19 @@ This implementation plan breaks down the v0.5.0 release into discrete, increment
     - Update API documentation
     - Document new environment variables
 
-- [ ] 10. Checkpoint - Final verification
+- [ ] 10. Implement Puppet Reports Pagination & Debug Info Review
+  - See detailed spec: `.kiro/specs/puppet-reports-pagination/`
+  - [x] 10.1 Backend pagination support (Phase 1)
+  - [x] 10.2 Frontend pagination components (Phase 2)
+  - [x] 10.3 Node Detail page pagination (Phase 3)
+  - [x] 10.4 Debug info review - Puppet Page (Phase 4)
+  - [x] 10.5 Debug info review - Node Detail Page (Phase 5)
+  - [x] 10.6 Debug info aggregation enhancement (Phase 6)
+  - [ ] 10.7 Integration testing (Phase 7)
+  - [ ] 10.8 Documentation & cleanup (Phase 8)
+  - _Requirements: See puppet-reports-pagination spec_
+
+- [ ] 11. Checkpoint - Final verification
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
