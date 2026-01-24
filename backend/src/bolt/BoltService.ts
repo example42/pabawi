@@ -1147,11 +1147,9 @@ export class BoltService {
               if (typeof errorObj.details === "object" && errorObj.details !== null) {
                 const details = errorObj.details as Record<string, unknown>;
                 if (typeof details.exit_code === "number") {
-                  if (!nodeResult.output) {
-                    nodeResult.output = { stdout: "", stderr: "" };
-                  }
+                  nodeResult.output ??= { stdout: "", stderr: "" };
                   nodeResult.output.exitCode = details.exit_code;
-                  errorMessage += ` (exit code ${details.exit_code})`;
+                  errorMessage += ` (exit code ${String(details.exit_code)})`;
                 }
               }
 
@@ -1169,7 +1167,7 @@ export class BoltService {
                 errorMessage += `\n\nOutput:\n${valueObj._output.trim()}`;
               }
 
-              nodeResult.error = errorMessage || "Task execution failed";
+              nodeResult.error = errorMessage ?? "Task execution failed";
             } else if (!nodeResult.error) {
               // If no _error object but task failed, use _output as error
               nodeResult.error = typeof valueObj._output === "string" && valueObj._output.trim()

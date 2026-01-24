@@ -201,7 +201,7 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
 
     try {
       const content = fs.readFileSync(hieraYamlPath, "utf-8");
-      const config = parseYaml(content);
+      const config = parseYaml(content) as Record<string, unknown> | null;
 
       if (config && typeof config === "object") {
         const configObj = config as Record<string, unknown>;
