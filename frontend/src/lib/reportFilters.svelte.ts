@@ -20,15 +20,8 @@ class ReportFilterStore {
   /**
    * Set an individual filter value
    */
-  setFilter(key: keyof ReportFilters, value: unknown): void {
-    // Type-safe assignment based on key
-    if (key === 'status' && (Array.isArray(value) || value === undefined)) {
-      this.filters[key] = value as ('unchanged' | 'changed' | 'failed')[] | undefined;
-    } else if ((key === 'minDuration' || key === 'minCompileTime' || key === 'minTotalResources') &&
-               (typeof value === 'number' || value === undefined)) {
-      this.filters[key] = value as number | undefined;
-    }
-
+  setFilter<K extends keyof ReportFilters>(key: K, value: ReportFilters[K]): void {
+    this.filters[key] = value;
     this.persistToSession();
   }
 
@@ -64,7 +57,7 @@ class ReportFilterStore {
       const stored = sessionStorage.getItem(STORAGE_KEY);
       if (stored) {
         try {
-          const parsed = JSON.parse(stored);
+          const parsed: unknown = JSON.parse(stored);
           // Validate the parsed data structure
           if (typeof parsed === 'object' && parsed !== null) {
             this.filters = parsed as ReportFilters;

@@ -11,7 +11,7 @@
  * @param defaultValue - Default value if not found or invalid
  * @returns The stored page size or default value
  */
-export function loadPageSize(key: string = 'puppetReportsPageSize', defaultValue: number = 100): number {
+export function loadPageSize(key = 'puppetReportsPageSize', defaultValue = 100): number {
   if (typeof window === 'undefined') {
     return defaultValue;
   }
@@ -36,7 +36,7 @@ export function loadPageSize(key: string = 'puppetReportsPageSize', defaultValue
  * @param size - Page size to save
  * @param key - Storage key
  */
-export function savePageSize(size: number, key: string = 'puppetReportsPageSize'): void {
+export function savePageSize(size: number, key = 'puppetReportsPageSize'): void {
   if (typeof window === 'undefined') {
     return;
   }
@@ -54,7 +54,7 @@ export function savePageSize(size: number, key: string = 'puppetReportsPageSize'
  * @param defaultValue - Default value if not found
  * @returns The stored value or default value
  */
-export function getSessionItem<T>(key: string, defaultValue: T): T {
+export function getSessionItem(key: string, defaultValue: unknown): unknown {
   if (typeof window === 'undefined') {
     return defaultValue;
   }
@@ -62,7 +62,7 @@ export function getSessionItem<T>(key: string, defaultValue: T): T {
   try {
     const stored = sessionStorage.getItem(key);
     if (stored) {
-      return JSON.parse(stored) as T;
+      return JSON.parse(stored) as unknown;
     }
   } catch (error) {
     console.warn(`Failed to load ${key} from session storage:`, error);
@@ -76,7 +76,7 @@ export function getSessionItem<T>(key: string, defaultValue: T): T {
  * @param key - Storage key
  * @param value - Value to store
  */
-export function setSessionItem<T>(key: string, value: T): void {
+export function setSessionItem(key: string, value: unknown): void {
   if (typeof window === 'undefined') {
     return;
   }

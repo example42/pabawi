@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { reportFilters, ReportFilters } from './reportFilters.svelte';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { reportFilters } from './reportFilters.svelte';
 
 describe('ReportFilterStore', () => {
   beforeEach(() => {
@@ -82,51 +82,51 @@ describe('ReportFilterStore', () => {
 
   describe('session persistence', () => {
     it('should persist filters to sessionStorage', () => {
-      reportFilters.setFilter('status', ['success', 'failed']);
+      reportFilters.setFilter('status', ['changed', 'failed']);
       reportFilters.setFilter('minDuration', 300);
 
       const stored = sessionStorage.getItem('pabawi_report_filters');
       expect(stored).toBeTruthy();
 
-      const parsed = JSON.parse(stored!);
-      expect(parsed.status).toEqual(['success', 'failed']);
+      const parsed = JSON.parse(stored ?? '{}') as { status?: string[]; minDuration?: number };
+      expect(parsed.status).toEqual(['changed', 'failed']);
       expect(parsed.minDuration).toBe(300);
     });
 
     it('should update sessionStorage when filters change', () => {
-      reportFilters.setFilter('status', ['success']);
+      reportFilters.setFilter('status', ['changed']);
       let stored = sessionStorage.getItem('pabawi_report_filters');
-      let parsed = JSON.parse(stored!);
-      expect(parsed.status).toEqual(['success']);
+      let parsed = JSON.parse(stored ?? '{}') as { status?: string[]; minDuration?: number };
+      expect(parsed.status).toEqual(['changed']);
 
       reportFilters.setFilter('minDuration', 500);
       stored = sessionStorage.getItem('pabawi_report_filters');
-      parsed = JSON.parse(stored!);
-      expect(parsed.status).toEqual(['success']);
+      parsed = JSON.parse(stored ?? '{}') as { status?: string[]; minDuration?: number };
+      expect(parsed.status).toEqual(['changed']);
       expect(parsed.minDuration).toBe(500);
     });
 
     it('should clear sessionStorage when filters are cleared', () => {
-      reportFilters.setFilter('status', ['success']);
+      reportFilters.setFilter('status', ['changed']);
       expect(sessionStorage.getItem('pabawi_report_filters')).toBeTruthy();
 
       reportFilters.clearFilters();
 
       const stored = sessionStorage.getItem('pabawi_report_filters');
-      const parsed = JSON.parse(stored!);
+      const parsed = JSON.parse(stored ?? '{}') as Record<string, unknown>;
       expect(parsed).toEqual({});
     });
 
     it('should persist all filter types to sessionStorage', () => {
-      reportFilters.setFilter('status', ['success', 'failed']);
+      reportFilters.setFilter('status', ['changed', 'failed']);
       reportFilters.setFilter('minDuration', 300);
       reportFilters.setFilter('minCompileTime', 60);
       reportFilters.setFilter('minTotalResources', 100);
 
       const stored = sessionStorage.getItem('pabawi_report_filters');
-      const parsed = JSON.parse(stored!);
+      const parsed = JSON.parse(stored ?? '{}') as { status?: string[]; minDuration?: number; minCompileTime?: number; minTotalResources?: number };
 
-      expect(parsed.status).toEqual(['success', 'failed']);
+      expect(parsed.status).toEqual(['changed', 'failed']);
       expect(parsed.minDuration).toBe(300);
       expect(parsed.minCompileTime).toBe(60);
       expect(parsed.minTotalResources).toBe(100);
