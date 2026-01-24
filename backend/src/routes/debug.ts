@@ -190,7 +190,7 @@ export function createDebugRouter(): Router {
         metadata: { correlationId },
       });
 
-      const logs = frontendLogStore.get(correlationId) || [];
+      const logs = frontendLogStore.get(correlationId) ?? [];
 
       res.json({
         correlationId,
@@ -206,18 +206,21 @@ export function createDebugRouter(): Router {
    */
   router.get(
     '/frontend-logs',
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler((_req: Request, res: Response): void => {
       logger.debug('Retrieving all correlation IDs', {
         component: 'DebugRouter',
         operation: 'getAllCorrelationIds',
       });
 
-      const correlationIds = Array.from(frontendLogStore.keys()).map(id => ({
-        correlationId: id,
-        logCount: frontendLogStore.get(id)?.length || 0,
-        firstLog: frontendLogStore.get(id)?.[0]?.timestamp,
-        lastLog: frontendLogStore.get(id)?.[frontendLogStore.get(id)!.length - 1]?.timestamp,
-      }));
+      const correlationIds = Array.from(frontendLogStore.keys()).map(id => {
+        const logs = frontendLogStore.get(id);
+        return {
+          correlationId: id,
+          logCount: logs?.length ?? 0,
+          firstLog: logs?.[0]?.timestamp,
+          lastLog: logs?.[logs.length - 1]?.timestamp,
+        };
+      });
 
       res.json({
         correlationIds,
@@ -232,7 +235,7 @@ export function createDebugRouter(): Router {
    */
   router.delete(
     '/frontend-logs/:correlationId',
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler((req: Request, res: Response): void => {
       const { correlationId } = req.params;
 
       logger.info('Clearing frontend logs', {
@@ -257,7 +260,7 @@ export function createDebugRouter(): Router {
    */
   router.delete(
     '/frontend-logs',
-    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+    asyncHandler((_req: Request, res: Response): void => {
       logger.info('Clearing all frontend logs', {
         component: 'DebugRouter',
         operation: 'clearAllFrontendLogs',
@@ -280,5 +283,5 @@ export function createDebugRouter(): Router {
  * Get frontend logs for a correlation ID (used by other routes)
  */
 export function getFrontendLogs(correlationId: string): FrontendLogEntry[] {
-  return frontendLogStore.get(correlationId) || [];
+  return frontendLogStore.get(correlationId) ?? [];
 }

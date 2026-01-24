@@ -315,7 +315,7 @@ export function createInventoryRouter(
             expertModeService.addMetadata(debugInfo, 'requestedSources', requestedSources);
             expertModeService.addMetadata(debugInfo, 'pqlQuery', query.pql);
             expertModeService.addInfo(debugInfo, {
-              message: `Retrieved ${filteredNodes.length} nodes from ${Object.keys(filteredSources).length} sources`,
+              message: `Retrieved ${String(filteredNodes.length)} nodes from ${String(Object.keys(filteredSources).length)} sources`,
               level: 'info',
             });
 
@@ -374,7 +374,7 @@ export function createInventoryRouter(
           expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addMetadata(debugInfo, 'nodeCount', nodes.length);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved ${nodes.length} nodes from Bolt`,
+            message: `Retrieved ${String(nodes.length)} nodes from Bolt`,
             level: 'info',
           });
 
@@ -666,7 +666,7 @@ export function createInventoryRouter(
             );
             expertModeService.addMetadata(debugInfo, 'sourceCount', Object.keys(sources).length);
             expertModeService.addInfo(debugInfo, {
-              message: `Retrieved ${Object.keys(sources).length} inventory sources`,
+              message: `Retrieved ${String(Object.keys(sources).length)} inventory sources`,
               level: 'info',
             });
 

@@ -475,7 +475,7 @@ export class ExpertModeService {
       if (typeof value === 'string') {
         headers[key] = value;
       } else if (Array.isArray(value)) {
-        headers[key] = value.join(', ');
+        headers[key] = value.map(String).join(', ');
       }
     });
 
@@ -486,8 +486,10 @@ export class ExpertModeService {
       if (typeof value === 'string') {
         query[key] = value;
       } else if (Array.isArray(value)) {
-        query[key] = value.join(', ');
-      } else if (value !== undefined) {
+        query[key] = value.filter(v => typeof v === 'string').join(', ');
+      } else if (typeof value === 'number' || typeof value === 'boolean') {
+        query[key] = String(value);
+      } else if (typeof value === 'object' && value !== null) {
         query[key] = String(value);
       }
     });
@@ -497,8 +499,8 @@ export class ExpertModeService {
       method: req.method,
       headers,
       query,
-      userAgent: req.headers['user-agent'] || 'unknown',
-      ip: req.ip || req.socket.remoteAddress || 'unknown',
+      userAgent: req.headers['user-agent'] ?? 'unknown',
+      ip: req.ip ?? req.socket.remoteAddress ?? 'unknown',
       timestamp: new Date().toISOString(),
     };
   }

@@ -204,7 +204,7 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
       const config = parseYaml(content) as Record<string, unknown> | null;
 
       if (config && typeof config === "object") {
-        const configObj = config as Record<string, unknown>;
+        const configObj = config;
 
         // Check hierarchy for datadir values
         if (configObj.hierarchy && Array.isArray(configObj.hierarchy)) {

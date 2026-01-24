@@ -130,9 +130,10 @@ export function createTasksRouter(
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
+          expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addMetadata(debugInfo, 'taskCount', tasks.length);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved ${tasks.length} Bolt tasks`,
+            message: `Retrieved ${String(tasks.length)} Bolt tasks`,
             level: 'info',
           });
 
@@ -155,6 +156,7 @@ export function createTasksRouter(
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
               message: `Bolt execution failed: ${error.message}`,
@@ -188,6 +190,7 @@ export function createTasksRouter(
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
               message: `Bolt parse error: ${error.message}`,
@@ -221,6 +224,7 @@ export function createTasksRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addError(debugInfo, {
             message: `Error listing tasks: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -336,9 +340,10 @@ export function createTasksRouter(
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
+          expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addMetadata(debugInfo, 'moduleCount', Object.keys(tasksByModule).length);
           expertModeService.addInfo(debugInfo, {
-            message: `Retrieved tasks from ${Object.keys(tasksByModule).length} modules`,
+            message: `Retrieved tasks from ${String(Object.keys(tasksByModule).length)} modules`,
             level: 'info',
           });
 
@@ -361,6 +366,7 @@ export function createTasksRouter(
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
               message: `Bolt execution failed: ${error.message}`,
@@ -394,6 +400,7 @@ export function createTasksRouter(
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
               message: `Bolt parse error: ${error.message}`,
@@ -427,6 +434,7 @@ export function createTasksRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addError(debugInfo, {
             message: `Error listing tasks by module: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -679,6 +687,7 @@ export function createTasksRouter(
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
+          expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addMetadata(debugInfo, 'executionId', executionId);
           expertModeService.addMetadata(debugInfo, 'nodeId', nodeId);
           expertModeService.addMetadata(debugInfo, 'taskName', taskName);
@@ -708,6 +717,7 @@ export function createTasksRouter(
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addWarning(debugInfo, {
               message: "Request validation failed",
@@ -741,6 +751,7 @@ export function createTasksRouter(
 
           if (debugInfo) {
             debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
               message: `Bolt configuration missing: ${error.message}`,
@@ -774,6 +785,7 @@ export function createTasksRouter(
 
         if (debugInfo) {
           debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addError(debugInfo, {
             message: `Error processing task execution request: ${error instanceof Error ? error.message : 'Unknown error'}`,

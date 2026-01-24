@@ -55,7 +55,7 @@ export class PuppetRunHistoryService {
    * @returns Node run history with summary statistics
    */
   async getNodeHistory(nodeId: string, days = 7): Promise<NodeRunHistory> {
-    this.log(`Getting run history for node '${nodeId}' for last ${days} days`);
+    this.log(`Getting run history for node '${nodeId}' for last ${String(days)} days`);
 
     try {
       // Calculate date range
@@ -73,7 +73,7 @@ export class PuppetRunHistoryService {
         return reportDate >= startDate && reportDate <= endDate;
       });
 
-      this.log(`Found ${filteredReports.length} reports for node '${nodeId}' in date range`);
+      this.log(`Found ${String(filteredReports.length)} reports for node '${nodeId}' in date range`);
 
       // Group reports by date and status
       const history = this.groupReportsByDate(filteredReports);
@@ -99,7 +99,7 @@ export class PuppetRunHistoryService {
    * @returns Aggregated run history data
    */
   async getAggregatedHistory(days = 7): Promise<RunHistoryData[]> {
-    this.log(`Getting aggregated run history for all nodes for last ${days} days`);
+    this.log(`Getting aggregated run history for all nodes for last ${String(days)} days`);
 
     try {
       // Calculate date range
@@ -117,7 +117,7 @@ export class PuppetRunHistoryService {
         return reportDate >= startDate && reportDate <= endDate;
       });
 
-      this.log(`Found ${filteredReports.length} reports across all nodes in date range`);
+      this.log(`Found ${String(filteredReports.length)} reports across all nodes in date range`);
 
       // Group reports by date and status
       const history = this.groupReportsByDate(filteredReports);
@@ -155,7 +155,8 @@ export class PuppetRunHistoryService {
         });
       }
 
-      const entry = dateMap.get(dateKey)!;
+      const entry = dateMap.get(dateKey);
+      if (!entry) continue;
 
       // Increment counters based on status
       switch (report.status) {

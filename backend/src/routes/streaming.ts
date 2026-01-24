@@ -244,7 +244,7 @@ export function createStreamingRouter(
         debugInfo.duration = duration;
         expertModeService.addMetadata(debugInfo, 'activeExecutions', activeExecutions);
         expertModeService.addInfo(debugInfo, {
-          message: `Retrieved streaming statistics: ${activeExecutions} active executions`,
+          message: `Retrieved streaming statistics: ${String(activeExecutions)} active executions`,
           level: 'info',
         });
 

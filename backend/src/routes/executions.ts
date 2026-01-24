@@ -3,6 +3,9 @@ import { z } from "zod";
 import type {
   ExecutionRepository,
   ExecutionType,
+  ExecutionStatus,
+  NodeResult,
+  ExecutionRecord,
 } from "../database/ExecutionRepository";
 import { type ExecutionFilters } from "../database/ExecutionRepository";
 import type { ExecutionQueue } from "../services/ExecutionQueue";
@@ -27,17 +30,14 @@ const ExecutionFiltersQuerySchema = z.object({
   pageSize: z.coerce.number().int().positive().max(100).default(50),
 });
 
-/**
- * Interface for re-execution parameter modifications
- */
-interface ReExecutionModifications {
-  type?: string;
-  targetNodes?: string[];
-  action?: string;
-  parameters?: Record<string, unknown>;
-  command?: string;
-  expertMode?: boolean;
-}
+const ReExecutionModificationsSchema = z.object({
+  type: z.string().optional(),
+  targetNodes: z.array(z.string()).optional(),
+  action: z.string().optional(),
+  parameters: z.record(z.unknown()).optional(),
+  command: z.string().optional(),
+  expertMode: z.boolean().optional(),
+});
 
 /**
  * Create executions router
@@ -763,6 +763,7 @@ export function createExecutionsRouter(
         logger.debug("Processing re-execution request", {
           component: "ExecutionsRouter",
           operation: "createReExecution",
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           metadata: { executionId, hasModifications: Object.keys(req.body).length > 0 },
         });
 
@@ -802,21 +803,22 @@ export function createExecutionsRouter(
         }
 
         // Parse request body for parameter modifications
-        const modifications = req.body as ReExecutionModifications;
+        const modifications = ReExecutionModificationsSchema.parse(req.body);
 
         // Create new execution with preserved parameters
         // Allow modifications from request body
-        const newExecution = {
+        const executionData: Omit<ExecutionRecord, "id" | "originalExecutionId"> = {
           type: (modifications.type ?? originalExecution.type) as ExecutionType,
           targetNodes:
-            modifications.targetNodes ?? originalExecution.targetNodes,
-          action: modifications.action ?? originalExecution.action,
-          parameters: modifications.parameters ?? originalExecution.parameters,
-          status: "running" as const,
+            (modifications.targetNodes ?? originalExecution.targetNodes),
+          action: (modifications.action ?? originalExecution.action),
+           
+          parameters: (modifications.parameters ?? originalExecution.parameters),
+          status: "running" as ExecutionStatus,
           startedAt: new Date().toISOString(),
-          results: [],
-          command: modifications.command ?? originalExecution.command,
-          expertMode: modifications.expertMode ?? originalExecution.expertMode,
+          results: [] as NodeResult[],
+          command: (modifications.command ?? originalExecution.command),
+          expertMode: (modifications.expertMode ?? originalExecution.expertMode),
         };
 
         logger.debug("Creating re-execution with parameters", {
@@ -824,15 +826,16 @@ export function createExecutionsRouter(
           operation: "createReExecution",
           metadata: {
             executionId,
-            type: newExecution.type,
-            targetNodesCount: newExecution.targetNodes?.length ?? 0,
+            type: executionData.type,
+            targetNodesCount: executionData.targetNodes.length,
           },
         });
 
         // Create the re-execution with reference to original
+         
         const newExecutionId = await executionRepository.createReExecution(
           executionId,
-          newExecution,
+          executionData,
         );
 
         // Return the new execution ID and details

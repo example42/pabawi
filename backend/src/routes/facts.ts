@@ -177,9 +177,9 @@ export function createFactsRouter(
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addMetadata(debugInfo, 'nodeId', nodeId);
-          expertModeService.addMetadata(debugInfo, 'factCount', Object.keys(facts).length);
+          expertModeService.addMetadata(debugInfo, 'factCount', String(Object.keys(facts).length));
           expertModeService.addInfo(debugInfo, {
-            message: `Gathered ${Object.keys(facts).length} facts from node`,
+            message: `Gathered ${String(Object.keys(facts).length)} facts from node`,
             context: JSON.stringify({ nodeId }),
             level: 'info',
           });
