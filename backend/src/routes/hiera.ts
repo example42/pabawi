@@ -374,8 +374,8 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
         if (debugInfo) {
           debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'hiera');
-          const keyCount: number = healthStatus.details?.keyCount ?? 0;
-          const fileCount: number = healthStatus.details?.fileCount ?? 0;
+          const keyCount = typeof healthStatus.details?.keyCount === 'number' ? healthStatus.details.keyCount : 0;
+          const fileCount = typeof healthStatus.details?.fileCount === 'number' ? healthStatus.details.fileCount : 0;
           expertModeService.addMetadata(debugInfo, 'keyCount', keyCount.toString());
           expertModeService.addMetadata(debugInfo, 'fileCount', fileCount.toString());
           expertModeService.addInfo(debugInfo, {

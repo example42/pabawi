@@ -740,6 +740,9 @@ export class PuppetDBService
    * Get a specific report by hash
    *
    * Queries PuppetDB for a specific report and includes full details.
+   * Fetches logs, metrics, and events from their dedicated endpoints since PuppetDB
+   * may return these as href references instead of embedded data.
+   * See: https://help.puppet.com/pdb/8/topics/reports.htm
    * Implements requirement 3.4.
    *
    * @param reportHash - Report hash identifier
@@ -779,12 +782,98 @@ export class PuppetDBService
 
       const firstResult = result[0] as Record<string, unknown>;
       const hasMetrics = Boolean(firstResult.metrics);
+      const hasLogs = Boolean(firstResult.logs);
       this.log(
-        `Fetched report '${reportHash}', has metrics: ${String(hasMetrics)}`,
+        `Fetched report '${reportHash}', has metrics: ${String(hasMetrics)}, has logs: ${String(hasLogs)}`,
       );
 
-      // Transform the report
-      const report = this.transformReport(result[0]);
+      // Fetch logs from dedicated endpoint if not embedded or only href reference
+      // PuppetDB returns logs as {"href": "/pdb/query/v4/reports/<hash>/logs", "data": [...]}
+      // or just {"href": "..."} without data
+      const logsObj = firstResult.logs as Record<string, unknown> | undefined;
+      if (!logsObj || (logsObj.href && !Array.isArray(logsObj.data))) {
+        try {
+          this.log(`Fetching logs for report '${reportHash}' from dedicated endpoint`);
+          const logsData = await this.executeWithResilience(async () => {
+            return await client.get(`/pdb/query/v4/reports/${reportHash}/logs`);
+          });
+
+          if (Array.isArray(logsData)) {
+            firstResult.logs = { data: logsData, href: `/pdb/query/v4/reports/${reportHash}/logs` };
+            this.log(`Successfully fetched ${String(logsData.length)} logs for report '${reportHash}'`);
+          } else {
+            this.log(`Unexpected logs data format from endpoint: ${typeof logsData}`, "warn");
+            firstResult.logs = { data: [] };
+          }
+        } catch (logsError) {
+          this.logError(`Failed to fetch logs for report '${reportHash}', continuing without logs`, logsError);
+          firstResult.logs = { data: [] };
+        }
+      }
+
+      // Fetch metrics from dedicated endpoint if not embedded or only href reference
+      const metricsObj = firstResult.metrics as Record<string, unknown> | undefined;
+      if (!metricsObj || (metricsObj.href && !Array.isArray(metricsObj.data))) {
+        try {
+          this.log(`Fetching metrics for report '${reportHash}' from dedicated endpoint`);
+          const metricsData = await this.executeWithResilience(async () => {
+            return await client.get(`/pdb/query/v4/reports/${reportHash}/metrics`);
+          });
+
+          if (Array.isArray(metricsData)) {
+            firstResult.metrics = { data: metricsData, href: `/pdb/query/v4/reports/${reportHash}/metrics` };
+            this.log(`Successfully fetched ${String(metricsData.length)} metrics for report '${reportHash}'`);
+          } else {
+            this.log(`Unexpected metrics data format from endpoint: ${typeof metricsData}`, "warn");
+            firstResult.metrics = { data: [] };
+          }
+        } catch (metricsError) {
+          this.logError(`Failed to fetch metrics for report '${reportHash}', continuing without metrics`, metricsError);
+          firstResult.metrics = { data: [] };
+        }
+      }
+
+      // Transform the report (now with logs and metrics populated)
+      const report = this.transformReport(firstResult);
+
+      // Fetch events for this report from the dedicated events endpoint
+      // PuppetDB returns events as {"href": "/pdb/query/v4/reports/<hash>/events", "data": [...]}
+      const certname = report.certname;
+      if (certname) {
+        try {
+          this.log(`Fetching events for report '${reportHash}' from dedicated endpoint`);
+          const eventsData = await this.executeWithResilience(async () => {
+            return await client.get(`/pdb/query/v4/reports/${reportHash}/events`);
+          });
+
+          if (Array.isArray(eventsData)) {
+            // Transform events to ResourceEvent format for the report
+            report.resource_events = eventsData.map((event: Record<string, unknown>) => ({
+              resource_type: typeof event.resource_type === "string" ? event.resource_type : "",
+              resource_title: typeof event.resource_title === "string" ? event.resource_title : "",
+              property: typeof event.property === "string" ? event.property : "",
+              timestamp: typeof event.timestamp === "string" ? event.timestamp : "",
+              status: this.normalizeEventStatus(typeof event.status === "string" ? event.status : "success"),
+              old_value: event.old_value,
+              new_value: event.new_value,
+              message: typeof event.message === "string" ? event.message : undefined,
+              file: typeof event.file === "string" ? event.file : undefined,
+              line: typeof event.line === "number" ? event.line : undefined,
+              containment_path: Array.isArray(event.containment_path) ? event.containment_path as string[] : [],
+            }));
+
+            this.log(`Added ${String(report.resource_events.length)} events to report '${reportHash}'`);
+          } else {
+            this.log(`Unexpected events data format from endpoint: ${typeof eventsData}`, "warn");
+          }
+        } catch (eventError) {
+          this.logError(
+            `Failed to fetch events for report '${reportHash}', continuing without events`,
+            eventError,
+          );
+          // Continue without events - the report is still useful
+        }
+      }
 
       // Cache the result
       this.cache.set(cacheKey, report, this.cacheTTL);
@@ -1237,6 +1326,12 @@ export class PuppetDBService
       if (filters?.endTime) {
         this.log(`Adding end time filter: ${filters.endTime}`);
         queryParts.push(`["<=", "timestamp", "${filters.endTime}"]`);
+      }
+
+      // Add report hash filter if specified (for fetching events for a specific report)
+      if (filters?.reportHash) {
+        this.log(`Adding report hash filter: ${filters.reportHash}`);
+        queryParts.push(`["=", "report", "${filters.reportHash}"]`);
       }
 
       // Combine query parts with AND operator
@@ -1754,33 +1849,128 @@ export class PuppetDBService
         changes: changeMetrics,
         events: eventMetrics,
       },
-      logs: Array.isArray(raw.logs)
-        ? (raw.logs as {
-            level: string;
-            message: string;
-            source: string;
-            tags: string[];
-            time: string;
-            file?: string;
-            line?: number;
-          }[])
-        : [],
-      resource_events: Array.isArray(raw.resource_events)
-        ? (raw.resource_events as {
-            resource_type: string;
-            resource_title: string;
-            property: string;
-            timestamp: string;
-            status: "success" | "failure" | "noop" | "skipped";
-            old_value?: unknown;
-            new_value?: unknown;
-            message?: string;
-            file?: string;
-            line?: number;
-            containment_path: string[];
-          }[])
-        : [],
+      logs: this.extractLogsArray(raw.logs),
+      resource_events: this.extractResourceEventsArray(raw.resource_events),
     };
+  }
+
+  /**
+   * Extract logs array from PuppetDB response
+   *
+   * PuppetDB may return logs in different formats:
+   * - Direct array: [{level, message, ...}, ...]
+   * - Object with data: {"href": "...", "data": [{level, message, ...}, ...]}
+   * - Object with only href: {"href": "..."} (data needs to be fetched separately)
+   *
+   * @param logsData - Raw logs data from PuppetDB
+   * @returns Array of log entries
+   */
+  private extractLogsArray(logsData: unknown): {
+    level: string;
+    message: string;
+    source: string;
+    tags: string[];
+    time: string;
+    file?: string;
+    line?: number;
+  }[] {
+    // Direct array format
+    if (Array.isArray(logsData)) {
+      return logsData as {
+        level: string;
+        message: string;
+        source: string;
+        tags: string[];
+        time: string;
+        file?: string;
+        line?: number;
+      }[];
+    }
+
+    // Object format with data property
+    if (logsData && typeof logsData === "object") {
+      const logsObj = logsData as Record<string, unknown>;
+      if (Array.isArray(logsObj.data)) {
+        this.log(`Extracted ${String(logsObj.data.length)} logs from object.data format`);
+        return logsObj.data as {
+          level: string;
+          message: string;
+          source: string;
+          tags: string[];
+          time: string;
+          file?: string;
+          line?: number;
+        }[];
+      }
+    }
+
+    // No logs or unrecognized format
+    return [];
+  }
+
+  /**
+   * Extract resource events array from PuppetDB response
+   *
+   * PuppetDB may return resource_events in different formats:
+   * - Direct array: [{resource_type, resource_title, ...}, ...]
+   * - Object with data: {"href": "...", "data": [{resource_type, ...}, ...]}
+   *
+   * @param eventsData - Raw resource_events data from PuppetDB
+   * @returns Array of resource events
+   */
+  private extractResourceEventsArray(eventsData: unknown): {
+    resource_type: string;
+    resource_title: string;
+    property: string;
+    timestamp: string;
+    status: "success" | "failure" | "noop" | "skipped";
+    old_value?: unknown;
+    new_value?: unknown;
+    message?: string;
+    file?: string;
+    line?: number;
+    containment_path: string[];
+  }[] {
+    // Direct array format
+    if (Array.isArray(eventsData)) {
+      return eventsData as {
+        resource_type: string;
+        resource_title: string;
+        property: string;
+        timestamp: string;
+        status: "success" | "failure" | "noop" | "skipped";
+        old_value?: unknown;
+        new_value?: unknown;
+        message?: string;
+        file?: string;
+        line?: number;
+        containment_path: string[];
+      }[];
+    }
+
+    // Object format with data property
+    if (eventsData && typeof eventsData === "object") {
+      const eventsObj = eventsData as Record<string, unknown>;
+      if (Array.isArray(eventsObj.data)) {
+        this.log(`Extracted ${String(eventsObj.data.length)} resource_events from object.data format`);
+        return eventsObj.data as {
+          resource_type: string;
+          resource_title: string;
+          property: string;
+          timestamp: string;
+          status: "success" | "failure" | "noop" | "skipped";
+          old_value?: unknown;
+          new_value?: unknown;
+          message?: string;
+          file?: string;
+          line?: number;
+          containment_path: string[];
+        }[];
+      }
+    }
+
+    // No events or unrecognized format
+    return [];
   }
 
   /**
@@ -2479,6 +2669,167 @@ export class PuppetDBService
       return count;
     } catch (error) {
       this.logError("Failed to get total reports count", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get report counts grouped by date and status
+   *
+   * Uses PuppetDB's aggregate query to efficiently get counts without fetching all reports.
+   * Queries reports where start_time is within the specified date range.
+   *
+   * @param startDate - Start of date range (ISO string)
+   * @param endDate - End of date range (ISO string)
+   * @returns Array of counts grouped by date and status
+   */
+  async getReportCountsByDateAndStatus(
+    startDate: string,
+    endDate: string
+  ): Promise<{ date: string; status: string; count: number }[]> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `reports:counts:${startDate}:${endDate}`;
+      const cached = this.cache.get(cacheKey);
+      if (Array.isArray(cached)) {
+        this.log("Returning cached report counts by date and status");
+        return cached as { date: string; status: string; count: number }[];
+      }
+
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      this.log(`Querying PuppetDB for report counts from ${startDate} to ${endDate}`);
+
+      // Use PuppetDB's extract/group_by to get counts grouped by status and date
+      // Query: extract count, status, and date from start_time, grouped by status and date
+      // Filter: start_time >= startDate AND start_time <= endDate
+      const extractQuery = JSON.stringify([
+        "extract",
+        [
+          ["function", "count"],
+          "status",
+          ["function", "to_string", "start_time", "YYYY-MM-DD"]
+        ],
+        ["and",
+          [">=", "start_time", startDate],
+          ["<=", "start_time", endDate]
+        ],
+        ["group_by", "status", ["function", "to_string", "start_time", "YYYY-MM-DD"]]
+      ]);
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/reports", extractQuery);
+      });
+
+      if (!Array.isArray(result)) {
+        this.log("Unexpected response format from PuppetDB reports aggregate query", "warn");
+        return [];
+      }
+
+      // Transform the result to our expected format
+      // PuppetDB returns: { status: string, count: number, to_string: string (date) }
+      const counts = result.map((row: Record<string, unknown>) => ({
+        date: String(row.to_string),
+        status: String(row.status),
+        count: Number(row.count),
+      }));
+
+      this.log(`Got ${String(counts.length)} date/status combinations`);
+
+      // Cache the result with shorter TTL (30 seconds)
+      this.cache.set(cacheKey, counts, 30000);
+
+      return counts;
+    } catch (error) {
+      this.logError("Failed to get report counts by date and status", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get report counts for a specific node grouped by date and status
+   *
+   * Uses PuppetDB's aggregate query to efficiently get counts without fetching all reports.
+   * Queries reports where certname matches and start_time is within the specified date range.
+   *
+   * @param certname - Node identifier (certname)
+   * @param startDate - Start of date range (ISO string)
+   * @param endDate - End of date range (ISO string)
+   * @returns Array of counts grouped by date and status
+   */
+  async getNodeReportCountsByDateAndStatus(
+    certname: string,
+    startDate: string,
+    endDate: string
+  ): Promise<{ date: string; status: string; count: number }[]> {
+    this.ensureInitialized();
+
+    try {
+      // Check cache first
+      const cacheKey = `reports:node:counts:${certname}:${startDate}:${endDate}`;
+      const cached = this.cache.get(cacheKey);
+      if (Array.isArray(cached)) {
+        this.log(`Returning cached report counts for node '${certname}'`);
+        return cached as { date: string; status: string; count: number }[];
+      }
+
+      const client = this.client;
+      if (!client) {
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      this.log(`Querying PuppetDB for report counts for node '${certname}' from ${startDate} to ${endDate}`);
+
+      // Use PuppetDB's extract/group_by to get counts grouped by status and date
+      // Filter: certname = certname AND start_time >= startDate AND start_time <= endDate
+      const extractQuery = JSON.stringify([
+        "extract",
+        [
+          ["function", "count"],
+          "status",
+          ["function", "to_string", "start_time", "YYYY-MM-DD"]
+        ],
+        ["and",
+          ["=", "certname", certname],
+          [">=", "start_time", startDate],
+          ["<=", "start_time", endDate]
+        ],
+        ["group_by", "status", ["function", "to_string", "start_time", "YYYY-MM-DD"]]
+      ]);
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/reports", extractQuery);
+      });
+
+      if (!Array.isArray(result)) {
+        this.log(`Unexpected response format from PuppetDB reports aggregate query for node '${certname}'`, "warn");
+        return [];
+      }
+
+      // Transform the result to our expected format
+      const counts = result.map((row: Record<string, unknown>) => ({
+        date: String(row.to_string),
+        status: String(row.status),
+        count: Number(row.count),
+      }));
+
+      this.log(`Got ${String(counts.length)} date/status combinations for node '${certname}'`);
+
+      // Cache the result with shorter TTL (30 seconds)
+      this.cache.set(cacheKey, counts, 30000);
+
+      return counts;
+    } catch (error) {
+      this.logError(`Failed to get report counts for node '${certname}'`, error);
       throw error;
     }
   }

@@ -102,7 +102,7 @@ export function createDebugRouter(): Router {
    */
   router.post(
     '/frontend-logs',
-    asyncHandler((req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
       logger.info('Receiving frontend logs', {
@@ -181,7 +181,7 @@ export function createDebugRouter(): Router {
    */
   router.get(
     '/frontend-logs/:correlationId',
-    asyncHandler((req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const { correlationId } = req.params;
 
       logger.debug('Retrieving frontend logs', {
@@ -206,7 +206,7 @@ export function createDebugRouter(): Router {
    */
   router.get(
     '/frontend-logs',
-    asyncHandler((_req: Request, res: Response): void => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       logger.debug('Retrieving all correlation IDs', {
         component: 'DebugRouter',
         operation: 'getAllCorrelationIds',
@@ -235,7 +235,7 @@ export function createDebugRouter(): Router {
    */
   router.delete(
     '/frontend-logs/:correlationId',
-    asyncHandler((req: Request, res: Response): void => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const { correlationId } = req.params;
 
       logger.info('Clearing frontend logs', {
@@ -260,7 +260,7 @@ export function createDebugRouter(): Router {
    */
   router.delete(
     '/frontend-logs',
-    asyncHandler((_req: Request, res: Response): void => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       logger.info('Clearing all frontend logs', {
         component: 'DebugRouter',
         operation: 'clearAllFrontendLogs',

@@ -617,17 +617,16 @@
     <!-- Background overlay -->
     <button
       type="button"
-      class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+      class="fixed inset-0 z-40 bg-gray-500 bg-opacity-75 transition-opacity"
       onclick={closeExecutionDetail}
       aria-label="Close modal"
     ></button>
 
     <!-- Modal panel -->
-    <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+    <div class="relative z-50 flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
       <div
         class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all dark:bg-gray-800 sm:my-8 sm:w-full sm:max-w-4xl"
         role="document"
-        onclick={(e) => e.stopPropagation()}
       >
         {#if loadingDetail}
           <!-- Loading State -->
