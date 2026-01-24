@@ -22,7 +22,7 @@ export function createColorsRouter(): Router {
    */
   router.get(
     "/",
-    asyncHandler((req: Request, res: Response): void => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
