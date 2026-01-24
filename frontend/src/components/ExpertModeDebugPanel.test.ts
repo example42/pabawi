@@ -32,6 +32,7 @@ describe('ExpertModeDebugPanel Component', () => {
         message: 'Connection timeout',
         code: 'ETIMEDOUT',
         stack: 'Error: Connection timeout\n    at fetch (/app/api.ts:123)',
+        level: 'error',
       },
     ],
     metadata: {

@@ -11,9 +11,9 @@ describe('ReportFilterStore', () => {
 
   describe('setFilter', () => {
     it('should set status filter', () => {
-      reportFilters.setFilter('status', ['success', 'failed']);
+      reportFilters.setFilter('status', ['changed', 'failed']);
       const filters = reportFilters.getFilters();
-      expect(filters.status).toEqual(['success', 'failed']);
+      expect(filters.status).toEqual(['changed', 'failed']);
     });
 
     it('should set minDuration filter', () => {
@@ -35,12 +35,12 @@ describe('ReportFilterStore', () => {
     });
 
     it('should set multiple filters', () => {
-      reportFilters.setFilter('status', ['success']);
+      reportFilters.setFilter('status', ['changed']);
       reportFilters.setFilter('minDuration', 300);
       reportFilters.setFilter('minCompileTime', 60);
 
       const filters = reportFilters.getFilters();
-      expect(filters.status).toEqual(['success']);
+      expect(filters.status).toEqual(['changed']);
       expect(filters.minDuration).toBe(300);
       expect(filters.minCompileTime).toBe(60);
     });
@@ -56,7 +56,7 @@ describe('ReportFilterStore', () => {
 
   describe('clearFilters', () => {
     it('should clear all filters', () => {
-      reportFilters.setFilter('status', ['success', 'failed']);
+      reportFilters.setFilter('status', ['changed', 'failed']);
       reportFilters.setFilter('minDuration', 300);
       reportFilters.setFilter('minCompileTime', 60);
 
@@ -69,7 +69,7 @@ describe('ReportFilterStore', () => {
 
   describe('getFilters', () => {
     it('should return a copy of filters', () => {
-      reportFilters.setFilter('status', ['success']);
+      reportFilters.setFilter('status', ['changed']);
 
       const filters1 = reportFilters.getFilters();
       const filters2 = reportFilters.getFilters();
