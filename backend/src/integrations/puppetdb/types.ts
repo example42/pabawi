@@ -154,4 +154,5 @@ export interface EventFilters {
   startTime?: string;
   endTime?: string;
   limit?: number;
+  reportHash?: string;
 }

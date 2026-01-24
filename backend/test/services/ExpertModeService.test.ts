@@ -1255,7 +1255,7 @@ describe('ExpertModeService', () => {
 
       const context = service.collectRequestContext(req);
 
-      expect(context.query.filter).toBe('[object Object]');
+      expect(context.query.filter).toBe('{"status":"active","type":"user"}');
       expect(context.query.tags).toBe('tag1, tag2');
       expect(context.query.count).toBe('42');
     });

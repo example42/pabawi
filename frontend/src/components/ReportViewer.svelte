@@ -590,22 +590,38 @@
       </svg>
     </button>
     {#if showLogs}
-      <div class="border-t border-gray-200 p-4 dark:border-gray-700">
-        <div class="max-h-64 overflow-y-auto space-y-2">
-          {#each report.logs as log}
-            <div class="rounded bg-gray-50 p-2 text-sm dark:bg-gray-900/50">
-              <div class="flex items-start gap-2">
-                <span class="font-mono text-xs {
-                  log.level === 'err' || log.level === 'error' ? 'text-red-600 dark:text-red-400' :
-                  log.level === 'warning' || log.level === 'warn' ? 'text-yellow-600 dark:text-yellow-400' :
-                  'text-gray-600 dark:text-gray-400'
-                }">
-                  [{log.level.toUpperCase()}]
-                </span>
-                <span class="flex-1 text-gray-700 dark:text-gray-300">{log.message}</span>
+      <div class="border-t border-gray-200 dark:border-gray-700">
+        <div class="max-h-96 overflow-y-auto bg-gray-900 dark:bg-gray-950 p-2 font-mono text-xs leading-relaxed">
+          {#if report.logs.length === 0}
+            <div class="text-gray-500 dark:text-gray-400 p-2">No logs available</div>
+          {:else}
+            {#each report.logs as log, index (index)}
+              <div class="hover:bg-gray-800 dark:hover:bg-gray-900 px-1 py-0.5 whitespace-nowrap overflow-x-auto">
+                <span class="text-gray-500">{log.time ? new Date(log.time).toISOString() : ''}</span>
+                {' '}
+                <span class="{
+                  log.level === 'err' || log.level === 'error' ? 'text-red-400' :
+                  log.level === 'warning' || log.level === 'warn' ? 'text-yellow-400' :
+                  log.level === 'notice' ? 'text-blue-400' :
+                  log.level === 'info' ? 'text-green-400' :
+                  log.level === 'debug' ? 'text-purple-400' :
+                  'text-gray-400'
+                }">{log.level ? log.level.toUpperCase().padEnd(7) : 'UNKNOWN'}</span>
+                {' '}
+                <span class="text-cyan-400">{log.source || ''}</span>
+                {#if log.file}
+                  {' '}
+                  <span class="text-gray-500">({log.file}{log.line ? `:${log.line}` : ''})</span>
+                {/if}
+                {': '}
+                <span class="text-gray-200">{log.message || ''}</span>
+                {#if log.tags && log.tags.length > 0}
+                  {' '}
+                  <span class="text-gray-600">[{log.tags.join(', ')}]</span>
+                {/if}
               </div>
-            </div>
-          {/each}
+            {/each}
+          {/if}
         </div>
       </div>
     {/if}

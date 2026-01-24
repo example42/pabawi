@@ -50,6 +50,9 @@ export class PuppetRunHistoryService {
   /**
    * Get run history for a specific node
    *
+   * Uses PuppetDB's aggregate query for efficient chart data,
+   * and fetches a small number of recent reports for summary statistics.
+   *
    * @param nodeId - Node identifier (certname)
    * @param days - Number of days to look back (default: 7)
    * @returns Node run history with summary statistics
@@ -60,26 +63,38 @@ export class PuppetRunHistoryService {
     try {
       // Calculate date range
       const endDate = new Date();
+      // Set end date to end of today
+      endDate.setHours(23, 59, 59, 999);
+      
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
+      // Set start date to beginning of that day
+      startDate.setHours(0, 0, 0, 0);
 
-      // Get reports for the node
-      // We'll fetch more than we need to ensure we have enough data
-      const reports = await this.puppetDBService.getNodeReports(nodeId, days * 10);
+      // Use the efficient aggregate query to get counts by date and status
+      const counts = await this.puppetDBService.getNodeReportCountsByDateAndStatus(
+        nodeId,
+        startDate.toISOString(),
+        endDate.toISOString()
+      );
 
-      // Filter reports within date range
-      const filteredReports = reports.filter((report) => {
+      this.log(`Got ${String(counts.length)} date/status combinations for node '${nodeId}'`);
+
+      // Convert counts to RunHistoryData format
+      const history = this.convertCountsToHistory(counts, startDate, endDate);
+
+      // Fetch a small number of recent reports for summary statistics
+      // We only need enough to calculate avgDuration and get lastRun
+      const recentReports = await this.puppetDBService.getNodeReports(nodeId, 10);
+      
+      // Filter to date range for accurate summary
+      const filteredReports = recentReports.filter((report) => {
         const reportDate = new Date(report.producer_timestamp);
         return reportDate >= startDate && reportDate <= endDate;
       });
 
-      this.log(`Found ${String(filteredReports.length)} reports for node '${nodeId}' in date range`);
-
-      // Group reports by date and status
-      const history = this.groupReportsByDate(filteredReports);
-
-      // Calculate summary statistics
-      const summary = this.calculateSummary(filteredReports);
+      // Calculate summary statistics from counts and recent reports
+      const summary = this.calculateSummaryFromCounts(counts, filteredReports);
 
       return {
         nodeId,
@@ -95,6 +110,9 @@ export class PuppetRunHistoryService {
   /**
    * Get aggregated run history for all nodes
    *
+   * Uses PuppetDB's aggregate query to efficiently get counts grouped by date and status.
+   * This avoids fetching all reports and instead queries only the counts needed.
+   *
    * @param days - Number of days to look back (default: 7)
    * @returns Aggregated run history data
    */
@@ -104,23 +122,24 @@ export class PuppetRunHistoryService {
     try {
       // Calculate date range
       const endDate = new Date();
+      // Set end date to end of today
+      endDate.setHours(23, 59, 59, 999);
+      
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
+      // Set start date to beginning of that day
+      startDate.setHours(0, 0, 0, 0);
 
-      // Get all reports
-      // We'll fetch a large number to get comprehensive data
-      const reports = await this.puppetDBService.getAllReports(days * 100);
+      // Use the efficient aggregate query to get counts by date and status
+      const counts = await this.puppetDBService.getReportCountsByDateAndStatus(
+        startDate.toISOString(),
+        endDate.toISOString()
+      );
 
-      // Filter reports within date range
-      const filteredReports = reports.filter((report) => {
-        const reportDate = new Date(report.producer_timestamp);
-        return reportDate >= startDate && reportDate <= endDate;
-      });
+      this.log(`Got ${String(counts.length)} date/status combinations from PuppetDB`);
 
-      this.log(`Found ${String(filteredReports.length)} reports across all nodes in date range`);
-
-      // Group reports by date and status
-      const history = this.groupReportsByDate(filteredReports);
+      // Convert counts to RunHistoryData format
+      const history = this.convertCountsToHistory(counts, startDate, endDate);
 
       return history;
     } catch (error) {
@@ -130,45 +149,48 @@ export class PuppetRunHistoryService {
   }
 
   /**
-   * Group reports by date and status
+   * Convert report counts by date/status to RunHistoryData format
    *
-   * @param reports - Array of reports to group
-   * @returns Array of run history data grouped by date
+   * @param counts - Array of counts from PuppetDB
+   * @param startDate - Start date of the range
+   * @param endDate - End date of the range
+   * @returns Array of run history data with all days filled in
    */
-  private groupReportsByDate(reports: Report[]): RunHistoryData[] {
-    // Create a map to group reports by date
+  private convertCountsToHistory(
+    counts: { date: string; status: string; count: number }[],
+    startDate: Date,
+    endDate: Date
+  ): RunHistoryData[] {
+    // Pre-populate all days with zero counts
     const dateMap = new Map<string, RunHistoryData>();
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dateKey = currentDate.toISOString().split("T")[0];
+      dateMap.set(dateKey, {
+        date: dateKey,
+        success: 0,
+        failed: 0,
+        changed: 0,
+        unchanged: 0,
+      });
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
 
-    for (const report of reports) {
-      // Extract date from producer_timestamp (YYYY-MM-DD)
-      const reportDate = new Date(report.producer_timestamp);
-      const dateKey = reportDate.toISOString().split("T")[0];
-
-      // Get or create entry for this date
-      if (!dateMap.has(dateKey)) {
-        dateMap.set(dateKey, {
-          date: dateKey,
-          success: 0,
-          failed: 0,
-          changed: 0,
-          unchanged: 0,
-        });
-      }
-
-      const entry = dateMap.get(dateKey);
+    // Fill in the counts from PuppetDB
+    for (const { date, status, count } of counts) {
+      const entry = dateMap.get(date);
       if (!entry) continue;
 
-      // Increment counters based on status
-      switch (report.status) {
+      switch (status) {
         case "failed":
-          entry.failed++;
+          entry.failed += count;
           break;
         case "changed":
-          entry.changed++;
+          entry.changed += count;
           break;
         case "unchanged":
-          entry.unchanged++;
-          entry.success++; // unchanged is considered success
+          entry.unchanged += count;
+          entry.success += count; // unchanged is considered success
           break;
       }
     }
@@ -182,13 +204,30 @@ export class PuppetRunHistoryService {
   }
 
   /**
-   * Calculate summary statistics for reports
+   * Log a message
    *
-   * @param reports - Array of reports to analyze
+   * Uses counts for totalRuns and successRate, and recent reports for avgDuration and lastRun.
+   *
+   * @param counts - Array of counts from PuppetDB aggregate query
+   * @param recentReports - Array of recent reports for duration/lastRun calculation
    * @returns Summary statistics
    */
-  private calculateSummary(reports: Report[]): NodeRunHistory["summary"] {
-    if (reports.length === 0) {
+  private calculateSummaryFromCounts(
+    counts: { date: string; status: string; count: number }[],
+    recentReports: Report[]
+  ): NodeRunHistory["summary"] {
+    // Calculate totals from counts
+    let totalRuns = 0;
+    let successfulRuns = 0;
+
+    for (const { status, count } of counts) {
+      totalRuns += count;
+      if (status === "unchanged" || status === "changed") {
+        successfulRuns += count;
+      }
+    }
+
+    if (totalRuns === 0) {
       return {
         totalRuns: 0,
         successRate: 0,
@@ -197,38 +236,37 @@ export class PuppetRunHistoryService {
       };
     }
 
-    // Count successful runs (unchanged or changed without failures)
-    const successfulRuns = reports.filter(
-      (report) => report.status === "unchanged" || report.status === "changed"
-    ).length;
+    // Calculate success rate from counts
+    const successRate = (successfulRuns / totalRuns) * 100;
 
-    // Calculate success rate
-    const successRate = (successfulRuns / reports.length) * 100;
+    // Calculate average duration from recent reports (if available)
+    let avgDuration = 0;
+    if (recentReports.length > 0) {
+      const totalDuration = recentReports.reduce((sum, report) => {
+        const startTime = new Date(report.start_time).getTime();
+        const endTime = new Date(report.end_time).getTime();
+        const duration = (endTime - startTime) / 1000; // convert to seconds
+        return sum + duration;
+      }, 0);
+      avgDuration = totalDuration / recentReports.length;
+    }
 
-    // Calculate average duration
-    const totalDuration = reports.reduce((sum, report) => {
-      const startTime = new Date(report.start_time).getTime();
-      const endTime = new Date(report.end_time).getTime();
-      const duration = (endTime - startTime) / 1000; // convert to seconds
-      return sum + duration;
-    }, 0);
-
-    const avgDuration = totalDuration / reports.length;
-
-    // Get last run timestamp
-    const sortedReports = [...reports].sort((a, b) => {
-      return (
-        new Date(b.producer_timestamp).getTime() -
-        new Date(a.producer_timestamp).getTime()
-      );
-    });
-
-    const lastRun = sortedReports[0].producer_timestamp;
+    // Get last run timestamp from recent reports
+    let lastRun = new Date().toISOString();
+    if (recentReports.length > 0) {
+      const sortedReports = [...recentReports].sort((a, b) => {
+        return (
+          new Date(b.producer_timestamp).getTime() -
+          new Date(a.producer_timestamp).getTime()
+        );
+      });
+      lastRun = sortedReports[0].producer_timestamp;
+    }
 
     return {
-      totalRuns: reports.length,
-      successRate: Math.round(successRate * 100) / 100, // round to 2 decimal places
-      avgDuration: Math.round(avgDuration * 100) / 100, // round to 2 decimal places
+      totalRuns,
+      successRate: Math.round(successRate * 100) / 100,
+      avgDuration: Math.round(avgDuration * 100) / 100,
       lastRun,
     };
   }
