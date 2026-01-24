@@ -11,7 +11,7 @@ const configService = new ConfigService();
  */
 router.get(
   "/ui",
-  asyncHandler((_req, res) => {
+  asyncHandler(async (_req, res) => {
     const uiConfig = configService.getUIConfig();
 
     res.json({
