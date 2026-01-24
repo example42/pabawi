@@ -1,6 +1,6 @@
 # Pabawi AI Coding Guidelines
 
-**Version:** 0.4.0  
+**Version:** 0.5.0
 **Last Updated:** January 2026
 
 Pabawi is a unified web interface for infrastructure management, executing commands and tasks via Bolt, PuppetDB, Puppetserver, and Hiera. This document guides AI agents through the architecture, conventions, and workflows essential for productive contributions.
