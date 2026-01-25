@@ -493,12 +493,7 @@ class profile::unused {
   fs.writeFileSync(path.join(testDir, "manifests", "profile", "unused.pp"), unusedManifest);
 
   // Create a file with trailing whitespace for lint testing
-  const lintTestManifest = `
-class profile::lint_test {
-  # This line has trailing spaces
-  notify { 'test': }
-}
-`;
+  const lintTestManifest = 'class profile::lint_test {\n  # This line has trailing spaces   \n  notify { \'test\': }\n}\n';
   fs.writeFileSync(path.join(testDir, "manifests", "profile", "lint_test.pp"), lintTestManifest);
 
   // Create profile::vhost defined type
