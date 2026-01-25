@@ -1747,7 +1747,7 @@
                 class="whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium {activePuppetSubTab === 'catalog-compilation' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
                 onclick={() => switchPuppetSubTab('catalog-compilation')}
               >
-                Catalog Compilation
+                Catalog Diff
               </button>
               <button
                 type="button"
@@ -1934,11 +1934,11 @@
             </div>
           {/if}
 
-          <!-- Catalog Compilation Sub-Tab -->
+          <!-- Catalog Diff Sub-Tab -->
           {#if activePuppetSubTab === 'catalog-compilation'}
             <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
               <div class="mb-4 flex items-center gap-3">
-                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog Compilation</h2>
+                <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Catalog Diff</h2>
                 <IntegrationBadge integration="puppetserver" variant="badge" size="sm" />
               </div>
 

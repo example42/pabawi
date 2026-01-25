@@ -2620,6 +2620,10 @@ export class PuppetDBService
 
   /**
    * Get total count of reports (optionally filtered)
+   *
+   * Uses PuppetDB's aggregate query with extract/count function for efficient counting.
+   * See: https://help.puppet.com/pdb/8/topics/reports.htm
+   *
    * @param filters - Optional filters to apply before counting
    * @returns Total number of reports matching the filters
    */
@@ -2643,24 +2647,43 @@ export class PuppetDBService
         );
       }
 
-      this.log(`Querying PuppetDB for total reports count`);
+      this.log(`Querying PuppetDB for total reports count using aggregate query`);
 
-      // PuppetDB doesn't have a direct count endpoint, so we need to fetch all reports
-      // and count them. For filtered counts, we'll need to apply filters after fetching.
-      // This is not ideal for performance but matches PuppetDB's API limitations.
+      // Build the aggregate count query using PuppetDB's extract function
+      // Query format: ["extract", [["function", "count"]], <optional-filter>]
+      // This returns a single row with { "count": N }
+      let extractQuery: unknown[];
+
+      if (filters && Object.keys(filters).length > 0) {
+        // Build filter conditions from the filters object
+        const conditions = this.buildFilterConditions(filters);
+        extractQuery = [
+          "extract",
+          [["function", "count"]],
+          conditions
+        ];
+      } else {
+        // No filters - use a match-all condition (certname matches any string)
+        // PuppetDB requires a condition for extract queries
+        extractQuery = [
+          "extract",
+          [["function", "count"]],
+          ["~", "certname", ""]
+        ];
+      }
+
       const result = await this.executeWithResilience(async () => {
-        return await client.query("pdb/query/v4/reports", undefined, {
-          limit: 10000, // Set a high limit to get accurate count
-          order_by: '[{"field": "producer_timestamp", "order": "desc"}]',
-        });
+        return await client.query("pdb/query/v4/reports", JSON.stringify(extractQuery));
       });
 
-      if (!Array.isArray(result)) {
-        this.log("Unexpected response format from PuppetDB reports endpoint", "warn");
+      // Result is an array with a single object: [{ "count": N }]
+      if (!Array.isArray(result) || result.length === 0) {
+        this.log("Unexpected response format from PuppetDB reports aggregate query", "warn");
         return 0;
       }
 
-      const count = result.length;
+      const countResult = result[0] as Record<string, unknown>;
+      const count = typeof countResult.count === 'number' ? countResult.count : 0;
       this.log(`Total reports count: ${String(count)}`);
 
       // Cache the result with shorter TTL (30 seconds)
@@ -2670,6 +2693,50 @@ export class PuppetDBService
     } catch (error) {
       this.logError("Failed to get total reports count", error);
       throw error;
+    }
+  }
+
+  /**
+   * Build PuppetDB filter conditions from a filters object
+   *
+   * @param filters - Object with filter key-value pairs
+   * @returns PuppetDB AST query condition
+   */
+  private buildFilterConditions(filters: Record<string, unknown>): unknown[] {
+    const conditions: unknown[][] = [];
+
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== null) {
+        // Only process primitive values (string, number, boolean)
+        if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
+          continue;
+        }
+
+        if (key === 'startDate' || key === 'start_time_gte') {
+          conditions.push([">=", "start_time", value]);
+        } else if (key === 'endDate' || key === 'start_time_lte') {
+          conditions.push(["<=", "start_time", value]);
+        } else if (key === 'status') {
+          conditions.push(["=", "status", value]);
+        } else if (key === 'certname') {
+          conditions.push(["=", "certname", value]);
+        } else if (key === 'environment') {
+          conditions.push(["=", "environment", value]);
+        } else {
+          // Generic equality filter
+          conditions.push(["=", key, value]);
+        }
+      }
+    }
+
+    if (conditions.length === 0) {
+      // Return match-all condition
+      return ["~", "certname", ""];
+    } else if (conditions.length === 1) {
+      return conditions[0];
+    } else {
+      // Combine with "and"
+      return ["and", ...conditions];
     }
   }
 
