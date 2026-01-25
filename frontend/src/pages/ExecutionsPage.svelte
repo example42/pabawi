@@ -17,6 +17,8 @@
   import { useExecutionStream } from '../lib/executionStream.svelte';
   import type { DebugInfo } from '../lib/api';
 
+  const pageTitle = 'Pabawi - Executions';
+
   interface ExecutionResult {
     id: string;
     type: 'command' | 'task' | 'facts' | 'puppet' | 'package';
@@ -341,6 +343,11 @@
 
     selectedExecution = null;
     detailError = null;
+
+    // Clear the execution ID from URL to prevent the $effect from reopening the modal
+    if (router.query.get('id')) {
+      router.navigate('/executions');
+    }
   }
 
   // Calculate execution summary
@@ -402,6 +409,10 @@
     }
   });
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 <div class="container mx-auto px-4 py-8">
   <!-- Header -->

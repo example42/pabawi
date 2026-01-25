@@ -15,6 +15,13 @@
 
   const integration = $derived(params?.integration || '');
 
+  // Dynamic page title based on integration name
+  const pageTitle = $derived(
+    integration
+      ? `Pabawi - ${integration.charAt(0).toUpperCase() + integration.slice(1)} Setup`
+      : 'Pabawi - Integration Setup'
+  );
+
   // Debug info state for expert mode
   let debugInfo = $state<DebugInfo | null>(null);
 
@@ -55,6 +62,10 @@
     }
   });
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 {#if integration === 'puppetserver'}
   <!-- Use the dedicated Puppetserver setup guide component -->

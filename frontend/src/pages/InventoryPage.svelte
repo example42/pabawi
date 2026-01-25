@@ -10,6 +10,8 @@
   import { expertMode } from '../lib/expertMode.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
+  const pageTitle = 'Pabawi - Inventory';
+
   interface Node {
     id: string;
     name: string;
@@ -395,6 +397,10 @@
     fetchInventory();
   });
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 <div class="container mx-auto px-4 py-8">
   <!-- Header -->
