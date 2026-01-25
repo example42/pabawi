@@ -14,6 +14,8 @@
   import { expertMode } from '../lib/expertMode.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
+  const pageTitle = 'Pabawi - Dashboard';
+
   interface Node {
     id: string;
     name: string;
@@ -330,6 +332,10 @@
     };
   });
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 <div class="container mx-auto px-4 py-8">
   <!-- Welcome Section -->

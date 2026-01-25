@@ -19,6 +19,8 @@
   import { expertMode } from '../lib/expertMode.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
+  const pageTitle = 'Pabawi - Puppet';
+
   // Tab types
   type TabId = 'reports' | 'environments' | 'facts' | 'status' | 'admin' | 'hiera' | 'analysis';
 
@@ -210,6 +212,10 @@
     };
   });
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 <div class="container mx-auto px-4 py-8">
   <!-- Page Header -->

@@ -30,6 +30,9 @@
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
+  // Dynamic page title based on node name
+  const pageTitle = $derived(node ? `Pabawi - ${node.name}` : 'Pabawi - Node Details');
+
   interface Props {
     params?: { id: string };
   }
@@ -1163,6 +1166,10 @@
     };
   });
 </script>
+
+<svelte:head>
+  <title>{pageTitle}</title>
+</svelte:head>
 
 <div class="container mx-auto px-4 py-8">
   <!-- Back button -->
