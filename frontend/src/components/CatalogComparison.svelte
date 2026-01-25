@@ -61,9 +61,25 @@
   const hasResults = $derived(catalogDiff !== null);
 
   // Filter resources based on search query
-  const filteredDiff = $derived(() => {
-    if (!catalogDiff || !searchQuery.trim()) {
-      return catalogDiff;
+  const filteredDiff = $derived.by(() => {
+    if (!catalogDiff) {
+      return null;
+    }
+
+    // Ensure arrays exist with defaults
+    const added = catalogDiff.added ?? [];
+    const removed = catalogDiff.removed ?? [];
+    const modified = catalogDiff.modified ?? [];
+    const unchanged = catalogDiff.unchanged ?? [];
+
+    if (!searchQuery.trim()) {
+      return {
+        ...catalogDiff,
+        added,
+        removed,
+        modified,
+        unchanged
+      };
     }
 
     const query = searchQuery.toLowerCase();
@@ -74,9 +90,10 @@
 
     return {
       ...catalogDiff,
-      added: catalogDiff.added.filter(matchesQuery),
-      removed: catalogDiff.removed.filter(matchesQuery),
-      modified: catalogDiff.modified.filter(matchesQuery)
+      added: added.filter(matchesQuery),
+      removed: removed.filter(matchesQuery),
+      modified: modified.filter(matchesQuery),
+      unchanged
     };
   });
 
@@ -98,7 +115,7 @@
       catalogDiff = null;
 
       const startTime = performance.now();
-      const result = await post<CatalogDiff>(
+      const result = await post<{ diff: CatalogDiff; source: string }>(
         '/api/integrations/puppetserver/catalog/compare',
         {
           certname,
@@ -108,15 +125,16 @@
       );
       const endTime = performance.now();
 
-      catalogDiff = result;
+      // Extract diff from response wrapper
+      catalogDiff = result.diff;
 
       if (expertMode.enabled) {
         console.log('[CatalogComparison] Comparison complete');
         console.log('[CatalogComparison] Response time:', Math.round(endTime - startTime), 'ms');
-        console.log('[CatalogComparison] Added:', result.added.length);
-        console.log('[CatalogComparison] Removed:', result.removed.length);
-        console.log('[CatalogComparison] Modified:', result.modified.length);
-        console.log('[CatalogComparison] Unchanged:', result.unchanged.length);
+        console.log('[CatalogComparison] Added:', result.diff?.added?.length ?? 0);
+        console.log('[CatalogComparison] Removed:', result.diff?.removed?.length ?? 0);
+        console.log('[CatalogComparison] Modified:', result.diff?.modified?.length ?? 0);
+        console.log('[CatalogComparison] Unchanged:', result.diff?.unchanged?.length ?? 0);
       }
       showSuccess('Catalogs compared', `Successfully compared ${environment1} and ${environment2}`);
     } catch (err) {
@@ -271,8 +289,8 @@
   {/if}
 
   <!-- Results -->
-  {#if hasResults && !loading && filteredDiff()}
-    {@const diff = filteredDiff()}
+  {#if hasResults && !loading && filteredDiff}
+    {@const diff = filteredDiff}
 
     <!-- Summary -->
     <div class="mb-6 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
