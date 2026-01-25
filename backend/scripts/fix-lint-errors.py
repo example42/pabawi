@@ -14,10 +14,10 @@ def fix_template_literals(content: str) -> str:
         (r'\$\{([^}]+\.length)\}', r'${String(\1)}'),
         (r'\$\{(count|total|size|index|page|limit|offset)\}', r'${String(\1)}'),
     ]
-    
+
     for pattern, replacement in patterns:
         content = re.sub(pattern, replacement, content)
-    
+
     return content
 
 def fix_nullish_coalescing(content: str) -> str:
@@ -29,35 +29,35 @@ def fix_nullish_coalescing(content: str) -> str:
         (r'(\w+)\s*\|\|\s*""', r'\1 ?? ""'),
         (r'(\w+)\s*\|\|\s*\'\'', r'\1 ?? \'\''),
     ]
-    
+
     for pattern, replacement in patterns:
         content = re.sub(pattern, replacement, content)
-    
+
     return content
 
 def main():
     backend_src = Path('backend/src')
-    
+
     if not backend_src.exists():
         print("Error: backend/src directory not found")
         sys.exit(1)
-    
+
     # Find all TypeScript files
     ts_files = list(backend_src.rglob('*.ts'))
-    
+
     print(f"Found {len(ts_files)} TypeScript files")
     print("Note: This script makes conservative fixes.")
     print("Manual review is still required for complex cases.\n")
-    
+
     for ts_file in ts_files:
         try:
             content = ts_file.read_text()
             original = content
-            
+
             # Apply fixes
             content = fix_template_literals(content)
             content = fix_nullish_coalescing(content)
-            
+
             if content != original:
                 print(f"Fixed: {ts_file.relative_to(backend_src.parent)}")
                 # Uncomment to actually write changes:

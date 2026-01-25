@@ -152,11 +152,11 @@ describe('PuppetRunHistoryService', () => {
 
         // Should return 8 days (today + 7 days back), with data on 2 of them
         expect(result.history.length).toBe(8);
-        
+
         // Find the entries for our specific dates
         const date1Entry = result.history.find(h => h.date === date1Str);
         const date2Entry = result.history.find(h => h.date === date2Str);
-        
+
         expect(date1Entry).toBeDefined();
         expect(date2Entry).toBeDefined();
         expect(date1Entry!.unchanged).toBe(1);
@@ -182,7 +182,7 @@ describe('PuppetRunHistoryService', () => {
 
         // Find the entry for our specific date
         const dateEntry = result.history.find(h => h.date === dateStr);
-        
+
         expect(dateEntry).toBeDefined();
         expect(dateEntry!.unchanged).toBe(1);
         expect(dateEntry!.changed).toBe(1);
@@ -510,7 +510,7 @@ describe('PuppetRunHistoryService', () => {
 
         // Should return 8 days with data on the specific date
         expect(result.length).toBe(8);
-        
+
         const dateEntry = result.find(h => h.date === dateStr);
         expect(dateEntry).toBeDefined();
         expect(dateEntry!.unchanged).toBe(10);
@@ -539,14 +539,14 @@ describe('PuppetRunHistoryService', () => {
 
         // Should return 8 days with data on 2 specific dates
         expect(result.length).toBe(8);
-        
+
         const date1Entry = result.find(h => h.date === date1Str);
         const date2Entry = result.find(h => h.date === date2Str);
-        
+
         expect(date1Entry).toBeDefined();
         expect(date1Entry!.unchanged).toBe(5);
         expect(date1Entry!.changed).toBe(3);
-        
+
         expect(date2Entry).toBeDefined();
         expect(date2Entry!.failed).toBe(1);
         expect(date2Entry!.unchanged).toBe(8);

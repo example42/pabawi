@@ -1,10 +1,10 @@
 # PuppetDB Integration API Documentation
 
-Version: 0.2.0
+Version: 0.5.0
 
 ## Overview
 
-This document describes the API endpoints added in version 0.2.0 for PuppetDB integration, re-execution capabilities, and expert mode enhancements. These endpoints extend the base Pabawi API to support multi-source infrastructure management.
+This document describes the API endpoints for PuppetDB integration, re-execution capabilities, and expert mode enhancements. These endpoints extend the base Pabawi API to support multi-source infrastructure management.
 
 ## Table of Contents
 

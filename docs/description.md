@@ -1,77 +1,79 @@
-# Unified Remote Execution Interface — Technical Summary
+# Pabawi — Technical Summary
 
 ## Overview
 
-This document summarizes the technical design for a **web interface and unified API** that orchestrates remote execution tools such as **Bolt**, **Ansible**, and future adapters (e.g., Salt, Chef, Terraform).
+Pabawi is a **web-based interface and unified API** for managing Puppet infrastructure through Bolt execution and multiple information sources.
 
-The objective is to provide a **common abstraction layer** and **consistent web API** to execute commands, tasks, workflows, and facts collection operations across heterogeneous automation backends.
+The application provides a **common abstraction layer** and **consistent web API** to execute commands, tasks, and workflows while aggregating data from Bolt, PuppetDB, Puppetserver, and Hiera through a plugin-based architecture.
 
 ---
 
 ## 1. Goals and Objectives
 
-- Provide a **web-based orchestration layer** for remote execution tools.
-- Abstract differences between tools into a **shared action model**.
-- Offer a **REST API** with standardized JSON schemas.
-- Enable **UI integration** for command execution, inventory browsing, and log visualization.
-- Support **multiple adapters** via a plugin architecture.
-- Design with strong security principles
+- Provide a **web-based interface** for Bolt automation and Puppet infrastructure management
+- Unify data from **multiple information sources** (Bolt, PuppetDB, Puppetserver, Hiera) through a plugin architecture
+- Offer a **REST API** with standardized JSON schemas
+- Enable **real-time execution monitoring** with streaming output
+- Support **graceful degradation** when integrations are unavailable
+- Maintain **strong security** with command whitelisting and expert mode debugging
 
 ---
 
-## 2.  Common Concepts Across Infrastructure Automation Tools
+## 2. Plugin-Based Architecture
 
-| Concept | Bolt | Ansible | Salt | Terraform | Chef | Puppet | Fabric | PowerShell DSC | CFEngine | Capistrano | Unified Abstraction |
-|----------|------|----------|------|-----------|------|--------|--------|----------------|----------|------------|----------------------|
-| **Inventory** | inventory.yaml | inventory.ini / hosts | roster file / nodegroups | providers + resources | nodes.json / knife search | nodes.pp / PuppetDB | fabfile hosts list | Configuration data | hosts in promises | deploy.rb servers | ExecutionTarget |
-| **Command Execution** | `bolt command run` | `ansible -m command` | `salt '*' cmd.run` | N/A (declarative) | `knife ssh 'cmd'` | N/A (declarative) | `fab run:'cmd'` | `Invoke-Command` | `cf-runagent` | `cap invoke:cmd` | RunCommand |
-| **Task Execution** | `bolt task run` | `ansible -m <module>` | `salt '*' state.single` | `terraform apply` | `chef-client -o recipe` | `puppet agent -t` | `@task def name()` | `Start-DscConfiguration` | `cf-agent` | `cap task_name` | RunTask |
-| **Workflow Execution** | `bolt plan run` | `ansible-playbook playbook.yml` | `salt '*' state.apply` | `terraform plan/apply` | `chef-client -r runlist` | `puppet apply manifest.pp` | `fab deploy` | Configuration Script | Policy execution | `cap production deploy` | RunWorkflow |
-| **Facts Gathering** | `bolt inventory show` | `ansible -m setup` / `gather_facts` | `salt '*' grains.items` | `terraform show/state` | `ohai` | `facter` | Custom functions | `Get-DscConfiguration` | `cf-promises --show-vars` | Custom rake tasks | GatherFacts |
-| **Credentials** | bolt-project.yaml transport | ansible.cfg / vault / inventory vars | pillar / master config | provider blocks / env vars | knife.rb / data bags | hiera / eyaml | SSH config / env vars | Credentials in MOF | Encrypted files | SSH keys / config | CredentialProfile |
-| **Variables/Parameters** | vars in plan/inventory | host_vars / group_vars / extra-vars | pillar / grains | variables.tf / tfvars | attributes / data bags | hiera / params | env dict / config | Configuration data | variables in promises | set :var, value | ExecutionParameters |
-| **State/Idempotency** | Tasks can be idempotent | Modules are idempotent | States are idempotent | Resources are idempotent | Resources converge | Resources converge | Manual implementation | DSC resources converge | Promises converge | Manual implementation | StateManagement |
-| **Result Output** | JSON / human | JSON / YAML / human | YAML / JSON / text | JSON / HCL | JSON / text | YAML / JSON | stdout / custom | PowerShell objects | Text / JSON | stdout / logs | ExecutionResult |
-| **Remote Execution** | SSH / WinRM / Docker | SSH / WinRM | ZeroMQ / SSH | Provider APIs | SSH / WinRM | Puppet Server / SSH | SSH / paramiko | WinRM / PowerShell Remoting | cf-serverd protocol | SSH / SCP | TransportProtocol |
-| **Configuration Format** | YAML | YAML | YAML / SLS | HCL | Ruby DSL | Puppet DSL | Python | PowerShell / MOF | CFEngine language | Ruby DSL | ConfigurationLanguage |
-| **Templating** | EPP / ERB | Jinja2 | Jinja2 / Mako | HCL interpolation | ERB | EPP / ERB | Jinja2 / Python f-strings | PowerShell strings | Mustache / CFEngine | ERB | TemplateEngine |
+Pabawi uses a plugin system to integrate multiple tools and data sources:
 
----
+### Current Integrations (v0.5.0)
 
-## 3. Unified Data Model
+| Integration | Type | Priority | Capabilities |
+|------------|------|----------|--------------|
+| **Bolt** | Execution + Information | 10 | Command/task execution, inventory, facts |
+| **PuppetDB** | Information | 10 | Inventory, facts, reports, catalog data |
+| **Puppetserver** | Information | 20 | Node certificates, status, catalog compilation |
+| **Hiera** | Information | 6 | Hierarchical configuration data, key analysis |
 
-### Entities
+### Plugin Types
 
-- **Tool**: Describes an automation backend (Bolt, Ansible, etc.).  
-- **Target**: A host or endpoint to execute actions on.  
-- **CredentialProfile**: Secure reference to authentication data.  
-- **ExecutionContext**: Scope of a single execution (tool, targets, vars).  
-- **Action**: Logical execution unit (command, task, plan).  
-- **ExecutionResult**: Normalized outcome across all targets.
+- **Execution Tool Plugins**: Execute actions on target nodes (Bolt)
+- **Information Source Plugins**: Provide inventory, facts, and node data (PuppetDB, Puppetserver, Hiera)
+- **Both**: Plugins that provide execution and information capabilities (Bolt)
 
 ---
 
-## 4. Implementation steps
+## 3. Data Model
 
-### Version 0.1.0 (Completed)
+### Core Entities
 
-Simple web interface serving the Bolt environment of the local cwd, it directly uses credentials, inventory files and modules found on the local existing directory of the Bolt user.
-Implements Bolt support for Inventory, Facts, and Executions.
-The web interface provides the following pages:
+- **Node**: A managed infrastructure target (from Bolt inventory or discovered via integrations)
+- **Integration**: A data source or execution tool plugin
+- **Execution**: A command, task, or plan execution with streaming output
+- **Facts**: System information collected from nodes
+- **Report**: Puppet run report with metrics and status
+- **ExecutionResult**: Normalized outcome with source attribution
 
-- Nodes inventory (able to adapt efficiently to from dozens to thousands of nodes)
-- Node detail page (where to see facts, execution results, run commands and tasks)
-- Executions results page (summary of all executions and link to drill down for details)
+---
 
-### Version 0.2.0 (Completed)
+## 4. Version History
 
-Add PuppetDB support for Inventory, Facts and reports. Implement plugin architecture for integrations.
+### Version 0.5.0 (Current)
 
-### Version 0.4.0 (Current)
+Puppet report filtering, run history visualization, and enhanced expert mode debugging.
 
-Add Hiera integration for hierarchical configuration data browsing and analysis. Remove puppetserver CA management functionality. Enhance plugin architecture with improved error handling and health monitoring.
+**Key Features:**
 
-Key features:
+- Report filtering by status, duration, compile time, and total resources
+- Puppet run history visualization with stacked bar charts
+- Aggregated run history for all nodes on home page
+- Enhanced expert mode with frontend log collection and obfuscation
+- Performance metrics (memory, CPU, cache stats)
+- Centralized logging service with consistent formatting
+- UI configuration options
+
+### Version 0.4.0
+
+Hiera integration for hierarchical configuration data browsing and analysis.
+
+**Key Features:**
 
 - Hiera integration for configuration data exploration
 - Key usage analysis and classification
@@ -81,61 +83,76 @@ Key features:
 - Enhanced plugin architecture with better error handling
 - Improved health monitoring and graceful degradation
 
-### Version 0.5.0 (Planned)
+### Version 0.2.0
 
-Add Ansible support for Inventory, Facts and Executions. Implement workflows logic.
+PuppetDB integration and plugin architecture.
 
-### Version 0.x.0 (Future)
+**Key Features:**
 
-Add support for other tools (Terraform, Salt, Chef, etc.)
+- PuppetDB support for inventory, facts, and reports
+- Plugin architecture for integrations
+- Multi-source data aggregation
 
-### Version 1.0.0 (Future)
+### Version 0.1.0
 
-Add multitenant support, with centralized authentication and authorization
+Initial release with Bolt integration.
+
+**Key Features:**
+
+- Bolt support for inventory, facts, and executions
+- Node inventory (optimized for 10-1000+ nodes)
+- Node detail page with facts, execution results, commands, and tasks
+- Executions results page
 
 For detailed architecture information, see [Architecture Documentation](./architecture.md).
 
 ---
 
-## 5 Technical stack
+## 5. Technical Stack
 
 ### Frontend
 
-- Framework: Svelte — chosen for its lightweight reactivity model and minimal runtime overhead.
-- Styling: Tailwind CSS — enables utility-first, consistent design and rapid UI prototyping.
-- Build Tool: Vite — ensures fast hot-reload and optimized production builds.
+- **Framework**: Svelte 5 with TypeScript
+- **Styling**: Tailwind CSS for utility-first design
+- **Build Tool**: Vite for fast development and optimized builds
+- **State Management**: Svelte 5 runes (`$state()`, `$effect()`)
 
-Features:
+**Features:**
 
 - Interactive dashboards for execution monitoring
-- Real-time log streaming (WebSocket/SSE integration)
-= Modular components for tool adapters (Bolt, Ansible, etc.)
+- Real-time streaming output via Server-Sent Events (SSE)
+- Virtual scrolling for large inventories (1000+ nodes)
+- Expert mode with frontend log collection and obfuscation
 
 ### Backend
 
-- Language/Runtime: Typescript / ???
-- API Specification: OpenAPI 3.0 (REST)
+- **Language/Runtime**: TypeScript on Node.js
+- **Framework**: Express
+- **API Specification**: OpenAPI 3.0 (REST)
+- **Database**: SQLite for execution history
 
-Responsibilities:
+**Responsibilities:**
 
-- Abstract dispatch of actions to adapters (Bolt, Ansible, etc.)
-- Execution orchestration, result normalization, and persistence
-- Authentication, RBAC, and audit logging
+- Plugin-based integration management
+- Execution orchestration with queue and streaming
+- Multi-source data aggregation with priority-based routing
+- Structured logging and performance monitoring
 
-### Containerization & Deployment
+### Deployment
 
-- Container Runtime: Docker
-- Base Image: node:alpine (for production builds)
-- Container Orchestration (optional): Kubernetes for scaling and adapter isolation
+- **Container Runtime**: Docker
+- **Base Images**: node:alpine (production), node:slim (development)
+- **Configuration**: Environment variables (.env)
+- **CI/CD**: GitHub Actions for lint, test, build
 
-Features:
+**Features:**
 
 - Single container serving both API and frontend
-- Configurable through environment variables (.env)
-- Ready for CI/CD pipelines (e.g., GitHub Actions, GitLab CI)
+- Multi-architecture builds (amd64, arm64)
+- Development and production Docker configurations
 
-### Additional Tooling
+### Infrastructure
 
-- Database: PostgreSQL or SQLite (for metadata and results)
-- Secrets Management: HashiCorp Vault (optional - TO DEFINE)
-- Observability: OpenTelemetry for distributed tracing and Prometheus metrics
+- **Database**: SQLite (execution history with composite indexes)
+- **Logging**: Centralized LoggerService with structured metadata
+- **Monitoring**: Performance metrics, health checks, expert mode diagnostics

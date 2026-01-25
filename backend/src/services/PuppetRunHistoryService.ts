@@ -65,7 +65,7 @@ export class PuppetRunHistoryService {
       const endDate = new Date();
       // Set end date to end of today
       endDate.setHours(23, 59, 59, 999);
-      
+
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       // Set start date to beginning of that day
@@ -86,7 +86,7 @@ export class PuppetRunHistoryService {
       // Fetch a small number of recent reports for summary statistics
       // We only need enough to calculate avgDuration and get lastRun
       const recentReports = await this.puppetDBService.getNodeReports(nodeId, 10);
-      
+
       // Filter to date range for accurate summary
       const filteredReports = recentReports.filter((report) => {
         const reportDate = new Date(report.producer_timestamp);
@@ -124,7 +124,7 @@ export class PuppetRunHistoryService {
       const endDate = new Date();
       // Set end date to end of today
       endDate.setHours(23, 59, 59, 999);
-      
+
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
       // Set start date to beginning of that day

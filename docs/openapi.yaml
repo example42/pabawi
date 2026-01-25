@@ -31,7 +31,7 @@ info:
     Server-Sent Events (SSE). After starting an execution, connect to the streaming
     endpoint to receive stdout, stderr, and status updates as they occur.
 
-  version: 0.4.0
+  version: 0.5.0
   contact:
     name: Pabawi Support
   license:
@@ -70,6 +70,8 @@ tags:
     description: Puppetserver integration endpoints
   - name: Hiera
     description: Hiera data lookup and analysis
+  - name: Debug
+    description: Frontend log collection and troubleshooting
 
 paths:
   /health:
@@ -134,6 +136,23 @@ paths:
                   executionTimeout:
                     type: integer
                     description: Execution timeout in milliseconds
+
+  /config/ui:
+    get:
+      summary: Get UI configuration
+      description: Retrieve UI configuration settings for the frontend
+      tags:
+        - System
+      responses:
+        '200':
+          description: UI configuration retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ui:
+                    type: object
 
   /inventory:
     get:
@@ -304,6 +323,27 @@ paths:
                     format: date-time
                   cached:
                     type: boolean
+
+  /integrations/colors:
+    get:
+      summary: Get integration colors
+      description: Return the color palette for each integration (bolt, puppetdb, puppetserver, hiera)
+      tags:
+        - Integrations
+      responses:
+        '200':
+          description: Integration colors retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  colors:
+                    type: object
+                  integrations:
+                    type: array
+                    items:
+                      type: string
 
   /integrations/puppetdb/nodes:
     get:
@@ -478,6 +518,166 @@ paths:
                     type: string
                     example: puppetdb
 
+  /integrations/puppetdb/reports:
+    get:
+      summary: Get all Puppet reports
+      description: Return recent Puppet reports across all nodes from PuppetDB
+      tags:
+        - PuppetDB
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of reports to return
+          schema:
+            type: integer
+            default: 100
+        - name: status
+          in: query
+          description: Filter by report status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Reports retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PuppetReport'
+                  source:
+                    type: string
+                    example: puppetdb
+
+  /integrations/puppetdb/nodes/{certname}/reports/{hash}:
+    get:
+      summary: Get report details
+      description: Return detailed information for a specific Puppet report
+      tags:
+        - PuppetDB
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Report retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PuppetReportDetail'
+        '404':
+          description: Report not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/puppetdb/nodes/{certname}/catalog:
+    get:
+      summary: Get node catalog
+      description: Return Puppet catalog for a specific node from PuppetDB
+      tags:
+        - PuppetDB
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: resourceType
+          in: query
+          description: Optional resource type filter
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Catalog retrieved successfully
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/puppetdb/nodes/{certname}/resources:
+    get:
+      summary: Get node resources
+      description: Return managed resources for a specific node from PuppetDB
+      tags:
+        - PuppetDB
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: resourceType
+          in: query
+          description: Optional resource type filter
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resources retrieved successfully
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/puppetdb/nodes/{certname}/events:
+    get:
+      summary: Get node events
+      description: Return Puppet events for a specific node from PuppetDB
+      tags:
+        - PuppetDB
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by event status
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Events retrieved successfully
+
+  /integrations/puppetdb/admin/summary-stats:
+    get:
+      summary: Get PuppetDB summary statistics
+      description: Return summary statistics from the PuppetDB admin API (resource intensive on large instances)
+      tags:
+        - PuppetDB
+      responses:
+        '200':
+          description: Summary statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+        '503':
+          description: PuppetDB not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /integrations/puppetserver/nodes:
     get:
       summary: List nodes from Puppetserver CA
@@ -501,6 +701,28 @@ paths:
                     example: puppetserver
                   count:
                     type: integer
+
+  /integrations/puppetserver/nodes/{certname}:
+    get:
+      summary: Get node details
+      description: Return specific node details from Puppetserver CA
+      tags:
+        - Puppetserver
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Node retrieved successfully
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /integrations/puppetserver/nodes/{certname}/status:
     get:
@@ -537,6 +759,176 @@ paths:
                   source:
                     type: string
                     enum: [puppetdb, puppetserver]
+
+  /integrations/puppetserver/nodes/{certname}/facts:
+    get:
+      summary: Get node facts
+      description: Return facts for a specific node from Puppetserver
+      tags:
+        - Puppetserver
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Facts retrieved successfully
+        '404':
+          description: Node not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/puppetserver/catalog/{certname}/{environment}:
+    get:
+      summary: Compile catalog
+      description: Compile catalog for a node in a specific environment
+      tags:
+        - Puppetserver
+      parameters:
+        - name: certname
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: environment
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Catalog compiled successfully
+
+  /integrations/puppetserver/catalog/compare:
+    post:
+      summary: Compare catalogs
+      description: Compare catalogs between two environments for a node
+      tags:
+        - Puppetserver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                certname:
+                  type: string
+                environment1:
+                  type: string
+                environment2:
+                  type: string
+      responses:
+        '200':
+          description: Catalog comparison completed
+
+  /integrations/puppetserver/environments:
+    get:
+      summary: List environments
+      description: Return all Puppetserver environments
+      tags:
+        - Puppetserver
+      responses:
+        '200':
+          description: Environments retrieved successfully
+
+  /integrations/puppetserver/environments/{name}:
+    get:
+      summary: Get environment details
+      description: Return details for a specific Puppetserver environment
+      tags:
+        - Puppetserver
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment retrieved successfully
+
+  /integrations/puppetserver/environments/{name}/deploy:
+    post:
+      summary: Deploy environment
+      description: Trigger deployment for a specific Puppetserver environment
+      tags:
+        - Puppetserver
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment deployment triggered
+
+  /integrations/puppetserver/environments/{name}/cache:
+    delete:
+      summary: Flush environment cache
+      description: Flush the environment cache for a specific Puppetserver environment
+      tags:
+        - Puppetserver
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Environment cache flushed successfully
+
+  /integrations/puppetserver/status/services:
+    get:
+      summary: Get Puppetserver services status
+      description: Return detailed service status from Puppetserver
+      tags:
+        - Puppetserver
+      responses:
+        '200':
+          description: Services status retrieved successfully
+
+  /integrations/puppetserver/status/simple:
+    get:
+      summary: Get simple Puppetserver status
+      description: Return lightweight status from Puppetserver
+      tags:
+        - Puppetserver
+      responses:
+        '200':
+          description: Simple status retrieved successfully
+
+  /integrations/puppetserver/admin-api:
+    get:
+      summary: Get Puppetserver admin API info
+      description: Return information about available Puppetserver admin API operations
+      tags:
+        - Puppetserver
+      responses:
+        '200':
+          description: Admin API info retrieved successfully
+
+  /integrations/puppetserver/metrics:
+    get:
+      summary: Get Puppetserver metrics
+      description: Return metrics from Puppetserver (Jolokia)
+      tags:
+        - Puppetserver
+      parameters:
+        - name: mbean
+          in: query
+          description: Optional MBean name to query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Metrics retrieved successfully
 
   /integrations/hiera/status:
     get:
@@ -1501,6 +1893,35 @@ paths:
                   expertMode:
                     type: boolean
 
+  /executions/{id}/cancel:
+    post:
+      summary: Cancel execution
+      description: Cancel or abort a running or stuck execution
+      tags:
+        - Executions
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Execution ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cancellation requested
+        '404':
+          description: Execution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
   /executions/queue/status:
     get:
       summary: Get execution queue status
@@ -1568,6 +1989,62 @@ paths:
                   activeExecutions:
                     type: integer
                     description: Number of executions with active streaming connections
+
+  /debug/frontend-logs:
+    post:
+      summary: Receive frontend logs
+      description: Receive a batch of frontend logs for troubleshooting
+      tags:
+        - Debug
+      responses:
+        '200':
+          description: Logs received successfully
+    get:
+      summary: List correlation IDs
+      description: Retrieve all stored correlation IDs with counts and timestamps
+      tags:
+        - Debug
+      responses:
+        '200':
+          description: Correlation IDs retrieved successfully
+    delete:
+      summary: Clear all frontend logs
+      description: Delete all stored frontend logs
+      tags:
+        - Debug
+      responses:
+        '200':
+          description: All frontend logs cleared
+
+  /debug/frontend-logs/{correlationId}:
+    get:
+      summary: Get frontend logs by correlation ID
+      description: Retrieve stored frontend logs for a specific correlation ID
+      tags:
+        - Debug
+      parameters:
+        - name: correlationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Frontend logs retrieved successfully
+    delete:
+      summary: Clear frontend logs by correlation ID
+      description: Delete stored frontend logs for a specific correlation ID
+      tags:
+        - Debug
+      parameters:
+        - name: correlationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Frontend logs cleared successfully
 
 components:
   parameters:

@@ -80,6 +80,7 @@ ExpertModeDebugPanel displays all blocks
 **Purpose**: Reusable pagination control component
 
 **Props**:
+
 ```typescript
 interface PaginationControlsProps {
   currentPage: number;
@@ -93,11 +94,13 @@ interface PaginationControlsProps {
 ```
 
 **State**:
+
 ```typescript
 // All state managed by parent component
 ```
 
 **UI Elements**:
+
 - Previous button (← Previous)
 - Page indicator (Page X of Y)
 - Next button (Next →)
@@ -109,6 +112,7 @@ interface PaginationControlsProps {
 ### 2. PuppetReportsListView Component (Enhanced)
 
 **New State**:
+
 ```typescript
 let currentPage = $state(1);
 let pageSize = $state(100); // persisted in session
@@ -117,6 +121,7 @@ let hasMore = $state(false);
 ```
 
 **New Methods**:
+
 ```typescript
 function handlePageChange(page: number): void;
 function handlePageSizeChange(size: number): void;
@@ -124,6 +129,7 @@ function resetPagination(): void; // called when filters change
 ```
 
 **API Integration**:
+
 ```typescript
 // Build query with pagination
 const queryParams = new URLSearchParams();
@@ -150,6 +156,7 @@ interface ReportsResponse {
 ```
 
 **PuppetDBService Changes**:
+
 ```typescript
 // Update getAllReports method signature
 async getAllReports(
@@ -164,6 +171,7 @@ async getTotalReportsCount(
 ```
 
 **Query Optimization**:
+
 - Use PuppetDB's built-in pagination support
 - Apply LIMIT and OFFSET in PQL queries
 - Fetch total count separately when needed
@@ -171,6 +179,7 @@ async getTotalReportsCount(
 ### 4. Session Storage for Page Size
 
 **Implementation**:
+
 ```typescript
 // In PuppetReportsListView
 import { browser } from '$app/environment';
@@ -195,6 +204,7 @@ function savePageSize(size: number): void {
 ### Current State Analysis
 
 **Puppet Page Tabs**:
+
 - ✅ Reports tab: Has debug info via PuppetReportsListView
 - ❓ Run History chart: Needs verification
 - ❓ Environments tab: Needs verification
@@ -205,6 +215,7 @@ function savePageSize(size: number): void {
 - ❓ Code Analysis tab: Needs verification
 
 **Node Detail Page Tabs**:
+
 - ❓ Node Status: Needs verification
 - ❓ Facts (multi-source): Needs verification
 - ❓ Puppet Reports: Needs verification
@@ -216,6 +227,7 @@ function savePageSize(size: number): void {
 ### Implementation Pattern
 
 **Standard Pattern for Components**:
+
 ```typescript
 // Component props
 interface Props {
@@ -246,6 +258,7 @@ $effect(() => {
 ```
 
 **Parent Page Pattern**:
+
 ```typescript
 // Aggregated debug info
 let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
@@ -275,6 +288,7 @@ function switchTab(tabId: TabId): void {
 **Scenario**: Facts tab fetches from both PuppetDB and Bolt
 
 **Implementation**:
+
 ```typescript
 // In MultiSourceFactsViewer component
 interface Props {
@@ -308,6 +322,7 @@ async function fetchBoltFacts() {
 ### Efficient Pagination Query
 
 **PuppetDB PQL Query**:
+
 ```
 reports[certname, hash, environment, status, noop, start_time, end_time, metrics] {
   // filters applied here
@@ -318,6 +333,7 @@ reports[certname, hash, environment, status, noop, start_time, end_time, metrics
 ```
 
 **Count Query** (separate):
+
 ```
 reports[count()] {
   // same filters as main query
@@ -343,11 +359,13 @@ reports[count()] {
 ### Loading States
 
 **Page Transition**:
+
 - Show loading spinner overlay on table
 - Disable pagination controls during load
 - Preserve current page display until new data arrives
 
 **Page Size Change**:
+
 - Show loading spinner
 - Reset to page 1
 - Update URL/state
@@ -358,7 +376,8 @@ reports[count()] {
 
 **Scenario**: User navigates to page that no longer exists (e.g., after filters reduce results)
 
-**Solution**: 
+**Solution**:
+
 - Detect `reports.length === 0 && currentPage > 1`
 - Automatically reset to page 1
 - Show info message: "No results on this page, showing page 1"
@@ -366,6 +385,7 @@ reports[count()] {
 **Scenario**: Network error during page fetch
 
 **Solution**:
+
 - Show error message
 - Keep current page data visible
 - Provide retry button
@@ -375,6 +395,7 @@ reports[count()] {
 **Scenario**: Component fails to pass debug info to parent
 
 **Solution**:
+
 - Log error to console
 - Continue normal operation
 - Debug info is optional, don't break UI
@@ -384,12 +405,14 @@ reports[count()] {
 ### Unit Tests
 
 **PaginationControls Component**:
+
 - Test page change events
 - Test page size change events
 - Test button disabled states
 - Test keyboard navigation
 
 **PuppetReportsListView with Pagination**:
+
 - Test initial page load
 - Test page navigation
 - Test page size changes
@@ -399,11 +422,13 @@ reports[count()] {
 ### Integration Tests
 
 **Pagination + Filtering**:
+
 - Apply filters, verify pagination resets
 - Change page, apply filters, verify reset
 - Change page size, verify reset to page 1
 
 **Debug Info Display**:
+
 - Enable expert mode, verify debug info appears in all tabs
 - Switch tabs, verify debug info clears and updates
 - Test multi-source debug info (Facts tab)
@@ -411,6 +436,7 @@ reports[count()] {
 ### Manual Testing Checklist
 
 **Pagination**:
+
 - [ ] Navigate through multiple pages
 - [ ] Change page size (100 → 200 → 500)
 - [ ] Verify page size persists across tab switches
@@ -420,12 +446,14 @@ reports[count()] {
 - [ ] Test with 1000+ reports
 
 **Debug Info - Puppet Page**:
+
 - [ ] Enable expert mode
 - [ ] Visit each tab and verify debug info appears
 - [ ] Verify debug info clears when switching tabs
 - [ ] Verify multiple debug blocks display correctly
 
 **Debug Info - Node Detail Page**:
+
 - [ ] Enable expert mode
 - [ ] Visit each tab and verify debug info appears
 - [ ] Test Facts tab with multiple sources
@@ -436,11 +464,13 @@ reports[count()] {
 ### Backend Optimization
 
 **Query Performance**:
+
 - Use indexed fields for sorting (start_time)
 - Minimize data fetched per report
 - Cache total count for short duration (30s)
 
 **Memory Usage**:
+
 - Never load all reports into memory
 - Stream results when possible
 - Limit maximum page size to 500
@@ -448,11 +478,13 @@ reports[count()] {
 ### Frontend Optimization
 
 **Rendering**:
+
 - Use virtual scrolling for large tables (future consideration)
 - Debounce page size changes
 - Avoid re-rendering entire table on page change
 
 **State Management**:
+
 - Don't store all pages in memory
 - Clear previous page data when navigating
 - Use derived state for computed values
@@ -460,24 +492,28 @@ reports[count()] {
 ## Migration Plan
 
 ### Phase 1: Backend Changes
+
 1. Update PuppetDBService with pagination support
 2. Update API endpoints to accept limit/offset
 3. Update response format with pagination metadata
 4. Test with existing frontend (backward compatible)
 
 ### Phase 2: Frontend Components
+
 1. Create PaginationControls component
 2. Update PuppetReportsListView with pagination
 3. Add session storage for page size
 4. Test pagination in isolation
 
 ### Phase 3: Debug Info Review
+
 1. Audit all Puppet Page tabs for debug info
 2. Audit all Node Detail Page tabs for debug info
 3. Fix missing debug info implementations
 4. Test multi-source debug info scenarios
 
 ### Phase 4: Integration & Testing
+
 1. Integration testing of pagination + filters
 2. Manual testing across all browsers
 3. Performance testing with large datasets
@@ -486,6 +522,7 @@ reports[count()] {
 ## Rollback Plan
 
 If issues arise:
+
 1. Feature flag to disable pagination (fall back to limit=100)
 2. Revert frontend changes (pagination controls hidden)
 3. Backend remains backward compatible

@@ -7,11 +7,13 @@ This feature adds pagination capabilities to Puppet reports views and ensures ex
 ## User Stories
 
 ### US-1: Pagination for Puppet Reports
+
 **As a** Puppet administrator  
 **I want to** paginate through Puppet reports with configurable page sizes  
 **So that** I can view older reports and control how many reports are displayed at once
 
 ### US-2: Expert Mode Debug Coverage
+
 **As a** developer or system administrator  
 **I want to** see expert mode debug information in all tabs and subtabs  
 **So that** I can troubleshoot issues across the entire application
@@ -23,6 +25,7 @@ This feature adds pagination capabilities to Puppet reports views and ensures ex
 **1.1** The Puppet Reports view MUST display pagination controls when more than the current page size of reports exist
 
 **1.2** Pagination controls MUST include:
+
 - Current page indicator (e.g., "Page 1 of 5")
 - Previous page button (disabled on first page)
 - Next page button (disabled on last page)
@@ -41,6 +44,7 @@ This feature adds pagination capabilities to Puppet reports views and ensures ex
 **2.2** The `/api/integrations/puppetdb/nodes/:certname/reports` endpoint MUST accept `limit` and `offset` query parameters
 
 **2.3** The API response MUST include:
+
 - `reports`: Array of report objects
 - `count`: Number of reports in current page
 - `totalCount`: Total number of reports available (after filters)
@@ -127,21 +131,25 @@ This feature adds pagination capabilities to Puppet reports views and ensures ex
 ## Non-Functional Requirements
 
 ### Performance
+
 - Initial page load MUST complete within 2 seconds
 - Page transitions MUST complete within 500ms
 - The system MUST handle datasets with 10,000+ reports efficiently
 
 ### Usability
+
 - Pagination controls MUST be intuitive and follow common UI patterns
 - The current page and total pages MUST be clearly visible
 - Keyboard navigation MUST be fully supported
 
 ### Accessibility
+
 - All pagination controls MUST be keyboard accessible
 - Screen readers MUST announce page changes
 - Color contrast MUST meet WCAG 2.1 AA standards
 
 ### Compatibility
+
 - Pagination MUST work in all supported browsers (Chrome, Firefox, Safari, Edge)
 - The feature MUST work with existing filter functionality
 - Expert mode debug info MUST not interfere with normal operation
