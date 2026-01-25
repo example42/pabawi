@@ -17,6 +17,7 @@ All 8 tabs on the Puppet Page have been audited for expert mode debug info imple
 **API Endpoint**: `GET /api/puppet/history?days={days}`
 
 **Implementation Details**:
+
 - ✅ Debug info extraction implemented in `fetchAggregatedRunHistory()` function
 - ✅ Properly handles both array response (normal mode) and object response (expert mode)
 - ✅ Calls `handleDebugInfo('Puppet Run History', data._debug)` when debug info present
@@ -56,12 +57,14 @@ async function fetchAggregatedRunHistory(days = 7): Promise<void> {
 **API Endpoint**: `GET /api/integrations/puppetdb/reports` (with pagination)
 
 **Implementation Details**:
+
 - ✅ Component has `onDebugInfo` prop defined
 - ✅ Parent passes callback: `onDebugInfo={(info) => handleDebugInfo('Puppet Reports', info)}`
 - ✅ Component extracts and passes debug info to parent
 - ✅ Debug info includes pagination metadata when expert mode enabled
 
-**Code Location**: 
+**Code Location**:
+
 - Component: `frontend/src/components/PuppetReportsListView.svelte`
 - Parent integration: `frontend/src/pages/PuppetPage.svelte` line 447
 
@@ -82,12 +85,14 @@ async function fetchAggregatedRunHistory(days = 7): Promise<void> {
 **API Endpoint**: `GET /api/integrations/puppetserver/environments`
 
 **Implementation Details**:
+
 - ✅ Component has `onDebugInfo` prop defined (line 26)
 - ✅ Parent passes callback: `onDebugInfo={(info) => handleDebugInfo('Puppet Environments', info)}`
 - ✅ Debug info extracted in `loadEnvironments()` function (lines 60-62)
 - ✅ Properly passes debug info to parent when present
 
-**Code Location**: 
+**Code Location**:
+
 - Component: `frontend/src/components/EnvironmentSelector.svelte` lines 26, 60-62
 - Parent integration: `frontend/src/pages/PuppetPage.svelte` line 461
 
@@ -119,12 +124,14 @@ if (onDebugInfo && data._debug) {
 **API Endpoint**: `GET /api/inventory?sources=puppetdb` and `GET /api/integrations/puppetdb/nodes/{certname}/facts`
 
 **Implementation Details**:
+
 - ✅ Component has `onDebugInfo` prop defined (line 21)
 - ✅ Parent passes callback: `onDebugInfo={(info) => handleDebugInfo('Node Facts', info)}`
 - ✅ Debug info extracted in both `fetchNodes()` and `fetchNodeFacts()` functions
 - ✅ Properly handles multiple API calls with debug info
 
-**Code Location**: 
+**Code Location**:
+
 - Component: `frontend/src/components/GlobalFactsTab.svelte` lines 21, 67-70, 88-91
 - Parent integration: `frontend/src/pages/PuppetPage.svelte` line 476
 
@@ -149,12 +156,14 @@ if (onDebugInfo && data._debug) {
 
 **Status**: COMPLETE  
 **Component**: PuppetserverStatus  
-**API Endpoints**: 
+**API Endpoints**:
+
 - `GET /api/integrations/puppetserver/status/services`
 - `GET /api/integrations/puppetserver/status/simple`
 - `GET /api/integrations/puppetserver/metrics`
 
 **Implementation Details**:
+
 - ✅ Component has `onDebugInfo` prop defined (line 11)
 - ✅ Parent passes callback: `onDebugInfo={(info) => handleDebugInfo('Puppetserver Status', info)}`
 - ✅ Debug info extracted in all three fetch functions:
@@ -163,7 +172,8 @@ if (onDebugInfo && data._debug) {
   - `fetchMetrics()` (lines 95-97)
 - ✅ Properly handles multiple API calls with debug info
 
-**Code Location**: 
+**Code Location**:
+
 - Component: `frontend/src/components/PuppetserverStatus.svelte` lines 11, 35-37, 64-66, 95-97
 - Parent integration: `frontend/src/pages/PuppetPage.svelte` line 495
 
@@ -186,12 +196,14 @@ if (onDebugInfo && data._debug) {
 **API Endpoint**: `GET /api/integrations/puppetdb/admin/summary-stats`
 
 **Implementation Details**:
+
 - ✅ Component has `onDebugInfo` prop defined (line 12)
 - ✅ Parent passes callback: `onDebugInfo={(info) => handleDebugInfo('PuppetDB Statistics', info)}`
 - ✅ Debug info extracted in `fetchSummaryStats()` function (lines 42-44)
 - ✅ Properly passes debug info to parent when present
 
-**Code Location**: 
+**Code Location**:
+
 - Component: `frontend/src/components/PuppetDBAdmin.svelte` lines 12, 42-44
 - Parent integration: `frontend/src/pages/PuppetPage.svelte` line 510
 
@@ -212,17 +224,20 @@ if (onDebugInfo && data._debug) {
 
 **Status**: COMPLETE  
 **Component**: GlobalHieraTab  
-**API Endpoints**: 
+**API Endpoints**:
+
 - `GET /api/integrations/hiera/keys/search?q={query}`
 - `GET /api/integrations/hiera/keys/{keyName}/nodes`
 
 **Implementation Details**:
+
 - ✅ Component has `onDebugInfo` prop defined (line 54)
 - ✅ Parent passes callback: `onDebugInfo={(info) => handleDebugInfo('Hiera Data', info)}`
 - ✅ Debug info extracted in both `searchKeys()` and `selectKey()` functions
 - ✅ Properly handles multiple API calls with debug info
 
-**Code Location**: 
+**Code Location**:
+
 - Component: `frontend/src/components/GlobalHieraTab.svelte` lines 54, 82-85, 107-110
 - Parent integration: `frontend/src/pages/PuppetPage.svelte` line 525
 
@@ -246,13 +261,15 @@ if (onDebugInfo && data._debug) {
 
 **Status**: COMPLETE  
 **Component**: CodeAnalysisTab  
-**API Endpoints**: 
+**API Endpoints**:
+
 - `GET /api/integrations/hiera/analysis/statistics`
 - `GET /api/integrations/hiera/analysis/unused`
 - `GET /api/integrations/hiera/analysis/lint`
 - `GET /api/integrations/hiera/analysis/modules`
 
 **Implementation Details**:
+
 - ✅ Component has `onDebugInfo` prop defined (line 11)
 - ✅ Parent passes callback: `onDebugInfo={(info) => handleDebugInfo('Code Analysis', info)}`
 - ✅ Debug info extracted in all four fetch functions:
@@ -262,7 +279,8 @@ if (onDebugInfo && data._debug) {
   - `fetchModuleUpdates()` (lines 211-214)
 - ✅ Properly handles multiple API calls with debug info
 
-**Code Location**: 
+**Code Location**:
+
 - Component: `frontend/src/components/CodeAnalysisTab.svelte` lines 11, 159-162, 176-179, 194-197, 211-214
 - Parent integration: `frontend/src/pages/PuppetPage.svelte` line 540
 
@@ -287,12 +305,14 @@ if (onDebugInfo && data._debug) {
 The PuppetPage properly implements debug info aggregation:
 
 1. **State Management** (lines 27-28):
+
 ```typescript
 let debugInfo = $state<DebugInfo | null>(null);
 let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
 ```
 
-2. **Aggregation Handler** (lines 31-47):
+1. **Aggregation Handler** (lines 31-47):
+
 ```typescript
 function handleDebugInfo(label: string, info: DebugInfo | null): void {
   if (info) {
@@ -308,7 +328,8 @@ function handleDebugInfo(label: string, info: DebugInfo | null): void {
 }
 ```
 
-3. **Tab Switching** (lines 149-163):
+1. **Tab Switching** (lines 149-163):
+
 ```typescript
 function switchTab(tabId: TabId): void {
   activeTab = tabId;
@@ -317,7 +338,8 @@ function switchTab(tabId: TabId): void {
 }
 ```
 
-4. **Debug Panel Display** (lines 555-565):
+1. **Debug Panel Display** (lines 555-565):
+
 ```typescript
 {#if expertMode.enabled && debugInfoBlocks.length > 0}
   <div class="mt-8 space-y-4">

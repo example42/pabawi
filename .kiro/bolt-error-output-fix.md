@@ -1,12 +1,15 @@
 # Bolt Task Error Output Fix
 
 ## Problem
+
 When Bolt tasks failed, the UI only showed a generic error message like "Bolt command failed with exit code 1" instead of the detailed error information that Bolt actually returns. The detailed output (like "Permission denied" errors) was being lost.
 
 ## Root Cause
+
 When Bolt executes a task that fails, it returns JSON output with different structures depending on the type of failure:
 
 **Case 1: Task execution failure with output**
+
 ```json
 {
   "items": [{
@@ -28,6 +31,7 @@ When Bolt executes a task that fails, it returns JSON output with different stru
 ```
 
 **Case 2: Connection/copy failure (no output)**
+
 ```json
 {
   "items": [{
@@ -46,6 +50,7 @@ When Bolt executes a task that fails, it returns JSON output with different stru
 ```
 
 The `transformTaskOutput` method in `BoltService.ts` was only extracting the error message from the `_error` object but:
+
 1. Completely ignoring the `_output` field which contains the actual command output
 2. Not displaying the error message as output when there's no `_output` field
 
@@ -77,6 +82,7 @@ Modified the `transformTaskOutput` method to:
 #### 1. TaskRunInterface (`frontend/src/components/TaskRunInterface.svelte`)
 
 Enhanced the execution result display to show:
+
 - **Output section**: Display `result.output.stdout` and `result.output.stderr` separately with proper formatting
 - **Exit code**: Show the exit code when available
 - **Error message**: Display the comprehensive error message that now includes the output
@@ -84,6 +90,7 @@ Enhanced the execution result display to show:
 #### 2. ExecutionsPage (`frontend/src/pages/ExecutionsPage.svelte`)
 
 Updated the execution detail modal to show **both** error and output:
+
 - Changed from `if/else` logic to show error OR output
 - Now shows error message first (if present)
 - Then shows the output section (if present)
@@ -92,6 +99,7 @@ Updated the execution detail modal to show **both** error and output:
 #### 3. NodeDetailPage (`frontend/src/pages/NodeDetailPage.svelte`)
 
 Updated the command execution result display:
+
 - Shows error message first (if present)
 - Then shows the output (if present)
 - Both are displayed together for failed executions
@@ -106,6 +114,7 @@ Added comprehensive tests covering:
 4. Successful task (regression test)
 
 All tests verify that:
+
 - Output is correctly extracted to `nodeResult.output.stdout`
 - Exit code is correctly extracted to `nodeResult.output.exitCode`
 - Error message includes the error kind, message, and output
@@ -116,16 +125,19 @@ All tests verify that:
 Users will now see the full error details when Bolt tasks fail in **all views**:
 
 ### Task Execution Interface
+
 - Error message with full context
 - Separate output section showing stdout/stderr
 - Exit code display
 
 ### Execution Detail Modal
+
 - Error message displayed prominently
 - Output section shown below the error
 - Both visible simultaneously for complete debugging context
 
 ### Node Detail Page
+
 - Command execution results show both error and output
 - Consistent display across all execution types
 
@@ -134,6 +146,7 @@ This makes debugging task failures much easier and provides the same level of de
 ## Testing
 
 Run the BoltService tests:
+
 ```bash
 cd backend
 npm test BoltService.test.ts
@@ -142,6 +155,7 @@ npm test BoltService.test.ts
 All 36 tests should pass, including the 4 new tests for error output extraction.
 
 Build the frontend to verify all components compile:
+
 ```bash
 cd frontend
 npm run build
@@ -152,11 +166,13 @@ npm run build
 ### Case 1: Task Execution Failure (with output)
 
 Before this fix:
+
 ```
 Error: Bolt command failed with exit code 1
 ```
 
 After this fix:
+
 ```
 Error: [puppetlabs.tasks/task-error] The task failed with exit code 126 (exit code 126)
 
@@ -169,11 +185,13 @@ Exit code: 126
 ### Case 2: Connection/Copy Failure (no output)
 
 Before this fix:
+
 ```
 Error: Bolt command failed with exit code 1
 ```
 
 After this fix:
+
 ```
 Error: [puppetlabs.tasks/task_file_error] Could not copy file to /tmp/580bed87-238f-487b-b4e5-75c0d7e0b690/info.sh: scp: Connection closed
 

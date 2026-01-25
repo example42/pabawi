@@ -1,6 +1,6 @@
 # Pabawi API Endpoints Reference
 
-Version: 0.4.0
+Version: 0.5.0
 
 ## Quick Reference
 
@@ -12,12 +12,14 @@ This document provides a quick reference table of all Pabawi API endpoints based
 |--------|----------|-------------|---------------|
 | GET | `/api/health` | Health check | No |
 | GET | `/api/config` | Get configuration | No |
+| GET | `/api/config/ui` | Get UI configuration | No |
 
 ## Integration Status
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | GET | `/api/integrations/status` | Get all integration status | No |
+| GET | `/api/integrations/colors` | Get integration color palette | No |
 
 ## Inventory Endpoints
 
@@ -37,6 +39,7 @@ This document provides a quick reference table of all Pabawi API endpoints based
 | GET | `/api/executions/:id/original` | Get original execution for re-execution | No |
 | GET | `/api/executions/:id/re-executions` | Get all re-executions | No |
 | POST | `/api/executions/:id/re-execute` | Trigger re-execution | No |
+| POST | `/api/executions/:id/cancel` | Cancel or abort execution | No |
 | GET | `/api/executions/queue/status` | Get execution queue status | No |
 
 ## Streaming Endpoints
@@ -161,7 +164,6 @@ This document provides a quick reference table of all Pabawi API endpoints based
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
-| GET | `/api/integrations/puppetdb/admin/archive` | Get archive info | Token |
 | GET | `/api/integrations/puppetdb/admin/summary-stats` | Get summary statistics | Token |
 
 ## Puppetserver Endpoints
@@ -189,6 +191,7 @@ This document provides a quick reference table of all Pabawi API endpoints based
 | GET | `/api/integrations/puppetserver/environments` | List environments | Certificate |
 | GET | `/api/integrations/puppetserver/environments/:name` | Get environment details | Certificate |
 | POST | `/api/integrations/puppetserver/environments/:name/deploy` | Deploy environment | Certificate |
+| DELETE | `/api/integrations/puppetserver/environments/:name/cache` | Flush environment cache | Certificate |
 
 ### Puppetserver Status & Metrics
 
@@ -203,21 +206,23 @@ This document provides a quick reference table of all Pabawi API endpoints based
 
 ### By Integration
 
-- **Bolt**: 15 endpoints (inventory, commands, tasks, puppet, packages, facts)
-- **Hiera**: 15 endpoints (status, keys, node data, analysis, statistics)
-- **PuppetDB**: 12 endpoints (nodes, facts, reports, catalogs, events, admin)
-- **Puppetserver**: 15 endpoints (nodes, catalogs, environments, status)
+- **Bolt**: Inventory, commands, tasks, puppet runs, packages, facts
+- **Hiera**: Status, keys, node data, analysis, statistics
+- **PuppetDB**: Inventory, facts, reports, catalogs, resources, events, admin summary stats
+- **Puppetserver**: Nodes, catalogs, environments (deploy/cache flush), status, metrics
+- **Puppet History**: Node history and aggregated history
 
 ### By HTTP Method
 
-- **GET**: 54 endpoints (read operations)
-- **POST**: 7 endpoints (write operations, executions)
+- **GET**: Majority of read operations across inventory, integrations, history
+- **POST**: Executions, tasks, puppet runs, re-execute, environment deploy
+- **DELETE**: Puppetserver environment cache flush, debug log cleanup
 
 ### By Authentication
 
-- **No Auth**: 37 endpoints (Bolt operations, Hiera operations, system endpoints)
-- **Token Auth**: 12 endpoints (PuppetDB operations)
-- **Certificate Auth**: 15 endpoints (Puppetserver operations)
+- **No Auth**: System, Bolt operations, Hiera operations, executions, debug
+- **Token Auth**: PuppetDB operations
+- **Certificate Auth**: Puppetserver operations
 
 ## Response Formats
 
@@ -244,6 +249,23 @@ All endpoints return JSON responses with the following structure:
 }
 ```
 
+## Puppet Run History Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/puppet/nodes/:id/history` | Get run history for a specific node | No |
+| GET | `/api/puppet/history` | Get aggregated run history for all nodes | No |
+
+## Debug Endpoints
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/debug/frontend-logs` | Receive frontend logs batch | No |
+| GET | `/api/debug/frontend-logs` | List stored correlation IDs | No |
+| GET | `/api/debug/frontend-logs/:correlationId` | Get frontend logs by correlation ID | No |
+| DELETE | `/api/debug/frontend-logs/:correlationId` | Clear logs for a correlation ID | No |
+| DELETE | `/api/debug/frontend-logs` | Clear all frontend logs | No |
+
 ## Common Query Parameters
 
 | Parameter | Type | Description | Applicable Endpoints |
@@ -252,7 +274,7 @@ All endpoints return JSON responses with the following structure:
 | `offset` | integer | Pagination offset | List endpoints |
 | `page` | integer | Page number | Execution history, Hiera endpoints |
 | `pageSize` | integer | Items per page | Execution history, Hiera endpoints |
-| `status` | string | Filter by status | Executions, events |
+| `status` | string | Filter by status | Executions, events, reports |
 | `type` | string | Filter by type | Executions |
 | `query` | string | PQL query or search term | PuppetDB nodes, Hiera search |
 | `refresh` | boolean | Force fresh data | Integration status |
@@ -264,6 +286,10 @@ All endpoints return JSON responses with the following structure:
 | `pql` | string | PuppetDB PQL query | Inventory |
 | `sortBy` | string | Sort field | Inventory |
 | `sortOrder` | string | Sort direction (asc/desc) | Inventory |
+| `days` | integer | Number of days to look back (1-365) | Puppet run history |
+| `minDuration` | number | Minimum duration in seconds | Report filtering |
+| `minCompileTime` | number | Minimum compile time in seconds | Report filtering |
+| `minTotalResources` | integer | Minimum total resources | Report filtering |
 
 ## Common Headers
 

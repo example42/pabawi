@@ -21,6 +21,77 @@ The Pabawi API provides a RESTful interface for managing infrastructure automati
 - View puppet run history visualizations (v0.5.0)
 - Access comprehensive debugging information via Expert Mode (v0.5.0)
 
+## Puppet Run History
+
+### Get Node Run History
+
+Retrieve puppet run history for a specific node with summary statistics.
+
+**Request:**
+
+```http
+GET /api/puppet/nodes/:id/history?days=7
+```
+
+**Path Parameters:**
+
+- `id` (string, required): Node identifier (certname)
+
+**Query Parameters:**
+
+- `days` (integer, optional): Number of days to look back (default: 7, max: 365)
+
+**Response:**
+
+```json
+{
+  "nodeId": "web-01.example.com",
+  "history": [
+    {
+      "date": "2024-01-15",
+      "success": 3,
+      "failed": 0,
+      "changed": 2,
+      "unchanged": 3
+    }
+  ],
+  "summary": {
+    "totalRuns": 21,
+    "successRate": 95.24,
+    "avgDuration": 45.3,
+    "lastRun": "2024-01-15T10:00:00.000Z"
+  }
+}
+```
+
+### Get Aggregated Run History
+
+Retrieve aggregated puppet run history for all nodes.
+
+**Request:**
+
+```http
+GET /api/puppet/history?days=7
+```
+
+**Query Parameters:**
+
+- `days` (integer, optional): Number of days to look back (default: 7, max: 365)
+
+**Response:**
+
+```json
+[
+  {
+    "date": "2024-01-15",
+    "success": 45,
+    "failed": 2,
+    "changed": 15,
+    "unchanged": 45
+  }
+]
+```
+
 ## Integration Support
 
 Pabawi supports multiple infrastructure management integrations:

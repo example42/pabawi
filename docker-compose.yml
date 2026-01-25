@@ -1,137 +1,30 @@
-
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: example42/pabawi:latest
-    container_name: pabawi-dev
+    container_name: pabawi
+    env_file:
+      - .env
     volumes:
-      # Mount entire workspace for development
-      - .:/workspace:cached
-      # Mount Bolt project directory (read-only)
+      # Bolt project directory (read-only)
       - ./bolt-project:/bolt-project:ro
-      # Mount data directory for SQLite database (read-write)
+      # SQLite database persistence
       - ./data:/data
-      # Mount SSL certificates for PuppetDB/Puppetserver integration (optional, read-only)
-      # Uncomment and adjust paths as needed:
+      # SSL certificates for PuppetDB/Puppetserver (optional)
       # - /path/to/ssl/certs:/ssl-certs:ro
-      # Mount Hiera control repository (optional, read-only)
-      # Uncomment and adjust path as needed:
+      # Hiera control repository (optional)
       # - /path/to/control-repo:/control-repo:ro
-      # Persist node_modules
-      - node_modules:/workspace/node_modules
-      - backend_node_modules:/workspace/backend/node_modules
-      - frontend_node_modules:/workspace/frontend/node_modules
     ports:
       - "${PORT:-3000}:3000"
-    command: sleep infinity
-    user: "1001:1001"
-    environment:
-      # Application configuration
-      - NODE_ENV=development
-      - PORT=3000
-      - HOST=0.0.0.0
-
-      # Bolt configuration
-      - BOLT_PROJECT_PATH=/bolt-project
-
-      # Database configuration
-      - DATABASE_PATH=/data/executions.db
-
-      # Command whitelist configuration
-      - BOLT_COMMAND_WHITELIST_ALLOW_ALL=${BOLT_COMMAND_WHITELIST_ALLOW_ALL:-false}
-      - BOLT_COMMAND_WHITELIST=${BOLT_COMMAND_WHITELIST:-["ls","pwd","whoami","uptime"]}
-
-      # Execution configuration
-      - BOLT_EXECUTION_TIMEOUT=${BOLT_EXECUTION_TIMEOUT:-300000}
-
-      # Logging configuration
-      - LOG_LEVEL=${LOG_LEVEL:-info}
-
-      # PuppetDB integration configuration (disabled by default)
-      - PUPPETDB_ENABLED=${PUPPETDB_ENABLED:-false}
-      - PUPPETDB_SERVER_URL=${PUPPETDB_SERVER_URL:-}
-      - PUPPETDB_PORT=${PUPPETDB_PORT:-8081}
-      - PUPPETDB_TOKEN=${PUPPETDB_TOKEN:-}
-      - PUPPETDB_TIMEOUT=${PUPPETDB_TIMEOUT:-30000}
-      - PUPPETDB_RETRY_ATTEMPTS=${PUPPETDB_RETRY_ATTEMPTS:-3}
-      - PUPPETDB_RETRY_DELAY=${PUPPETDB_RETRY_DELAY:-1000}
-      - PUPPETDB_SSL_ENABLED=${PUPPETDB_SSL_ENABLED:-false}
-      - PUPPETDB_SSL_CA=${PUPPETDB_SSL_CA:-}
-      - PUPPETDB_SSL_CERT=${PUPPETDB_SSL_CERT:-}
-      - PUPPETDB_SSL_KEY=${PUPPETDB_SSL_KEY:-}
-      - PUPPETDB_SSL_REJECT_UNAUTHORIZED=${PUPPETDB_SSL_REJECT_UNAUTHORIZED:-true}
-      - PUPPETDB_CACHE_TTL=${PUPPETDB_CACHE_TTL:-300000}
-      - PUPPETDB_CIRCUIT_BREAKER_THRESHOLD=${PUPPETDB_CIRCUIT_BREAKER_THRESHOLD:-5}
-      - PUPPETDB_CIRCUIT_BREAKER_TIMEOUT=${PUPPETDB_CIRCUIT_BREAKER_TIMEOUT:-60000}
-      - PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=${PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT:-30000}
-
-      # Puppetserver integration configuration (disabled by default)
-      - PUPPETSERVER_ENABLED=${PUPPETSERVER_ENABLED:-false}
-      - PUPPETSERVER_SERVER_URL=${PUPPETSERVER_SERVER_URL:-}
-      - PUPPETSERVER_PORT=${PUPPETSERVER_PORT:-8140}
-      - PUPPETSERVER_TOKEN=${PUPPETSERVER_TOKEN:-}
-      - PUPPETSERVER_TIMEOUT=${PUPPETSERVER_TIMEOUT:-30000}
-      - PUPPETSERVER_RETRY_ATTEMPTS=${PUPPETSERVER_RETRY_ATTEMPTS:-3}
-      - PUPPETSERVER_RETRY_DELAY=${PUPPETSERVER_RETRY_DELAY:-1000}
-      - PUPPETSERVER_INACTIVITY_THRESHOLD=${PUPPETSERVER_INACTIVITY_THRESHOLD:-3600}
-      - PUPPETSERVER_SSL_ENABLED=${PUPPETSERVER_SSL_ENABLED:-false}
-      - PUPPETSERVER_SSL_CA=${PUPPETSERVER_SSL_CA:-}
-      - PUPPETSERVER_SSL_CERT=${PUPPETSERVER_SSL_CERT:-}
-      - PUPPETSERVER_SSL_KEY=${PUPPETSERVER_SSL_KEY:-}
-      - PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=${PUPPETSERVER_SSL_REJECT_UNAUTHORIZED:-true}
-      - PUPPETSERVER_CACHE_TTL=${PUPPETSERVER_CACHE_TTL:-300000}
-      - PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD=${PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD:-5}
-      - PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT=${PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT:-60000}
-      - PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=${PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT:-30000}
-
-      # Hiera integration configuration (disabled by default)
-      - HIERA_ENABLED=${HIERA_ENABLED:-false}
-      - HIERA_CONTROL_REPO_PATH=${HIERA_CONTROL_REPO_PATH:-}
-      - HIERA_CONFIG_PATH=${HIERA_CONFIG_PATH:-hiera.yaml}
-      - HIERA_ENVIRONMENTS=${HIERA_ENVIRONMENTS:-["production"]}
-      - HIERA_FACT_SOURCE_PREFER_PUPPETDB=${HIERA_FACT_SOURCE_PREFER_PUPPETDB:-true}
-      - HIERA_FACT_SOURCE_LOCAL_PATH=${HIERA_FACT_SOURCE_LOCAL_PATH:-}
-      - HIERA_CATALOG_COMPILATION_ENABLED=${HIERA_CATALOG_COMPILATION_ENABLED:-false}
-      - HIERA_CATALOG_COMPILATION_TIMEOUT=${HIERA_CATALOG_COMPILATION_TIMEOUT:-60000}
-      - HIERA_CATALOG_COMPILATION_CACHE_TTL=${HIERA_CATALOG_COMPILATION_CACHE_TTL:-300000}
-      - HIERA_CACHE_ENABLED=${HIERA_CACHE_ENABLED:-true}
-      - HIERA_CACHE_TTL=${HIERA_CACHE_TTL:-300000}
-      - HIERA_CACHE_MAX_ENTRIES=${HIERA_CACHE_MAX_ENTRIES:-10000}
-      - HIERA_CODE_ANALYSIS_ENABLED=${HIERA_CODE_ANALYSIS_ENABLED:-true}
-      - HIERA_CODE_ANALYSIS_LINT_ENABLED=${HIERA_CODE_ANALYSIS_LINT_ENABLED:-true}
-      - HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK=${HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK:-true}
-      - HIERA_CODE_ANALYSIS_INTERVAL=${HIERA_CODE_ANALYSIS_INTERVAL:-3600000}
-      - HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS=${HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS:-["**/vendor/**","**/fixtures/**"]}
-
-      # Integration priority configuration (optional)
-      - BOLT_PRIORITY=${BOLT_PRIORITY:-5}
-      - PUPPETDB_PRIORITY=${PUPPETDB_PRIORITY:-10}
-      - PUPPETSERVER_PRIORITY=${PUPPETSERVER_PRIORITY:-8}
-      - HIERA_PRIORITY=${HIERA_PRIORITY:-6}
-
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
       interval: 30s
       timeout: 3s
       start_period: 5s
       retries: 3
-
     restart: unless-stopped
-
     networks:
       - pabawi-network
 
 networks:
   pabawi-network:
     driver: bridge
-
-volumes:
-  # Named volumes for node_modules persistence
-  node_modules:
-  backend_node_modules:
-  frontend_node_modules:
-  # Named volume for persistent data (alternative to bind mount)
-  pabawi-data:
-    driver: local

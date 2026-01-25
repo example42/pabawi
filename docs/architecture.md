@@ -1,6 +1,6 @@
 # Pabawi Architecture Documentation
 
-Version: 0.4.0
+Version: 0.5.0
 
 ## Table of Contents
 
@@ -219,7 +219,7 @@ Client Request: GET /api/inventory
     │   │   │   └─> Returns nodes from PuppetDB
     │   │   │
     │   │   └─> puppetserver.getInventory()
-    │   │       └─> Returns nodes from CA certificates
+    │   │       └─> Returns nodes from Puppetserver
     │   │
     │   ├─> Add Source Attribution
     │   │   └─> Each node tagged with source name
@@ -558,9 +558,8 @@ Links nodes across multiple information sources.
 #### PuppetserverService
 
 - Implements InformationSourcePlugin
-- Provides inventory from CA certificates
+- Provides inventory from registered nodes
 - Retrieves node status, facts, catalogs
-- Manages certificate operations
 - Uses Puppetserver REST API
 
 ## Multi-Source Data Aggregation
@@ -649,7 +648,7 @@ When an integration fails:
 ### Error Types
 
 - **Connection Errors**: Cannot reach integration endpoint
-- **Authentication Errors**: Invalid credentials or certificates
+- **Authentication Errors**: Invalid credentials or tokens
 - **Timeout Errors**: Request took too long
 - **Validation Errors**: Invalid request parameters
 - **Not Found Errors**: Resource doesn't exist
@@ -667,15 +666,16 @@ When an integration fails:
 ### Authentication
 
 - **Token-Based**: PuppetDB, Puppetserver support API tokens
-- **Certificate-Based**: Puppetserver CA operations require client certificates
 - **SSH Keys**: Bolt uses SSH keys for node access
+- **SSL/TLS**: Secure communication with client certificates for API access
 
 ### Secrets Management
 
 - Environment variables for sensitive configuration
+- Automatic obfuscation in expert mode logs
 - Never log sensitive data (tokens, passwords, keys)
-- Secure storage of certificates and keys
-- Audit logging for sensitive operations
+- SSL certificates stored securely on filesystem
+- Audit logging for execution history
 
 ### Access Control
 
@@ -720,15 +720,16 @@ When an integration fails:
 
 ## Future Enhancements
 
-### Planned Features
+### Potential Features (Not Currently Planned)
 
-1. **Ansible Integration**: Add Ansible as execution tool
-2. **Terraform Integration**: Add Terraform for infrastructure management
-3. **Multi-Tenancy**: Support multiple organizations
-4. **Advanced RBAC**: Fine-grained access control
-5. **Webhooks**: Event-driven automation
-6. **Metrics and Monitoring**: Prometheus metrics, distributed tracing
-7. **Plugin Marketplace**: Community-contributed plugins
+The following are potential future enhancements, not committed roadmap items:
+
+1. **Additional Execution Tools**: Ansible, Salt, or other automation frameworks
+2. **Multi-Tenancy**: Support multiple organizations with isolation
+3. **Advanced RBAC**: Fine-grained role-based access control
+4. **Webhooks**: Event-driven automation triggers
+5. **Enhanced Monitoring**: Prometheus metrics, OpenTelemetry tracing
+6. **Plugin Marketplace**: Community-contributed plugin ecosystem
 
 ### Extensibility
 

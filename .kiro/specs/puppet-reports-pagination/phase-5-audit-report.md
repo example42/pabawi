@@ -9,6 +9,7 @@
 This audit reviewed all tabs on the Node Detail Page to ensure proper expert mode debug information implementation. The audit found that **the Node Detail Page already has excellent debug info infrastructure** with a unified `handleDebugInfo` function and `debugInfoBlocks` state that supports multiple labeled debug blocks.
 
 **Key Findings**:
+
 - ✅ NodeDetailPage has proper debug info infrastructure (handleDebugInfo, debugInfoBlocks)
 - ✅ All API calls in NodeDetailPage properly extract and store debug info
 - ✅ Puppet Reports tab already has complete debug info implementation
@@ -21,16 +22,19 @@ This audit reviewed all tabs on the Node Detail Page to ensure proper expert mod
 ### 5.1 Node Status Tab ✅ VERIFIED
 
 **Component**: `NodeStatus.svelte`  
-**API Calls**: 
+**API Calls**:
+
 - `GET /api/integrations/puppetserver/nodes/:id/status` (called in NodeDetailPage)
 
 **Current Implementation**:
+
 - ✅ NodeDetailPage fetches node status and extracts debug info
 - ✅ Debug info stored with label "Node Status"
 - ✅ NodeStatus component displays status correctly
 - ⚠️ NodeStatus component does NOT have `onDebugInfo` prop (not needed - parent handles it)
 
 **Code Evidence**:
+
 ```typescript
 // NodeDetailPage.svelte - fetchNodeStatus()
 const data = await get<{ status: any; _debug?: DebugInfo }>(
@@ -55,16 +59,19 @@ if (data._debug) {
 
 **Component**: `MultiSourceFactsViewer.svelte`  
 **API Calls**:
+
 - `GET /api/integrations/puppetdb/nodes/:id/facts` (PuppetDB facts)
 - `POST /api/nodes/:id/facts` (Bolt facts - user-initiated)
 
 **Current Implementation**:
+
 - ✅ NodeDetailPage fetches PuppetDB facts and extracts debug info
 - ✅ Debug info stored with label "PuppetDB Facts"
 - ⚠️ MultiSourceFactsViewer does NOT have `onDebugInfo` prop
 - ⚠️ Bolt facts gathering does NOT pass debug info to parent
 
 **Code Evidence**:
+
 ```typescript
 // NodeDetailPage.svelte - fetchPuppetDBFacts()
 const data = await get<{ facts: any; _debug?: DebugInfo }>(
@@ -82,6 +89,7 @@ if (data._debug) {
 ```
 
 **Required Changes**:
+
 1. Add `onDebugInfo?: (label: string, info: DebugInfo | null) => void` prop to MultiSourceFactsViewer
 2. Update Bolt facts gathering to pass debug info back to parent
 3. Ensure both PuppetDB and Bolt facts debug info are displayed with clear labels
@@ -94,15 +102,18 @@ if (data._debug) {
 
 **Component**: `PuppetReportsListView.svelte`  
 **API Calls**:
+
 - `GET /api/integrations/puppetdb/nodes/:certname/reports` (with pagination)
 
 **Current Implementation**:
+
 - ✅ PuppetReportsListView has `onDebugInfo` prop
 - ✅ Debug info properly passed to NodeDetailPage
 - ✅ Debug info stored with label "Puppet Reports"
 - ✅ Pagination metadata included in debug info
 
 **Code Evidence**:
+
 ```typescript
 // NodeDetailPage.svelte - Puppet Reports tab
 <PuppetReportsListView
@@ -121,14 +132,17 @@ if (data._debug) {
 
 **Component**: `ManagedResourcesViewer.svelte`  
 **API Calls**:
+
 - `GET /api/integrations/puppetdb/nodes/:id/resources` (called in NodeDetailPage)
 
 **Current Implementation**:
+
 - ✅ NodeDetailPage fetches managed resources and extracts debug info
 - ✅ Debug info stored with label "Managed Resources"
 - ⚠️ ManagedResourcesViewer does NOT have `onDebugInfo` prop (not needed - parent handles it)
 
 **Code Evidence**:
+
 ```typescript
 // NodeDetailPage.svelte - fetchManagedResources()
 const data = await get<{ resources: Record<string, any[]>; _debug?: DebugInfo }>(
@@ -153,15 +167,18 @@ if (data._debug) {
 
 **Component**: `NodeHieraTab.svelte`  
 **API Calls**:
+
 - `GET /api/integrations/hiera/nodes/:id/data`
 
 **Current Implementation**:
+
 - ✅ NodeHieraTab handles debug info internally
 - ✅ Has own `debugInfo` state and ExpertModeDebugPanel
 - ✅ Debug info properly extracted from API response
 - ✅ Self-contained implementation (doesn't need parent integration)
 
 **Code Evidence**:
+
 ```typescript
 // NodeHieraTab.svelte
 let debugInfo = $state<DebugInfo | null>(null);
@@ -195,16 +212,19 @@ async function fetchHieraData(): Promise<void> {
 
 **Component**: `CatalogViewer.svelte`  
 **API Calls**:
+
 - `GET /api/integrations/puppetdb/nodes/:id/catalog` (called in NodeDetailPage)
 - `GET /api/integrations/puppetdb/nodes/:id/resources` (called in NodeDetailPage)
 
 **Current Implementation**:
+
 - ✅ NodeDetailPage fetches catalog and resources in parallel
 - ✅ Debug info extracted from both API calls
 - ✅ Debug info stored with labels "Catalog" and "Catalog Resources"
 - ⚠️ CatalogViewer does NOT have `onDebugInfo` prop (not needed - parent handles it)
 
 **Code Evidence**:
+
 ```typescript
 // NodeDetailPage.svelte - fetchCatalog()
 const [catalogData, resourcesData] = await Promise.all([
@@ -235,15 +255,18 @@ if (resourcesData._debug) {
 
 **Component**: `EventsViewer.svelte`  
 **API Calls**:
+
 - `GET /api/integrations/puppetdb/nodes/:id/events` (called in NodeDetailPage)
 
 **Current Implementation**:
+
 - ✅ NodeDetailPage fetches events and extracts debug info
 - ✅ Debug info stored with label "Events"
 - ⚠️ EventsViewer does NOT have `onDebugInfo` prop (not needed - parent handles it)
 - ✅ Includes timeout handling and cancellation support
 
 **Code Evidence**:
+
 ```typescript
 // NodeDetailPage.svelte - fetchEvents()
 const data = await get<{ events: any[]; _debug?: DebugInfo }>(
@@ -310,6 +333,7 @@ function handleDebugInfo(label: string, info: DebugInfo | null): void {
 ```
 
 **Features**:
+
 - ✅ Supports multiple debug info blocks
 - ✅ Each block has a descriptive label
 - ✅ Blocks displayed in chronological order
@@ -336,6 +360,7 @@ function handleDebugInfo(label: string, info: DebugInfo | null): void {
 ### ✅ Infrastructure Assessment
 
 The NodeDetailPage has **excellent debug info infrastructure**:
+
 - ✅ Unified handleDebugInfo function
 - ✅ Multiple labeled debug blocks support
 - ✅ Proper debug info extraction from all API calls
@@ -359,6 +384,7 @@ While PuppetDB facts already work correctly, we could enhance the Facts tab to s
 ### Priority 2: Documentation
 
 Document the debug info pattern used in NodeDetailPage as a reference for other pages:
+
 - Parent page handles API calls and debug info extraction
 - Child components focus on display logic
 - handleDebugInfo function manages multiple labeled blocks

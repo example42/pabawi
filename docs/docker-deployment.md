@@ -25,7 +25,7 @@ docker build -t pabawi:latest .
 # Run with basic Bolt integration
 docker run -d \
   --name pabawi \
-  -p 3000:3000 \
+  -p 127.0.0.1:3000:3000 \
   -v $(pwd)/bolt-project:/bolt-project:ro \
   -v $(pwd)/data:/data \
   -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false \
@@ -33,13 +33,36 @@ docker run -d \
   pabawi:latest
 ```
 
+### Running Without Building (Using Published Image)
+
+```bash
+# Run directly from Docker Hub (no git clone needed)
+docker run -d \
+  --name pabawi \
+  --user "$(id -u):1001" \
+  -p 127.0.0.1:3000:3000 \
+  --platform "amd64" \
+  -v "$(pwd):/bolt-project:ro" \
+  -v "$(pwd)/data:/data" \
+  -v "$(pwd)/certs:/certs" \
+  -v "$HOME/.ssh:/home/pabawi/.ssh" \
+  --env-file ./env \
+  example42/pabawi:latest
+```
+
+**Notes:**
+
+- `--user "$(id -u):1001"`: Your user must be able to read all the mounted files
+- `--platform "amd64"`: Use `amd64` or `arm64` depending on your architecture
+- Volume paths in your `.env` file must be relative to the container filesystem
+
 ### Full Integration Deployment
 
 ```bash
 # Run with all integrations enabled
 docker run -d \
   --name pabawi \
-  -p 3000:3000 \
+  -p 127.0.0.1:3000:3000 \
   -v $(pwd)/bolt-project:/bolt-project:ro \
   -v $(pwd)/control-repo:/control-repo:ro \
   -v $(pwd)/ssl-certs:/ssl-certs:ro \
@@ -61,6 +84,21 @@ docker run -d \
   -e HIERA_FACT_SOURCE_PREFER_PUPPETDB=true \
   pabawi:latest
 ```
+
+## Volume Mount Reference
+
+The volume mounts you need depend on where files are located on your host filesystem. Paths in your `.env` file must reference the container filesystem.
+
+| Kind of data | Path on host | Volume mount option | Env setting |
+| ------------ | ------------ | ------------------- | ----------- |
+| Bolt project dir | `$HOME/bolt-project` | `-v "${HOME}/bolt-project:/bolt:ro"` | `BOLT_PROJECT_PATH=/bolt` |
+| Control Repo | `$HOME/control-repo` | `-v "${HOME}/control-repo:/control-repo:ro"` | `HIERA_CONTROL_REPO_PATH=/control-repo` |
+| Pabawi Data | `$HOME/pabawi/data` | `-v "${HOME}/pabawi/data:/data"` | `DATABASE_PATH=/data/pabawi.db` |
+| Puppet certs - CA | `$HOME/puppet/certs/ca.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETSERVER_SSL_CA=/certs/ca.pem` |
+| Puppet certs - User cert | `$HOME/puppet/certs/pabawi.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETDB_SSL_CERT=/certs/pabawi.pem` |
+| Puppet certs - User key | `$HOME/puppet/certs/private/pabawi.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETDB_SSL_KEY=/certs/private/pabawi.pem` |
+
+**Note:** `PUPPETSERVER_SSL_*` settings can use the same paths as the corresponding `PUPPETDB_SSL_*` ones.
 
 ## Docker Images
 
@@ -298,22 +336,116 @@ sudo chmod -R 600 /path/to/ssl-certs/*.pem
 
 ## Docker Compose
 
-### Basic Configuration
+The project includes a `docker-compose.yml` that uses the published image from Docker Hub.
 
-Create `docker-compose.yml`:
+### Basic Usage
+
+```bash
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the service
+docker-compose down
+
+# Rebuild and restart (if using local build)
+docker-compose up -d --build
+```
+
+### Default Configuration
+
+The included `docker-compose.yml` provides:
+
+```yaml
+services:
+  app:
+    image: example42/pabawi:latest
+    container_name: pabawi
+    env_file:
+      - .env
+    volumes:
+      # Bolt project directory (read-only)
+      - ./bolt-project:/bolt-project:ro
+      # SQLite database persistence
+      - ./data:/data
+      # SSL certificates for PuppetDB/Puppetserver (optional)
+      # - /path/to/ssl/certs:/ssl-certs:ro
+      # Hiera control repository (optional)
+      # - /path/to/control-repo:/control-repo:ro
+    ports:
+      - "${PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - pabawi-network
+
+networks:
+  pabawi-network:
+    driver: bridge
+```
+
+### Enabling Integrations
+
+1. **Create your `.env` file** from the example:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Edit `.env`** to configure your integrations (see [Environment Variables](#environment-variables))
+
+3. **Uncomment volume mounts** in `docker-compose.yml` for the integrations you need:
+
+   ```yaml
+   volumes:
+     - ./bolt-project:/bolt-project:ro
+     - ./data:/data
+     # Uncomment and adjust paths as needed:
+     - /path/to/ssl/certs:/ssl-certs:ro
+     - /path/to/control-repo:/control-repo:ro
+   ```
+
+4. **Start the service**:
+
+   ```bash
+   docker-compose up -d
+   ```
+
+### Localhost-Only Access
+
+For security, bind to localhost only by setting in your `.env`:
+
+```env
+PORT=127.0.0.1:3000
+```
+
+Or modify the ports section directly:
+
+```yaml
+ports:
+  - "127.0.0.1:3000:3000"
+```
+
+### Custom Configuration
+
+For more advanced setups, you can extend the configuration:
 
 ```yaml
 version: '3.8'
 
 services:
   pabawi:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: pabawi:latest
+    image: example42/pabawi:latest
     container_name: pabawi
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - ./bolt-project:/bolt-project:ro
       - ./data:/data
@@ -575,6 +707,15 @@ sudo chown -R 1001:1001 ./data
 ```
 
 ## Security Considerations
+
+**⚠️ Security Note**: Pabawi should only be exposed via localhost. If you run Pabawi on a remote node, use SSH port forwarding:
+
+```bash
+# SSH port forwarding for remote access
+ssh -L 3000:localhost:3000 user@your-pabawi-host
+```
+
+If you want to allow Pabawi access to different users, configure a reverse proxy with authentication.
 
 ### Network Security
 

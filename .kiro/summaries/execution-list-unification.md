@@ -21,6 +21,7 @@ Created a reusable execution list component at `frontend/src/components/Executio
 - Fully responsive and accessible
 
 **Props:**
+
 - `executions`: Array of execution results
 - `currentNodeId?`: Optional current node ID for re-execution context
 - `onExecutionClick?`: Optional callback when execution is clicked
@@ -41,6 +42,7 @@ Created a reusable execution list component at `frontend/src/components/Executio
 Updated two locations:
 
 **a) Overview Tab - "Latest Executions":**
+
 - Replaced the simple card-based list with `ExecutionList`
 - Shows first 5 executions
 - Hides target nodes column (since we're already on a node page)
@@ -48,6 +50,7 @@ Updated two locations:
 - **Clicking an execution navigates to `/executions?id={executionId}` to show the execution detail modal**
 
 **b) Actions Tab - "Execution History":**
+
 - Replaced the table implementation with `ExecutionList`
 - Shows all executions for the node
 - Hides target nodes column
@@ -57,6 +60,7 @@ Updated two locations:
 ### 4. Updated HomePage
 
 **Recent Executions Section:**
+
 - Replaced the custom table implementation with `ExecutionList`
 - Shows recent executions with full details
 - Includes re-execution icon
@@ -66,6 +70,7 @@ Updated two locations:
 ### 5. Updated ExecutionsPage
 
 **Fixed Execution Detail Modal Auto-Open:**
+
 - Moved query parameter check from `onMount` to `$effect`
 - Modal now automatically opens when navigating with `?id={executionId}` query parameter
 - Ensures executions are loaded before attempting to open the modal
@@ -101,6 +106,7 @@ Added export for `ExecutionList` in `frontend/src/components/index.ts`
 ## Visual Changes
 
 All four execution list locations now display:
+
 - Consistent table layout with proper spacing
 - Type badges with color coding
 - Live indicator for running executions

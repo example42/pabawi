@@ -31,6 +31,7 @@ This security audit identifies several **CRITICAL** vulnerabilities and security
 
 **Issue:**
 The application has **zero authentication or authorization mechanisms**. Anyone who can access the endpoint can:
+
 - Execute arbitrary commands on infrastructure
 - View sensitive system information
 - Trigger Puppet runs
@@ -38,6 +39,7 @@ The application has **zero authentication or authorization mechanisms**. Anyone 
 - View Hiera data (potentially containing secrets)
 
 **Evidence:**
+
 ```markdown
 # From README.md lines 60-65
 - **No Built-in Authentication**: Pabawi currently has no user authentication or authorization system
@@ -46,17 +48,20 @@ The application has **zero authentication or authorization mechanisms**. Anyone 
 ```
 
 **Attack Scenario:**
+
 1. Attacker gains network access to server running Pabawi
 2. Sends requests to `http://server:3000/api/nodes/{node}/command`
 3. Executes malicious commands on entire infrastructure
 
 **Recommendation:**
+
 - **IMMEDIATE:** Add authentication middleware (JWT, OAuth2, or API keys)
 - Implement role-based access control (RBAC)
 - Add audit logging for all privileged operations
 - Consider implementing request signing for API calls
 
 **Mitigation (Short-term):**
+
 ```typescript
 // backend/src/middleware/auth.ts
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -80,6 +85,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
 While `spawn()` is used with `shell: false`, the argument escaping in `buildCommandString()` may be insufficient. Arguments are passed directly to Bolt CLI without proper sanitization beyond quote escaping.
 
 **Evidence:**
+
 ```typescript
 // backend/src/bolt/BoltService.ts:74-86
 private buildCommandString(args: string[]): string {
@@ -101,12 +107,14 @@ childProcess = spawn("bolt", args, {
 ```
 
 **Vulnerabilities:**
+
 1. Arguments not validated for shell metacharacters (`;`, `|`, `&`, `$()`, etc.)
 2. Environment variable `process.env` passed without sanitization
 3. No validation of argument count or structure
 4. Command whitelist bypassed if `COMMAND_WHITELIST_ALLOW_ALL=true`
 
 **Attack Scenario:**
+
 ```bash
 # Attacker crafts malicious task parameter
 POST /api/nodes/target/task
@@ -119,6 +127,7 @@ POST /api/nodes/target/task
 ```
 
 **Recommendation:**
+
 - Implement strict input validation for all Bolt arguments
 - Use allowlist for permitted characters in parameters
 - Never pass entire `process.env` - use explicit environment variables
@@ -126,6 +135,7 @@ POST /api/nodes/target/task
 - Log all command executions with full context
 
 **Mitigation:**
+
 ```typescript
 // Validate arguments against injection patterns
 private validateArgument(arg: string): void {
@@ -148,6 +158,7 @@ private validateArgument(arg: string): void {
 CORS configuration not found in the visible code sections, but the application serves both frontend and API. If CORS is too permissive, it allows any origin to make authenticated requests.
 
 **Current Evidence:**
+
 ```typescript
 // backend/src/server.ts line 1 imports cors
 import cors from "cors";
@@ -156,11 +167,13 @@ import cors from "cors";
 ```
 
 **Recommendation:**
+
 - Restrict CORS to specific origins only
 - Never use `Access-Control-Allow-Origin: *` in production
 - Implement CORS whitelist based on environment
 
 **Proper Configuration:**
+
 ```typescript
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
@@ -184,6 +197,7 @@ app.use(cors({
 No security headers detected (helmet.js not found in dependencies or code).
 
 **Missing Headers:**
+
 - `X-Frame-Options: DENY` (Clickjacking protection)
 - `X-Content-Type-Options: nosniff` (MIME sniffing protection)
 - `Strict-Transport-Security` (HTTPS enforcement)
@@ -191,6 +205,7 @@ No security headers detected (helmet.js not found in dependencies or code).
 - `X-XSS-Protection: 1; mode=block`
 
 **Recommendation:**
+
 ```bash
 npm install --save helmet
 ```
@@ -227,6 +242,7 @@ app.use(helmet({
 While parameterized queries are used, there's risk in dynamic query construction and JSON field searching.
 
 **Evidence:**
+
 ```typescript
 // backend/src/database/ExecutionRepository.ts:121-150
 const sql = `
@@ -248,11 +264,13 @@ const params = [
 ```
 
 **Concerns:**
+
 1. JSON fields queried with `LIKE` (noted in architecture.md as not efficiently indexable)
 2. No prepared statement caching
 3. String concatenation in filter queries could be risky
 
 **Recommendation:**
+
 - Review all filter/search implementations for SQL injection
 - Use ORM or query builder (e.g., Knex.js) for complex queries
 - Never concatenate user input into SQL strings
@@ -270,6 +288,7 @@ const params = [
 Configuration paths (`BOLT_PROJECT_PATH`, `DATABASE_PATH`, Hiera `controlRepoPath`) are read from environment variables without validation.
 
 **Evidence:**
+
 ```dotenv
 # .env
 BOLT_PROJECT_PATH=~/bolt-project
@@ -278,6 +297,7 @@ HIERA_CONTROL_REPO_PATH=/path/to/control-repo
 ```
 
 **Attack Scenario:**
+
 ```bash
 # Attacker modifies environment or config
 BOLT_PROJECT_PATH=../../../etc
@@ -285,6 +305,7 @@ DATABASE_PATH=../../../tmp/malicious.db
 ```
 
 **Recommendation:**
+
 ```typescript
 // backend/src/config/ConfigService.ts
 import path from 'path';
@@ -310,6 +331,7 @@ function validatePath(inputPath: string, basePath: string): string {
 Sensitive data (tokens, SSL certificates) stored in environment variables and potentially logged.
 
 **Evidence:**
+
 ```typescript
 // backend/src/config/ConfigService.ts:124-147
 token: process.env.PUPPETDB_TOKEN,
@@ -322,12 +344,14 @@ ssl: {
 ```
 
 **Concerns:**
+
 1. Tokens logged in startup metadata
 2. SSL certificates passed as environment strings (should be file paths)
 3. No secret rotation mechanism
 4. Expert mode may leak tokens in API responses
 
 **Recommendation:**
+
 - Use secret management (HashiCorp Vault, AWS Secrets Manager)
 - Store certificate paths, not content, in environment
 - Implement secret rotation
@@ -368,6 +392,7 @@ While Zod is used for validation, some edge cases may not be covered:
 4. **File uploads**: No validation (if implemented)
 
 **Recommendation:**
+
 - Add maximum length constraints to all string inputs
 - Validate node ID format (alphanumeric + hyphens/underscores only)
 - Sanitize PQL queries or use parameterized queries
@@ -383,6 +408,7 @@ While Zod is used for validation, some edge cases may not be covered:
 Error handler exposes stack traces and internal details even in non-expert mode.
 
 **Evidence:**
+
 ```typescript
 // Line 48-50
 if (process.env.NODE_ENV === "development") {
@@ -391,6 +417,7 @@ if (process.env.NODE_ENV === "development") {
 ```
 
 **Recommendation:**
+
 - Never expose stack traces in production
 - Sanitize error messages sent to client
 - Log detailed errors server-side only
@@ -404,11 +431,13 @@ if (process.env.NODE_ENV === "development") {
 
 **Issue:**
 No rate limiting allows:
+
 - Brute force attacks (if authentication added)
 - DoS via expensive operations (catalog compilation, report queries)
 - Resource exhaustion
 
 **Recommendation:**
+
 ```bash
 npm install --save express-rate-limit
 ```
@@ -442,12 +471,14 @@ app.use('/api/nodes/:id/command', executionLimiter);
 ANSI output converted to HTML may be vulnerable to XSS if malicious ANSI codes are crafted.
 
 **Evidence:**
+
 ```typescript
 // ansiToHtml.ts - converts ANSI to inline styles
 // Strings are not explicitly sanitized before HTML insertion
 ```
 
 **Recommendation:**
+
 - Escape HTML entities before applying styles
 - Use DOMPurify to sanitize output
 - Never use `innerHTML` without sanitization (only found in test file)
@@ -468,6 +499,7 @@ childProcess = spawn("bolt", args, {
 ```
 
 **Recommendation:**
+
 ```typescript
 // Only pass necessary variables
 const cleanEnv = {
@@ -494,6 +526,7 @@ childProcess = spawn("bolt", args, {
 Execution commands, node IDs, and parameters logged extensively. Could leak sensitive data.
 
 **Recommendation:**
+
 - Implement log level filtering
 - Redact sensitive parameters
 - Rotate logs with retention policy
@@ -505,16 +538,19 @@ Execution commands, node IDs, and parameters logged extensively. Could leak sens
 **Location:** `package.json`  
 
 **Issue:**
+
 - Override for `tar: 7.5.6` suggests known vulnerability
 - No automated dependency scanning in CI
 
 **Recommendation:**
+
 ```bash
 npm audit
 npm audit fix
 ```
 
 Add to CI:
+
 ```yaml
 - name: Security audit
   run: npm audit --audit-level=moderate
@@ -530,6 +566,7 @@ Add to CI:
 No HTTPS configuration or HTTP→HTTPS redirect.
 
 **Recommendation:**
+
 - Add TLS configuration for production
 - Redirect HTTP to HTTPS
 - Use Let's Encrypt for certificates
@@ -548,19 +585,19 @@ No HTTPS configuration or HTTP→HTTPS redirect.
 
 ### Short-term (1-2 weeks)
 
-6. Add rate limiting to all endpoints
-7. Implement secret management
-8. Add SQL injection protection tests
-9. Sanitize error messages in production
-10. Add request size limits
+1. Add rate limiting to all endpoints
+2. Implement secret management
+3. Add SQL injection protection tests
+4. Sanitize error messages in production
+5. Add request size limits
 
 ### Medium-term (1 month)
 
-11. Implement RBAC
-12. Add audit logging
-13. Security scanning in CI/CD
-14. Penetration testing
-15. Security documentation
+1. Implement RBAC
+2. Add audit logging
+3. Security scanning in CI/CD
+4. Penetration testing
+5. Security documentation
 
 ---
 

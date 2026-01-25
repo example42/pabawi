@@ -80,6 +80,7 @@ npm run build:frontend && npm run copy:frontend && npm run dev:backend
 ### Backend (Express + TypeScript)
 
 **Error Handling:**
+
 - Define domain-specific errors in `backend/src/errors/` (e.g., `BoltExecutionError`, `CommandNotAllowedError`)
 - Errors extend base class with statusCode property
 - Global error middleware (`errorHandler.ts`) catches all errors, formats response based on error type
@@ -87,11 +88,13 @@ npm run build:frontend && npm run copy:frontend && npm run dev:backend
 - **Bolt Task Errors:** Extract both `_output` and `_error` fields from failed tasks—combine for comprehensive error messages
 
 **Configuration & Validation:**
+
 - Use `ConfigService` to load/validate environment variables with Zod schemas (`backend/src/config/schema.ts`)
 - All integrations read config via `ConfigService.getConfig()`
 - Sensitive values (tokens, certs) load from env, never hardcoded
 
 **Services Architecture:**
+
 - `BoltService`: Spawns Bolt CLI, parses JSON output, implements streaming callbacks and caching (30s inventory, 5m facts TTL)
 - `DatabaseService`: SQLite schema management, migrations
 - `ExecutionRepository`: CRUD operations for execution history with composite indexes
@@ -104,17 +107,20 @@ npm run build:frontend && npm run copy:frontend && npm run dev:backend
 ### Frontend (Svelte 5 + Vite)
 
 **Stores & State:**
+
 - Reactive stores in `src/lib/` (e.g., `router.svelte.ts`, `expertMode.svelte.ts`, `theme.svelte.ts`)
 - Use SvelteKit-like patterns for state management (Svelte 5 runes: `$state()`, `$effect()`)
 - Expert mode state persisted to localStorage, triggers enhanced API responses with debug info
 
 **API Integration:**
+
 - All HTTP calls via `src/lib/api.ts` (centralizes fetch, error handling, type safety)
 - Routes in `src/pages/`, components in `src/components/` organized by feature
 - Real-time streaming via SSE (`executionStream.svelte.ts`): auto-reconnect, exponential backoff, correlation IDs
 - Use `useExecutionStream()` utility for live command/task output with reactive state management
 
 **UI Patterns:**
+
 - Tailwind CSS for styling (see `tailwind.config.js`)
 - Integration color coding: Bolt (orange #FFAE1A), PuppetDB (violet #9063CD), Puppetserver (blue #2E3A87), Hiera (red #C1272D)
 - Error boundary component handles graceful error display (`ErrorBoundary.svelte`)
@@ -125,6 +131,7 @@ npm run build:frontend && npm run copy:frontend && npm run dev:backend
 ### Database Schema
 
 SQLite schema defined in `backend/src/database/schema.sql`, migrations in `migrations.sql`. Key tables:
+
 - `executions`: Stores all command/task execution history with results
 - Auto-create on first run via `DatabaseService`
 
@@ -183,19 +190,22 @@ PuppetDB, Puppetserver, Hiera enabled via `INTEGRATION_PUPPETDB_ENABLED`, `INTEG
 ## Common Tasks for AI Agents
 
 ### nitialize `LoggerService`, `ExpertModeService` in router factory
-4. Implement business logic, calling services (BoltService, IntegrationManager, repos)
-5. **Add structured logging** at request start, before/after operations, and errors:
+
+1. Implement business logic, calling services (BoltService, IntegrationManager, repos)
+2. **Add structured logging** at request start, before/after operations, and errors:
+
    ```typescript
    logger.info("Processing request", { component: "RouterName", integration: "bolt", operation: "executeCommand", metadata: {...} });
    ```
-6. Use `integrationManager.getInventory()`, `.getNodeData()`, etc. for multi-source data
-7. **Support expert mode**: Check `req.expertMode`, attach debug info with `ExpertModeService.attachDebugInfo()`
-8. Mount in `server.ts` with appropriate path prefix
-9. Return consistent response format with `source` field identifying integratio
-3. Implement business logic, calling services (BoltService, IntegrationManager, repos)
-4. Use `integrationManager.getInventory()`, `.getNodeData()`, etc. for multi-source data
+
+3. Use `integrationManager.getInventory()`, `.getNodeData()`, etc. for multi-source data
+4. **Support expert mode**: Check `req.expertMode`, attach debug info with `ExpertModeService.attachDebugInfo()`
 5. Mount in `server.ts` with appropriate path prefix
-6. Wrap response/errors using error handler pattern
+6. Return consistent response format with `source` field identifying integratio
+7. Implement business logic, calling services (BoltService, IntegrationManager, repos)
+8. Use `integrationManager.getInventory()`, `.getNodeData()`, etc. for multi-source data
+9. Mount in `server.ts` with appropriate path prefix
+10. Wrap response/errors using error handler pattern
 
 ### Adding a New Plugin Integration
 
@@ -235,6 +245,7 @@ PuppetDB, Puppetserver, Hiera enabled via `INTEGRATION_PUPPETDB_ENABLED`, `INTEG
 - Use integration color coding in UI (see `INTEGRATION_COLORS` mapping)
 
 ❌ **DON'T:**
+
 - Hardcode paths, timeouts, or configuration—use ConfigService
 - Execute shell commands directly—use BoltService or spawn with proper error handling
 - Skip error handling or use generic `Error` type

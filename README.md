@@ -79,7 +79,7 @@ For production or multi-user environments, implement external authentication thr
 - **Puppet Reports**: Browse detailed Puppet run reports with metrics and resource changes
 - **Catalog Inspection**: Examine compiled Puppet catalogs and resource relationships
 - **Event Tracking**: Monitor individual resource changes and failures over time
-- **Catalogs comprison**: Compare and show differences in catalogs from different environments
+- **Catalogs diff**: Compare and show differences in catalogs from different environments
 - **Hiera Data Browser**: Explore hierarchical configuration data and key usage analysis
 
 ### Advanced Features
@@ -103,7 +103,7 @@ padawi/
 │   └── vite.config.ts
 ├── backend/           # Node.js + TypeScript API server
 │   ├── src/
-│   │   ├── bolt/          # Bolt integration
+│   │   ├── bolt/          # Bolt integration (temp)
 │   │   ├── integrations/  # Plugin architecture
 │   │   │   ├── bolt/      # Bolt plugin
 │   │   │   ├── puppetdb/  # PuppetDB integration
@@ -553,6 +553,7 @@ See [Troubleshooting Guide](docs/troubleshooting.md) for more solutions.
 
 ### Version History
 
+- **v0.5.0**: Report filtering, puppet run history visualization, enhanced expert mode with frontend logging
 - **v0.4.0**: Hiera integration, puppetserver CA management removal, enhanced plugin architecture
 - **v0.3.0**: Puppetserver integration, interface enhancements
 - **v0.2.0**: PuppetDB integration, re-execution, expert mode enhancements

@@ -30,34 +30,34 @@ function wrapInString(match, content) {
 
 function fixFile(filePath) {
   const fullPath = path.join(__dirname, '..', filePath);
-  
+
   if (!fs.existsSync(fullPath)) {
     console.log(`File not found: ${fullPath}`);
     return;
   }
-  
+
   let content = fs.readFileSync(fullPath, 'utf8');
   const lines = content.split('\n');
   
   const fileFixes = fixes[filePath];
   if (!fileFixes) return;
-  
+
   let modified = false;
-  
+
   for (const fix of fileFixes) {
     const lineIndex = fix.line - 1;
     if (lineIndex < 0 || lineIndex >= lines.length) continue;
-    
+
     const originalLine = lines[lineIndex];
     const newLine = originalLine.replace(fix.pattern, wrapInString);
-    
+
     if (newLine !== originalLine) {
       lines[lineIndex] = newLine;
       modified = true;
       console.log(`Fixed line ${fix.line} in ${filePath}`);
     }
   }
-  
+
   if (modified) {
     fs.writeFileSync(fullPath, lines.join('\n'), 'utf8');
     console.log(`✓ Updated ${filePath}`);

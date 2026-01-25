@@ -1,6 +1,6 @@
 # Pabawi Integrations API Documentation
 
-Version: 0.3.0
+Version: 0.5.0
 
 ## Overview
 
