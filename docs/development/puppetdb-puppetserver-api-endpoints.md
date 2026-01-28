@@ -1,5 +1,7 @@
 # PuppetDB and Puppet Server API Endpoints Analysis
 
+**Generated:** January 12, 2026  
+
 This document provides a comprehensive list of all PuppetDB and Puppet Server API endpoints used in the Pabawi codebase, including where they are used and their purpose.
 
 ## PuppetDB API Endpoints
