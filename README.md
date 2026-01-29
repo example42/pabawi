@@ -21,24 +21,22 @@
 - [Project Structure](#project-structure)
 - [Screenshots](#screenshots)
 - [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Development / Debugging](#development--debugging)
-- [Build](#build)
-- [Configuration](#configuration)
-  - [Basic Configuration](#basic-configuration)
   - [Bolt Integration](#bolt-integration)
   - [PuppetDB Integration](#puppetdb-integration)
   - [PuppetServer Integration](#puppetserver-integration)
   - [Hiera Integration](#hiera-integration)
+- [Installation](#installation)
+- [Development / debugging](#development--debugging)
+  - [Accessing the Application](#accessing-the-application)
+- [Build](#build)
+- [Configuration](#configuration)
 - [Testing](#testing)
   - [Unit and Integration Tests](#unit-and-integration-tests)
   - [End-to-End Tests](#end-to-end-tests)
   - [Development Pre-commit Hooks](#development-pre-commit-hooks)
 - [Docker Deployment](#docker-deployment)
   - [Quick Start](#quick-start)
-  - [Running with Docker Compose](#running-with-docker-compose)
 - [Troubleshooting](#troubleshooting)
-  - [Common Issues](#common-issues)
 - [Roadmap](#roadmap)
   - [Planned Features](#planned-features)
   - [Version History](#version-history)
@@ -47,11 +45,7 @@
   - [Documentation](#documentation)
   - [Getting Help](#getting-help)
 - [Acknowledgments](#acknowledgments)
-- [Documentation](#documentation-1)
-  - [Getting Started](#getting-started)
-  - [API Reference](#api-reference)
-  - [Integration Setup](#integration-setup)
-  - [Additional Resources](#additional-resources)
+- [Documentation](#documentation)
 
 ## Security Notice
 
@@ -211,99 +205,11 @@ npm run build
 
 ## Configuration
 
-### Basic Configuration
+Pabawi uses a `.env` file for configuration. Copy `backend/.env.example` to `backend/.env` to get started.
 
-Copy `backend/.env.example` to `backend/.env` and configure the integrations you want, starting from general settings:
+For detailed configuration options including Bolt, PuppetDB, PuppetServer, and Hiera integration settings, please refer to the [Configuration Guide](docs/configuration.md).
 
-```env
-# Pabawi General Configurations
-PORT=3000
-LOG_LEVEL=info
-DATABASE_PATH=./data/executions.db
-```
-
-### Bolt integration
-
-```env
-# Bolt Related settings
-BOLT_PROJECT_PATH=.
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST=["ls","pwd","whoami"]
-BOLT_EXECUTION_TIMEOUT=300000
-```
-
-### PuppetDB Integration
-
-To enable PuppetDB integration, add to `backend/.env`:
-
-```env
-# Enable and configure PuppetDB integration
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-
-# Token based Authentication (Puppet Enterprise only)
-PUPPETDB_TOKEN=your-token-here
-
-# Certs based Authentication (Puppet Enterprise and Open Source Puppet)
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/path/to/ca.pem
-PUPPETDB_SSL_CERT=/path/to/cert.pem
-PUPPETDB_SSL_KEY=/path/to/key.pem
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-```
-
-See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md) for detailed configuration instructions.
-
-### PuppetServer Integration
-
-To enable PuppetServer integration, add to `backend/.env`:
-
-```env
-# Enable and configure PuppetServer integration
-PUPPETSERVER_ENABLED=true
-PUPPETSERVER_SERVER_URL=https://puppet.example.com
-PUPPETSERVERT_PORT=8140
-
-# Token based Authentication (Puppet Enterprise only)
-PUPPETSERVER_TOKEN=your-token-here
-
-# Certs based Authentication (Puppet Enterprise and Open Source Puppet)
-PUPPETSERVER_SSL_ENABLED=true
-PUPPETSERVER_SSL_CA=/path/to/ca.pem
-PUPPETSERVER_SSL_CERT=/path/to/cert.pem
-PUPPETSERVER_SSL_KEY=/path/to/key.pem
-PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
-```
-
-See [PuppetServer Integration Setup Guide](docs/puppetserver-integration-setup.md) for detailed configuration instructions.
-
-### Hiera Integration
-
-To enable Hiera integration, add to `backend/.env`:
-
-```env
-# Enable Hiera
-HIERA_ENABLED=true
-HIERA_CONTROL_REPO_PATH=/path/to/control-repo
-
-# Optional Configuration
-HIERA_CONFIG_PATH=hiera.yaml
-HIERA_ENVIRONMENTS=["production","development"]
-
-# Fact Source Configuration
-HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
-HIERA_FACT_SOURCE_LOCAL_PATH=/path/to/facts
-
-# Cache Configuration
-HIERA_CACHE_ENABLED=true
-HIERA_CACHE_TTL=300000
-HIERA_CACHE_MAX_ENTRIES=10000
-
-# Code Analysis Configuration
-HIERA_CODE_ANALYSIS_ENABLED=true
-HIERA_CODE_ANALYSIS_LINT_ENABLED=true
-```
+For API details, see the [Integrations API Documentation](docs/integrations-api.md).
 
 ## Testing
 
@@ -371,173 +277,17 @@ For comprehensive Docker deployment instructions including all integrations, see
 
 ### Quick Start
 
-### Running the Docker Image
+To start Pabawi with Docker Compose using the default configuration:
 
 ```bash
-# Using the provided script (adapt as needed)
-./scripts/docker-run.sh
-
-# Or, without the need to git clone, manually executing a command as follows:
-docker run -d \
-  --name pabawi \
-  --user "$(id -u):1001" \ # Your user must be able to read all the mounted files
-  -p 127.0.0.1:3000:3000 \
-  --platform "amd64" \ # amd64 or arm64
-  -v "$(pwd):/bolt-project:ro" \
-  -v "$(pwd)/data:/data" \
-  -v "$(pwd)/certs:/certs" \ 
-  -v "$HOME/.ssh:/home/pabawi/.ssh" \
-  --env-file ./env \
-  example42/padawi:latest
-```
-
-Access the application at <http://localhost:3000>
-
-**Important**: The amount of volume mounts is up to you and depends on where, in the host filesystem, are the files which are needed by the Pabawi instance running inside the container. Also, the paths referenced in your .env file must be relative to container file system.
-
-Examples:
-
-| Kind of data | Path on the host | Volume Mount option | Env setting |
-| ----------- | ---------------- | ------------------- | ----------- |
-| Bolt project dir | $HOME/bolt-project | -v "${HOME}/bolt-project:/bolt:ro" | BOLT_PROJECT_PATH=/bolt |
-| Control Repo | $HOME/control-repo | -v "${HOME}/control-repo:/control-repo:ro" | HIERA_CONTROL_REPO_PATH=/control-repo |
-| Pabawi Data | $HOME/pabawi/data | -v "${HOME}/pabawi/data:/data" | DATABASE_PATH=/data/pabawi.db |
-| Puppet certs - Ca | $HOME/puppet/certs/ca.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETSERVER_SSL_CA=/certs/ca.pem |
-| Puppet certs - Pabawi user cert | $HOME/puppet/certs/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_CERT=/certs/pabawi.pem |
-| Puppet certs - Pabawi user key | $HOME/puppet/certs/private/pabawi.pem | -v "${HOME}/puppet/certs:/certs" | PUPPETDB_SSL_KEY=/certs/private/pabawi.pem |
-
-PUPPETSERVER_SSL_* settings can use the same paths of the relevant PUPPETDB_SSL_ ones.
-
-**⚠️ Security Note**: With current version is always better to expose access on;y via localhost. If you run pabawi on a remote node, use SSH port forwarding:
-
-```bash
-# SSH port forwarding for remote access
-ssh -L 3000:localhost:3000 user@your-pabawi-host
-```
-
-If you want to allow Pabawi access to different users, you should configure a reverse proxy with authentication.
-
-### Running with Docker Compose
-
-The docker-compose.yml file includes comprehensive configuration for all integrations:
-
-```bash
-# Start the service
 docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop the service
-docker-compose down
 ```
 
-#### Enabling Integrations
+This will start the application at <http://localhost:3000>.
 
-To enable integrations, create a `.env` file in the project root with your configuration:
+## Troubleshooting
 
-```env
-# PuppetDB Integration
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-PUPPETDB_TOKEN=your-token-here
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/ssl-certs/ca.pem
-PUPPETDB_SSL_CERT=/ssl-certs/client.pem
-PUPPETDB_SSL_KEY=/ssl-certs/client-key.pem
-
-# Puppetserver Integration
-PUPPETSERVER_ENABLED=true
-PUPPETSERVER_SERVER_URL=https://puppet.example.com
-PUPPETSERVER_PORT=8140
-PUPPETSERVER_SSL_ENABLED=true
-PUPPETSERVER_SSL_CA=/ssl-certs/ca.pem
-PUPPETSERVER_SSL_CERT=/ssl-certs/client.pem
-PUPPETSERVER_SSL_KEY=/ssl-certs/client-key.pem
-
-# Hiera Integration
-HIERA_ENABLED=true
-HIERA_CONTROL_REPO_PATH=/control-repo
-HIERA_ENVIRONMENTS=["production","staging"]
-HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
-```
-
-#### Volume Mounts for Integrations
-
-Update the docker-compose.yml volumes section to include your SSL certificates and control repository:
-
-```yaml
-volumes:
-  # Existing mounts
-  - ./bolt-project:/bolt-project:ro
-  - ./data:/data
-  
-  # SSL certificates for PuppetDB/Puppetserver
-  - /path/to/ssl/certs:/ssl-certs:ro
-  
-  # Hiera control repository
-  - /path/to/control-repo:/control-repo:ro
-```
-
-Access the application at <http://localhost:3000>
-
-### Troubleshooting
-
-### Common Issues
-
-#### Database Permission Errors
-
-If you see `SQLITE_CANTOPEN: unable to open database file`, the container user (UID 1001) doesn't have write access to the `/data` volume.
-
-**On Linux:**
-
-```bash
-# Set correct ownership on the data directory
-sudo chown -R 1001:1001 ./data
-```
-
-**On macOS/Windows:**
-Docker Desktop handles permissions automatically. Ensure the directory exists:
-
-```bash
-mkdir -p ./data
-```
-
-**Using the docker-run.sh script:**
-The provided script automatically handles permissions on Linux systems.
-
-#### PuppetDB Connection Issues
-
-If PuppetDB integration shows "Disconnected":
-
-1. Verify PuppetDB is running and accessible
-2. Check configuration in `backend/.env`
-3. Test connectivity: `curl https://puppetdb.example.com:8081/pdb/meta/v1/version`
-4. Review logs with `LOG_LEVEL=debug`
-5. See [PuppetDB Integration Setup Guide](docs/puppetdb-integration-setup.md)
-
-#### Hiera Integration Issues
-
-If Hiera integration shows "Not Found" for all keys:
-
-1. Verify control repository path is correct (`HIERA_CONTROL_REPO_PATH`)
-2. Check `hiera.yaml` exists in control repository root
-3. Ensure hieradata directories exist and contain YAML files
-4. Verify node facts are available (PuppetDB or local files)
-5. Check hierarchy path interpolation with available facts
-6. Review logs with `LOG_LEVEL=debug` for detailed error messages
-
-#### Expert Mode Not Showing Full Output
-
-If expert mode doesn't show complete output:
-
-1. Ensure expert mode is enabled (toggle in navigation)
-2. Check execution was run with expert mode enabled
-3. Verify database has `stdout` and `stderr` columns
-4. For historical executions, only those run in v0.2.0+ have full output
-
-See [Troubleshooting Guide](docs/troubleshooting.md) for more solutions.
+For solutions to common issues including installation, configuration, and integration problems, please refer to the comprehensive [Troubleshooting Guide](docs/troubleshooting.md).
 
 ## Roadmap
 
@@ -571,7 +321,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 - [Configuration Guide](docs/configuration.md)
 - [User Guide](docs/user-guide.md)
 - [API Documentation](docs/api.md)
-- [PuppetDB Integration Setup](docs/puppetdb-integration-setup.md)
+- [PuppetDB Integration Setup](docs/integrations/puppetdb.md)
 
 ### Getting Help
 
@@ -602,7 +352,9 @@ Special thanks to all contributors and the Puppet community.
 
 ### Getting Started
 
+- [Technical Summary](docs/description.md) - High-level technical overview and goals
 - [Architecture Documentation](docs/architecture.md) - System architecture and plugin design
+- [Repository Structure](docs/repo_structure_and_config.md) - Guide to repository files and configuration
 - [Configuration Guide](docs/configuration.md) - Complete configuration reference
 - [User Guide](docs/user-guide.md) - Comprehensive user documentation
 - [API Documentation](docs/api.md) - REST API reference
@@ -616,8 +368,8 @@ Special thanks to all contributors and the Puppet community.
 
 ### Integration Setup
 
-- [PuppetDB Integration Setup](docs/puppetdb-integration-setup.md) - PuppetDB configuration guide
-- [Puppetserver Setup](docs/uppetserver-integration-setup.md) - Puppetserver configuration guide
+- [PuppetDB Integration Setup](docs/integrations/puppetdb.md) - PuppetDB configuration guide
+- [Puppetserver Setup](docs/integrations/puppetserver.md) - Puppetserver configuration guide
 - [PuppetDB API Documentation](docs/puppetdb-api.md) - PuppetDB-specific API endpoints
 
 ### Additional Resources
