@@ -87,7 +87,10 @@ docker run -d \
 
 ## Volume Mount Reference
 
-The volume mounts you need depend on where files are located on your host filesystem. Paths in your `.env` file must reference the container filesystem.
+**Important: Path Configuration**
+The paths you reference in your `.env` file (like `BOLT_PROJECT_PATH` or `PUPPETDB_SSL_CA`) must be the paths **inside the container**, not the paths on your host machine.
+
+The volume mounts map your local host files to these container paths. You can mount as many or as few volumes as needed depending on which integrations you are using.
 
 | Kind of data | Path on host | Volume mount option | Env setting |
 | ------------ | ------------ | ------------------- | ----------- |
@@ -130,94 +133,22 @@ docker buildx build --platform linux/amd64,linux/arm64 -t pabawi:latest .
 
 ## Environment Variables
 
-### Core Configuration
+Pabawi is configured using environment variables. For a complete reference of all available variables, including Core, Bolt, and Integration settings, please consult the **[Configuration Guide](./configuration.md)**.
+
+You can pass these variables to the Docker container using the `-e` flag:
 
 ```bash
-# Server settings
-PORT=3000
-HOST=0.0.0.0
-NODE_ENV=production
-
-# Database
-DATABASE_PATH=/data/executions.db
-
-# Bolt configuration
-BOLT_PROJECT_PATH=/bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]'
-BOLT_EXECUTION_TIMEOUT=300000
-
-# Logging
-LOG_LEVEL=info
+docker run -d \
+  -e PORT=3000 \
+  -e LOG_LEVEL=info \
+  -e PUPPETDB_ENABLED=true \
+  pabawi:latest
 ```
 
-### PuppetDB Integration
+Or by referencing an environment file (recommended):
 
 ```bash
-# Enable PuppetDB
-PUPPETDB_ENABLED=true
-PUPPETDB_SERVER_URL=https://puppetdb.example.com
-PUPPETDB_PORT=8081
-
-# Authentication (choose one)
-PUPPETDB_TOKEN=your-token-here  # Puppet Enterprise only
-# OR SSL certificates
-PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/ssl-certs/ca.pem
-PUPPETDB_SSL_CERT=/ssl-certs/client.pem
-PUPPETDB_SSL_KEY=/ssl-certs/client-key.pem
-PUPPETDB_SSL_REJECT_UNAUTHORIZED=true
-
-# Performance
-PUPPETDB_TIMEOUT=30000
-PUPPETDB_RETRY_ATTEMPTS=3
-PUPPETDB_CACHE_TTL=300000
-```
-
-### Puppetserver Integration
-
-```bash
-# Enable Puppetserver
-PUPPETSERVER_ENABLED=true
-PUPPETSERVER_SERVER_URL=https://puppet.example.com
-PUPPETSERVER_PORT=8140
-
-# Authentication (choose one)
-PUPPETSERVER_TOKEN=your-token-here  # Puppet Enterprise only
-# OR SSL certificates
-PUPPETSERVER_SSL_ENABLED=true
-PUPPETSERVER_SSL_CA=/ssl-certs/ca.pem
-PUPPETSERVER_SSL_CERT=/ssl-certs/client.pem
-PUPPETSERVER_SSL_KEY=/ssl-certs/client-key.pem
-PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
-
-# Performance
-PUPPETSERVER_TIMEOUT=30000
-PUPPETSERVER_RETRY_ATTEMPTS=3
-PUPPETSERVER_CACHE_TTL=300000
-```
-
-### Hiera Integration
-
-```bash
-# Enable Hiera
-HIERA_ENABLED=true
-HIERA_CONTROL_REPO_PATH=/control-repo
-HIERA_CONFIG_PATH=hiera.yaml
-HIERA_ENVIRONMENTS='["production","staging","development"]'
-
-# Fact source configuration
-HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
-HIERA_FACT_SOURCE_LOCAL_PATH=/facts
-
-# Cache configuration
-HIERA_CACHE_ENABLED=true
-HIERA_CACHE_TTL=300000
-HIERA_CACHE_MAX_ENTRIES=10000
-
-# Code analysis
-HIERA_CODE_ANALYSIS_ENABLED=true
-HIERA_CODE_ANALYSIS_LINT_ENABLED=true
+docker run --env-file .env pabawi:latest
 ```
 
 ## Volume Mounts
@@ -788,7 +719,7 @@ open http://localhost:3000
 ## Additional Resources
 
 - [Configuration Guide](./configuration.md)
-- [PuppetDB Integration Setup](./puppetdb-integration-setup.md)
+- [PuppetDB Integration Setup](./integrations/puppetdb.md)
 - [Puppetserver Setup](./uppetserver-integration-setup.md)
 - [Troubleshooting Guide](./troubleshooting.md)
 - [API Documentation](./api.md)

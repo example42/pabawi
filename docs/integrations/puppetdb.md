@@ -327,9 +327,46 @@ curl http://localhost:3000/api/integrations/puppetdb/nodes
 
 # Get facts for a specific node
 curl http://localhost:3000/api/integrations/puppetdb/nodes/node1.example.com/facts
+```
 
-# Get reports for a specific node
-curl http://localhost:3000/api/integrations/puppetdb/nodes/node1.example.com/reports
+### Manual API Verification
+
+If the integration fails, you can test connectivity to the PuppetDB API directly using `curl`.
+
+**1. Test Basic Connectivity:**
+
+```bash
+# Test HTTP connection (default port 8080)
+curl http://puppetdb.example.com:8080/pdb/meta/v1/version
+
+# Test HTTPS connection (default port 8081)
+curl --cert /path/to/cert.pem \
+     --key /path/to/key.pem \
+     --cacert /path/to/ca.pem \
+     https://puppetdb.example.com:8081/pdb/meta/v1/version
+```
+
+**2. Test Nodes Query:**
+
+```bash
+# List all nodes
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/nodes'
+```
+
+**3. Test Reports Query:**
+
+```bash
+# Query reports for a node
+curl -X GET 'http://puppetdb.example.com:8080/pdb/query/v4/reports' \
+  -H "Content-Type: application/json" \
+  -d '{"query":["=","certname","node1.example.com"],"limit":10}'
+```
+
+**4. Test Admin Endpoints:**
+
+```bash
+# Archive info
+curl http://puppetdb.example.com:8080/pdb/admin/v1/archive
 ```
 
 ### Using Logs

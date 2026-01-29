@@ -174,6 +174,52 @@ After configuring the integration:
    }
    ```
 
+### Manual API Verification
+
+If the integration fails, you can test connectivity to the Puppetserver API directly using `curl`.
+
+**1. Test Basic Connectivity:**
+
+```bash
+# Test HTTPS connection
+curl -k https://puppetserver.example.com:8140
+```
+
+**2. Test Certificate Status API:**
+
+```bash
+# With token authentication
+curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses \
+  -H "X-Authentication: your-token-here"
+
+# With certificate authentication
+curl --cert /path/to/cert.pem \
+     --key /path/to/key.pem \
+     --cacert /path/to/ca.pem \
+     https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses
+```
+
+**3. Test Individual Certificate Lookup:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_status/node1.example.com \
+  -H "X-Authentication: your-token-here"
+```
+
+**4. Test Facts API:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/puppet/v3/facts/node1.example.com \
+  -H "X-Authentication: your-token-here"
+```
+
+**5. Test Status Endpoints:**
+
+```bash
+curl -k https://puppetserver.example.com:8140/status/v1/simple \
+  -H "X-Authentication: your-token-here"
+```
+
 ## Features Available
 
 Once configured, you can:

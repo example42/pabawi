@@ -21,6 +21,7 @@ Pabawi is a web-based interface for the Bolt automation tool that allows you to 
 - [Integration Color Coding](#integration-color-coding)
 - [Expert Mode](#expert-mode)
 - [Realtime Streaming Output](#realtime-streaming-output)
+- [Interpreting Bolt Command Output](#interpreting-bolt-command-output)
 - [Puppet Reports Filtering](#puppet-reports-filtering)
 - [Puppet Run Visualization](#puppet-run-visualization)
 - [Tips and Best Practices](#tips-and-best-practices)
@@ -1555,6 +1556,10 @@ Integration colors are chosen for:
 - **Text labels**: Colors are always accompanied by text labels
 - **Icon support**: Icons provide additional visual cues beyond color
 
+## Troubleshooting
+
+For detailed troubleshooting steps, common error messages, and solutions, please refer to the dedicated [Troubleshooting Guide](./troubleshooting.md).
+
 ## Expert Mode
 
 **Enhanced in v0.5.0**: Expert Mode now provides comprehensive debugging information including frontend logs, backend debug info, performance metrics, and full request lifecycle visibility.
@@ -1999,975 +2004,209 @@ Once expert mode is enabled:
 
 **Components:**
 
-1. **Bolt Command** (top):
-   - Shows exact command being executed
-   - Displayed prominently
-   - Copy button for easy copying
-
-2. **Connection Status:**
-   - Connected: Green indicator
-   - Disconnected: Red indicator
-   - Reconnecting: Yellow indicator
-
-3. **Output Sections:**
-   - **stdout**: Standard output (normal output)
-   - **stderr**: Standard error (errors and warnings)
-   - Syntax highlighting applied
-   - Auto-scrolls to latest output
-
-4. **Execution Status:**
-   - Running: Blue indicator
-   - Success: Green indicator
-   - Failed: Red indicator
-
-5. **Elapsed Time:**
-   - Shows time since execution started
-   - Updates in real-time
-   - Helps monitor long operations
-
-6. **Controls:**
-   - Pause auto-scroll
-   - Copy output
-   - Expand/collapse sections
-
-**Example Display:**
-
-```
-┌─────────────────────────────────────────────────┐
-│ Bolt Command:                                   │
-│ bolt task run psick::puppet_agent \             │
-│   --targets web-01 --format json                │
-│ [Copy]                                          │
-├─────────────────────────────────────────────────┤
-│ Status: Running | Connected | Elapsed: 15.3s    │
-├─────────────────────────────────────────────────┤
-│ Standard Output (stdout):                       │
-│ Info: Using environment 'production'            │
-│ Info: Retrieving pluginfacts                    │
-│ Info: Retrieving plugin                         │
-│ Info: Loading facts                             │
-│ Info: Caching catalog for web-01                │
-│ Info: Applying configuration version '1234'     │
-│ Notice: /Stage[main]/Nginx/Package[nginx]/...   │
-│ Notice: /Stage[main]/Nginx/Service[nginx]/...   │
-│ ▼ [Auto-scroll: On] [Pause]                    │
-├─────────────────────────────────────────────────┤
-│ Standard Error (stderr):                        │
-│ Warning: Skipping resource due to noop mode     │
-│ ▼                                               │
-└─────────────────────────────────────────────────┘
-```
-
-#### Monitoring Long-Running Operations
-
-**For Long Operations:**
-
-1. Start the execution
-2. Monitor initial output
-3. Verify execution is progressing
-4. Pause auto-scroll to review earlier output
-5. Resume auto-scroll to see latest
-6. Wait for completion
-
-**Progress Indicators:**
-
-- Output continues to appear
-- Elapsed time increases
-- Status remains "Running"
-- Connection stays active
-
-**Completion:**
-
-- Status changes to Success or Failed
-- Final output displayed
-- Total duration shown
-- Connection closes automatically
-
-### Streaming Features
-
-#### Auto-Scroll
-
-**Behavior:**
-
-- Automatically scrolls to latest output
-- Keeps newest information visible
-- Enabled by default
-
-**Pausing Auto-Scroll:**
-
-1. Click "Pause" button
-2. Or scroll up manually
-3. Auto-scroll pauses
-4. Review earlier output
-
-**Resuming Auto-Scroll:**
-
-1. Click "Resume" button
-2. Or scroll to bottom
-3. Auto-scroll resumes
-4. Jumps to latest output
-
-#### Copy to Clipboard
-
-**Copying Output:**
-
-1. Click "Copy" button
-2. Entire output copied to clipboard
-3. Includes both stdout and stderr
-4. Preserves formatting
-
-**Copying Bolt Command:**
-
-1. Click "Copy" next to Bolt command
-2. Command copied to clipboard
-3. Can paste into terminal
-4. Useful for manual testing
-
-#### Connection Management
-
-**Automatic Reconnection:**
-
-- If connection drops, automatically reconnects
-- Reconnection attempts every 3 seconds
-- Up to 10 reconnection attempts
-- Status indicator shows reconnection state
-
-**Manual Reconnection:**
-
-- Refresh the page
-- Or wait for automatic reconnection
-- Output history preserved
-- Streaming resumes from current point
-
-### Streaming Performance
-
-**Buffering:**
-
-- Output buffered for 100ms
-- Reduces network traffic
-- Improves browser performance
-- Minimal delay in display
-
-**Output Limits:**
-
-- Maximum 10MB output per execution
-- Very long lines truncated
-- Prevents browser performance issues
-- Full output available in logs
-
-**Network Efficiency:**
-
-- Only sends new output
-- Compressed transmission
-- Minimal bandwidth usage
-- Efficient for long operations
+- **Status Bar**: Shows active connection status
+- **Output Window**: Displays text as it arrives
+- **Scroll Lock**: Option to auto-scroll or pause
+- **Stop Button**: Cancel execution (if supported)
 
 ### Troubleshooting Streaming
 
-#### Problem: "Streaming not available"
+**Problem: "Streaming connection failed"**
 
-**Causes:**
+- Check network connection
+- Verify SSE support on server
+- Check for proxy interference
+- Streaming may fall back to polling
 
-- Expert mode not enabled
-- Browser doesn't support SSE
-- Server configuration issue
+**Problem: "No output appears"**
 
-**Solutions:**
+- Command may not produce output yet
+- Buffering may cause slight delay
+- Check if execution is actually running
 
-1. Enable expert mode
-2. Use modern browser
-3. Check server configuration
-4. Verify network connectivity
+## Interpreting Bolt Command Output
 
-#### Problem: "Connection keeps dropping"
+When working with Bolt, understanding its output format is crucial for diagnosing issues. This section explains how to interpret standard Bolt JSON output.
 
-**Causes:**
+### Standard Success Response
 
-- Network instability
-- Proxy configuration
-- Firewall blocking SSE
-- Server restart
+A successful command execution returns a JSON structure like this:
 
-**Solutions:**
+```json
+{
+  "items": [
+    {
+      "target": "web-01",
+      "status": "success",
+      "result": {
+        "stdout": "up 10 days\n",
+        "stderr": "",
+        "exit_code": 0
+      }
+    }
+  ],
+  "target_count": 1,
+  "elapsed_time": 1
+}
+```
 
-1. Check network connection
-2. Configure proxy for SSE:
+**Key Fields:**
 
-   ```nginx
-   proxy_buffering off;
-   proxy_cache off;
-   proxy_read_timeout 3600s;
-   ```
+- `status`: "success" indicates command ran without error
+- `stdout`: The actual output from the command
+- `stderr`: Any error messages (usually empty on success)
+- `exit_code`: Should be 0 for success
 
-3. Check firewall rules
-4. Wait for automatic reconnection
+### Task Execution Response
 
-#### Problem: "No output appearing"
+Task results are more structured:
 
-**Causes:**
+```json
+{
+  "items": [
+    {
+      "target": "db-01",
+      "status": "success",
+      "result": {
+        "output": "Service postgresql restarted",
+        "changed": true,
+        "_output": "Service postgresql restarted"
+      }
+    }
+  ]
+}
+```
 
-- Command produces no output
-- Output buffering delay
-- Execution hasn't started
+**Key Fields:**
 
-**Solutions:**
+- `result`: Contains task-specific return values
+- `_output`: The human-readable output string
 
-1. Wait a few seconds for buffering
-2. Verify execution is running
-3. Check execution status
-4. Try a command that produces output
+### Common Error Responses
 
-#### Problem: "Output truncated"
+**1. Connection Failure:**
 
-**Causes:**
+```json
+{
+  "target": "web-02",
+  "status": "failure",
+  "result": {
+    "_error": {
+      "kind": "puppetlabs.tasks/connect-error",
+      "msg": "Failed to connect to web-02: Connection refused",
+      "details": {}
+    }
+  }
+}
+```
 
-- Output exceeds 10MB limit
-- Very long lines truncated
+**2. Command Failure (Non-zero exit code):**
 
-**Solutions:**
-
-1. Increase output limit in configuration
-2. Reduce command verbosity
-3. Check server logs for full output
-4. Use less verbose commands
-
-### Streaming Best Practices
-
-**Do:**
-
-- Enable expert mode for streaming
-- Monitor long-running operations
-- Pause auto-scroll to review output
-- Copy output for documentation
-- Use for troubleshooting
-
-**Don't:**
-
-- Leave many streaming connections open
-- Ignore connection status
-- Assume all output is captured
-- Close browser during critical operations
-- Rely solely on streaming for audit logs
-
-### Streaming vs. Traditional Execution
-
-**Use Streaming When:**
-
-- Operation takes more than 30 seconds
-- Need to monitor progress
-- Troubleshooting issues
-- Learning what commands do
-- Verifying execution is progressing
-
-**Use Traditional When:**
-
-- Quick operations (< 10 seconds)
-- Don't need real-time feedback
-- Reviewing completed executions
-- Expert mode not needed
-- Simplified interface preferred
-
-### Advanced Streaming Features
-
-**Multiple Concurrent Streams:**
-
-- Can monitor multiple executions
-- Each in separate browser tab
-- Independent connections
-- No interference between streams
-
-**Stream Persistence:**
-
-- Output preserved after completion
-- Can review after execution finishes
-- Available until page refresh
-- Saved in execution history
-
-**Integration with Execution History:**
-
-- Streaming executions appear in history
-- Can view stream from history page
-- Historical executions show final output
-- Request ID links stream to history
+```json
+{
+  "target": "web-01",
+  "status": "failure",
+  "result": {
+    "stdout": "",
+    "stderr": "cat: /nonexistent: No such file or directory\n",
+    "exit_code": 1,
+    "_error": {
+      "kind": "puppetlabs.tasks/command-error",
+      "msg": "The command failed with exit code 1",
+      "details": { "exit_code": 1 }
+    }
+  }
+}
+```
 
 ## Puppet Reports Filtering
 
-**New in v0.5.0**: Advanced filtering capabilities allow you to quickly find specific puppet reports based on status, duration, compile time, and resource count.
+**New in v0.5.0**: The PuppetDB integration now includes powerful report filtering capabilities that allow you to find exactly the reports you need based on time, status, and environment.
 
-### Overview
+### Filter Options
 
-The report filtering feature helps you analyze puppet runs by narrowing down large report lists to specific scenarios. Filters can be combined and persist across page navigation during your session.
+When viewing Puppet reports for a node, you can use the following filters:
 
-### Available Filters
+1. **Time Period**:
+   - **Last 24 Hours** (default): Shows recent activity
+   - **Last 7 Days**: Weekly overview
+   - **Last 30 Days**: Monthly history
+   - **All Time**: Complete history (paginated)
 
-#### Status Filter
+2. **Status**:
+   - **All Statuses**: Show every report
+   - **Changed**: Only reports where resources were modified
+   - **Unchanged**: Reports with no changes
+   - **Failed**: Reports with errors
 
-Filter reports by their execution status:
+3. **Environment**:
+   - Filter by Puppet environment (production, development, etc.)
+   - Dropdown populates automatically based on available reports
 
-- **Success**: Runs that completed without errors
-- **Failed**: Runs that encountered errors
-- **Changed**: Runs that made changes to the system
-- **Unchanged**: Runs that made no changes
+### Using Report Filters
 
-**Multi-select**: You can select multiple statuses to see reports matching any of them.
+1. Navigate to a node's detail page
+2. Click the **"Reports"** tab
+3. Locate the filter bar above the reports list
+4. Select your desired criteria
+5. The list updates automatically to show matching reports
 
-#### Duration Filter
+### Report Status Indicators
 
-Filter reports by minimum run duration (in seconds):
+Reports in the list are color-coded by status:
 
-- Shows only reports that took longer than the specified time
-- Useful for identifying slow puppet runs
-- Example: Set to 60 to see runs taking more than 1 minute
-
-#### Compile Time Filter
-
-Filter reports by minimum catalog compilation time (in seconds):
-
-- Shows only reports with compilation time exceeding the threshold
-- Helps identify catalog compilation performance issues
-- Example: Set to 30 to see runs with slow catalog compilation
-
-#### Total Resources Filter
-
-Filter reports by minimum number of resources managed:
-
-- Shows only reports managing more than the specified number of resources
-- Useful for identifying nodes with large catalogs
-- Example: Set to 100 to see nodes managing many resources
-
-### Using Filters
-
-#### Accessing the Filter Panel
-
-**On Puppet Reports Page:**
-
-1. Navigate to the Puppet page
-2. Locate the "Filters" panel above the report list
-3. The panel shows all available filter options
-
-**On Home Page:**
-
-1. The home page puppet reports block includes a compact filter panel
-2. Same filtering capabilities as the full page
-
-#### Applying Filters
-
-1. **Select Status:**
-   - Click the status dropdown
-   - Check one or more status options
-   - Reports update automatically
-
-2. **Set Duration Threshold:**
-   - Enter minimum duration in seconds
-   - Press Enter or click outside the field
-   - Reports filter to show only longer runs
-
-3. **Set Compile Time Threshold:**
-   - Enter minimum compile time in seconds
-   - Press Enter or click outside the field
-   - Reports filter accordingly
-
-4. **Set Resource Count Threshold:**
-   - Enter minimum resource count
-   - Press Enter or click outside the field
-   - Reports filter to show nodes with more resources
-
-#### Combining Filters
-
-- Multiple filters work together (AND logic)
-- A report must match ALL active filters to be shown
-- Example: "Failed runs taking more than 60 seconds"
-
-#### Active Filter Indicator
-
-- A badge shows the number of active filters
-- Example: "3 filters active"
-- Helps you know when filters are applied
-
-#### Clearing Filters
-
-1. Click the "Clear Filters" button
-2. All filters reset to default (no filtering)
-3. Full report list displays
-
-### Filter Persistence
-
-**Session Persistence:**
-
-- Filter settings persist while you navigate the application
-- Navigate away and return - filters remain active
-- Filters clear when you close the browser or end your session
-- Not stored in localStorage (session only)
-
-**Per-Page Filters:**
-
-- Home page and Puppet page maintain separate filter states
-- Allows different filter configurations for different views
-
-### Troubleshooting Filters
-
-**Problem: "No results found"**
-
-- Filters may be too restrictive
-- Try relaxing one or more filter criteria
-- Check if reports exist that match your criteria
-- Clear all filters to see full list
-
-**Problem: "Filters not persisting"**
-
-- Filters only persist during your session
-- Closing browser clears filters
-- This is by design for security and privacy
-
-**Problem: "Filter values not applying"**
-
-- Ensure you press Enter after typing values
-- Or click outside the input field
-- Check that values are valid numbers
+- **Blue**: Changed (resources were modified)
+- **Green**: Unchanged (no modifications needed)
+- **Red**: Failed (errors occurred during run)
 
 ## Puppet Run Visualization
 
-### Overview
+**New in v0.5.0**: Visualize Puppet runs with an interactive timeline and resource graph to better understand execution flow and resource relationships.
 
-Puppet run visualizations provide graphical representations of puppet run history, showing the distribution of run statuses over time. Charts are available for individual nodes and aggregated across all nodes.
+### Timeline View
 
-### Chart Types
+The timeline view shows the sequence of events during a Puppet run:
 
-#### Node-Specific Chart
+- **Execution Flow**: See which resources were applied in what order
+- **Duration**: Visual representation of how long each resource took
+- **Status Colors**: Quickly identify failed or changed resources
+- **Filtering**: Focus on specific resource types or statuses
 
-**Location**: Node Detail Page → Node Status Tab
+### Resource Graph
 
-**Shows:**
+The resource graph displays dependencies between resources:
 
-- Puppet run history for the specific node
-- Last 7 days of runs by default
-- Status breakdown (success, failed, changed, unchanged)
-- Daily aggregation of runs
+- **Nodes**: Represent individual resources (File, Package, Service, etc.)
+- **Edges**: Represent dependencies (require, subscribe, notify, before)
+- **Interactive**: Zoom, pan, and click nodes for details
+- **Layout**: Automatic layout to minimize crossing lines
 
-**Use Cases:**
-
-- Monitor individual node health
-- Identify patterns in node behavior
-- Track changes over time for a specific node
-- Troubleshoot recurring issues on a node
-
-#### Aggregated Chart
-
-**Location**: Home Page → Puppet Reports Block
-
-**Shows:**
-
-- Puppet run history across all nodes
-- Last 7 days of runs by default
-- Total run counts by status
-- Overall infrastructure health at a glance
-
-**Use Cases:**
-
-- Monitor overall infrastructure health
-- Identify widespread issues
-- Track deployment impacts
-- Capacity planning and trend analysis
-
-**Configuration**: The home page chart can be disabled via the `UI_SHOW_HOME_PAGE_RUN_CHART` environment variable if needed.
-
-### Chart Features
-
-#### Visual Elements
-
-**Bar Chart Display:**
-
-- Each bar represents one day
-- Bar height shows total number of runs
-- Colors indicate run status:
-  - **Green**: Successful runs
-  - **Red**: Failed runs
-  - **Blue**: Runs with changes
-  - **Gray**: Unchanged runs
-
-**Stacked Bars:**
-
-- Bars are stacked to show status distribution
-- Easy to see proportion of each status
-- Total height shows total runs per day
-
-#### Interactive Features
-
-**Tooltips:**
-
-- Hover over any bar to see details
-- Shows exact counts for each status
-- Displays date for the bar
-- Example: "Jan 15: 45 success, 3 failed, 12 changed"
-
-**Responsive Design:**
-
-- Charts adjust to container width
-- Works on different screen sizes
-- Maintains readability on mobile devices
-- Scales appropriately for large displays
-
-#### Summary Statistics
-
-Below each chart, summary statistics show:
-
-- **Total Runs**: Total number of runs in the period
-- **Success Rate**: Percentage of successful runs
-- **Average Duration**: Average run duration
-- **Last Run**: Timestamp of most recent run
-
-### Using the Visualizations
-
-#### Viewing Node-Specific History
+### Accessing Visualizations
 
 1. Navigate to a node's detail page
-2. Click the "Node Status" tab
-3. Scroll to the "Puppet Run History" section
-4. View the 7-day chart
-
-**Interpreting the Chart:**
-
-- Look for patterns in failures
-- Identify days with many changes
-- Spot unusual activity
-- Compare to known events (deployments, changes)
-
-#### Viewing Aggregated History
-
-1. Go to the Home page
-2. Locate the "Puppet Reports" block
-3. View the aggregated chart at the top
-
-**Interpreting the Chart:**
-
-- Monitor overall infrastructure health
-- Identify widespread issues affecting multiple nodes
-- Track deployment impacts across the infrastructure
-- Spot trends over time
-
-#### Chart Updates
-
-**Automatic Refresh:**
-
-- Charts update when new report data is available
-- Refresh occurs every 5 minutes automatically
-- Visual indicator shows when chart updates
-- No manual refresh needed
-
-**Manual Refresh:**
-
-- Refresh the page to update immediately
-- Or wait for automatic refresh
-- Useful after making changes
-
-### Visualization Best Practices
-
-**Regular Monitoring:**
-
-- Check charts daily for anomalies
-- Compare current trends to historical patterns
-- Investigate sudden changes in failure rates
-- Track success rate over time
-
-**Correlation with Events:**
-
-- Compare chart data to deployment schedules
-- Correlate failures with infrastructure changes
-- Track impact of configuration changes
-- Document significant events
-
-**Proactive Management:**
-
-- Set informal thresholds for acceptable failure rates
-- Investigate when success rate drops below threshold
-- Use charts to identify nodes needing attention
-- Plan maintenance based on run patterns
-
-**Troubleshooting:**
-
-- Use charts to identify when issues started
-- Compare node-specific charts to aggregated view
-- Identify if issues are node-specific or widespread
-- Track resolution effectiveness over time
-
-### Troubleshooting Visualizations
-
-**Problem: "Chart not displaying"**
-
-- Ensure PuppetDB integration is enabled and connected
-- Verify reports exist for the time period
-- Check browser console for errors
-- Try refreshing the page
-
-**Problem: "No data in chart"**
-
-- No puppet runs in the last 7 days
-- PuppetDB may not have report data
-- Check PuppetDB connectivity
-- Verify puppet agents are running
-
-**Problem: "Chart shows unexpected data"**
-
-- Verify date range is correct
-- Check if filters are applied
-- Ensure PuppetDB data is up to date
-- Compare with raw report data
-
-**Problem: "Chart not updating"**
-
-- Wait for automatic refresh (5 minutes)
-- Manually refresh the page
-- Check network connectivity
-- Verify PuppetDB is accessible
+2. Go to the **"Reports"** tab
+3. Click on a specific report to view details
+4. Look for the **"Visualization"** toggle or tab within the report detail view
 
 ## Tips and Best Practices
 
-### General Usage Tips
+### General Usage
 
-#### Start Small
+- **Check Connectivity First**: Before running complex tasks, verify node connectivity with a simple `uptime` command.
+- **Use Expert Mode for Learning**: Enable Expert Mode to see the underlying Bolt commands and learn how they are constructed.
+- **Refresh Inventory**: If you add new nodes to your Bolt inventory file, restart the Pabawi server or wait for the inventory cache to expire.
 
-- Begin with read-only commands (`uptime`, `df -h`)
-- Test on non-production nodes first
-- Use noop mode for Puppet runs
-- Verify results before scaling up
+### Performance
 
-#### Use Expert Mode Wisely
+- **Limit Target Count**: For better performance, avoid running commands on hundreds of nodes simultaneously unless necessary.
+- **Use Inventory Groups**: Define groups in your `inventory.yaml` to target logical sets of nodes easily.
+- **Streaming for Long Tasks**: Always use Expert Mode/Streaming for tasks that take more than a few seconds to avoid timeouts.
 
-- Enable for troubleshooting
-- Disable for day-to-day operations
-- Learn from the detailed output
-- Use request IDs to correlate logs
+### Security
 
-#### Leverage Caching
-
-- Inventory cached for 30 seconds
-- Facts cached for 5 minutes
-- Reduces load on target nodes
-- Improves response times
-
-#### Monitor Execution History
-
-- Review regularly for patterns
-- Track failed executions
-- Monitor execution duration
-- Document significant operations
-
-### Security Best Practices
-
-#### Command Execution
-
-- Understand command whitelist restrictions
-- Never execute commands you don't understand
-- Avoid destructive commands
-- Use read-only commands when possible
-- Test commands locally first
-
-#### Credential Management
-
-- Never share credentials through Pabawi
-- Use SSH keys instead of passwords
-- Rotate credentials regularly
-- Follow principle of least privilege
-- Review Bolt inventory permissions
-
-#### Access Control
-
-- Limit access to authorized users
-- Use different configurations for dev/prod
-- Enable expert mode only for trusted users
-- Monitor execution history for auditing
-- Document access policies
-
-### Performance Optimization
-
-#### For Large Inventories
-
-- Use search and filters effectively
-- Virtual scrolling handles 1000+ nodes
-- Enable inventory caching
-- Consider grouping nodes in Bolt inventory
-
-#### For Long-Running Operations
-
-- Use streaming to monitor progress
-- Increase timeout for large operations
-- Run during maintenance windows
-- Monitor system resources
-
-#### For Frequent Operations
-
-- Create Bolt tasks for common workflows
-- Use tags to limit Puppet scope
-- Cache facts when appropriate
-- Batch operations when possible
-
-### Troubleshooting Workflow
-
-#### When Something Fails
-
-1. **Enable Expert Mode**
-   - Get detailed error information
-   - View Bolt command executed
-   - Copy request ID
-
-2. **Review Error Details**
-   - Read error message carefully
-   - Check raw Bolt output
-   - Review execution context
-
-3. **Test Manually**
-   - Copy Bolt command
-   - Run in terminal
-   - Verify connectivity
-   - Check permissions
-
-4. **Check Logs**
-   - Use request ID to find logs
-   - Review server logs
-   - Check target node logs
-   - Correlate timestamps
-
-5. **Fix and Retry**
-   - Address identified issue
-   - Test fix manually first
-   - Retry in Pabawi
-   - Verify success
-
-### Workflow Recommendations
-
-#### Daily Operations
-
-1. Check execution history for failures
-2. Review node status in inventory
-3. Gather facts on critical nodes
-4. Execute routine commands
-5. Monitor system health
-
-#### Configuration Changes
-
-1. Test in development environment
-2. Use Puppet noop mode
-3. Review proposed changes
-4. Apply to production
-5. Verify changes applied
-6. Document in execution history
-
-#### Troubleshooting Issues
-
-1. Enable expert mode
-2. Gather facts from affected nodes
-3. Execute diagnostic commands
-4. Review execution output
-5. Correlate with system logs
-6. Document findings
-
-#### Package Management
-
-1. Verify package name and version
-2. Check disk space
-3. Test on non-production node
-4. Install on production
-5. Verify installation
-6. Test application functionality
-
-### Common Patterns
-
-#### Health Check Workflow
-
-```
-1. Navigate to node
-2. Execute: uptime
-3. Execute: df -h
-4. Execute: free -m
-5. Gather facts
-6. Review results
-```
-
-#### Service Restart Workflow
-
-```
-1. Check service status
-2. Execute: systemctl status <service>
-3. Restart service
-4. Execute: systemctl restart <service>
-5. Verify service running
-6. Execute: systemctl status <service>
-7. Check application logs
-```
-
-#### Puppet Apply Workflow
-
-```
-1. Navigate to node
-2. Run Puppet in noop mode
-3. Review proposed changes
-4. Run Puppet normally
-5. Verify changes applied
-6. Check for errors
-7. Test application
-```
-
-#### Package Installation Workflow
-
-```
-1. Check current version
-2. Execute: <package> --version
-3. Install/upgrade package
-4. Verify installation
-5. Execute: <package> --version
-6. Test functionality
-7. Document in notes
-```
-
-### Keyboard Shortcuts
-
-While Pabawi doesn't currently have extensive keyboard shortcuts, you can use standard browser shortcuts:
-
-- **Ctrl/Cmd + F**: Search on page
-- **Ctrl/Cmd + R**: Refresh page
-- **Ctrl/Cmd + T**: New tab
-- **Ctrl/Cmd + W**: Close tab
-- **Ctrl/Cmd + Click**: Open link in new tab
-
-### Browser Recommendations
-
-**Recommended Browsers:**
-
-- Chrome/Chromium (latest)
-- Firefox (latest)
-- Safari (latest)
-- Edge (latest)
-
-**Browser Settings:**
-
-- Enable JavaScript
-- Allow cookies for session management
-- Enable localStorage for preferences
-- Allow Server-Sent Events for streaming
-
-### Mobile Usage
-
-Pabawi is optimized for desktop browsers:
-
-- Mobile browsers supported but not optimized
-- Responsive design for tablets
-- Some features may be limited on mobile
-- Desktop recommended for full functionality
-
-### Integration with Other Tools
-
-#### With Bolt CLI
-
-- Use Pabawi for quick operations
-- Use Bolt CLI for complex workflows
-- Test commands in Pabawi first
-- Automate with Bolt plans
-
-#### With Puppet
-
-- Use Pabawi for ad-hoc Puppet runs
-- Use Puppet Enterprise for full management
-- Test changes in noop mode
-- Monitor results in Pabawi
-
-#### With Monitoring Tools
-
-- Complement monitoring with Pabawi
-- Use Pabawi for remediation
-- Gather facts for monitoring context
-- Execute diagnostic commands
-
-### Documentation and Learning
-
-#### Learning Resources
-
-- Read this user guide thoroughly
-- Review configuration guide
-- Study troubleshooting guide
-- Explore Bolt documentation
-- Practice in development environment
-
-#### Staying Updated
-
-- Check release notes for new features
-- Review changelog for bug fixes
-- Test new features in development
-- Provide feedback to maintainers
-
-### Getting Help
-
-#### Self-Service
-
-1. Check this user guide
-2. Review troubleshooting guide
-3. Enable expert mode for details
-4. Search execution history
-5. Check server logs
-
-#### Support Channels
-
-1. Enable expert mode
-2. Copy error details and request ID
-3. Document steps to reproduce
-4. Include relevant logs
-5. Contact your administrator or support team
-
-### Best Practices Summary
-
-**Security:**
-
-- Use command whitelist
-- Rotate credentials regularly
-- Monitor execution history
-- Limit access appropriately
-
-**Performance:**
-
-- Enable caching
-- Use filters effectively
-- Monitor resource usage
-- Optimize frequent operations
-
-**Reliability:**
-
-- Test before production
-- Use noop mode
-- Monitor execution results
-- Document changes
-
-**Troubleshooting:**
-
-- Enable expert mode
-- Review detailed errors
-- Test manually
-- Correlate logs
-
-**Workflow:**
-
-- Start small
-- Test thoroughly
-- Document operations
-- Review regularly
+- **Review Whitelists**: In production environments, strictly configure the command whitelist to prevent unauthorized execution.
+- **Least Privilege**: Ensure the SSH user used by Bolt has only the necessary permissions on target nodes (e.g., specific sudo capabilities).
+- **Audit Logs**: Regularly review the Execution History for any unusual activity.
 
 ---
-
-## Conclusion
-
-Pabawi provides a powerful, user-friendly interface for managing infrastructure with Bolt. By following the workflows and best practices in this guide, you can effectively:
-
-- Manage node inventory
-- Execute commands safely
-- Run Bolt tasks efficiently
-- Apply Puppet configurations
-- Install packages reliably
-- Monitor execution history
-- Troubleshoot issues quickly
-
-For additional information, consult:
-
-- **Configuration Guide**: `docs/configuration.md`
-- **Troubleshooting Guide**: `docs/troubleshooting.md`
-- **API Documentation**: `docs/api.md`
-- **README**: `README.md`
-
-Happy automating with Pabawi!
+*End of User Guide*
