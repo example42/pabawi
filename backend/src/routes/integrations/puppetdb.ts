@@ -5,7 +5,7 @@ import {
   PuppetDBConnectionError,
   PuppetDBQueryError,
   PuppetDBAuthenticationError,
-} from "../../integrations/puppetdb";
+} from "../../integrations/puppetdb/PuppetDBClient";
 import { asyncHandler } from "../asyncHandler";
 import { requestDeduplication } from "../../middleware/deduplication";
 import {
@@ -161,7 +161,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -481,7 +481,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -753,7 +753,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -1095,7 +1095,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -1469,7 +1469,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -1786,7 +1786,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -2152,7 +2152,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -2538,7 +2538,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -2850,7 +2850,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -3207,7 +3207,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
@@ -3509,7 +3509,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
         } else {
           res.json(responseData);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
         if (error instanceof PuppetDBAuthenticationError) {

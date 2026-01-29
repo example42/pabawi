@@ -24,6 +24,12 @@ export interface StreamingEvent {
   data?: unknown;
 }
 
+export interface StreamingCallback {
+  onCommand: (cmd: string) => void;
+  onStdout: (chunk: string) => void;
+  onStderr: (chunk: string) => void;
+}
+
 /**
  * Subscriber connection information
  */
@@ -77,6 +83,27 @@ export class StreamingExecutionManager {
     this.config = config;
     this.logger = new LoggerService();
     this.startHeartbeat();
+  }
+
+  public createStreamingCallback(
+    executionId: string,
+    expertMode: boolean
+  ): StreamingCallback | undefined {
+    if (!expertMode) {
+      return undefined;
+    }
+
+    return {
+      onCommand: (cmd: string): void => {
+        this.emitCommand(executionId, cmd);
+      },
+      onStdout: (chunk: string): void => {
+        this.emitStdout(executionId, chunk);
+      },
+      onStderr: (chunk: string): void => {
+        this.emitStderr(executionId, chunk);
+      },
+    };
   }
 
   /**

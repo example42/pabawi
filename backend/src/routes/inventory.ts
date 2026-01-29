@@ -12,13 +12,7 @@ import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { ExpertModeService } from "../services/ExpertModeService";
 import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
-
-/**
- * Request validation schemas
- */
-const NodeIdParamSchema = z.object({
-  id: z.string().min(1, "Node ID is required"),
-});
+import { NodeIdParamSchema } from "../validation/commonSchemas";
 
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),

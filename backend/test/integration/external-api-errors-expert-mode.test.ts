@@ -21,7 +21,7 @@ import {
   PuppetDBConnectionError,
   PuppetDBAuthenticationError,
   PuppetDBQueryError,
-} from '../../src/integrations/puppetdb';
+} from '../../src/integrations/puppetdb/PuppetDBClient';
 import {
   PuppetserverConnectionError,
   PuppetserverAuthenticationError,
@@ -324,7 +324,9 @@ describe('External API Errors in Expert Mode', () => {
       expect(response.body._debug.errors.length).toBeGreaterThan(0);
 
       const error = response.body._debug.errors[0];
-      expect(error.message).toContain('unreachable') || expect(error.message).toContain('Bolt');
+      expect(
+        error.message.includes('unreachable') || error.message.includes('Bolt')
+      ).toBe(true);
       expect(error.level).toBe('error');
     });
 
@@ -359,7 +361,9 @@ describe('External API Errors in Expert Mode', () => {
       expect(response.body._debug.errors.length).toBeGreaterThan(0);
 
       const error = response.body._debug.errors[0];
-      expect(error.message).toContain('timeout') || expect(error.message).toContain('Bolt');
+      expect(
+        error.message.includes('timeout') || error.message.includes('Bolt')
+      ).toBe(true);
       expect(error.level).toBe('error');
     });
   });

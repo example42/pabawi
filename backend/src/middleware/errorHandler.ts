@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { ErrorHandlingService, type ExecutionContext } from "../errors";
+import { ErrorHandlingService, type ExecutionContext } from "../errors/ErrorHandlingService";
 import { LoggerService } from "../services/LoggerService";
 
 // Extend Express Request to include custom properties

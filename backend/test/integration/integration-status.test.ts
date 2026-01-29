@@ -9,7 +9,7 @@ import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BasePlugin } from "../../src/integrations/BasePlugin";
 import { LoggerService } from "../../src/services/LoggerService";
 import { createIntegrationsRouter } from "../../src/routes/integrations";
-import { requestIdMiddleware } from "../../src/middleware";
+import { requestIdMiddleware } from "../../src/middleware/errorHandler";
 import { deduplicationMiddleware } from "../../src/middleware/deduplication";
 import type {
   IntegrationConfig,
@@ -25,6 +25,7 @@ class MockInformationSource
   extends BasePlugin
   implements InformationSourcePlugin
 {
+  public type = "information" as const;
   private healthy: boolean;
 
   constructor(name: string, healthy = true, logger: LoggerService) {
@@ -56,7 +57,30 @@ class MockInformationSource
     return {
       nodeId: _nodeId,
       gatheredAt: new Date().toISOString(),
-      facts: {},
+      facts: {
+        os: {
+          family: "unknown",
+          name: "unknown",
+          release: {
+            full: "unknown",
+            major: "unknown",
+          },
+        },
+        processors: {
+          count: 0,
+          models: [],
+        },
+        memory: {
+          system: {
+            total: "0 MB",
+            available: "0 MB",
+          },
+        },
+        networking: {
+          hostname: "unknown",
+          interfaces: {},
+        },
+      },
     };
   }
 

@@ -4,7 +4,8 @@ import request from "supertest";
 import { BoltService } from "../src/bolt/BoltService";
 import { IntegrationManager } from "../src/integrations/IntegrationManager";
 import { createInventoryRouter } from "../src/routes/inventory";
-import { expertModeMiddleware, requestIdMiddleware } from "../src/middleware";
+import { requestIdMiddleware } from "../src/middleware/errorHandler";
+import { expertModeMiddleware } from "../src/middleware/expertMode";
 import type { Node } from "../src/bolt/types";
 
 // Mock child_process to avoid actual Bolt CLI execution
