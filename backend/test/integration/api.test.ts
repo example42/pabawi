@@ -14,7 +14,8 @@ import { CommandWhitelistService } from "../../src/validation/CommandWhitelistSe
 import { StreamingExecutionManager } from "../../src/services/StreamingExecutionManager";
 import { createCommandsRouter } from "../../src/routes/commands";
 import { createTasksRouter } from "../../src/routes/tasks";
-import { errorHandler, requestIdMiddleware } from "../../src/middleware";
+import { errorHandler, requestIdMiddleware } from "../../src/middleware/errorHandler";
+import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import type { Database } from "sqlite3";
 
 // Mock child_process to avoid actual Bolt CLI execution
@@ -72,6 +73,7 @@ describe("API Integration Tests", () => {
   let executionRepository: ExecutionRepository;
   let commandWhitelistService: CommandWhitelistService;
   let streamingManager: StreamingExecutionManager;
+  let integrationManager: IntegrationManager;
 
   beforeAll(() => {
     // Mock spawn is initialized via vi.mock at the top of the file
@@ -91,6 +93,7 @@ describe("API Integration Tests", () => {
       whitelist: ["ls", "pwd", "whoami"],
       matchMode: "exact",
     });
+    integrationManager = new IntegrationManager();
     streamingManager = new StreamingExecutionManager({
       bufferMs: 100,
       maxOutputSize: 10485760,
@@ -101,7 +104,7 @@ describe("API Integration Tests", () => {
     app.use(
       "/api/nodes",
       createCommandsRouter(
-        boltService,
+        integrationManager,
         executionRepository,
         commandWhitelistService,
         streamingManager,
@@ -109,7 +112,7 @@ describe("API Integration Tests", () => {
     );
     app.use(
       "/api/nodes",
-      createTasksRouter(boltService, executionRepository, streamingManager),
+      createTasksRouter(integrationManager, executionRepository, streamingManager),
     );
 
     // Add error handler

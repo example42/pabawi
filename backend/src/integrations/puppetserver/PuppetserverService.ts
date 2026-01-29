@@ -17,6 +17,7 @@ import type { PuppetserverConfig } from "../../config/schema";
 import { PuppetserverClient } from "./PuppetserverClient";
 import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
+import { SimpleCache } from "../../utils/caching";
 import type {
   NodeStatus,
   Environment,
@@ -35,54 +36,6 @@ import {
 } from "./errors";
 
 /**
- * Cache entry with TTL
- */
-interface CacheEntry<T> {
-  data: T;
-  expiresAt: number;
-}
-
-/**
- * Simple in-memory cache with TTL
- */
-class SimpleCache {
-  private cache = new Map<string, CacheEntry<unknown>>();
-
-  get(key: string): unknown {
-    const entry = this.cache.get(key);
-    if (!entry) {
-      return undefined;
-    }
-
-    if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
-      return undefined;
-    }
-    return entry.data;
-  }
-
-  set(key: string, value: unknown, ttlMs: number): void {
-    this.cache.set(key, {
-      data: value,
-      expiresAt: Date.now() + ttlMs,
-    });
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-
-  clearExpired(): void {
-    const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
-      if (now > entry.expiresAt) {
-        this.cache.delete(key);
-      }
-    }
-  }
-}
-
-/**
  * Puppetserver Service
  *
  * Provides access to Puppetserver data through the plugin interface.
@@ -95,14 +48,15 @@ export class PuppetserverService
   type = "information" as const;
   private client?: PuppetserverClient;
   private puppetserverConfig?: PuppetserverConfig;
-  private cache = new SimpleCache();
   private cacheTTL = 300000; // Default 5 minutes
+  private cache: SimpleCache<unknown>;
 
   /**
    * Create a new Puppetserver service
    */
   constructor(logger?: LoggerService, performanceMonitor?: PerformanceMonitorService) {
     super("puppetserver", "information", logger, performanceMonitor);
+    this.cache = new SimpleCache({ ttl: this.cacheTTL });
   }
 
   /**

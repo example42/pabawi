@@ -9,7 +9,7 @@ import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { LoggerService } from "../../src/services/LoggerService";
 import { PuppetserverService } from "../../src/integrations/puppetserver/PuppetserverService";
 import { createIntegrationsRouter } from "../../src/routes/integrations";
-import { requestIdMiddleware } from "../../src/middleware";
+import { requestIdMiddleware } from "../../src/middleware/errorHandler";
 import type { IntegrationConfig } from "../../src/integrations/types";
 import type { Node, Facts } from "../../src/bolt/types";
 import type { NodeStatus } from "../../src/integrations/puppetserver/types";
@@ -190,9 +190,9 @@ class MockPuppetserverService extends PuppetserverService {
     return activity === "inactive" || activity === "never_checked_in";
   }
 
-  getSecondsSinceLastCheckIn(status: NodeStatus): number | null {
+  getSecondsSinceLastCheckIn(status: NodeStatus): number {
     if (!status.report_timestamp) {
-      return null;
+      return Number.POSITIVE_INFINITY;
     }
 
     const reportTime = new Date(status.report_timestamp).getTime();

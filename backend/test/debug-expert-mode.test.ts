@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
-import { expertModeMiddleware, requestIdMiddleware } from "../src/middleware";
+import { requestIdMiddleware } from "../src/middleware/errorHandler";
+import { expertModeMiddleware } from "../src/middleware/expertMode";
 
 describe("Debug Expert Mode", () => {
   let app: Express;

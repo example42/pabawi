@@ -19,6 +19,7 @@ import {
 import { asyncHandler } from "./asyncHandler";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
+import { NodeParamSchema } from "../validation/commonSchemas";
 
 /**
  * Request validation schemas
@@ -27,12 +28,8 @@ const KeyNameParamSchema = z.object({
   key: z.string().min(1, "Key name is required"),
 });
 
-const NodeIdParamSchema = z.object({
-  nodeId: z.string().min(1, "Node ID is required"),
-});
-
 const NodeKeyParamSchema = z.object({
-  nodeId: z.string().min(1, "Node ID is required"),
+  nodeId: NodeParamSchema.shape.nodeId,
   key: z.string().min(1, "Key name is required"),
 });
 
@@ -945,7 +942,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
       }
 
       try {
-        const params = NodeIdParamSchema.parse(req.params);
+        const params = NodeParamSchema.parse(req.params);
         const filterParams = KeyFilterQuerySchema.parse(req.query);
 
         if (debugInfo) {
@@ -1134,7 +1131,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
       }
 
       try {
-        const params = NodeIdParamSchema.parse(req.params);
+        const params = NodeParamSchema.parse(req.params);
         const paginationParams = PaginationQuerySchema.parse(req.query);
         const filterParams = KeyFilterQuerySchema.parse(req.query);
 

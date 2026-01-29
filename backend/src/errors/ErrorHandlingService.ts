@@ -619,21 +619,45 @@ export class ErrorHandlingService {
     if (typeof data === "object" && data !== null) {
       const sanitized: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(data)) {
-        const lowerKey = key.toLowerCase();
-        if (
-          lowerKey.includes("password") ||
-          lowerKey.includes("token") ||
-          lowerKey.includes("secret") ||
-          lowerKey.includes("key")
-        ) {
+        if (this.shouldObfuscateKey(key)) {
           sanitized[key] = "***";
-        } else {
+        } else if (this.isSafeObject(value)) {
           sanitized[key] = this.sanitizeSensitiveData(value);
+        } else {
+          sanitized[key] = value;
         }
       }
       return sanitized;
     }
 
     return data;
+  }
+
+  private shouldObfuscateKey(key: string): boolean {
+    const lowerKey = key.toLowerCase();
+    const sensitivePatterns = [
+      "password",
+      "token",
+      "secret",
+      "apikey",
+      "api_key",
+      "privatekey",
+      "private_key",
+      "auth",
+      "credential",
+      "session",
+      "cookie",
+      "authorization",
+      "bearer",
+    ];
+    return sensitivePatterns.some((pattern) => lowerKey.includes(pattern));
+  }
+
+  private isSafeObject(value: unknown): value is Record<string, unknown> {
+    if (value === null || typeof value !== "object") {
+      return false;
+    }
+    const proto = Object.getPrototypeOf(value) as object | null;
+    return proto === Object.prototype || proto === null;
   }
 }

@@ -9,9 +9,10 @@
 
 ### 🔴 High Priority - Significant Duplication
 
-#### 1.1 SimpleCache Class Duplication
+#### 1.1 SimpleCache Class Duplication ✅ DONE
 
 **Issue:** Identical `SimpleCache` class implemented in multiple files  
+**Status:** Consolidated to `backend/src/utils/caching.ts`, both PuppetDBService and PuppetserverService updated to import.  
 **Locations:**
 
 - `integrations/puppetdb/PuppetDBService.ts` (lines ~80-120)
@@ -137,9 +138,10 @@ constructor() {
 
 ---
 
-#### 1.7 Cache Entry Type Duplication
+#### 1.7 Cache Entry Type Duplication ✅ DONE
 
 **Issue:** `CacheEntry<T>` interface duplicated across files  
+**Status:** Unified in `backend/src/utils/caching.ts`, exported for reuse across services.  
 **Locations:**
 
 - `bolt/BoltService.ts`
@@ -154,9 +156,10 @@ constructor() {
 
 ---
 
-#### 1.8 Request Validation Pattern Duplication
+#### 1.8 Request Validation Pattern Duplication ✅ DONE
 
 **Issue:** Similar Zod validation patterns in every route file  
+**Status:** Added `backend/src/validation/commonSchemas.ts`, Node ID schemas (NodeIdParamSchema, NodeParamSchema) now shared across routes (commands, tasks, facts, puppet, hiera, inventory, puppetHistory).  
 **Pattern:**
 
 ```typescript
@@ -191,9 +194,10 @@ const NodeIdParamSchema = z.object({
 
 ---
 
-#### 1.10 Streaming Callback Pattern Duplication
+#### 1.10 Streaming Callback Pattern Duplication ✅ DONE
 
 **Issue:** Similar streaming callback setup in multiple routes  
+**Status:** Added factory function `createStreamingCallback()` in `backend/src/services/StreamingExecutionManager.ts`, routes updated (commands, tasks, packages, puppet).  
 **Locations:**
 
 - `routes/commands.ts`
