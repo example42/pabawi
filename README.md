@@ -109,24 +109,9 @@ pabawi/
 
 > **📸 [View Complete Screenshots Gallery](docs/screenshots.md)** - Comprehensive visual documentation of all Pabawi features and interfaces.
 
-### Inventory and Node detail page
+To have an idea of Pabawi awesomeness, here some random screenshots
 
-<img src="docs/screenshots/inventory.png" alt="Inventory Page" width="400"> <img src="docs/screenshots/node-detail-page.png" alt="Node Detail Page" width="400">
-
-*Node inventory with multi-source support and node detail interface for operations*
-
-### Task Execution and Details
-
-<img src="docs/screenshots/task-execution.png" alt="Task Execution" width="400"> <img src="docs/screenshots/execution-details.png" alt="Execution Details" width="400">
-
-*Bolt task execution interface and and detailed execution results with re-run capabilities*
-
-### Puppet reports and Bolt executions
-
-<img src="docs/screenshots/puppet-reports.png" alt="Puppet Reports" width="400">
-<img src="docs/screenshots/executions-list.png" alt="Executions List" width="400">
-
-*Puppet run reports with detailed metrics and Bolt Execution history with filtering*
+<img src="docs/screenshots/pabawi-screenshots.png" alt="Pababi Screenshots" width="1024">
 
 ## Prerequisites
 
