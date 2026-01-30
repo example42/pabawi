@@ -9,7 +9,6 @@ set -euo pipefail
 DEFAULT_CERTNAME="pabawi"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-ENV_FILE="$PROJECT_ROOT/backend/.env"
 
 # Colors for output
 RED='\033[0;31m'
@@ -84,23 +83,30 @@ EOF
 
 # Function to load environment variables
 load_env() {
-    if [[ -f "$ENV_FILE" ]]; then
-        print_status "Loading environment from $ENV_FILE"
-        # Export variables from .env file
-        set -a
-        # shellcheck source=/dev/null
-        source "$ENV_FILE"
-        set +a
+    local env_file
+    if [[ -f ".env" ]]; then
+        env_file=".env"
+        print_status "Loading environment from .env in current directory"
+    elif [[ -f "$PROJECT_ROOT/backend/.env" ]]; then
+        env_file="$PROJECT_ROOT/backend/.env"
+        print_status "Loading environment from $env_file"
     else
-        print_warning ".env file not found at $ENV_FILE"
+        print_warning ".env file not found in current directory or at $PROJECT_ROOT/backend/.env"
+        return
     fi
+
+    # Export variables from .env file
+    set -a
+    # shellcheck source=/dev/null
+    source "$env_file"
+    set +a
 }
 
 # Function to validate required environment variables
 validate_env() {
     if [[ -z "${PUPPETSERVER_SERVER_URL:-}" ]]; then
         print_error "PUPPETSERVER_SERVER_URL is required"
-        print_error "Please set it in $ENV_FILE or as an environment variable"
+        print_error "Please set it in .env file or as an environment variable"
         exit 1
     fi
 

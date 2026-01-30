@@ -178,18 +178,18 @@ To start Pabawi with Docker Compose using the default configuration:
 # certs dir for puppetdb / puppetserver integration
 # control-repo dir for hiera integration
 # bolt-project dir for Bolt integration (could also be your control-repo dir) 
-mkdir -p pabawi/data
+mkdir pabawi/
 cd pabawi
 # Create your configuration file in your current directory (paths in .env are relative to the container)
-.env
+vi .env
 
 # Run the example42/pabawi image mounting your pabawi dir 
 docker run -d \
   --name pabawi \
   --user "$(id -u):1001" \
   -p 127.0.0.1:3000:3000 \
-  -v "$(pwd):/data" \
-  --env-file ./env \
+  -v "$(pwd)/pabawi:/pabawi" \
+  --env-file ".env" \
   example42/pabawi:latest
 ```
 
