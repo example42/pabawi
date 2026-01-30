@@ -32,7 +32,6 @@ This document describes the various configuration files, dotfiles, and directori
 * **`docker-compose.yml`**: Defines the multi-container Docker application. It sets up the main `app` service, mounts volumes for persistence (`data/`, `bolt-project/`), and configures networking (`pabawi-network`).
 * **`Dockerfile`**, **`Dockerfile.alpine`**, **`Dockerfile.ubuntu`**: Instructions for building the application's Docker image.
   * **`Dockerfile`**: The main multi-stage build file. It builds the frontend (Vite) and backend (TypeScript) separately, then combines them into a production image based on Ubuntu 24.04. It installs Node.js, Puppet, and Bolt.
-  * *Note: `Dockerfile.alpine` and `Dockerfile.ubuntu` appear to be variants or older versions targeting specific base OSs.*
 
 ### Testing
 
@@ -60,9 +59,16 @@ Contains GitHub-specific configuration.
 
 ### `.kiro/`
 
-Kiro project files.
+Kiro has been used extensively for Pabawi development, in this directory are present all project files and most of the generated docs.
 
-* Contains subdirectories like `todo/`, `done/`, `specs/`, `steering/`, suggesting it tracks development tasks and specifications.
+Subdirs:
+
+* **`specs/`**, the directory where Kiro stores its files for Spc driven development. Subdirs for each implementation plan
+* **`hooks/`**, the directory which Kiro uses to trigger hooks under certain conditions
+* **`steering/`** the directory which Kiro uses to define project structure, best practices and coding guidelines
+* **`todo/`**, **`done/`**, **`undo/`**, custom dirs (not Kiro native) used to store notes about things to do
+* **`scripts/`**, custom dir for scripts used by Kiro during development and testing
+* **`summaries/`** Custom dir where Kiro is instructed to save the summaries of its coding sessions.
 
 ### `.vscode/`
 

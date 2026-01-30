@@ -26,17 +26,11 @@
   - [PuppetServer Integration](#puppetserver-integration)
   - [Hiera Integration](#hiera-integration)
 - [Installation](#installation)
-- [Development / debugging](#development--debugging)
-  - [Accessing the Application](#accessing-the-application)
-- [Build](#build)
+  - [Via NPM](#via-npm)
+  - [Using Docker Image](#using-docker-image)
 - [Configuration](#configuration)
-- [Testing](#testing)
-  - [Unit and Integration Tests](#unit-and-integration-tests)
-  - [End-to-End Tests](#end-to-end-tests)
-  - [Development Pre-commit Hooks](#development-pre-commit-hooks)
-- [Docker Deployment](#docker-deployment)
-  - [Quick Start](#quick-start)
 - [Troubleshooting](#troubleshooting)
+- [Development and Contributing](#development-and-contributing)
 - [Roadmap](#roadmap)
   - [Planned Features](#planned-features)
   - [Version History](#version-history)
@@ -45,7 +39,6 @@
   - [Documentation](#documentation)
   - [Getting Help](#getting-help)
 - [Acknowledgments](#acknowledgments)
-- [Documentation](#documentation)
 
 ## Security Notice
 
@@ -68,7 +61,6 @@ For production or multi-user environments, implement external authentication thr
 - **Task Execution**: Execute Bolt tasks with parameters automatic discovery
 - **Package Management**: Install and manage packages across your infrastructure
 - **Execution History**: Track all operations with detailed results and re-execution capability
-- **Dynamic Inventory**: Automatically discover nodes from PuppetDB
 - **Node Facts**: View comprehensive system information from Puppet agents
 - **Puppet Reports**: Browse detailed Puppet run reports with metrics and resource changes
 - **Catalog Inspection**: Examine compiled Puppet catalogs and resource relationships
@@ -87,7 +79,7 @@ For production or multi-user environments, implement external authentication thr
 ## Project Structure
 
 ```text
-padawi/
+pabawi/
 ├── frontend/          # Svelte 5 + Vite frontend
 │   ├── src/
 │   │   ├── components/    # UI components
@@ -123,7 +115,7 @@ padawi/
 
 *Node inventory with multi-source support and node detail interface for operations*
 
-### Task Execution and Detaila
+### Task Execution and Details
 
 <img src="docs/screenshots/task-execution.png" alt="Task Execution" width="400"> <img src="docs/screenshots/execution-details.png" alt="Execution Details" width="400">
 
@@ -140,161 +132,110 @@ padawi/
 
 - Node.js 20+
 - npm 9+
-- Contrainer engine (when used via container image)
+- Container engine (when used via container image)
 
 ### Bolt Integration
 
 - Bolt CLI installed
-- A local bolt project directory
-- Eventual ssh keys used in Bolt configuration
+- A local Bolt project directory
+- Any required SSH keys used in Bolt configuration
+- For details: [Bolt Setup](docs/integrations/bolt.md)
 
 ### PuppetDB Integration
 
 - Network access to PuppetDB port 8081
-- A local certificate signed the the PuppetCA used by PuppetDB
+- A local certificate signed by the Puppet CA used by PuppetDB
+- For details: [PuppetDB Setup](docs/integrations/puppetdb.md)
 
 ### PuppetServer Integration
 
 - Network access to PuppetServer port 8140
-- A local certificate signed the the PuppetCA used by PuppetServer
+- A local certificate signed by the Puppet CA used by PuppetServer
+- For details: [PuppetServer Setup](docs/integrations/puppetserver.md)
 
 ### Hiera Integration
 
-- A local copy of your control-repo, with eventual external modules in Puppetfile
+- A local copy of your control-repo, with any external modules in Puppetfile
 - If PuppetDB integration is not active, node facts files must be present on a local directory
+- For details: [Hiera Setup](docs/integrations/hiera.md)
 
 ## Installation
 
+### Via NPM
+
+To run pabawi locally you need NPM installed. Then:
+
 ```bash
+
+# Clone the pabawi repo
+git clone https://github.com/example42/pabawi
+cd pabawi
+
 # Install all dependencies
 npm run install:all
+
+# Create your configuration file in:
+backend/.env
+
+# Run Pabawi
+npm run dev:fullstack
 ```
 
-## Development / debugging
+This will start the application at <http://localhost:3000>.
+
+### Using Docker image
+
+To start Pabawi with Docker Compose using the default configuration:
 
 ```bash
-# Run backend (port 3000)
-npm run dev:backend
+# HINT to keep things simple: Create a dedicated directory where to place:
+# data dir for SQLite
+# certs dir for puppetdb / puppetserver integration
+# control-repo dir for hiera integration
+# bolt-project dir for Bolt integration (could also be your control-repo dir) 
+mkdir -p pabawi/data
+cd pabawi
+# Create your configuration file in your current directory (paths in .env are relative to the container)
+.env
 
-# Run frontend (port 5173)
-npm run dev:frontend
+# Run the example42/pabawi image mounting your pabawi dir 
+docker run -d \
+  --name pabawi \
+  --user "$(id -u):1001" \
+  -p 127.0.0.1:3000:3000 \
+  -v "$(pwd):/data" \
+  --env-file ./env \
+  example42/pabawi:latest
 ```
 
-### Accessing the Application
+This will start the application at <http://localhost:3000>.
 
-**⚠️ Security Reminder: Access Pabawi only via localhost for security**
-
-**Development Mode** (when running both servers separately):
-
-- **Frontend UI**: <http://localhost:5173> (Main application interface)
-- **Backend API**: <http://localhost:3000/api> (API endpoints)
-
-**Production Mode** (Docker or built application):
-
-- **Application**: <http://localhost:3000> (Frontend and API served together)
-- The backend serves the built frontend as static files
-
-**Network Access**: If you need to access Pabawi from other machines, use SSH port forwarding or implement a reverse proxy with proper authentication. Do not expose Pabawi directly to the network without authentication.
-
-## Build
-
-```bash
-# Build both frontend and backend
-npm run build
-```
+For comprehensive Docker deployment instructions including all integrations, see the [Docker Deployment Guide](docs/docker-deployment.md).
 
 ## Configuration
 
-Pabawi uses a `.env` file for configuration. Copy `backend/.env.example` to `backend/.env` to get started.
+Pabawi uses a `.env` file for configuration. Use `backend/.env.example` as reference.
 
 For detailed configuration options including Bolt, PuppetDB, PuppetServer, and Hiera integration settings, please refer to the [Configuration Guide](docs/configuration.md).
 
 For API details, see the [Integrations API Documentation](docs/integrations-api.md).
 
-## Testing
-
-### Unit and Integration Tests
-
-```bash
-# Run all unit and integration tests
-npm test
-
-# Run backend tests only
-npm test --workspace=backend
-
-# Run frontend tests only
-npm test --workspace=frontend
-```
-
-### End-to-End Tests
-
-```bash
-# Run all E2E tests
-npm run test:e2e
-
-# Run E2E tests with UI (interactive)
-npm run test:e2e:ui
-
-# Run E2E tests in headed mode (visible browser)
-npm run test:e2e:headed
-```
-
-See [E2E Testing Guide](docs/e2e-testing.md) for detailed information about end-to-end testing.
-
-### Development Pre-commit Hooks
-
-This project uses pre-commit hooks to ensure code quality and security before commits.
-
-```bash
-# Install pre-commit (requires Python)
-pip install pre-commit
-
-# Or using homebrew on macOS
-brew install pre-commit
-
-# Install the git hooks
-pre-commit install
-pre-commit install --hook-type commit-msg
-
-# Run all hooks on all files
-pre-commit run --all-files
-
-# Run specific hook
-pre-commit run eslint --all-files
-
-# Update hooks to latest versions
-pre-commit autoupdate
-```
-
-```bash
-# Skip pre-commit hooks (not recommended)
-git commit --no-verify -m "message"
-```
-
-## Docker Deployment
-
-For comprehensive Docker deployment instructions including all integrations, see the [Docker Deployment Guide](docs/docker-deployment.md).
-
-### Quick Start
-
-To start Pabawi with Docker Compose using the default configuration:
-
-```bash
-docker-compose up -d
-```
-
-This will start the application at <http://localhost:3000>.
-
 ## Troubleshooting
 
 For solutions to common issues including installation, configuration, and integration problems, please refer to the comprehensive [Troubleshooting Guide](docs/troubleshooting.md).
+
+## Development and Contributing
+
+For development and contributions guidelines check the [Development Guide](docs/development.md).
+
+For details of the repository files and configurations check the [Repository Structure](docs/repo_structure_and_config.md) document.
 
 ## Roadmap
 
 ### Planned Features
 
-- **Additional Integrations**: Ansible, Choria, Tiny Puppet
-- **Additional Integrations (to evaluate)**: Terraform, AWS CLI, Azure CLI, Kubernetes
+- **Additional Integrations**: Ansible, Tiny Puppet
+- **Additional Integrations (to evaluate)**: Terraform, AWS CLI, Azure CLI, Kubernetes, Choria, Icinga
 - **Scheduled Executions**: Cron-like scheduling for recurring tasks
 - **Custom Dashboards**: User-configurable dashboard widgets
 - **RBAC**: Role-based access control and user/groups management
@@ -317,11 +258,35 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ### Documentation
 
+#### Getting Started
+
+- [Technical Summary](docs/description.md) - High-level technical overview and goals
 - [Architecture Documentation](docs/architecture.md) - System architecture and plugin design
-- [Configuration Guide](docs/configuration.md)
-- [User Guide](docs/user-guide.md)
-- [API Documentation](docs/api.md)
-- [PuppetDB Integration Setup](docs/integrations/puppetdb.md)
+- [Repository Structure](docs/repo_structure_and_config.md) - Guide to repository files and configuration
+- [Configuration Guide](docs/configuration.md) - Complete configuration reference
+- [User Guide](docs/user-guide.md) - Comprehensive user documentation
+- [API Documentation](docs/api.md) - REST API reference
+
+#### API Reference
+
+- [Integrations API Documentation](docs/integrations-api.md) - Complete API reference for all integrations
+- [API Endpoints Reference](docs/api-endpoints-reference.md) - Quick reference table of all endpoints
+- [Authentication Guide](docs/authentication.md) - Authentication setup and troubleshooting
+- [Error Codes Reference](docs/error-codes.md) - Complete error code reference
+
+#### Integration Setup
+
+- [Bolt Setup](docs/integrations/bolt.md) - Bolt configuration guide
+- [Hiera Setup](docs/integrations/hiera.md) - Hiera configuration guide
+- [PuppetDB Integration Setup](docs/integrations/puppetdb.md) - PuppetDB configuration guide
+- [Puppetserver Setup](docs/integrations/puppetserver.md) - Puppetserver configuration guide
+- [PuppetDB API Documentation](docs/puppetdb-api.md) - PuppetDB-specific API endpoints
+
+#### Additional Resources
+
+- [E2E Testing Guide](docs/e2e-testing.md) - End-to-end testing documentation
+- [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
+- [Development](docs/development.md) - Development and contributing
 
 ### Getting Help
 
@@ -339,6 +304,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 Pabawi builds on excellent open-source projects:
 
+- **Puppet/OpenVox**: The king of (classic) configuration management tools
 - **Puppet Bolt**: Remote task execution engine
 - **PuppetDB**: Centralized Puppet data storage
 - **Svelte 5**: Reactive UI framework
@@ -347,32 +313,3 @@ Pabawi builds on excellent open-source projects:
 - **SQLite**: Embedded database
 
 Special thanks to all contributors and the Puppet community.
-
-## Documentation
-
-### Getting Started
-
-- [Technical Summary](docs/description.md) - High-level technical overview and goals
-- [Architecture Documentation](docs/architecture.md) - System architecture and plugin design
-- [Repository Structure](docs/repo_structure_and_config.md) - Guide to repository files and configuration
-- [Configuration Guide](docs/configuration.md) - Complete configuration reference
-- [User Guide](docs/user-guide.md) - Comprehensive user documentation
-- [API Documentation](docs/api.md) - REST API reference
-
-### API Reference
-
-- [Integrations API Documentation](docs/integrations-api.md) - Complete API reference for all integrations
-- [API Endpoints Reference](docs/api-endpoints-reference.md) - Quick reference table of all endpoints
-- [Authentication Guide](docs/authentication.md) - Authentication setup and troubleshooting
-- [Error Codes Reference](docs/error-codes.md) - Complete error code reference
-
-### Integration Setup
-
-- [PuppetDB Integration Setup](docs/integrations/puppetdb.md) - PuppetDB configuration guide
-- [Puppetserver Setup](docs/integrations/puppetserver.md) - Puppetserver configuration guide
-- [PuppetDB API Documentation](docs/puppetdb-api.md) - PuppetDB-specific API endpoints
-
-### Additional Resources
-
-- [E2E Testing Guide](docs/e2e-testing.md) - End-to-end testing documentation
-- [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
