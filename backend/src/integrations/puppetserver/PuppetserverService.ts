@@ -49,7 +49,7 @@ export class PuppetserverService
   private client?: PuppetserverClient;
   private puppetserverConfig?: PuppetserverConfig;
   private cacheTTL = 300000; // Default 5 minutes
-  private cache: SimpleCache<unknown>;
+  private cache: SimpleCache;
 
   /**
    * Create a new Puppetserver service

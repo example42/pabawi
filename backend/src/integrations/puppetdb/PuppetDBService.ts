@@ -92,7 +92,7 @@ export class PuppetDBService
   private retryConfig?: RetryConfig;
   private puppetDBConfig?: PuppetDBConfig;
   private cacheTTL = 300000; // Default 5 minutes
-  private cache: SimpleCache<unknown>;
+  private cache: SimpleCache;
 
   /**
    * Create a new PuppetDB service
