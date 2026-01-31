@@ -37,3 +37,21 @@ export {
   getPluginLoader,
   resetPluginLoader,
 } from "./PluginLoader";
+
+// Widget Registry
+export type {
+  WidgetFilterOptions,
+  WidgetSortOptions,
+  WidgetRegistryEvent,
+  WidgetRegistryEventHandler,
+  WidgetRegistryState,
+} from "./WidgetRegistry.svelte";
+
+export {
+  WidgetRegistry,
+  getWidgetRegistry,
+  resetWidgetRegistry,
+  useSlotWidgets,
+  usePluginWidgets,
+  useWidget,
+} from "./WidgetRegistry.svelte";

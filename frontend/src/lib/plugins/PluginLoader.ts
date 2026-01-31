@@ -20,8 +20,6 @@ import type {
   PluginWidget,
   LoadedPlugin,
   LoadedWidget,
-  PluginLoadState,
-  WidgetLoadState,
   PluginFrontendModule,
   PluginLoaderConfig,
   PluginValidationResult,
@@ -536,7 +534,7 @@ export class PluginLoader {
    */
   private async loadWidgetComponentInternal(
     widget: LoadedWidget,
-    pluginInfo: PluginInfo
+    _pluginInfo: PluginInfo
   ): Promise<Component | null> {
     const widgetId = widget.id;
     this.emit({ type: "widget:loading", widgetId });
@@ -686,23 +684,21 @@ export class PluginLoader {
       return;
     }
 
-    const logContext = {
-      component: "PluginLoader",
-      ...context,
-    };
+    const component = "PluginLoader";
+    const operation = "loader";
 
     switch (level) {
       case "debug":
-        logger.debug(message, logContext);
+        logger.debug(component, operation, message, context);
         break;
       case "info":
-        logger.info(message, logContext);
+        logger.info(component, operation, message, context);
         break;
       case "warn":
-        logger.warn(message, logContext);
+        logger.warn(component, operation, message, context);
         break;
       case "error":
-        logger.error(message, logContext);
+        logger.error(component, operation, message, undefined, context);
         break;
     }
   }
