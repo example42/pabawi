@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import path from "path";
+import type { Database } from "sqlite3";
 import { ConfigService } from "./config/ConfigService";
 import { DatabaseService } from "./database/DatabaseService";
 import { BoltValidator, BoltValidationError } from "./validation/BoltValidator";
@@ -157,8 +158,10 @@ async function startServer(): Promise<Express> {
     })();
 
     // Initialize execution repository
+    // Note: ExecutionRepository still uses raw sqlite3 connection for backward compatibility
+    // This will be refactored in a future update to use the DatabaseAdapter interface
     const executionRepository = new ExecutionRepository(
-      databaseService.getConnection(),
+      databaseService.getConnection() as Database,
     );
 
     // Initialize command whitelist service
