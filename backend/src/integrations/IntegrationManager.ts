@@ -44,6 +44,7 @@ import type {
   PluginRegistration,
   Action,
   PluginMetadata,
+  BasePluginInterface,
 } from "./types";
 import type { Node, Facts, ExecutionResult } from "../bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
@@ -190,6 +191,70 @@ export class IntegrationManager {
       component: "IntegrationManager",
       operation: "registerPlugin",
       metadata: { pluginName: plugin.name, pluginType: plugin.type },
+    });
+  }
+
+  /**
+   * Register a v1.0.0 capability-based plugin
+   *
+   * This method registers plugins that implement BasePluginInterface.
+   * Capabilities and widgets are automatically registered with the CapabilityRegistry.
+   *
+   * @param plugin - Plugin instance implementing BasePluginInterface
+   * @param options - Registration options
+   * @param options.priority - Priority for capability routing (default: 10)
+   * @throws Error if plugin with same name already registered
+   */
+  registerCapabilityPlugin(
+    plugin: BasePluginInterface,
+    options?: { priority?: number }
+  ): void {
+    const pluginName = plugin.metadata.name;
+    const priority = options?.priority ?? 10;
+
+    if (this.v1Plugins.has(pluginName)) {
+      throw new Error(`Plugin '${pluginName}' is already registered`);
+    }
+
+    // Create LoadedPlugin wrapper for the v1Plugins map
+    const loadedPlugin: LoadedPlugin = {
+      instance: plugin,
+      discovery: {
+        path: "builtin",
+        source: "builtin",
+        name: pluginName,
+        hasPackageJson: false,
+        entryPoint: "direct-registration",
+      },
+      loadedAt: new Date().toISOString(),
+      loadDurationMs: 0,
+      warnings: [],
+    };
+
+    this.v1Plugins.set(pluginName, loadedPlugin);
+
+    // Register capabilities with the registry
+    for (const capability of plugin.capabilities) {
+      this.capabilityRegistry.registerCapability(pluginName, capability, priority);
+    }
+
+    // Register widgets if present
+    if (plugin.widgets) {
+      for (const widget of plugin.widgets) {
+        this.capabilityRegistry.registerWidget(pluginName, widget);
+      }
+    }
+
+    this.logger.info(`Registered capability plugin: ${pluginName}`, {
+      component: "IntegrationManager",
+      operation: "registerCapabilityPlugin",
+      metadata: {
+        pluginName,
+        priority,
+        capabilityCount: plugin.capabilities.length,
+        widgetCount: plugin.widgets?.length ?? 0,
+        integrationType: plugin.metadata.integrationType,
+      },
     });
   }
 

@@ -29,7 +29,6 @@ import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
-import { BoltPlugin } from "./integrations/bolt/BoltPlugin";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
@@ -216,75 +215,8 @@ async function startServer(): Promise<Express> {
 
     const integrationManager = new IntegrationManager({ logger });
 
-    // Initialize Bolt integration only if configured
-    let boltPlugin: BoltPlugin | undefined;
-    const boltProjectPath = config.boltProjectPath;
-
-    // Check if Bolt is properly configured by looking for project files
-    let boltConfigured = false;
-    if (boltProjectPath && boltProjectPath !== '.') {
-      const fs = await import("fs");
-      const path = await import("path");
-
-      const inventoryYaml = path.join(boltProjectPath, "inventory.yaml");
-      const inventoryYml = path.join(boltProjectPath, "inventory.yml");
-      const boltProjectYaml = path.join(boltProjectPath, "bolt-project.yaml");
-      const boltProjectYml = path.join(boltProjectPath, "bolt-project.yml");
-
-      const hasInventory = fs.existsSync(inventoryYaml) || fs.existsSync(inventoryYml);
-      const hasBoltProject = fs.existsSync(boltProjectYaml) || fs.existsSync(boltProjectYml);
-
-      boltConfigured = hasInventory || hasBoltProject;
-    }
-
-    logger.info("=== Bolt Integration Setup ===", {
-      component: "Server",
-      operation: "initializeBolt",
-      metadata: {
-        configured: boltConfigured,
-        projectPath: boltProjectPath || 'not set',
-      },
-    });
-
-    if (boltConfigured) {
-      logger.info("Registering Bolt integration...", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
-      try {
-        boltPlugin = new BoltPlugin(boltService, logger, performanceMonitor);
-        const boltConfig: IntegrationConfig = {
-          enabled: true,
-          name: "bolt",
-          type: "both",
-          config: {
-            projectPath: config.boltProjectPath,
-          },
-          priority: 5, // Lower priority than PuppetDB
-        };
-        integrationManager.registerPlugin(boltPlugin, boltConfig);
-        logger.info("Bolt integration registered successfully", {
-          component: "Server",
-          operation: "initializeBolt",
-          metadata: { projectPath: config.boltProjectPath },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Bolt integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeBolt",
-        });
-        boltPlugin = undefined;
-      }
-    } else {
-      logger.warn("Bolt integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
-      logger.info("Set BOLT_PROJECT_PATH to a valid project directory to enable Bolt integration", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
-    }
+    // NOTE: Bolt plugin is now auto-discovered and loaded by PluginLoader v1.0.0
+    // See backend/src/integrations/bolt/index.ts for the createPlugin() factory
 
     // Initialize PuppetDB integration only if configured
     let puppetDBService: PuppetDBService | undefined;

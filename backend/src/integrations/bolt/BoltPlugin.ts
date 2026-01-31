@@ -1,79 +1,546 @@
 /**
- * Bolt Integration Plugin
+ * Bolt Plugin v1.0 - Modular Plugin Architecture
  *
- * Wraps BoltService to provide integration plugin interface for the IntegrationManager.
- * This allows Bolt to be monitored alongside other integrations like PuppetDB.
+ * Implements BasePluginInterface with:
+ * - Capability-based execution (command, task, inventory, facts)
+ * - Frontend widget definitions
+ * - CLI command generation
+ * - RBAC-aware capability handlers
+ *
+ * @module integrations/bolt/BoltPlugin
+ * @version 1.0.0
  */
 
-import { BasePlugin } from "../BasePlugin";
-import type {
-  HealthStatus,
-  ExecutionToolPlugin,
-  InformationSourcePlugin,
-  Action,
-  Capability,
+import type { ZodSchema } from "zod";
+import { z } from "zod";
+import {
+  IntegrationType,
+  type BasePluginInterface,
+  type PluginMetadata,
+  type PluginCapability,
+  type PluginWidget,
+  type PluginCLICommand,
+  type ExecutionContext,
+  type HealthStatus,
 } from "../types";
-import type { BoltService } from "../../bolt/BoltService";
-import type { ExecutionResult, Node, Facts } from "../../bolt/types";
+import type { BoltService, StreamingCallback } from "../../bolt/BoltService";
+import type { ExecutionResult, Node, Facts, Task } from "../../bolt/types";
 import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 
-/**
- * Bolt Plugin
- *
- * Provides execution tool capabilities, inventory information, and health monitoring for Bolt.
- */
-export class BoltPlugin
-  extends BasePlugin
-  implements ExecutionToolPlugin, InformationSourcePlugin
-{
-  readonly type = "both" as const;
-  private boltService: BoltService;
+// =============================================================================
+// Capability Parameter Schemas
+// =============================================================================
 
-  constructor(boltService: BoltService, logger?: LoggerService, performanceMonitor?: PerformanceMonitorService) {
-    super("bolt", "both", logger, performanceMonitor);
+/**
+ * Schema for command execution parameters
+ */
+const CommandExecuteSchema = z.object({
+  command: z.string().min(1).describe("Shell command to execute"),
+  targets: z.union([z.string(), z.array(z.string())]).describe("Target node(s) to execute on"),
+  timeout: z.number().optional().describe("Execution timeout in milliseconds"),
+});
+
+/**
+ * Schema for task execution parameters
+ */
+const TaskExecuteSchema = z.object({
+  task: z.string().min(1).describe("Name of the Bolt task to execute"),
+  targets: z.union([z.string(), z.array(z.string())]).describe("Target node(s) to execute on"),
+  parameters: z.record(z.unknown()).optional().describe("Task parameters"),
+  timeout: z.number().optional().describe("Execution timeout in milliseconds"),
+});
+
+/**
+ * Schema for inventory listing parameters
+ */
+const InventoryListSchema = z.object({
+  refresh: z.boolean().optional().default(false).describe("Force refresh from source"),
+});
+
+/**
+ * Schema for facts query parameters
+ */
+const FactsQuerySchema = z.object({
+  target: z.string().min(1).describe("Node to query facts for"),
+  refresh: z.boolean().optional().default(false).describe("Force refresh from source"),
+});
+
+/**
+ * Schema for task listing parameters
+ */
+const TaskListSchema = z.object({
+  module: z.string().optional().describe("Filter by module name"),
+});
+
+/**
+ * Schema for task details parameters
+ */
+const TaskDetailsSchema = z.object({
+  task: z.string().min(1).describe("Task name to get details for"),
+});
+
+// =============================================================================
+// Plugin Configuration
+// =============================================================================
+
+/**
+ * Bolt plugin configuration schema
+ */
+export const BoltPluginConfigSchema = z.object({
+  projectPath: z.string().optional().describe("Path to Bolt project directory"),
+  executionTimeout: z.number().optional().describe("Default execution timeout in ms"),
+  cache: z.object({
+    inventoryTtl: z.number().optional().describe("Inventory cache TTL in ms"),
+    factsTtl: z.number().optional().describe("Facts cache TTL in ms"),
+  }).optional(),
+});
+
+export type BoltPluginConfig = z.infer<typeof BoltPluginConfigSchema>;
+
+// =============================================================================
+// Plugin Implementation
+// =============================================================================
+
+/**
+ * Bolt Plugin v1.0.0
+ *
+ * Provides Puppet Bolt integration with capability-based architecture:
+ * - command.execute: Run shell commands on target nodes
+ * - task.execute: Run Bolt tasks on target nodes
+ * - inventory.list: List nodes from Bolt inventory
+ * - facts.query: Gather facts from target nodes
+ * - task.list: List available Bolt tasks
+ * - task.details: Get task metadata and parameters
+ */
+export class BoltPlugin implements BasePluginInterface {
+  // =========================================================================
+  // Plugin Metadata
+  // =========================================================================
+
+  readonly metadata: PluginMetadata = {
+    name: "bolt",
+    version: "1.0.0",
+    author: "Pabawi Team",
+    description: "Puppet Bolt integration for remote command and task execution",
+    integrationType: IntegrationType.RemoteExecution,
+    homepage: "https://puppet.com/docs/bolt/latest/bolt.html",
+    color: "#FFAE1A", // Puppet/Bolt orange
+    icon: "terminal",
+    tags: ["bolt", "puppet", "remote-execution", "commands", "tasks"],
+    minPabawiVersion: "1.0.0",
+  };
+
+  // =========================================================================
+  // Capabilities
+  // =========================================================================
+
+  readonly capabilities: PluginCapability[];
+
+  // =========================================================================
+  // Widgets
+  // =========================================================================
+
+  readonly widgets: PluginWidget[] = [
+    {
+      id: "bolt:command-executor",
+      name: "Command Executor",
+      component: "./components/CommandExecutor.svelte",
+      slots: ["dashboard", "node-detail", "standalone-page"],
+      size: "medium",
+      requiredCapabilities: ["bolt.command.execute"],
+      icon: "terminal",
+      priority: 100,
+      config: {
+        showTargetSelector: true,
+        showOutputPanel: true,
+      },
+    },
+    {
+      id: "bolt:task-runner",
+      name: "Task Runner",
+      component: "./components/TaskRunner.svelte",
+      slots: ["dashboard", "node-detail", "standalone-page"],
+      size: "large",
+      requiredCapabilities: ["bolt.task.execute"],
+      icon: "play",
+      priority: 90,
+      config: {
+        showTaskBrowser: true,
+        showParameterForm: true,
+      },
+    },
+    {
+      id: "bolt:inventory-viewer",
+      name: "Inventory Viewer",
+      component: "./components/InventoryViewer.svelte",
+      slots: ["dashboard", "inventory-panel", "sidebar"],
+      size: "medium",
+      requiredCapabilities: ["bolt.inventory.list"],
+      icon: "server",
+      priority: 80,
+    },
+    {
+      id: "bolt:task-browser",
+      name: "Task Browser",
+      component: "./components/TaskBrowser.svelte",
+      slots: ["dashboard", "sidebar"],
+      size: "small",
+      requiredCapabilities: ["bolt.task.list"],
+      icon: "list",
+      priority: 70,
+    },
+  ];
+
+  // =========================================================================
+  // CLI Commands
+  // =========================================================================
+
+  readonly cliCommands: PluginCLICommand[] = [
+    {
+      name: "bolt",
+      actions: [
+        {
+          name: "run",
+          capability: "bolt.command.execute",
+          description: "Execute a command on target nodes",
+          aliases: ["cmd", "command"],
+          examples: [
+            'pab bolt run "uptime" --targets all',
+            'pab bolt run "systemctl status nginx" --targets web-*',
+          ],
+        },
+        {
+          name: "task",
+          capability: "bolt.task.execute",
+          description: "Execute a Bolt task on target nodes",
+          examples: [
+            'pab bolt task package --targets web-01 --params \'{"action":"install","name":"nginx"}\'',
+            "pab bolt task service --targets all --params '{\"action\":\"restart\",\"name\":\"httpd\"}'",
+          ],
+        },
+        {
+          name: "inventory",
+          capability: "bolt.inventory.list",
+          description: "List nodes from Bolt inventory",
+          aliases: ["nodes", "inv"],
+          examples: ["pab bolt inventory", "pab bolt inventory --format json"],
+        },
+        {
+          name: "facts",
+          capability: "bolt.facts.query",
+          description: "Gather facts from a target node",
+          examples: [
+            "pab bolt facts web-01",
+            "pab bolt facts db-server --format json",
+          ],
+        },
+        {
+          name: "tasks",
+          capability: "bolt.task.list",
+          description: "List available Bolt tasks",
+          aliases: ["list-tasks"],
+          examples: ["pab bolt tasks", "pab bolt tasks --module service"],
+        },
+      ],
+    },
+  ];
+
+  // =========================================================================
+  // Configuration
+  // =========================================================================
+
+  readonly configSchema: ZodSchema = BoltPluginConfigSchema;
+
+  readonly defaultPermissions: Record<string, string[]> = {
+    "bolt.command.execute": ["admin", "operator"],
+    "bolt.task.execute": ["admin", "operator"],
+    "bolt.inventory.list": ["admin", "operator", "viewer"],
+    "bolt.facts.query": ["admin", "operator", "viewer"],
+    "bolt.task.list": ["admin", "operator", "viewer"],
+    "bolt.task.details": ["admin", "operator", "viewer"],
+  };
+
+  // =========================================================================
+  // Private State
+  // =========================================================================
+
+  private boltService: BoltService;
+  private logger: LoggerService;
+  private performanceMonitor: PerformanceMonitorService;
+  private config: BoltPluginConfig = {};
+  private _initialized = false;
+
+  // =========================================================================
+  // Constructor
+  // =========================================================================
+
+  constructor(
+    boltService: BoltService,
+    logger: LoggerService,
+    performanceMonitor: PerformanceMonitorService,
+  ) {
     this.boltService = boltService;
+    this.logger = logger;
+    this.performanceMonitor = performanceMonitor;
+
+    // Initialize capabilities array with bound handlers
+    this.capabilities = this.createCapabilities();
   }
 
+  // =========================================================================
+  // Capability Factory
+  // =========================================================================
+
   /**
-   * Perform plugin-specific initialization
+   * Create capability definitions with bound handlers
    */
-  protected async performInitialization(): Promise<void> {
-    const complete = this.performanceMonitor.startTimer('bolt:initialization');
+  private createCapabilities(): PluginCapability[] {
+    return [
+      // Command Execution
+      {
+        category: "command",
+        name: "bolt.command.execute",
+        description: "Execute a shell command on one or more target nodes using Bolt",
+        handler: this.executeCommand.bind(this),
+        requiredPermissions: ["bolt.command.execute", "command.execute"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            command: {
+              type: "string",
+              description: "Shell command to execute",
+              required: true,
+            },
+            targets: {
+              type: "array",
+              description: "Target node(s) to execute on",
+              required: true,
+            },
+            timeout: {
+              type: "number",
+              description: "Execution timeout in milliseconds",
+              required: false,
+              default: 300000,
+            },
+          },
+          returns: {
+            type: "ExecutionResult",
+            description: "Execution results for each target node",
+          },
+        },
+      },
+
+      // Task Execution
+      {
+        category: "task",
+        name: "bolt.task.execute",
+        description: "Execute a Bolt task on one or more target nodes",
+        handler: this.executeTask.bind(this),
+        requiredPermissions: ["bolt.task.execute", "task.execute"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            task: {
+              type: "string",
+              description: "Name of the Bolt task to execute",
+              required: true,
+            },
+            targets: {
+              type: "array",
+              description: "Target node(s) to execute on",
+              required: true,
+            },
+            parameters: {
+              type: "object",
+              description: "Task parameters",
+              required: false,
+            },
+            timeout: {
+              type: "number",
+              description: "Execution timeout in milliseconds",
+              required: false,
+              default: 300000,
+            },
+          },
+          returns: {
+            type: "ExecutionResult",
+            description: "Task execution results for each target node",
+          },
+        },
+      },
+
+      // Inventory Listing
+      {
+        category: "inventory",
+        name: "bolt.inventory.list",
+        description: "List nodes from the Bolt inventory file",
+        handler: this.listInventory.bind(this),
+        requiredPermissions: ["bolt.inventory.list", "inventory.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            refresh: {
+              type: "boolean",
+              description: "Force refresh from source",
+              required: false,
+              default: false,
+            },
+          },
+          returns: {
+            type: "Node[]",
+            description: "Array of nodes from inventory",
+          },
+        },
+      },
+
+      // Facts Query
+      {
+        category: "info",
+        name: "bolt.facts.query",
+        description: "Gather system facts from a target node using Bolt",
+        handler: this.queryFacts.bind(this),
+        requiredPermissions: ["bolt.facts.query", "facts.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            target: {
+              type: "string",
+              description: "Node to query facts for",
+              required: true,
+            },
+            refresh: {
+              type: "boolean",
+              description: "Force refresh from source",
+              required: false,
+              default: false,
+            },
+          },
+          returns: {
+            type: "Facts",
+            description: "System facts for the target node",
+          },
+        },
+      },
+
+      // Task Listing
+      {
+        category: "info",
+        name: "bolt.task.list",
+        description: "List available Bolt tasks from modules",
+        handler: this.listTasks.bind(this),
+        requiredPermissions: ["bolt.task.list"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            module: {
+              type: "string",
+              description: "Filter by module name",
+              required: false,
+            },
+          },
+          returns: {
+            type: "Task[]",
+            description: "Array of available tasks",
+          },
+        },
+      },
+
+      // Task Details
+      {
+        category: "info",
+        name: "bolt.task.details",
+        description: "Get details about a specific Bolt task",
+        handler: this.getTaskDetails.bind(this),
+        requiredPermissions: ["bolt.task.details"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            task: {
+              type: "string",
+              description: "Task name to get details for",
+              required: true,
+            },
+          },
+          returns: {
+            type: "Task",
+            description: "Task metadata and parameters",
+          },
+        },
+      },
+    ];
+  }
+
+  // =========================================================================
+  // Lifecycle Methods
+  // =========================================================================
+
+  /**
+   * Initialize the plugin
+   */
+  async initialize(): Promise<void> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:initialization");
 
     try {
+      this.logger.info("Initializing BoltPlugin", {
+        component: "BoltPlugin",
+        operation: "initialize",
+      });
+
       // Verify Bolt is accessible by checking inventory
       await this.boltService.getInventory();
-      this.log("Bolt is accessible and inventory loaded");
+
+      this._initialized = true;
+
+      this.logger.info("BoltPlugin initialized successfully", {
+        component: "BoltPlugin",
+        operation: "initialize",
+        metadata: {
+          projectPath: this.boltService.getBoltProjectPath(),
+          capabilitiesCount: this.capabilities.length,
+          widgetsCount: this.widgets.length,
+        },
+      });
 
       complete({ success: true });
     } catch (error) {
-      this.logError("Failed to verify Bolt accessibility during initialization", error);
-      // Don't throw error during initialization - let health checks handle this
-      // This allows the server to start even if Bolt is not properly configured
-      this.log("Bolt plugin initialized with configuration issues - will report in health checks");
+      this.logger.warn("BoltPlugin initialization completed with issues", {
+        component: "BoltPlugin",
+        operation: "initialize",
+        metadata: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+
+      // Don't throw - allow plugin to start in degraded mode
+      this._initialized = true;
 
       complete({ success: false, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
   /**
-   * Perform plugin-specific health check
-   *
-   * Verifies that Bolt CLI is accessible and project-specific configuration exists.
-   *
-   * @returns Health status (without lastCheck timestamp)
+   * Perform health check
    */
-  protected async performHealthCheck(): Promise<
-    Omit<HealthStatus, "lastCheck">
-  > {
-    const complete = this.performanceMonitor.startTimer('bolt:healthCheck');
-    const fs = await import("fs");
-    const path = await import("path");
+  async healthCheck(): Promise<HealthStatus> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:healthCheck");
+    const now = new Date().toISOString();
+
+    if (!this._initialized) {
+      complete({ healthy: false });
+      return {
+        healthy: false,
+        message: "Plugin is not initialized",
+        lastCheck: now,
+      };
+    }
 
     try {
-      // First check if Bolt command is available
+      // Check if Bolt command is available
+      const fs = await import("fs");
+      const path = await import("path");
       const childProcess = await import("child_process");
+
       const boltCheck = childProcess.spawn("bolt", ["--version"], { stdio: "pipe" });
 
       const boltAvailable = await new Promise<boolean>((resolve) => {
@@ -96,7 +563,6 @@ export class BoltPlugin
         boltCheck.on("close", handleClose);
         boltCheck.on("error", handleError);
 
-        // Timeout after 5 seconds
         setTimeout(() => {
           if (!resolved) {
             resolved = true;
@@ -111,6 +577,7 @@ export class BoltPlugin
         return {
           healthy: false,
           message: "Bolt command is not available. Please install Puppet Bolt.",
+          lastCheck: now,
           details: {
             error: "bolt command not found",
             projectPath: this.boltService.getBoltProjectPath(),
@@ -118,69 +585,48 @@ export class BoltPlugin
         };
       }
 
-      // Check for project-specific configuration files
+      // Check for project configuration
       const projectPath = this.boltService.getBoltProjectPath();
       const inventoryYaml = path.join(projectPath, "inventory.yaml");
       const inventoryYml = path.join(projectPath, "inventory.yml");
-      const boltProjectYaml = path.join(projectPath, "bolt-project.yaml");
-      const boltProjectYml = path.join(projectPath, "bolt-project.yml");
-
       const hasInventory = fs.existsSync(inventoryYaml) || fs.existsSync(inventoryYml);
-      const hasBoltProject = fs.existsSync(boltProjectYaml) || fs.existsSync(boltProjectYml);
 
-      // If no project-specific configuration exists, report as degraded
-      if (!hasInventory && !hasBoltProject) {
+      if (!hasInventory) {
         complete({ available: true, configured: false });
         return {
           healthy: false,
-          message: "Bolt project configuration is missing. Using global configuration as fallback.",
-          details: {
-            error: "No project-specific inventory.yaml or bolt-project.yaml found",
-            projectPath,
-            missingFiles: ["inventory.yaml", "bolt-project.yaml"],
-            usingGlobalConfig: true,
-          },
-        };
-      }
-
-      // If inventory is missing but bolt-project exists, report as degraded
-      if (!hasInventory) {
-        complete({ available: true, configured: true, degraded: true });
-        return {
-          healthy: false,
           degraded: true,
-          message: "Bolt inventory file is missing. Task execution will be limited.",
+          message: "Bolt inventory file is missing. Some operations will be limited.",
+          lastCheck: now,
           details: {
-            error: "inventory.yaml not found in project directory",
             projectPath,
             missingFiles: ["inventory.yaml"],
-            hasBoltProject,
           },
         };
       }
 
-      // Try to load inventory as a final health check
+      // Try to load inventory
       const inventory = await this.boltService.getInventory();
 
       complete({ available: true, configured: true, nodeCount: inventory.length });
       return {
         healthy: true,
-        message: `Bolt is properly configured. ${String(inventory.length)} nodes in inventory.`,
+        message: `Bolt is healthy. ${inventory.length} nodes in inventory.`,
+        lastCheck: now,
         details: {
           nodeCount: inventory.length,
           projectPath,
-          hasInventory,
-          hasBoltProject,
+          capabilities: this.capabilities.map((c) => c.name),
         },
       };
-    } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       complete({ error: errorMessage });
+
       return {
         healthy: false,
         message: `Bolt health check failed: ${errorMessage}`,
+        lastCheck: now,
         details: {
           error: errorMessage,
           projectPath: this.boltService.getBoltProjectPath(),
@@ -190,76 +636,74 @@ export class BoltPlugin
   }
 
   /**
-   * Execute an action using Bolt
-   *
-   * @param action - Action to execute
-   * @returns Execution result
+   * Get current plugin configuration
    */
-  async executeAction(action: Action): Promise<ExecutionResult> {
-    const complete = this.performanceMonitor.startTimer('bolt:executeAction');
+  getConfig(): Record<string, unknown> {
+    return {
+      ...this.config,
+      projectPath: this.boltService.getBoltProjectPath(),
+      defaultTimeout: this.boltService.getDefaultTimeout(),
+    };
+  }
 
-    if (!this.initialized) {
-      complete({ error: 'not initialized' });
-      throw new Error("Bolt plugin not initialized");
-    }
+  /**
+   * Check if plugin is initialized
+   */
+  isInitialized(): boolean {
+    return this._initialized;
+  }
 
-    // Bolt currently only supports single target execution
-    const target = Array.isArray(action.target)
-      ? action.target[0]
-      : action.target;
+  /**
+   * Cleanup on shutdown
+   */
+  async shutdown(): Promise<void> {
+    this.logger.info("BoltPlugin shutting down", {
+      component: "BoltPlugin",
+      operation: "shutdown",
+    });
+    this._initialized = false;
+  }
 
-    if (!target) {
-      complete({ error: 'no target' });
-      throw new Error("No target specified for action");
-    }
+  // =========================================================================
+  // Capability Handlers
+  // =========================================================================
 
-    // Extract streaming callback from action metadata if present
-    const streamingCallback = action.metadata?.streamingCallback as
-      | {
-          onCommand?: (cmd: string) => void;
-          onStdout?: (chunk: string) => void;
-          onStderr?: (chunk: string) => void;
-        }
-      | undefined;
+  /**
+   * Execute a command on target nodes
+   */
+  private async executeCommand(
+    params: Record<string, unknown>,
+    context: ExecutionContext,
+  ): Promise<ExecutionResult> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:executeCommand");
 
     try {
-      // Map action to appropriate Bolt service method
-      let result: ExecutionResult;
+      const validated = CommandExecuteSchema.parse(params);
+      const target = Array.isArray(validated.targets)
+        ? validated.targets[0]
+        : validated.targets;
 
-      switch (action.type) {
-        case "command":
-          result = await this.boltService.runCommand(
-            target,
-            action.action,
-            streamingCallback,
-          );
-          break;
+      this.logger.info("Executing command", {
+        component: "BoltPlugin",
+        operation: "executeCommand",
+        metadata: {
+          command: validated.command,
+          target,
+          correlationId: context.correlationId,
+          userId: context.user?.id,
+        },
+      });
 
-        case "task":
-          result = await this.boltService.runTask(
-            target,
-            action.action,
-            action.parameters,
-            streamingCallback,
-          );
-          break;
+      // Extract streaming callback from context metadata if present
+      const streamingCallback = context.metadata?.streamingCallback as StreamingCallback | undefined;
 
-        case "script":
-          complete({ error: 'script not implemented' });
-          throw new Error("Script execution not yet implemented");
+      const result = await this.boltService.runCommand(
+        target,
+        validated.command,
+        streamingCallback,
+      );
 
-        case "plan":
-          complete({ error: 'plan not implemented' });
-          throw new Error("Plan execution not yet implemented");
-
-        default: {
-          const exhaustiveCheck: never = action.type;
-          complete({ error: 'unsupported action type' });
-          throw new Error(`Unsupported action type: ${String(exhaustiveCheck)}`);
-        }
-      }
-
-      complete({ actionType: action.type, status: result.status });
+      complete({ status: result.status, target });
       return result;
     } catch (error) {
       complete({ error: error instanceof Error ? error.message : String(error) });
@@ -268,62 +712,44 @@ export class BoltPlugin
   }
 
   /**
-   * List capabilities supported by Bolt
-   *
-   * @returns Array of capabilities
+   * Execute a task on target nodes
    */
-  listCapabilities(): Capability[] {
-    return [
-      {
-        name: "command",
-        description: "Execute shell commands on target nodes",
-        parameters: [
-          {
-            name: "command",
-            type: "string",
-            required: true,
-            description: "Shell command to execute",
-          },
-        ],
-      },
-      {
-        name: "task",
-        description: "Execute Puppet tasks on target nodes",
-        parameters: [
-          {
-            name: "task",
-            type: "string",
-            required: true,
-            description: "Name of the task to execute",
-          },
-          {
-            name: "parameters",
-            type: "object",
-            required: false,
-            description: "Task parameters",
-          },
-        ],
-      },
-    ];
-  }
-
-  /**
-   * Get inventory of nodes from Bolt
-   *
-   * @returns Array of nodes
-   */
-  async getInventory(): Promise<Node[]> {
-    const complete = this.performanceMonitor.startTimer('bolt:getInventory');
-
-    if (!this.initialized) {
-      complete({ error: 'not initialized' });
-      throw new Error("Bolt plugin not initialized");
-    }
+  private async executeTask(
+    params: Record<string, unknown>,
+    context: ExecutionContext,
+  ): Promise<ExecutionResult> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:executeTask");
 
     try {
-      const inventory = await this.boltService.getInventory();
-      complete({ nodeCount: inventory.length });
-      return inventory;
+      const validated = TaskExecuteSchema.parse(params);
+      const target = Array.isArray(validated.targets)
+        ? validated.targets[0]
+        : validated.targets;
+
+      this.logger.info("Executing task", {
+        component: "BoltPlugin",
+        operation: "executeTask",
+        metadata: {
+          task: validated.task,
+          target,
+          hasParameters: !!validated.parameters,
+          correlationId: context.correlationId,
+          userId: context.user?.id,
+        },
+      });
+
+      // Extract streaming callback from context metadata if present
+      const streamingCallback = context.metadata?.streamingCallback as StreamingCallback | undefined;
+
+      const result = await this.boltService.runTask(
+        target,
+        validated.task,
+        validated.parameters as Record<string, string> | undefined,
+        streamingCallback,
+      );
+
+      complete({ status: result.status, target, task: validated.task });
+      return result;
     } catch (error) {
       complete({ error: error instanceof Error ? error.message : String(error) });
       throw error;
@@ -331,69 +757,161 @@ export class BoltPlugin
   }
 
   /**
-   * Get facts for a specific node
-   *
-   * @param nodeId - Node identifier
-   * @returns Node facts
+   * List nodes from inventory
    */
-  async getNodeFacts(nodeId: string): Promise<Facts> {
-    const complete = this.performanceMonitor.startTimer('bolt:getNodeFacts');
-
-    if (!this.initialized) {
-      complete({ error: 'not initialized' });
-      throw new Error("Bolt plugin not initialized");
-    }
+  private async listInventory(
+    params: Record<string, unknown>,
+    context: ExecutionContext,
+  ): Promise<Node[]> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:listInventory");
 
     try {
-      const facts = await this.boltService.gatherFacts(nodeId);
-      complete({ nodeId });
-      return facts;
+      const validated = InventoryListSchema.parse(params);
+
+      this.logger.debug("Listing inventory", {
+        component: "BoltPlugin",
+        operation: "listInventory",
+        metadata: {
+          refresh: validated.refresh,
+          correlationId: context.correlationId,
+        },
+      });
+
+      const nodes = await this.boltService.getInventory();
+
+      complete({ nodeCount: nodes.length });
+      return nodes;
     } catch (error) {
-      complete({ error: error instanceof Error ? error.message : String(error), nodeId });
+      complete({ error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }
 
   /**
-   * Get arbitrary data for a node
-   *
-   * Bolt doesn't support arbitrary data types beyond facts,
-   * so this method throws an error for unsupported data types.
-   *
-   * @param nodeId - Node identifier
-   * @param dataType - Type of data to retrieve
-   * @returns Data of the requested type
+   * Query facts for a node
    */
-  async getNodeData(nodeId: string, dataType: string): Promise<unknown> {
-    const complete = this.performanceMonitor.startTimer('bolt:getNodeData');
+  private async queryFacts(
+    params: Record<string, unknown>,
+    context: ExecutionContext,
+  ): Promise<Facts> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:queryFacts");
 
-    if (!this.initialized) {
-      complete({ error: 'not initialized' });
-      throw new Error("Bolt plugin not initialized");
+    try {
+      const validated = FactsQuerySchema.parse(params);
+
+      this.logger.debug("Querying facts", {
+        component: "BoltPlugin",
+        operation: "queryFacts",
+        metadata: {
+          target: validated.target,
+          refresh: validated.refresh,
+          correlationId: context.correlationId,
+        },
+      });
+
+      const facts = await this.boltService.gatherFacts(validated.target);
+
+      complete({ target: validated.target });
+      return facts;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
     }
-
-    // Bolt only supports facts data type
-    if (dataType === "facts") {
-      try {
-        const facts = await this.boltService.gatherFacts(nodeId);
-        complete({ nodeId, dataType });
-        return facts;
-      } catch (error) {
-        complete({ error: error instanceof Error ? error.message : String(error), nodeId, dataType });
-        throw error;
-      }
-    }
-
-    complete({ error: 'unsupported data type', nodeId, dataType });
-    throw new Error(`Bolt does not support data type: ${dataType}`);
   }
 
   /**
-   * Get the wrapped BoltService instance
-   *
-   * @returns BoltService instance
+   * List available tasks
+   */
+  private async listTasks(
+    params: Record<string, unknown>,
+    context: ExecutionContext,
+  ): Promise<Task[]> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:listTasks");
+
+    try {
+      const validated = TaskListSchema.parse(params);
+
+      this.logger.debug("Listing tasks", {
+        component: "BoltPlugin",
+        operation: "listTasks",
+        metadata: {
+          module: validated.module,
+          correlationId: context.correlationId,
+        },
+      });
+
+      const tasks = await this.boltService.listTasks();
+
+      // Filter by module if specified
+      const filteredTasks = validated.module
+        ? tasks.filter((t) => t.module === validated.module)
+        : tasks;
+
+      complete({ taskCount: filteredTasks.length, module: validated.module });
+      return filteredTasks;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Get task details
+   */
+  private async getTaskDetails(
+    params: Record<string, unknown>,
+    context: ExecutionContext,
+  ): Promise<Task | null> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:getTaskDetails");
+
+    try {
+      const validated = TaskDetailsSchema.parse(params);
+
+      this.logger.debug("Getting task details", {
+        component: "BoltPlugin",
+        operation: "getTaskDetails",
+        metadata: {
+          task: validated.task,
+          correlationId: context.correlationId,
+        },
+      });
+
+      const task = await this.boltService.getTaskDetails(validated.task);
+
+      complete({ task: validated.task, found: !!task });
+      return task;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  // =========================================================================
+  // Legacy Bridge Methods (for backward compatibility)
+  // =========================================================================
+
+  /**
+   * Get the underlying BoltService instance
+   * @deprecated Use capability handlers instead
    */
   getBoltService(): BoltService {
     return this.boltService;
   }
 }
+
+// =============================================================================
+// Plugin Factory
+// =============================================================================
+
+/**
+ * Factory function for creating BoltPlugin instances
+ */
+export function createBoltPlugin(
+  boltService: BoltService,
+  logger: LoggerService,
+  performanceMonitor: PerformanceMonitorService,
+): BoltPlugin {
+  return new BoltPlugin(boltService, logger, performanceMonitor);
+}
+
+export default BoltPlugin;
