@@ -318,9 +318,46 @@ export class UserService {
   }
 
   /**
-   * Verify user password
+   * Find user by username or email (for authentication)
    */
-  async verifyPassword(user: User, password: string): Promise<boolean> {
+  async findByUsernameOrEmail(usernameOrEmail: string): Promise<User | null> {
+    const row = await this.db.queryOne<UserRow>(
+      "SELECT * FROM users WHERE username = ? OR email = ?",
+      [usernameOrEmail, usernameOrEmail]
+    );
+
+    if (!row) {
+      return null;
+    }
+
+    return this.hydrateUser(row);
+  }
+
+  /**
+   * Get user by ID (alias for getUserById for AuthService compatibility)
+   */
+  async getById(id: string): Promise<User | null> {
+    return this.getUserById(id);
+  }
+
+  /**
+   * Verify user password by user ID
+   */
+  async verifyPassword(userId: string, password: string): Promise<boolean> {
+    const row = await this.db.queryOne<UserRow>(
+      "SELECT password_hash FROM users WHERE id = ?",
+      [userId]
+    );
+    if (!row) {
+      return false;
+    }
+    return bcrypt.compare(password, row.password_hash);
+  }
+
+  /**
+   * Verify password using User object
+   */
+  async verifyUserPassword(user: User, password: string): Promise<boolean> {
     return bcrypt.compare(password, user.passwordHash);
   }
 
@@ -434,7 +471,7 @@ export class UserService {
   /**
    * Convert User to UserPublic (strips sensitive data)
    */
-  private toPublicUser(user: User): UserPublic {
+  toPublicUser(user: User): UserPublic {
     return {
       id: user.id,
       username: user.username,
