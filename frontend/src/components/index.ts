@@ -1,3 +1,8 @@
+// Permission & Auth Components (v1.0.0 Phase 4, Step 20)
+export { default as PermissionGuard } from "./PermissionGuard.svelte";
+export { default as RequireAuth } from "./RequireAuth.svelte";
+export { default as AdminOnly } from "./AdminOnly.svelte";
+
 export { default as CatalogComparison } from "./CatalogComparison.svelte";
 export { default as CatalogViewer } from "./CatalogViewer.svelte";
 
