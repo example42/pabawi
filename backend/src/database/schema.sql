@@ -54,3 +54,104 @@ CREATE INDEX IF NOT EXISTS idx_executions_status_started ON executions(status, s
 
 -- Type + time: Filter by execution type with time ordering
 CREATE INDEX IF NOT EXISTS idx_executions_type_started ON executions(type, started_at DESC);
+
+-- ============================================================================
+-- Authentication & Authorization Tables (v1.0.0 RBAC System)
+-- ============================================================================
+
+-- Users table for storing user accounts
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  display_name TEXT,
+  active INTEGER DEFAULT 1,  -- Boolean flag (0 or 1)
+  created_at TEXT NOT NULL,  -- ISO 8601 timestamp
+  updated_at TEXT,  -- ISO 8601 timestamp
+  last_login_at TEXT  -- ISO 8601 timestamp
+);
+
+-- Groups table for organizing users
+CREATE TABLE IF NOT EXISTS groups (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  description TEXT,
+  created_at TEXT NOT NULL,  -- ISO 8601 timestamp
+  updated_at TEXT  -- ISO 8601 timestamp
+);
+
+-- Roles table for permission bundling
+CREATE TABLE IF NOT EXISTS roles (
+  id TEXT PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  description TEXT,
+  priority INTEGER DEFAULT 0,  -- Higher priority wins in conflict resolution
+  is_system INTEGER DEFAULT 0,  -- Boolean flag for built-in roles
+  created_at TEXT NOT NULL,  -- ISO 8601 timestamp
+  updated_at TEXT  -- ISO 8601 timestamp
+);
+
+-- Permissions table for capability-based access control
+CREATE TABLE IF NOT EXISTS permissions (
+  id TEXT PRIMARY KEY,
+  role_id TEXT NOT NULL,
+  capability TEXT NOT NULL,  -- Capability pattern (e.g., 'command.execute', 'inventory.*', '*')
+  action TEXT NOT NULL CHECK(action IN ('allow', 'deny')),
+  conditions TEXT,  -- JSON object for conditional permissions
+  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+
+-- User-Group junction table (many-to-many)
+CREATE TABLE IF NOT EXISTS user_groups (
+  user_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  PRIMARY KEY (user_id, group_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+);
+
+-- User-Role junction table (direct role assignments)
+CREATE TABLE IF NOT EXISTS user_roles (
+  user_id TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  PRIMARY KEY (user_id, role_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+
+-- Group-Role junction table (roles assigned to groups)
+CREATE TABLE IF NOT EXISTS group_roles (
+  group_id TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  PRIMARY KEY (group_id, role_id),
+  FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+  FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+
+-- User indexes
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_active ON users(active);
+CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC);
+
+-- Group indexes
+CREATE INDEX IF NOT EXISTS idx_groups_name ON groups(name);
+CREATE INDEX IF NOT EXISTS idx_groups_created_at ON groups(created_at DESC);
+
+-- Role indexes
+CREATE INDEX IF NOT EXISTS idx_roles_name ON roles(name);
+CREATE INDEX IF NOT EXISTS idx_roles_priority ON roles(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_roles_is_system ON roles(is_system);
+
+-- Permission indexes
+CREATE INDEX IF NOT EXISTS idx_permissions_role_id ON permissions(role_id);
+CREATE INDEX IF NOT EXISTS idx_permissions_capability ON permissions(capability);
+
+-- Junction table indexes for efficient lookups
+CREATE INDEX IF NOT EXISTS idx_user_groups_user_id ON user_groups(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_groups_group_id ON user_groups(group_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
+CREATE INDEX IF NOT EXISTS idx_group_roles_group_id ON group_roles(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_roles_role_id ON group_roles(role_id);
