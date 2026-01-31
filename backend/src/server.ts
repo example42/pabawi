@@ -29,10 +29,12 @@ import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import { BoltPlugin } from "./integrations/bolt/BoltPlugin";
-import type { IntegrationConfig } from "./integrations/types";
+import { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
+import { PackageManagerPlugin } from './integrations/package-manager/PackageManagerPlugin';
+import nodesRouter from './routes/nodes.js';
 
 /**
  * Initialize and start the application
@@ -704,6 +706,7 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api",
       createPackagesRouter(
+        integrationManager, // Add as first parameter
         boltService,
         executionRepository,
         config.packageTasks,
@@ -713,6 +716,7 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api/nodes",
       createPackagesRouter(
+        integrationManager,
         boltService,
         executionRepository,
         config.packageTasks,

@@ -1,11 +1,13 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../bolt/BoltService";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
+import type { IntegrationManager } from "../integrations/IntegrationManager";
+import { PackageManagerPlugin } from "../integrations/package-manager/PackageManagerPlugin";
+import { PackageOperation } from "../integrations/package-manager/types";
 
 /**
  * Request body schema for package installation
@@ -20,33 +22,20 @@ const InstallPackageRequestSchema = z.object({
 });
 
 /**
- * Package task configuration type
- */
-interface PackageTaskConfig {
-  name: string;
-  label: string;
-  parameterMapping: {
-    packageName: string;
-    ensure?: string;
-    version?: string;
-    settings?: string;
-  };
-}
-
-/**
  * Create router for package installation endpoints
  *
- * @param boltService - Bolt service instance
+ * @param integrationManager - Integration manager instance
  * @param executionRepository - Execution repository instance
  * @param packageTasks - Array of available package installation tasks
  * @returns Express router
  */
-export function createPackagesRouter(
+export const createPackagesRouter = (
+  integrationManager: IntegrationManager,
   boltService: BoltService,
   executionRepository: ExecutionRepository,
   packageTasks: PackageTaskConfig[],
   streamingManager?: StreamingExecutionManager,
-): Router {
+): Router => {
   const router = Router();
   const logger = new LoggerService();
 
@@ -66,7 +55,7 @@ export function createPackagesRouter(
 
     logger.info("Fetching available package tasks", {
       component: "PackagesRouter",
-      integration: "bolt",
+      integration: "package-manager",
       operation: "listPackageTasks",
     });
 
@@ -81,7 +70,7 @@ export function createPackagesRouter(
 
     logger.info("Package tasks fetched successfully", {
       component: "PackagesRouter",
-      integration: "bolt",
+      integration: "package-manager",
       operation: "listPackageTasks",
       metadata: { taskCount: packageTasks.length, duration },
     });
@@ -93,7 +82,7 @@ export function createPackagesRouter(
     // Attach debug info if expert mode is enabled
     if (debugInfo) {
       debugInfo.duration = duration;
-      expertModeService.setIntegration(debugInfo, 'bolt');
+      expertModeService.setIntegration(debugInfo, 'package-manager');
       expertModeService.addMetadata(debugInfo, 'taskCount', packageTasks.length);
       expertModeService.addInfo(debugInfo, {
         message: `Retrieved ${String(packageTasks.length)} package tasks`,
@@ -116,6 +105,37 @@ export function createPackagesRouter(
   router.post(
     "/:id/install-package",
     asyncHandler(async (req: Request, res: Response) => {
+      const correlationId = uuidv4();
+      const { id: nodeId } = req.params;
+      const { packageName, provider } = req.body;
+
+      logger.info('Package installation request received', {
+        component: 'PackageRouter',
+        operation: 'install-package',
+        correlationId,
+        nodeId,
+        packageName,
+        provider,
+        body: req.body
+      });
+
+      // Validate required fields
+      if (!packageName || typeof packageName !== 'string' || packageName.trim() === '') {
+        logger.warn('Invalid package installation request: missing or invalid packageName', {
+          component: 'PackageRouter',
+          correlationId,
+          nodeId,
+          packageName,
+          body: req.body
+        });
+        throw new BadRequestError('packageName is required and must be a non-empty string');
+      }
+
+      // Validate node name
+      if (!nodeId || typeof nodeId !== 'string' || nodeId.trim() === '') {
+        throw new BadRequestError('nodeId is required and must be a non-empty string');
+      }
+
       const startTime = Date.now();
       const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -125,11 +145,9 @@ export function createPackagesRouter(
         ? expertModeService.createDebugInfo('POST /api/nodes/:id/install-package', requestId, 0)
         : null;
 
-      const nodeId = req.params.id;
-
       logger.info("Processing package installation request", {
         component: "PackagesRouter",
-        integration: "bolt",
+        integration: "package-manager",
         operation: "installPackage",
         metadata: { nodeId },
       });
@@ -147,14 +165,14 @@ export function createPackagesRouter(
         if (!validationResult.success) {
           logger.warn("Invalid package installation request", {
             component: "PackagesRouter",
-            integration: "bolt",
+            integration: "package-manager",
             operation: "installPackage",
             metadata: { errors: validationResult.error.issues },
           });
 
           if (debugInfo) {
             debugInfo.duration = Date.now() - startTime;
-            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.setIntegration(debugInfo, 'package-manager');
             expertModeService.addWarning(debugInfo, {
               message: "Invalid package installation request",
               context: JSON.stringify(validationResult.error.issues),
@@ -194,14 +212,14 @@ export function createPackagesRouter(
         if (!taskConfig) {
           logger.warn("Package installation task not configured", {
             component: "PackagesRouter",
-            integration: "bolt",
+            integration: "package-manager",
             operation: "installPackage",
             metadata: { taskName, availableTasks: packageTasks.map((t) => t.name) },
           });
 
           if (debugInfo) {
             debugInfo.duration = Date.now() - startTime;
-            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.setIntegration(debugInfo, 'package-manager');
             expertModeService.addWarning(debugInfo, {
               message: `Package installation task '${taskName}' is not configured`,
               context: `Available tasks: ${packageTasks.map((t) => t.name).join(", ")}`,
@@ -221,6 +239,39 @@ export function createPackagesRouter(
 
           res.status(400).json(
             debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
+          return;
+        }
+
+        const plugin = integrationManager.getExecutionTool("package-manager");
+
+        if (!(plugin instanceof PackageManagerPlugin) || !plugin.isInitialized()) {
+          logger.warn("Package manager plugin not available or not initialized", {
+            component: "PackagesRouter",
+            integration: "package-manager",
+            operation: "installPackage",
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = Date.now() - startTime;
+            expertModeService.setIntegration(debugInfo, 'package-manager');
+            expertModeService.addWarning(debugInfo, {
+              message: "Package manager plugin not available",
+              level: 'warn',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Package manager plugin is not available",
+            },
+          };
+
+          res.status(503).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse,
           );
           return;
         }
@@ -247,7 +298,7 @@ export function createPackagesRouter(
 
         logger.info("Execution record created, starting package installation", {
           component: "PackagesRouter",
-          integration: "bolt",
+          integration: "package-manager",
           operation: "installPackage",
           metadata: { executionId, nodeId, taskName, packageName },
         });
@@ -263,23 +314,12 @@ export function createPackagesRouter(
         // Execute package installation asynchronously
         void (async (): Promise<void> => {
           try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode
-            );
-
-            // Execute package installation task with parameter mapping
-            const result = await boltService.installPackage(
-              nodeId,
-              taskName,
-              {
-                packageName,
-                ensure,
-                version,
-                settings,
-              },
-              taskConfig.parameterMapping,
-              streamingCallback,
+            const executionTool = integrationManager.getExecutionTool();
+            // Assuming the method is executeCommand; adjust if the interface differs
+            const result = await executionTool.executeCommand(
+              command,
+              targets,
+              options,
             );
 
             // Update execution record with results

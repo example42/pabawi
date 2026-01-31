@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { get, post } from '../lib/api';
+  import { api } from '../lib/api';
+  import { logger } from '../lib/logger.svelte';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
@@ -13,17 +14,6 @@
   interface Props {
     nodeId: string;
     onExecutionComplete?: () => void;
-  }
-
-  interface PackageTask {
-    name: string;
-    label: string;
-    parameterMapping: {
-      packageName: string;
-      ensure?: string;
-      version?: string;
-      settings?: string;
-    };
   }
 
   interface ExecutionResult {
@@ -57,58 +47,24 @@
 
   // State
   let expanded = $state(false);
-  let availableTasks = $state<PackageTask[]>([]);
-  let selectedTask = $state<string>('');
   let packageName = $state('');
   let packageVersion = $state('');
-  let ensure = $state<'present' | 'absent' | 'latest'>('present');
-  let settings = $state('');
-  let executing = $state(false);
+  let provider = $state('');
+  let selectedNode = $state('');
+  let nodes = $state<string[]>([]);
+  let loading = $state(false);
   let error = $state<string | null>(null);
+  let success = $state<string | null>(null);
+  let executing = $state(false);
   let result = $state<ExecutionResult | null>(null);
-  let tasksLoading = $state(false);
-  let tasksFetched = $state(false);
   let executionStream = $state<ExecutionStream | null>(null);
 
   // Validation
   let validationError = $state<string | null>(null);
 
-  // Fetch available package tasks
-  async function fetchPackageTasks(): Promise<void> {
-    tasksLoading = true;
-    try {
-      const data = await get<{ tasks: PackageTask[] }>('/api/package-tasks', {
-        maxRetries: 2,
-      });
-      availableTasks = data.tasks || [];
-      if (availableTasks.length > 0 && !selectedTask) {
-        selectedTask = availableTasks[0].name;
-      }
-    } catch (err) {
-      console.error('Error fetching package tasks:', err);
-      showError('Failed to load package tasks');
-    } finally {
-      tasksLoading = false;
-    }
-  }
-
-  // Get the selected task configuration
-  const selectedTaskConfig = $derived(
-    availableTasks.find((t) => t.name === selectedTask)
-  );
-
-  // Check if settings are supported by the selected task
-  const supportsSettings = $derived(
-    selectedTaskConfig?.parameterMapping.settings !== undefined
-  );
-
+  // Update validation to only check packageName
   function validateForm(): boolean {
     validationError = null;
-
-    if (!selectedTask) {
-      validationError = 'Please select a package task';
-      return false;
-    }
 
     if (!packageName.trim()) {
       validationError = 'Package name is required';
@@ -121,19 +77,10 @@
       return false;
     }
 
-    // Validate settings JSON if provided
-    if (settings.trim()) {
-      try {
-        JSON.parse(settings);
-      } catch (e) {
-        validationError = 'Settings must be valid JSON';
-        return false;
-      }
-    }
-
     return true;
   }
 
+  // Update the existing installPackage event handler
   async function installPackage(event: Event): Promise<void> {
     event.preventDefault();
 
@@ -150,11 +97,9 @@
     try {
       showInfo('Installing package...');
 
-      // Build parameters
+      // Simplified parameters for new API
       const parameters: Record<string, unknown> = {
-        taskName: selectedTask,
         packageName: packageName.trim(),
-        ensure,
         expertMode: expertMode.enabled,
       };
 
@@ -162,17 +107,21 @@
         parameters.version = packageVersion.trim();
       }
 
-      if (settings.trim() && supportsSettings) {
-        parameters.settings = JSON.parse(settings);
-      }
-
-      const data = await post<{ executionId: string }>(
-        `/api/nodes/${nodeId}/install-package`,
-        parameters,
-        { maxRetries: 0 }
+      // ✅ CORRECT: Use api.post() - not just post()
+      const response = await api.post<{
+        executionId: string;
+        message: string;
+        results?: Array<{
+          node: string;
+          status: string;
+          message?: string;
+        }>;
+      }>(
+        `/nodes/${selectedNode}/install-package`,
+        parameters
       );
 
-      const executionId = data.executionId;
+      const executionId = response.executionId;
 
       // If expert mode is enabled, create a stream for real-time output
       if (expertMode.enabled) {
@@ -249,13 +198,13 @@
     validationError = null;
   }
 
-  // Fetch tasks when component expands
-  $effect(() => {
-    if (expanded && !tasksFetched) {
-      tasksFetched = true;
-      fetchPackageTasks();
-    }
-  });
+  // Remove the $effect that calls fetchPackageTasks
+  // $effect(() => {
+  //   if (expanded && !tasksFetched) {
+  //     tasksFetched = true;
+  //     fetchPackageTasks();
+  //   }
+  // });
 </script>
 
 <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -282,44 +231,10 @@
   {#if expanded}
     <div class="mt-4 space-y-4">
       <p class="text-sm text-gray-600 dark:text-gray-400">
-        Install software on this node using the configured package installation task.
+        Install software on this node. The system will automatically detect the OS and use the appropriate package manager.
       </p>
 
       <form onsubmit={installPackage} class="space-y-4">
-        <!-- Task Selection -->
-        <div>
-          <label for="task-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Package Task <span class="text-red-500">*</span>
-          </label>
-          {#if tasksLoading}
-            <div class="mt-1 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-              <LoadingSpinner size="sm" />
-              <span>Loading tasks...</span>
-            </div>
-          {:else if availableTasks.length === 0}
-            <p class="mt-1 text-sm text-red-600 dark:text-red-400">
-              No package tasks available
-            </p>
-          {:else}
-            <select
-              id="task-select"
-              bind:value={selectedTask}
-              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-              disabled={executing}
-              required
-            >
-              {#each availableTasks as task}
-                <option value={task.name}>{task.label}</option>
-              {/each}
-            </select>
-            {#if selectedTaskConfig}
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Task: {selectedTaskConfig.name}
-              </p>
-            {/if}
-          {/if}
-        </div>
-
         <!-- Package Name -->
         <div>
           <label for="package-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -351,46 +266,6 @@
           />
         </div>
 
-        <!-- Ensure -->
-        <div>
-          <label for="ensure" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Ensure
-          </label>
-          <select
-            id="ensure"
-            bind:value={ensure}
-            class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-            disabled={executing}
-          >
-            <option value="present">Present</option>
-            <option value="absent">Absent</option>
-            <option value="latest">Latest</option>
-          </select>
-          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Present: Install if not present, Absent: Remove if present, Latest: Install/upgrade to latest version
-          </p>
-        </div>
-
-        <!-- Settings -->
-        {#if supportsSettings}
-          <div>
-            <label for="settings" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Additional Settings (JSON)
-            </label>
-            <textarea
-              id="settings"
-              bind:value={settings}
-              placeholder='&#123;"option1": "value1", "option2": "value2"&#125;'
-              rows="3"
-              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-mono placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
-              disabled={executing}
-            ></textarea>
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Optional JSON object with additional package-specific settings
-            </p>
-          </div>
-        {/if}
-
         {#if validationError}
           <div class="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
             <p class="text-sm text-red-600 dark:text-red-400">{validationError}</p>
@@ -401,7 +276,7 @@
           <button
             type="submit"
             class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={executing || !packageName.trim() || !selectedTask || availableTasks.length === 0}
+            disabled={executing || !packageName.trim()}
           >
             {executing ? 'Installing...' : 'Install Package'}
           </button>

@@ -2,9 +2,9 @@
  * API utility functions with retry logic and error handling
  */
 
-import { expertMode } from './expertMode.svelte';
 import { showWarning } from './toast.svelte';
 import { logger } from './logger.svelte';
+import { expertMode } from './expertMode.svelte';
 
 export type ErrorType = 'connection' | 'authentication' | 'timeout' | 'validation' | 'not_found' | 'permission' | 'execution' | 'configuration' | 'unknown';
 
@@ -413,7 +413,7 @@ export async function fetchWithRetry<T = unknown>(
             attempts: attempt + 1,
           });
 
-          logger.clearCorrelationId();
+          logger.setCorrelationId(null);
           return data;
         }
 
@@ -457,13 +457,13 @@ export async function fetchWithRetry<T = unknown>(
           attempts: attempt + 1,
         });
 
-        logger.clearCorrelationId();
+        logger.setCorrelationId(null);
         throw new Error(error.message);
       } catch (error) {
         // Check if request was aborted
         if (error instanceof Error && error.name === 'AbortError') {
           logger.warn('API', 'fetch', 'Request aborted', { url });
-          logger.clearCorrelationId();
+          logger.setCorrelationId(null);
           throw error; // Don't retry aborted requests
         }
 
@@ -500,7 +500,7 @@ export async function fetchWithRetry<T = unknown>(
           duration: totalDuration,
           attempts: attempt + 1,
         });
-        logger.clearCorrelationId();
+        logger.setCorrelationId(null);
         throw error;
       }
     }
@@ -512,7 +512,7 @@ export async function fetchWithRetry<T = unknown>(
       duration: totalDuration,
       attempts: maxRetries + 1,
     });
-    logger.clearCorrelationId();
+    logger.setCorrelationId(null);
     throw lastError ?? new Error('Request failed after maximum retries');
   } finally {
     // Clear timeout if it was set
@@ -537,20 +537,26 @@ export async function get<T = unknown>(
  */
 export async function post<T = unknown>(
   url: string,
-  body?: unknown,
+  data?: unknown,
   retryOptions?: RetryOptions
 ): Promise<T> {
-  return fetchWithRetry<T>(
-    url,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
+  const startTime = performance.now();
+  const fullUrl = `${this.baseUrl}${url}`;
+
+  logger.debug('[API] POST request', {
+    url: fullUrl,
+    data,
+    expertMode: this.expertModeEnabled
+  });
+
+  return fetchWithRetry<T>(fullUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(this.expertModeEnabled ? { 'X-Expert-Mode': 'true' } : {}),
     },
-    retryOptions
-  );
+    body: data ? JSON.stringify(data) : undefined,
+  }, retryOptions);
 }
 
 /**
@@ -667,3 +673,138 @@ export function getErrorGuidance(error: unknown): { message: string; guidance: s
     guidance: 'Please try again. If the problem persists, contact support.',
   };
 }
+
+class ApiClient {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = '') {
+    this.baseUrl = baseUrl;
+  }
+
+  private async fetchWithRetry<T>(
+    url: string,
+    options: RequestInit,
+    maxRetries: number = 3
+  ): Promise<T> {
+    const correlationId = logger.generateCorrelationId();
+    logger.setCorrelationId(correlationId);
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            ...options.headers,
+            'X-Correlation-Id': correlationId,
+            ...(expertMode.enabled ? { 'X-Expert-Mode': 'true' } : {}),
+          },
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({
+            error: `HTTP ${response.status}: ${response.statusText}`
+          }));
+          throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        }
+
+        return await response.json();
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error('Unknown error');
+
+        if (attempt < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      } finally {
+        logger.setCorrelationId(null);
+      }
+    }
+
+    throw lastError || new Error('Request failed after retries');
+  }
+
+  async get<T = unknown>(url: string): Promise<T> {
+    const startTime = performance.now();
+    const fullUrl = `${this.baseUrl}${url}`;
+
+    try {
+      const result = await this.fetchWithRetry<T>(fullUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const duration = performance.now() - startTime;
+      logger.debug('[API] GET success', { url, duration });
+
+      return result;
+    } catch (error) {
+      const duration = performance.now() - startTime;
+      logger.error('[API] GET failed', {
+        url,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        duration
+      });
+      throw error;
+    }
+  }
+
+  async post<T = unknown>(url: string, data?: unknown): Promise<T> {
+    const startTime = performance.now();
+    const fullUrl = `${this.baseUrl}${url}`;
+
+    try {
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(expertMode.enabled ? { 'X-Expert-Mode': 'true' } : {}),
+        },
+        body: data ? JSON.stringify(data) : undefined,
+      });
+
+      const duration = performance.now() - startTime;
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({
+          error: `HTTP ${response.status}: ${response.statusText}`
+        }));
+
+        logger.error('[API] POST failed', {
+          url,
+          status: response.status,
+          error: errorData,
+          duration
+        });
+
+        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      logger.debug('[API] POST success', {
+        url,
+        duration,
+        status: response.status
+      });
+
+      return result;
+
+    } catch (error) {
+      const duration = performance.now() - startTime;
+      logger.error('[API] POST exception', {
+        url,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        duration
+      });
+      throw error;
+    }
+  }
+
+  // ...existing code...
+}
+
+// Create and export singleton instance
+export const api = new ApiClient('/api');

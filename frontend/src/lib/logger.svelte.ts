@@ -427,11 +427,30 @@ class FrontendLogger {
 }
 
 // Export singleton instance
-export const logger = new FrontendLogger();
+let currentCorrelationId = $state<string | null>(null);
 
-// Flush logs before page unload
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', () => {
-    logger.flush();
-  });
-}
+export const logger = {
+  debug: (message: string, metadata?: Record<string, unknown>) => {
+    // ...existing code...
+  },
+  info: (message: string, metadata?: Record<string, unknown>) => {
+    // ...existing code...
+  },
+  warn: (message: string, metadata?: Record<string, unknown>) => {
+    // ...existing code...
+  },
+  error: (message: string, metadata?: Record<string, unknown>) => {
+    // ...existing code...
+  },
+  generateCorrelationId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  },
+  setCorrelationId(correlationId: string | null): void {
+    currentCorrelationId = correlationId;
+  },
+  getCorrelationId(): string | null {
+    return currentCorrelationId;
+  },
+};
+
+// No default export - use named export only

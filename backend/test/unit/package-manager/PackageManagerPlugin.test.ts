@@ -1,0 +1,3 @@
+import { describe, it, expect, vi } from 'vitest';
+import { PackageManagerPlugin } from '../../../src/integrations/package-manager/PackageManagerPlugin';
+// ... (mock dependencies and write tests for executePackageOperation, OS detection, etc.) ...

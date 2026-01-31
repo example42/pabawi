@@ -18,6 +18,7 @@ import type {
 import type { Node, Facts, ExecutionResult } from "../bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
 import { LoggerService } from "../services/LoggerService";
+import { IntegrationNotAvailableError } from '../errors/IntegrationNotAvailableError';
 
 /**
  * Health check cache entry
@@ -174,6 +175,18 @@ export class IntegrationManager {
     );
 
     return errors;
+  }
+
+  /**
+   * Retrieves the primary execution tool plugin (e.g., Bolt) for running commands.
+   * Throws IntegrationNotAvailableError if no execution tool is registered or enabled.
+   */
+  getExecutionTool(): ExecutionToolPlugin {
+    const boltPlugin = this.plugins.get('bolt'); // Assuming 'bolt' is the key used in registration
+    if (!boltPlugin || !(boltPlugin instanceof ExecutionToolPlugin) || !boltPlugin.isEnabled()) {
+      throw new IntegrationNotAvailableError('No execution tool available (e.g., Bolt plugin not registered or enabled)');
+    }
+    return boltPlugin;
   }
 
   /**
