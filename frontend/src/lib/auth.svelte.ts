@@ -562,10 +562,16 @@ class AuthStore {
    *
    * Uses local permission data for fast reactive checks.
    * Supports wildcard patterns (e.g., "bolt.*" matches "bolt.command")
+   *
+   * NOTE: When permissions is null (no authentication configured),
+   * returns true to allow all capabilities. Pabawi is designed for
+   * local/workstation use without authentication by default.
    */
   hasCapability(capability: string): boolean {
+    // No authentication configured - allow all capabilities
+    // This is expected for local/workstation use without auth
     if (!this.permissions) {
-      return false;
+      return true;
     }
 
     // Check explicit deny first
