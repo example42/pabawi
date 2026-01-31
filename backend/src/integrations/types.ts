@@ -43,7 +43,7 @@ export enum IntegrationType {
   /** Workflow orchestration */
   Orchestration = "Orchestration",
   /** Secret and credential management */
-  SecretManagement = "SecretManagement", #pragma: allowlist secret
+  SecretManagement = "SecretManagement", // pragma: allowlist secret
   /** Reporting and analytics */
   ReportingAnalytics = "ReportingAnalytics",
   /** Audit and compliance */
