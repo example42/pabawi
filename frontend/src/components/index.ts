@@ -26,6 +26,7 @@ export { default as IntegrationStatus } from "./IntegrationStatus.svelte";
 export { default as LoadingSpinner } from "./LoadingSpinner.svelte";
 export { default as ManagedResourcesViewer } from "./ManagedResourcesViewer.svelte";
 export { default as Navigation } from "./Navigation.svelte";
+export { default as DynamicNavigation } from "./DynamicNavigation.svelte";
 export { default as NodeHieraTab } from "./NodeHieraTab.svelte";
 export { default as NodeStatus } from "./NodeStatus.svelte";
 export { default as PaginationControls } from "./PaginationControls.svelte";
