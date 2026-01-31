@@ -1,12 +1,29 @@
 <script lang="ts">
+  /**
+   * Dashboard Page (HomePage)
+   *
+   * Part of v1.0.0 Modular Plugin Architecture (Phase 4, Step 22)
+   *
+   * Main landing page with:
+   * - Integration status overview
+   * - Plugin widget slots for dashboard widgets
+   * - Expert mode debug panel
+   *
+   * @module pages/HomePage
+   */
   import { onMount } from 'svelte';
   import IntegrationStatus from '../components/IntegrationStatus.svelte';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import { WidgetSlot } from '../lib/plugins';
+  import { auth } from '../lib/auth.svelte';
   import { get } from '../lib/api';
   import { expertMode } from '../lib/expertMode.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   const pageTitle = 'Pabawi - Dashboard';
+
+  // Get user capabilities for widget filtering
+  let userCapabilities = $derived(auth.permissions?.allowed ?? []);
 
   interface IntegrationStatusData {
     name: string;
@@ -139,23 +156,41 @@
     </div>
   </div>
 
-  <!-- Placeholder for Widget Slots -->
-  <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+  <!-- Dashboard Widget Slot (v1.0.0 Plugin System) -->
+  <section class="bg-white dark:bg-gray-800 shadow rounded-lg">
     <div class="px-4 py-5 sm:p-6">
-      <div class="text-center py-12">
-        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-        </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">Dashboard Widgets</h3>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          Plugin widgets will be loaded here based on your permissions.
-        </p>
-        <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-          v1.0.0 - Widget Slot: dashboard
-        </p>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-medium text-gray-900 dark:text-white">Dashboard Widgets</h2>
+        <span class="text-xs text-gray-400 dark:text-gray-500">Widgets from enabled plugins</span>
       </div>
+      <WidgetSlot
+        slot="dashboard"
+        layout="grid"
+        columns={2}
+        gap="4"
+        {userCapabilities}
+        showEmptyState={true}
+        emptyMessage="No dashboard widgets available. Enable plugins to add widgets here."
+        debug={expertMode.enabled}
+      />
     </div>
-  </div>
+  </section>
+
+  <!-- Sidebar Widget Slot (v1.0.0 Plugin System) -->
+  <section class="bg-white dark:bg-gray-800 shadow rounded-lg">
+    <div class="px-4 py-5 sm:p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-medium text-gray-900 dark:text-white">Quick Actions</h2>
+      </div>
+      <WidgetSlot
+        slot="sidebar"
+        layout="stack"
+        {userCapabilities}
+        showEmptyState={false}
+        debug={expertMode.enabled}
+      />
+    </div>
+  </section>
 
   <!-- Expert Mode Debug Panel -->
   {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}

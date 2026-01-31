@@ -9,6 +9,8 @@
   import NodeDetailPage from './pages/NodeDetailPage.svelte';
   import IntegrationSetupPage from './pages/IntegrationSetupPage.svelte';
   import PuppetPage from './pages/PuppetPage.svelte';
+  import LoginPage from './pages/LoginPage.svelte';
+  import PluginManagerPage from './pages/PluginManagerPage.svelte';
   import { router } from './lib/router.svelte';
 
   const routes = {
@@ -17,7 +19,9 @@
     '/executions': ExecutionsPage,
     '/puppet': PuppetPage,
     '/nodes/:id': NodeDetailPage,
-    '/integrations/:integration/setup': IntegrationSetupPage
+    '/integrations/:integration/setup': IntegrationSetupPage,
+    '/login': LoginPage,
+    '/plugins': PluginManagerPage
   };
 
   function handleError(error: Error, errorInfo: { componentStack?: string }): void {
