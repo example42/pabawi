@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import type { ExecutionStream } from '../lib/executionStream.svelte';
   import StatusBadge from './StatusBadge.svelte';
 
@@ -345,7 +345,7 @@
   </div>
 
   <!-- Bolt Command (Expert Mode) -->
-  {#if expertMode.enabled && effectiveCommand}
+  {#if debugMode.enabled && effectiveCommand}
     <div>
       <h4 class="mb-2 text-sm font-semibold text-gray-700 dark:text-gray-300">Bolt Command:</h4>
       <div class="relative rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">

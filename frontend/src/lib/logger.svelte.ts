@@ -8,7 +8,7 @@
  * - Correlation ID support for request tracking
  */
 
-import { expertMode } from './expertMode.svelte';
+import { debugMode } from './debug';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -83,7 +83,7 @@ class FrontendLogger {
    * Check if backend sync should be enabled based on expert mode
    */
   private shouldSendToBackend(): boolean {
-    return expertMode.enabled;
+    return debugMode.enabled;
   }
 
   /**

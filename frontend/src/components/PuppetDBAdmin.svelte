@@ -3,7 +3,7 @@
   import { get } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
@@ -27,7 +27,7 @@
     summaryStatsLoading = true;
     summaryStatsError = null;
 
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       console.log('[PuppetDBAdmin] Fetching summary stats');
       console.log('[PuppetDBAdmin] API endpoint: GET /api/integrations/puppetdb/admin/summary-stats');
       console.log('[PuppetDBAdmin] WARNING: This endpoint can be resource-intensive');
@@ -48,7 +48,7 @@
         onDebugInfo(data._debug);
       }
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.log('[PuppetDBAdmin] Summary stats loaded successfully');
         console.log('[PuppetDBAdmin] Response time:', Math.round(endTime - startTime), 'ms');
         console.log('[PuppetDBAdmin] Data:', data);

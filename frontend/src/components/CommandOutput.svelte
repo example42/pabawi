@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
 
   interface Props {
     stdout?: string;
@@ -123,7 +123,7 @@
 
 {#if hasOutput}
   <div class="command-output space-y-3">
-    {#if expertMode.enabled && boltCommand}
+    {#if debugMode.enabled && boltCommand}
       <div>
         <h4 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Bolt Command:</h4>
         <div class="relative rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
@@ -156,7 +156,7 @@
     {/if}
 
     <!-- Search Controls (Expert Mode Only) -->
-    {#if expertMode.enabled && (stdout || stderr)}
+    {#if debugMode.enabled && (stdout || stderr)}
       <div class="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-gray-700 dark:bg-gray-900/50">
         <button
           type="button"
@@ -217,7 +217,7 @@
           bind:this={stdoutContainer}
           class="max-h-96 overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900"
         >
-          {#if expertMode.enabled && searchActive && searchQuery}
+          {#if debugMode.enabled && searchActive && searchQuery}
             <pre class="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100">{@html highlightedStdout}</pre>
           {:else}
             <pre class="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100">{stdout}</pre>
@@ -233,7 +233,7 @@
           bind:this={stderrContainer}
           class="max-h-96 overflow-auto rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20"
         >
-          {#if expertMode.enabled && searchActive && searchQuery}
+          {#if debugMode.enabled && searchActive && searchQuery}
             <pre class="whitespace-pre-wrap break-words font-mono text-sm text-red-900 dark:text-red-100">{@html highlightedStderr}</pre>
           {:else}
             <pre class="whitespace-pre-wrap break-words font-mono text-sm text-red-900 dark:text-red-100">{stderr}</pre>

@@ -22,11 +22,11 @@
   import CatalogComparison from '../components/CatalogComparison.svelte';
   import NodeHieraTab from '../components/NodeHieraTab.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
-  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import DebugPanel from '../components/DebugPanel.svelte';
   import ExecutionList from '../components/ExecutionList.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
@@ -302,7 +302,7 @@
 
       const data = await post<{ executionId: string }>(
         `/api/nodes/${nodeId}/command`,
-        { command: commandInput, expertMode: expertMode.enabled },
+        { command: commandInput, expertMode: debugMode.enabled },
         { maxRetries: 0 } // Don't retry command executions
       );
 
@@ -310,7 +310,7 @@
       commandExecutionId = executionId;
 
       // If expert mode is enabled, create a stream for real-time output
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         commandStream = useExecutionStream(executionId, {
           onComplete: (result) => {
             // Fetch final execution result
@@ -1651,7 +1651,7 @@
         </div>
       {/if}
 
-      {#if commandStream && expertMode.enabled && (commandStream.executionStatus === 'running' || commandStream.isConnecting)}
+      {#if commandStream && debugMode.enabled && (commandStream.executionStatus === 'running' || commandStream.isConnecting)}
         <!-- Real-time output viewer for running executions in expert mode -->
         <div class="mt-4">
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
@@ -2066,12 +2066,12 @@
   {/if}
 
   <!-- Unified Expert Mode Debug Panel - Shows all debug blocks from current tab -->
-  {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}
+  {#if debugMode.enabled && sortedDebugInfoBlocks.length > 0}
     <div class="mt-8 space-y-4">
       {#each sortedDebugInfoBlocks as block (block.label)}
         <div>
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
-          <ExpertModeDebugPanel debugInfo={block.debugInfo} />
+          <DebugPanel debugInfo={block.debugInfo} />
         </div>
       {/each}
     </div>

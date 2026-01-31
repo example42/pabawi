@@ -17,13 +17,13 @@
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
-  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import DebugPanel from '../components/DebugPanel.svelte';
   import { AdminOnly } from '../components';
   import { getPluginLoader, type LoadedPlugin, type PluginInfo } from '../lib/plugins';
   import { auth } from '../lib/auth.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import type { DebugInfo } from '../lib/api';
 
   const pageTitle = 'Pabawi - Plugin Manager';
@@ -111,7 +111,7 @@
       plugins = loadedPlugins;
 
       // Get debug info from API if expert mode
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         const response = await get<{ plugins: PluginInfo[]; _debug?: DebugInfo }>('/api/plugins');
         if (response._debug) {
           debugInfo = response._debug;
@@ -608,9 +608,9 @@
     {/if}
 
     <!-- Expert Mode Debug Panel -->
-    {#if expertMode.enabled && debugInfo}
+    {#if debugMode.enabled && debugInfo}
       <div class="mt-8">
-        <ExpertModeDebugPanel {debugInfo} />
+        <DebugPanel {debugInfo} />
       </div>
     {/if}
   </div>

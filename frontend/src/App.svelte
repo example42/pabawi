@@ -1,6 +1,6 @@
 <script lang="ts">
   import Router from './components/Router.svelte';
-  import Navigation from './components/Navigation.svelte';
+  import DynamicNavigation from './components/DynamicNavigation.svelte';
   import ErrorBoundary from './components/ErrorBoundary.svelte';
   import ToastContainer from './components/ToastContainer.svelte';
   import HomePage from './pages/HomePage.svelte';
@@ -26,7 +26,8 @@
 
   function handleError(error: Error, errorInfo: { componentStack?: string }): void {
     // Log error to console for debugging
-    console.error('Application error:', error, errorInfo);
+    // Use $state.snapshot to avoid Svelte 5 proxy warnings
+    console.error('[snapshot] Application error:', $state.snapshot(error), $state.snapshot(errorInfo));
 
     // In production, you could send this to an error tracking service
     // e.g., Sentry, LogRocket, etc.
@@ -35,7 +36,7 @@
 
 <ErrorBoundary onError={handleError}>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
-    <Navigation currentPath={router.currentPath} />
+    <DynamicNavigation currentPath={router.currentPath} />
     <main class="flex-1">
       <Router {routes} />
     </main>

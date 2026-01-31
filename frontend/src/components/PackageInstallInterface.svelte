@@ -7,7 +7,7 @@
   import CommandOutput from './CommandOutput.svelte';
   import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
@@ -155,7 +155,7 @@
         taskName: selectedTask,
         packageName: packageName.trim(),
         ensure,
-        expertMode: expertMode.enabled,
+        expertMode: debugMode.enabled,
       };
 
       if (packageVersion.trim()) {
@@ -175,7 +175,7 @@
       const executionId = data.executionId;
 
       // If expert mode is enabled, create a stream for real-time output
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         executionStream = useExecutionStream(executionId, {
           onComplete: (result) => {
             // Fetch final execution result
@@ -430,7 +430,7 @@
       {/if}
 
       <!-- Real-time Output (Expert Mode + Running) -->
-      {#if executionStream && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
+      {#if executionStream && debugMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
         <div class="mt-4">
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
           <RealtimeOutputViewer stream={executionStream} autoConnect={false} />

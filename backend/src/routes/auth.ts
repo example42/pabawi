@@ -270,7 +270,7 @@ export function createAuthRouter(config: AuthRoutesConfig): Router {
       await ensureInitialized();
 
       const { accessToken, refreshToken, allSessions } = req.body as LogoutRequest;
-      const user = req.user as User | undefined;
+      const user = req.user;
 
       try {
         // If logout all sessions and we have a user
@@ -350,7 +350,7 @@ export function createAuthRouter(config: AuthRoutesConfig): Router {
       const startTime = Date.now();
       await ensureInitialized();
 
-      const user = req.user as User;
+      const user = req.user!;
 
       // Get effective permissions
       const effectivePermissions = await authorizationService.getEffectivePermissions(user);
@@ -398,7 +398,7 @@ export function createAuthRouter(config: AuthRoutesConfig): Router {
     asyncHandler(async (req: Request, res: Response) => {
       await ensureInitialized();
 
-      const user = req.user as User;
+      const user = req.user!;
       const count = await authService.getActiveSessionCount(user.id);
 
       res.json({
@@ -416,7 +416,7 @@ export function createAuthRouter(config: AuthRoutesConfig): Router {
     "/check",
     createAuthMiddleware({ db: config.db, jwtSecret: config.jwtSecret }),
     asyncHandler(async (req: Request, res: Response) => {
-      const user = req.user as User;
+      const user = req.user!;
       const { capability, context } = req.body as {
         capability: string;
         context?: Record<string, unknown>;

@@ -2,7 +2,7 @@
   import { get, del } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import LoadingSpinner from './LoadingSpinner.svelte';
 
   interface EnvironmentSettings {
@@ -45,7 +45,7 @@
 
   // Load environments
   async function loadEnvironments(): Promise<void> {
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       console.log('[EnvironmentSelector] Loading environments');
       console.log('[EnvironmentSelector] API endpoint: GET /api/integrations/puppetserver/environments');
     }
@@ -64,7 +64,7 @@
         onDebugInfo(data._debug);
       }
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.log('[EnvironmentSelector] Loaded', environments.length, 'environments');
         console.log('[EnvironmentSelector] Response time:', Math.round(endTime - startTime), 'ms');
         console.log('[EnvironmentSelector] Data:', data);
@@ -98,7 +98,7 @@
 
   // Flush environment cache
   async function flushEnvironmentCache(environmentName: string): Promise<void> {
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       console.log('[EnvironmentSelector] Flushing cache for environment:', environmentName);
       console.log('[EnvironmentSelector] API endpoint: DELETE /api/integrations/puppetserver/environments/' + environmentName + '/cache');
     }
@@ -109,7 +109,7 @@
       await del(`/api/integrations/puppetserver/environments/${environmentName}/cache`);
       const endTime = performance.now();
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.log('[EnvironmentSelector] Environment cache flushed successfully');
         console.log('[EnvironmentSelector] Response time:', Math.round(endTime - startTime), 'ms');
       }
@@ -119,7 +119,7 @@
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to flush environment cache';
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.error('[EnvironmentSelector] Flush failed:', err);
       }
 

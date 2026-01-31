@@ -36,7 +36,6 @@ Object.defineProperty(global, 'localStorage', {
 // Import after mocking localStorage
 import {
   debugMode,
-  expertMode,
   createDebugContext,
 } from './index';
 
@@ -64,19 +63,6 @@ describe('debugMode', () => {
       expect(debugMode.enabled).toBe(true);
       debugMode.setEnabled(false);
       expect(debugMode.enabled).toBe(false);
-    });
-  });
-
-  describe('backward compatibility', () => {
-    it('should export expertMode as alias', () => {
-      // eslint-disable-next-line @typescript-eslint/no-deprecated
-      expect(expertMode).toBe(debugMode);
-    });
-
-    it('should have same enabled state', () => {
-      debugMode.setEnabled(true);
-      // eslint-disable-next-line @typescript-eslint/no-deprecated
-      expect(expertMode.enabled).toBe(true);
     });
   });
 

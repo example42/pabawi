@@ -1141,7 +1141,7 @@ export class IntegrationManager {
    */
   async loadPluginsV1(): Promise<{
     loaded: string[];
-    errors: Array<{ plugin: string; error: Error }>;
+    errors: { plugin: string; error: Error }[];
   }> {
     this.logger.info("Loading v1.0.0 plugins...", {
       component: "IntegrationManager",
@@ -1149,7 +1149,7 @@ export class IntegrationManager {
     });
 
     const loadedPlugins: string[] = [];
-    const errors: Array<{ plugin: string; error: Error }> = [];
+    const errors: { plugin: string; error: Error }[] = [];
 
     try {
       // Load all discovered plugins
@@ -1196,8 +1196,8 @@ export class IntegrationManager {
    *
    * @returns Array of initialization errors
    */
-  async initializePluginsV1(): Promise<Array<{ plugin: string; error: Error }>> {
-    const errors: Array<{ plugin: string; error: Error }> = [];
+  async initializePluginsV1(): Promise<{ plugin: string; error: Error }[]> {
+    const errors: { plugin: string; error: Error }[] = [];
 
     this.logger.info(`Initializing ${String(this.v1Plugins.size)} v1.0.0 plugins...`, {
       component: "IntegrationManager",

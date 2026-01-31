@@ -403,7 +403,7 @@ export class AuthService {
       // Decode without verification to get the jti and exp
       const decoded = jwt.decode(token) as JWTAccessPayload | JWTRefreshPayload | null;
 
-      if (!decoded || !decoded.jti) {
+      if (!decoded?.jti) {
         throw new AuthenticationError("Invalid token format");
       }
 

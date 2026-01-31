@@ -5,7 +5,7 @@
   import { get } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import { router } from '../lib/router.svelte';
 
   // Types based on backend Hiera types
@@ -487,7 +487,7 @@
                               <span class="font-mono text-sm text-gray-700 dark:text-gray-300">{formatValue(node.value)}</span>
                             {/if}
                           </div>
-                          {#if expertMode.enabled}
+                          {#if debugMode.enabled}
                             <div class="mt-2 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                               <span>Source: {node.sourceFile}</span>
                               <span>Level: {node.hierarchyLevel}</span>

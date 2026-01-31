@@ -7,13 +7,13 @@
   import RealtimeOutputViewer from '../components/RealtimeOutputViewer.svelte';
   import ReExecutionButton from '../components/ReExecutionButton.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
-  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import DebugPanel from '../components/DebugPanel.svelte';
   import ExecutionList from '../components/ExecutionList.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
   import { ansiToHtml } from '../lib/ansiToHtml';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import { useExecutionStream } from '../lib/executionStream.svelte';
   import type { DebugInfo } from '../lib/api';
 
@@ -288,7 +288,7 @@
     fetchExecutionDetail(execution.id);
 
     // Create streaming connection if execution is running and expert mode is enabled
-    if (execution.status === 'running' && expertMode.enabled) {
+    if (execution.status === 'running' && debugMode.enabled) {
       executionStream = useExecutionStream(execution.id, {
         onComplete: () => {
           // Refresh execution details when streaming completes
@@ -360,12 +360,12 @@
   }
 
   // Track previous expert mode state to detect changes
-  let previousExpertMode = $state(expertMode.enabled);
+  let previousDebugMode = $state(debugMode.enabled);
 
   // Fetch executions and nodes on mount
   onMount(() => {
     debugInfo = null; // Clear debug info on mount
-    previousExpertMode = expertMode.enabled; // Initialize tracking
+    previousDebugMode = debugMode.enabled; // Initialize tracking
     fetchExecutions();
     fetchNodes();
   });
@@ -390,11 +390,11 @@
 
   // Re-fetch when expert mode is toggled
   $effect(() => {
-    const currentExpertMode = expertMode.enabled;
+    const currentDebugMode = debugMode.enabled;
 
     // Only react if expert mode actually changed
-    if (currentExpertMode !== previousExpertMode) {
-      if (currentExpertMode) {
+    if (currentDebugMode !== previousDebugMode) {
+      if (currentDebugMode) {
         // Expert mode was enabled, re-fetch to get debug info
         if (!loading && executions.length > 0) {
           void fetchExecutions();
@@ -405,7 +405,7 @@
       }
 
       // Update tracking variable
-      previousExpertMode = currentExpertMode;
+      previousDebugMode = currentDebugMode;
     }
   });
 </script>
@@ -610,9 +610,9 @@
   {/if}
 
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && debugInfo}
+  {#if debugMode.enabled && debugInfo}
     <div class="mt-8">
-      <ExpertModeDebugPanel {debugInfo} />
+      <DebugPanel {debugInfo} />
     </div>
   {/if}
 </div>
@@ -778,7 +778,7 @@
             </div>
 
             <!-- Realtime Output (Expert Mode + Running) -->
-            {#if expertMode.enabled && selectedExecution.status === 'running' && executionStream}
+            {#if debugMode.enabled && selectedExecution.status === 'running' && executionStream}
               <div class="mb-6">
                 <h4 class="mb-3 text-sm font-semibold text-gray-900 dark:text-white">
                   Live Output
@@ -872,9 +872,9 @@
             </div>
 
             <!-- Expert Mode Debug Panel (in modal) -->
-            {#if expertMode.enabled && debugInfo}
+            {#if debugMode.enabled && debugInfo}
               <div class="mt-6">
-                <ExpertModeDebugPanel {debugInfo} compact={false} insideModal={true} />
+                <DebugPanel {debugInfo} compact={false} insideModal={true} />
               </div>
             {/if}
           </div>

@@ -3,7 +3,7 @@
   import { get } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
 
@@ -33,7 +33,7 @@
     servicesLoading = true;
     servicesError = null;
 
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       console.log('[PuppetserverStatus] Fetching services status');
       console.log('[PuppetserverStatus] API endpoint: GET /api/integrations/puppetserver/status/services');
     }
@@ -50,7 +50,7 @@
         onDebugInfo(data._debug);
       }
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.log('[PuppetserverStatus] Services status loaded successfully');
         console.log('[PuppetserverStatus] Response time:', Math.round(endTime - startTime), 'ms');
         console.log('[PuppetserverStatus] Data:', data);
@@ -69,7 +69,7 @@
     simpleLoading = true;
     simpleError = null;
 
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       console.log('[PuppetserverStatus] Fetching simple status');
       console.log('[PuppetserverStatus] API endpoint: GET /api/integrations/puppetserver/status/simple');
     }
@@ -86,7 +86,7 @@
         onDebugInfo(data._debug);
       }
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.log('[PuppetserverStatus] Simple status loaded successfully');
         console.log('[PuppetserverStatus] Response time:', Math.round(endTime - startTime), 'ms');
         console.log('[PuppetserverStatus] Data:', data);
@@ -107,7 +107,7 @@
     metricsLoading = true;
     metricsError = null;
 
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       console.log('[PuppetserverStatus] Fetching metrics');
       console.log('[PuppetserverStatus] API endpoint: GET /api/integrations/puppetserver/metrics');
       console.log('[PuppetserverStatus] WARNING: This endpoint can be resource-intensive');
@@ -125,7 +125,7 @@
         onDebugInfo(data._debug);
       }
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.log('[PuppetserverStatus] Metrics loaded successfully');
         console.log('[PuppetserverStatus] Response time:', Math.round(endTime - startTime), 'ms');
         console.log('[PuppetserverStatus] Data:', data);
@@ -158,7 +158,7 @@
 
 <div class="space-y-6">
   <!-- Expert Mode Info Banner -->
-  {#if expertMode.enabled}
+  {#if debugMode.enabled}
     <div class="rounded-md border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
       <div class="flex items-start gap-3">
         <svg class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -214,7 +214,7 @@
       </button>
     </div>
 
-    {#if expertMode.enabled && !simpleLoading && !simpleError}
+    {#if debugMode.enabled && !simpleLoading && !simpleError}
       <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
         <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /status/v1/simple</code>
       </div>
@@ -249,7 +249,7 @@
       </button>
     </div>
 
-    {#if expertMode.enabled && !servicesLoading && !servicesError}
+    {#if debugMode.enabled && !servicesLoading && !servicesError}
       <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
         <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /status/v1/services</code>
       </div>
@@ -288,7 +288,7 @@
       {/if}
     </div>
 
-    {#if expertMode.enabled && !showMetricsWarning && !metricsLoading && !metricsError}
+    {#if debugMode.enabled && !showMetricsWarning && !metricsLoading && !metricsError}
       <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
         <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /metrics/v2</code>
         <span class="ml-2 text-red-600 dark:text-red-400 font-medium">⚠️ Resource-intensive operation</span>
@@ -308,7 +308,7 @@
             <p class="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
               The metrics endpoint can be resource-intensive on your Puppetserver. Loading metrics may temporarily impact server performance. Use this feature sparingly.
             </p>
-            {#if expertMode.enabled}
+            {#if debugMode.enabled}
               <div class="mt-3 text-xs text-yellow-700 dark:text-yellow-300">
                 <p class="font-medium">Technical Details:</p>
                 <ul class="ml-4 mt-1 list-disc space-y-1">

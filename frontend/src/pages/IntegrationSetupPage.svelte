@@ -2,8 +2,8 @@
   import { onMount } from 'svelte';
   import { router } from '../lib/router.svelte';
   import { PuppetserverSetupGuide, PuppetdbSetupGuide, BoltSetupGuide, HieraSetupGuide } from '../components';
-  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import DebugPanel from '../components/DebugPanel.svelte';
+  import { debugMode } from '../lib/debug';
   import { get } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
 
@@ -31,7 +31,7 @@
 
   async function fetchIntegrationStatus(): Promise<void> {
     // Only fetch if expert mode is enabled
-    if (!expertMode.enabled) {
+    if (!debugMode.enabled) {
       return;
     }
 
@@ -55,7 +55,7 @@
 
   // Re-fetch when expert mode is toggled
   $effect(() => {
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       void fetchIntegrationStatus();
     } else {
       debugInfo = null;
@@ -88,9 +88,9 @@
     <PuppetserverSetupGuide />
 
     <!-- Expert Mode Debug Panel -->
-    {#if expertMode.enabled && debugInfo}
+    {#if debugMode.enabled && debugInfo}
       <div class="mt-8">
-        <ExpertModeDebugPanel {debugInfo} compact={true} />
+        <DebugPanel {debugInfo} compact={true} />
       </div>
     {/if}
   </div>
@@ -115,9 +115,9 @@
     <PuppetdbSetupGuide />
 
     <!-- Expert Mode Debug Panel -->
-    {#if expertMode.enabled && debugInfo}
+    {#if debugMode.enabled && debugInfo}
       <div class="mt-8">
-        <ExpertModeDebugPanel {debugInfo} compact={true} />
+        <DebugPanel {debugInfo} compact={true} />
       </div>
     {/if}
   </div>
@@ -142,9 +142,9 @@
     <BoltSetupGuide />
 
     <!-- Expert Mode Debug Panel -->
-    {#if expertMode.enabled && debugInfo}
+    {#if debugMode.enabled && debugInfo}
       <div class="mt-8">
-        <ExpertModeDebugPanel {debugInfo} compact={true} />
+        <DebugPanel {debugInfo} compact={true} />
       </div>
     {/if}
   </div>
@@ -169,9 +169,9 @@
     <HieraSetupGuide />
 
     <!-- Expert Mode Debug Panel -->
-    {#if expertMode.enabled && debugInfo}
+    {#if debugMode.enabled && debugInfo}
       <div class="mt-8">
-        <ExpertModeDebugPanel {debugInfo} compact={true} />
+        <DebugPanel {debugInfo} compact={true} />
       </div>
     {/if}
   </div>
@@ -243,9 +243,9 @@
     </div>
 
     <!-- Expert Mode Debug Panel -->
-    {#if expertMode.enabled && debugInfo}
+    {#if debugMode.enabled && debugInfo}
       <div class="mt-8">
-        <ExpertModeDebugPanel {debugInfo} compact={true} />
+        <DebugPanel {debugInfo} compact={true} />
       </div>
     {/if}
   </div>

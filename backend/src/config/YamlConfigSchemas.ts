@@ -497,9 +497,10 @@ export function validatePabawiConfig(
 // Schema Registration
 // ============================================================================
 
+import type {
+  SchemaCategory} from "./SchemaRegistry";
 import {
-  registerCoreSchema,
-  SchemaCategory,
+  registerCoreSchema
 } from "./SchemaRegistry";
 
 /**

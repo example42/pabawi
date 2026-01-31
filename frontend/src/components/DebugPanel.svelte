@@ -1,515 +1,986 @@
 <script lang="ts">
-  /**
-   * Debug Panel Component
-   *
-   * A comprehensive debug panel for displaying:
-   * - Tracked API requests with timing
-   * - Debug context data
-   * - Request statistics
-   * - Backend debug info (when available)
-   *
-   * This component is designed to work with the debug context system
-   * for per-widget/component debugging.
-   */
-
   import type { DebugInfo } from '../lib/api';
-  import type { TrackedRequest, DebugConfig } from '../lib/debug/debugMode.svelte';
-  import { debugMode } from '../lib/debug/debugMode.svelte';
+  import type { LogEntry } from '../lib/logger.svelte';
+  import DebugCopyButton from './DebugCopyButton.svelte';
+  import { logger } from '../lib/logger.svelte';
 
-  interface Props {
-    /** Optional correlation ID to filter requests */
-    correlationId?: string;
-    /** Optional backend debug info to display */
-    debugInfo?: DebugInfo;
-    /** Show as compact inline panel */
-    compact?: boolean;
-    /** Whether the panel is inside a modal */
-    insideModal?: boolean;
-    /** Custom title for the panel */
-    title?: string;
-    /** Show configuration controls */
-    showConfig?: boolean;
-    /** Additional CSS classes */
-    class?: string;
+  interface FrontendDebugInfo {
+    renderTime?: number;
+    componentTree?: string[];
+    url?: string;
+    browserInfo?: {
+      userAgent: string;
+      viewport: { width: number; height: number };
+      language: string;
+      platform: string;
+    };
+    cookies?: Record<string, string>;
+    localStorage?: Record<string, string>;
+    sessionStorage?: Record<string, string>;
   }
 
-  let {
-    correlationId,
-    debugInfo,
-    compact = false,
-    insideModal = false,
-    title = "Debug Panel",
-    showConfig = false,
-    class: className = "",
-  }: Props = $props();
+  interface Props {
+    debugInfo: DebugInfo;
+    frontendInfo?: FrontendDebugInfo;
+    responseData?: unknown;
+    compact?: boolean; // Compact mode for on-page view
+    insideModal?: boolean; // If true, the panel is inside a modal
+  }
 
-  // Panel state
-  let isExpanded = $state(debugMode.config.autoExpandPanels);
-  let showRequests = $state(true);
-  let showStats = $state(false);
-  let showBackendInfo = $state(false);
-  let showConfigPanel = $state(false);
-  let activeTab = $state<"requests" | "timeline" | "config">("requests");
+  let { debugInfo, frontendInfo, responseData, compact = false, insideModal = false }: Props = $props();
 
-  // Get tracked requests (filtered by correlation ID if provided)
-  const requests = $derived(
-    correlationId
-      ? debugMode.getRequestsByCorrelationId(correlationId)
-      : debugMode.requests
-  );
+  // State for collapsible sections
+  let isExpanded = $state(false);
+  let showApiCalls = $state(false);
+  let showErrors = $state(false);
+  let showWarnings = $state(false);
+  let showInfo = $state(false);
+  let showDebug = $state(false);
+  let showPerformance = $state(false);
+  let showContext = $state(false);
+  let showMetadata = $state(false);
+  let showFrontendInfo = $state(false);
+  let showTimeline = $state(false);
 
-  // Get request statistics
-  const stats = $derived(debugMode.getRequestStats());
+  // Timeline view state
+  let timelineSearchQuery = $state('');
+  let timelineFilterLevel = $state<'all' | 'error' | 'warn' | 'info' | 'debug'>('all');
 
-  // Get pending requests
-  const pendingRequests = $derived(requests.filter((r) => r.pending));
+  // Count messages by type
+  const errorCount = $derived(debugInfo.errors?.length || 0);
+  const warningCount = $derived(debugInfo.warnings?.length || 0);
+  const infoCount = $derived(debugInfo.info?.length || 0);
+  const debugCount = $derived(debugInfo.debug?.length || 0);
+
+  // Get frontend logs from logger
+  const frontendLogs = $derived(logger.getLogs());
+
+  // Timeline entry type
+  interface TimelineEntry {
+    timestamp: string;
+    level: 'error' | 'warn' | 'info' | 'debug';
+    source: 'frontend' | 'backend';
+    message: string;
+    context?: string;
+    metadata?: Record<string, unknown>;
+    stackTrace?: string;
+  }
+
+  // Combine frontend and backend logs into timeline
+  const timelineEntries = $derived.by(() => {
+    const entries: TimelineEntry[] = [];
+
+    // Add frontend logs
+    frontendLogs.forEach(log => {
+      entries.push({
+        timestamp: log.timestamp,
+        level: log.level,
+        source: 'frontend',
+        message: `[${log.component}] ${log.operation}: ${log.message}`,
+        metadata: log.metadata,
+        stackTrace: log.stackTrace,
+      });
+    });
+
+    // Add backend errors
+    debugInfo.errors?.forEach(error => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'error',
+        source: 'backend',
+        message: error.message,
+        context: error.code,
+        stackTrace: error.stack,
+      });
+    });
+
+    // Add backend warnings
+    debugInfo.warnings?.forEach(warning => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'warn',
+        source: 'backend',
+        message: warning.message,
+        context: warning.context,
+      });
+    });
+
+    // Add backend info
+    debugInfo.info?.forEach(info => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'info',
+        source: 'backend',
+        message: info.message,
+        context: info.context,
+      });
+    });
+
+    // Add backend debug
+    debugInfo.debug?.forEach(debug => {
+      entries.push({
+        timestamp: debugInfo.timestamp,
+        level: 'debug',
+        source: 'backend',
+        message: debug.message,
+        context: debug.context,
+      });
+    });
+
+    // Sort by timestamp (newest first)
+    return entries.sort((a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  });
+
+  // Filtered timeline entries based on search and level filter
+  const filteredTimelineEntries = $derived.by(() => {
+    let filtered = timelineEntries;
+
+    // Apply level filter
+    if (timelineFilterLevel !== 'all') {
+      filtered = filtered.filter(entry => entry.level === timelineFilterLevel);
+    }
+
+    // Apply search filter
+    if (timelineSearchQuery.trim()) {
+      const query = timelineSearchQuery.toLowerCase();
+      filtered = filtered.filter(entry =>
+        entry.message.toLowerCase().includes(query) ||
+        entry.context?.toLowerCase().includes(query) ||
+        JSON.stringify(entry.metadata || {}).toLowerCase().includes(query)
+      );
+    }
+
+    return filtered;
+  });
 
   // Format duration for display
-  function formatDuration(ms: number): string {
+  const formatDuration = (ms: number): string => {
     if (ms < 1000) {
       return `${ms.toFixed(0)}ms`;
     }
     return `${(ms / 1000).toFixed(2)}s`;
-  }
+  };
 
   // Format timestamp for display
-  function formatTimestamp(timestamp: string | number): string {
+  const formatTimestamp = (timestamp: string): string => {
     try {
       const date = new Date(timestamp);
-      return date.toLocaleTimeString();
+      return date.toLocaleString();
     } catch {
-      return String(timestamp);
+      return timestamp;
     }
-  }
+  };
 
   // Format bytes for display
-  function formatBytes(bytes: number | null): string {
-    if (bytes === null) return "—";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  // Get status color class
-  function getStatusColor(status: number | null, pending: boolean): string {
-    if (pending) return "text-blue-600 dark:text-blue-400";
-    if (status === null) return "text-gray-500 dark:text-gray-400";
-    if (status >= 200 && status < 300) return "text-green-600 dark:text-green-400";
-    if (status >= 300 && status < 400) return "text-yellow-600 dark:text-yellow-400";
-    if (status >= 400 && status < 500) return "text-orange-600 dark:text-orange-400";
-    return "text-red-600 dark:text-red-400";
-  }
-
-  // Get status badge class
-  function getStatusBadgeClass(status: number | null, pending: boolean): string {
-    if (pending) return "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300";
-    if (status === null) return "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300";
-    if (status >= 200 && status < 300) return "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300";
-    if (status >= 300 && status < 400) return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300";
-    if (status >= 400 && status < 500) return "bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300";
-    return "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300";
-  }
-
-  // Update config
-  function updateConfig(key: keyof DebugConfig, value: boolean | number): void {
-    debugMode.updateConfig({ [key]: value });
-  }
-
-  // Clear requests
-  function clearRequests(): void {
-    debugMode.clearRequests();
-  }
-
-  // Copy debug info to clipboard
-  async function copyDebugInfo(): Promise<void> {
-    const data = {
-      correlationId,
-      requests,
-      stats,
-      debugInfo,
-      timestamp: new Date().toISOString(),
-    };
-    await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-  }
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes.toFixed(0)} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  };
 </script>
 
 {#if compact}
-  <!-- Compact Mode -->
-  <div class="rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 p-3 {className}">
+  <!-- Compact Mode: On-page view with errors, warnings, info -->
+  <div class="rounded-lg border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50 p-3">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-3">
-        <!-- Debug Icon -->
         <svg
           class="h-4 w-4 text-gray-600 dark:text-gray-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+          fill="currentColor"
+          viewBox="0 0 20 20"
           aria-hidden="true"
         >
           <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+            fill-rule="evenodd"
+            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z"
+            clip-rule="evenodd"
           />
         </svg>
-
-        <!-- Status Summary -->
         <div class="flex items-center gap-2 text-xs">
-          {#if pendingRequests.length > 0}
-            <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-              {pendingRequests.length} pending
-            </span>
-          {/if}
-          {#if stats.failed > 0}
+          {#if errorCount > 0}
             <span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/40 dark:text-red-300">
-              {stats.failed} failed
+              {errorCount} {errorCount === 1 ? 'Error' : 'Errors'}
             </span>
           {/if}
-          {#if stats.successful > 0}
-            <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/40 dark:text-green-300">
-              {stats.successful} OK
+          {#if warningCount > 0}
+            <span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300">
+              {warningCount} {warningCount === 1 ? 'Warning' : 'Warnings'}
             </span>
           {/if}
-          {#if correlationId}
-            <span class="text-gray-500 dark:text-gray-400 font-mono text-xs truncate max-w-[120px]">
-              {correlationId.substring(0, 16)}...
+          {#if infoCount > 0}
+            <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+              {infoCount} {infoCount === 1 ? 'Info' : 'Info'}
             </span>
+          {/if}
+          {#if errorCount === 0 && warningCount === 0 && infoCount === 0}
+            <span class="text-gray-600 dark:text-gray-400">No issues</span>
           {/if}
         </div>
       </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="text-xs text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-          onclick={copyDebugInfo}
-          title="Copy debug info"
-        >
-          Copy
-        </button>
-        <button
-          type="button"
-          class="text-xs text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-          onclick={() => isExpanded = !isExpanded}
-        >
-          {isExpanded ? "Collapse" : "Expand"}
-        </button>
-      </div>
+      <DebugCopyButton
+        data={responseData}
+        {debugInfo}
+        {frontendInfo}
+        label="Show Details"
+        includeContext={true}
+        includePerformance={true}
+        includeBrowserInfo={true}
+        {insideModal}
+      />
     </div>
 
-    <!-- Expanded compact view -->
-    {#if isExpanded}
-      <div class="mt-3 border-t border-gray-200 pt-3 dark:border-gray-700">
-        {#if requests.length > 0}
-          <div class="space-y-1 max-h-40 overflow-y-auto">
-            {#each requests.slice(0, 5) as request}
-              <div class="flex items-center justify-between text-xs">
-                <div class="flex items-center gap-2 truncate">
-                  <span class="font-mono text-gray-500 dark:text-gray-400">{request.method}</span>
-                  <span class="truncate text-gray-700 dark:text-gray-300">{request.url}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class={getStatusColor(request.status, request.pending)}>
-                    {request.pending ? "..." : request.status ?? "ERR"}
-                  </span>
-                  {#if request.endTime}
-                    <span class="text-gray-500 dark:text-gray-400">
-                      {formatDuration(request.endTime - request.startTime)}
-                    </span>
-                  {/if}
-                </div>
-              </div>
-            {/each}
-            {#if requests.length > 5}
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                +{requests.length - 5} more requests
-              </div>
-            {/if}
-          </div>
-        {:else}
-          <div class="text-xs text-gray-500 dark:text-gray-400">No requests tracked</div>
+    <!-- Compact error/warning/info display -->
+    {#if errorCount > 0 || warningCount > 0 || infoCount > 0}
+      <div class="mt-2 space-y-1">
+        {#if debugInfo.errors && debugInfo.errors.length > 0}
+          {#each debugInfo.errors.slice(0, 2) as error}
+            <div class="text-xs text-red-700 dark:text-red-300 flex items-start gap-1">
+              <span class="font-medium">•</span>
+              <span>{error.message}</span>
+            </div>
+          {/each}
+          {#if debugInfo.errors.length > 2}
+            <div class="text-xs text-red-600 dark:text-red-400">
+              +{debugInfo.errors.length - 2} more errors
+            </div>
+          {/if}
+        {/if}
+
+        {#if debugInfo.warnings && debugInfo.warnings.length > 0}
+          {#each debugInfo.warnings.slice(0, 2) as warning}
+            <div class="text-xs text-yellow-700 dark:text-yellow-300 flex items-start gap-1">
+              <span class="font-medium">•</span>
+              <span>{warning.message}</span>
+            </div>
+          {/each}
+          {#if debugInfo.warnings.length > 2}
+            <div class="text-xs text-yellow-600 dark:text-yellow-400">
+              +{debugInfo.warnings.length - 2} more warnings
+            </div>
+          {/if}
+        {/if}
+
+        {#if debugInfo.info && debugInfo.info.length > 0}
+          {#each debugInfo.info.slice(0, 2) as info}
+            <div class="text-xs text-blue-700 dark:text-blue-300 flex items-start gap-1">
+              <span class="font-medium">•</span>
+              <span>{info.message}</span>
+            </div>
+          {/each}
+          {#if debugInfo.info.length > 2}
+            <div class="text-xs text-blue-600 dark:text-blue-400">
+              +{debugInfo.info.length - 2} more info messages
+            </div>
+          {/if}
         {/if}
       </div>
     {/if}
   </div>
 {:else}
-  <!-- Full Mode -->
-  <div class="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20 {className}">
+  <!-- Full Mode: Expandable panel with all debug information -->
+  <div class="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20">
     <!-- Header -->
-    <div class="flex items-center justify-between p-4 border-b border-blue-200 dark:border-blue-800">
+    <button
+      type="button"
+      class="flex w-full items-center justify-between p-4 text-left hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+      onclick={() => isExpanded = !isExpanded}
+      aria-expanded={isExpanded}
+    >
       <div class="flex items-center gap-3">
-        <!-- Debug Icon -->
         <svg
           class="h-5 w-5 text-blue-600 dark:text-blue-400"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
+          fill="currentColor"
+          viewBox="0 0 20 20"
           aria-hidden="true"
         >
           <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+            fill-rule="evenodd"
+            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z"
+            clip-rule="evenodd"
           />
         </svg>
         <div>
-          <h3 class="text-sm font-medium text-blue-800 dark:text-blue-200">{title}</h3>
-          {#if correlationId}
-            <p class="text-xs text-blue-600 dark:text-blue-400 font-mono">
-              {correlationId}
-            </p>
-          {/if}
+          <h3 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+            Expert Mode Debug Information
+          </h3>
+          <p class="text-xs text-blue-600 dark:text-blue-400">
+            {debugInfo.operation ?? 'Unknown operation'} • {formatDuration(debugInfo.duration ?? 0)}
+          </p>
         </div>
       </div>
-
-      <!-- Header Actions -->
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          class="p-1.5 rounded-md text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-900/40"
-          onclick={copyDebugInfo}
-          title="Copy debug info"
-        >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          class="p-1.5 rounded-md text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-900/40"
-          onclick={clearRequests}
-          title="Clear requests"
-        >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      </div>
-    </div>
-
-    <!-- Tab Navigation -->
-    <div class="flex border-b border-blue-200 dark:border-blue-800">
-      <button
-        type="button"
-        class="flex-1 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'requests' ? 'text-blue-800 dark:text-blue-200 border-b-2 border-blue-600' : 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200'}"
-        onclick={() => activeTab = 'requests'}
+      <svg
+        class="h-5 w-5 text-blue-600 dark:text-blue-400 transition-transform {isExpanded ? 'rotate-180' : ''}"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
       >
-        Requests ({requests.length})
-      </button>
-      <button
-        type="button"
-        class="flex-1 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'timeline' ? 'text-blue-800 dark:text-blue-200 border-b-2 border-blue-600' : 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200'}"
-        onclick={() => activeTab = 'timeline'}
-      >
-        Stats
-      </button>
-      {#if showConfig}
-        <button
-          type="button"
-          class="flex-1 px-4 py-2 text-sm font-medium transition-colors {activeTab === 'config' ? 'text-blue-800 dark:text-blue-200 border-b-2 border-blue-600' : 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200'}"
-          onclick={() => activeTab = 'config'}
-        >
-          Config
-        </button>
-      {/if}
-    </div>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+      </svg>
+    </button>
 
-    <!-- Tab Content -->
-    <div class="p-4">
-      {#if activeTab === 'requests'}
-        <!-- Requests Tab -->
-        {#if requests.length > 0}
-          <div class="space-y-2 max-h-96 overflow-y-auto">
-            {#each requests as request}
-              <div class="rounded-md border border-blue-200 bg-white p-3 dark:border-blue-700 dark:bg-blue-950/50">
-                <!-- Request Header -->
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
-                      {request.method}
-                    </span>
-                    <span class="text-sm text-gray-900 dark:text-gray-100 truncate max-w-[300px]">
-                      {request.url}
-                    </span>
+    <!-- Expanded Content -->
+    {#if isExpanded}
+      <div class="border-t border-blue-200 p-4 space-y-4 dark:border-blue-800">
+        <!-- Basic Information -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Timestamp</dt>
+            <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+              {formatTimestamp(debugInfo.timestamp)}
+            </dd>
+          </div>
+          <div>
+            <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Request ID</dt>
+            <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+              {debugInfo.requestId}
+            </dd>
+          </div>
+          {#if debugInfo.integration}
+            <div>
+              <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Integration</dt>
+              <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                {debugInfo.integration}
+              </dd>
+            </div>
+          {/if}
+          <div>
+            <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Duration</dt>
+            <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+              {formatDuration(debugInfo.duration)}
+            </dd>
+          </div>
+          {#if debugInfo.cacheHit !== undefined}
+            <div>
+              <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Cache Status</dt>
+              <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100">
+                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {debugInfo.cacheHit ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'}">
+                  {debugInfo.cacheHit ? 'HIT' : 'MISS'}
+                </span>
+              </dd>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Errors Section (Red) -->
+        {#if debugInfo.errors && debugInfo.errors.length > 0}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showErrors = !showErrors}
+            >
+              <h4 class="text-sm font-medium text-red-800 dark:text-red-200">
+                Errors ({debugInfo.errors.length})
+              </h4>
+              <svg
+                class="h-4 w-4 text-red-600 dark:text-red-400 transition-transform {showErrors ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showErrors}
+              <div class="mt-2 space-y-2">
+                {#each debugInfo.errors as error}
+                  <div class="rounded-md bg-red-100 p-3 dark:bg-red-900/30">
+                    <div class="text-sm font-medium text-red-900 dark:text-red-100">
+                      {error.message}
+                    </div>
+                    {#if error.code}
+                      <div class="mt-1 text-xs text-red-700 dark:text-red-300">
+                        Code: {error.code}
+                      </div>
+                    {/if}
+                    {#if error.stack}
+                      <details class="mt-2">
+                        <summary class="cursor-pointer text-xs text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200">
+                          Show stack trace
+                        </summary>
+                        <pre class="mt-2 overflow-x-auto rounded bg-red-50 p-2 text-xs text-red-900 dark:bg-red-950 dark:text-red-100">{error.stack}</pre>
+                      </details>
+                    {/if}
                   </div>
-                  <div class="flex items-center gap-2">
-                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {getStatusBadgeClass(request.status, request.pending)}">
-                      {#if request.pending}
-                        <svg class="animate-spin -ml-0.5 mr-1.5 h-3 w-3" fill="none" viewBox="0 0 24 24">
-                          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        pending
-                      {:else if request.error}
-                        error
-                      {:else}
-                        {request.status}
-                      {/if}
-                    </span>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Warnings Section (Yellow) -->
+        {#if debugInfo.warnings && debugInfo.warnings.length > 0}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showWarnings = !showWarnings}
+            >
+              <h4 class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                Warnings ({debugInfo.warnings.length})
+              </h4>
+              <svg
+                class="h-4 w-4 text-yellow-600 dark:text-yellow-400 transition-transform {showWarnings ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showWarnings}
+              <div class="mt-2 space-y-2">
+                {#each debugInfo.warnings as warning}
+                  <div class="rounded-md bg-yellow-100 p-3 dark:bg-yellow-900/30">
+                    <div class="text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                      {warning.message}
+                    </div>
+                    {#if warning.context}
+                      <div class="mt-1 text-xs text-yellow-700 dark:text-yellow-300">
+                        Context: {warning.context}
+                      </div>
+                    {/if}
                   </div>
-                </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
-                <!-- Request Details -->
-                <div class="mt-2 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  <span>{formatTimestamp(request.startTime)}</span>
-                  {#if request.endTime}
-                    <span>{formatDuration(request.endTime - request.startTime)}</span>
-                  {/if}
-                  {#if request.responseSize !== null}
-                    <span>{formatBytes(request.responseSize)}</span>
-                  {/if}
-                  {#if request.source}
-                    <span class="font-mono">{request.source}</span>
-                  {/if}
-                </div>
+        <!-- Info Section (Blue) -->
+        {#if debugInfo.info && debugInfo.info.length > 0}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showInfo = !showInfo}
+            >
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Info ({debugInfo.info.length})
+              </h4>
+              <svg
+                class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showInfo ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showInfo}
+              <div class="mt-2 space-y-2">
+                {#each debugInfo.info as info}
+                  <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                    <div class="text-sm text-blue-900 dark:text-blue-100">
+                      {info.message}
+                    </div>
+                    {#if info.context}
+                      <div class="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                        Context: {info.context}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
-                <!-- Error Message -->
-                {#if request.error}
-                  <div class="mt-2 text-xs text-red-600 dark:text-red-400">
-                    {request.error}
+        <!-- Debug Section (Gray) -->
+        {#if debugInfo.debug && debugInfo.debug.length > 0}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showDebug = !showDebug}
+            >
+              <h4 class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                Debug ({debugInfo.debug.length})
+              </h4>
+              <svg
+                class="h-4 w-4 text-gray-600 dark:text-gray-400 transition-transform {showDebug ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showDebug}
+              <div class="mt-2 space-y-2">
+                {#each debugInfo.debug as debug}
+                  <div class="rounded-md bg-gray-100 p-3 dark:bg-gray-800">
+                    <div class="text-sm text-gray-900 dark:text-gray-100">
+                      {debug.message}
+                    </div>
+                    {#if debug.context}
+                      <div class="mt-1 text-xs text-gray-700 dark:text-gray-300">
+                        Context: {debug.context}
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Performance Metrics Section -->
+        {#if debugInfo.performance}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showPerformance = !showPerformance}
+            >
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Performance Metrics
+              </h4>
+              <svg
+                class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showPerformance ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showPerformance}
+              <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Memory Usage</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {formatBytes(debugInfo.performance.memoryUsage)}
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">CPU Usage</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {debugInfo.performance.cpuUsage.toFixed(2)}%
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Active Connections</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {debugInfo.performance.activeConnections}
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Cache Hit Rate</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {(debugInfo.performance.cacheStats.hitRate * 100).toFixed(1)}%
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Cache Size</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {debugInfo.performance.cacheStats.size} items
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Avg Request Duration</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {formatDuration(debugInfo.performance.requestStats.avgDuration)}
+                  </dd>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Context Section -->
+        {#if debugInfo.context}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showContext = !showContext}
+            >
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Request Context
+              </h4>
+              <svg
+                class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showContext ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showContext}
+              <div class="mt-2 space-y-2">
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">URL</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono break-all">
+                    {debugInfo.context.url}
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Method</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {debugInfo.context.method}
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">User Agent</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono break-all">
+                    {debugInfo.context.userAgent}
+                  </dd>
+                </div>
+                <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                  <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">IP Address</dt>
+                  <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                    {debugInfo.context.ip}
+                  </dd>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- API Calls Section -->
+        {#if debugInfo.apiCalls && debugInfo.apiCalls.length > 0}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showApiCalls = !showApiCalls}
+            >
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                API Calls ({debugInfo.apiCalls.length})
+              </h4>
+              <svg
+                class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showApiCalls ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showApiCalls}
+              <div class="mt-2 space-y-2">
+                {#each debugInfo.apiCalls as apiCall}
+                  <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1">
+                        <div class="flex items-center gap-2">
+                          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-200">
+                            {apiCall.method}
+                          </span>
+                          <span class="text-sm font-mono text-blue-900 dark:text-blue-100">
+                            {apiCall.endpoint}
+                          </span>
+                        </div>
+                        <div class="mt-1 flex items-center gap-3 text-xs text-blue-700 dark:text-blue-300">
+                          <span>Status: {apiCall.status}</span>
+                          <span>Duration: {formatDuration(apiCall.duration)}</span>
+                          {#if apiCall.cached}
+                            <span class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/40 dark:text-green-300">
+                              Cached
+                            </span>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Metadata Section -->
+        {#if debugInfo.metadata && Object.keys(debugInfo.metadata).length > 0}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showMetadata = !showMetadata}
+            >
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Metadata
+              </h4>
+              <svg
+                class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showMetadata ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showMetadata}
+              <pre class="mt-2 overflow-x-auto rounded bg-blue-100 p-3 text-xs text-blue-900 dark:bg-blue-900/30 dark:text-blue-100">{JSON.stringify(debugInfo.metadata, null, 2)}</pre>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Frontend Info Section -->
+        {#if frontendInfo && (frontendInfo.renderTime || frontendInfo.componentTree || frontendInfo.browserInfo)}
+          <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => showFrontendInfo = !showFrontendInfo}
+            >
+              <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Frontend Information
+              </h4>
+              <svg
+                class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showFrontendInfo ? 'rotate-180' : ''}"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {#if showFrontendInfo}
+              <div class="mt-2 space-y-2">
+                {#if frontendInfo.renderTime}
+                  <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                    <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Render Time</dt>
+                    <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono">
+                      {formatDuration(frontendInfo.renderTime)}
+                    </dd>
+                  </div>
+                {/if}
+                {#if frontendInfo.url}
+                  <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                    <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Current URL</dt>
+                    <dd class="mt-1 text-sm text-blue-900 dark:text-blue-100 font-mono break-all">
+                      {frontendInfo.url}
+                    </dd>
+                  </div>
+                {/if}
+                {#if frontendInfo.browserInfo}
+                  <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                    <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Browser Info</dt>
+                    <dd class="mt-1 text-xs text-blue-900 dark:text-blue-100 space-y-1">
+                      <div>Platform: {frontendInfo.browserInfo.platform}</div>
+                      <div>Language: {frontendInfo.browserInfo.language}</div>
+                      <div>Viewport: {frontendInfo.browserInfo.viewport.width}x{frontendInfo.browserInfo.viewport.height}</div>
+                    </dd>
+                  </div>
+                {/if}
+                {#if frontendInfo.componentTree && frontendInfo.componentTree.length > 0}
+                  <div class="rounded-md bg-blue-100 p-3 dark:bg-blue-900/30">
+                    <dt class="text-xs font-medium text-blue-700 dark:text-blue-300">Component Tree</dt>
+                    <dd class="mt-1">
+                      <ul class="list-disc list-inside text-sm text-blue-900 dark:text-blue-100 space-y-1">
+                        {#each frontendInfo.componentTree as component}
+                          <li class="font-mono text-xs">{component}</li>
+                        {/each}
+                      </ul>
+                    </dd>
                   </div>
                 {/if}
               </div>
-            {/each}
+            {/if}
           </div>
-        {:else}
-          <div class="text-center py-8 text-gray-500 dark:text-gray-400">
-            <svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+        {/if}
+
+        <!-- Timeline View Section -->
+        <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+          <button
+            type="button"
+            class="flex w-full items-center justify-between text-left"
+            onclick={() => showTimeline = !showTimeline}
+          >
+            <h4 class="text-sm font-medium text-blue-800 dark:text-blue-200">
+              Timeline View ({timelineEntries.length} entries)
+            </h4>
+            <svg
+              class="h-4 w-4 text-blue-600 dark:text-blue-400 transition-transform {showTimeline ? 'rotate-180' : ''}"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
-            <p class="mt-2 text-sm">No requests tracked yet</p>
-            <p class="mt-1 text-xs">API requests will appear here when debug mode is enabled</p>
-          </div>
-        {/if}
-      {:else if activeTab === 'timeline'}
-        <!-- Stats Tab -->
-        <div class="grid grid-cols-2 gap-4">
-          <div class="rounded-md bg-white p-4 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-700">
-            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">Total Requests</div>
-          </div>
-          <div class="rounded-md bg-white p-4 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-700">
-            <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.pending}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">Pending</div>
-          </div>
-          <div class="rounded-md bg-white p-4 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-700">
-            <div class="text-2xl font-bold text-green-600 dark:text-green-400">{stats.successful}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">Successful</div>
-          </div>
-          <div class="rounded-md bg-white p-4 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-700">
-            <div class="text-2xl font-bold text-red-600 dark:text-red-400">{stats.failed}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">Failed</div>
-          </div>
-          <div class="col-span-2 rounded-md bg-white p-4 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-700">
-            <div class="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {formatDuration(stats.avgDuration)}
+          </button>
+          {#if showTimeline}
+            <div class="mt-3 space-y-3">
+              <!-- Timeline Filters -->
+              <div class="flex flex-col sm:flex-row gap-2">
+                <!-- Search Input -->
+                <div class="flex-1">
+                  <input
+                    type="text"
+                    bind:value={timelineSearchQuery}
+                    placeholder="Search logs..."
+                    class="w-full rounded-md border border-blue-300 bg-white px-3 py-1.5 text-sm text-gray-900 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-blue-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-400"
+                  />
+                </div>
+
+                <!-- Level Filter -->
+                <div class="flex gap-1">
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'all'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'all' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60'}"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'error'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'error' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-800 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-300 dark:hover:bg-red-900/60'}"
+                  >
+                    Errors
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'warn'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'warn' ? 'bg-yellow-600 text-white' : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-300 dark:hover:bg-yellow-900/60'}"
+                  >
+                    Warnings
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'info'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'info' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:hover:bg-blue-900/60'}"
+                  >
+                    Info
+                  </button>
+                  <button
+                    type="button"
+                    onclick={() => timelineFilterLevel = 'debug'}
+                    class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {timelineFilterLevel === 'debug' ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'}"
+                  >
+                    Debug
+                  </button>
+                </div>
+              </div>
+
+              <!-- Timeline Entries -->
+              <div class="space-y-2 max-h-96 overflow-y-auto">
+                {#if filteredTimelineEntries.length === 0}
+                  <div class="rounded-md bg-gray-100 p-4 text-center text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                    No log entries match your filters
+                  </div>
+                {:else}
+                  {#each filteredTimelineEntries as entry}
+                    <div class="rounded-md border p-3 {
+                      entry.level === 'error' ? 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20' :
+                      entry.level === 'warn' ? 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20' :
+                      entry.level === 'info' ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20' :
+                      'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800'
+                    }">
+                      <!-- Entry Header -->
+                      <div class="flex items-start justify-between gap-2">
+                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                          <!-- Level Badge -->
+                          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium shrink-0 {
+                            entry.level === 'error' ? 'bg-red-600 text-white' :
+                            entry.level === 'warn' ? 'bg-yellow-600 text-white' :
+                            entry.level === 'info' ? 'bg-blue-600 text-white' :
+                            'bg-gray-600 text-white'
+                          }">
+                            {entry.level.toUpperCase()}
+                          </span>
+
+                          <!-- Source Badge -->
+                          <span class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium shrink-0 {
+                            entry.source === 'frontend' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300' :
+                            'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300'
+                          }">
+                            {entry.source}
+                          </span>
+
+                          <!-- Timestamp -->
+                          <span class="text-xs text-gray-600 dark:text-gray-400 font-mono truncate">
+                            {formatTimestamp(entry.timestamp)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Entry Message -->
+                      <div class="mt-2 text-sm {
+                        entry.level === 'error' ? 'text-red-900 dark:text-red-100' :
+                        entry.level === 'warn' ? 'text-yellow-900 dark:text-yellow-100' :
+                        entry.level === 'info' ? 'text-blue-900 dark:text-blue-100' :
+                        'text-gray-900 dark:text-gray-100'
+                      }">
+                        {entry.message}
+                      </div>
+
+                      <!-- Entry Context -->
+                      {#if entry.context}
+                        <div class="mt-1 text-xs {
+                          entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
+                          entry.level === 'warn' ? 'text-yellow-700 dark:text-yellow-300' :
+                          entry.level === 'info' ? 'text-blue-700 dark:text-blue-300' :
+                          'text-gray-700 dark:text-gray-300'
+                        }">
+                          Context: {entry.context}
+                        </div>
+                      {/if}
+
+                      <!-- Entry Metadata -->
+                      {#if entry.metadata && Object.keys(entry.metadata).length > 0}
+                        <details class="mt-2">
+                          <summary class="cursor-pointer text-xs {
+                            entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
+                            entry.level === 'warn' ? 'text-yellow-700 dark:text-yellow-300' :
+                            entry.level === 'info' ? 'text-blue-700 dark:text-blue-300' :
+                            'text-gray-700 dark:text-gray-300'
+                          } hover:underline">
+                            Show metadata
+                          </summary>
+                          <pre class="mt-1 overflow-x-auto rounded p-2 text-xs {
+                            entry.level === 'error' ? 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100' :
+                            entry.level === 'warn' ? 'bg-yellow-100 text-yellow-900 dark:bg-yellow-950 dark:text-yellow-100' :
+                            entry.level === 'info' ? 'bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-100' :
+                            'bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100'
+                          }">{JSON.stringify(entry.metadata, null, 2)}</pre>
+                        </details>
+                      {/if}
+
+                      <!-- Stack Trace -->
+                      {#if entry.stackTrace}
+                        <details class="mt-2">
+                          <summary class="cursor-pointer text-xs {
+                            entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
+                            'text-gray-700 dark:text-gray-300'
+                          } hover:underline">
+                            Show stack trace
+                          </summary>
+                          <pre class="mt-1 overflow-x-auto rounded p-2 text-xs {
+                            entry.level === 'error' ? 'bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-100' :
+                            'bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100'
+                          }">{entry.stackTrace}</pre>
+                        </details>
+                      {/if}
+                    </div>
+                  {/each}
+                {/if}
+              </div>
             </div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">Average Duration</div>
-          </div>
+          {/if}
         </div>
 
-        <!-- Backend Debug Info (if provided) -->
-        {#if debugInfo}
-          <div class="mt-4 border-t border-blue-200 pt-4 dark:border-blue-700">
-            <h4 class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">Backend Debug Info</h4>
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <span class="text-gray-500 dark:text-gray-400">Operation:</span>
-                <span class="ml-1 text-gray-900 dark:text-gray-100">{debugInfo.operation}</span>
-              </div>
-              <div>
-                <span class="text-gray-500 dark:text-gray-400">Duration:</span>
-                <span class="ml-1 text-gray-900 dark:text-gray-100">{formatDuration(debugInfo.duration)}</span>
-              </div>
-              {#if debugInfo.integration}
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">Integration:</span>
-                  <span class="ml-1 text-gray-900 dark:text-gray-100">{debugInfo.integration}</span>
-                </div>
-              {/if}
-              {#if debugInfo.cacheHit !== undefined}
-                <div>
-                  <span class="text-gray-500 dark:text-gray-400">Cache:</span>
-                  <span class="ml-1 text-gray-900 dark:text-gray-100">{debugInfo.cacheHit ? 'HIT' : 'MISS'}</span>
-                </div>
-              {/if}
-            </div>
-          </div>
-        {/if}
-      {:else if activeTab === 'config' && showConfig}
-        <!-- Config Tab -->
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm font-medium text-gray-900 dark:text-gray-100">Log API Requests</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">Log request details to console</div>
-            </div>
-            <button
-              type="button"
-              class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 {debugMode.config.logApiRequests ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}"
-              role="switch"
-              aria-checked={debugMode.config.logApiRequests}
-              onclick={() => updateConfig('logApiRequests', !debugMode.config.logApiRequests)}
-            >
-              <span class="sr-only">Log API Requests</span>
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {debugMode.config.logApiRequests ? 'translate-x-5' : 'translate-x-0'}"
-              ></span>
-            </button>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm font-medium text-gray-900 dark:text-gray-100">Include Performance</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">Include performance metrics in debug info</div>
-            </div>
-            <button
-              type="button"
-              class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 {debugMode.config.includePerformance ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}"
-              role="switch"
-              aria-checked={debugMode.config.includePerformance}
-              onclick={() => updateConfig('includePerformance', !debugMode.config.includePerformance)}
-            >
-              <span class="sr-only">Include Performance</span>
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {debugMode.config.includePerformance ? 'translate-x-5' : 'translate-x-0'}"
-              ></span>
-            </button>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <div>
-              <div class="text-sm font-medium text-gray-900 dark:text-gray-100">Auto-expand Panels</div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">Expand debug panels by default</div>
-            </div>
-            <button
-              type="button"
-              class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 {debugMode.config.autoExpandPanels ? 'bg-blue-600' : 'bg-gray-200 dark:bg-gray-700'}"
-              role="switch"
-              aria-checked={debugMode.config.autoExpandPanels}
-              onclick={() => updateConfig('autoExpandPanels', !debugMode.config.autoExpandPanels)}
-            >
-              <span class="sr-only">Auto-expand Panels</span>
-              <span
-                class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {debugMode.config.autoExpandPanels ? 'translate-x-5' : 'translate-x-0'}"
-              ></span>
-            </button>
-          </div>
-
-          <div class="pt-4 border-t border-blue-200 dark:border-blue-700">
-            <button
-              type="button"
-              class="w-full px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-200"
-              onclick={() => debugMode.resetConfig()}
-            >
-              Reset to Defaults
-            </button>
-          </div>
+        <!-- Copy Button -->
+        <div class="border-t border-blue-200 pt-4 dark:border-blue-800">
+          <DebugCopyButton
+            data={responseData}
+            {debugInfo}
+            {frontendInfo}
+            frontendLogs={frontendLogs}
+            label="Show Details"
+            includeContext={true}
+            includePerformance={true}
+            includeBrowserInfo={true}
+            {insideModal}
+          />
         </div>
-      {/if}
-    </div>
+      </div>
+    {/if}
   </div>
 {/if}

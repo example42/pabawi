@@ -239,6 +239,4 @@ export type DatabaseAdapterFactory = (
 /**
  * Database adapter constructor interface
  */
-export interface DatabaseAdapterConstructor {
-  new (config: DatabaseConfig): DatabaseAdapter;
-}
+export type DatabaseAdapterConstructor = new (config: DatabaseConfig) => DatabaseAdapter;

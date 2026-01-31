@@ -820,10 +820,10 @@ export class PluginLoader {
     // Try default export
     if (module.default) {
       if (typeof module.default === "function") {
-        const result = (module.default as PluginFactory)();
+        const result = (module.default)();
         return result instanceof Promise ? await result : result;
       }
-      return module.default as BasePluginInterface;
+      return module.default;
     }
 
     // Try Plugin class

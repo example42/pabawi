@@ -12,7 +12,8 @@
  * @version 1.0.0
  */
 
-import { z, ZodSchema, ZodObject, ZodError } from "zod";
+import type { ZodSchema, ZodError } from "zod";
+import { z, ZodObject } from "zod";
 import { LoggerService } from "../services/LoggerService";
 
 /**
@@ -99,9 +100,9 @@ export interface SchemaRegistrationOptions {
  */
 export class SchemaRegistry {
   private static instance: SchemaRegistry | null = null;
-  private schemas: Map<string, RegisteredSchema> = new Map();
+  private schemas = new Map<string, RegisteredSchema>();
   private logger: LoggerService;
-  private deprecationWarnings: Set<string> = new Set();
+  private deprecationWarnings = new Set<string>();
 
   constructor() {
     this.logger = new LoggerService({
@@ -354,7 +355,7 @@ export class SchemaRegistry {
   compose<T extends Record<string, unknown>>(
     schemaIds: string[]
   ): ZodSchema<T> | null {
-    const schemas: Array<ZodObject<any>> = [];
+    const schemas: ZodObject<any>[] = [];
 
     for (const id of schemaIds) {
       const entry = this.get(id);

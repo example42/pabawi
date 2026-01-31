@@ -83,7 +83,7 @@ export function requireCapability(
     next: NextFunction
   ): Promise<void> {
     // Check if user is authenticated
-    const user = req.user as User | undefined;
+    const user = req.user;
 
     if (!user) {
       logger.debug("RBAC check failed: no user", {
@@ -196,7 +196,7 @@ export function requireAnyCapability(
     res: Response,
     next: NextFunction
   ): Promise<void> {
-    const user = req.user as User | undefined;
+    const user = req.user;
 
     if (!user) {
       res.status(401).json({
@@ -233,7 +233,7 @@ export function requireAnyCapability(
             operation: "requireAnyCapability",
             metadata: { userId: user.id, capability, path: req.path },
           });
-          return next();
+          next(); return;
         }
       }
 
@@ -288,7 +288,7 @@ export function requireAllCapabilities(
     res: Response,
     next: NextFunction
   ): Promise<void> {
-    const user = req.user as User | undefined;
+    const user = req.user;
 
     if (!user) {
       res.status(401).json({

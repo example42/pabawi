@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import ExpertModeDebugPanel from './ExpertModeDebugPanel.svelte';
+import DebugPanel from './DebugPanel.svelte';
 import type { DebugInfo } from '../lib/api';
 
-describe('ExpertModeDebugPanel Component', () => {
+describe('DebugPanel Component', () => {
   const mockDebugInfo: DebugInfo = {
     timestamp: '2024-01-15T10:30:00.000Z',
     requestId: 'req_123456',
@@ -47,7 +47,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
   describe('Rendering', () => {
     it('should render collapsed by default', () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -59,7 +59,7 @@ describe('ExpertModeDebugPanel Component', () => {
     });
 
     it('should expand when header is clicked', async () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -78,7 +78,7 @@ describe('ExpertModeDebugPanel Component', () => {
   describe('Basic Information Display', () => {
     it('should display timestamp correctly', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -92,7 +92,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should display request ID', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -106,7 +106,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should display integration when provided', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -121,7 +121,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should display cache status', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -138,7 +138,7 @@ describe('ExpertModeDebugPanel Component', () => {
   describe('API Calls Section', () => {
     it('should display API calls count', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -152,7 +152,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should expand API calls section when clicked', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -170,7 +170,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should display API call details', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -190,7 +190,7 @@ describe('ExpertModeDebugPanel Component', () => {
   describe('Errors Section', () => {
     it('should display errors count', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -204,7 +204,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should expand errors section when clicked', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -224,7 +224,7 @@ describe('ExpertModeDebugPanel Component', () => {
   describe('Metadata Section', () => {
     it('should display metadata section', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -238,7 +238,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should expand metadata section when clicked', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -259,7 +259,7 @@ describe('ExpertModeDebugPanel Component', () => {
   describe('Frontend Info Section', () => {
     it('should display frontend info when provided', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           frontendInfo: {
@@ -277,7 +277,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should display render time', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           frontendInfo: {
@@ -298,7 +298,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
     it('should display component tree', async () => {
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           frontendInfo: {
@@ -322,7 +322,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
   describe('Duration Formatting', () => {
     it('should format milliseconds correctly', () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: {
             ...mockDebugInfo,
@@ -335,7 +335,7 @@ describe('ExpertModeDebugPanel Component', () => {
     });
 
     it('should format seconds correctly', () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: {
             ...mockDebugInfo,
@@ -358,7 +358,7 @@ describe('ExpertModeDebugPanel Component', () => {
         duration: 250,
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithoutIntegration,
         },
@@ -380,7 +380,7 @@ describe('ExpertModeDebugPanel Component', () => {
         duration: 250,
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithoutApiCalls,
         },
@@ -402,7 +402,7 @@ describe('ExpertModeDebugPanel Component', () => {
         duration: 250,
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithoutErrors,
         },
@@ -424,7 +424,7 @@ describe('ExpertModeDebugPanel Component', () => {
         duration: 250,
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithoutMetadata,
         },
@@ -456,7 +456,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithMessages,
           compact: true,
@@ -476,7 +476,7 @@ describe('ExpertModeDebugPanel Component', () => {
         duration: 250,
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: cleanDebugInfo,
           compact: true,
@@ -487,7 +487,7 @@ describe('ExpertModeDebugPanel Component', () => {
     });
 
     it('should have "Show Details" button in compact mode', () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           compact: true,
@@ -507,7 +507,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithManyErrors,
           compact: true,
@@ -529,7 +529,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithWarnings,
         },
@@ -549,7 +549,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithInfo,
         },
@@ -569,7 +569,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithDebug,
         },
@@ -591,7 +591,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithErrors,
         },
@@ -613,7 +613,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithWarnings,
         },
@@ -635,7 +635,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithInfo,
         },
@@ -657,7 +657,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithDebug,
         },
@@ -679,7 +679,7 @@ describe('ExpertModeDebugPanel Component', () => {
         info: [{ message: 'Info', level: 'info' }],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithMessages,
           compact: true,
@@ -719,7 +719,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithPerformance,
         },
@@ -753,7 +753,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithPerformance,
         },
@@ -791,7 +791,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithPerformance,
         },
@@ -829,7 +829,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithPerformance,
         },
@@ -869,7 +869,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithPerformance,
         },
@@ -905,7 +905,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithContext,
         },
@@ -931,7 +931,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithContext,
         },
@@ -963,7 +963,7 @@ describe('ExpertModeDebugPanel Component', () => {
         },
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithContext,
         },
@@ -984,7 +984,7 @@ describe('ExpertModeDebugPanel Component', () => {
 
   describe('Timeline View', () => {
     it('should display timeline view section', async () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -1004,7 +1004,7 @@ describe('ExpertModeDebugPanel Component', () => {
         info: [{ message: 'Info 1', level: 'info' }],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithLogs,
         },
@@ -1018,7 +1018,7 @@ describe('ExpertModeDebugPanel Component', () => {
     });
 
     it('should display timeline filter buttons', async () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -1038,7 +1038,7 @@ describe('ExpertModeDebugPanel Component', () => {
     });
 
     it('should display search input in timeline', async () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
         },
@@ -1057,14 +1057,14 @@ describe('ExpertModeDebugPanel Component', () => {
 
   describe('Compact vs Full Mode', () => {
     it('should render differently in compact mode', () => {
-      const { container: compactContainer } = render(ExpertModeDebugPanel, {
+      const { container: compactContainer } = render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           compact: true,
         },
       });
 
-      const { container: fullContainer } = render(ExpertModeDebugPanel, {
+      const { container: fullContainer } = render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           compact: false,
@@ -1075,7 +1075,7 @@ describe('ExpertModeDebugPanel Component', () => {
     });
 
     it('should not show expandable sections in compact mode', () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           compact: true,
@@ -1087,7 +1087,7 @@ describe('ExpertModeDebugPanel Component', () => {
     });
 
     it('should show expandable sections in full mode', () => {
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: mockDebugInfo,
           compact: false,
@@ -1109,7 +1109,7 @@ describe('ExpertModeDebugPanel Component', () => {
         ],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithManyMessages,
           compact: true,
@@ -1137,7 +1137,7 @@ describe('ExpertModeDebugPanel Component', () => {
         debug: [{ message: 'Debug message', level: 'debug' }],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithAllLevels,
         },
@@ -1161,7 +1161,7 @@ describe('ExpertModeDebugPanel Component', () => {
         debug: [{ message: 'Debug message', level: 'debug' }],
       };
 
-      render(ExpertModeDebugPanel, {
+      render(DebugPanel, {
         props: {
           debugInfo: debugInfoWithAllLevels,
         },

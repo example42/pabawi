@@ -1,7 +1,7 @@
 <script lang="ts">
   import { post } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import EnvironmentSelector from './EnvironmentSelector.svelte';
 
@@ -101,7 +101,7 @@
   async function compareCatalogs(): Promise<void> {
     if (!environment1 || !environment2) return;
 
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       console.log('[CatalogComparison] Comparing catalogs');
       console.log('[CatalogComparison] Certname:', certname);
       console.log('[CatalogComparison] Environment 1:', environment1);
@@ -128,7 +128,7 @@
       // Extract diff from response wrapper
       catalogDiff = result.diff;
 
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         console.log('[CatalogComparison] Comparison complete');
         console.log('[CatalogComparison] Response time:', Math.round(endTime - startTime), 'ms');
         console.log('[CatalogComparison] Added:', result.diff?.added?.length ?? 0);

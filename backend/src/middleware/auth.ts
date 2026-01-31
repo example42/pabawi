@@ -61,7 +61,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     if (!authHeader) {
       if (config.optional) {
         req.isAuthenticated = false;
-        return next();
+        next(); return;
       }
 
       logger.debug("No authorization header", {
@@ -82,7 +82,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     if (parts.length !== 2 || parts[0].toLowerCase() !== "bearer") {
       if (config.optional) {
         req.isAuthenticated = false;
-        return next();
+        next(); return;
       }
 
       logger.debug("Invalid authorization header format", {
@@ -125,7 +125,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     } catch (error) {
       if (config.optional) {
         req.isAuthenticated = false;
-        return next();
+        next(); return;
       }
 
       if (error instanceof AuthenticationError) {

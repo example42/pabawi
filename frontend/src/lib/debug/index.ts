@@ -2,7 +2,7 @@
  * Debug Module Exports
  *
  * This module provides a unified debug system for Pabawi with:
- * - Debug mode state management (replaces expertMode)
+ * - Debug mode state management
  * - Per-widget debug contexts with correlation IDs
  * - API request tracking
  * - Configuration management
@@ -30,8 +30,6 @@
 // Debug mode store and types
 export {
   debugMode,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated
-  expertMode, // Backward compatibility alias
   type DebugConfig,
   type TrackedRequest,
   type DebugContext,

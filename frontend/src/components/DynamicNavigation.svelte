@@ -16,7 +16,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { link } from "../lib/router.svelte";
-  import { expertMode } from "../lib/expertMode.svelte";
+  import { debugMode } from "../lib/debug";
   import { themeManager } from "../lib/theme.svelte";
   import { auth } from "../lib/auth.svelte";
   import {
@@ -130,8 +130,8 @@
     return "text-gray-500";
   }
 
-  function handleExpertToggle(): void {
-    expertMode.toggle();
+  function handleDebugToggle(): void {
+    debugMode.toggle();
   }
 
   function handleThemeToggle(): void {
@@ -305,23 +305,23 @@
           {/if}
         </button>
 
-        <!-- Expert Mode Toggle -->
+        <!-- Debug Mode Toggle -->
         <label class="flex items-center gap-2 cursor-pointer group">
           <span class="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-white transition-colors">
-            Expert Mode
+            Debug
           </span>
           <button
             type="button"
             role="switch"
-            aria-checked={expertMode.enabled}
-            aria-label="Toggle expert mode"
-            onclick={handleExpertToggle}
-            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 {expertMode.enabled
+            aria-checked={debugMode.enabled}
+            aria-label="Toggle debug mode"
+            onclick={handleDebugToggle}
+            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 {debugMode.enabled
               ? 'bg-primary-600'
               : 'bg-gray-200 dark:bg-gray-700'}"
           >
             <span
-              class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {expertMode.enabled
+              class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {debugMode.enabled
                 ? 'translate-x-6'
                 : 'translate-x-1'}"
             ></span>

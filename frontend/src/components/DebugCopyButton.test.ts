@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
-import ExpertModeCopyButton from './ExpertModeCopyButton.svelte';
+import DebugCopyButton from './DebugCopyButton.svelte';
 import type { DebugInfo } from '../lib/api';
 import * as toast from '../lib/toast.svelte';
 
@@ -10,7 +10,7 @@ vi.mock('../lib/toast.svelte', () => ({
   showError: vi.fn(),
 }));
 
-describe('ExpertModeCopyButton Component', () => {
+describe('DebugCopyButton Component', () => {
   const mockDebugInfo: DebugInfo = {
     timestamp: '2024-01-15T10:30:00.000Z',
     requestId: 'req_123456',
@@ -89,7 +89,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('Rendering', () => {
     it('should render with default label', () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -101,7 +101,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should render with custom label', () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -115,7 +115,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should render copy icon', () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -131,7 +131,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('Copy Functionality', () => {
     it('should copy debug info to clipboard when clicked', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -151,7 +151,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should include debug info in copied text', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -171,7 +171,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should include API calls in copied text', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -190,7 +190,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should include errors in copied text', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -209,7 +209,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should include metadata in copied text', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -227,7 +227,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should include response data when includeContext is true', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -247,7 +247,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should exclude response data when includeContext is false', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -267,7 +267,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('Frontend Info', () => {
     it('should include frontend info when provided', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -292,7 +292,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should include browser info when includeBrowserInfo is true', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -314,7 +314,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should exclude browser info when includeBrowserInfo is false', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -334,7 +334,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('Performance Metrics', () => {
     it('should include performance metrics when includePerformance is true', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -358,7 +358,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should exclude performance metrics when includePerformance is false', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -378,7 +378,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('Request Context', () => {
     it('should include request context when includeContext is true', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -401,7 +401,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should exclude request context when includeContext is false', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -427,7 +427,7 @@ describe('ExpertModeCopyButton Component', () => {
         value: 'session_id=abc123; user_pref=dark_mode',
       });
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -453,7 +453,7 @@ describe('ExpertModeCopyButton Component', () => {
         value: 'session_id=abc123',
       });
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -490,7 +490,7 @@ describe('ExpertModeCopyButton Component', () => {
         writable: true,
       });
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -508,7 +508,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should exclude storage when includeStorage is false', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -536,7 +536,7 @@ describe('ExpertModeCopyButton Component', () => {
         },
       });
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -563,7 +563,7 @@ describe('ExpertModeCopyButton Component', () => {
       // eslint-disable-next-line @typescript-eslint/no-deprecated
       document.execCommand = vi.fn().mockReturnValue(true);
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -582,7 +582,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('Format Validation', () => {
     it('should format with proper headers and footers', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -601,7 +601,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should include timestamp in header', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -621,7 +621,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('All Options Testing', () => {
     it('should include all sections when all options are true', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -648,7 +648,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should exclude all optional sections when all options are false', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -711,7 +711,7 @@ describe('ExpertModeCopyButton Component', () => {
         ],
       };
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: debugInfoWithAllLevels,
@@ -747,7 +747,7 @@ describe('ExpertModeCopyButton Component', () => {
         ],
       };
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: debugInfoWithStackTrace,
@@ -791,7 +791,7 @@ describe('ExpertModeCopyButton Component', () => {
         ],
       };
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: debugInfoWithContext,
@@ -832,7 +832,7 @@ describe('ExpertModeCopyButton Component', () => {
         },
       ];
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -868,7 +868,7 @@ describe('ExpertModeCopyButton Component', () => {
         },
       ];
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -912,7 +912,7 @@ describe('ExpertModeCopyButton Component', () => {
         },
       ];
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -939,7 +939,7 @@ describe('ExpertModeCopyButton Component', () => {
 
   describe('Modal vs Direct Copy Behavior', () => {
     it('should copy directly when insideModal is true', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -956,7 +956,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should show modal when insideModal is false', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -973,7 +973,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should copy from modal when copy button is clicked', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -995,7 +995,7 @@ describe('ExpertModeCopyButton Component', () => {
     });
 
     it('should close modal when close button is clicked', async () => {
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: mockDebugInfo,
@@ -1101,7 +1101,7 @@ describe('ExpertModeCopyButton Component', () => {
         },
       };
 
-      render(ExpertModeCopyButton, {
+      render(DebugCopyButton, {
         props: {
           data: mockResponseData,
           debugInfo: completeDebugInfo,

@@ -81,7 +81,7 @@ export class AuthorizationService {
   private logger: LoggerService;
   private config: Required<AuthorizationServiceConfig>;
   private roleService: RoleService;
-  private permissionCache: Map<string, CachedPermissions> = new Map();
+  private permissionCache = new Map<string, CachedPermissions>();
 
   constructor(
     private db: DatabaseAdapter,

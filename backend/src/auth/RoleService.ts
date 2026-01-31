@@ -42,11 +42,11 @@ export class RoleService {
       operation: "initializeBuiltInRoles",
     });
 
-    const builtInRoles: Array<{
+    const builtInRoles: {
       name: BuiltInRoleName;
       description: string;
       priority: number;
-    }> = [
+    }[] = [
       {
         name: BuiltInRoles.ADMIN,
         description: "Full system administrator with all permissions",

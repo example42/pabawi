@@ -13,10 +13,10 @@
   import CodeAnalysisTab from '../components/CodeAnalysisTab.svelte';
   import GlobalFactsTab from '../components/GlobalFactsTab.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
-  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import DebugPanel from '../components/DebugPanel.svelte';
   import PuppetRunChart from '../components/PuppetRunChart.svelte';
   import { integrationColors } from '../lib/integrationColors.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   const pageTitle = 'Pabawi - Puppet';
@@ -510,12 +510,12 @@
   </div>
 
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}
+  {#if debugMode.enabled && sortedDebugInfoBlocks.length > 0}
     <div class="mt-8 space-y-4">
       {#each sortedDebugInfoBlocks as block (block.label)}
         <div>
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
-          <ExpertModeDebugPanel debugInfo={block.debugInfo} />
+          <DebugPanel debugInfo={block.debugInfo} />
         </div>
       {/each}
     </div>

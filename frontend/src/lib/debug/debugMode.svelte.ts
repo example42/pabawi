@@ -7,8 +7,7 @@
  * - Debug context management
  * - API request tracking
  *
- * This module replaces the legacy expertMode.svelte.ts
- * Note: For backward compatibility, expertMode is still exported as an alias
+ * @module debug
  */
 
 // Storage keys
@@ -450,11 +449,6 @@ class DebugModeStore {
 
 // Export singleton instance
 export const debugMode = new DebugModeStore();
-
-/**
- * @deprecated Use debugMode instead. This alias is provided for backward compatibility.
- */
-export const expertMode = debugMode;
 
 // Re-export types for convenience
 export type { DebugModeStore };

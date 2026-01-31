@@ -351,7 +351,7 @@ export function createUserRouter(config: UserRoutesConfig): Router {
       const { id } = req.params;
 
       // Prevent self-deletion
-      const currentUser = req.user as User;
+      const currentUser = req.user!;
       if (currentUser.id === id) {
         res.status(400).json({
           error: "Cannot delete your own account",

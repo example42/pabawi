@@ -169,7 +169,7 @@ export class CapabilityRegistry {
   registerCapability(
     pluginName: string,
     capability: PluginCapability,
-    priority: number = 10
+    priority = 10
   ): void {
     this.validateCapabilityName(capability.name);
 
