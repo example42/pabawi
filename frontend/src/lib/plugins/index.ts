@@ -9,7 +9,7 @@
 
 // Types
 export type {
-  WidgetSlot,
+  WidgetSlot as WidgetSlotType,
   WidgetSize,
   PluginWidget,
   LoadedWidget,
@@ -55,3 +55,6 @@ export {
   usePluginWidgets,
   useWidget,
 } from "./WidgetRegistry.svelte";
+
+// Widget Slot Component
+export { default as WidgetSlot } from "./WidgetSlot.svelte";
