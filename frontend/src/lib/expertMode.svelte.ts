@@ -1,31 +1,37 @@
-// Expert mode state management with localStorage persistence
+/**
+ * Expert Mode (Legacy)
+ *
+ * @deprecated This module is deprecated. Use the new debug module instead:
+ *
+ * ```typescript
+ * // Old way (deprecated)
+ * import { expertMode } from '$lib/expertMode.svelte';
+ *
+ * // New way (recommended)
+ * import { debugMode, useDebugContext } from '$lib/debug';
+ * ```
+ *
+ * The `expertMode` export is preserved for backward compatibility and
+ * is now an alias for `debugMode`. All existing code using `expertMode`
+ * will continue to work without changes.
+ *
+ * Migration Guide:
+ * - `expertMode.enabled` → `debugMode.enabled`
+ * - `expertMode.toggle()` → `debugMode.toggle()`
+ * - `expertMode.setEnabled(value)` → `debugMode.setEnabled(value)`
+ *
+ * New features available in the debug module:
+ * - Per-widget debug contexts with `useDebugContext()`
+ * - API request tracking with `trackedFetch()`
+ * - Correlation ID management
+ * - Configuration management
+ *
+ * @module expertMode
+ */
 
-const STORAGE_KEY = "pabawi_expert_mode";
+// Re-export from the new debug module for backward compatibility
+// eslint-disable-next-line @typescript-eslint/no-deprecated
+export { debugMode, expertMode } from './debug';
 
-class ExpertModeStore {
-  enabled = $state(false);
-
-  constructor() {
-    // Load from localStorage on initialization
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      this.enabled = stored === "true";
-    }
-  }
-
-  toggle(): void {
-    this.enabled = !this.enabled;
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, String(this.enabled));
-    }
-  }
-
-  setEnabled(value: boolean): void {
-    this.enabled = value;
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, String(value));
-    }
-  }
-}
-
-export const expertMode = new ExpertModeStore();
+// Re-export types for backward compatibility
+export type { DebugConfig, TrackedRequest, DebugContext } from './debug';
