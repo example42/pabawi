@@ -378,10 +378,10 @@ export class CapabilityRegistry {
   getAllWidgets(
     user?: User,
     slot?: string
-  ): (RegisteredWidget & { authorized: boolean })[] {
-    const result: (RegisteredWidget & { authorized: boolean })[] = [];
+  ): (RegisteredWidget & { widgetId: string; authorized: boolean })[] {
+    const result: (RegisteredWidget & { widgetId: string; authorized: boolean })[] = [];
 
-    for (const [, registration] of this.widgets) {
+    for (const [widgetId, registration] of this.widgets) {
       // Filter by slot if specified
       if (slot && !registration.widget.slots.includes(slot as never)) {
         continue;
@@ -395,7 +395,7 @@ export class CapabilityRegistry {
           )
         : true;
 
-      result.push({ ...registration, authorized });
+      result.push({ ...registration, widgetId, authorized });
     }
 
     // Sort by priority (higher first)

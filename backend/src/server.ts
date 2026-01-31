@@ -20,6 +20,7 @@ import { createStreamingRouter } from "./routes/streaming";
 import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
+import { createPluginsRouter } from "./routes/plugins";
 import configRouter from "./routes/config";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
@@ -689,6 +690,10 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api/debug",
       createDebugRouter(),
+    );
+    app.use(
+      "/api/plugins",
+      createPluginsRouter(integrationManager),
     );
 
     // Serve static frontend files in production

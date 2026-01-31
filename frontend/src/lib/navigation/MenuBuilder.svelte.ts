@@ -190,19 +190,41 @@ class MenuBuilder {
   // ===========================================================================
 
   /**
-   * Initialize the menu builder and subscribe to plugin events
+   * Initialize the menu builder, load plugins, and subscribe to plugin events
+   *
+   * This method:
+   * 1. Subscribes to plugin loader events for future updates
+   * 2. Loads all available plugins from the backend
+   * 3. Builds the initial menu from loaded plugins
    */
-  initialize(): void {
+  async initialize(): Promise<void> {
     this.log("debug", "Initializing menu builder");
+    this.isBuilding = true;
 
-    // Subscribe to plugin loader events
-    const pluginLoader = getPluginLoader();
-    this.pluginLoaderUnsubscribe = pluginLoader.subscribe((event) => {
-      this.handlePluginEvent(event);
-    });
+    try {
+      // Subscribe to plugin loader events for future updates
+      const pluginLoader = getPluginLoader();
+      this.pluginLoaderUnsubscribe = pluginLoader.subscribe((event) => {
+        this.handlePluginEvent(event);
+      });
 
-    // Build initial menu
-    this.rebuild();
+      // Load all plugins from the backend API
+      this.log("debug", "Loading plugins from backend");
+      const loadedPlugins = await pluginLoader.loadAll();
+      this.log("info", `Loaded ${loadedPlugins.length} plugins`);
+
+      // Build initial menu with loaded plugins
+      this.rebuild();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to initialize menu";
+      this.lastError = message;
+      this.log("error", `Menu initialization failed: ${message}`);
+
+      // Still build the menu with core items even if plugins fail
+      this.rebuild();
+    } finally {
+      this.isBuilding = false;
+    }
   }
 
   /**

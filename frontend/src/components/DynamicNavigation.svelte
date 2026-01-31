@@ -39,6 +39,7 @@
   // Menu state
   const menu = useMenu();
   let menuError = $state<string | null>(null);
+  let menuLoading = $state(true);
   let collapsedGroups = $state<Set<string>>(new Set());
 
   // Initialize menu builder on mount
@@ -49,13 +50,17 @@
     const unsubscribe = menuBuilder.subscribe((event) => {
       if (event.type === "error") {
         menuError = event.error;
+        menuLoading = false;
       } else if (event.type === "menu:built" || event.type === "menu:updated") {
         menuError = null;
+        menuLoading = false;
       }
     });
 
-    // Initialize the menu builder (subscribes to plugin loader)
-    menuBuilder.initialize();
+    // Initialize the menu builder (loads plugins and builds menu)
+    void menuBuilder.initialize().finally(() => {
+      menuLoading = false;
+    });
 
     return () => {
       unsubscribe();
