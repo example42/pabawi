@@ -527,6 +527,7 @@ export class IntegrationManager {
    * @param nodeId - Node identifier
    * @param debugContext - Optional debug context
    * @returns Facts from the highest priority provider
+   * @throws Error if no facts available or capability execution fails
    */
   async getNodeFactsViaCapability(
     user: User,
@@ -540,11 +541,11 @@ export class IntegrationManager {
       debugContext
     );
 
-    if (!result.success) {
+    if (!result.success || !result.data) {
       throw new Error(result.error?.message ?? `Failed to get facts for node '${nodeId}'`);
     }
 
-    return result.data ?? {};
+    return result.data;
   }
 
   // ============================================================================
