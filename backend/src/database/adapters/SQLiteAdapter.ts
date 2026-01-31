@@ -313,11 +313,22 @@ export class SQLiteAdapter implements DatabaseAdapter {
   async initializeSchema(schemaSql: string): Promise<void> {
     this.ensureConnected();
 
-    // Split schema into statements
+    // Split schema into statements and filter out empty ones
+    // Note: We need to handle multi-line statements with leading comments
     const statements = schemaSql
       .split(";")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith("--"));
+      .map((s) => {
+        // Remove leading comment lines but keep the actual SQL
+        const lines = s.split("\n");
+        const nonCommentLines = lines.filter((line) => {
+          const trimmed = line.trim();
+          // Keep non-empty lines that don't start with --
+          // Also keep empty lines that are part of multi-line statements
+          return trimmed.length > 0 && !trimmed.startsWith("--");
+        });
+        return nonCommentLines.join("\n").trim();
+      })
+      .filter((s) => s.length > 0);
 
     for (const statement of statements) {
       try {
