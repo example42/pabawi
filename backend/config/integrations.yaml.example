@@ -1,0 +1,301 @@
+# Pabawi Integrations Configuration
+# ===================================
+#
+# This file configures the various integrations available in Pabawi.
+# Environment variables can be used with the following syntax:
+#   ${VAR_NAME}              - Required variable (error if not set)
+#   ${VAR_NAME:-default}     - Variable with default value
+#   ${VAR_NAME:?error msg}   - Variable with custom error message if missing
+#
+# Configuration Precedence (highest to lowest):
+#   1. Command-line arguments
+#   2. Environment variables
+#   3. YAML configuration files
+#   4. Default values in code
+#
+# Copy this file to integrations.yaml and customize for your environment.
+
+integrations:
+  # =========================================
+  # Bolt Integration (Remote Execution)
+  # =========================================
+  # Bolt provides remote command and task execution via SSH/WinRM
+  bolt:
+    enabled: true
+    priority: 5
+
+    # Frontend widget configuration
+    frontend:
+      widgets:
+        - id: bolt:command-executor
+          enabled: true
+          defaultSlots:
+            - dashboard
+            - node-detail
+        - id: bolt:task-runner
+          enabled: true
+          defaultSlots:
+            - dashboard
+            - node-detail
+        - id: bolt:inventory-viewer
+          enabled: true
+          defaultSlots:
+            - dashboard
+            - inventory-panel
+
+    # Default role permissions for Bolt capabilities
+    defaultPermissions:
+      command.execute:
+        - admin
+        - operator
+      task.execute:
+        - admin
+        - operator
+      plan.execute:
+        - admin
+      inventory.list:
+        - admin
+        - operator
+        - viewer
+
+    # Bolt-specific configuration
+    config:
+      projectPath: ${BOLT_PROJECT_PATH:-.}
+      timeout: ${BOLT_EXECUTION_TIMEOUT:-300000}
+
+      # Command whitelist for security
+      commandWhitelist:
+        allowAll: ${BOLT_COMMAND_WHITELIST_ALLOW_ALL:-false}
+        matchMode: ${BOLT_COMMAND_WHITELIST_MATCH_MODE:-exact}
+        # commands:
+        #   - ls
+        #   - pwd
+        #   - whoami
+        #   - cat
+        #   - grep
+        #   - find
+
+  # =========================================
+  # PuppetDB Integration (Facts & Reports)
+  # =========================================
+  # PuppetDB provides node facts, reports, and inventory information
+  puppetdb:
+    enabled: ${PUPPETDB_ENABLED:-false}
+    priority: 10
+
+    # Frontend widget configuration
+    frontend:
+      widgets:
+        - id: puppetdb:facts-viewer
+          enabled: true
+          defaultSlots:
+            - node-detail
+        - id: puppetdb:reports-panel
+          enabled: true
+          defaultSlots:
+            - node-detail
+
+    # Default role permissions for PuppetDB capabilities
+    defaultPermissions:
+      facts.query:
+        - admin
+        - operator
+        - viewer
+      facts.export:
+        - admin
+        - operator
+      reports.query:
+        - admin
+        - operator
+        - viewer
+      inventory.list:
+        - admin
+        - operator
+        - viewer
+
+    # PuppetDB connection configuration
+    config:
+      serverUrl: ${PUPPETDB_SERVER_URL}
+      port: ${PUPPETDB_PORT:-8081}
+      token: ${PUPPETDB_TOKEN:-}
+      timeout: ${PUPPETDB_TIMEOUT:-30000}
+      retryAttempts: ${PUPPETDB_RETRY_ATTEMPTS:-3}
+      retryDelay: ${PUPPETDB_RETRY_DELAY:-1000}
+
+      # SSL/TLS configuration
+      ssl:
+        enabled: ${PUPPETDB_SSL_ENABLED:-true}
+        ca: ${PUPPETDB_SSL_CA:-}
+        cert: ${PUPPETDB_SSL_CERT:-}
+        key: ${PUPPETDB_SSL_KEY:-}
+        rejectUnauthorized: ${PUPPETDB_SSL_REJECT_UNAUTHORIZED:-true}
+
+      # Response caching
+      cache:
+        ttl: ${PUPPETDB_CACHE_TTL:-300000}
+
+      # Circuit breaker for resilience
+      circuitBreaker:
+        threshold: ${PUPPETDB_CIRCUIT_BREAKER_THRESHOLD:-5}
+        timeout: ${PUPPETDB_CIRCUIT_BREAKER_TIMEOUT:-60000}
+        resetTimeout: ${PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT:-30000}
+
+  # =========================================
+  # Puppetserver Integration (Catalog Info)
+  # =========================================
+  # Puppetserver provides catalog compilation and node management
+  puppetserver:
+    enabled: ${PUPPETSERVER_ENABLED:-false}
+    priority: 20
+
+    # Frontend widget configuration
+    frontend:
+      widgets:
+        - id: puppetserver:node-status
+          enabled: true
+          defaultSlots:
+            - node-detail
+        - id: puppetserver:environment-selector
+          enabled: true
+          defaultSlots:
+            - inventory-panel
+
+    # Default role permissions for Puppetserver capabilities
+    defaultPermissions:
+      node.status:
+        - admin
+        - operator
+        - viewer
+      node.deactivate:
+        - admin
+      catalog.compile:
+        - admin
+        - operator
+      environment.list:
+        - admin
+        - operator
+        - viewer
+
+    # Puppetserver connection configuration
+    config:
+      serverUrl: ${PUPPETSERVER_SERVER_URL}
+      port: ${PUPPETSERVER_PORT:-8140}
+      token: ${PUPPETSERVER_TOKEN:-}
+      timeout: ${PUPPETSERVER_TIMEOUT:-30000}
+      retryAttempts: ${PUPPETSERVER_RETRY_ATTEMPTS:-3}
+      retryDelay: ${PUPPETSERVER_RETRY_DELAY:-1000}
+      inactivityThreshold: ${PUPPETSERVER_INACTIVITY_THRESHOLD:-3600}
+
+      # SSL/TLS configuration
+      ssl:
+        enabled: ${PUPPETSERVER_SSL_ENABLED:-true}
+        ca: ${PUPPETSERVER_SSL_CA:-}
+        cert: ${PUPPETSERVER_SSL_CERT:-}
+        key: ${PUPPETSERVER_SSL_KEY:-}
+        rejectUnauthorized: ${PUPPETSERVER_SSL_REJECT_UNAUTHORIZED:-true}
+
+      # Response caching
+      cache:
+        ttl: ${PUPPETSERVER_CACHE_TTL:-300000}
+
+      # Circuit breaker for resilience
+      circuitBreaker:
+        threshold: ${PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD:-5}
+        timeout: ${PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT:-60000}
+        resetTimeout: ${PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT:-30000}
+
+  # =========================================
+  # Hiera Integration (Data Lookups)
+  # =========================================
+  # Hiera provides hierarchical data lookups for Puppet
+  hiera:
+    enabled: ${HIERA_ENABLED:-false}
+    priority: 6
+
+    # Frontend widget configuration
+    frontend:
+      widgets:
+        - id: hiera:data-browser
+          enabled: true
+          defaultSlots:
+            - standalone-page
+        - id: hiera:node-lookup
+          enabled: true
+          defaultSlots:
+            - node-detail
+
+    # Default role permissions for Hiera capabilities
+    defaultPermissions:
+      hiera.lookup:
+        - admin
+        - operator
+        - viewer
+      hiera.hierarchy:
+        - admin
+        - operator
+        - viewer
+      hiera.edit:
+        - admin
+
+    # Hiera configuration
+    config:
+      controlRepoPath: ${HIERA_CONTROL_REPO_PATH}
+      hieraConfigPath: ${HIERA_CONFIG_PATH:-hiera.yaml}
+      environments:
+        - production
+        - staging
+        - development
+
+      # Fact sources for hierarchy resolution
+      factSources:
+        preferPuppetDB: ${HIERA_FACT_SOURCE_PREFER_PUPPETDB:-true}
+        localFactsPath: ${HIERA_FACT_SOURCE_LOCAL_PATH:-}
+
+      # Catalog compilation (for checking resource parameters)
+      catalogCompilation:
+        enabled: ${HIERA_CATALOG_COMPILATION_ENABLED:-false}
+        timeout: ${HIERA_CATALOG_COMPILATION_TIMEOUT:-60000}
+        cacheTTL: ${HIERA_CATALOG_COMPILATION_CACHE_TTL:-300000}
+
+      # Data caching
+      cache:
+        enabled: ${HIERA_CACHE_ENABLED:-true}
+        ttl: ${HIERA_CACHE_TTL:-300000}
+        maxEntries: ${HIERA_CACHE_MAX_ENTRIES:-10000}
+
+      # Code analysis features
+      codeAnalysis:
+        enabled: ${HIERA_CODE_ANALYSIS_ENABLED:-true}
+        lintEnabled: ${HIERA_CODE_ANALYSIS_LINT_ENABLED:-true}
+        moduleUpdateCheck: ${HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK:-true}
+        analysisInterval: ${HIERA_CODE_ANALYSIS_INTERVAL:-3600000}
+        exclusionPatterns:
+          - "**/.git/**"
+          - "**/node_modules/**"
+          - "**/.bundle/**"
+
+# =========================================
+# External Plugins
+# =========================================
+# Configure third-party or custom plugins installed via npm or local directories
+#
+# External plugins are loaded from:
+#   - node_modules/@pabawi-plugins/*
+#   - Paths specified in externalPlugins section below
+#
+# externalPlugins:
+#   - path: ./custom-plugins/my-plugin
+#     enabled: true
+#     config:
+#       customSetting: value
+#
+#   - package: "@pabawi-plugins/ansible"
+#     enabled: true
+#     priority: 15
+#     config:
+#       playbookPath: /etc/ansible/playbooks
+#
+#   - package: "@pabawi-plugins/terraform"
+#     enabled: false
+#     config:
+#       workspacePath: /var/terraform

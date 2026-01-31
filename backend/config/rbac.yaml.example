@@ -1,0 +1,303 @@
+# Pabawi RBAC Configuration
+# ==========================
+#
+# This file configures Role-Based Access Control for Pabawi.
+# It defines roles, their permissions, and can pre-configure users/groups.
+#
+# Environment variables can be used with the following syntax:
+#   ${VAR_NAME}              - Required variable
+#   ${VAR_NAME:-default}     - Variable with default value
+#
+# Configuration Precedence (highest to lowest):
+#   1. Database values (managed via API/UI)
+#   2. Environment variables
+#   3. YAML configuration files
+#   4. Default values in code
+#
+# Note: Roles defined here are "seed" data - they will be created on startup
+# if they don't exist, but can be modified via the API afterward.
+#
+# Copy this file to rbac.yaml and customize for your environment.
+
+# =========================================
+# Authentication Configuration
+# =========================================
+auth:
+  # Enable/disable authentication (default: false for local development)
+  enabled: ${AUTH_ENABLED:-false}
+
+  # JWT token configuration
+  jwt:
+    secret: ${JWT_SECRET:?JWT_SECRET must be set when auth is enabled}
+    accessTokenExpiry: ${JWT_ACCESS_TOKEN_EXPIRY:-3600}      # 1 hour in seconds
+    refreshTokenExpiry: ${JWT_REFRESH_TOKEN_EXPIRY:-604800}  # 7 days in seconds
+    issuer: ${JWT_ISSUER:-pabawi}
+
+  # Session configuration
+  session:
+    maxActiveSessions: ${MAX_ACTIVE_SESSIONS:-5}
+    inactivityTimeout: ${SESSION_INACTIVITY_TIMEOUT:-1800}  # 30 minutes
+
+  # Password policy
+  password:
+    minLength: ${PASSWORD_MIN_LENGTH:-12}
+    requireUppercase: ${PASSWORD_REQUIRE_UPPERCASE:-true}
+    requireLowercase: ${PASSWORD_REQUIRE_LOWERCASE:-true}
+    requireNumbers: ${PASSWORD_REQUIRE_NUMBERS:-true}
+    requireSpecialChars: ${PASSWORD_REQUIRE_SPECIAL:-true}
+
+# =========================================
+# Role Definitions
+# =========================================
+# Roles are evaluated in order of priority (higher = evaluated later)
+# Deny rules always take precedence over allow rules
+#
+# Permission capabilities follow the pattern: category.action
+# Wildcards supported: * (all), category.* (all actions in category)
+#
+# Built-in capability categories:
+#   - command.*      Command execution
+#   - task.*         Task execution
+#   - plan.*         Plan execution
+#   - inventory.*    Inventory management
+#   - facts.*        Fact queries
+#   - reports.*      Report queries
+#   - hiera.*        Hiera lookups
+#   - node.*         Node management
+#   - user.*         User management (admin)
+#   - role.*         Role management (admin)
+#   - system.*       System administration
+roles:
+  # =========================================
+  # Administrator Role (System Default)
+  # =========================================
+  - name: admin
+    description: Full system administrator with unrestricted access
+    priority: 100
+    isSystem: true  # Cannot be deleted
+    permissions:
+      - capability: "*"
+        action: allow
+        description: Full access to all capabilities
+
+  # =========================================
+  # Operator Role (System Default)
+  # =========================================
+  - name: operator
+    description: Operations team member with execution privileges
+    priority: 50
+    isSystem: true
+    permissions:
+      # Command and task execution
+      - capability: command.execute
+        action: allow
+        description: Execute commands on nodes
+      - capability: task.execute
+        action: allow
+        description: Execute tasks on nodes
+      - capability: plan.execute
+        action: allow
+        description: Execute plans
+
+      # Inventory and facts (read-only)
+      - capability: inventory.*
+        action: allow
+        description: Full inventory access
+      - capability: facts.*
+        action: allow
+        description: Full facts access
+      - capability: reports.*
+        action: allow
+        description: Full reports access
+
+      # Hiera lookups (read-only)
+      - capability: hiera.lookup
+        action: allow
+        description: Perform Hiera lookups
+      - capability: hiera.hierarchy
+        action: allow
+        description: View Hiera hierarchy
+
+      # Node management (limited)
+      - capability: node.status
+        action: allow
+        description: View node status
+
+      # Deny admin capabilities
+      - capability: user.*
+        action: deny
+        description: Cannot manage users
+      - capability: role.*
+        action: deny
+        description: Cannot manage roles
+      - capability: system.*
+        action: deny
+        description: Cannot access system administration
+
+  # =========================================
+  # Viewer Role (System Default)
+  # =========================================
+  - name: viewer
+    description: Read-only access to view infrastructure state
+    priority: 10
+    isSystem: true
+    permissions:
+      # Read-only inventory access
+      - capability: inventory.list
+        action: allow
+        description: View inventory
+      - capability: inventory.detail
+        action: allow
+        description: View node details
+
+      # Read-only facts access
+      - capability: facts.query
+        action: allow
+        description: Query facts
+
+      # Read-only reports access
+      - capability: reports.query
+        action: allow
+        description: Query reports
+
+      # Read-only Hiera access
+      - capability: hiera.lookup
+        action: allow
+        description: Perform Hiera lookups
+
+      # Deny all execution capabilities
+      - capability: command.*
+        action: deny
+        description: Cannot execute commands
+      - capability: task.*
+        action: deny
+        description: Cannot execute tasks
+      - capability: plan.*
+        action: deny
+        description: Cannot execute plans
+
+      # Deny admin capabilities
+      - capability: user.*
+        action: deny
+        description: Cannot manage users
+      - capability: role.*
+        action: deny
+        description: Cannot manage roles
+      - capability: node.deactivate
+        action: deny
+        description: Cannot deactivate nodes
+      - capability: system.*
+        action: deny
+        description: Cannot access system administration
+
+  # =========================================
+  # Anonymous Role (System Default)
+  # =========================================
+  # Used when authentication is disabled or for unauthenticated requests
+  - name: anonymous
+    description: Unauthenticated access (when auth is disabled)
+    priority: 1
+    isSystem: true
+    permissions:
+      # When auth is disabled, anonymous has full access
+      # When auth is enabled, anonymous has no access
+      - capability: "*"
+        action: "${AUTH_ENABLED:-false}" == "true" ? deny : allow
+        description: Full access when auth disabled, no access when enabled
+
+  # =========================================
+  # Custom Role Examples (Uncomment to use)
+  # =========================================
+
+  # # Production-only operator
+  # - name: prod-operator
+  #   description: Operator with access restricted to production environment
+  #   priority: 55
+  #   permissions:
+  #     - capability: command.execute
+  #       action: allow
+  #       conditions:
+  #         nodeFilter: "environment=production"
+  #     - capability: task.execute
+  #       action: allow
+  #       conditions:
+  #         nodeFilter: "environment=production"
+  #     - capability: inventory.*
+  #       action: allow
+  #     - capability: facts.*
+  #       action: allow
+
+  # # Maintenance window operator
+  # - name: maintenance-operator
+  #   description: Operator with time-restricted access
+  #   priority: 45
+  #   permissions:
+  #     - capability: command.execute
+  #       action: allow
+  #       conditions:
+  #         timeWindow: "weekdays:22:00-06:00"
+  #     - capability: task.execute
+  #       action: allow
+  #       conditions:
+  #         timeWindow: "weekend:00:00-23:59"
+
+  # # Auditor role
+  # - name: auditor
+  #   description: Compliance auditor with read-only access to all data
+  #   priority: 25
+  #   permissions:
+  #     - capability: "*.query"
+  #       action: allow
+  #     - capability: "*.list"
+  #       action: allow
+  #     - capability: "*.export"
+  #       action: allow
+  #     - capability: reports.*
+  #       action: allow
+  #     - capability: "*.execute"
+  #       action: deny
+
+# =========================================
+# Group Definitions
+# =========================================
+# Groups allow you to assign roles to multiple users at once
+#
+# groups:
+#   - name: ops-team
+#     description: Operations team members
+#     roles:
+#       - operator
+#
+#   - name: dev-team
+#     description: Development team members
+#     roles:
+#       - viewer
+#
+#   - name: senior-ops
+#     description: Senior operations team with elevated privileges
+#     roles:
+#       - operator
+#       - prod-operator
+
+# =========================================
+# Initial Users (Seed Data)
+# =========================================
+# Users defined here will be created on first startup if they don't exist.
+# Passwords should be provided via environment variables for security.
+#
+# users:
+#   - username: admin
+#     email: admin@example.com
+#     password: ${INITIAL_ADMIN_PASSWORD:?INITIAL_ADMIN_PASSWORD must be set}
+#     displayName: System Administrator
+#     roles:
+#       - admin
+#     active: true
+#
+#   - username: operator
+#     email: operator@example.com
+#     password: ${INITIAL_OPERATOR_PASSWORD}
+#     displayName: Default Operator
+#     groups:
+#       - ops-team
+#     active: true

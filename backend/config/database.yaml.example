@@ -1,0 +1,126 @@
+# Pabawi Database Configuration
+# ==============================
+#
+# This file configures the database backend for Pabawi.
+# Environment variables can be used with the following syntax:
+#   ${VAR_NAME}              - Required variable
+#   ${VAR_NAME:-default}     - Variable with default value
+#
+# Copy this file to database.yaml and customize for your environment.
+
+# =========================================
+# SQLite Configuration (Default)
+# =========================================
+# SQLite is the default database, suitable for single-server deployments
+# and development environments.
+database:
+  type: sqlite
+
+  # Database file path (relative to backend directory or absolute)
+  path: ${DATABASE_PATH:-./data/pabawi.db}
+
+  # Connection pool settings (for future connection pooling)
+  # poolMin: 1
+  # poolMax: 1
+
+  # Connection timeout in milliseconds
+  connectionTimeout: ${DATABASE_CONNECTION_TIMEOUT:-30000}
+
+  # Enable debug logging for database queries
+  debug: ${DATABASE_DEBUG:-false}
+
+# =========================================
+# PostgreSQL Configuration (Future)
+# =========================================
+# PostgreSQL is recommended for production deployments with
+# high availability and clustering requirements.
+#
+# Uncomment and configure for PostgreSQL:
+#
+# database:
+#   type: postgresql
+#
+#   # Connection settings
+#   host: ${DATABASE_HOST:-localhost}
+#   port: ${DATABASE_PORT:-5432}
+#   database: ${DATABASE_NAME:-pabawi}
+#   username: ${DATABASE_USERNAME:-pabawi}
+#   password: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required for PostgreSQL}
+#
+#   # SSL/TLS settings
+#   ssl: ${DATABASE_SSL:-true}
+#
+#   # Connection pool settings
+#   poolMin: ${DATABASE_POOL_MIN:-2}
+#   poolMax: ${DATABASE_POOL_MAX:-10}
+#
+#   # Connection timeout in milliseconds
+#   connectionTimeout: ${DATABASE_CONNECTION_TIMEOUT:-30000}
+#
+#   # Debug logging
+#   debug: ${DATABASE_DEBUG:-false}
+
+# =========================================
+# MySQL/MariaDB Configuration (Future)
+# =========================================
+# MySQL/MariaDB is supported for environments that require it.
+#
+# Uncomment and configure for MySQL:
+#
+# database:
+#   type: mysql
+#
+#   # Connection settings
+#   host: ${DATABASE_HOST:-localhost}
+#   port: ${DATABASE_PORT:-3306}
+#   database: ${DATABASE_NAME:-pabawi}
+#   username: ${DATABASE_USERNAME:-pabawi}
+#   password: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required for MySQL}
+#
+#   # SSL/TLS settings
+#   ssl: ${DATABASE_SSL:-false}
+#
+#   # Connection pool settings
+#   poolMin: ${DATABASE_POOL_MIN:-2}
+#   poolMax: ${DATABASE_POOL_MAX:-10}
+#
+#   # Connection timeout in milliseconds
+#   connectionTimeout: ${DATABASE_CONNECTION_TIMEOUT:-30000}
+#
+#   # Debug logging
+#   debug: ${DATABASE_DEBUG:-false}
+
+# =========================================
+# Migration Settings
+# =========================================
+# Configure how database migrations are handled
+migrations:
+  # Automatically run migrations on startup
+  autoRun: ${DATABASE_MIGRATIONS_AUTO_RUN:-true}
+
+  # Migration files directory (relative to backend directory)
+  directory: ${DATABASE_MIGRATIONS_DIRECTORY:-./src/database}
+
+  # Lock timeout for migration operations (milliseconds)
+  lockTimeout: ${DATABASE_MIGRATIONS_LOCK_TIMEOUT:-60000}
+
+# =========================================
+# Backup Settings (Future)
+# =========================================
+# Configure automatic database backups
+#
+# backup:
+#   # Enable automatic backups
+#   enabled: ${DATABASE_BACKUP_ENABLED:-false}
+#
+#   # Backup schedule (cron expression)
+#   schedule: ${DATABASE_BACKUP_SCHEDULE:-0 2 * * *}  # Daily at 2 AM
+#
+#   # Backup directory
+#   directory: ${DATABASE_BACKUP_DIRECTORY:-./data/backups}
+#
+#   # Number of backups to retain
+#   retention: ${DATABASE_BACKUP_RETENTION:-7}
+#
+#   # Compress backups
+#   compress: ${DATABASE_BACKUP_COMPRESS:-true}
