@@ -66,9 +66,18 @@ export type {
 // Constants
 export { BuiltInRoles, DefaultRolePermissions } from "./types.js";
 
+// SetupService types
+export type {
+  SetupStatus,
+  InitialAdminInput,
+  PasswordValidation,
+  PasswordPolicy,
+} from "./SetupService.js";
+
 // Services
 export { UserService } from "./UserService.js";
 export { GroupService } from "./GroupService.js";
 export { RoleService } from "./RoleService.js";
 export { AuthService, AuthenticationError } from "./AuthService.js";
 export { AuthorizationService, AuthorizationError } from "./AuthorizationService.js";
+export { SetupService } from "./SetupService.js";

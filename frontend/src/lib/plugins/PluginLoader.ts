@@ -29,6 +29,7 @@ import type {
   WidgetSlot,
 } from "./types";
 import { DEFAULT_PLUGIN_LOADER_CONFIG } from "./types";
+import { hasLocalWidget, loadLocalWidgetComponent } from "./WidgetBridge";
 
 /**
  * Plugin Loader class
@@ -232,7 +233,23 @@ export class PluginLoader {
       return cached;
     }
 
-    // Find the widget
+    // First, try local widget manifest (works even if backend plugin not registered)
+    if (hasLocalWidget(widgetId)) {
+      try {
+        const component = await loadLocalWidgetComponent(widgetId);
+        if (component) {
+          this.widgetComponents.set(widgetId, component);
+          this.emit({ type: "widget:loaded", widgetId });
+          return component;
+        }
+      } catch (error) {
+        this.log("warn", `Failed to load widget from local manifest: ${widgetId}`, {
+          error: this.errorMessage(error),
+        });
+      }
+    }
+
+    // Find the widget in loaded plugins
     let targetWidget: LoadedWidget | undefined;
     let targetPlugin: LoadedPlugin | undefined;
 
@@ -546,7 +563,25 @@ export class PluginLoader {
       return cached;
     }
 
-    // Try to get from plugin module first
+    // First, try to load from local widget manifest (frontend/src/widgets/)
+    if (hasLocalWidget(widgetId)) {
+      try {
+        const component = await loadLocalWidgetComponent(widgetId);
+        if (component) {
+          this.widgetComponents.set(widgetId, component);
+          this.emit({ type: "widget:loaded", widgetId });
+          this.log("debug", `Loaded widget from local manifest: ${widgetId}`);
+          return component;
+        }
+      } catch (error) {
+        this.log("warn", `Failed to load widget from local manifest: ${widgetId}`, {
+          error: this.errorMessage(error),
+        });
+        // Fall through to try other loading methods
+      }
+    }
+
+    // Try to get from plugin module next
     const pluginModule = this.pluginModules.get(widget.pluginName);
     if (pluginModule?.components) {
       const componentName = this.extractComponentName(widget.component);
@@ -558,7 +593,7 @@ export class PluginLoader {
       }
     }
 
-    // Try dynamic import
+    // Try dynamic import as fallback
     try {
       const componentPath = `${this.config.assetsBaseUrl}/${widget.pluginName}/${widget.component}`;
       const module = await this.importWithRetry(componentPath);

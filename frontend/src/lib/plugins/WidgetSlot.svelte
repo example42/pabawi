@@ -14,6 +14,7 @@
   @version 1.0.0
 -->
 <script lang="ts">
+  import { onMount } from "svelte";
   import type { Component } from "svelte";
   import type { LoadedWidget, WidgetSlot as WidgetSlotType, WidgetSize } from "./types";
   import { getWidgetRegistry } from "./WidgetRegistry.svelte";
@@ -90,12 +91,41 @@
   // Track active tab (for tabs layout)
   let activeTabId = $state<string | null>(null);
 
+  // Registry version counter to trigger reactivity when widgets change
+  let registryVersion = $state(0);
+
+  // Subscribe to registry events to trigger re-renders
+  onMount(() => {
+    const unsubscribe = registry.subscribe((event) => {
+      // Increment version on any widget change to trigger $derived recalculation
+      if (
+        event.type === "widget:registered" ||
+        event.type === "widget:unregistered" ||
+        event.type === "widget:updated" ||
+        event.type === "registry:refreshed" ||
+        event.type === "registry:cleared"
+      ) {
+        registryVersion++;
+        if (debug) {
+          log("debug", `Registry event: ${event.type}, triggering re-render`);
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  });
+
   // ==========================================================================
   // Derived State
   // ==========================================================================
 
   // Get widgets for this slot with permission filtering
+  // The registryVersion dependency ensures re-calculation when registry changes
   let widgets = $derived.by(() => {
+    // Access registryVersion to establish reactive dependency
+    void registryVersion;
     const slotWidgets = registry.getWidgetsForSlot(slot, userCapabilities);
     if (debug) {
       log("debug", `Found ${slotWidgets.length} widgets for slot: ${slot}`);

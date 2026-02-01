@@ -10,7 +10,12 @@
   import IntegrationSetupPage from './pages/IntegrationSetupPage.svelte';
   import PuppetPage from './pages/PuppetPage.svelte';
   import LoginPage from './pages/LoginPage.svelte';
+  import SetupPage from './pages/SetupPage.svelte';
   import PluginManagerPage from './pages/PluginManagerPage.svelte';
+  // Admin pages
+  import UsersPage from './pages/admin/UsersPage.svelte';
+  import RolesPage from './pages/admin/RolesPage.svelte';
+  import SettingsPage from './pages/admin/SettingsPage.svelte';
   import { router } from './lib/router.svelte';
 
   const routes = {
@@ -21,7 +26,13 @@
     '/nodes/:id': NodeDetailPage,
     '/integrations/:integration/setup': IntegrationSetupPage,
     '/login': LoginPage,
-    '/plugins': PluginManagerPage
+    '/setup': SetupPage,
+    '/plugins': PluginManagerPage,
+    // Admin routes
+    '/admin/users': UsersPage,
+    '/admin/roles': RolesPage,
+    '/admin/plugins': PluginManagerPage,
+    '/admin/settings': SettingsPage
   };
 
   function handleError(error: Error, errorInfo: { componentStack?: string }): void {

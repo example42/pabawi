@@ -21,6 +21,11 @@ import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
 import { createPluginsRouter } from "./routes/plugins";
+import { createSetupRouter } from "./routes/setup";
+import { createAuthRouter } from "./routes/auth";
+import { createUserRouter } from "./routes/users";
+import { createRoleRouter } from "./routes/roles";
+import { createGroupRouter } from "./routes/groups";
 import configRouter from "./routes/config";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
@@ -598,6 +603,53 @@ async function startServer(): Promise<Express> {
 
     // Config routes (UI settings, etc.)
     app.use("/api/config", configRouter);
+
+    // Get database adapter for auth routes
+    const dbAdapter = databaseService.getAdapter();
+
+    // Setup routes (first-run admin creation - no auth required)
+    app.use(
+      "/api/setup",
+      createSetupRouter({ db: dbAdapter })
+    );
+
+    // Auth routes (login, logout, refresh - mostly no auth required)
+    const jwtSecret = process.env.JWT_SECRET || "pabawi-dev-secret-change-in-production";
+    const accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY ? parseInt(process.env.JWT_ACCESS_TOKEN_EXPIRY, 10) : 3600;
+    const refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY ? parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRY, 10) : 604800;
+
+    app.use(
+      "/api/auth",
+      createAuthRouter({
+        db: dbAdapter,
+        jwtSecret,
+        accessTokenExpiry,
+        refreshTokenExpiry,
+      })
+    );
+
+    // User management routes (admin only)
+    app.use(
+      "/api/users",
+      createUserRouter({ db: dbAdapter, jwtSecret })
+    );
+
+    // Role management routes (admin only)
+    app.use(
+      "/api/roles",
+      createRoleRouter({ db: dbAdapter, jwtSecret })
+    );
+
+    // Group management routes (admin only)
+    app.use(
+      "/api/groups",
+      createGroupRouter({ db: dbAdapter, jwtSecret })
+    );
+
+    logger.info("Authentication and authorization routes mounted", {
+      component: "Server",
+      operation: "startServer",
+    });
 
     // API Routes
     app.use(

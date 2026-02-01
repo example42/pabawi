@@ -85,6 +85,11 @@ class Router {
 
 export const router = new Router();
 
+// Export navigate function for use in components
+export function navigate(path: string): void {
+  router.navigate(path);
+}
+
 export function link(node: HTMLAnchorElement): { destroy: () => void } {
   function handleClick(event: MouseEvent): void {
     // Only handle left clicks
