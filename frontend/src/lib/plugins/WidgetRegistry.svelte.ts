@@ -357,10 +357,17 @@ class WidgetRegistry {
    * Register a widget
    */
   registerWidget(widget: LoadedWidget): void {
+    console.log(`[WidgetRegistry.registerWidget] Registering widget: ${widget.id}`, {
+      slots: widget.slots,
+      plugin: widget.pluginName,
+      requiredCapabilities: widget.requiredCapabilities
+    });
+
     const existingWidget = this._state.widgets.get(widget.id);
 
     // Update the main widgets map
     this._state.widgets.set(widget.id, widget);
+    console.log(`[WidgetRegistry.registerWidget] Added to widgets map. Total widgets: ${this._state.widgets.size}`);
 
     // Update slot index
     for (const slot of widget.slots) {
@@ -370,6 +377,7 @@ class WidgetRegistry {
       const slotSet = this._state.widgetsBySlot.get(slot);
       if (slotSet) {
         slotSet.add(widget.id);
+        console.log(`[WidgetRegistry.registerWidget] Added to slot '${slot}'. Widgets in slot: ${slotSet.size}`);
       }
     }
 
@@ -430,9 +438,15 @@ class WidgetRegistry {
    * Register all widgets from a loaded plugin
    */
   registerPluginWidgets(plugin: LoadedPlugin): void {
+    console.log(`[WidgetRegistry] Registering widgets for plugin: ${plugin.info.metadata.name}`);
+    console.log(`[WidgetRegistry] Plugin has ${plugin.widgets.length} widgets:`,
+      plugin.widgets.map(w => ({ id: w.id, slots: w.slots })));
+
     for (const widget of plugin.widgets) {
       this.registerWidget(widget);
     }
+
+    console.log(`[WidgetRegistry] Total widgets in registry after registration: ${this._state.widgets.size}`);
   }
 
   /**

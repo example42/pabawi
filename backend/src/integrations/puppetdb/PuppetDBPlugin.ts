@@ -255,6 +255,35 @@ export class PuppetDBPlugin implements BasePluginInterface {
       icon: "pie-chart",
       priority: 95,
     },
+    {
+      id: "puppetdb:events-viewer",
+      name: "Events Viewer",
+      component: "./components/EventsViewer.svelte",
+      slots: ["node-detail", "standalone-page"],
+      size: "large",
+      requiredCapabilities: ["puppetdb.events"],
+      icon: "activity",
+      priority: 80,
+      config: {
+        showStatusFilter: true,
+        showResourceFilter: true,
+        defaultLimit: 100,
+      },
+    },
+    {
+      id: "puppetdb:catalog-viewer",
+      name: "Catalog Viewer",
+      component: "./components/CatalogViewer.svelte",
+      slots: ["node-detail", "standalone-page"],
+      size: "large",
+      requiredCapabilities: ["puppetdb.catalog"],
+      icon: "file-code",
+      priority: 75,
+      config: {
+        showRelationships: true,
+        showParameters: true,
+      },
+    },
   ];
 
   // =========================================================================

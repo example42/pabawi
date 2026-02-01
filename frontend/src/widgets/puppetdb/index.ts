@@ -33,7 +33,7 @@ export const PUPPETDB_WIDGET_MANIFEST = {
     load: () => import('./NodeBrowser.svelte'),
     slots: ['dashboard', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['puppetdb:nodes'],
+    requiredCapabilities: ['puppetdb.nodes'],
   },
   'puppetdb:facts-explorer': {
     id: 'puppetdb:facts-explorer',
@@ -41,7 +41,7 @@ export const PUPPETDB_WIDGET_MANIFEST = {
     load: () => import('./FactsExplorer.svelte'),
     slots: ['node-detail', 'modal'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['puppetdb:facts'],
+    requiredCapabilities: ['puppetdb.facts'],
   },
   'puppetdb:reports-viewer': {
     id: 'puppetdb:reports-viewer',
@@ -49,7 +49,7 @@ export const PUPPETDB_WIDGET_MANIFEST = {
     load: () => import('./ReportsViewer.svelte'),
     slots: ['dashboard', 'standalone-page', 'node-detail'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['puppetdb:reports'],
+    requiredCapabilities: ['puppetdb.reports'],
   },
   'puppetdb:reports-summary': {
     id: 'puppetdb:reports-summary',
@@ -57,7 +57,7 @@ export const PUPPETDB_WIDGET_MANIFEST = {
     load: () => import('./ReportsSummary.svelte'),
     slots: ['dashboard', 'sidebar'] as string[],
     defaultSize: { width: 1, height: 1 },
-    requiredCapabilities: ['puppetdb:reports'],
+    requiredCapabilities: ['puppetdb.reports'],
   },
 };
 /* eslint-enable @typescript-eslint/explicit-function-return-type */

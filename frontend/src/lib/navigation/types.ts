@@ -145,10 +145,14 @@ export interface Menu {
 export interface PluginMenuContribution {
   /** Plugin name */
   pluginName: string;
+  /** Display name for the plugin */
+  displayName?: string;
   /** Integration type for grouping */
   integrationType: IntegrationType;
   /** Menu items to add */
   items: MenuItem[];
+  /** Priority for ordering */
+  priority?: number;
   /** Section to add items to (default: "plugins") */
   section?: string;
   /** Plugin color for theming */

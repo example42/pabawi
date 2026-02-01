@@ -33,7 +33,7 @@ export const BOLT_WIDGET_MANIFEST = {
     load: () => import('./CommandExecutor.svelte'),
     slots: ['dashboard', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['bolt:command'],
+    requiredCapabilities: ['bolt.command.execute'],
   },
   'bolt:task-runner': {
     id: 'bolt:task-runner',
@@ -41,7 +41,7 @@ export const BOLT_WIDGET_MANIFEST = {
     load: () => import('./TaskRunner.svelte'),
     slots: ['dashboard', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['bolt:task'],
+    requiredCapabilities: ['bolt.task.execute'],
   },
   'bolt:inventory-viewer': {
     id: 'bolt:inventory-viewer',
@@ -49,7 +49,7 @@ export const BOLT_WIDGET_MANIFEST = {
     load: () => import('./InventoryViewer.svelte'),
     slots: ['dashboard', 'sidebar'] as string[],
     defaultSize: { width: 1, height: 2 },
-    requiredCapabilities: ['bolt:inventory'],
+    requiredCapabilities: ['bolt.inventory.list'],
   },
   'bolt:task-browser': {
     id: 'bolt:task-browser',
@@ -57,7 +57,7 @@ export const BOLT_WIDGET_MANIFEST = {
     load: () => import('./TaskBrowser.svelte'),
     slots: ['sidebar', 'modal'] as string[],
     defaultSize: { width: 1, height: 1 },
-    requiredCapabilities: ['bolt:task'],
+    requiredCapabilities: ['bolt.task.list'],
   },
 };
 /* eslint-enable @typescript-eslint/explicit-function-return-type */

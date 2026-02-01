@@ -42,7 +42,7 @@
 
   // Get setup URL for integration
   function getSetupUrl(name: string): string {
-    return `/integrations/${name}/setup`;
+    return `/integrations/${name.toLowerCase()}/setup`;
   }
 
 

@@ -35,7 +35,7 @@ export const HIERA_WIDGET_MANIFEST = {
     load: () => import('./HieraExplorer.svelte'),
     slots: ['dashboard', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['hiera:read'],
+    requiredCapabilities: ['hiera.keys', 'hiera.lookup'],
   },
   'hiera:key-lookup': {
     id: 'hiera:key-lookup',
@@ -43,7 +43,7 @@ export const HIERA_WIDGET_MANIFEST = {
     load: () => import('./KeyLookup.svelte'),
     slots: ['node-detail', 'modal', 'sidebar'] as string[],
     defaultSize: { width: 1, height: 1 },
-    requiredCapabilities: ['hiera:lookup'],
+    requiredCapabilities: ['hiera.lookup'],
   },
   'hiera:hierarchy-viewer': {
     id: 'hiera:hierarchy-viewer',
@@ -51,7 +51,7 @@ export const HIERA_WIDGET_MANIFEST = {
     load: () => import('./HierarchyViewer.svelte'),
     slots: ['node-detail', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['hiera:read'],
+    requiredCapabilities: ['hiera.hierarchy'],
   },
   'hiera:node-data': {
     id: 'hiera:node-data',
@@ -59,7 +59,7 @@ export const HIERA_WIDGET_MANIFEST = {
     load: () => import('./NodeHieraData.svelte'),
     slots: ['node-detail'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['hiera:read'],
+    requiredCapabilities: ['hiera.node'],
   },
   'hiera:code-analysis': {
     id: 'hiera:code-analysis',
@@ -67,7 +67,7 @@ export const HIERA_WIDGET_MANIFEST = {
     load: () => import('./CodeAnalysis.svelte'),
     slots: ['dashboard', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['hiera:analyze'],
+    requiredCapabilities: ['hiera.analysis'],
   },
   'hiera:key-values-grid': {
     id: 'hiera:key-values-grid',
@@ -75,7 +75,7 @@ export const HIERA_WIDGET_MANIFEST = {
     load: () => import('./KeyValuesGrid.svelte'),
     slots: ['standalone-page', 'modal'] as string[],
     defaultSize: { width: 3, height: 2 },
-    requiredCapabilities: ['hiera:read'],
+    requiredCapabilities: ['hiera.values'],
   },
 };
 /* eslint-enable @typescript-eslint/explicit-function-return-type */

@@ -118,8 +118,21 @@
   }: Props = $props();
 
   // ==========================================================================
+  // Helpers
+  // ==========================================================================
+
+  function normalizeTargets(targets: string | string[] | undefined): string[] {
+    if (!targets) return [];
+    return Array.isArray(targets) ? targets : [targets];
+  }
+
+  // ==========================================================================
   // State
   // ==========================================================================
+
+  // Capture initial prop values (these are intentionally non-reactive)
+  const initialTargets = normalizeTargets(targetNodes);
+  const initialParams = { ...initialParameters };
 
   // Task browser state
   let tasksByModule = $state<TasksByModule>({});
@@ -132,12 +145,10 @@
   // Target selection state
   let nodes = $state<Node[]>([]);
   let nodesLoading = $state(false);
-  let selectedTargets = $state<string[]>(
-    Array.isArray(targetNodes) ? targetNodes : targetNodes ? [targetNodes] : []
-  );
+  let selectedTargets = $state<string[]>(initialTargets);
 
   // Execution state
-  let taskParameters = $state<Record<string, unknown>>(initialParameters);
+  let taskParameters = $state<Record<string, unknown>>(initialParams);
   let executing = $state(false);
   let executionError = $state<string | null>(null);
   let executionResult = $state<ExecutionResult | null>(null);

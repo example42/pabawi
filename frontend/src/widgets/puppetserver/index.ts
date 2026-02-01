@@ -31,7 +31,7 @@ export const PUPPETSERVER_WIDGET_MANIFEST = {
     load: () => import('./EnvironmentManager.svelte'),
     slots: ['dashboard', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
-    requiredCapabilities: ['puppetserver:environments'],
+    requiredCapabilities: ['puppetserver.environments'],
   },
   'puppetserver:status-dashboard': {
     id: 'puppetserver:status-dashboard',
@@ -39,7 +39,7 @@ export const PUPPETSERVER_WIDGET_MANIFEST = {
     load: () => import('./StatusDashboard.svelte'),
     slots: ['dashboard', 'sidebar'] as string[],
     defaultSize: { width: 1, height: 1 },
-    requiredCapabilities: ['puppetserver:status'],
+    requiredCapabilities: ['puppetserver.status'],
   },
 };
 /* eslint-enable @typescript-eslint/explicit-function-return-type */

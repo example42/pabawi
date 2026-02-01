@@ -731,6 +731,7 @@ async function startServer(): Promise<Express> {
       "/api/integrations",
       createIntegrationsRouter(
         integrationManager,
+        logger,
         puppetDBService,
         puppetserverService,
       ),

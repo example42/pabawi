@@ -127,6 +127,10 @@
     // Access registryVersion to establish reactive dependency
     void registryVersion;
     const slotWidgets = registry.getWidgetsForSlot(slot, userCapabilities);
+    console.log(`[WidgetSlot] Slot '${slot}' query result: ${slotWidgets.length} widgets`,
+      slotWidgets.map(w => w.id));
+    console.log(`[WidgetSlot] Registry widget count: ${registry.widgetCount}`);
+    console.log(`[WidgetSlot] User capabilities:`, userCapabilities);
     if (debug) {
       log("debug", `Found ${slotWidgets.length} widgets for slot: ${slot}`);
     }
@@ -401,7 +405,8 @@
               </div>
             {:else if state?.component}
               <!-- Render Widget Component -->
-              <svelte:component this={state.component} {widget} />
+              {@const WidgetComponent = state.component}
+              <WidgetComponent {widget} />
             {:else}
               <!-- Pending State -->
               <div class="animate-pulse">
@@ -472,7 +477,8 @@
               </button>
             </div>
           {:else if state?.component}
-            <svelte:component this={state.component} {widget} />
+            {@const WidgetComponent = state.component}
+            <WidgetComponent {widget} />
           {:else}
             <div class="animate-pulse">
               <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
@@ -541,7 +547,8 @@
               </button>
             </div>
           {:else if state?.component}
-            <svelte:component this={state.component} {widget} />
+            {@const WidgetComponent = state.component}
+            <WidgetComponent {widget} />
           {:else}
             <div class="animate-pulse py-8">
               <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-3"></div>

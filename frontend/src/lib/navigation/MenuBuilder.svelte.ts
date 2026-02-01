@@ -14,10 +14,10 @@
  * @version 1.0.0
  */
 
-import { getPluginLoader, type LoadedPlugin, type PluginEvent } from "../plugins";
+import { get as apiGet } from "../api";
 import { getAuthStore, type AuthStore } from "../auth.svelte";
 import { logger } from "../logger.svelte";
-import type { IntegrationType, PluginCapabilitySummary } from "../plugins/types";
+import type { IntegrationType } from "../plugins/types";
 import type {
   Menu,
   MenuItem,
@@ -31,6 +31,66 @@ import type {
   IntegrationTypeMetadata,
 } from "./types";
 import { DEFAULT_MENU_BUILDER_CONFIG, INTEGRATION_TYPE_METADATA } from "./types";
+
+// =============================================================================
+// Backend Menu Data Types
+// =============================================================================
+
+/**
+ * Tab definition from backend
+ */
+interface IntegrationTab {
+  id: string;
+  label: string;
+  capability: string;
+  widget?: string;
+  icon?: string;
+  priority: number;
+}
+
+/**
+ * Integration menu item from backend
+ */
+interface IntegrationMenuItem {
+  name: string;
+  displayName: string;
+  description: string;
+  color?: string;
+  icon?: string;
+  enabled: boolean;
+  healthy: boolean;
+  path: string;
+  tabs: IntegrationTab[];
+}
+
+/**
+ * Integration category from backend
+ */
+interface IntegrationCategory {
+  type: IntegrationType;
+  label: string;
+  description?: string;
+  icon?: string;
+  priority: number;
+  integrations: IntegrationMenuItem[];
+}
+
+/**
+ * Legacy route from backend
+ */
+interface LegacyRoute {
+  label: string;
+  path: string;
+  icon?: string;
+}
+
+/**
+ * Menu response from backend
+ */
+interface MenuResponse {
+  categories: IntegrationCategory[];
+  legacy: LegacyRoute[];
+}
 
 // =============================================================================
 // Core Navigation Items
@@ -48,24 +108,6 @@ const CORE_NAV_ITEMS: MenuItem[] = [
     exact: true,
     icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
     priority: 1000,
-  },
-  {
-    id: "inventory",
-    type: "link",
-    label: "Inventory",
-    path: "/inventory",
-    icon: "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01",
-    priority: 900,
-    requiredCapabilities: ["inventory.*", "inventory.list"],
-  },
-  {
-    id: "executions",
-    type: "link",
-    label: "Executions",
-    path: "/executions",
-    icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
-    priority: 800,
-    requiredCapabilities: ["command.*", "task.*", "execution.list"],
   },
 ];
 
@@ -85,6 +127,13 @@ const DEFAULT_SECTIONS: MenuSection[] = [
     title: "Integrations",
     items: [],
     priority: 500,
+    showTitle: false, // Don't show title since we have category groups
+  },
+  {
+    id: "legacy",
+    title: "Legacy",
+    items: [],
+    priority: 300,
     showTitle: true,
   },
   {
@@ -178,9 +227,6 @@ class MenuBuilder {
   // Event subscribers
   private eventHandlers = new Set<MenuBuilderEventHandler>();
 
-  // Plugin loader subscription cleanup
-  private pluginLoaderUnsubscribe: (() => void) | null = null;
-
   constructor(config: Partial<MenuBuilderConfig> = {}) {
     this.config = { ...DEFAULT_MENU_BUILDER_CONFIG, ...config };
   }
@@ -190,37 +236,98 @@ class MenuBuilder {
   // ===========================================================================
 
   /**
-   * Initialize the menu builder, load plugins, and subscribe to plugin events
+   * Fetch integration menu data from backend API
+   */
+  private async fetchIntegrationMenu(): Promise<void> {
+    try {
+      const response = await apiGet<MenuResponse>("/api/integrations/menu");
+
+      // Clear existing plugin contributions
+      this.pluginContributions.clear();
+
+      // Build contributions from integration menu categories
+      for (const category of response.categories) {
+        for (const integration of category.integrations) {
+          // Create a contribution for each integration
+          this.pluginContributions.set(integration.name, {
+            pluginName: integration.name,
+            displayName: integration.displayName,
+            integrationType: category.type,
+            items: [
+              {
+                id: `integration-${integration.name}`,
+                type: "link",
+                label: integration.displayName,
+                path: integration.path,
+                icon: integration.icon || category.icon,
+                priority: 500 - category.priority, // Higher backend priority = lower frontend priority number
+                requiredCapabilities: [], // No capability filtering yet
+                badge: integration.enabled && !integration.healthy ? "offline" : undefined,
+                metadata: {
+                  description: integration.description,
+                  color: integration.color,
+                  tabCount: integration.tabs.length,
+                },
+              } as LinkMenuItem,
+            ],
+            priority: category.priority,
+          });
+        }
+      }
+
+      // Add legacy routes as custom contributions
+      for (const legacyRoute of response.legacy) {
+        const legacyId = legacyRoute.path.split("/").filter(Boolean).join("-") || "legacy";
+        this.customContributions.set(`legacy-${legacyId}`, {
+          pluginName: `legacy-${legacyId}`,
+          displayName: legacyRoute.label,
+          integrationType: "Info" as IntegrationType, // Placeholder type
+          items: [
+            {
+              id: `legacy-${legacyId}`,
+              type: "link",
+              label: legacyRoute.label,
+              path: legacyRoute.path,
+              icon: legacyRoute.icon,
+              priority: 800, // Between core (1000) and categories (500)
+            } as LinkMenuItem,
+          ],
+          priority: 800,
+        });
+      }
+
+      this.log("info", `Loaded ${response.categories.length} categories, ${response.legacy.length} legacy routes`);
+    } catch (error) {
+      this.log("error", `Failed to fetch integration menu: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Initialize the menu builder, fetch integration menu data, and build menu
    *
    * This method:
-   * 1. Subscribes to plugin loader events for future updates
-   * 2. Loads all available plugins from the backend
-   * 3. Builds the initial menu from loaded plugins
+   * 1. Fetches dynamic integration menu from backend
+   * 2. Builds menu with categories, integrations, legacy, and admin sections
    */
   async initialize(): Promise<void> {
     this.log("debug", "Initializing menu builder");
     this.isBuilding = true;
 
     try {
-      // Subscribe to plugin loader events for future updates
-      const pluginLoader = getPluginLoader();
-      this.pluginLoaderUnsubscribe = pluginLoader.subscribe((event) => {
-        this.handlePluginEvent(event);
-      });
+      // Fetch integration menu data from backend
+      this.log("debug", "Fetching integration menu from backend");
+      await this.fetchIntegrationMenu();
+      this.log("info", "Integration menu data loaded");
 
-      // Load all plugins from the backend API
-      this.log("debug", "Loading plugins from backend");
-      const loadedPlugins = await pluginLoader.loadAll();
-      this.log("info", `Loaded ${loadedPlugins.length} plugins`);
-
-      // Build initial menu with loaded plugins
+      // Build menu with fetched data
       this.rebuild();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to initialize menu";
       this.lastError = message;
       this.log("error", `Menu initialization failed: ${message}`);
 
-      // Still build the menu with core items even if plugins fail
+      // Still build the menu with core items even if integrations fail
       this.rebuild();
     } finally {
       this.isBuilding = false;
@@ -231,11 +338,6 @@ class MenuBuilder {
    * Destroy the menu builder and cleanup subscriptions
    */
   destroy(): void {
-    if (this.pluginLoaderUnsubscribe) {
-      this.pluginLoaderUnsubscribe();
-      this.pluginLoaderUnsubscribe = null;
-    }
-
     this.pluginContributions.clear();
     this.customContributions.clear();
     this.eventHandlers.clear();
@@ -252,20 +354,7 @@ class MenuBuilder {
     try {
       this.log("debug", "Rebuilding menu");
 
-      // Clear plugin contributions (custom contributions are preserved)
-      this.pluginContributions.clear();
-
-      // Load plugin contributions
-      const pluginLoader = getPluginLoader();
-      const plugins = pluginLoader.getAllPlugins();
-
-      for (const plugin of plugins.values()) {
-        if (plugin.loadState === "loaded") {
-          this.addPluginContribution(plugin);
-        }
-      }
-
-      // Build the menu
+      // Build the menu from current contributions
       const menu = this.buildMenu();
       this.menu = menu;
 
@@ -374,156 +463,6 @@ class MenuBuilder {
   // ===========================================================================
 
   /**
-   * Handle plugin events from the plugin loader
-   */
-  private handlePluginEvent(event: PluginEvent): void {
-    switch (event.type) {
-      case "plugin:loaded":
-        if (event.plugin.loadState === "loaded") {
-          this.addPluginContribution(event.plugin);
-          this.rebuild();
-        }
-        break;
-
-      case "plugin:unloaded":
-        this.removeContribution(event.pluginName);
-        break;
-
-      // Other events don't require menu rebuild
-      default:
-        break;
-    }
-  }
-
-  /**
-   * Add menu contribution from a loaded plugin
-   */
-  private addPluginContribution(plugin: LoadedPlugin): void {
-    const metadata = plugin.info.metadata;
-
-    // Create menu items from plugin capabilities
-    const items: MenuItem[] = this.createPluginMenuItems(plugin);
-
-    if (items.length === 0) {
-      return;
-    }
-
-    const contribution: PluginMenuContribution = {
-      pluginName: metadata.name,
-      integrationType: metadata.integrationType,
-      items,
-      section: "integrations",
-      color: metadata.color,
-      icon: metadata.icon,
-    };
-
-    this.pluginContributions.set(metadata.name, contribution);
-  }
-
-  /**
-   * Create menu items from a plugin's metadata
-   */
-  private createPluginMenuItems(plugin: LoadedPlugin): MenuItem[] {
-    const metadata = plugin.info.metadata;
-    const capabilities = plugin.info.capabilities;
-    const items: MenuItem[] = [];
-
-    // Create a group item for the plugin if it has multiple capabilities
-    if (capabilities.length > 0) {
-      // Determine the main page route for this plugin
-      const mainPath = `/${metadata.name.toLowerCase()}`;
-
-      // Create child items for each capability category
-      const capabilityItems = this.createCapabilityItems(
-        plugin,
-        mainPath
-      );
-
-      if (capabilityItems.length > 1) {
-        // Create a group with children
-        const groupItem: GroupMenuItem = {
-          id: `plugin:${metadata.name}`,
-          type: "group",
-          label: this.formatPluginLabel(metadata.name),
-          icon: metadata.icon ?? this.getDefaultPluginIcon(metadata.integrationType),
-          children: capabilityItems,
-          collapsed: false,
-          integrationType: metadata.integrationType,
-          pluginName: metadata.name,
-          priority: this.getIntegrationPriority(metadata.integrationType),
-          requiredCapabilities: this.getPluginCapabilities(plugin),
-        };
-        items.push(groupItem);
-      } else if (capabilityItems.length === 1) {
-        // Single capability - use a simple link
-        const capItem = capabilityItems[0];
-        items.push({
-          ...capItem,
-          id: `plugin:${metadata.name}`,
-          label: this.formatPluginLabel(metadata.name),
-          icon: metadata.icon ?? this.getDefaultPluginIcon(metadata.integrationType),
-          priority: this.getIntegrationPriority(metadata.integrationType),
-        });
-      }
-    } else {
-      // Plugin without capabilities - just add a link to the plugin page
-      const linkItem: LinkMenuItem = {
-        id: `plugin:${metadata.name}`,
-        type: "link",
-        label: this.formatPluginLabel(metadata.name),
-        path: `/${metadata.name.toLowerCase()}`,
-        icon: metadata.icon ?? this.getDefaultPluginIcon(metadata.integrationType),
-        priority: this.getIntegrationPriority(metadata.integrationType),
-      };
-      items.push(linkItem);
-    }
-
-    return items;
-  }
-
-  /**
-   * Create menu items from plugin capabilities
-   */
-  private createCapabilityItems(
-    plugin: LoadedPlugin,
-    basePath: string
-  ): LinkMenuItem[] {
-    const capabilities = plugin.info.capabilities;
-    if (capabilities.length === 0) return [];
-
-    // Group capabilities by category
-    const categoryMap = new Map<string, PluginCapabilitySummary[]>();
-
-    for (const cap of capabilities) {
-      const existing = categoryMap.get(cap.category) ?? [];
-      existing.push(cap);
-      categoryMap.set(cap.category, existing);
-    }
-
-    const items: LinkMenuItem[] = [];
-    const pluginName = plugin.info.metadata.name;
-
-    for (const [category, caps] of categoryMap) {
-      // Create a link for each category
-      const item: LinkMenuItem = {
-        id: `plugin:${pluginName}:${category}`,
-        type: "link",
-        label: this.formatCategoryLabel(category),
-        path: `${basePath}/${category.toLowerCase()}`,
-        icon: this.getCategoryIcon(category),
-        priority: this.getCategoryPriority(category),
-        requiredCapabilities: caps.map((c) => c.name),
-      };
-      items.push(item);
-    }
-
-    // Sort by priority
-    items.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-
-    return items;
-  }
-
-  /**
    * Build the complete menu structure
    */
   private buildMenu(): Menu {
@@ -554,15 +493,16 @@ class MenuBuilder {
 
     if (integrationsSection && this.contributions.size > 0) {
       if (this.config.groupByIntegrationType) {
-        // Group by integration type
+        // Group by integration type (category-based structure)
         const grouped = this.groupContributionsByType();
 
         for (const [integrationType, contributions] of grouped) {
           const metadata = this.getIntegrationTypeMetadata(integrationType);
 
-          // Collect all items for this integration type
+          // Collect all integration link items for this type
           const groupItems: MenuItem[] = [];
           for (const contrib of contributions) {
+            // Filter items by permission
             const filteredItems = this.filterItemsByPermission(
               contrib.items,
               authStore
@@ -574,30 +514,25 @@ class MenuBuilder {
             continue;
           }
 
-          // Sort items by priority
+          // Sort items by priority (higher priority first)
           if (this.config.sortByPriority) {
             groupItems.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
           }
 
-          // If only one plugin in this type, don't create extra nesting
-          if (contributions.length === 1 && groupItems.length === 1) {
-            integrationsSection.items.push(groupItems[0]);
-          } else {
-            // Create group for this integration type
-            const typeGroup: GroupMenuItem = {
-              id: `integration-type:${integrationType}`,
-              type: "group",
-              label: metadata.label,
-              icon: metadata.icon,
-              children: groupItems,
-              collapsed: false,
-              priority: metadata.priority,
-            };
-            integrationsSection.items.push(typeGroup);
-          }
+          // Create group for this integration type (category)
+          const typeGroup: GroupMenuItem = {
+            id: `integration-type:${integrationType}`,
+            type: "group",
+            label: metadata.label,
+            icon: metadata.icon,
+            children: groupItems, // Integration links as children
+            collapsed: true, // Start collapsed
+            priority: metadata.priority,
+          };
+          integrationsSection.items.push(typeGroup);
         }
       } else {
-        // Flat list of all plugin items
+        // Flat list of all integration items
         for (const contrib of this.contributions.values()) {
           const filteredItems = this.filterItemsByPermission(
             contrib.items,
@@ -615,14 +550,72 @@ class MenuBuilder {
       }
     }
 
-    // Add admin items
-    const adminSection = sections.find((s) => s.id === "admin");
-    if (adminSection) {
+    // Add legacy items as a single dropdown group in the core section
+    const coreSection = sections.find((s) => s.id === "core");
+    if (coreSection) {
+      const legacyItems: MenuItem[] = [];
+      for (const [key, contrib] of this.customContributions) {
+        if (key.startsWith("legacy-")) {
+          const filteredItems = this.filterItemsByPermission(
+            contrib.items,
+            authStore
+          );
+          legacyItems.push(...filteredItems);
+        }
+      }
+
+      // Sort legacy items by priority
+      if (this.config.sortByPriority) {
+        legacyItems.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+      }
+
+      // Create group dropdown for legacy items
+      if (legacyItems.length > 0) {
+        const legacyGroup: GroupMenuItem = {
+          id: "legacy-group",
+          type: "group",
+          label: "LEGACY",
+          icon: "M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z",
+          children: legacyItems,
+          collapsed: false,
+          priority: 300,
+        };
+        coreSection.items.push(legacyGroup);
+      }
+    }
+
+    // Remove the legacy section since we're adding it to core
+    const legacySectionIndex = sections.findIndex((s) => s.id === "legacy");
+    if (legacySectionIndex !== -1) {
+      sections.splice(legacySectionIndex, 1);
+    }
+
+    // Add admin items as a single dropdown group in the core section
+    if (coreSection) {
       const filteredAdmin = this.filterItemsByPermission(
         ADMIN_NAV_ITEMS,
         authStore
       );
-      adminSection.items = filteredAdmin;
+
+      // Create group dropdown for admin items
+      if (filteredAdmin.length > 0) {
+        const adminGroup: GroupMenuItem = {
+          id: "admin-group",
+          type: "group",
+          label: "ADMINISTRATION",
+          icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
+          children: filteredAdmin,
+          collapsed: false,
+          priority: 100,
+        };
+        coreSection.items.push(adminGroup);
+      }
+    }
+
+    // Remove the admin section since we're adding it to core
+    const adminSectionIndex = sections.findIndex((s) => s.id === "admin");
+    if (adminSectionIndex !== -1) {
+      sections.splice(adminSectionIndex, 1);
     }
 
     // Filter out empty sections
@@ -754,86 +747,6 @@ class MenuBuilder {
       count += this.flattenItems(section.items).length;
     }
     return count;
-  }
-
-  /**
-   * Get capabilities from a plugin for permission filtering
-   */
-  private getPluginCapabilities(plugin: LoadedPlugin): string[] {
-    const capabilities = plugin.info.capabilities;
-    return capabilities.map((c) => c.name);
-  }
-
-  /**
-   * Format plugin name for display
-   */
-  private formatPluginLabel(name: string): string {
-    // Convert camelCase/snake_case to Title Case
-    return name
-      .replace(/[-_]/g, " ")
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-  }
-
-  /**
-   * Format category name for display
-   */
-  private formatCategoryLabel(category: string): string {
-    return this.formatPluginLabel(category);
-  }
-
-  /**
-   * Get default icon for integration type
-   */
-  private getDefaultPluginIcon(integrationType: IntegrationType): string {
-    const meta = INTEGRATION_TYPE_METADATA[integrationType];
-    return meta ? meta.icon : INTEGRATION_TYPE_METADATA.Info.icon;
-  }
-
-  /**
-   * Get icon for capability category
-   */
-  private getCategoryIcon(category: string): string {
-    const categoryIcons: Record<string, string> = {
-      command: "M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
-      task: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4",
-      inventory: "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01",
-      facts: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-      reports: "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-      catalog: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
-      config: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
-      hiera: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4",
-    };
-
-    const normalizedCategory = category.toLowerCase();
-    const icon = categoryIcons[normalizedCategory];
-    return icon ? icon : INTEGRATION_TYPE_METADATA.Info.icon;
-  }
-
-  /**
-   * Get priority for integration type
-   */
-  private getIntegrationPriority(integrationType: IntegrationType): number {
-    const meta = INTEGRATION_TYPE_METADATA[integrationType];
-    return meta ? meta.priority : 0;
-  }
-
-  /**
-   * Get priority for capability category
-   */
-  private getCategoryPriority(category: string): number {
-    const categoryPriorities: Record<string, number> = {
-      command: 100,
-      task: 90,
-      inventory: 80,
-      facts: 70,
-      reports: 60,
-      catalog: 50,
-      config: 40,
-      hiera: 30,
-    };
-
-    return categoryPriorities[category.toLowerCase()] ?? 0;
   }
 
   /**

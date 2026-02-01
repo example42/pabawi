@@ -72,7 +72,9 @@
   // State
   // ==========================================================================
 
-  let keyInput = $state(initialKey);
+  // Capture initial prop value (intentionally non-reactive)
+  const initialKeyValue = initialKey;
+  let keyInput = $state(initialKeyValue);
   let result = $state<LookupResult | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);

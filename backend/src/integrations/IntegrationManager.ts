@@ -1454,6 +1454,15 @@ export class IntegrationManager {
   }
 
   /**
+   * Get all v1.0.0 loaded plugins
+   *
+   * @returns Map of plugin name to LoadedPlugin
+   */
+  getAllV1Plugins(): Map<string, LoadedPlugin> {
+    return new Map(this.v1Plugins);
+  }
+
+  /**
    * Shutdown the manager and all plugins
    *
    * Stops health checks and shuts down all plugins cleanly.

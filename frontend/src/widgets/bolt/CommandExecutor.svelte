@@ -97,13 +97,21 @@
   }: Props = $props();
 
   // ==========================================================================
+  // Helpers
+  // ==========================================================================
+
+  function normalizeTargets(targets: string | string[] | undefined): string[] {
+    if (!targets) return [];
+    return Array.isArray(targets) ? targets : [targets];
+  }
+
+  // ==========================================================================
   // State
   // ==========================================================================
 
+  const initialTargets = normalizeTargets(targetNodes);
   let command = $state('');
-  let selectedTargets = $state<string[]>(
-    Array.isArray(targetNodes) ? targetNodes : targetNodes ? [targetNodes] : []
-  );
+  let selectedTargets = $state<string[]>(initialTargets);
   let nodes = $state<Node[]>([]);
   let nodesLoading = $state(false);
   let nodesError = $state<string | null>(null);
