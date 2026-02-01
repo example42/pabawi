@@ -116,8 +116,11 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {#each roles as role}
             <div
+              role="button"
+              tabindex="0"
               class="bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-lg transition-shadow cursor-pointer"
               onclick={() => selectRole(role)}
+              onkeydown={(e) => e.key === 'Enter' && selectRole(role)}
             >
               <div class="p-6">
                 <div class="flex items-center justify-between">
@@ -163,6 +166,7 @@
                   <h3 class="text-xl font-semibold text-gray-900 dark:text-white">{selectedRole.name}</h3>
                   <button
                     onclick={closeRoleDetails}
+                    aria-label="Close role details"
                     class="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
                   >
                     <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

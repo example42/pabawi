@@ -446,6 +446,12 @@ export class PluginLoader {
       throw new Error(`Failed to fetch plugin list: ${response.statusText}`);
     }
 
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown type'}. Response: ${text.substring(0, 200)}`);
+    }
+
     const data = await response.json();
     return data.plugins ?? [];
   }
@@ -468,6 +474,12 @@ export class PluginLoader {
 
     if (!response.ok) {
       throw new Error(`Failed to fetch plugin info: ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      throw new Error(`Expected JSON response but got ${contentType || 'unknown type'}. Response: ${text.substring(0, 200)}`);
     }
 
     const data: PluginInfo = await response.json();
@@ -593,42 +605,11 @@ export class PluginLoader {
       }
     }
 
-    // Try dynamic import as fallback
-    try {
-      const componentPath = `${this.config.assetsBaseUrl}/${widget.pluginName}/${widget.component}`;
-      const module = await this.importWithRetry(componentPath);
-      const component = module.default ?? module;
-
-      if (!component) {
-        throw new Error("No default export found");
-      }
-
-      this.widgetComponents.set(widgetId, component);
-      this.emit({ type: "widget:loaded", widgetId });
-      this.log("debug", `Loaded widget component: ${widgetId}`);
-
-      return component;
-    } catch (error) {
-      const errorMsg = this.errorMessage(error);
-      this.emit({ type: "widget:error", widgetId, error: errorMsg });
-      this.log("error", `Failed to load widget component: ${widgetId}`, { error: errorMsg });
-      return null;
-    }
-  }
-
-  /**
-   * Import with retry logic
-   */
-  private async importWithRetry(path: string, attempt = 1): Promise<any> {
-    try {
-      return await import(/* @vite-ignore */ path);
-    } catch (error) {
-      if (attempt < this.config.maxRetries) {
-        await this.delay(this.config.retryDelay * attempt);
-        return this.importWithRetry(path, attempt + 1);
-      }
-      throw error;
-    }
+    // Skip dynamic import fallback - all widgets should be in local manifest or plugin module
+    // Dynamic imports from /plugins/ path often fail with HTML responses
+    this.log("warn", `Widget not found in local manifest or plugin module: ${widgetId}`);
+    this.emit({ type: "widget:error", widgetId, error: "Widget component not available" });
+    return null;
   }
 
   /**
@@ -746,13 +727,6 @@ export class PluginLoader {
       return error.message;
     }
     return String(error);
-  }
-
-  /**
-   * Delay helper
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 

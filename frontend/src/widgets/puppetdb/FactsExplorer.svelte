@@ -333,6 +333,7 @@
               <button
                 type="button"
                 onclick={() => toggleExpand(currentPath)}
+                aria-label={isExpanded ? 'Collapse' : 'Expand'}
                 class="flex-shrink-0 text-gray-400 hover:text-violet-500"
               >
                 <svg class="w-4 h-4 transition-transform {isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">

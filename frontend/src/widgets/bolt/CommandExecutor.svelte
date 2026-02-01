@@ -299,7 +299,7 @@
   {#if showTargetSelector}
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label for="target-nodes-section" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Target Nodes ({selectedTargets.length} selected)
         </label>
         <div class="flex gap-2">
@@ -328,7 +328,7 @@
       {:else if nodesError}
         <ErrorAlert message={nodesError} variant="inline" />
       {:else}
-        <div class="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+        <div id="target-nodes-section" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           {#each nodes as node (node.id)}
             <button
               type="button"
@@ -351,11 +351,12 @@
 
   <!-- Command Input -->
   <div class="space-y-2">
-    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+    <label for="command-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
       Command
     </label>
     <div class="relative">
       <input
+        id="command-input"
         type="text"
         bind:value={command}
         onkeydown={handleKeyDown}

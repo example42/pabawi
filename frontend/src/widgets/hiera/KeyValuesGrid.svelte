@@ -416,10 +416,21 @@
 
 <!-- Value Modal -->
 {#if showValueModal && selectedItem}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onclick={() => showValueModal = false}>
+  <div
+    role="button"
+    tabindex="0"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+    onclick={() => showValueModal = false}
+    onkeydown={(e) => e.key === 'Escape' && (showValueModal = false)}
+    aria-label="Close modal"
+  >
     <div
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
       class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col"
       onclick={(e) => e.stopPropagation()}
+      onkeydown={(e) => e.key === 'Escape' && (showValueModal = false)}
     >
       <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
         <div>
@@ -432,6 +443,7 @@
         <button
           type="button"
           onclick={() => showValueModal = false}
+          aria-label="Close value modal"
           class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
         >
           <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

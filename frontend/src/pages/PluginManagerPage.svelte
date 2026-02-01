@@ -398,6 +398,7 @@
                   <button
                     type="button"
                     onclick={closeDetails}
+                    aria-label="Close details"
                     class="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
                   >
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

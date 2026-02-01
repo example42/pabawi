@@ -187,48 +187,6 @@ export class PuppetserverPlugin implements BasePluginInterface {
 
   readonly widgets: PluginWidget[] = [
     {
-      id: "puppetserver:catalog-compiler",
-      name: "Catalog Compiler",
-      component: "./components/CatalogCompiler.svelte",
-      slots: ["standalone-page", "modal"],
-      size: "large",
-      requiredCapabilities: ["puppetserver.catalog"],
-      icon: "layers",
-      priority: 100,
-      config: {
-        showEnvironmentSelector: true,
-        showResourceTree: true,
-      },
-    },
-    {
-      id: "puppetserver:catalog-viewer",
-      name: "Catalog Viewer",
-      component: "./components/CatalogViewer.svelte",
-      slots: ["node-detail", "standalone-page"],
-      size: "large",
-      requiredCapabilities: ["puppetserver.catalog.get"],
-      icon: "layers",
-      priority: 95,
-      config: {
-        showResourceSearch: true,
-        showRelationships: true,
-      },
-    },
-    {
-      id: "puppetserver:catalog-diff",
-      name: "Catalog Diff",
-      component: "./components/CatalogDiff.svelte",
-      slots: ["standalone-page", "modal"],
-      size: "full",
-      requiredCapabilities: ["puppetserver.catalog.compare"],
-      icon: "git-compare",
-      priority: 90,
-      config: {
-        showSideBySide: true,
-        highlightChanges: true,
-      },
-    },
-    {
       id: "puppetserver:environment-manager",
       name: "Environment Manager",
       component: "./components/EnvironmentManager.svelte",
@@ -243,16 +201,6 @@ export class PuppetserverPlugin implements BasePluginInterface {
       },
     },
     {
-      id: "puppetserver:environment-selector",
-      name: "Environment Selector",
-      component: "./components/EnvironmentSelector.svelte",
-      slots: ["sidebar", "modal"],
-      size: "small",
-      requiredCapabilities: ["puppetserver.environments"],
-      icon: "folder",
-      priority: 80,
-    },
-    {
       id: "puppetserver:status-dashboard",
       name: "Puppetserver Status",
       component: "./components/StatusDashboard.svelte",
@@ -265,19 +213,6 @@ export class PuppetserverPlugin implements BasePluginInterface {
         showServices: true,
         autoRefresh: true,
         refreshInterval: 30000,
-      },
-    },
-    {
-      id: "puppetserver:metrics-viewer",
-      name: "Metrics Viewer",
-      component: "./components/MetricsViewer.svelte",
-      slots: ["standalone-page", "dashboard"],
-      size: "large",
-      requiredCapabilities: ["puppetserver.metrics"],
-      icon: "bar-chart",
-      priority: 70,
-      config: {
-        showPerformanceWarning: true,
       },
     },
   ];

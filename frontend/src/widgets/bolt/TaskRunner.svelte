@@ -431,10 +431,10 @@
 
     <!-- Target Selection -->
     <div class="space-y-2">
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+      <label for="task-target-nodes" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
         Target Nodes ({selectedTargets.length} selected)
       </label>
-      <div class="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+      <div id="task-target-nodes" class="flex flex-wrap gap-2 max-h-24 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
         {#if nodesLoading}
           <LoadingSpinner size="sm" />
         {:else}
@@ -460,13 +460,15 @@
     <!-- Task Parameters -->
     {#if showParameterForm && selectedTask.parameters.length > 0}
       <div class="space-y-2">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label for="task-parameters" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
           Parameters
         </label>
-        <TaskParameterForm
-          parameters={selectedTask.parameters}
-          bind:values={taskParameters}
-        />
+        <div id="task-parameters">
+          <TaskParameterForm
+            parameters={selectedTask.parameters}
+            bind:values={taskParameters}
+          />
+        </div>
       </div>
     {/if}
 
