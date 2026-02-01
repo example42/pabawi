@@ -14,7 +14,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import type { DatabaseAdapter } from "../database/interfaces/DatabaseInterface.js";
 import { AuthService, AuthenticationError, type AuthTokens } from "../auth/AuthService.js";
 import { AuthorizationService } from "../auth/AuthorizationService.js";
-import type { User, UserPublic } from "../auth/types.js";
+import type { UserPublic } from "../auth/types.js";
 import { createAuthMiddleware, optionalAuth } from "../middleware/auth.js";
 import { LoggerService } from "../services/LoggerService.js";
 import { ExpertModeService } from "../services/ExpertModeService.js";

@@ -67,6 +67,10 @@
   // ==========================================================================
 
   const passwordsMatch = $derived(password === confirmPassword);
+  const hasUppercase = $derived(/[A-Z]/.test(password));
+  const hasLowercase = $derived(/[a-z]/.test(password));
+  const hasNumber = $derived(/\d/.test(password));
+  const hasSpecialChar = $derived(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password));
   const formValid = $derived(
     username.length >= 3 &&
     email.includes('@') &&
@@ -346,37 +350,26 @@
                     At least {passwordPolicy.minLength} characters
                   </li>
                   {#if passwordPolicy.requireUppercase}
-                     <script>
-                       // ...existing code...
-                       $: hasUppercase = /[A-Z]/.test(password);
-                       // ...existing code...
-                     </script>
-                     <li class="flex items-center gap-2">
-                       <span class:text-green-500={hasUppercase}>{hasUppercase ? '✓' : '○'}</span>
-                       One uppercase letter
+                    <li class="flex items-center gap-2">
+                      <span class:text-green-500={hasUppercase}>{hasUppercase ? '✓' : '○'}</span>
+                      One uppercase letter
                     </li>
                   {/if}
                   {#if passwordPolicy.requireLowercase}
                     <li class="flex items-center gap-2">
-                      <span class={/[a-z]/.test(password) ? 'text-green-500' : ''}>
-                        {/[a-z]/.test(password) ? '✓' : '○'}
-                      </span>
+                      <span class:text-green-500={hasLowercase}>{hasLowercase ? '✓' : '○'}</span>
                       One lowercase letter
                     </li>
                   {/if}
                   {#if passwordPolicy.requireNumbers}
                     <li class="flex items-center gap-2">
-                      <span class={/\d/.test(password) ? 'text-green-500' : ''}>
-                        {/\d/.test(password) ? '✓' : '○'}
-                      </span>
+                      <span class:text-green-500={hasNumber}>{hasNumber ? '✓' : '○'}</span>
                       One number
                     </li>
                   {/if}
                   {#if passwordPolicy.requireSpecialChars}
                     <li class="flex items-center gap-2">
-                      <span class={/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? 'text-green-500' : ''}>
-                        {/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password) ? '✓' : '○'}
-                      </span>
+                      <span class:text-green-500={hasSpecialChar}>{hasSpecialChar ? '✓' : '○'}</span>
                       One special character
                     </li>
                   {/if}
@@ -445,6 +438,107 @@
           <br />
           Make sure to use a strong, unique password.
         </p>
+
+        <!-- Authentication Configuration Help -->
+        <div class="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+          <details class="group">
+            <summary class="flex items-center justify-between cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-orange-600 dark:hover:text-orange-400">
+              <span class="flex items-center gap-2">
+                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Authentication Configuration
+              </span>
+              <svg class="w-5 h-5 text-gray-400 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </summary>
+
+            <div class="mt-4 space-y-4 text-xs text-gray-600 dark:text-gray-400">
+              <!-- Disable Authentication -->
+              <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <h4 class="font-semibold text-blue-900 dark:text-blue-300 mb-2 flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Disable Authentication (Local Development)
+                </h4>
+                <p class="text-blue-800 dark:text-blue-300 mb-2">
+                  If you're running Pabawi on your local workstation and don't need authentication, you can disable it:
+                </p>
+                <div class="bg-white dark:bg-gray-800 rounded border border-blue-300 dark:border-blue-700 p-2 font-mono text-xs">
+                  <code class="text-blue-900 dark:text-blue-200"># In backend/.env</code><br />
+                  <code class="text-blue-900 dark:text-blue-200">AUTH_ENABLED=false</code>
+                </div>
+                <p class="text-blue-800 dark:text-blue-300 mt-2">
+                  Then restart the backend server. All features will be accessible without login.
+                </p>
+              </div>
+
+              <!-- Configure Authentication -->
+              <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 dark:text-gray-300 mb-2 flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  Authentication Configuration Options
+                </h4>
+                <p class="text-gray-700 dark:text-gray-400 mb-2">
+                  Current authentication settings can be configured in <code class="bg-gray-200 dark:bg-gray-700 px-1 rounded">backend/.env</code>:
+                </p>
+                <div class="bg-white dark:bg-gray-900 rounded border border-gray-300 dark:border-gray-600 p-2 font-mono text-xs space-y-1">
+                  <div><code class="text-gray-600 dark:text-gray-500"># Enable/disable authentication</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">AUTH_ENABLED=true</code></div>
+                  <div class="pt-2"><code class="text-gray-600 dark:text-gray-500"># JWT secret (required when auth enabled)</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">JWT_SECRET=your-secret-key</code></div>
+                  <div class="pt-2"><code class="text-gray-600 dark:text-gray-500"># Token expiry (seconds)</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">JWT_ACCESS_TOKEN_EXPIRY=3600  # 1 hour</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">JWT_REFRESH_TOKEN_EXPIRY=604800  # 7 days</code></div>
+                  <div class="pt-2"><code class="text-gray-600 dark:text-gray-500"># Password policy</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">PASSWORD_MIN_LENGTH=12</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">PASSWORD_REQUIRE_UPPERCASE=true</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">PASSWORD_REQUIRE_LOWERCASE=true</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">PASSWORD_REQUIRE_NUMBERS=true</code></div>
+                  <div><code class="text-gray-900 dark:text-gray-200">PASSWORD_REQUIRE_SPECIAL=true</code></div>
+                </div>
+              </div>
+
+              <!-- Security Note -->
+              <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <h4 class="font-semibold text-yellow-900 dark:text-yellow-300 mb-2 flex items-center gap-2">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Security Considerations
+                </h4>
+                <ul class="text-yellow-800 dark:text-yellow-300 space-y-1 list-disc list-inside">
+                  <li>Pabawi can execute privileged operations on your infrastructure</li>
+                  <li>For production use, always enable authentication and use strong passwords</li>
+                  <li>If exposing to network, deploy behind a reverse proxy with additional authentication</li>
+                  <li>Authentication can be disabled for local workstation use only</li>
+                </ul>
+              </div>
+
+              <!-- Documentation Link -->
+              <div class="text-center">
+                <a
+                  href="https://github.com/yourusername/pabawi/blob/main/docs/configuration.md"
+                  target="_blank"
+                  class="inline-flex items-center gap-1 text-orange-600 dark:text-orange-400 hover:text-orange-700 dark:hover:text-orange-300 font-medium"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  Full Configuration Documentation
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+          </details>
+        </div>
       </div>
     {:else}
       <!-- Setup already complete -->

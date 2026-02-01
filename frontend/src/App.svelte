@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import Router from './components/Router.svelte';
   import DynamicNavigation from './components/DynamicNavigation.svelte';
   import ErrorBoundary from './components/ErrorBoundary.svelte';
@@ -16,7 +17,15 @@
   import UsersPage from './pages/admin/UsersPage.svelte';
   import RolesPage from './pages/admin/RolesPage.svelte';
   import SettingsPage from './pages/admin/SettingsPage.svelte';
-  import { router } from './lib/router.svelte';
+  import { router, navigate } from './lib/router.svelte';
+  import { get } from './lib/api';
+
+  interface SetupStatus {
+    setupRequired: boolean;
+    initialized: boolean;
+    userCount: number;
+    hasDefaultRoles: boolean;
+  }
 
   const routes = {
     '/': HomePage,
@@ -43,6 +52,25 @@
     // In production, you could send this to an error tracking service
     // e.g., Sentry, LogRocket, etc.
   }
+
+  // Check if initial setup is required on app load
+  onMount(async () => {
+    try {
+      // Only check if not already on setup page
+      if (router.currentPath !== '/setup') {
+        const status = await get<SetupStatus>('/api/setup/status');
+
+        // If setup is required, redirect to setup page
+        if (status.setupRequired) {
+          navigate('/setup');
+        }
+      }
+    } catch (err) {
+      // If setup endpoint fails, it might not be implemented yet
+      // Don't block the app from loading
+      console.warn('Could not check setup status:', err);
+    }
+  });
 </script>
 
 <ErrorBoundary onError={handleError}>

@@ -15,7 +15,6 @@
 
 import { z } from "zod";
 import {
-  SSLConfigSchema,
   DatabaseConfigSchema,
   PuppetDBCacheConfigSchema,
   PuppetDBCircuitBreakerConfigSchema,

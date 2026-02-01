@@ -10,14 +10,10 @@
 import type { DatabaseAdapter } from "../database/interfaces/DatabaseInterface.js";
 import type {
   User,
-  Role,
   Permission,
-  PermissionAction,
   PermissionCondition,
   PermissionCheckResult,
   EffectivePermissions,
-  RoleRow,
-  PermissionRow,
   GroupRoleRow,
 } from "./types.js";
 import { RoleService } from "./RoleService.js";

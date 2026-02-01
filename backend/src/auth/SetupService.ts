@@ -11,7 +11,6 @@
 import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import type { DatabaseAdapter } from "../database/interfaces/DatabaseInterface.js";
-import { UserService } from "./UserService.js";
 import { RoleService } from "./RoleService.js";
 import { LoggerService } from "../services/LoggerService.js";
 
@@ -85,7 +84,6 @@ const BCRYPT_SALT_ROUNDS = 12;
  */
 export class SetupService {
   private logger: LoggerService;
-  private userService: UserService;
   private roleService: RoleService;
   private passwordPolicy: PasswordPolicy;
 
@@ -94,7 +92,6 @@ export class SetupService {
     passwordPolicy?: Partial<PasswordPolicy>
   ) {
     this.logger = new LoggerService();
-    this.userService = new UserService(db);
     this.roleService = new RoleService(db);
     this.passwordPolicy = {
       ...DEFAULT_PASSWORD_POLICY,
@@ -134,7 +131,7 @@ export class SetupService {
       this.logger.info("Setup status retrieved", {
         component: "SetupService",
         operation: "getSetupStatus",
-        metadata: status,
+        metadata: status as unknown as Record<string, unknown>,
       });
 
       return status;

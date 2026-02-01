@@ -8,10 +8,8 @@
  */
 
 import type { Request, Response, NextFunction } from "express";
-import type { User } from "../auth/types.js";
 import {
   AuthorizationService,
-  AuthorizationError,
   type ExecutionContext,
 } from "../auth/AuthorizationService.js";
 import type { DatabaseAdapter } from "../database/interfaces/DatabaseInterface.js";

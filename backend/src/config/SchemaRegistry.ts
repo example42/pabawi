@@ -13,7 +13,7 @@
  */
 
 import type { ZodSchema, ZodError } from "zod";
-import { z, ZodObject } from "zod";
+import { ZodObject } from "zod";
 import { LoggerService } from "../services/LoggerService";
 
 /**
@@ -105,10 +105,7 @@ export class SchemaRegistry {
   private deprecationWarnings = new Set<string>();
 
   constructor() {
-    this.logger = new LoggerService({
-      level: "info",
-      component: "SchemaRegistry",
-    });
+    this.logger = new LoggerService("info");
   }
 
   /**

@@ -22,7 +22,7 @@ import type { DatabaseAdapter } from "../database/interfaces/DatabaseInterface.j
 import { UserService } from "../auth/UserService.js";
 import { RoleService } from "../auth/RoleService.js";
 import { GroupService } from "../auth/GroupService.js";
-import type { CreateUserInput, UpdateUserInput, User, PaginationOptions } from "../auth/types.js";
+import type { CreateUserInput, UpdateUserInput, PaginationOptions } from "../auth/types.js";
 import { createAuthMiddleware } from "../middleware/auth.js";
 import { requireAdmin, invalidateUserCache } from "../middleware/rbac.js";
 import { LoggerService } from "../services/LoggerService.js";
