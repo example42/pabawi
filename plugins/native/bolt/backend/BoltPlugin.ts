@@ -521,9 +521,9 @@ export class BoltPlugin implements BasePluginInterface {
   // Private State
   // =========================================================================
 
-  private boltService: BoltService;
-  private logger: LoggerService;
-  private performanceMonitor: PerformanceMonitorService;
+  private boltService: BoltServiceInterface;
+  private logger: LoggerServiceInterface;
+  private performanceMonitor: PerformanceMonitorServiceInterface;
   private config: BoltPluginConfig = {};
   private _initialized = false;
 
@@ -532,9 +532,9 @@ export class BoltPlugin implements BasePluginInterface {
   // =========================================================================
 
   constructor(
-    boltService: BoltService,
-    logger: LoggerService,
-    performanceMonitor: PerformanceMonitorService,
+    boltService: BoltServiceInterface,
+    logger: LoggerServiceInterface,
+    performanceMonitor: PerformanceMonitorServiceInterface,
   ) {
     this.boltService = boltService;
     this.logger = logger;
@@ -1150,7 +1150,7 @@ export class BoltPlugin implements BasePluginInterface {
    * Get the underlying BoltService instance
    * @deprecated Use capability handlers instead
    */
-  getBoltService(): BoltService {
+  getBoltService(): BoltServiceInterface {
     return this.boltService;
   }
 }
@@ -1163,9 +1163,9 @@ export class BoltPlugin implements BasePluginInterface {
  * Factory function for creating BoltPlugin instances
  */
 export function createBoltPlugin(
-  boltService: BoltService,
-  logger: LoggerService,
-  performanceMonitor: PerformanceMonitorService,
+  boltService: BoltServiceInterface,
+  logger: LoggerServiceInterface,
+  performanceMonitor: PerformanceMonitorServiceInterface,
 ): BoltPlugin {
   return new BoltPlugin(boltService, logger, performanceMonitor);
 }
