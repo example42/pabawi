@@ -15,7 +15,7 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
     - Define standard plugin structure: `backend/`, `frontend/`, `cli/`, `config/`, `README.md`
     - _Requirements: 1.1, 1.2, 1.3_
   
-  - [ ] 1.2 Move BoltPlugin to new structure
+  - [x] 1.2 Move BoltPlugin to new structure
     - Create `plugins/native/bolt/` directory
     - Move backend code from `backend/src/integrations/bolt/` to `plugins/native/bolt/backend/`
     - Create `plugins/native/bolt/frontend/` for widget components

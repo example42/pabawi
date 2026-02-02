@@ -3,27 +3,21 @@
  *
  * Puppet Bolt integration for remote command and task execution.
  *
- * @module integrations/bolt
+ * @module plugins/native/bolt/backend
  * @version 1.0.0
- *
- * NOTE: This file re-exports from the new plugin location at plugins/native/bolt/backend/
- * for backward compatibility. New code should import directly from the plugin location.
  */
 
-// Re-export everything from the new plugin location
+import { BoltPlugin } from "./BoltPlugin.js";
+import { BoltService } from "../../../../backend/src/bolt/BoltService.js";
+import { LoggerService } from "../../../../backend/src/services/LoggerService.js";
+import { PerformanceMonitorService } from "../../../../backend/src/services/PerformanceMonitorService.js";
+import { ConfigService } from "../../../../backend/src/config/ConfigService.js";
+
 export {
   BoltPlugin,
   BoltPluginConfigSchema,
   type BoltPluginConfig,
-  createBoltPlugin,
 } from "./BoltPlugin.js";
-
-// Re-export factory functions
-import { BoltPlugin } from "./BoltPlugin.js";
-import { BoltService } from "../../bolt/BoltService.js";
-import { LoggerService } from "../../services/LoggerService.js";
-import { PerformanceMonitorService } from "../../services/PerformanceMonitorService.js";
-import { ConfigService } from "../../config/ConfigService.js";
 
 /**
  * Factory function for PluginLoader auto-discovery
@@ -39,6 +33,17 @@ export function createPlugin(): BoltPlugin {
   const performanceMonitor = new PerformanceMonitorService();
   const boltService = new BoltService(config.boltProjectPath);
 
+  return new BoltPlugin(boltService, logger, performanceMonitor);
+}
+
+/**
+ * Legacy factory function (for manual instantiation with custom dependencies)
+ */
+export function createBoltPlugin(
+  boltService: BoltService,
+  logger: LoggerService,
+  performanceMonitor: PerformanceMonitorService,
+): BoltPlugin {
   return new BoltPlugin(boltService, logger, performanceMonitor);
 }
 

@@ -1,4 +1,5 @@
 {
+  "$schema": "../../plugin-manifest.schema.json",
   "name": "bolt",
   "version": "1.0.0",
   "author": "Pabawi Team",
@@ -11,7 +12,8 @@
   "tags": ["puppet", "bolt", "automation", "remote-execution", "tasks", "commands"],
   "minPabawiVersion": "1.0.0",
   "dependencies": [],
-  "entryPoint": "backend/index.ts",
+  "entryPoint": "./backend/index.ts",
+  "frontendEntryPoint": "./frontend/index.ts",
   "capabilities": [
     {
       "name": "command.execute",
