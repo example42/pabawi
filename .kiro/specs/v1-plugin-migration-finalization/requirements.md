@@ -154,7 +154,7 @@ The 4 native integrations (Bolt, PuppetDB, Puppetserver, Hiera) will be restruct
 8. THE v1 API routes SHALL include node endpoints: `/api/v1/nodes`, `/api/v1/nodes/:nodeId`, `/api/v1/nodes/:nodeId/journal`
 9. THE v1 API routes SHALL include event endpoints: `/api/v1/events`, `/api/v1/nodes/:nodeId/events`
 
-### Requirement 9: Legacy Code Removal
+### Requirement 9: Legacy Code Removal (Optional at the end)
 
 **User Story:** As a developer, I want all legacy 0.5.x code to be removed, so that the codebase is clean and maintainable without deprecated patterns.
 
