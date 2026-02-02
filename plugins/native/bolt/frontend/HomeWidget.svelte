@@ -15,9 +15,11 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import { get } from '../../../../frontend/src/lib/api';
-  import { router } from '../../../../frontend/src/lib/router.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, router } = getPluginContext();
+  const { LoadingSpinner } = ui;
 
   // ==========================================================================
   // Types
@@ -110,12 +112,12 @@
 
     try {
       // Load health status
-      const healthResponse = await get<HealthStatus>('/api/integrations/bolt/health');
+      const healthResponse = await api.get<HealthStatus>('/api/integrations/bolt/health');
       healthStatus = healthResponse;
 
       // Load inventory count
       try {
-        const inventoryResponse = await get<InventoryResponse>('/api/inventory?source=bolt');
+        const inventoryResponse = await api.get<InventoryResponse>('/api/inventory?source=bolt');
         nodeCount = inventoryResponse.nodes?.length ?? 0;
       } catch {
         // Use health status node count as fallback
@@ -124,7 +126,7 @@
 
       // Load recent executions
       try {
-        const executionsResponse = await get<ExecutionsResponse>('/api/executions?type=command,task&limit=10');
+        const executionsResponse = await api.get<ExecutionsResponse>('/api/executions?type=command,task&limit=10');
         recentExecutionCount = executionsResponse.total ?? 0;
 
         // Get last execution status

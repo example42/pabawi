@@ -15,10 +15,11 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../../../frontend/src/components/ErrorAlert.svelte';
-  import { get } from '../../../../frontend/src/lib/api';
-  import { router } from '../../../../frontend/src/lib/router.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, router } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -119,7 +120,7 @@
     loading = true;
     error = null;
     try {
-      const response = await get<{ tasksByModule: TasksByModule }>('/api/tasks');
+      const response = await api.get<{ tasksByModule: TasksByModule }>('/api/tasks');
       tasksByModule = response.tasksByModule || {};
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load tasks';
@@ -181,7 +182,7 @@
       <span class="ml-2 text-sm text-gray-500">Loading tasks...</span>
     </div>
   {:else if error}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if filteredTasks.length === 0}
     <div class="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
       {searchQuery ? 'No tasks match your search' : 'No tasks available'}

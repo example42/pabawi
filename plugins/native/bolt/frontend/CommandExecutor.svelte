@@ -16,14 +16,11 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../../../frontend/src/components/ErrorAlert.svelte';
-  import RealtimeOutputViewer from '../../../../frontend/src/components/RealtimeOutputViewer.svelte';
-  import StatusBadge from '../../../../frontend/src/components/StatusBadge.svelte';
-  import { get, post } from '../../../../frontend/src/lib/api';
-  import { showError, showSuccess } from '../../../../frontend/src/lib/toast.svelte';
-  import { debugMode } from '../../../../frontend/src/lib/debug';
-  import { useExecutionStream, type ExecutionStream } from '../../../../frontend/src/lib/executionStream.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, toast, debug, executionStream: execStreamFactory } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert, RealtimeOutputViewer, StatusBadge } = ui;
 
   // ==========================================================================
   // Types
@@ -119,7 +116,7 @@
   let executing = $state(false);
   let executionError = $state<string | null>(null);
   let executionResult = $state<ExecutionResult | null>(null);
-  let executionStream = $state<ExecutionStream | null>(null);
+  let execStream = $state<ReturnType<typeof execStreamFactory.create> | null>(null);
 
   let commandHistory = $state<CommandHistory[]>([]);
   let showHistory = $state(false);
@@ -130,7 +127,7 @@
   // ==========================================================================
 
   let canExecute = $derived(command.trim().length > 0 && selectedTargets.length > 0 && !executing);
-  let isStreaming = $derived(executionStream?.status === 'streaming');
+  let isStreaming = $derived(execStream?.state.isStreaming ?? false);
   let hasOutput = $derived(executionResult?.results && executionResult.results.length > 0);
 
   // ==========================================================================
@@ -153,7 +150,7 @@
     nodesLoading = true;
     nodesError = null;
     try {
-      const response = await get<{ nodes: Node[] }>('/api/inventory');
+      const response = await api.get<{ nodes: Node[] }>('/api/inventory');
       nodes = response.nodes || [];
     } catch (err) {
       nodesError = err instanceof Error ? err.message : 'Failed to load nodes';
@@ -164,7 +161,7 @@
 
   async function fetchCommandWhitelist(): Promise<void> {
     try {
-      const response = await get<{ allowAll: boolean; whitelist: string[] }>('/api/commands/whitelist');
+      const response = await api.get<{ allowAll: boolean; whitelist: string[] }>('/api/commands/whitelist');
       commandWhitelist = response;
     } catch {
       // Non-critical, continue without whitelist info
@@ -209,15 +206,16 @@
         ? selectedTargets[0]
         : selectedTargets.join(',');
 
-      const response = await post<ExecutionResult>('/api/commands', {
+      const response = await api.post<ExecutionResult>('/api/commands', {
         command: command.trim(),
         targets: targetsParam,
-        expertMode: debugMode.enabled,
+        expertMode: debug.isEnabled(),
       });
 
       // Start streaming if we have an execution ID
       if (response.id) {
-        executionStream = useExecutionStream(response.id);
+        execStream = execStreamFactory.create();
+        execStream.start(response.id);
       }
 
       executionResult = response;
@@ -230,15 +228,15 @@
       saveCommandHistory();
 
       if (response.status === 'success') {
-        showSuccess('Command executed successfully');
+        toast.success('Command executed successfully');
       } else if (response.status === 'failed') {
-        showError('Command execution failed');
+        toast.error('Command execution failed');
       }
 
       onExecutionComplete?.(response);
     } catch (err) {
       executionError = err instanceof Error ? err.message : 'Command execution failed';
-      showError(executionError);
+      toast.error(executionError);
     } finally {
       executing = false;
     }
@@ -334,7 +332,7 @@
           Loading nodes...
         </div>
       {:else if nodesError}
-        <ErrorAlert message={nodesError} variant="inline" />
+        <ErrorAlert message={nodesError} />
       {:else}
         <div id="target-nodes-section" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
           {#each nodes as node (node.id)}
@@ -424,7 +422,7 @@
 
   <!-- Execution Error -->
   {#if executionError}
-    <ErrorAlert message={executionError} variant="inline" />
+    <ErrorAlert message={executionError} />
   {/if}
 
   <!-- Output Panel -->
@@ -437,12 +435,10 @@
         {/if}
       </div>
 
-      {#if executionStream && isStreaming}
+      {#if execStream && isStreaming}
         <RealtimeOutputViewer
-          executionId={executionResult?.id || ''}
-          initialStdout={executionStream.stdout}
-          initialStderr={executionStream.stderr}
-          status={executionResult?.status || 'running'}
+          output={execStream.state.output}
+          isStreaming={true}
         />
       {:else if executionResult?.results}
         <div class="space-y-2">

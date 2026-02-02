@@ -24,8 +24,14 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "isolatedModules": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pabawi/plugin-sdk": ["src/lib/plugins/sdk/index.ts"],
+      "$lib/*": ["src/lib/*"],
+      "$components/*": ["src/components/*"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte"],
+  "include": ["src/**/*.ts", "src/**/*.svelte", "../plugins/**/*.ts", "../plugins/**/*.svelte"],
   "exclude": ["node_modules", "dist"]
 }

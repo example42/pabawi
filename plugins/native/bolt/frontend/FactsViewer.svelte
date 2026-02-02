@@ -15,10 +15,11 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../../../frontend/src/components/ErrorAlert.svelte';
-  import { get } from '../../../../frontend/src/lib/api';
-  import { showSuccess } from '../../../../frontend/src/lib/toast.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, toast } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -145,7 +146,7 @@
     loading = true;
     error = null;
     try {
-      const response = await get<Facts>(`/api/nodes/${encodeURIComponent(nodeId)}/facts?source=bolt`);
+      const response = await api.get<Facts>(`/api/nodes/${encodeURIComponent(nodeId)}/facts?source=bolt`);
       facts = response;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load facts';
@@ -175,7 +176,7 @@
   async function copyToClipboard(data: unknown): Promise<void> {
     try {
       await navigator.clipboard.writeText(JSON.stringify(data, null, 2));
-      showSuccess('Copied to clipboard');
+      toast.success('Copied to clipboard');
     } catch {
       // Fallback for older browsers
       const text = JSON.stringify(data, null, 2);
@@ -185,7 +186,7 @@
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
-      showSuccess('Copied to clipboard');
+      toast.success('Copied to clipboard');
     }
   }
 

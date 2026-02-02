@@ -16,15 +16,11 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../../../frontend/src/components/ErrorAlert.svelte';
-  import RealtimeOutputViewer from '../../../../frontend/src/components/RealtimeOutputViewer.svelte';
-  import StatusBadge from '../../../../frontend/src/components/StatusBadge.svelte';
-  import TaskParameterForm from '../../../../frontend/src/components/TaskParameterForm.svelte';
-  import { get, post } from '../../../../frontend/src/lib/api';
-  import { showError, showSuccess } from '../../../../frontend/src/lib/toast.svelte';
-  import { debugMode } from '../../../../frontend/src/lib/debug';
-  import { useExecutionStream, type ExecutionStream } from '../../../../frontend/src/lib/executionStream.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, toast, debug, executionStream: execStreamFactory } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert, RealtimeOutputViewer, StatusBadge, TaskParameterForm } = ui;
 
   // ==========================================================================
   // Types
@@ -148,7 +144,7 @@
   let executing = $state(false);
   let executionError = $state<string | null>(null);
   let executionResult = $state<ExecutionResult | null>(null);
-  let executionStream = $state<ExecutionStream | null>(null);
+  let execStream = $state<ReturnType<typeof execStreamFactory.create> | null>(null);
 
   let activeView = $state<'browser' | 'executor'>('browser');
 
@@ -177,7 +173,7 @@
   });
 
   let canExecute = $derived(selectedTask && selectedTargets.length > 0 && !executing);
-  let isStreaming = $derived(executionStream?.status === 'streaming');
+  let isStreaming = $derived(execStream?.state.isStreaming ?? false);
   let hasOutput = $derived(executionResult?.results && executionResult.results.length > 0);
 
   // ==========================================================================
@@ -210,7 +206,7 @@
     tasksLoading = true;
     tasksError = null;
     try {
-      const response = await get<{ tasksByModule: TasksByModule }>('/api/tasks');
+      const response = await api.get<{ tasksByModule: TasksByModule }>('/api/tasks');
       tasksByModule = response.tasksByModule || {};
     } catch (err) {
       tasksError = err instanceof Error ? err.message : 'Failed to load tasks';
@@ -222,7 +218,7 @@
   async function fetchNodes(): Promise<void> {
     nodesLoading = true;
     try {
-      const response = await get<{ nodes: Node[] }>('/api/inventory');
+      const response = await api.get<{ nodes: Node[] }>('/api/inventory');
       nodes = response.nodes || [];
     } catch {
       // Non-critical
@@ -278,29 +274,30 @@
         ? selectedTargets[0]
         : selectedTargets.join(',');
 
-      const response = await post<ExecutionResult>('/api/tasks/execute', {
+      const response = await api.post<ExecutionResult>('/api/tasks/execute', {
         task: selectedTask.name,
         targets: targetsParam,
         parameters: taskParameters,
-        expertMode: debugMode.enabled,
+        expertMode: debug.isEnabled(),
       });
 
       if (response.id) {
-        executionStream = useExecutionStream(response.id);
+        execStream = execStreamFactory.create();
+        execStream.start(response.id);
       }
 
       executionResult = response;
 
       if (response.status === 'success') {
-        showSuccess(`Task ${selectedTask.name} completed successfully`);
+        toast.success(`Task ${selectedTask.name} completed successfully`);
       } else if (response.status === 'failed') {
-        showError(`Task ${selectedTask.name} failed`);
+        toast.error(`Task ${selectedTask.name} failed`);
       }
 
       onExecutionComplete?.(response);
     } catch (err) {
       executionError = err instanceof Error ? err.message : 'Task execution failed';
-      showError(executionError);
+      toast.error(executionError);
     } finally {
       executing = false;
     }
@@ -483,7 +480,7 @@
     </button>
 
     {#if executionError}
-      <ErrorAlert message={executionError} variant="inline" />
+      <ErrorAlert message={executionError} />
     {/if}
 
     {#if isStreaming || hasOutput}
@@ -495,12 +492,10 @@
           {/if}
         </div>
 
-        {#if executionStream && isStreaming}
+        {#if execStream && isStreaming}
           <RealtimeOutputViewer
-            executionId={executionResult?.id || ''}
-            initialStdout={executionStream.stdout}
-            initialStderr={executionStream.stderr}
-            status={executionResult?.status || 'running'}
+            output={execStream.state.output}
+            isStreaming={true}
           />
         {:else if executionResult?.results}
           <div class="space-y-2">
