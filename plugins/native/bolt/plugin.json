@@ -1,0 +1,147 @@
+{
+  "name": "bolt",
+  "version": "1.0.0",
+  "author": "Pabawi Team",
+  "description": "Puppet Bolt integration for remote command and task execution",
+  "integrationType": "RemoteExecution",
+  "integrationTypes": ["RemoteExecution", "InventorySource", "Info"],
+  "homepage": "https://puppet.com/docs/bolt",
+  "color": "#FFAE1A",
+  "icon": "terminal",
+  "tags": ["puppet", "bolt", "automation", "remote-execution", "tasks", "commands"],
+  "minPabawiVersion": "1.0.0",
+  "dependencies": [],
+  "entryPoint": "backend/index.ts",
+  "capabilities": [
+    {
+      "name": "command.execute",
+      "category": "command",
+      "description": "Execute shell commands on target nodes via Bolt",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.command.execute"]
+    },
+    {
+      "name": "task.execute",
+      "category": "task",
+      "description": "Execute Bolt tasks on target nodes",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.task.execute"]
+    },
+    {
+      "name": "task.list",
+      "category": "task",
+      "description": "List available Bolt tasks",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.task.list"]
+    },
+    {
+      "name": "inventory.list",
+      "category": "inventory",
+      "description": "List nodes from Bolt inventory",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.inventory.list"]
+    },
+    {
+      "name": "facts.query",
+      "category": "info",
+      "description": "Query facts from nodes via Bolt",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.facts.query"]
+    }
+  ],
+  "widgets": [
+    {
+      "id": "bolt:home-widget",
+      "name": "Bolt Summary",
+      "component": "frontend/HomeWidget.svelte",
+      "slots": ["home-summary"],
+      "size": "medium",
+      "requiredCapabilities": ["inventory.list"],
+      "priority": 10
+    },
+    {
+      "id": "bolt:command-executor",
+      "name": "Command Executor",
+      "component": "frontend/CommandExecutor.svelte",
+      "slots": ["node-detail", "dashboard"],
+      "size": "large",
+      "requiredCapabilities": ["command.execute"],
+      "category": "command",
+      "nodeScoped": true
+    },
+    {
+      "id": "bolt:task-runner",
+      "name": "Task Runner",
+      "component": "frontend/TaskRunner.svelte",
+      "slots": ["node-detail", "dashboard"],
+      "size": "large",
+      "requiredCapabilities": ["task.execute", "task.list"],
+      "category": "task",
+      "nodeScoped": true
+    },
+    {
+      "id": "bolt:facts-viewer",
+      "name": "Facts Viewer",
+      "component": "frontend/FactsViewer.svelte",
+      "slots": ["node-detail"],
+      "size": "medium",
+      "requiredCapabilities": ["facts.query"],
+      "category": "info",
+      "nodeScoped": true
+    }
+  ],
+  "cliCommands": [
+    {
+      "name": "bolt",
+      "actions": [
+        {
+          "name": "run",
+          "capability": "command.execute",
+          "description": "Run a command on target nodes",
+          "aliases": ["cmd"],
+          "examples": [
+            "pab bolt run 'hostname' --targets node1.example.com",
+            "pab bolt run 'uptime' --targets all"
+          ]
+        },
+        {
+          "name": "task",
+          "capability": "task.execute",
+          "description": "Run a Bolt task on target nodes",
+          "examples": [
+            "pab bolt task package::install --targets node1 --params '{\"name\": \"nginx\"}'",
+            "pab bolt task facts --targets all"
+          ]
+        },
+        {
+          "name": "tasks",
+          "capability": "task.list",
+          "description": "List available Bolt tasks",
+          "examples": ["pab bolt tasks", "pab bolt tasks --filter package"]
+        },
+        {
+          "name": "inventory",
+          "capability": "inventory.list",
+          "description": "List nodes from Bolt inventory",
+          "examples": ["pab bolt inventory", "pab bolt inventory --format json"]
+        },
+        {
+          "name": "facts",
+          "capability": "facts.query",
+          "description": "Query facts from nodes",
+          "examples": [
+            "pab bolt facts node1.example.com",
+            "pab bolt facts --targets all --fact os.family"
+          ]
+        }
+      ]
+    }
+  ],
+  "defaultPermissions": {
+    "command.execute": ["admin", "operator"],
+    "task.execute": ["admin", "operator"],
+    "task.list": ["admin", "operator", "viewer"],
+    "inventory.list": ["admin", "operator", "viewer"],
+    "facts.query": ["admin", "operator", "viewer"]
+  }
+}

@@ -24,28 +24,37 @@ import type { Node, Facts, ExecutionResult } from "../bolt/types";
 /**
  * Integration types categorizing plugin functionality
  * Used for UI organization, menu grouping, and capability discovery
+ *
+ * Every integration type can potentially write entries to the Node Journal.
+ * Journal logging is configurable per-plugin (when/what to write and logging level).
  */
 export enum IntegrationType {
-  /** Infrastructure provisioning (Terraform, CloudFormation) */
-  Provisioning = "Provisioning",
-  /** Configuration management (Puppet, Ansible, Chef) */
-  ConfigurationManagement = "ConfigurationManagement",
   /** Inventory and node discovery sources */
   InventorySource = "InventorySource",
   /** Remote command/task execution (Bolt, Ansible, SSH) */
   RemoteExecution = "RemoteExecution",
-  /** Software installation via package managers (Bolt, Ansible, remote-ssh with apt/yum/brew detection) */
-  InstallSoftware = "InstallSoftware",
   /** Information retrieval (PuppetDB facts, inventory data, node metadata) */
   Info = "Info",
+  /** Configuration management (Puppet, Ansible, Chef) */
+  ConfigurationManagement = "ConfigurationManagement",
+  /** Events that happened on systems (alerts, changes, incidents) */
+  Event = "Event",
   /** Monitoring and metrics collection */
   Monitoring = "Monitoring",
-  /** Workflow orchestration */
-  Orchestration = "Orchestration",
+  /** Infrastructure provisioning (Terraform, CloudFormation) */
+  Provisioning = "Provisioning",
+  /** Application deployment automation */
+  Deployment = "Deployment",
   /** Secret and credential management */
   SecretManagement = "SecretManagement", // pragma: allowlist secret
-  /** Reporting and analytics */
-  ReportingAnalytics = "ReportingAnalytics",
+  /** Scheduled operations and jobs */
+  Schedule = "Schedule",
+  /** Software installation via package managers */
+  SoftwareInstall = "SoftwareInstall",
+  /** Workflow orchestration */
+  Orchestration = "Orchestration",
+  /** Logging and analytics */
+  Logging = "Logging",
   /** Audit and compliance */
   AuditCompliance = "AuditCompliance",
   /** Backup and recovery */

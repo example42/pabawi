@@ -1,0 +1,126 @@
+{
+  "name": "puppetserver",
+  "version": "1.0.0",
+  "author": "Pabawi Team",
+  "description": "Puppetserver integration for catalog compilation, environments, and server status",
+  "integrationType": "ConfigurationManagement",
+  "integrationTypes": ["ConfigurationManagement", "Info"],
+  "homepage": "https://puppet.com/docs/puppet/latest/server",
+  "color": "#2E3A87",
+  "icon": "server",
+  "tags": ["puppet", "puppetserver", "catalog", "environments", "configuration"],
+  "minPabawiVersion": "1.0.0",
+  "dependencies": [],
+  "entryPoint": "backend/index.ts",
+  "capabilities": [
+    {
+      "name": "catalog.compile",
+      "category": "config",
+      "description": "Compile a catalog for a node",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.catalog"]
+    },
+    {
+      "name": "environments.list",
+      "category": "config",
+      "description": "List available Puppet environments",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.environments"]
+    },
+    {
+      "name": "status.get",
+      "category": "info",
+      "description": "Get Puppetserver status and health",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.status"]
+    },
+    {
+      "name": "facts.get",
+      "category": "info",
+      "description": "Get facts for a node from Puppetserver",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.facts"]
+    }
+  ],
+  "widgets": [
+    {
+      "id": "puppetserver:home-widget",
+      "name": "Puppetserver Summary",
+      "component": "frontend/HomeWidget.svelte",
+      "slots": ["home-summary"],
+      "size": "medium",
+      "requiredCapabilities": ["status.get"],
+      "priority": 15
+    },
+    {
+      "id": "puppetserver:catalog-compilation",
+      "name": "Catalog Compilation",
+      "component": "frontend/CatalogCompilation.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["catalog.compile"],
+      "category": "config",
+      "nodeScoped": true
+    },
+    {
+      "id": "puppetserver:environment-info",
+      "name": "Environment Info",
+      "component": "frontend/EnvironmentInfo.svelte",
+      "slots": ["node-detail", "dashboard"],
+      "size": "medium",
+      "requiredCapabilities": ["environments.list"],
+      "category": "config"
+    },
+    {
+      "id": "puppetserver:node-status",
+      "name": "Node Status",
+      "component": "frontend/NodeStatus.svelte",
+      "slots": ["node-detail"],
+      "size": "small",
+      "requiredCapabilities": ["status.get"],
+      "category": "info",
+      "nodeScoped": true
+    }
+  ],
+  "cliCommands": [
+    {
+      "name": "puppetserver",
+      "actions": [
+        {
+          "name": "catalog",
+          "capability": "catalog.compile",
+          "description": "Compile a catalog for a node",
+          "examples": [
+            "pab puppetserver catalog node1.example.com",
+            "pab puppetserver catalog node1 --environment production"
+          ]
+        },
+        {
+          "name": "environments",
+          "capability": "environments.list",
+          "description": "List available environments",
+          "aliases": ["envs"],
+          "examples": ["pab puppetserver environments"]
+        },
+        {
+          "name": "status",
+          "capability": "status.get",
+          "description": "Get Puppetserver status",
+          "examples": ["pab puppetserver status"]
+        },
+        {
+          "name": "facts",
+          "capability": "facts.get",
+          "description": "Get facts for a node",
+          "examples": ["pab puppetserver facts node1.example.com"]
+        }
+      ]
+    }
+  ],
+  "defaultPermissions": {
+    "catalog.compile": ["admin", "operator"],
+    "environments.list": ["admin", "operator", "viewer"],
+    "status.get": ["admin", "operator", "viewer"],
+    "facts.get": ["admin", "operator", "viewer"]
+  }
+}
