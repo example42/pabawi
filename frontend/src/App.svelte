@@ -22,12 +22,15 @@
   import { router, navigate } from './lib/router.svelte';
   import { get } from './lib/api';
   import { getPluginLoader } from './lib/plugins';
+  import { auth } from './lib/auth.svelte';
 
   interface SetupStatus {
     setupRequired: boolean;
     initialized: boolean;
     userCount: number;
     hasDefaultRoles: boolean;
+    /** Whether authentication is enabled (users exist) */
+    authEnabled?: boolean;
   }
 
   const routes = {
@@ -49,6 +52,12 @@
     '/admin/settings': SettingsPage
   };
 
+  // Public routes that don't require authentication
+  const publicRoutes = ['/login', '/setup'];
+
+  // Track if auth is required (users exist in the system)
+  let authRequired = $state(false);
+
   function handleError(error: Error, errorInfo: { componentStack?: string }): void {
     // Log error to console for debugging
     // Use $state.snapshot to avoid Svelte 5 proxy warnings
@@ -57,6 +66,34 @@
     // In production, you could send this to an error tracking service
     // e.g., Sentry, LogRocket, etc.
   }
+
+  /**
+   * Check if current path is a public route
+   */
+  function isPublicRoute(path: string): boolean {
+    return publicRoutes.some(route => path === route || path.startsWith(route + '/'));
+  }
+
+  /**
+   * Enforce authentication - redirect to login if not authenticated
+   */
+  function enforceAuth(): void {
+    if (authRequired && !auth.isAuthenticated && !isPublicRoute(router.currentPath)) {
+      console.log('[App] Authentication required, redirecting to login');
+      const returnUrl = router.currentPath;
+      navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+    }
+  }
+
+  // Watch for route changes and enforce auth
+  $effect(() => {
+    // Access currentPath to create dependency
+    const _path = router.currentPath;
+    // Enforce auth on route changes
+    if (authRequired) {
+      enforceAuth();
+    }
+  });
 
   // Check if initial setup is required and initialize plugins on app load
   onMount(async () => {
@@ -68,6 +105,22 @@
         // If setup is required, redirect to setup page
         if (status.setupRequired) {
           navigate('/setup');
+          return;
+        }
+
+        // If users exist (setup complete), authentication is required
+        // unless explicitly disabled via environment variable
+        if (status.initialized && status.userCount > 0) {
+          authRequired = true;
+          console.log('[App] Authentication enabled - users exist in system');
+
+          // If not authenticated and not on a public route, redirect to login
+          if (!auth.isAuthenticated && !isPublicRoute(router.currentPath)) {
+            console.log('[App] User not authenticated, redirecting to login');
+            const returnUrl = router.currentPath;
+            navigate(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+            return;
+          }
         }
       }
     } catch (err) {
