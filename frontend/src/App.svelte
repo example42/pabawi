@@ -14,6 +14,7 @@
   import LoginPage from './pages/LoginPage.svelte';
   import SetupPage from './pages/SetupPage.svelte';
   import PluginManagerPage from './pages/PluginManagerPage.svelte';
+  import ProfilePage from './pages/ProfilePage.svelte';
   // Admin pages
   import UsersPage from './pages/admin/UsersPage.svelte';
   import RolesPage from './pages/admin/RolesPage.svelte';
@@ -40,6 +41,7 @@
     '/login': LoginPage,
     '/setup': SetupPage,
     '/plugins': PluginManagerPage,
+    '/profile': ProfilePage,
     // Admin routes
     '/admin/users': UsersPage,
     '/admin/roles': RolesPage,

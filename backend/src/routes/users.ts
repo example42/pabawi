@@ -4,7 +4,7 @@
  * Part of v1.0.0 Modular Plugin Architecture (Phase 2, Step 11)
  *
  * Provides REST API endpoints for user CRUD operations.
- * All endpoints require admin role.
+ * All endpoints require admin role except self-password change.
  *
  * Endpoints:
  * - GET /api/users - List users (paginated)
@@ -12,6 +12,7 @@
  * - GET /api/users/:id - Get user by ID
  * - POST /api/users - Create user
  * - PUT /api/users/:id - Update user
+ * - PUT /api/users/:id/password - Change user password
  * - DELETE /api/users/:id - Delete user
  * - GET /api/users/:id/groups - Get user's groups
  * - GET /api/users/:id/roles - Get user's roles (effective)
@@ -337,6 +338,110 @@ export function createUserRouter(config: UserRoutesConfig): Router {
         }
         throw error;
       }
+    })
+  );
+
+  /**
+   * PUT /api/users/:id/password
+   * Change user password (requires current password verification)
+   * Users can change their own password; admins can change any user's password
+   */
+  router.put(
+    "/:id/password",
+    asyncHandler(async (req: Request, res: Response) => {
+      const startTime = Date.now();
+      const { id } = req.params;
+      const currentUser = req.user!;
+
+      // Check if user is changing their own password or is an admin
+      const isSelfChange = currentUser.id === id;
+      const isAdmin = currentUser.roles.includes("admin");
+
+      if (!isSelfChange && !isAdmin) {
+        res.status(403).json({
+          error: "You can only change your own password",
+          code: "FORBIDDEN",
+        });
+        return;
+      }
+
+      const { currentPassword, newPassword } = req.body as {
+        currentPassword?: string;
+        newPassword: string;
+      };
+
+      // For self-change, require current password
+      if (isSelfChange && !currentPassword) {
+        res.status(400).json({
+          error: "Current password is required",
+          code: "VALIDATION_ERROR",
+        });
+        return;
+      }
+
+      if (!newPassword || newPassword.length < 8) {
+        res.status(400).json({
+          error: "New password must be at least 8 characters",
+          code: "VALIDATION_ERROR",
+        });
+        return;
+      }
+
+      logger.info("Changing user password", {
+        component: "UserRouter",
+        operation: "changePassword",
+        metadata: { userId: id, isSelfChange },
+      });
+
+      // Verify the user exists
+      const user = await userService.getUserById(id);
+      if (!user) {
+        res.status(404).json({
+          error: "User not found",
+          code: "NOT_FOUND",
+        });
+        return;
+      }
+
+      // For self-change, verify current password
+      if (isSelfChange && currentPassword) {
+        const isValid = await userService.verifyPassword(id, currentPassword);
+        if (!isValid) {
+          res.status(401).json({
+            error: "Current password is incorrect",
+            code: "INVALID_CREDENTIALS",
+          });
+          return;
+        }
+      }
+
+      // Update the password
+      await userService.updateUser(id, { password: newPassword });
+
+      logger.info("User password changed", {
+        component: "UserRouter",
+        operation: "changePassword",
+        metadata: { userId: id, changedBy: currentUser.id },
+      });
+
+      // Add debug info if expert mode
+      if (req.expertMode) {
+        const duration = Date.now() - startTime;
+        const debugInfo = expertModeService.createDebugInfo(
+          `PUT /api/users/${id}/password`,
+          req.correlationId || "users-password",
+          duration
+        );
+        debugInfo.performance = expertModeService.collectPerformanceMetrics();
+        debugInfo.context = expertModeService.collectRequestContext(req);
+        res.json(expertModeService.attachDebugInfo(
+          { success: true, message: "Password changed successfully" },
+          debugInfo
+        ));
+        return;
+      }
+
+      res.json({ success: true, message: "Password changed successfully" });
     })
   );
 

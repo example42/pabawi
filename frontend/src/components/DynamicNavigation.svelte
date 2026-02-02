@@ -15,7 +15,7 @@
 -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { link } from "../lib/router.svelte";
+  import { link, navigate } from "../lib/router.svelte";
   import { debugMode } from "../lib/debug";
   import { themeManager } from "../lib/theme.svelte";
   import { auth } from "../lib/auth.svelte";
@@ -41,6 +41,7 @@
   let menuError = $state<string | null>(null);
   let menuLoading = $state(true);
   let collapsedGroups = $state<Set<string>>(new Set());
+  let userMenuOpen = $state(false);
 
   // Initialize menu builder on mount
   onMount(() => {
@@ -143,8 +144,24 @@
     themeManager.toggle();
   }
 
-  function handleLogout(): void {
-    auth.logout();
+  async function handleLogout(): Promise<void> {
+    userMenuOpen = false;
+    await auth.logout();
+    navigate('/login');
+  }
+
+  function toggleUserMenu(): void {
+    userMenuOpen = !userMenuOpen;
+  }
+
+  function closeUserMenu(): void {
+    userMenuOpen = false;
+  }
+
+  function handleUserMenuKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      userMenuOpen = false;
+    }
   }
 </script>
 
@@ -269,23 +286,104 @@
 
       <!-- Right Side Controls -->
       <div class="flex items-center gap-3">
-        <!-- User Info (if authenticated) -->
+        <!-- User Profile Menu (if authenticated) -->
         {#if auth.isAuthenticated && auth.user}
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600 dark:text-gray-400">
-              {auth.user.displayName || auth.user.username}
-            </span>
+          <div class="relative">
             <button
               type="button"
-              onclick={handleLogout}
-              class="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-              aria-label="Logout"
-              title="Logout"
+              onclick={toggleUserMenu}
+              onkeydown={handleUserMenuKeydown}
+              class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+              aria-expanded={userMenuOpen}
+              aria-haspopup="true"
             >
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              <!-- User Avatar -->
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
+                <span class="text-sm font-semibold">
+                  {(auth.user.displayName || auth.user.username).charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <span class="hidden sm:block">
+                {auth.user.displayName || auth.user.username}
+              </span>
+              <svg class="h-4 w-4 transition-transform" class:rotate-180={userMenuOpen} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </button>
+
+            <!-- User Dropdown Menu -->
+            {#if userMenuOpen}
+              <!-- Backdrop for closing menu on click outside -->
+              <button
+                type="button"
+                class="fixed inset-0 z-40 cursor-default"
+                onclick={closeUserMenu}
+                aria-label="Close menu"
+              ></button>
+
+              <div
+                class="absolute right-0 z-50 mt-2 w-56 origin-top-right rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                role="menu"
+                aria-orientation="vertical"
+              >
+                <!-- User Info Header -->
+                <div class="border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+                  <p class="text-sm font-medium text-gray-900 dark:text-white">
+                    {auth.user.displayName || auth.user.username}
+                  </p>
+                  <p class="truncate text-xs text-gray-500 dark:text-gray-400">
+                    {auth.user.email}
+                  </p>
+                </div>
+
+                <!-- Menu Items -->
+                <div class="py-1">
+                  <!-- User Profile -->
+                  <a
+                    href="/profile"
+                    use:link
+                    onclick={closeUserMenu}
+                    class="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                    role="menuitem"
+                  >
+                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    User Profile
+                  </a>
+
+                  <!-- Settings -->
+                  <a
+                    href="/admin/settings"
+                    use:link
+                    onclick={closeUserMenu}
+                    class="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                    role="menuitem"
+                  >
+                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Settings
+                  </a>
+                </div>
+
+                <!-- Logout -->
+                <div class="border-t border-gray-200 py-1 dark:border-gray-700">
+                  <button
+                    type="button"
+                    onclick={handleLogout}
+                    class="flex w-full items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                    role="menuitem"
+                  >
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    Log Out
+                  </button>
+                </div>
+              </div>
+            {/if}
           </div>
         {/if}
 
