@@ -94,6 +94,17 @@ export interface PluginLoaderOptions {
   skipPlugins?: string[];
   /** Logger instance */
   logger?: LoggerService;
+  /**
+   * Additional external plugin configurations from YAML config
+   * Each entry can specify a path or package name
+   */
+  additionalPlugins?: Array<{
+    path?: string;
+    package?: string;
+    enabled?: boolean;
+    priority?: number;
+    config?: Record<string, unknown>;
+  }>;
 }
 
 /**
@@ -105,18 +116,47 @@ function getProjectRoot(): string {
 }
 
 /**
+ * Get the default native plugins path
+ * Supports PABAWI_NATIVE_PLUGINS_PATH environment variable override
+ */
+function getDefaultNativePluginsPath(): string {
+  const envPath = process.env.PABAWI_NATIVE_PLUGINS_PATH;
+  if (envPath) {
+    // Support both absolute and relative paths
+    return path.isAbsolute(envPath) ? envPath : path.resolve(getProjectRoot(), envPath);
+  }
+  return path.join(getProjectRoot(), "plugins", "native");
+}
+
+/**
+ * Get the default external plugins path
+ * Supports PABAWI_EXTERNAL_PLUGINS_PATH environment variable override
+ */
+function getDefaultExternalPluginsPath(): string {
+  const envPath = process.env.PABAWI_EXTERNAL_PLUGINS_PATH;
+  if (envPath) {
+    // Support both absolute and relative paths
+    return path.isAbsolute(envPath) ? envPath : path.resolve(getProjectRoot(), envPath);
+  }
+  return path.join(getProjectRoot(), "plugins", "external");
+}
+
+/**
  * Default paths for plugin discovery
  *
  * Native paths are parent directories that contain plugin subdirectories.
  * The loader will scan these directories for plugins with plugin.json manifests.
+ *
+ * Environment variables:
+ * - PABAWI_NATIVE_PLUGINS_PATH: Override the native plugins directory
+ * - PABAWI_EXTERNAL_PLUGINS_PATH: Override the external plugins directory
  */
 const DEFAULT_NATIVE_PATHS = [
-  // New plugin directory structure (plugins/native/bolt/, plugins/native/puppetdb/, etc.)
-  path.join(getProjectRoot(), "plugins", "native"),
+  getDefaultNativePluginsPath(),
 ];
 
 const DEFAULT_EXTERNAL_PATHS = [
-  path.join(getProjectRoot(), "plugins", "external"),
+  getDefaultExternalPluginsPath(),
 ];
 
 /**
@@ -162,17 +202,34 @@ export interface PluginModule {
  */
 export class PluginLoader {
   private logger: LoggerService;
-  private options: Required<Omit<PluginLoaderOptions, 'logger'>> & { logger: LoggerService };
+  private options: Required<Omit<PluginLoaderOptions, 'logger' | 'additionalPlugins'>> & {
+    logger: LoggerService;
+    additionalPlugins: NonNullable<PluginLoaderOptions['additionalPlugins']>;
+  };
   private loadedPlugins = new Map<string, LoadedPlugin>();
 
   constructor(options: PluginLoaderOptions = {}) {
     this.logger = options.logger ?? new LoggerService();
+
+    // Process additional plugins to extract paths for local loading
+    const additionalPlugins = options.additionalPlugins ?? [];
+    const additionalLocalPaths = additionalPlugins
+      .filter(p => p.enabled !== false && p.path)
+      .map(p => {
+        const pluginPath = p.path!;
+        // Support both absolute and relative paths
+        return path.isAbsolute(pluginPath)
+          ? pluginPath
+          : path.resolve(getProjectRoot(), pluginPath);
+      });
+
     this.options = {
       nativePaths: options.nativePaths ?? DEFAULT_NATIVE_PATHS,
       externalPaths: options.externalPaths ?? DEFAULT_EXTERNAL_PATHS,
-      localPaths: options.localPaths ?? [],
+      localPaths: [...(options.localPaths ?? []), ...additionalLocalPaths],
       strictValidation: options.strictValidation ?? false,
       skipPlugins: options.skipPlugins ?? [],
+      additionalPlugins,
       logger: this.logger,
     };
 
@@ -182,6 +239,7 @@ export class PluginLoader {
         nativePaths: this.options.nativePaths.length,
         externalPaths: this.options.externalPaths.length,
         localPaths: this.options.localPaths.length,
+        additionalPlugins: this.options.additionalPlugins.length,
       },
     });
   }
@@ -830,6 +888,34 @@ export class PluginLoader {
    */
   getExternalPluginsPath(): string {
     return this.options.externalPaths[0] ?? path.join(getProjectRoot(), "plugins", "external");
+  }
+
+  /**
+   * Get additional plugin configurations
+   *
+   * Returns the additional plugin configurations passed via options,
+   * typically from YAML configuration files.
+   *
+   * @returns Array of additional plugin configurations
+   */
+  getAdditionalPluginConfigs(): NonNullable<PluginLoaderOptions['additionalPlugins']> {
+    return this.options.additionalPlugins;
+  }
+
+  /**
+   * Get the configuration for a specific additional plugin
+   *
+   * @param pluginName - Name of the plugin
+   * @returns Plugin configuration or undefined if not found
+   */
+  getAdditionalPluginConfig(pluginName: string): NonNullable<PluginLoaderOptions['additionalPlugins']>[number] | undefined {
+    const plugin = this.loadedPlugins.get(pluginName);
+    if (!plugin) return undefined;
+
+    // Find matching additional plugin config by path
+    return this.options.additionalPlugins.find(
+      p => p.path && plugin.discovery.path.includes(p.path)
+    );
   }
 
   // ==========================================================================

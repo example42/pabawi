@@ -31,9 +31,17 @@
       "$lib/*": ["src/lib/*"],
       "$components/*": ["src/components/*"],
       "@plugins/native/*": ["../plugins/native/*"],
-      "@plugins/external/*": ["../plugins/external/*"]
+      "@plugins/external/*": ["../plugins/external/*"],
+      "@plugins/*": ["../plugins/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "../plugins/**/*.ts", "../plugins/**/*.svelte"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "../plugins/native/*/frontend/**/*.ts",
+    "../plugins/native/*/frontend/**/*.svelte",
+    "../plugins/external/*/frontend/**/*.ts",
+    "../plugins/external/*/frontend/**/*.svelte"
+  ],
   "exclude": ["node_modules", "dist"]
 }

@@ -74,14 +74,14 @@ All plugin-specific code MUST reside in `plugins/native/{pluginName}/` directory
     - Update widget imports and exports
     - _Requirements: 1.9, 5.4_
 
-- [ ] 3. Update PluginLoader for New Directory Structure
-  - [ ] 3.1 Update PluginLoader to load from plugins/ directory
+- [x] 3. Update PluginLoader for New Directory Structure
+  - [x] 3.1 Update PluginLoader to load from plugins/ directory
     - Modify PluginLoader to scan `plugins/native/` and `plugins/external/`
     - Load plugin manifests from `plugin.json` files
     - Support configurable external plugins directory
     - _Requirements: 1.2, 1.5, 1.7_
   
-  - [ ] 3.2 Update build system for plugin frontend code
+  - [x] 3.2 Update build system for plugin frontend code
     - Configure Vite to include plugin frontend components
     - Set up path aliases for plugin imports
     - Ensure plugin widgets are bundled correctly

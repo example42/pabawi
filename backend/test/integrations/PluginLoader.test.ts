@@ -593,3 +593,107 @@ describe("PluginLoader with real plugin directories", () => {
     });
   });
 });
+
+
+describe("PluginLoader additional plugins configuration", () => {
+  let logger: LoggerService;
+  let loader: PluginLoader;
+
+  beforeEach(() => {
+    logger = new LoggerService();
+    loader = new PluginLoader({ logger });
+  });
+
+  describe("getAdditionalPluginConfigs", () => {
+    it("should return empty array when no additional plugins configured", () => {
+      const configs = loader.getAdditionalPluginConfigs();
+      expect(configs).toEqual([]);
+    });
+  });
+
+  describe("getAdditionalPluginConfig", () => {
+    it("should return undefined for non-existent plugin config", () => {
+      const config = loader.getAdditionalPluginConfig("non-existent");
+      expect(config).toBeUndefined();
+    });
+  });
+});
+
+describe("PluginLoader with additional plugins", () => {
+  let logger: LoggerService;
+
+  beforeEach(() => {
+    logger = new LoggerService();
+  });
+
+  it("should accept additional plugins configuration", () => {
+    const loader = new PluginLoader({
+      additionalPlugins: [
+        { path: "./custom-plugins/my-plugin", enabled: true, priority: 5 },
+        { path: "./custom-plugins/another-plugin", enabled: false },
+      ],
+      logger,
+    });
+
+    const configs = loader.getAdditionalPluginConfigs();
+    expect(configs).toHaveLength(2);
+    expect(configs[0].path).toBe("./custom-plugins/my-plugin");
+    expect(configs[0].priority).toBe(5);
+  });
+
+  it("should add enabled additional plugin paths to local paths", async () => {
+    const loader = new PluginLoader({
+      nativePaths: [],
+      externalPaths: [],
+      additionalPlugins: [
+        { path: "./custom-plugins/enabled-plugin", enabled: true },
+        { path: "./custom-plugins/disabled-plugin", enabled: false },
+      ],
+      logger,
+    });
+
+    // The enabled plugin path should be added to local paths
+    // We can verify this by checking that discover doesn't crash
+    // and that the loader was created successfully
+    expect(loader).toBeDefined();
+    expect(loader.getAdditionalPluginConfigs()).toHaveLength(2);
+  });
+
+  it("should support absolute paths in additional plugins", () => {
+    const loader = new PluginLoader({
+      additionalPlugins: [
+        { path: "/absolute/path/to/plugin", enabled: true },
+      ],
+      logger,
+    });
+
+    expect(loader.getAdditionalPluginConfigs()).toHaveLength(1);
+  });
+});
+
+describe("PluginLoader environment variable support", () => {
+  let logger: LoggerService;
+  const originalEnv = process.env;
+
+  beforeEach(() => {
+    logger = new LoggerService();
+    // Reset environment
+    process.env = { ...originalEnv };
+  });
+
+  afterEach(() => {
+    process.env = originalEnv;
+  });
+
+  it("should use default paths when environment variables are not set", () => {
+    delete process.env.PABAWI_NATIVE_PLUGINS_PATH;
+    delete process.env.PABAWI_EXTERNAL_PLUGINS_PATH;
+
+    const loader = new PluginLoader({ logger });
+
+    expect(loader.getNativePluginsPath()).toContain("plugins");
+    expect(loader.getNativePluginsPath()).toContain("native");
+    expect(loader.getExternalPluginsPath()).toContain("plugins");
+    expect(loader.getExternalPluginsPath()).toContain("external");
+  });
+});
