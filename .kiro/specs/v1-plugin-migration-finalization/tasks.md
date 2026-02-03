@@ -42,7 +42,7 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
     - Verify PuppetserverPlugin still initializes correctly
     - _Requirements: 1.4, 1.8, 15.3_
   
-  - [ ] 1.5 Move HieraPlugin to new structure
+  - [x] 1.5 Move HieraPlugin to new structure
     - Create `plugins/native/hiera/` directory
     - Move backend code from `backend/src/integrations/hiera/` to `plugins/native/hiera/backend/`
     - Create `plugins/native/hiera/frontend/` for widget components
