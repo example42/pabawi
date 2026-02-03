@@ -63,29 +63,29 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
   - Verify all 4 plugins load from new locations
   - Verify existing functionality still works
 
-- [ ] 3. API Versioning Implementation
-  - [ ] 3.1 Create v1 API router structure
+- [x] 3. API Versioning Implementation
+  - [x] 3.1 Create v1 API router structure
     - Create `backend/src/routes/v1/` directory
     - Create main v1 router that mounts all v1 routes under `/api/v1`
     - Add `X-API-Version` response header middleware
     - _Requirements: 4.1, 4.2, 4.7_
   
-  - [ ] 3.2 Create v1 plugins routes
+  - [x] 3.2 Create v1 plugins routes
     - Create `/api/v1/plugins` routes (list, get, capabilities, widgets, health)
     - Reference existing plugin route patterns from 0.x code
     - _Requirements: 4.4, 4.6_
   
-  - [ ] 3.3 Create v1 capabilities routes
+  - [x] 3.3 Create v1 capabilities routes
     - Create `/api/v1/capabilities` routes (list, get, execute)
     - Implement capability execution endpoint with RBAC
     - _Requirements: 4.4, 4.5_
   
-  - [ ] 3.4 Create v1 nodes routes
+  - [x] 3.4 Create v1 nodes routes
     - Create `/api/v1/nodes` routes (list, get, sources)
     - Reference existing inventory/nodes routes from 0.x code for data structures
     - _Requirements: 4.8_
   
-  - [ ] 3.5 Create v1 widgets routes
+  - [x] 3.5 Create v1 widgets routes
     - Create `/api/v1/widgets` routes (list, by-slot)
     - _Requirements: 4.4_
   
@@ -93,7 +93,7 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
     - **Property 10: API Versioning Compliance**
     - **Validates: Requirements 4.1, 4.3**
 
-- [ ] 4. Checkpoint - API versioning complete
+- [x] 4. Checkpoint - API versioning complete
   - Ensure all tests pass, ask the user if questions arise.
   - Verify all v1 routes are accessible
   - Verify response headers include API version

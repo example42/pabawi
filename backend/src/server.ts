@@ -27,6 +27,7 @@ import { createUserRouter } from "./routes/users";
 import { createRoleRouter } from "./routes/roles";
 import { createGroupRouter } from "./routes/groups";
 import configRouter from "./routes/config";
+import { createV1Router } from "./routes/v1";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
@@ -748,6 +749,20 @@ async function startServer(): Promise<Express> {
       "/api/plugins",
       createPluginsRouter(integrationManager),
     );
+
+    // v1 API routes (versioned API)
+    app.use(
+      "/api/v1",
+      createV1Router({
+        integrationManager,
+        logger,
+      }),
+    );
+
+    logger.info("v1 API routes mounted at /api/v1", {
+      component: "Server",
+      operation: "startServer",
+    });
 
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");
