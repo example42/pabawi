@@ -9,19 +9,19 @@
  */
 
 // ==========================================================================
-// Plugin Widget Manifests
+// Plugin Widget Manifests (from plugin directories via alias)
 // ==========================================================================
 
-import { BOLT_WIDGET_MANIFEST, getBoltWidgetIds, getBoltWidget } from './bolt';
-import { PUPPETDB_WIDGET_MANIFEST, getPuppetDBWidgetIds, getPuppetDBWidget } from './puppetdb';
-import { PUPPETSERVER_WIDGET_MANIFEST, getPuppetserverWidgetIds, getPuppetserverWidget } from './puppetserver';
-import { HIERA_WIDGET_MANIFEST, getHieraWidgetIds, getHieraWidget } from './hiera';
+import { BOLT_WIDGET_MANIFEST, getBoltWidgetIds, getBoltWidget } from '@plugins/native/bolt/frontend';
+import { PUPPETDB_WIDGET_MANIFEST, getPuppetDBWidgetIds, getPuppetDBWidget } from '@plugins/native/puppetdb/frontend';
+import { PUPPETSERVER_WIDGET_MANIFEST, getPuppetserverWidgetIds, getPuppetserverWidget } from '@plugins/native/puppetserver/frontend';
+import { HIERA_WIDGET_MANIFEST, getHieraWidgetIds, getHieraWidget } from '@plugins/native/hiera/frontend';
 
 // Re-export individual manifests
-export { BOLT_WIDGET_MANIFEST } from './bolt';
-export { PUPPETDB_WIDGET_MANIFEST } from './puppetdb';
-export { PUPPETSERVER_WIDGET_MANIFEST } from './puppetserver';
-export { HIERA_WIDGET_MANIFEST } from './hiera';
+export { BOLT_WIDGET_MANIFEST } from '@plugins/native/bolt/frontend';
+export { PUPPETDB_WIDGET_MANIFEST } from '@plugins/native/puppetdb/frontend';
+export { PUPPETSERVER_WIDGET_MANIFEST } from '@plugins/native/puppetserver/frontend';
+export { HIERA_WIDGET_MANIFEST } from '@plugins/native/hiera/frontend';
 
 // ==========================================================================
 // Types

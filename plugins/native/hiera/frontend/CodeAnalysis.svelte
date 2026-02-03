@@ -10,14 +10,16 @@
   - Detect unused Hiera keys
   - Identify missing keys
 
-  @module widgets/hiera/CodeAnalysis
+  @module plugins/native/hiera/frontend/CodeAnalysis
   @version 1.0.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../components/ErrorAlert.svelte';
-  import { get, post } from '../../lib/api';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -78,6 +80,7 @@
     config = {},
   }: Props = $props();
 
+
   // ==========================================================================
   // State
   // ==========================================================================
@@ -117,14 +120,6 @@
   });
 
   // ==========================================================================
-  // Lifecycle
-  // ==========================================================================
-
-  onMount(() => {
-    // Don't auto-analyze on mount - it may be expensive
-  });
-
-  // ==========================================================================
   // Data Fetching
   // ==========================================================================
 
@@ -135,7 +130,7 @@
       const params: Record<string, string> = { environment };
       if (moduleFilter) params.module = moduleFilter;
 
-      const response = await post<AnalysisResult>('/api/hiera/analyze', params);
+      const response = await api.post<AnalysisResult>('/api/hiera/analyze', params);
       analysis = response;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Analysis failed';
@@ -197,7 +192,7 @@
 
   <!-- Results -->
   {#if error}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if !analysis}
     <div class="text-center py-8 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
       <svg class="w-12 h-12 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -264,6 +259,7 @@
         </button>
       {/if}
     </div>
+
 
     <!-- Tab Content -->
     <div class="{compact ? 'max-h-48' : 'max-h-72'} overflow-y-auto">

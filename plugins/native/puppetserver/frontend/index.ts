@@ -15,7 +15,9 @@
 export { default as HomeWidget } from './HomeWidget.svelte';
 export { default as CatalogCompilation } from './CatalogCompilation.svelte';
 export { default as EnvironmentInfo } from './EnvironmentInfo.svelte';
+export { default as EnvironmentManager } from './EnvironmentManager.svelte';
 export { default as NodeStatus } from './NodeStatus.svelte';
+export { default as StatusDashboard } from './StatusDashboard.svelte';
 
 // ==========================================================================
 // Widget Manifest for Dynamic Loading
@@ -51,11 +53,27 @@ export const PUPPETSERVER_WIDGET_MANIFEST = {
     defaultSize: { width: 2, height: 1 },
     requiredCapabilities: ['puppetserver.environments'],
   },
+  'puppetserver:environment-manager': {
+    id: 'puppetserver:environment-manager',
+    name: 'Environment Manager',
+    load: () => import('./EnvironmentManager.svelte'),
+    slots: ['dashboard', 'standalone-page'] as string[],
+    defaultSize: { width: 2, height: 2 },
+    requiredCapabilities: ['puppetserver.environments'],
+  },
   'puppetserver:node-status': {
     id: 'puppetserver:node-status',
     name: 'Node Status',
     load: () => import('./NodeStatus.svelte'),
     slots: ['node-detail'] as string[],
+    defaultSize: { width: 1, height: 1 },
+    requiredCapabilities: ['puppetserver.status'],
+  },
+  'puppetserver:status-dashboard': {
+    id: 'puppetserver:status-dashboard',
+    name: 'Status Dashboard',
+    load: () => import('./StatusDashboard.svelte'),
+    slots: ['dashboard', 'sidebar'] as string[],
     defaultSize: { width: 1, height: 1 },
     requiredCapabilities: ['puppetserver.status'],
   },

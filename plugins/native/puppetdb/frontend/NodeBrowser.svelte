@@ -11,15 +11,16 @@
   - Last check-in timestamps
   - Quick link to node details
 
-  @module widgets/puppetdb/NodeBrowser
+  @module plugins/native/puppetdb/frontend/NodeBrowser
   @version 1.0.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../components/ErrorAlert.svelte';
-  import { get } from '../../lib/api';
-  import { router } from '../../lib/router.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, router } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -63,6 +64,7 @@
     config = {},
     onNodeSelect,
   }: Props = $props();
+
 
   // ==========================================================================
   // State
@@ -123,7 +125,7 @@
     loading = true;
     error = null;
     try {
-      const response = await get<{ nodes: PuppetDBNode[] }>('/api/puppetdb/nodes');
+      const response = await api.get<{ nodes: PuppetDBNode[] }>('/api/puppetdb/nodes');
       nodes = response.nodes || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load PuppetDB nodes';
@@ -241,7 +243,7 @@
       <span class="ml-2 text-sm text-gray-500">Loading nodes...</span>
     </div>
   {:else if error}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if filteredNodes.length === 0}
     <div class="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
       {searchQuery ? 'No nodes match your search' : 'No nodes found in PuppetDB'}

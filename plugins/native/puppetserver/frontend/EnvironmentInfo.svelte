@@ -139,10 +139,12 @@
     <div class="space-y-2">
       {#each environments as env}
         <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-          <button
-            type="button"
+          <div
+            role="button"
+            tabindex="0"
             onclick={() => selectEnvironment(env)}
-            class="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectEnvironment(env); } }}
+            class="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left cursor-pointer"
           >
             <div class="flex items-center gap-3">
               <span class="w-2 h-2 rounded-full {env.status === 'deployed' ? 'bg-green-500' : env.status === 'deploying' ? 'bg-yellow-500' : 'bg-gray-400'}"></span>
@@ -165,7 +167,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
             </div>
-          </button>
+          </div>
 
           {#if selectedEnvironment?.name === env.name}
             <div class="px-4 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-600">

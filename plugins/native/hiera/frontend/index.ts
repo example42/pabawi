@@ -13,9 +13,12 @@
 // ==========================================================================
 
 export { default as HomeWidget } from './HomeWidget.svelte';
+export { default as HieraExplorer } from './HieraExplorer.svelte';
 export { default as KeyLookup } from './KeyLookup.svelte';
 export { default as HierarchyViewer } from './HierarchyViewer.svelte';
 export { default as NodeHieraData } from './NodeHieraData.svelte';
+export { default as CodeAnalysis } from './CodeAnalysis.svelte';
+export { default as KeyValuesGrid } from './KeyValuesGrid.svelte';
 
 // ==========================================================================
 // Widget Manifest for Dynamic Loading
@@ -34,6 +37,14 @@ export const HIERA_WIDGET_MANIFEST = {
     slots: ['home-summary'] as string[],
     defaultSize: { width: 1, height: 1 },
     requiredCapabilities: ['hiera.keys'],
+  },
+  'hiera:explorer': {
+    id: 'hiera:explorer',
+    name: 'Hiera Explorer',
+    load: () => import('./HieraExplorer.svelte'),
+    slots: ['dashboard', 'standalone-page'] as string[],
+    defaultSize: { width: 2, height: 2 },
+    requiredCapabilities: ['hiera.keys', 'hiera.lookup'],
   },
   'hiera:key-lookup': {
     id: 'hiera:key-lookup',
@@ -58,6 +69,22 @@ export const HIERA_WIDGET_MANIFEST = {
     slots: ['node-detail'] as string[],
     defaultSize: { width: 2, height: 2 },
     requiredCapabilities: ['hiera.node'],
+  },
+  'hiera:code-analysis': {
+    id: 'hiera:code-analysis',
+    name: 'Code Analysis',
+    load: () => import('./CodeAnalysis.svelte'),
+    slots: ['dashboard', 'standalone-page'] as string[],
+    defaultSize: { width: 2, height: 2 },
+    requiredCapabilities: ['hiera.analysis'],
+  },
+  'hiera:key-values-grid': {
+    id: 'hiera:key-values-grid',
+    name: 'Key Values Grid',
+    load: () => import('./KeyValuesGrid.svelte'),
+    slots: ['standalone-page', 'modal'] as string[],
+    defaultSize: { width: 3, height: 2 },
+    requiredCapabilities: ['hiera.values'],
   },
 };
 /* eslint-enable @typescript-eslint/explicit-function-return-type */

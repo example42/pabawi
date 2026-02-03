@@ -10,15 +10,16 @@
   - Quick metrics
   - Link to full reports view
 
-  @module widgets/puppetdb/ReportsSummary
+  @module plugins/native/puppetdb/frontend/ReportsSummary
   @version 1.0.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../components/ErrorAlert.svelte';
-  import { get } from '../../lib/api';
-  import { router } from '../../lib/router.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, router } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -78,6 +79,7 @@
     void fetchSummary();
   });
 
+
   // ==========================================================================
   // Data Fetching
   // ==========================================================================
@@ -86,7 +88,7 @@
     loading = true;
     error = null;
     try {
-      const response = await get<ReportSummary>(`/api/puppetdb/reports/summary?period=${period}`);
+      const response = await api.get<ReportSummary>(`/api/puppetdb/reports/summary?period=${period}`);
       summary = response;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load summary';
@@ -141,7 +143,7 @@
       <LoadingSpinner size="sm" />
     </div>
   {:else if error}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if summary}
     <!-- Success Rate -->
     <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">

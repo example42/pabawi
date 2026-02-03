@@ -10,14 +10,16 @@
   - Export capability
   - Inline value editing (if permitted)
 
-  @module widgets/hiera/KeyValuesGrid
+  @module plugins/native/hiera/frontend/KeyValuesGrid
   @version 1.0.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../components/ErrorAlert.svelte';
-  import { get } from '../../lib/api';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -68,6 +70,7 @@
     onKeySelect,
   }: Props = $props();
 
+
   // ==========================================================================
   // State
   // ==========================================================================
@@ -80,6 +83,7 @@
   let sortDirection = $state<SortDirection>('asc');
   let selectedItem = $state<HieraKeyValue | null>(null);
   let showValueModal = $state(false);
+  let internalLevelFilter = $state(levelFilter);
 
   // ==========================================================================
   // Derived
@@ -88,8 +92,8 @@
   let filteredData = $derived.by(() => {
     let result = data;
 
-    if (levelFilter) {
-      result = result.filter(d => d.level === levelFilter);
+    if (internalLevelFilter) {
+      result = result.filter(d => d.level === internalLevelFilter);
     }
 
     if (searchQuery.trim()) {
@@ -144,7 +148,7 @@
       const queryString = params.toString();
       const url = queryString ? `/api/hiera/all-keys?${queryString}` : '/api/hiera/all-keys';
 
-      const response = await get<{ keys: HieraKeyValue[] }>(url);
+      const response = await api.get<{ keys: HieraKeyValue[] }>(url);
       data = response.keys || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load data';
@@ -240,6 +244,7 @@
   }
 </script>
 
+
 <div class="key-values-grid {compact ? 'space-y-2' : 'space-y-4'}">
   <!-- Header -->
   <div class="flex items-center justify-between">
@@ -285,7 +290,7 @@
     </div>
     {#if levels.length > 1}
       <select
-        bind:value={levelFilter}
+        bind:value={internalLevelFilter}
         class="px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-red-500"
       >
         <option value="">All levels</option>
@@ -303,7 +308,7 @@
       <span class="ml-2 text-sm text-gray-500">Loading data...</span>
     </div>
   {:else if error}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if filteredData.length === 0}
     <div class="text-center py-8 text-sm text-gray-500 dark:text-gray-400">
       {searchQuery ? 'No keys match your search' : 'No Hiera data found'}
@@ -333,9 +338,7 @@
                   Key
                 {/if}
               </th>
-              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Value
-              </th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Value</th>
               <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">
                 {#if sortable}
                   <button
@@ -387,23 +390,17 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                       </svg>
                     {/if}
-                    <span class="font-mono text-gray-700 dark:text-gray-300 truncate max-w-xs" title={item.key}>
-                      {item.key}
-                    </span>
+                    <span class="font-mono text-gray-700 dark:text-gray-300 truncate max-w-xs" title={item.key}>{item.key}</span>
                   </div>
                 </td>
                 <td class="px-3 py-2">
-                  <span class="font-mono text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs block" title={formatFullValue(item.value)}>
-                    {formatValuePreview(item.value)}
-                  </span>
+                  <span class="font-mono text-xs text-gray-500 dark:text-gray-400 truncate max-w-xs block" title={formatFullValue(item.value)}>{formatValuePreview(item.value)}</span>
                 </td>
                 <td class="px-3 py-2">
                   <span class="text-xs {getTypeColor(item.valueType)}">{item.valueType}</span>
                 </td>
                 <td class="px-3 py-2">
-                  <span class="px-1.5 py-0.5 text-xs rounded {getLevelBadgeColor(item.level)}">
-                    {item.level}
-                  </span>
+                  <span class="px-1.5 py-0.5 text-xs rounded {getLevelBadgeColor(item.level)}">{item.level}</span>
                 </td>
               </tr>
             {/each}

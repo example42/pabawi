@@ -172,9 +172,9 @@
     debug,
     executionStream,
     plugin: {
-      name: pluginName,
-      version: pluginVersion,
-      color: pluginColor,
+      get name() { return pluginName; },
+      get version() { return pluginVersion; },
+      get color() { return pluginColor; },
     },
   };
 

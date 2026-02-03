@@ -10,14 +10,16 @@
   - Key metrics display
   - Quick actions
 
-  @module widgets/puppetserver/StatusDashboard
+  @module plugins/native/puppetserver/frontend/StatusDashboard
   @version 1.0.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../components/ErrorAlert.svelte';
-  import { get } from '../../lib/api';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -71,6 +73,7 @@
     config = {},
   }: Props = $props();
 
+
   // ==========================================================================
   // State
   // ==========================================================================
@@ -104,7 +107,7 @@
     if (!status) loading = true;
     error = null;
     try {
-      const response = await get<ServerStatus>('/api/puppetserver/status');
+      const response = await api.get<ServerStatus>('/api/puppetserver/status');
       status = response;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load status';
@@ -178,7 +181,7 @@
       <span class="ml-2 text-sm text-gray-500">Checking status...</span>
     </div>
   {:else if error && !status}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if status}
     <!-- Status Badge -->
     <div class="flex items-center justify-between p-3 rounded-lg {getStatusBg(status.status)}">

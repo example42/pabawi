@@ -75,19 +75,16 @@
 
   /**
    * Widget component mapping for dynamic imports
+   * Uses @plugins/native alias configured in vite.config.ts
    */
   const widgetComponents: Record<string, () => Promise<{ default: Component }>> = {
     // PuppetDB widgets
-    'puppetdb:node-browser': () => import('../widgets/puppetdb/NodeBrowser.svelte'),
-    'puppetdb:facts-explorer': () => import('../widgets/puppetdb/FactsExplorer.svelte'),
-    'puppetdb:reports-viewer': () => import('../widgets/puppetdb/ReportsViewer.svelte'),
-    'puppetdb:reports-summary': () => import('../widgets/puppetdb/ReportsSummary.svelte'),
-    'puppetdb:events-viewer': () => import('../widgets/puppetdb/EventsViewer.svelte'),
-    'puppetdb:catalog-viewer': () => import('../widgets/puppetdb/CatalogViewer.svelte'),
-
-    // Bolt widgets (examples - add as needed)
-    // 'bolt:command-executor': () => import('../components/CommandExecutor.svelte'),
-    // 'bolt:task-runner': () => import('../components/TaskRunner.svelte'),
+    'puppetdb:node-browser': () => import('@plugins/native/puppetdb/frontend/NodeBrowser.svelte'),
+    'puppetdb:facts-explorer': () => import('@plugins/native/puppetdb/frontend/FactsExplorer.svelte'),
+    'puppetdb:reports-viewer': () => import('@plugins/native/puppetdb/frontend/ReportsViewer.svelte'),
+    'puppetdb:reports-summary': () => import('@plugins/native/puppetdb/frontend/ReportsSummary.svelte'),
+    'puppetdb:events-viewer': () => import('@plugins/native/puppetdb/frontend/EventsViewer.svelte'),
+    'puppetdb:catalog-viewer': () => import('@plugins/native/puppetdb/frontend/CatalogViewer.svelte'),
   };
 
   /**

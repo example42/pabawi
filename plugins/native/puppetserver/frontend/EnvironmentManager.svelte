@@ -10,15 +10,16 @@
   - Cache flush functionality
   - Environment details view
 
-  @module widgets/puppetserver/EnvironmentManager
+  @module plugins/native/puppetserver/frontend/EnvironmentManager
   @version 1.0.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../components/ErrorAlert.svelte';
-  import { get, post } from '../../lib/api';
-  import { showSuccess, showError } from '../../lib/toast.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, toast } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -56,6 +57,7 @@
     onEnvironmentSelect,
   }: Props = $props();
 
+
   // ==========================================================================
   // State
   // ==========================================================================
@@ -82,7 +84,7 @@
     loading = true;
     error = null;
     try {
-      const response = await get<{ environments: Environment[] }>('/api/puppetserver/environments');
+      const response = await api.get<{ environments: Environment[] }>('/api/puppetserver/environments');
       environments = response.environments || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load environments';
@@ -103,11 +105,11 @@
   async function deployEnvironment(envName: string): Promise<void> {
     actionLoading = `deploy-${envName}`;
     try {
-      await post(`/api/puppetserver/environments/${encodeURIComponent(envName)}/deploy`, {});
-      showSuccess(`Environment '${envName}' deployment triggered`);
+      await api.post(`/api/puppetserver/environments/${encodeURIComponent(envName)}/deploy`, {});
+      toast.success(`Environment '${envName}' deployment triggered`);
       void fetchEnvironments();
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Deploy failed');
+      toast.error(err instanceof Error ? err.message : 'Deploy failed');
     } finally {
       actionLoading = null;
     }
@@ -116,10 +118,10 @@
   async function flushCache(envName: string): Promise<void> {
     actionLoading = `flush-${envName}`;
     try {
-      await post(`/api/puppetserver/environments/${encodeURIComponent(envName)}/cache/flush`, {});
-      showSuccess(`Cache flushed for '${envName}'`);
+      await api.post(`/api/puppetserver/environments/${encodeURIComponent(envName)}/cache/flush`, {});
+      toast.success(`Cache flushed for '${envName}'`);
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Cache flush failed');
+      toast.error(err instanceof Error ? err.message : 'Cache flush failed');
     } finally {
       actionLoading = null;
     }
@@ -175,7 +177,7 @@
       <span class="ml-2 text-sm text-gray-500">Loading environments...</span>
     </div>
   {:else if error}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if environments.length === 0}
     <div class="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
       No environments found

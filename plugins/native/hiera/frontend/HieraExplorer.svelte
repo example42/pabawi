@@ -10,14 +10,16 @@
   - Value lookup with interpolation
   - Source file tracking
 
-  @module widgets/hiera/HieraExplorer
+  @module plugins/native/hiera/frontend/HieraExplorer
   @version 1.0.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../components/ErrorAlert.svelte';
-  import { get } from '../../lib/api';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -62,6 +64,7 @@
     config = {},
     onKeySelect,
   }: Props = $props();
+
 
   // ==========================================================================
   // State
@@ -124,7 +127,7 @@
     loading = true;
     error = null;
     try {
-      const response = await get<{ keys: HieraKey[] }>('/api/hiera/keys');
+      const response = await api.get<{ keys: HieraKey[] }>('/api/hiera/keys');
       keys = response.keys || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load Hiera keys';
@@ -135,7 +138,7 @@
 
   async function fetchEnvironments(): Promise<void> {
     try {
-      const response = await get<{ environments: string[] }>('/api/puppetserver/environments');
+      const response = await api.get<{ environments: string[] }>('/api/puppetserver/environments');
       environments = (response.environments || []).map(e => typeof e === 'string' ? e : (e as {name:string}).name);
     } catch {
       // Non-critical
@@ -231,7 +234,7 @@
       <span class="ml-2 text-sm text-gray-500">Loading keys...</span>
     </div>
   {:else if error}
-    <ErrorAlert message={error} variant="inline" />
+    <ErrorAlert message={error} />
   {:else if filteredKeys.length === 0}
     <div class="text-center py-6 text-sm text-gray-500 dark:text-gray-400">
       {searchQuery ? 'No keys match your search' : 'No Hiera keys found'}

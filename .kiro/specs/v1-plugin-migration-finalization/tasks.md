@@ -49,26 +49,26 @@ All plugin-specific code MUST reside in `plugins/native/{pluginName}/` directory
     - Create re-export from `plugins/native/hiera/backend/index.ts`
     - _Requirements: 1.4, 1.8, 15.4_
 
-- [ ] 2. Migrate Frontend Widget Code to plugins/ Directory
-  - [ ] 2.1 Migrate Bolt frontend widgets
+- [x] 2. Migrate Frontend Widget Code to plugins/ Directory
+  - [x] 2.1 Migrate Bolt frontend widgets
     - Move all files from `frontend/src/widgets/bolt/` to `plugins/native/bolt/frontend/`
     - Include: CommandExecutor.svelte, TaskRunner.svelte, TaskBrowser.svelte, InventoryViewer.svelte
     - Update widget imports and exports
     - _Requirements: 1.6, 5.1_
   
-  - [ ] 2.2 Migrate PuppetDB frontend widgets
+  - [x] 2.2 Migrate PuppetDB frontend widgets
     - Move all files from `frontend/src/widgets/puppetdb/` to `plugins/native/puppetdb/frontend/`
     - Include: FactsExplorer.svelte, ReportsViewer.svelte, ReportsSummary.svelte, EventsViewer.svelte, CatalogViewer.svelte, NodeBrowser.svelte
     - Update widget imports and exports
     - _Requirements: 1.7, 5.2_
   
-  - [ ] 2.3 Migrate Puppetserver frontend widgets
+  - [x] 2.3 Migrate Puppetserver frontend widgets
     - Move all files from `frontend/src/widgets/puppetserver/` to `plugins/native/puppetserver/frontend/`
     - Include: StatusDashboard.svelte, EnvironmentManager.svelte
     - Update widget imports and exports
     - _Requirements: 1.8, 5.3_
   
-  - [ ] 2.4 Migrate Hiera frontend widgets
+  - [x] 2.4 Migrate Hiera frontend widgets
     - Move all files from `frontend/src/widgets/hiera/` to `plugins/native/hiera/frontend/`
     - Include: HieraExplorer.svelte, KeyLookup.svelte, HierarchyViewer.svelte, NodeHieraData.svelte, CodeAnalysis.svelte, KeyValuesGrid.svelte
     - Update widget imports and exports
