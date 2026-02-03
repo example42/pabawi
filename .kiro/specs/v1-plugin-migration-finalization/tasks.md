@@ -24,7 +24,7 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
     - Verify BoltPlugin still initializes correctly
     - _Requirements: 1.4, 1.8, 15.1_
   
-  - [ ] 1.3 Move PuppetDBPlugin to new structure
+  - [x] 1.3 Move PuppetDBPlugin to new structure
     - Create `plugins/native/puppetdb/` directory
     - Move backend code from `backend/src/integrations/puppetdb/` to `plugins/native/puppetdb/backend/`
     - Create `plugins/native/puppetdb/frontend/` for widget components
