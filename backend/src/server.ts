@@ -33,12 +33,7 @@ import { ExecutionQueue } from "./services/ExecutionQueue";
 import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
 import { expertModeMiddleware } from "./middleware/expertMode";
 import { IntegrationManager } from "./integrations/IntegrationManager";
-import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
-import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
-import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
-import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
-import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
 
 /**
@@ -213,253 +208,25 @@ async function startServer(): Promise<Express> {
       operation: "startServer",
     });
 
-    // Create shared PerformanceMonitorService instance for all plugins
-    const performanceMonitor = new PerformanceMonitorService();
-    logger.info("PerformanceMonitorService initialized", {
-      component: "Server",
-      operation: "startServer",
-    });
+    // Note: PerformanceMonitorService is now injected into plugins by PluginLoader
+    // when loading from plugins/native/ directory
 
     const integrationManager = new IntegrationManager({ logger });
 
-    // NOTE: Bolt plugin is now auto-discovered and loaded by PluginLoader v1.0.0
-    // See backend/src/integrations/bolt/index.ts for the createPlugin() factory
+    // NOTE: All plugins are now auto-discovered and loaded by PluginLoader v1.0.0
+    // from plugins/native/ and plugins/external/ directories.
+    // Legacy manual plugin registration has been removed.
+    // See plugins/native/{pluginName}/backend/ for plugin implementations.
 
-    // Initialize PuppetDB integration only if configured
-    let puppetDBService: PuppetDBService | undefined;
-    const puppetDBConfig = config.integrations.puppetdb;
-    const puppetDBConfigured = !!puppetDBConfig?.serverUrl;
-
-    if (puppetDBConfigured) {
-      logger.info("Initializing PuppetDB integration...", {
-        component: "Server",
-        operation: "initializePuppetDB",
-      });
-      try {
-        puppetDBService = new PuppetDBService(logger, performanceMonitor);
-        const integrationConfig: IntegrationConfig = {
-          enabled: puppetDBConfig.enabled,
-          name: "puppetdb",
-          type: "information",
-          config: puppetDBConfig,
-          priority: 10, // Higher priority than Bolt
-        };
-
-        integrationManager.registerPlugin(puppetDBService, integrationConfig);
-
-        logger.info("PuppetDB integration registered and enabled", {
-          component: "Server",
-          operation: "initializePuppetDB",
-          metadata: {
-            serverUrl: puppetDBConfig.serverUrl,
-            sslEnabled: puppetDBConfig.ssl?.enabled ?? false,
-            hasAuthentication: !!puppetDBConfig.token,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize PuppetDB integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializePuppetDB",
-        });
-        puppetDBService = undefined;
-      }
-    } else {
-      logger.warn("PuppetDB integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializePuppetDB",
-      });
-    }
-
-    // Initialize Puppetserver integration only if configured
-    let puppetserverService: PuppetserverService | undefined;
-    const puppetserverConfig = config.integrations.puppetserver;
-    const puppetserverConfigured = !!puppetserverConfig?.serverUrl;
-
-    logger.debug("=== Puppetserver Integration Setup ===", {
-      component: "Server",
-      operation: "initializePuppetserver",
-      metadata: {
-        configured: puppetserverConfigured,
-        config: puppetserverConfig,
-      },
-    });
-
-    if (puppetserverConfigured) {
-      logger.info("Initializing Puppetserver integration...", {
-        component: "Server",
-        operation: "initializePuppetserver",
-      });
-      try {
-        puppetserverService = new PuppetserverService(logger, performanceMonitor);
-        logger.debug("PuppetserverService instance created", {
-          component: "Server",
-          operation: "initializePuppetserver",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: puppetserverConfig.enabled,
-          name: "puppetserver",
-          type: "information",
-          config: puppetserverConfig,
-          priority: 8, // Lower priority than PuppetDB (10), higher than Bolt (5)
-        };
-
-        logger.debug("Registering Puppetserver plugin", {
-          component: "Server",
-          operation: "initializePuppetserver",
-          metadata: { config: integrationConfig },
-        });
-        integrationManager.registerPlugin(
-          puppetserverService,
-          integrationConfig,
-        );
-
-        logger.info("Puppetserver integration registered successfully", {
-          component: "Server",
-          operation: "initializePuppetserver",
-          metadata: {
-            enabled: puppetserverConfig.enabled,
-            serverUrl: puppetserverConfig.serverUrl,
-            port: puppetserverConfig.port,
-            sslEnabled: puppetserverConfig.ssl?.enabled ?? false,
-            hasAuthentication: !!puppetserverConfig.token,
-            priority: 8,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Puppetserver integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializePuppetserver",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("Puppetserver initialization error stack", {
-            component: "Server",
-            operation: "initializePuppetserver",
-          }, error);
-        }
-        puppetserverService = undefined;
-      }
-    } else {
-      logger.warn("Puppetserver integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializePuppetserver",
-      });
-    }
-    logger.debug("=== End Puppetserver Integration Setup ===", {
-      component: "Server",
-      operation: "initializePuppetserver",
-    });
-
-    // Initialize Hiera integration only if configured
-    let hieraPlugin: HieraPlugin | undefined;
-    const hieraConfig = config.integrations.hiera;
-    const hieraConfigured = !!hieraConfig?.controlRepoPath;
-
-    logger.debug("=== Hiera Integration Setup ===", {
-      component: "Server",
-      operation: "initializeHiera",
-      metadata: {
-        configured: hieraConfigured,
-        config: hieraConfig,
-      },
-    });
-
-    if (hieraConfigured) {
-      logger.info("Initializing Hiera integration...", {
-        component: "Server",
-        operation: "initializeHiera",
-      });
-      try {
-        hieraPlugin = new HieraPlugin(logger, performanceMonitor);
-        hieraPlugin.setIntegrationManager(integrationManager);
-        logger.debug("HieraPlugin instance created", {
-          component: "Server",
-          operation: "initializeHiera",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: hieraConfig.enabled,
-          name: "hiera",
-          type: "information",
-          config: hieraConfig,
-          priority: 6, // Lower priority than Puppetserver (8), higher than Bolt (5)
-        };
-
-        logger.debug("Registering Hiera plugin", {
-          component: "Server",
-          operation: "initializeHiera",
-          metadata: { config: integrationConfig },
-        });
-        integrationManager.registerPlugin(
-          hieraPlugin,
-          integrationConfig,
-        );
-
-        logger.info("Hiera integration registered successfully", {
-          component: "Server",
-          operation: "initializeHiera",
-          metadata: {
-            enabled: hieraConfig.enabled,
-            controlRepoPath: hieraConfig.controlRepoPath,
-            hieraConfigPath: hieraConfig.hieraConfigPath,
-            priority: 6,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Hiera integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeHiera",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("Hiera initialization error stack", {
-            component: "Server",
-            operation: "initializeHiera",
-          }, error);
-        }
-        hieraPlugin = undefined;
-      }
-    } else {
-      logger.warn("Hiera integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeHiera",
-      });
-      logger.info("Set HIERA_CONTROL_REPO_PATH to a valid control repository to enable Hiera integration", {
-        component: "Server",
-        operation: "initializeHiera",
-      });
-    }
-    logger.debug("=== End Hiera Integration Setup ===", {
-      component: "Server",
-      operation: "initializeHiera",
-    });
-
-    // Initialize all registered plugins
+    // Initialize all plugins (loads from plugins/ directory)
     logger.info("=== Initializing All Integration Plugins ===", {
       component: "Server",
       operation: "initializePlugins",
-      metadata: {
-        totalPlugins: integrationManager.getPluginCount(),
-      },
     });
 
-    // Log all registered plugins before initialization
-    const allPlugins = integrationManager.getAllPlugins();
-    logger.info("Registered plugins:", {
-      component: "Server",
-      operation: "initializePlugins",
+    const initErrors = await integrationManager.initializePlugins({
+      loadV1Plugins: true,
     });
-    for (const registration of allPlugins) {
-      logger.info(`  - ${registration.plugin.name} (${registration.plugin.type})`, {
-        component: "Server",
-        operation: "initializePlugins",
-        metadata: {
-          enabled: registration.config.enabled,
-          priority: registration.config.priority,
-        },
-      });
-    }
-
-    const initErrors = await integrationManager.initializePlugins();
 
     if (initErrors.length > 0) {
       logger.warn(`Integration initialization completed with ${String(initErrors.length)} error(s):`, {
@@ -479,18 +246,21 @@ async function startServer(): Promise<Express> {
       });
     }
 
-    // Log information sources after initialization
-    logger.info("Information sources after initialization:", {
+    // Log loaded plugins
+    const v1PluginNames = integrationManager.getV1PluginNames();
+    logger.info(`Loaded ${String(v1PluginNames.length)} v1.0.0 plugins:`, {
       component: "Server",
       operation: "initializePlugins",
+      metadata: { plugins: v1PluginNames },
     });
-    const infoSources = integrationManager.getAllInformationSources();
-    for (const source of infoSources) {
-      logger.info(`  - ${source.name}: initialized=${String(source.isInitialized())}`, {
-        component: "Server",
-        operation: "initializePlugins",
-      });
-    }
+
+    // Log registered capabilities
+    const capabilities = integrationManager.getAllCapabilities();
+    logger.info(`Registered ${String(capabilities.length)} capabilities`, {
+      component: "Server",
+      operation: "initializePlugins",
+      metadata: { capabilityCount: capabilities.length },
+    });
 
     logger.info("Integration manager initialized successfully", {
       component: "Server",
@@ -504,15 +274,9 @@ async function startServer(): Promise<Express> {
     // Make integration manager available globally for cross-service access
     (global as Record<string, unknown>).integrationManager = integrationManager;
 
-    // Initialize PuppetRunHistoryService if PuppetDB is available
-    let puppetRunHistoryService: PuppetRunHistoryService | undefined;
-    if (puppetDBService) {
-      puppetRunHistoryService = new PuppetRunHistoryService(puppetDBService, logger);
-      logger.info("PuppetRunHistoryService initialized successfully", {
-        component: "Server",
-        operation: "startServer",
-      });
-    }
+    // Initialize PuppetRunHistoryService
+    // Note: PuppetRunHistoryService will be updated to use capability-based access in a future task
+    const puppetRunHistoryService: PuppetRunHistoryService | undefined = undefined;
 
     // Start health check scheduler for integrations
     if (integrationManager.getPluginCount() > 0) {
@@ -733,8 +497,8 @@ async function startServer(): Promise<Express> {
       createIntegrationsRouter(
         integrationManager,
         logger,
-        puppetDBService,
-        puppetserverService,
+        undefined, // PuppetDBService - will be accessed via CapabilityRegistry
+        undefined, // PuppetserverService - will be accessed via CapabilityRegistry
       ),
     );
     app.use(

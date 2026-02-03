@@ -11,6 +11,7 @@ import { asyncHandler } from "./asyncHandler";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import type { User } from "../integrations/CapabilityRegistry";
 
 /**
  * Create facts router
@@ -105,16 +106,24 @@ export function createFactsRouter(
 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
-            message: "Getting Bolt information source",
+            message: "Getting facts via capability-based routing",
             level: 'debug',
           });
         }
 
-        // Gather facts from the node using IntegrationManager
-        // This will get facts from Bolt (the default execution tool)
-        const boltSource = integrationManager.getInformationSource("bolt");
-        if (!boltSource) {
-          logger.warn("Bolt integration not available", {
+        // Gather facts using capability-based routing
+        // Create a system user for internal capability execution
+        const systemUser: User = {
+          id: "system",
+          username: "system",
+          roles: ["admin"],
+        };
+
+        const capabilityRegistry = integrationManager.getCapabilityRegistry();
+
+        // Check if info.facts capability is available
+        if (!capabilityRegistry.hasCapability("info.facts")) {
+          logger.warn("No plugin provides info.facts capability", {
             component: "FactsRouter",
             integration: "bolt",
             operation: "gatherFacts",
@@ -125,7 +134,7 @@ export function createFactsRouter(
             debugInfo.duration = Date.now() - startTime;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addWarning(debugInfo, {
-              message: "Bolt integration is not available",
+              message: "No plugin provides info.facts capability",
               level: 'warn',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -134,8 +143,8 @@ export function createFactsRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_NOT_AVAILABLE",
-              message: "Bolt integration is not available",
+              code: "CAPABILITY_NOT_AVAILABLE",
+              message: "No plugin provides facts gathering capability",
             },
           };
 
@@ -147,13 +156,52 @@ export function createFactsRouter(
 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
-            message: "Gathering facts from node",
+            message: "Gathering facts from node via capability",
             context: JSON.stringify({ nodeId }),
             level: 'debug',
           });
         }
 
-        const facts = await boltSource.getNodeFacts(nodeId);
+        const factsResult = await capabilityRegistry.executeCapability<Record<string, unknown>>(
+          systemUser,
+          "info.facts",
+          { nodeId },
+          undefined
+        );
+
+        if (!factsResult.success || !factsResult.data) {
+          logger.error("Failed to gather facts via capability", {
+            component: "FactsRouter",
+            integration: "bolt",
+            operation: "gatherFacts",
+            metadata: { nodeId, error: factsResult.error?.message },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = Date.now() - startTime;
+            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.addError(debugInfo, {
+              message: `Failed to gather facts: ${factsResult.error?.message ?? 'Unknown error'}`,
+              level: 'error',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
+            error: {
+              code: factsResult.error?.code ?? "FACTS_GATHERING_FAILED",
+              message: factsResult.error?.message ?? "Failed to gather facts",
+            },
+          };
+
+          res.status(500).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
+          return;
+        }
+
+        const facts = factsResult.data;
 
         const duration = Date.now() - startTime;
 

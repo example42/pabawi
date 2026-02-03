@@ -3,11 +3,15 @@
  *
  * Service for linking nodes across multiple information sources based on matching identifiers.
  * Implements the node linking strategy described in the design document.
+ *
+ * @module integrations/NodeLinkingService
+ * @version 1.0.0
  */
 
 import type { Node } from "../bolt/types";
 import type { IntegrationManager } from "./IntegrationManager";
 import { LoggerService } from "../services/LoggerService";
+import type { User } from "./CapabilityRegistry";
 
 /**
  * Linked node with source attribution
@@ -41,6 +45,7 @@ export interface LinkedNodeData {
  * Node Linking Service
  *
  * Links nodes from multiple sources based on matching identifiers (certname, hostname, etc.)
+ * Uses capability-based routing via CapabilityRegistry for v1.0.0 architecture.
  */
 export class NodeLinkingService {
   private logger: LoggerService;
@@ -143,6 +148,9 @@ export class NodeLinkingService {
   /**
    * Get all data for a linked node from all sources
    *
+   * Uses capability-based routing to fetch data from all plugins that provide
+   * the relevant capabilities (info.facts, reports.list, etc.)
+   *
    * @param nodeId - Node identifier
    * @returns Aggregated node data from all linked sources
    */
@@ -160,53 +168,93 @@ export class NodeLinkingService {
       throw new Error(`Node '${nodeId}' not found in any source`);
     }
 
-    // Fetch data from all sources
+    // Fetch data from all sources using capability-based routing
     const dataBySource: LinkedNodeData["dataBySource"] = {};
 
+    // Create a system user for internal capability execution
+    const systemUser: User = {
+      id: "system",
+      username: "system",
+      roles: ["admin"],
+    };
+
+    const capabilityRegistry = this.integrationManager.getCapabilityRegistry();
+
     for (const sourceName of linkedNode.sources) {
-      const source = this.integrationManager.getInformationSource(sourceName);
-
-      if (!source?.isInitialized()) {
-        continue;
-      }
-
       try {
-        // Get facts from this source
-        const facts = await source.getNodeFacts(nodeId);
+        const sourceData: LinkedNodeData["dataBySource"][string] = {};
 
-        // Get additional data types based on source
-        const additionalData: Record<string, unknown> = {};
+        // Get facts using info.facts capability
+        const factsResult = await capabilityRegistry.executeCapability<Record<string, unknown>>(
+          systemUser,
+          "info.facts",
+          { nodeId },
+          undefined
+        );
 
-        // Try to get source-specific data
-        try {
-          if (sourceName === "puppetdb") {
-            // Get PuppetDB-specific data
-            additionalData.reports = await source.getNodeData(
-              nodeId,
-              "reports",
-            );
-            additionalData.catalog = await source.getNodeData(
-              nodeId,
-              "catalog",
-            );
-            additionalData.events = await source.getNodeData(nodeId, "events");
-          } else if (sourceName === "puppetserver") {
-            // Get Puppetserver-specific data
-            additionalData.certificate = await source.getNodeData(
-              nodeId,
-              "certificate",
-            );
-            additionalData.status = await source.getNodeData(nodeId, "status");
-          }
-        } catch {
-          // Log but don't fail if additional data retrieval fails
-          // Silently ignore errors for additional data
+        if (factsResult.success && factsResult.data && factsResult.handledBy === sourceName) {
+          sourceData.facts = factsResult.data;
         }
 
-        dataBySource[sourceName] = {
-          facts,
-          ...additionalData,
-        };
+        // Get additional data types based on source using capabilities
+        if (sourceName === "puppetdb") {
+          // Get PuppetDB-specific data via capabilities
+          const reportsResult = await capabilityRegistry.executeCapability<unknown[]>(
+            systemUser,
+            "reports.list",
+            { nodeId },
+            undefined
+          );
+          if (reportsResult.success && reportsResult.data) {
+            sourceData.reports = reportsResult.data;
+          }
+
+          const catalogResult = await capabilityRegistry.executeCapability<unknown>(
+            systemUser,
+            "catalog.get",
+            { nodeId },
+            undefined
+          );
+          if (catalogResult.success && catalogResult.data) {
+            sourceData.catalog = catalogResult.data;
+          }
+
+          const eventsResult = await capabilityRegistry.executeCapability<unknown[]>(
+            systemUser,
+            "events.list",
+            { nodeId },
+            undefined
+          );
+          if (eventsResult.success && eventsResult.data) {
+            sourceData.events = eventsResult.data;
+          }
+        } else if (sourceName === "puppetserver") {
+          // Get Puppetserver-specific data via capabilities
+          const certResult = await capabilityRegistry.executeCapability<unknown>(
+            systemUser,
+            "certificate.get",
+            { nodeId },
+            undefined
+          );
+          if (certResult.success && certResult.data) {
+            sourceData.certificate = certResult.data;
+          }
+
+          const statusResult = await capabilityRegistry.executeCapability<unknown>(
+            systemUser,
+            "status.get",
+            { nodeId },
+            undefined
+          );
+          if (statusResult.success && statusResult.data) {
+            sourceData.status = statusResult.data;
+          }
+        }
+
+        // Only add to dataBySource if we got some data
+        if (Object.keys(sourceData).length > 0) {
+          dataBySource[sourceName] = sourceData;
+        }
       } catch (error) {
         this.logger.error(`Failed to get data from ${sourceName}`, {
           component: "NodeLinkingService",

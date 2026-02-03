@@ -18,6 +18,7 @@ import type { LoggerService } from "../../services/LoggerService";
 import { asyncHandler } from "../asyncHandler";
 import { ExpertModeService } from "../../services/ExpertModeService";
 import { requestDeduplication } from "../../middleware/deduplication";
+import type { User } from "../../integrations/CapabilityRegistry";
 
 /**
  * Query schema for listing nodes
@@ -120,21 +121,36 @@ export function createV1NodesRouter(
 
           // Apply PQL filter if specified
           if (query.pql) {
-            const puppetdbSource =
-              integrationManager.getInformationSource("puppetdb");
-            if (puppetdbSource) {
+            // Use capability-based routing to query PuppetDB with PQL filter
+            const capabilityRegistry = integrationManager.getCapabilityRegistry();
+            if (capabilityRegistry.hasCapability("inventory.query")) {
               try {
-                const puppetdbService = puppetdbSource as unknown as {
-                  queryInventory: (pql: string) => Promise<Array<{ id: string }>>;
+                // Create a system user for internal capability execution
+                const systemUser: User = {
+                  id: "system",
+                  username: "system",
+                  roles: ["admin"],
                 };
-                const pqlNodes = await puppetdbService.queryInventory(query.pql);
-                const pqlNodeIds = new Set(pqlNodes.map((n) => n.id));
 
-                filteredNodes = filteredNodes.filter((node) => {
-                  const nodeSource =
-                    (node as { source?: string }).source ?? "bolt";
-                  return nodeSource === "puppetdb" && pqlNodeIds.has(node.id);
-                });
+                // Query PuppetDB with PQL filter using the inventory.query capability
+                const pqlResult = await capabilityRegistry.executeCapability<Array<{ id: string }>>(
+                  systemUser,
+                  "inventory.query",
+                  { pql: query.pql },
+                  undefined
+                );
+
+                if (pqlResult.success && pqlResult.data) {
+                  const pqlNodeIds = new Set(pqlResult.data.map((n) => n.id));
+
+                  filteredNodes = filteredNodes.filter((node) => {
+                    const nodeSource =
+                      (node as { source?: string }).source ?? "bolt";
+                    return nodeSource === "puppetdb" && pqlNodeIds.has(node.id);
+                  });
+                } else {
+                  throw new Error(pqlResult.error?.message ?? "PQL query failed");
+                }
               } catch (error) {
                 logger.error("Error applying PQL filter", {
                   component: "V1NodesRouter",
@@ -521,24 +537,23 @@ export function createV1NodesRouter(
         }> = [];
 
         if (integrationManager?.isInitialized()) {
-          // Check each information source for this node
-          const infoSources = integrationManager.getAllInformationSources();
+          // Get all registered plugins and check if they have data for this node
+          const allPlugins = integrationManager.getAllPlugins();
 
-          for (const source of infoSources) {
+          for (const registration of allPlugins) {
             try {
-              // Check if source has data for this node
-              // This is a simplified check - in full implementation,
-              // each source would have a method to check node existence
-              const hasData = source.isInitialized();
+              const pluginName = registration.plugin.metadata.name;
+              // Check if plugin is initialized (simplified check)
+              const hasData = registration.initialized;
 
               sources.push({
-                plugin: source.name,
+                plugin: pluginName,
                 hasData,
                 lastUpdated: new Date().toISOString(),
               });
             } catch {
               sources.push({
-                plugin: source.name,
+                plugin: registration.plugin.metadata.name,
                 hasData: false,
               });
             }

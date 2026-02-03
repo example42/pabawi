@@ -11,10 +11,10 @@ import {
   BoltTaskParameterError,
 } from "../bolt/types";
 import { asyncHandler } from "./asyncHandler";
-import type { BoltPlugin } from "../integrations/bolt/BoltPlugin";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import type { User } from "../integrations/CapabilityRegistry";
 
 const TaskExecutionBodySchema = z.object({
   taskName: z.string().min(1, "Task name is required"),
@@ -56,20 +56,26 @@ export function createTasksRouter(
       });
 
       try {
-        // Get Bolt plugin from IntegrationManager
+        // Get Bolt tasks via capability-based routing
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
-            message: "Getting Bolt plugin from IntegrationManager",
+            message: "Getting tasks via capability-based routing",
             level: 'debug',
           });
         }
 
-        const boltPlugin = integrationManager.getExecutionTool(
-          "bolt",
-        ) as BoltPlugin | null;
+        // Create a system user for internal capability execution
+        const systemUser: User = {
+          id: "system",
+          username: "system",
+          roles: ["admin"],
+        };
 
-        if (!boltPlugin) {
-          logger.warn("Bolt integration not available", {
+        const capabilityRegistry = integrationManager.getCapabilityRegistry();
+
+        // Check if task.list capability is available
+        if (!capabilityRegistry.hasCapability("task.list")) {
+          logger.warn("No plugin provides task.list capability", {
             component: "TasksRouter",
             integration: "bolt",
             operation: "listTasks",
@@ -79,7 +85,7 @@ export function createTasksRouter(
             debugInfo.duration = Date.now() - startTime;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addWarning(debugInfo, {
-              message: "Bolt integration is not available",
+              message: "No plugin provides task.list capability",
               level: 'warn',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -88,8 +94,8 @@ export function createTasksRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_NOT_AVAILABLE",
-              message: "Bolt integration is not available",
+              code: "CAPABILITY_NOT_AVAILABLE",
+              message: "No plugin provides task listing capability",
             },
           };
 
@@ -101,13 +107,51 @@ export function createTasksRouter(
 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
-            message: "Listing tasks from Bolt service",
+            message: "Listing tasks via capability",
             level: 'debug',
           });
         }
 
-        const boltService = boltPlugin.getBoltService();
-        const tasks = await boltService.listTasks();
+        const tasksResult = await capabilityRegistry.executeCapability<Array<{ name: string; description?: string }>>(
+          systemUser,
+          "task.list",
+          {},
+          undefined
+        );
+
+        if (!tasksResult.success || !tasksResult.data) {
+          logger.error("Failed to list tasks via capability", {
+            component: "TasksRouter",
+            integration: "bolt",
+            operation: "listTasks",
+            metadata: { error: tasksResult.error?.message },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = Date.now() - startTime;
+            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.addError(debugInfo, {
+              message: `Failed to list tasks: ${tasksResult.error?.message ?? 'Unknown error'}`,
+              level: 'error',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
+            error: {
+              code: tasksResult.error?.code ?? "TASK_LISTING_FAILED",
+              message: tasksResult.error?.message ?? "Failed to list tasks",
+            },
+          };
+
+          res.status(500).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
+          return;
+        }
+
+        const tasks = tasksResult.data;
 
         const duration = Date.now() - startTime;
 
@@ -266,20 +310,26 @@ export function createTasksRouter(
       });
 
       try {
-        // Get Bolt plugin from IntegrationManager
+        // Get Bolt tasks by module via capability-based routing
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
-            message: "Getting Bolt plugin from IntegrationManager",
+            message: "Getting tasks by module via capability-based routing",
             level: 'debug',
           });
         }
 
-        const boltPlugin = integrationManager.getExecutionTool(
-          "bolt",
-        ) as BoltPlugin | null;
+        // Create a system user for internal capability execution
+        const systemUser: User = {
+          id: "system",
+          username: "system",
+          roles: ["admin"],
+        };
 
-        if (!boltPlugin) {
-          logger.warn("Bolt integration not available", {
+        const capabilityRegistry = integrationManager.getCapabilityRegistry();
+
+        // Check if task.listByModule capability is available
+        if (!capabilityRegistry.hasCapability("task.listByModule")) {
+          logger.warn("No plugin provides task.listByModule capability", {
             component: "TasksRouter",
             integration: "bolt",
             operation: "listTasksByModule",
@@ -289,7 +339,7 @@ export function createTasksRouter(
             debugInfo.duration = Date.now() - startTime;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addWarning(debugInfo, {
-              message: "Bolt integration is not available",
+              message: "No plugin provides task.listByModule capability",
               level: 'warn',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -298,8 +348,8 @@ export function createTasksRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_NOT_AVAILABLE",
-              message: "Bolt integration is not available",
+              code: "CAPABILITY_NOT_AVAILABLE",
+              message: "No plugin provides task listing by module capability",
             },
           };
 
@@ -311,13 +361,51 @@ export function createTasksRouter(
 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
-            message: "Listing tasks by module from Bolt service",
+            message: "Listing tasks by module via capability",
             level: 'debug',
           });
         }
 
-        const boltService = boltPlugin.getBoltService();
-        const tasksByModule = await boltService.listTasksByModule();
+        const tasksResult = await capabilityRegistry.executeCapability<Record<string, Array<{ name: string; description?: string }>>>(
+          systemUser,
+          "task.listByModule",
+          {},
+          undefined
+        );
+
+        if (!tasksResult.success || !tasksResult.data) {
+          logger.error("Failed to list tasks by module via capability", {
+            component: "TasksRouter",
+            integration: "bolt",
+            operation: "listTasksByModule",
+            metadata: { error: tasksResult.error?.message },
+          });
+
+          if (debugInfo) {
+            debugInfo.duration = Date.now() - startTime;
+            expertModeService.setIntegration(debugInfo, 'bolt');
+            expertModeService.addError(debugInfo, {
+              message: `Failed to list tasks by module: ${tasksResult.error?.message ?? 'Unknown error'}`,
+              level: 'error',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
+            error: {
+              code: tasksResult.error?.code ?? "TASK_LISTING_FAILED",
+              message: tasksResult.error?.message ?? "Failed to list tasks by module",
+            },
+          };
+
+          res.status(500).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
+          return;
+        }
+
+        const tasksByModule = tasksResult.data;
 
         const duration = Date.now() - startTime;
 

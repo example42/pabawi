@@ -87,29 +87,29 @@ All plugin-specific code MUST reside in `plugins/native/{pluginName}/` directory
     - Ensure plugin widgets are bundled correctly
     - _Requirements: 1.6_
 
-- [ ] 4. Checkpoint - Plugin migration complete
+- [x] 4. Checkpoint - Plugin migration complete
   - Verify all 4 plugins load from new locations
   - Verify all tests pass
   - Verify existing functionality still works
 
 ### Phase 2: Legacy 0.x Code Removal
 
-- [ ] 5. Remove Legacy Backend Code
-  - [ ] 5.1 Remove legacy interfaces from types.ts
+- [-] 5. Remove Legacy Backend Code
+  - [x] 5.1 Remove legacy interfaces from types.ts
     - Remove `ExecutionToolPlugin`, `InformationSourcePlugin`, `IntegrationPlugin` interfaces
     - Remove `IntegrationConfig`, `PluginRegistration` types
     - Remove deprecated capability types
     - Keep only v1.x types: `BasePluginInterface`, `PluginCapability`, `PluginWidget`
     - _Requirements: 5.1, 5.4, 5.5, 5.6_
   
-  - [ ] 5.2 Remove legacy IntegrationManager methods
+  - [x] 5.2 Remove legacy IntegrationManager methods
     - Remove `getExecutionTool()`, `getInformationSource()` methods
     - Remove `getAllExecutionTools()`, `getAllInformationSources()` methods
     - Remove `executionTools` and `informationSources` Maps
     - Update any code that used these methods to use CapabilityRegistry
     - _Requirements: 5.2_
   
-  - [ ] 5.3 Remove empty integration directories
+  - [x] 5.3 Remove empty integration directories
     - Remove `backend/src/integrations/bolt/` directory (code moved to plugins/)
     - Remove `backend/src/integrations/puppetdb/` directory (code moved to plugins/)
     - Remove `backend/src/integrations/puppetserver/` directory (code moved to plugins/)
@@ -117,13 +117,13 @@ All plugin-specific code MUST reside in `plugins/native/{pluginName}/` directory
     - Keep shared infrastructure: BasePlugin.ts, CapabilityRegistry.ts, IntegrationManager.ts, PluginLoader.ts, types.ts
     - _Requirements: 5.1_
   
-  - [ ] 5.4 Remove legacy BoltService from backend/src/bolt/
+  - [x] 5.4 Remove legacy BoltService from backend/src/bolt/
     - Remove `backend/src/bolt/` directory (code moved to plugins/)
     - Update any imports that referenced this location
     - _Requirements: 5.1_
 
-- [ ] 6. Remove Legacy Frontend Code
-  - [ ] 6.1 Remove empty widget directories
+- [x] 6. Remove Legacy Frontend Code
+  - [x] 6.1 Remove empty widget directories
     - Remove `frontend/src/widgets/bolt/` directory (code moved to plugins/)
     - Remove `frontend/src/widgets/puppetdb/` directory (code moved to plugins/)
     - Remove `frontend/src/widgets/puppetserver/` directory (code moved to plugins/)
@@ -131,13 +131,13 @@ All plugin-specific code MUST reside in `plugins/native/{pluginName}/` directory
     - Update `frontend/src/widgets/index.ts` to export from plugin locations
     - _Requirements: 5.7_
   
-  - [ ] 6.2 Update frontend imports to use plugin paths
+  - [x] 6.2 Update frontend imports to use plugin paths
     - Update all component imports to reference `plugins/native/{plugin}/frontend/`
     - Update any hardcoded widget paths
     - _Requirements: 5.7_
 
-- [ ] 7. Remove Legacy Route Files
-  - [ ] 7.1 Identify and remove unversioned routes
+- [-] 7. Remove Legacy Route Files
+  - [-] 7.1 Identify and remove unversioned routes
     - Audit `backend/src/routes/` for unversioned route files
     - Remove routes that duplicate v1 API functionality
     - Keep only v1 routes under `/api/v1/`

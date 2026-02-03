@@ -5,18 +5,12 @@
  *
  * ## v1.0.0 Architecture
  *
- * This version introduces capability-based plugin architecture:
+ * This version uses capability-based plugin architecture:
  * - **CapabilityRegistry**: Central registry for capability-based routing
  * - **PluginLoader**: Automatic plugin discovery and loading
- * - **BasePluginInterface**: New unified plugin interface
+ * - **BasePluginInterface**: Unified plugin interface
  *
- * ### Migration Path
- *
- * Legacy plugins (ExecutionToolPlugin, InformationSourcePlugin) are still supported
- * but deprecated. New plugins should implement BasePluginInterface and register
- * capabilities with the CapabilityRegistry.
- *
- * ### Preferred APIs (v1.0.0+)
+ * ### APIs (v1.0.0)
  *
  * - `executeCapability()` - Execute any capability by name
  * - `getInventoryViaCapability()` - Get inventory using capability routing
@@ -24,29 +18,18 @@
  * - `getCapabilitiesByCategory()` - List capabilities by category
  * - `getAllCapabilities()` - List all registered capabilities
  *
- * ### Deprecated APIs (will be removed in v2.0.0)
- *
- * - `getExecutionTool()` - Use executeCapability() with 'command.execute'
- * - `getInformationSource()` - Use executeCapability() with 'inventory.list'
- * - `getAllExecutionTools()` - Use getCapabilitiesByCategory('command')
- * - `getAllInformationSources()` - Use getCapabilitiesByCategory('inventory')
- *
  * @module integrations/IntegrationManager
  * @version 1.0.0
  */
 
 import type {
-  IntegrationPlugin,
-  ExecutionToolPlugin,
-  InformationSourcePlugin,
-  IntegrationConfig,
   HealthStatus,
-  PluginRegistration,
-  Action,
   PluginMetadata,
   BasePluginInterface,
+  PluginRegistrationV1,
+  Facts,
 } from "./types";
-import type { Node, Facts, ExecutionResult } from "../bolt/types";
+import type { Node, ExecutionResult } from "../bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
 import { LoggerService } from "../services/LoggerService";
 import {
@@ -106,17 +89,7 @@ export interface AggregatedNodeData {
  * - Periodic health check scheduling with caching
  */
 export class IntegrationManager {
-  private plugins = new Map<string, PluginRegistration>();
-  /**
-   * @deprecated v1.0.0 - Use CapabilityRegistry with 'command.*' and 'task.*' capabilities instead.
-   * Will be removed in v2.0.0.
-   */
-  private executionTools = new Map<string, ExecutionToolPlugin>();
-  /**
-   * @deprecated v1.0.0 - Use CapabilityRegistry with 'inventory.*' and 'info.*' capabilities instead.
-   * Will be removed in v2.0.0.
-   */
-  private informationSources = new Map<string, InformationSourcePlugin>();
+  private plugins = new Map<string, PluginRegistrationV1>();
   private initialized = false;
   private nodeLinkingService: NodeLinkingService;
   private logger: LoggerService;
@@ -153,45 +126,6 @@ export class IntegrationManager {
     });
 
     this.logger.info("IntegrationManager created", { component: "IntegrationManager" });
-  }
-
-  /**
-   * Register a plugin with the manager
-   *
-   * @param plugin - Plugin instance to register
-   * @param config - Configuration for the plugin
-   * @throws Error if plugin with same name already registered
-   */
-  registerPlugin(plugin: IntegrationPlugin, config: IntegrationConfig): void {
-    if (this.plugins.has(plugin.name)) {
-      throw new Error(`Plugin '${plugin.name}' is already registered`);
-    }
-
-    const registration: PluginRegistration = {
-      plugin,
-      config,
-      registeredAt: new Date().toISOString(),
-    };
-
-    this.plugins.set(plugin.name, registration);
-
-    // Add to type-specific maps
-    if (plugin.type === "execution" || plugin.type === "both") {
-      this.executionTools.set(plugin.name, plugin as ExecutionToolPlugin);
-    }
-
-    if (plugin.type === "information" || plugin.type === "both") {
-      this.informationSources.set(
-        plugin.name,
-        plugin as InformationSourcePlugin,
-      );
-    }
-
-    this.logger.info(`Registered plugin: ${plugin.name} (${plugin.type})`, {
-      component: "IntegrationManager",
-      operation: "registerPlugin",
-      metadata: { pluginName: plugin.name, pluginType: plugin.type },
-    });
   }
 
   /**
@@ -234,6 +168,14 @@ export class IntegrationManager {
 
     this.v1Plugins.set(pluginName, loadedPlugin);
 
+    // Also add to plugins map for health checks
+    const registration: PluginRegistrationV1 = {
+      plugin,
+      registeredAt: new Date().toISOString(),
+      initialized: false,
+    };
+    this.plugins.set(pluginName, registration);
+
     // Register capabilities with the registry
     for (const capability of plugin.capabilities) {
       this.capabilityRegistry.registerCapability(pluginName, capability, priority);
@@ -262,55 +204,20 @@ export class IntegrationManager {
   /**
    * Initialize all registered plugins
    *
-   * Initializes both legacy plugins (registered via registerPlugin) and
-   * v1.0.0 capability-based plugins (discovered via PluginLoader).
-   *
-   * In v1.0.0+, this method:
-   * 1. Initializes legacy plugins for backward compatibility
-   * 2. Loads and initializes v1.0.0 plugins via PluginLoader
-   * 3. Registers all capabilities with CapabilityRegistry
+   * Initializes v1.0.0 capability-based plugins (discovered via PluginLoader
+   * or registered via registerCapabilityPlugin).
    *
    * @param options - Initialization options
-   * @param options.loadV1Plugins - Whether to load v1.0.0 plugins (default: true)
-   * @param options.skipLegacy - Skip legacy plugin initialization (default: false)
+   * @param options.loadV1Plugins - Whether to load v1.0.0 plugins from disk (default: true)
    * @returns Array of initialization errors (empty if all succeeded)
    */
   async initializePlugins(options?: {
     loadV1Plugins?: boolean;
-    skipLegacy?: boolean;
   }): Promise<{ plugin: string; error: Error }[]> {
-    const { loadV1Plugins = true, skipLegacy = false } = options ?? {};
+    const { loadV1Plugins = true } = options ?? {};
     const errors: { plugin: string; error: Error }[] = [];
 
-    // Initialize legacy plugins unless skipped
-    if (!skipLegacy && this.plugins.size > 0) {
-      this.logger.info(`Initializing ${String(this.plugins.size)} legacy plugins...`, {
-        component: "IntegrationManager",
-        operation: "initializePlugins",
-        metadata: { pluginCount: this.plugins.size, mode: "legacy" },
-      });
-
-      for (const [name, registration] of this.plugins) {
-        try {
-          await registration.plugin.initialize(registration.config);
-          this.logger.info(`Initialized legacy plugin: ${name}`, {
-            component: "IntegrationManager",
-            operation: "initializePlugins",
-            metadata: { pluginName: name, mode: "legacy" },
-          });
-        } catch (error) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          errors.push({ plugin: name, error: err });
-          this.logger.error(`Failed to initialize legacy plugin '${name}'`, {
-            component: "IntegrationManager",
-            operation: "initializePlugins",
-            metadata: { pluginName: name, mode: "legacy" },
-          }, err);
-        }
-      }
-    }
-
-    // Load and initialize v1.0.0 plugins
+    // Load and initialize v1.0.0 plugins from disk
     if (loadV1Plugins) {
       this.logger.info("Loading v1.0.0 capability-based plugins...", {
         component: "IntegrationManager",
@@ -346,7 +253,30 @@ export class IntegrationManager {
           operation: "initializePlugins",
           metadata: { mode: "v1.0.0" },
         }, err);
-        // Don't add to errors - v1.0.0 loading failure shouldn't block legacy
+      }
+    }
+
+    // Initialize directly registered plugins
+    for (const [name, registration] of this.plugins) {
+      if (!registration.initialized) {
+        try {
+          await registration.plugin.initialize();
+          registration.initialized = true;
+          this.logger.info(`Initialized plugin: ${name}`, {
+            component: "IntegrationManager",
+            operation: "initializePlugins",
+            metadata: { pluginName: name },
+          });
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          registration.initError = err.message;
+          errors.push({ plugin: name, error: err });
+          this.logger.error(`Failed to initialize plugin '${name}'`, {
+            component: "IntegrationManager",
+            operation: "initializePlugins",
+            metadata: { pluginName: name },
+          }, err);
+        }
       }
     }
 
@@ -358,7 +288,7 @@ export class IntegrationManager {
         operation: "initializePlugins",
         metadata: {
           errorCount: errors.length,
-          legacyPluginCount: this.plugins.size,
+          pluginCount: this.plugins.size,
           v1PluginCount: this.v1Plugins.size,
         },
       }
@@ -368,103 +298,12 @@ export class IntegrationManager {
   }
 
   /**
-   * Get an execution tool plugin by name
-   *
-   * @deprecated v1.0.0 - Use `executeCapability()` with capability names like 'command.execute' or 'task.execute'.
-   * Will be removed in v2.0.0.
-   *
-   * @param name - Plugin name
-   * @returns Plugin instance or null if not found
-   */
-  getExecutionTool(name: string): ExecutionToolPlugin | null {
-    this.logger.warn(
-      `getExecutionTool('${name}') is deprecated. Use executeCapability() instead.`,
-      { component: "IntegrationManager", operation: "getExecutionTool" }
-    );
-    return this.executionTools.get(name) ?? null;
-  }
-
-  /**
-   * Get an information source plugin by name
-   *
-   * @deprecated v1.0.0 - Use `executeCapability()` with capability names like 'inventory.list' or 'info.facts'.
-   * Will be removed in v2.0.0.
-   *
-   * @param name - Plugin name
-   * @returns Plugin instance or null if not found
-   */
-  getInformationSource(name: string): InformationSourcePlugin | null {
-    this.logger.warn(
-      `getInformationSource('${name}') is deprecated. Use executeCapability() instead.`,
-      { component: "IntegrationManager", operation: "getInformationSource" }
-    );
-    return this.informationSources.get(name) ?? null;
-  }
-
-  /**
-   * Get all registered execution tools
-   *
-   * @deprecated v1.0.0 - Use `getCapabilitiesByCategory('command')` or `getCapabilitiesByCategory('task')` instead.
-   * Will be removed in v2.0.0.
-   *
-   * @returns Array of execution tool plugins
-   */
-  getAllExecutionTools(): ExecutionToolPlugin[] {
-    this.logger.warn(
-      "getAllExecutionTools() is deprecated. Use getCapabilitiesByCategory() instead.",
-      { component: "IntegrationManager", operation: "getAllExecutionTools" }
-    );
-    return Array.from(this.executionTools.values());
-  }
-
-  /**
-   * Get all registered information sources
-   *
-   * @deprecated v1.0.0 - Use `getCapabilitiesByCategory('inventory')` or `getCapabilitiesByCategory('info')` instead.
-   * Will be removed in v2.0.0.
-   *
-   * @returns Array of information source plugins
-   */
-  getAllInformationSources(): InformationSourcePlugin[] {
-    this.logger.warn(
-      "getAllInformationSources() is deprecated. Use getCapabilitiesByCategory() instead.",
-      { component: "IntegrationManager", operation: "getAllInformationSources" }
-    );
-    return Array.from(this.informationSources.values());
-  }
-
-  /**
    * Get all registered plugins
    *
    * @returns Array of all plugin registrations
    */
-  getAllPlugins(): PluginRegistration[] {
+  getAllPlugins(): PluginRegistrationV1[] {
     return Array.from(this.plugins.values());
-  }
-
-  /**
-   * Execute an action using the specified execution tool
-   *
-   * @param toolName - Name of the execution tool to use
-   * @param action - Action to execute
-   * @returns Execution result
-   * @throws Error if tool not found or not initialized
-   */
-  async executeAction(
-    toolName: string,
-    action: Action,
-  ): Promise<ExecutionResult> {
-    const tool = this.getExecutionTool(toolName);
-
-    if (!tool) {
-      throw new Error(`Execution tool '${toolName}' not found`);
-    }
-
-    if (!tool.isInitialized()) {
-      throw new Error(`Execution tool '${toolName}' is not initialized`);
-    }
-
-    return await tool.executeAction(action);
   }
 
   // ============================================================================
@@ -615,13 +454,13 @@ export class IntegrationManager {
   }
 
   // ============================================================================
-  // Legacy Data Aggregation Methods (for backward compatibility)
+  // Data Aggregation Methods
   // ============================================================================
 
   /**
-   * Get linked inventory from all information sources
+   * Get linked inventory from all plugins
    *
-   * Queries all information sources, links nodes across sources, and returns
+   * Queries all plugins with inventory capability, links nodes across sources, and returns
    * nodes with source attribution and multi-source indicators.
    *
    * @returns Linked inventory with source attribution
@@ -643,10 +482,10 @@ export class IntegrationManager {
   }
 
   /**
-   * Get aggregated inventory from all information sources
+   * Get aggregated inventory from all plugins with inventory capability
    *
-   * Queries all information sources in parallel and combines results.
-   * Continues even if some sources fail.
+   * Queries all plugins in parallel and combines results.
+   * Continues even if some plugins fail.
    *
    * @returns Aggregated inventory with source attribution
    */
@@ -655,120 +494,102 @@ export class IntegrationManager {
       component: "IntegrationManager",
       operation: "getAggregatedInventory",
     });
-    this.logger.debug(
-      `Total information sources registered: ${String(this.informationSources.size)}`,
-      {
-        component: "IntegrationManager",
-        operation: "getAggregatedInventory",
-        metadata: { sourceCount: this.informationSources.size },
-      }
-    );
-
-    // Log all registered information sources
-    for (const [name, source] of this.informationSources.entries()) {
-      this.logger.debug(
-        `Source: ${name}, Type: ${source.type}, Initialized: ${String(source.isInitialized())}`,
-        {
-          component: "IntegrationManager",
-          operation: "getAggregatedInventory",
-          metadata: { sourceName: name, sourceType: source.type, initialized: source.isInitialized() },
-        }
-      );
-    }
 
     const sources: AggregatedInventory["sources"] = {};
     const allNodes: Node[] = [];
     const now = new Date().toISOString();
 
-    // Get inventory from all sources in parallel
-    const inventoryPromises = Array.from(this.informationSources.entries()).map(
-      async ([name, source]) => {
-        this.logger.debug(`Processing source: ${name}`, {
-          component: "IntegrationManager",
-          operation: "getAggregatedInventory",
-          metadata: { sourceName: name },
-        });
+    // Get all plugins providing inventory.list capability
+    const inventoryProviders = this.capabilityRegistry.getProvidersForCapability("inventory.list");
 
-        try {
-          if (!source.isInitialized()) {
-            this.logger.warn(`Source '${name}' is not initialized - skipping`, {
-              component: "IntegrationManager",
-              operation: "getAggregatedInventory",
-              metadata: { sourceName: name },
-            });
-            sources[name] = {
-              nodeCount: 0,
-              lastSync: now,
-              status: "unavailable",
-            };
-            return [];
-          }
+    this.logger.debug(
+      `Total inventory providers: ${String(inventoryProviders.length)}`,
+      {
+        component: "IntegrationManager",
+        operation: "getAggregatedInventory",
+        metadata: { providerCount: inventoryProviders.length },
+      }
+    );
 
-          this.logger.debug(`Calling getInventory() on source '${name}'`, {
+    if (inventoryProviders.length === 0) {
+      this.logger.warn("No plugins provide 'inventory.list' capability", {
+        component: "IntegrationManager",
+        operation: "getAggregatedInventory",
+      });
+      return { nodes: [], sources: {} };
+    }
+
+    // Create a system user for internal capability execution
+    const systemUser: User = {
+      id: "system",
+      username: "system",
+      roles: ["admin"],
+    };
+
+    // Get inventory from all providers in parallel
+    const inventoryPromises = inventoryProviders.map(async (registered) => {
+      const pluginName = registered.pluginName;
+      this.logger.debug(`Processing provider: ${pluginName}`, {
+        component: "IntegrationManager",
+        operation: "getAggregatedInventory",
+        metadata: { pluginName },
+      });
+
+      try {
+        const result = await this.capabilityRegistry.executeCapability<Node[]>(
+          systemUser,
+          "inventory.list",
+          {},
+          undefined
+        );
+
+        if (result.success && result.data) {
+          const nodes = result.data;
+          this.logger.debug(`Provider '${pluginName}' returned ${String(nodes.length)} nodes`, {
             component: "IntegrationManager",
             operation: "getAggregatedInventory",
-            metadata: { sourceName: name },
+            metadata: { pluginName, nodeCount: nodes.length },
           });
-          const nodes = await source.getInventory();
-          this.logger.debug(`Source '${name}' returned ${String(nodes.length)} nodes`, {
-            component: "IntegrationManager",
-            operation: "getAggregatedInventory",
-            metadata: { sourceName: name, nodeCount: nodes.length },
-          });
-
-          // Log sample of nodes for debugging
-          if (nodes.length > 0) {
-            const sampleNode = nodes[0];
-            this.logger.debug(
-              `Sample node from '${name}': ${JSON.stringify(sampleNode).substring(0, 200)}`,
-              {
-                component: "IntegrationManager",
-                operation: "getAggregatedInventory",
-                metadata: { sourceName: name },
-              }
-            );
-          }
 
           // Add source attribution to each node
           const nodesWithSource = nodes.map((node) => ({
             ...node,
-            source: name,
+            source: pluginName,
           }));
 
-          sources[name] = {
+          sources[pluginName] = {
             nodeCount: nodes.length,
             lastSync: now,
             status: "healthy",
           };
 
-          this.logger.debug(
-            `Successfully processed ${String(nodes.length)} nodes from '${name}'`,
-            {
-              component: "IntegrationManager",
-              operation: "getAggregatedInventory",
-              metadata: { sourceName: name, nodeCount: nodes.length },
-            }
-          );
           return nodesWithSource;
-        } catch (error) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          this.logger.error(`Failed to get inventory from '${name}'`, {
-            component: "IntegrationManager",
-            operation: "getAggregatedInventory",
-            metadata: { sourceName: name },
-          }, err);
-          sources[name] = {
+        } else {
+          sources[pluginName] = {
             nodeCount: 0,
             lastSync: now,
             status: "unavailable",
           };
           return [];
         }
-      },
-    );
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(`Failed to get inventory from '${pluginName}'`, {
+          component: "IntegrationManager",
+          operation: "getAggregatedInventory",
+          metadata: { pluginName },
+        }, err);
+        sources[pluginName] = {
+          nodeCount: 0,
+          lastSync: now,
+          status: "unavailable",
+        };
+        return [];
+      }
+    });
 
     const results = await Promise.all(inventoryPromises);
-    this.logger.debug(`Received results from ${String(results.length)} sources`, {
+    this.logger.debug(`Received results from ${String(results.length)} providers`, {
       component: "IntegrationManager",
       operation: "getAggregatedInventory",
       metadata: { resultCount: results.length },
@@ -776,11 +597,6 @@ export class IntegrationManager {
 
     // Flatten all nodes
     for (const nodes of results) {
-      this.logger.debug(`Adding ${String(nodes.length)} nodes to allNodes array`, {
-        component: "IntegrationManager",
-        operation: "getAggregatedInventory",
-        metadata: { nodeCount: nodes.length },
-      });
       allNodes.push(...nodes);
     }
 
@@ -798,19 +614,6 @@ export class IntegrationManager {
       metadata: { uniqueNodes: uniqueNodes.length },
     });
 
-    // Log source breakdown
-    const sourceBreakdown: Record<string, number> = {};
-    for (const node of uniqueNodes) {
-      const nodeSource =
-        (node as Node & { source?: string }).source ?? "unknown";
-      sourceBreakdown[nodeSource] = (sourceBreakdown[nodeSource] ?? 0) + 1;
-    }
-    this.logger.debug("Node breakdown by source", {
-      component: "IntegrationManager",
-      operation: "getAggregatedInventory",
-      metadata: { sourceBreakdown },
-    });
-
     this.logger.debug("Completed getAggregatedInventory", {
       component: "IntegrationManager",
       operation: "getAggregatedInventory",
@@ -825,7 +628,7 @@ export class IntegrationManager {
   /**
    * Get linked data for a specific node
    *
-   * Queries all information sources for the node, links data across sources,
+   * Queries all plugins for the node, links data across sources,
    * and returns aggregated data with source attribution.
    *
    * @param nodeId - Node identifier
@@ -841,7 +644,7 @@ export class IntegrationManager {
   /**
    * Get aggregated data for a specific node
    *
-   * Queries all information sources for the node and combines results.
+   * Queries all plugins for the node and combines results.
    *
    * @param nodeId - Node identifier
    * @returns Aggregated node data from all sources
@@ -850,51 +653,50 @@ export class IntegrationManager {
     const facts: Record<string, Facts> = {};
     const additionalData: Record<string, Record<string, unknown>> = {};
 
-    // Get node from first available source
-    let node: Node | null = null;
-    for (const source of this.informationSources.values()) {
-      if (!source.isInitialized()) continue;
+    // Create a system user for internal capability execution
+    const systemUser: User = {
+      id: "system",
+      username: "system",
+      roles: ["admin"],
+    };
 
-      try {
-        const inventory = await source.getInventory();
-        node = inventory.find((n) => n.id === nodeId) ?? null;
-        if (node) break;
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
-        this.logger.error(`Failed to get node from '${source.name}'`, {
-          component: "IntegrationManager",
-          operation: "getNodeData",
-          metadata: { sourceName: source.name, nodeId },
-        }, err);
-      }
-    }
+    // Get inventory to find the node
+    const inventory = await this.getAggregatedInventory();
+    const node = inventory.nodes.find((n) => n.id === nodeId) ?? null;
 
     if (!node) {
       throw new Error(`Node '${nodeId}' not found in any source`);
     }
 
-    // Get facts from all sources in parallel
-    const factsPromises = Array.from(this.informationSources.entries()).map(
-      async ([name, source]) => {
-        try {
-          if (!source.isInitialized()) return;
+    // Get facts from all providers with info.facts capability
+    const factsProviders = this.capabilityRegistry.getProvidersForCapability("info.facts");
 
-          const nodeFacts = await source.getNodeFacts(nodeId);
-          facts[name] = nodeFacts;
-        } catch (error) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          this.logger.error(
-            `Failed to get facts from '${name}' for node '${nodeId}'`,
-            {
-              component: "IntegrationManager",
-              operation: "getNodeData",
-              metadata: { sourceName: name, nodeId },
-            },
-            err
-          );
+    const factsPromises = factsProviders.map(async (registered) => {
+      const pluginName = registered.pluginName;
+      try {
+        const result = await this.capabilityRegistry.executeCapability<Facts>(
+          systemUser,
+          "info.facts",
+          { nodeId },
+          undefined
+        );
+
+        if (result.success && result.data) {
+          facts[pluginName] = result.data;
         }
-      },
-    );
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.logger.error(
+          `Failed to get facts from '${pluginName}' for node '${nodeId}'`,
+          {
+            component: "IntegrationManager",
+            operation: "getNodeData",
+            metadata: { pluginName, nodeId },
+          },
+          err
+        );
+      }
+    });
 
     await Promise.all(factsPromises);
 
@@ -1080,8 +882,8 @@ export class IntegrationManager {
     }
 
     this.plugins.delete(name);
-    this.executionTools.delete(name);
-    this.informationSources.delete(name);
+    this.v1Plugins.delete(name);
+    this.capabilityRegistry.unregisterPlugin(name);
 
     this.logger.info(`Unregistered plugin: ${name}`, {
       component: "IntegrationManager",
@@ -1108,21 +910,8 @@ export class IntegrationManager {
         continue;
       }
 
-      // Get priority for both nodes
-      const existingSource = (existing as Node & { source?: string }).source;
-      const newSource = (node as Node & { source?: string }).source;
-
-      const existingPriority = existingSource
-        ? (this.plugins.get(existingSource)?.config.priority ?? 0)
-        : 0;
-      const newPriority = newSource
-        ? (this.plugins.get(newSource)?.config.priority ?? 0)
-        : 0;
-
-      // Keep node from higher priority source
-      if (newPriority > existingPriority) {
-        nodeMap.set(node.id, node);
-      }
+      // For now, keep the first node encountered (could be enhanced with priority logic)
+      // Priority could be determined by plugin registration order or explicit priority setting
     }
 
     return Array.from(nodeMap.values());
@@ -1497,15 +1286,11 @@ export class IntegrationManager {
       }
     }
 
-    // Clear v1.0.0 state
+    // Clear state
     this.v1Plugins.clear();
     this.capabilityRegistry.clear();
     this.v1Initialized = false;
-
-    // Clear legacy state
     this.plugins.clear();
-    this.executionTools.clear();
-    this.informationSources.clear();
     this.healthCheckCache.clear();
     this.initialized = false;
 

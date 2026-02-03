@@ -13,6 +13,7 @@ import { ExpertModeService } from "../services/ExpertModeService";
 import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import type { User } from "../integrations/CapabilityRegistry";
 
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
@@ -145,34 +146,45 @@ export function createInventoryRouter(
               });
             }
 
-            const puppetdbSource =
-              integrationManager.getInformationSource("puppetdb");
-            if (puppetdbSource) {
+            // Use capability-based routing to query PuppetDB with PQL filter
+            const capabilityRegistry = integrationManager.getCapabilityRegistry();
+            if (capabilityRegistry.hasCapability("inventory.query")) {
               try {
-                // Query PuppetDB with PQL filter using the queryInventory method
-                // Cast to PuppetDBService to access the queryInventory method
-                const puppetdbService = puppetdbSource as unknown as {
-                  queryInventory: (pql: string) => Promise<Node[]>;
+                // Create a system user for internal capability execution
+                const systemUser: User = {
+                  id: "system",
+                  username: "system",
+                  roles: ["admin"],
                 };
-                const pqlNodes = await puppetdbService.queryInventory(
-                  query.pql,
+
+                // Query PuppetDB with PQL filter using the inventory.query capability
+                const pqlResult = await capabilityRegistry.executeCapability<Node[]>(
+                  systemUser,
+                  "inventory.query",
+                  { pql: query.pql },
+                  undefined
                 );
-                const pqlNodeIds = new Set(pqlNodes.map((n) => n.id));
 
-                // Filter to only include PuppetDB nodes that match PQL query
-                filteredNodes = filteredNodes.filter((node) => {
-                  const nodeSource =
-                    (node as { source?: string }).source ?? "bolt";
-                  // When PQL query is applied, only show PuppetDB nodes that match
-                  return nodeSource === "puppetdb" && pqlNodeIds.has(node.id);
-                });
+                if (pqlResult.success && pqlResult.data) {
+                  const pqlNodeIds = new Set(pqlResult.data.map((n) => n.id));
 
-                logger.info("PQL filter applied successfully", {
-                  component: "InventoryRouter",
-                  integration: "puppetdb",
-                  operation: "getInventory",
-                  metadata: { matchedNodes: filteredNodes.length },
-                });
+                  // Filter to only include PuppetDB nodes that match PQL query
+                  filteredNodes = filteredNodes.filter((node) => {
+                    const nodeSource =
+                      (node as { source?: string }).source ?? "bolt";
+                    // When PQL query is applied, only show PuppetDB nodes that match
+                    return nodeSource === "puppetdb" && pqlNodeIds.has(node.id);
+                  });
+
+                  logger.info("PQL filter applied successfully", {
+                    component: "InventoryRouter",
+                    integration: "puppetdb",
+                    operation: "getInventory",
+                    metadata: { matchedNodes: filteredNodes.length },
+                  });
+                } else {
+                  throw new Error(pqlResult.error?.message ?? "PQL query failed");
+                }
               } catch (error) {
                 logger.error("Error applying PQL filter", {
                   component: "InventoryRouter",
@@ -210,7 +222,7 @@ export function createInventoryRouter(
                 return;
               }
             } else {
-              logger.warn("PuppetDB source not available for PQL query", {
+              logger.warn("No plugin provides inventory.query capability for PQL query", {
                 component: "InventoryRouter",
                 integration: "puppetdb",
                 operation: "getInventory",
@@ -219,8 +231,8 @@ export function createInventoryRouter(
               // Capture warning in expert mode
               if (debugInfo) {
                 expertModeService.addWarning(debugInfo, {
-                  message: "PuppetDB source not available for PQL query",
-                  context: "PQL query requested but PuppetDB source is not available",
+                  message: "No plugin provides inventory.query capability for PQL query",
+                  context: "PQL query requested but no plugin provides the capability",
                   level: 'warn',
                 });
               }
@@ -569,7 +581,7 @@ export function createInventoryRouter(
 
       try {
         if (integrationManager?.isInitialized()) {
-          logger.debug("Checking health status for all information sources", {
+          logger.debug("Checking health status for all plugins", {
             component: "InventoryRouter",
             operation: "getSources",
           });
@@ -582,12 +594,12 @@ export function createInventoryRouter(
               Date.now() - startTime
             );
             expertModeService.addDebug(debugInfo, {
-              message: "Checking health status for all information sources",
+              message: "Checking health status for all plugins",
               level: 'debug',
             });
           }
 
-          // Get health status for all information sources
+          // Get health status for all plugins
           const healthStatuses = await integrationManager.healthCheckAll(true);
 
           const sources: Record<
@@ -600,32 +612,29 @@ export function createInventoryRouter(
             }
           > = {};
 
-          // Add Bolt as a source
-          sources.bolt = {
-            type: "execution",
-            status: "connected",
-            lastCheck: new Date().toISOString(),
-          };
+          // Get all registered plugins and their health status
+          const allPlugins = integrationManager.getAllPlugins();
+          for (const registration of allPlugins) {
+            const pluginName = registration.plugin.metadata.name;
+            const pluginType = registration.plugin.metadata.integrationType ?? "unknown";
+            const health = healthStatuses.get(pluginName);
 
-          // Add other information sources
-          for (const source of integrationManager.getAllInformationSources()) {
-            const health = healthStatuses.get(source.name);
-            sources[source.name] = {
-              type: source.type,
+            sources[pluginName] = {
+              type: pluginType,
               status: health?.healthy ? "connected" : "error",
               lastCheck: health?.lastCheck ?? new Date().toISOString(),
               error: health?.healthy ? undefined : health?.message,
             };
 
             if (!health?.healthy) {
-              logger.warn(`Source ${source.name} is not healthy`, {
+              logger.warn(`Source ${pluginName} is not healthy`, {
                 component: "InventoryRouter",
-                integration: source.name,
+                integration: pluginName,
                 operation: "getSources",
                 metadata: { error: health?.message },
               });
 
-              // Capture warning in expert mode (already exists below, but ensuring consistency)
+              // Capture warning in expert mode
               if (req.expertMode) {
                 const debugInfo = expertModeService.createDebugInfo(
                   'GET /api/inventory/sources',
@@ -633,7 +642,7 @@ export function createInventoryRouter(
                   Date.now() - startTime
                 );
                 expertModeService.addWarning(debugInfo, {
-                  message: `Source ${source.name} is not healthy`,
+                  message: `Source ${pluginName} is not healthy`,
                   context: health?.message,
                   level: 'warn',
                 });

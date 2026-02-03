@@ -3,15 +3,30 @@
  *
  * Abstract base class providing common functionality for all integration plugins.
  * Handles initialization state, configuration management, and basic health checking.
+ *
+ * v1.0.0: This class now implements BasePluginInterface for capability-based plugins.
  */
 
 import type {
-  IntegrationPlugin,
-  IntegrationConfig,
+  BasePluginInterface,
+  PluginMetadata,
+  PluginCapability,
+  PluginWidget,
+  PluginCLICommand,
   HealthStatus,
+  IntegrationType,
 } from "./types";
+import type { ZodSchema } from "zod";
 import { LoggerService } from "../services/LoggerService";
 import { PerformanceMonitorService } from "../services/PerformanceMonitorService";
+
+/**
+ * Plugin configuration for v1.0.0 plugins
+ */
+export interface PluginConfig {
+  enabled: boolean;
+  [key: string]: unknown;
+}
 
 /**
  * Abstract base class for integration plugins
@@ -23,57 +38,74 @@ import { PerformanceMonitorService } from "../services/PerformanceMonitorService
  * - Centralized logging via LoggerService
  * - Performance monitoring via PerformanceMonitorService
  */
-export abstract class BasePlugin implements IntegrationPlugin {
-  protected config: IntegrationConfig;
+export abstract class BasePlugin implements BasePluginInterface {
+  protected config: PluginConfig;
   protected initialized = false;
   protected lastHealthCheck?: HealthStatus;
   protected logger: LoggerService;
   protected performanceMonitor: PerformanceMonitorService;
 
   /**
+   * Plugin metadata - must be implemented by subclasses
+   */
+  abstract metadata: PluginMetadata;
+
+  /**
+   * Capabilities provided by this plugin - must be implemented by subclasses
+   */
+  abstract capabilities: PluginCapability[];
+
+  /**
+   * Optional frontend widgets
+   */
+  widgets?: PluginWidget[];
+
+  /**
+   * Optional CLI commands
+   */
+  cliCommands?: PluginCLICommand[];
+
+  /**
+   * Optional configuration schema
+   */
+  configSchema?: ZodSchema;
+
+  /**
+   * Optional default permissions
+   */
+  defaultPermissions?: Record<string, string[]>;
+
+  /**
    * Create a new base plugin instance
-   * @param name - Plugin name
-   * @param type - Plugin type
    * @param logger - Logger service instance (optional, creates default if not provided)
    * @param performanceMonitor - Performance monitor service instance (optional, creates default if not provided)
    */
   constructor(
-    public readonly name: string,
-    public readonly type: "execution" | "information" | "both",
     logger?: LoggerService,
     performanceMonitor?: PerformanceMonitorService,
   ) {
     // Initialize with default config
     this.config = {
       enabled: false,
-      name,
-      type,
-      config: {},
     };
     // Create a default logger if none provided (for backward compatibility)
-    // This will be removed once all plugins are migrated to pass LoggerService
     this.logger = logger ?? new LoggerService();
     // Create a default performance monitor if none provided
     this.performanceMonitor = performanceMonitor ?? new PerformanceMonitorService();
   }
 
   /**
-   * Initialize the plugin with configuration
+   * Initialize the plugin
    *
    * This method should be overridden by subclasses to perform
    * plugin-specific initialization (e.g., establishing connections,
    * validating credentials, loading resources).
-   *
-   * @param config - Integration configuration
    */
-  async initialize(config: IntegrationConfig): Promise<void> {
-    this.validateConfig(config);
-    this.config = config;
-
-    if (!config.enabled) {
+  async initialize(): Promise<void> {
+    if (!this.config.enabled) {
       this.logger.info("Plugin is disabled in configuration", {
         component: "BasePlugin",
-        integration: this.name,
+        integration: this.metadata.name,
         operation: "initialize",
       });
       return;
@@ -83,7 +115,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
     this.initialized = true;
     this.logger.info("Plugin initialized successfully", {
       component: "BasePlugin",
-      integration: this.name,
+      integration: this.metadata.name,
       operation: "initialize",
     });
   }
@@ -95,32 +127,6 @@ export abstract class BasePlugin implements IntegrationPlugin {
    * specific initialization logic.
    */
   protected abstract performInitialization(): Promise<void>;
-
-  /**
-   * Validate configuration before initialization
-   *
-   * Subclasses can override this to add custom validation logic.
-   *
-   * @param config - Configuration to validate
-   * @throws Error if configuration is invalid
-   */
-  protected validateConfig(config: IntegrationConfig): void {
-    if (!config.name) {
-      throw new Error("Plugin configuration must include a name");
-    }
-
-    if (config.name !== this.name) {
-      throw new Error(
-        `Configuration name '${config.name}' does not match plugin name '${this.name}'`,
-      );
-    }
-
-    if (config.type !== this.type) {
-      throw new Error(
-        `Configuration type '${config.type}' does not match plugin type '${this.type}'`,
-      );
-    }
-  }
 
   /**
    * Check the health status of the integration
@@ -185,10 +191,18 @@ export abstract class BasePlugin implements IntegrationPlugin {
 
   /**
    * Get the current configuration
-   * @returns Current integration configuration
+   * @returns Current plugin configuration
    */
-  getConfig(): IntegrationConfig {
+  getConfig(): Record<string, unknown> {
     return { ...this.config };
+  }
+
+  /**
+   * Set the plugin configuration
+   * @param config - Configuration to set
+   */
+  setConfig(config: PluginConfig): void {
+    this.config = { ...config };
   }
 
   /**
@@ -221,7 +235,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
   ): void {
     this.logger[level](message, {
       component: "BasePlugin",
-      integration: this.name,
+      integration: this.metadata.name,
       operation,
     });
   }
@@ -239,7 +253,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
 
     this.logger.error(`${message}: ${errorMessage}`, {
       component: "BasePlugin",
-      integration: this.name,
+      integration: this.metadata.name,
       operation,
     }, errorObj);
   }
@@ -253,10 +267,7 @@ export abstract class BasePlugin implements IntegrationPlugin {
   }
 
   /**
-   * Get plugin priority for ordering
-   * @returns Priority value (higher = higher priority)
+   * Optional cleanup method called during shutdown
    */
-  getPriority(): number {
-    return this.config.priority ?? 0;
-  }
+  async shutdown?(): Promise<void>;
 }
