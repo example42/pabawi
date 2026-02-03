@@ -474,27 +474,27 @@ class MenuBuilder {
     // Get auth store for permission filtering
     const authStore = getAuthStore();
 
+    // Get core section reference (used for multiple additions)
+    const coreSection = sections.find((s) => s.id === "core");
+
     // Add core items to core section
-    if (this.config.includeCoreItems) {
-      const coreSection = sections.find((s) => s.id === "core");
-      if (coreSection) {
-        const filteredCore = this.filterItemsByPermission(
-          CORE_NAV_ITEMS,
-          authStore
-        );
-        coreSection.items = filteredCore;
-      }
+    if (this.config.includeCoreItems && coreSection) {
+      const filteredCore = this.filterItemsByPermission(
+        CORE_NAV_ITEMS,
+        authStore
+      );
+      coreSection.items = filteredCore;
     }
 
-    // Add plugin contributions to integrations section
-    const integrationsSection = sections.find(
-      (s) => s.id === this.config.defaultPluginSection
-    );
-
-    if (integrationsSection && this.contributions.size > 0) {
+    // Add plugin contributions as a single "Integrations" dropdown in core section
+    // This creates a vertical menu: Integrations -> Integration Types -> Integrations
+    if (this.contributions.size > 0 && coreSection) {
       if (this.config.groupByIntegrationType) {
         // Group by integration type (category-based structure)
         const grouped = this.groupContributionsByType();
+
+        // Build integration type sub-groups
+        const integrationTypeGroups: MenuItem[] = [];
 
         for (const [integrationType, contributions] of grouped) {
           const metadata = this.getIntegrationTypeMetadata(integrationType);
@@ -519,39 +519,71 @@ class MenuBuilder {
             groupItems.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
           }
 
-          // Create group for this integration type (category)
+          // Create sub-group for this integration type
           const typeGroup: GroupMenuItem = {
             id: `integration-type:${integrationType}`,
             type: "group",
             label: metadata.label,
             icon: metadata.icon,
-            children: groupItems, // Integration links as children
-            collapsed: true, // Start collapsed
+            children: groupItems,
+            collapsed: false, // Expanded within the dropdown
             priority: metadata.priority,
+            integrationType: integrationType as IntegrationType,
           };
-          integrationsSection.items.push(typeGroup);
+          integrationTypeGroups.push(typeGroup);
+        }
+
+        // Sort integration type groups by priority
+        if (this.config.sortByPriority) {
+          integrationTypeGroups.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+        }
+
+        // Create single "Integrations" dropdown containing all type groups
+        if (integrationTypeGroups.length > 0) {
+          const integrationsGroup: GroupMenuItem = {
+            id: "integrations-main",
+            type: "group",
+            label: "Integrations",
+            icon: "M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z",
+            children: integrationTypeGroups,
+            collapsed: false,
+            priority: 900, // High priority to appear after Home
+          };
+          coreSection.items.push(integrationsGroup);
         }
       } else {
-        // Flat list of all integration items
+        // Flat list of all integration items in a single dropdown
+        const allItems: MenuItem[] = [];
         for (const contrib of this.contributions.values()) {
           const filteredItems = this.filterItemsByPermission(
             contrib.items,
             authStore
           );
-          integrationsSection.items.push(...filteredItems);
+          allItems.push(...filteredItems);
         }
-      }
 
-      // Sort integrations section items by priority
-      if (this.config.sortByPriority) {
-        integrationsSection.items.sort(
-          (a, b) => (b.priority ?? 0) - (a.priority ?? 0)
-        );
+        if (allItems.length > 0) {
+          const integrationsGroup: GroupMenuItem = {
+            id: "integrations-main",
+            type: "group",
+            label: "Integrations",
+            icon: "M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z",
+            children: allItems,
+            collapsed: false,
+            priority: 900,
+          };
+          coreSection.items.push(integrationsGroup);
+        }
       }
     }
 
+    // Remove the integrations section since we're adding it to core
+    const integrationsSectionIndex = sections.findIndex((s) => s.id === "integrations");
+    if (integrationsSectionIndex !== -1) {
+      sections.splice(integrationsSectionIndex, 1);
+    }
+
     // Add legacy items as a single dropdown group in the core section
-    const coreSection = sections.find((s) => s.id === "core");
     if (coreSection) {
       const legacyItems: MenuItem[] = [];
       for (const [key, contrib] of this.customContributions) {

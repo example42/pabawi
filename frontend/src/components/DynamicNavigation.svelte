@@ -84,7 +84,7 @@
   }
 
   /**
-   * Check if any child of a group is active
+   * Check if any child of a group is active (including nested groups)
    */
   function isGroupActive(group: GroupMenuItem): boolean {
     return group.children.some((child) => {
@@ -238,9 +238,9 @@
                         </svg>
                       </button>
 
-                      <!-- Dropdown Content - Vertical Layout -->
-                      <div class="absolute left-0 top-full z-50 hidden min-w-[14rem] origin-top-left rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none group-hover/menu:block dark:bg-gray-800 dark:ring-gray-700">
-                        <div class="flex flex-col py-1">
+                      <!-- Dropdown Content - Vertical Layout with Nested Groups -->
+                      <div class="absolute left-0 top-full z-50 hidden min-w-[16rem] origin-top-left rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none group-hover/menu:block dark:bg-gray-800 dark:ring-gray-700">
+                        <div class="flex flex-col py-1 max-h-[70vh] overflow-y-auto">
                           {#each groupItem.children as child}
                             {#if child.type === "link"}
                               {@const childLink = child as LinkMenuItem}
@@ -258,6 +258,45 @@
                                 {/if}
                                 <span class="whitespace-nowrap">{child.label}</span>
                               </a>
+                            {:else if child.type === "group"}
+                              <!-- Nested group (e.g., Integration Type) -->
+                              {@const nestedGroup = child as GroupMenuItem}
+                              <div class="py-1">
+                                <!-- Integration Type Header -->
+                                <div class="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 {getIntegrationColor(nestedGroup)}">
+                                  {#if nestedGroup.icon}
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={nestedGroup.icon} />
+                                    </svg>
+                                  {/if}
+                                  <span>{nestedGroup.label}</span>
+                                </div>
+                                <!-- Integration Links under this type -->
+                                {#each nestedGroup.children as nestedChild}
+                                  {#if nestedChild.type === "link"}
+                                    {@const nestedLink = nestedChild as LinkMenuItem}
+                                    <a
+                                      href={nestedLink.path}
+                                      use:link
+                                      class="flex items-center gap-2 pl-8 pr-4 py-2 text-sm transition-colors {isActive(nestedChild)
+                                        ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400'
+                                        : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'}"
+                                    >
+                                      {#if nestedChild.icon}
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={nestedChild.icon} />
+                                        </svg>
+                                      {/if}
+                                      <span class="whitespace-nowrap">{nestedChild.label}</span>
+                                      {#if nestedChild.badge}
+                                        <span class="ml-auto rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+                                          {nestedChild.badge}
+                                        </span>
+                                      {/if}
+                                    </a>
+                                  {/if}
+                                {/each}
+                              </div>
                             {:else if child.type === "divider"}
                               <div class="my-1 border-t border-gray-200 dark:border-gray-700"></div>
                             {/if}
