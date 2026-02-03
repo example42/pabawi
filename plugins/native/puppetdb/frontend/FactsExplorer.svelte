@@ -16,10 +16,11 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../../../frontend/src/components/ErrorAlert.svelte';
-  import { get } from '../../../../frontend/src/lib/api';
-  import { showSuccess } from '../../../../frontend/src/lib/toast.svelte';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api, toast } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -147,7 +148,7 @@
     loading = true;
     error = null;
     try {
-      const response = await get<{ facts: Facts }>(`/api/puppetdb/nodes/${encodeURIComponent(nodeId)}/facts`);
+      const response = await api.get<{ facts: Facts }>(`/api/puppetdb/nodes/${encodeURIComponent(nodeId)}/facts`);
       facts = response.facts || {};
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load facts';
@@ -195,7 +196,7 @@
     try {
       const text = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value);
       await navigator.clipboard.writeText(text);
-      showSuccess('Copied to clipboard');
+      toast.success('Copied to clipboard');
     } catch {
       // Fallback
     }

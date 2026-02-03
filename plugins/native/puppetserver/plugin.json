@@ -1,4 +1,5 @@
 {
+  "$schema": "../../plugin-manifest.schema.json",
   "name": "puppetserver",
   "version": "1.0.0",
   "author": "Pabawi Team",
@@ -8,38 +9,95 @@
   "homepage": "https://puppet.com/docs/puppet/latest/server",
   "color": "#2E3A87",
   "icon": "server",
-  "tags": ["puppet", "puppetserver", "catalog", "environments", "configuration"],
+  "tags": ["puppet", "puppetserver", "catalog", "environments", "facts", "configuration"],
   "minPabawiVersion": "1.0.0",
   "dependencies": [],
-  "entryPoint": "backend/index.ts",
+  "entryPoint": "./backend/index.ts",
+  "frontendEntryPoint": "./frontend/index.ts",
   "capabilities": [
     {
-      "name": "catalog.compile",
+      "name": "puppetserver.catalog",
       "category": "config",
-      "description": "Compile a catalog for a node",
+      "description": "Compile a Puppet catalog for a node in a specific environment",
       "riskLevel": "read",
       "requiredPermissions": ["puppetserver.catalog"]
     },
     {
-      "name": "environments.list",
+      "name": "puppetserver.catalog.get",
+      "category": "config",
+      "description": "Get the Puppet catalog for a node using its default environment",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.catalog.get", "puppetserver.catalog"]
+    },
+    {
+      "name": "puppetserver.catalog.compare",
+      "category": "config",
+      "description": "Compare catalogs between two environments for a node",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.catalog.compare", "puppetserver.catalog"]
+    },
+    {
+      "name": "puppetserver.environments",
       "category": "config",
       "description": "List available Puppet environments",
       "riskLevel": "read",
       "requiredPermissions": ["puppetserver.environments"]
     },
     {
-      "name": "status.get",
+      "name": "puppetserver.environment",
+      "category": "config",
+      "description": "Get details of a specific environment",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.environment", "puppetserver.environments"]
+    },
+    {
+      "name": "puppetserver.environment.deploy",
+      "category": "config",
+      "description": "Deploy/refresh a Puppet environment",
+      "riskLevel": "write",
+      "requiredPermissions": ["puppetserver.environment.deploy"]
+    },
+    {
+      "name": "puppetserver.environment.cache.flush",
+      "category": "config",
+      "description": "Flush environment cache",
+      "riskLevel": "write",
+      "requiredPermissions": ["puppetserver.environment.cache.flush"]
+    },
+    {
+      "name": "puppetserver.facts",
       "category": "info",
-      "description": "Get Puppetserver status and health",
+      "description": "Get facts for a specific node from Puppetserver",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.facts", "facts.read"]
+    },
+    {
+      "name": "puppetserver.status",
+      "category": "info",
+      "description": "Get Puppetserver simple status",
       "riskLevel": "read",
       "requiredPermissions": ["puppetserver.status"]
     },
     {
-      "name": "facts.get",
+      "name": "puppetserver.status.services",
       "category": "info",
-      "description": "Get facts for a node from Puppetserver",
+      "description": "Get detailed Puppetserver services status",
       "riskLevel": "read",
-      "requiredPermissions": ["puppetserver.facts"]
+      "requiredPermissions": ["puppetserver.status.services", "puppetserver.status"]
+    },
+    {
+      "name": "puppetserver.metrics",
+      "category": "info",
+      "description": "Get Puppetserver metrics (resource-intensive)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.metrics"]
+    },
+    {
+      "name": "puppetserver.admin",
+      "category": "info",
+      "description": "Get Puppetserver admin API information",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetserver.admin"]
     }
   ],
   "widgets": [
@@ -49,7 +107,7 @@
       "component": "frontend/HomeWidget.svelte",
       "slots": ["home-summary"],
       "size": "medium",
-      "requiredCapabilities": ["status.get"],
+      "requiredCapabilities": ["puppetserver.status"],
       "priority": 15
     },
     {
@@ -58,7 +116,7 @@
       "component": "frontend/CatalogCompilation.svelte",
       "slots": ["node-detail"],
       "size": "large",
-      "requiredCapabilities": ["catalog.compile"],
+      "requiredCapabilities": ["puppetserver.catalog"],
       "category": "config",
       "nodeScoped": true
     },
@@ -68,7 +126,7 @@
       "component": "frontend/EnvironmentInfo.svelte",
       "slots": ["node-detail", "dashboard"],
       "size": "medium",
-      "requiredCapabilities": ["environments.list"],
+      "requiredCapabilities": ["puppetserver.environments"],
       "category": "config"
     },
     {
@@ -77,7 +135,7 @@
       "component": "frontend/NodeStatus.svelte",
       "slots": ["node-detail"],
       "size": "small",
-      "requiredCapabilities": ["status.get"],
+      "requiredCapabilities": ["puppetserver.status"],
       "category": "info",
       "nodeScoped": true
     }
@@ -88,39 +146,89 @@
       "actions": [
         {
           "name": "catalog",
-          "capability": "catalog.compile",
+          "capability": "puppetserver.catalog",
           "description": "Compile a catalog for a node",
-          "examples": [
-            "pab puppetserver catalog node1.example.com",
-            "pab puppetserver catalog node1 --environment production"
-          ]
+          "examples": ["pab puppetserver catalog web-01", "pab puppetserver catalog web-01 --environment staging"]
+        },
+        {
+          "name": "catalog-diff",
+          "capability": "puppetserver.catalog.compare",
+          "description": "Compare catalogs between two environments",
+          "aliases": ["diff"],
+          "examples": ["pab puppetserver catalog-diff web-01 --environment1 production --environment2 staging"]
         },
         {
           "name": "environments",
-          "capability": "environments.list",
-          "description": "List available environments",
+          "capability": "puppetserver.environments",
+          "description": "List available Puppet environments",
           "aliases": ["envs"],
-          "examples": ["pab puppetserver environments"]
+          "examples": ["pab puppetserver environments", "pab puppetserver envs --format json"]
+        },
+        {
+          "name": "environment",
+          "capability": "puppetserver.environment",
+          "description": "Get details of a specific environment",
+          "aliases": ["env"],
+          "examples": ["pab puppetserver environment production"]
+        },
+        {
+          "name": "deploy",
+          "capability": "puppetserver.environment.deploy",
+          "description": "Deploy/refresh an environment",
+          "examples": ["pab puppetserver deploy production"]
+        },
+        {
+          "name": "flush-cache",
+          "capability": "puppetserver.environment.cache.flush",
+          "description": "Flush environment cache",
+          "aliases": ["flush"],
+          "examples": ["pab puppetserver flush-cache", "pab puppetserver flush-cache --name production"]
+        },
+        {
+          "name": "facts",
+          "capability": "puppetserver.facts",
+          "description": "Get facts for a node from Puppetserver",
+          "examples": ["pab puppetserver facts web-01"]
         },
         {
           "name": "status",
-          "capability": "status.get",
+          "capability": "puppetserver.status",
           "description": "Get Puppetserver status",
           "examples": ["pab puppetserver status"]
         },
         {
-          "name": "facts",
-          "capability": "facts.get",
-          "description": "Get facts for a node",
-          "examples": ["pab puppetserver facts node1.example.com"]
+          "name": "services",
+          "capability": "puppetserver.status.services",
+          "description": "Get detailed services status",
+          "examples": ["pab puppetserver services"]
+        },
+        {
+          "name": "metrics",
+          "capability": "puppetserver.metrics",
+          "description": "Get Puppetserver metrics (resource-intensive)",
+          "examples": ["pab puppetserver metrics"]
+        },
+        {
+          "name": "admin",
+          "capability": "puppetserver.admin",
+          "description": "Get admin API information",
+          "examples": ["pab puppetserver admin"]
         }
       ]
     }
   ],
   "defaultPermissions": {
-    "catalog.compile": ["admin", "operator"],
-    "environments.list": ["admin", "operator", "viewer"],
-    "status.get": ["admin", "operator", "viewer"],
-    "facts.get": ["admin", "operator", "viewer"]
+    "puppetserver.catalog": ["admin", "operator"],
+    "puppetserver.catalog.get": ["admin", "operator", "viewer"],
+    "puppetserver.catalog.compare": ["admin", "operator"],
+    "puppetserver.environments": ["admin", "operator", "viewer"],
+    "puppetserver.environment": ["admin", "operator", "viewer"],
+    "puppetserver.environment.deploy": ["admin"],
+    "puppetserver.environment.cache.flush": ["admin"],
+    "puppetserver.facts": ["admin", "operator", "viewer"],
+    "puppetserver.status": ["admin", "operator", "viewer"],
+    "puppetserver.status.services": ["admin", "operator", "viewer"],
+    "puppetserver.metrics": ["admin"],
+    "puppetserver.admin": ["admin"]
   }
 }

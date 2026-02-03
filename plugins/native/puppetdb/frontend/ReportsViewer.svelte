@@ -16,9 +16,11 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../../../frontend/src/components/ErrorAlert.svelte';
-  import { get } from '../../../../frontend/src/lib/api';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
 
   // ==========================================================================
   // Types
@@ -129,7 +131,7 @@
       const url = nodeId
         ? `/api/puppetdb/nodes/${encodeURIComponent(nodeId)}/reports`
         : '/api/puppetdb/reports';
-      const response = await get<{ reports: Report[] }>(url);
+      const response = await api.get<{ reports: Report[] }>(url);
       reports = response.reports || [];
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load reports';

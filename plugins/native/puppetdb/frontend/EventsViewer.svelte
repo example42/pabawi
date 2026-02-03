@@ -16,10 +16,25 @@
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
-  import LoadingSpinner from '../../../../frontend/src/components/LoadingSpinner.svelte';
-  import ErrorAlert from '../../../../frontend/src/components/ErrorAlert.svelte';
-  import { get } from '../../../../frontend/src/lib/api';
-  import { formatTimestamp } from '../../../../frontend/src/lib/utils';
+  import { getPluginContext } from '@pabawi/plugin-sdk';
+
+  // Get plugin context (injected by PluginContextProvider)
+  const { ui, api } = getPluginContext();
+  const { LoadingSpinner, ErrorAlert } = ui;
+
+  // ==========================================================================
+  // Utilities
+  // ==========================================================================
+
+  function formatTimestamp(timestamp: string | null): string {
+    if (!timestamp) return 'Never';
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    } catch {
+      return 'Invalid date';
+    }
+  }
 
   // ==========================================================================
   // Types
@@ -135,7 +150,7 @@
         ...(statusFilter !== 'all' && { status: statusFilter }),
       });
 
-      const response = await get<EventsResponse>(`/api/puppetdb/events/${certname}?${params}`);
+      const response = await api.get<EventsResponse>(`/api/puppetdb/events/${certname}?${params}`);
       events = response.events || [];
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load events';

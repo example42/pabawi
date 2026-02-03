@@ -33,7 +33,7 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
     - Verify PuppetDBPlugin still initializes correctly
     - _Requirements: 1.4, 1.8, 15.2_
   
-  - [ ] 1.4 Move PuppetserverPlugin to new structure
+  - [x] 1.4 Move PuppetserverPlugin to new structure
     - Create `plugins/native/puppetserver/` directory
     - Move backend code from `backend/src/integrations/puppetserver/` to `plugins/native/puppetserver/backend/`
     - Create `plugins/native/puppetserver/frontend/` for widget components
