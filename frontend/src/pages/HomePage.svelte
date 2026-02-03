@@ -348,7 +348,7 @@
       />
     </div>
     <h1 class="text-5xl font-bold text-gray-900 dark:text-white mb-4">
-      Welcome to Pabawi
+      Welcome to Pabawi zero
     </h1>
     <p class="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
       Puppet And Bolt Awesome Web Interface
