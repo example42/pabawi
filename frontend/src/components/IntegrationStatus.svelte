@@ -1,7 +1,7 @@
 <script lang="ts">
   import StatusBadge from './StatusBadge.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import { integrationColors } from '../lib/integrationColors.svelte';
 
   interface IntegrationStatus {
@@ -42,7 +42,7 @@
 
   // Get setup URL for integration
   function getSetupUrl(name: string): string {
-    return `/integrations/${name}/setup`;
+    return `/integrations/${name.toLowerCase()}/setup`;
   }
 
 
@@ -688,7 +688,7 @@
             {/if}
 
             <!-- Expert Mode Information -->
-            {#if expertMode.enabled}
+            {#if debugMode.enabled}
               <div class="mt-3 space-y-2 rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
                 <div class="flex items-center gap-2">
                   <svg class="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -1,0 +1,180 @@
+{
+  "$schema": "../../plugin-manifest.schema.json",
+  "name": "puppetdb",
+  "version": "1.0.0",
+  "author": "Pabawi Team",
+  "description": "PuppetDB integration for node inventory, facts, reports, and events",
+  "integrationType": "Info",
+  "integrationTypes": ["Info", "InventorySource", "Event"],
+  "homepage": "https://puppet.com/docs/puppetdb",
+  "color": "#9063CD",
+  "icon": "database",
+  "tags": ["puppet", "puppetdb", "inventory", "facts", "reports", "events"],
+  "minPabawiVersion": "1.0.0",
+  "dependencies": [],
+  "entryPoint": "./backend/index.ts",
+  "frontendEntryPoint": "./frontend/index.ts",
+  "capabilities": [
+    {
+      "name": "nodes.list",
+      "category": "inventory",
+      "description": "List all nodes from PuppetDB",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.nodes"]
+    },
+    {
+      "name": "facts.query",
+      "category": "info",
+      "description": "Query facts for nodes from PuppetDB",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.facts"]
+    },
+    {
+      "name": "reports.list",
+      "category": "info",
+      "description": "List Puppet reports from PuppetDB",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.reports"]
+    },
+    {
+      "name": "reports.get",
+      "category": "info",
+      "description": "Get a specific Puppet report",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.reports"]
+    },
+    {
+      "name": "events.list",
+      "category": "info",
+      "description": "List Puppet run events from PuppetDB",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.events"]
+    },
+    {
+      "name": "catalog.get",
+      "category": "info",
+      "description": "Get the compiled catalog for a node",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.catalog"]
+    },
+    {
+      "name": "query.pql",
+      "category": "info",
+      "description": "Execute a PQL query against PuppetDB",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.query"]
+    }
+  ],
+  "widgets": [
+    {
+      "id": "puppetdb:home-widget",
+      "name": "PuppetDB Summary",
+      "component": "frontend/HomeWidget.svelte",
+      "slots": ["home-summary"],
+      "size": "medium",
+      "requiredCapabilities": ["nodes.list"],
+      "priority": 20
+    },
+    {
+      "id": "puppetdb:facts-explorer",
+      "name": "Facts Explorer",
+      "component": "frontend/FactsExplorer.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["facts.query"],
+      "category": "info",
+      "nodeScoped": true
+    },
+    {
+      "id": "puppetdb:reports-viewer",
+      "name": "Reports Viewer",
+      "component": "frontend/ReportsViewer.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["reports.list"],
+      "category": "info",
+      "nodeScoped": true
+    },
+    {
+      "id": "puppetdb:events-viewer",
+      "name": "Events Viewer",
+      "component": "frontend/EventsViewer.svelte",
+      "slots": ["node-detail"],
+      "size": "medium",
+      "requiredCapabilities": ["events.list"],
+      "category": "info",
+      "nodeScoped": true
+    },
+    {
+      "id": "puppetdb:catalog-viewer",
+      "name": "Catalog Viewer",
+      "component": "frontend/CatalogViewer.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["catalog.get"],
+      "category": "info",
+      "nodeScoped": true
+    }
+  ],
+  "cliCommands": [
+    {
+      "name": "puppetdb",
+      "actions": [
+        {
+          "name": "nodes",
+          "capability": "nodes.list",
+          "description": "List nodes from PuppetDB",
+          "examples": ["pab puppetdb nodes", "pab puppetdb nodes --format json"]
+        },
+        {
+          "name": "facts",
+          "capability": "facts.query",
+          "description": "Query facts for a node",
+          "examples": [
+            "pab puppetdb facts node1.example.com",
+            "pab puppetdb facts node1 --fact os.family"
+          ]
+        },
+        {
+          "name": "reports",
+          "capability": "reports.list",
+          "description": "List reports for a node",
+          "examples": [
+            "pab puppetdb reports node1.example.com",
+            "pab puppetdb reports --limit 10"
+          ]
+        },
+        {
+          "name": "events",
+          "capability": "events.list",
+          "description": "List events for a node",
+          "examples": ["pab puppetdb events node1.example.com"]
+        },
+        {
+          "name": "catalog",
+          "capability": "catalog.get",
+          "description": "Get catalog for a node",
+          "examples": ["pab puppetdb catalog node1.example.com"]
+        },
+        {
+          "name": "query",
+          "capability": "query.pql",
+          "description": "Execute a PQL query",
+          "examples": [
+            "pab puppetdb query 'nodes { certname ~ \"web\" }'",
+            "pab puppetdb query 'facts { name = \"os\" }'"
+          ]
+        }
+      ]
+    }
+  ],
+  "defaultPermissions": {
+    "nodes.list": ["admin", "operator", "viewer"],
+    "facts.query": ["admin", "operator", "viewer"],
+    "reports.list": ["admin", "operator", "viewer"],
+    "reports.get": ["admin", "operator", "viewer"],
+    "events.list": ["admin", "operator", "viewer"],
+    "catalog.get": ["admin", "operator", "viewer"],
+    "query.pql": ["admin", "operator"]
+  }
+}

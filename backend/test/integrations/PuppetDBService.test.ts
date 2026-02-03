@@ -9,7 +9,7 @@ import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService
 import {
   PuppetDBConnectionError,
   PuppetDBQueryError,
-} from '../../src/integrations/puppetdb';
+} from '../../src/integrations/puppetdb/PuppetDBClient';
 import type { IntegrationConfig } from '../../src/integrations/types';
 
 describe('PuppetDBService', () => {

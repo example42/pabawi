@@ -1,60 +1,141 @@
 /**
- * Hiera Integration Module
+ * Hiera Integration Plugin
  *
- * Exports all Hiera integration components for local Puppet control repository
- * analysis, Hiera data lookup, and code analysis.
+ * Puppet Hiera integration for hierarchical data lookup, key resolution, and code analysis.
+ *
+ * @module integrations/hiera
+ * @version 1.0.0
  */
 
-// Export all types
-export * from "./types";
+import { HieraPluginV1 } from "./HieraPluginV1.js";
+import { HieraService } from "./HieraService.js";
+import { CodeAnalyzer } from "./CodeAnalyzer.js";
+import { LoggerService } from "../../services/LoggerService.js";
+import { PerformanceMonitorService } from "../../services/PerformanceMonitorService.js";
+import { ConfigService } from "../../config/ConfigService.js";
+import type { IntegrationManager } from "../IntegrationManager.js";
 
-// Export HieraParser
-export { HieraParser } from "./HieraParser";
-export type { HieraParseResult, ValidationResult, DataBackend, BackendInfo } from "./HieraParser";
+// Re-export v1.0 plugin class and config
+export {
+  HieraPluginV1,
+  HieraPluginConfigSchema,
+  type HieraPluginConfig,
+  createHieraPlugin,
+} from "./HieraPluginV1.js";
 
-// Export FactService
-export { FactService } from "./FactService";
+// Re-export legacy plugin for backward compatibility
+export { HieraPlugin } from "./HieraPlugin.js";
 
-// Export HieraScanner
-export { HieraScanner } from "./HieraScanner";
-export type { FileScanResult, FileChangeCallback } from "./HieraScanner";
+// Re-export services
+export { HieraService, type HieraServiceConfig } from "./HieraService.js";
+export { HieraParser } from "./HieraParser.js";
+export { HieraScanner } from "./HieraScanner.js";
+export { HieraResolver } from "./HieraResolver.js";
+export { FactService } from "./FactService.js";
+export { CodeAnalyzer } from "./CodeAnalyzer.js";
+export { CatalogCompiler } from "./CatalogCompiler.js";
 
-// Export HieraResolver
-export { HieraResolver } from "./HieraResolver";
-export type { CatalogAwareResolveOptions } from "./HieraResolver";
-
-// Export HieraService
-export { HieraService } from "./HieraService";
-export type { HieraServiceConfig } from "./HieraService";
-
-// Export CatalogCompiler
-export { CatalogCompiler } from "./CatalogCompiler";
-export type { CompiledCatalogResult } from "./CatalogCompiler";
-
-// Export CodeAnalyzer
-export { CodeAnalyzer } from "./CodeAnalyzer";
-export type { LintFilterOptions, IssueCounts } from "./CodeAnalyzer";
-
-// Export PuppetfileParser
-export { PuppetfileParser } from "./PuppetfileParser";
+// Re-export types
 export type {
-  ParsedModule,
-  PuppetfileParseResult,
-  PuppetfileParseError,
-  PuppetfileValidationIssue,
-  PuppetfileValidationResult,
-} from "./PuppetfileParser";
+  HieraConfig,
+  HieraDefaults,
+  HierarchyLevel,
+  LookupOptions,
+  LookupMethod,
+  HieraKey,
+  HieraKeyLocation,
+  HieraKeyIndex,
+  HieraFileInfo,
+  HieraResolution,
+  ResolveOptions,
+  MergeOptions,
+  HierarchyFileInfo,
+  NodeHieraData,
+  KeyNodeValues,
+  KeyUsageMap,
+  Facts,
+  FactResult,
+  LocalFactFile,
+  CodeAnalysisResult,
+  UnusedCodeReport,
+  UnusedItem,
+  LintIssue,
+  LintSeverity,
+  ModuleUpdate,
+  UsageStatistics,
+  ClassUsage,
+  ResourceUsage,
+  KeyListResponse,
+  HieraKeyInfo,
+  KeySearchResponse,
+  KeyDetailResponse,
+  NodeHieraDataResponse,
+  HieraResolutionInfo,
+  GlobalKeyLookupResponse,
+  ValueGroup,
+  CodeAnalysisResponse,
+  HieraStatusResponse,
+  PaginationParams,
+  PaginatedResponse,
+  HIERA_ERROR_CODES,
+  HieraErrorCode,
+  HieraError,
+  FactSourceConfig,
+  CatalogCompilationConfig,
+  HieraCacheConfig,
+  CodeAnalysisConfig,
+  HieraPluginConfig as HieraPluginConfigType,
+  HieraHealthStatus,
+} from "./types.js";
 
-// Export ForgeClient
-export { ForgeClient } from "./ForgeClient";
-export type {
-  ForgeModuleInfo,
-  ForgeApiError,
-  ModuleUpdateCheckResult,
-  ForgeClientConfig,
-  SecurityAdvisory,
-  ModuleSecurityStatus,
-} from "./ForgeClient";
+/**
+ * Factory function for PluginLoader auto-discovery
+ *
+ * Creates a HieraPluginV1 instance with default dependencies.
+ * This is called by PluginLoader when auto-discovering plugins.
+ *
+ * Note: The returned plugin requires setIntegrationManager() and setHieraService()
+ * to be called before initialization for full functionality.
+ */
+export function createPlugin(): HieraPluginV1 {
+  const configService = new ConfigService();
+  const config = configService.getConfig();
 
-// Export HieraPlugin
-export { HieraPlugin } from "./HieraPlugin";
+  const logger = new LoggerService(config.logLevel);
+  const performanceMonitor = new PerformanceMonitorService();
+
+  return new HieraPluginV1(logger, performanceMonitor);
+}
+
+/**
+ * Factory function with full dependency injection
+ *
+ * Creates a fully configured HieraPluginV1 instance with all dependencies.
+ * Use this when you need to provide custom services.
+ */
+export function createHieraPluginWithDependencies(
+  logger: LoggerService,
+  performanceMonitor: PerformanceMonitorService,
+  integrationManager?: IntegrationManager,
+  hieraService?: HieraService,
+  codeAnalyzer?: CodeAnalyzer,
+): HieraPluginV1 {
+  const plugin = new HieraPluginV1(logger, performanceMonitor);
+
+  if (integrationManager) {
+    plugin.setIntegrationManager(integrationManager);
+  }
+
+  if (hieraService) {
+    plugin.setHieraService(hieraService);
+  }
+
+  if (codeAnalyzer) {
+    plugin.setCodeAnalyzer(codeAnalyzer);
+  }
+
+  return plugin;
+}
+
+// Default export is the v1.0 plugin
+export default HieraPluginV1;

@@ -5,7 +5,7 @@
  * real-time execution output streams from the backend.
  */
 
-import { expertMode } from "./expertMode.svelte";
+import { debugMode } from "./debug";
 
 /**
  * Event types for streaming execution output
@@ -152,7 +152,7 @@ export function useExecutionStream(
     const baseUrl = `/api/executions/${executionId}/stream`;
     const params = new URLSearchParams();
 
-    if (expertMode.enabled) {
+    if (debugMode.enabled) {
       params.set("expertMode", "true");
     }
 

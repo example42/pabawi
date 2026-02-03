@@ -5,7 +5,7 @@
   import { get } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
 
   interface Props {
     onDebugInfo?: (info: DebugInfo | null) => void;
@@ -473,7 +473,7 @@
                     </span>
                     <div>
                       <span class="font-mono text-sm font-medium text-gray-900 dark:text-white">{classUsage.name}</span>
-                      {#if expertMode.enabled && classUsage.nodes.length > 0}
+                      {#if debugMode.enabled && classUsage.nodes.length > 0}
                         <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Nodes: {classUsage.nodes.slice(0, 3).join(', ')}{classUsage.nodes.length > 3 ? ` +${classUsage.nodes.length - 3} more` : ''}
                         </p>

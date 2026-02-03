@@ -263,21 +263,10 @@ export function createPackagesRouter(
         // Execute package installation asynchronously
         void (async (): Promise<void> => {
           try {
-            // Set up streaming callback if expert mode is enabled and streaming manager is available
-            const streamingCallback =
-              expertMode && streamingManager
-                ? {
-                    onCommand: (cmd: string): void => {
-                      streamingManager.emitCommand(executionId, cmd);
-                    },
-                    onStdout: (chunk: string): void => {
-                      streamingManager.emitStdout(executionId, chunk);
-                    },
-                    onStderr: (chunk: string): void => {
-                      streamingManager.emitStderr(executionId, chunk);
-                    },
-                  }
-                : undefined;
+            const streamingCallback = streamingManager?.createStreamingCallback(
+              executionId,
+              expertMode
+            );
 
             // Execute package installation task with parameter mapping
             const result = await boltService.installPackage(

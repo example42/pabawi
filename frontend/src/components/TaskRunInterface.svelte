@@ -8,7 +8,7 @@
   import TaskParameterForm from './TaskParameterForm.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Task {
@@ -206,7 +206,7 @@
         {
           taskName: selectedTask.name,
           parameters: taskParameters,
-          expertMode: expertMode.enabled,
+          expertMode: debugMode.enabled,
         },
         { maxRetries: 0 } // Don't retry task executions
       );
@@ -215,7 +215,7 @@
       lastExecutionId = executionId;
 
       // If expert mode is enabled, create a stream for real-time output
-      if (expertMode.enabled) {
+      if (debugMode.enabled) {
         executionStream = useExecutionStream(executionId, {
           onComplete: (result) => {
             // Fetch final execution result
@@ -568,7 +568,7 @@
         {/if}
 
         <!-- Real-time Output (Expert Mode + Running) -->
-        {#if executionStream && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
+        {#if executionStream && debugMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
           <div class="mt-4">
             <h5 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h5>
             <RealtimeOutputViewer stream={executionStream} autoConnect={false} />

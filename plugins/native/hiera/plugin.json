@@ -1,0 +1,158 @@
+{
+  "$schema": "../../plugin-manifest.schema.json",
+  "name": "hiera",
+  "version": "1.0.0",
+  "author": "Pabawi Team",
+  "description": "Hiera integration for key lookup, hierarchy visualization, and data analysis",
+  "integrationType": "ConfigurationManagement",
+  "integrationTypes": ["ConfigurationManagement", "Info"],
+  "homepage": "https://puppet.com/docs/puppet/latest/hiera.html",
+  "color": "#C1272D",
+  "icon": "layers",
+  "tags": ["puppet", "hiera", "configuration", "hierarchy", "data", "lookup"],
+  "minPabawiVersion": "1.0.0",
+  "dependencies": [],
+  "entryPoint": "./backend/index.ts",
+  "frontendEntryPoint": "./frontend/index.ts",
+  "capabilities": [
+    {
+      "name": "lookup.key",
+      "category": "config",
+      "description": "Look up a Hiera key value",
+      "riskLevel": "read",
+      "requiredPermissions": ["hiera.lookup"]
+    },
+    {
+      "name": "keys.list",
+      "category": "config",
+      "description": "List all Hiera keys",
+      "riskLevel": "read",
+      "requiredPermissions": ["hiera.keys"]
+    },
+    {
+      "name": "hierarchy.get",
+      "category": "config",
+      "description": "Get the Hiera hierarchy configuration",
+      "riskLevel": "read",
+      "requiredPermissions": ["hiera.hierarchy"]
+    },
+    {
+      "name": "scan.run",
+      "category": "config",
+      "description": "Scan and index Hiera data files",
+      "riskLevel": "read",
+      "requiredPermissions": ["hiera.scan"]
+    },
+    {
+      "name": "node.data",
+      "category": "info",
+      "description": "Get Hiera data for a specific node",
+      "riskLevel": "read",
+      "requiredPermissions": ["hiera.node"]
+    },
+    {
+      "name": "analysis.run",
+      "category": "info",
+      "description": "Analyze Hiera data for issues and recommendations",
+      "riskLevel": "read",
+      "requiredPermissions": ["hiera.analysis"]
+    }
+  ],
+  "widgets": [
+    {
+      "id": "hiera:home-widget",
+      "name": "Hiera Summary",
+      "component": "frontend/HomeWidget.svelte",
+      "slots": ["home-summary"],
+      "size": "medium",
+      "requiredCapabilities": ["keys.list"],
+      "priority": 5
+    },
+    {
+      "id": "hiera:key-lookup",
+      "name": "Key Lookup",
+      "component": "frontend/KeyLookup.svelte",
+      "slots": ["node-detail", "dashboard"],
+      "size": "medium",
+      "requiredCapabilities": ["lookup.key"],
+      "category": "config",
+      "nodeScoped": true
+    },
+    {
+      "id": "hiera:hierarchy-viewer",
+      "name": "Hierarchy Viewer",
+      "component": "frontend/HierarchyViewer.svelte",
+      "slots": ["node-detail", "standalone-page"],
+      "size": "large",
+      "requiredCapabilities": ["hierarchy.get"],
+      "category": "config"
+    },
+    {
+      "id": "hiera:node-data",
+      "name": "Node Hiera Data",
+      "component": "frontend/NodeHieraData.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["node.data"],
+      "category": "info",
+      "nodeScoped": true
+    }
+  ],
+  "cliCommands": [
+    {
+      "name": "hiera",
+      "actions": [
+        {
+          "name": "lookup",
+          "capability": "lookup.key",
+          "description": "Look up a Hiera key",
+          "examples": [
+            "pab hiera lookup profile::base::ntp_servers",
+            "pab hiera lookup mykey --node node1.example.com"
+          ]
+        },
+        {
+          "name": "keys",
+          "capability": "keys.list",
+          "description": "List all Hiera keys",
+          "examples": [
+            "pab hiera keys",
+            "pab hiera keys --filter profile::"
+          ]
+        },
+        {
+          "name": "hierarchy",
+          "capability": "hierarchy.get",
+          "description": "Show Hiera hierarchy",
+          "examples": ["pab hiera hierarchy"]
+        },
+        {
+          "name": "scan",
+          "capability": "scan.run",
+          "description": "Scan and index Hiera data",
+          "examples": ["pab hiera scan", "pab hiera scan --environment production"]
+        },
+        {
+          "name": "node",
+          "capability": "node.data",
+          "description": "Get Hiera data for a node",
+          "examples": ["pab hiera node node1.example.com"]
+        },
+        {
+          "name": "analyze",
+          "capability": "analysis.run",
+          "description": "Analyze Hiera data",
+          "examples": ["pab hiera analyze", "pab hiera analyze --check unused"]
+        }
+      ]
+    }
+  ],
+  "defaultPermissions": {
+    "lookup.key": ["admin", "operator", "viewer"],
+    "keys.list": ["admin", "operator", "viewer"],
+    "hierarchy.get": ["admin", "operator", "viewer"],
+    "scan.run": ["admin", "operator"],
+    "node.data": ["admin", "operator", "viewer"],
+    "analysis.run": ["admin", "operator"]
+  }
+}

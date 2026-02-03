@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getErrorGuidance, type ApiError } from '../lib/api';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import DetailedErrorDisplay from './DetailedErrorDisplay.svelte';
 
   interface Props {
@@ -50,7 +50,7 @@
   });
 
   // Use DetailedErrorDisplay if expert mode is enabled and we have an ApiError
-  const useDetailedDisplay = $derived(expertMode.enabled && error !== undefined);
+  const useDetailedDisplay = $derived(debugMode.enabled && error !== undefined);
 </script>
 
 <div class="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20" role="alert">

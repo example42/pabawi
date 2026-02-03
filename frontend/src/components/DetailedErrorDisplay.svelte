@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ApiError } from '../lib/api';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
 
   interface Props {
     error: ApiError;
@@ -89,7 +89,7 @@
   {/if}
 
   <!-- Expert Mode Details -->
-  {#if expertMode.enabled}
+  {#if debugMode.enabled}
     <div class="space-y-2">
       <!-- Bolt Command (if available) -->
       {#if error.boltCommand}

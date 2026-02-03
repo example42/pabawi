@@ -11,13 +11,7 @@ import { asyncHandler } from "./asyncHandler";
 import type { PuppetRunHistoryService } from "../services/PuppetRunHistoryService";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
-
-/**
- * Request validation schemas
- */
-const NodeIdParamSchema = z.object({
-  id: z.string().min(1, "Node ID is required"),
-});
+import { NodeIdParamSchema } from "../validation/commonSchemas";
 
 const DaysQuerySchema = z.object({
   days: z.string().optional().transform((val) => {

@@ -2,11 +2,11 @@
   import { onMount } from 'svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
-  import ExpertModeDebugPanel from './ExpertModeDebugPanel.svelte';
+  import DebugPanel from './DebugPanel.svelte';
   import { get } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
 
   // Types based on backend Hiera types
   interface HieraKeyLocation {
@@ -473,7 +473,7 @@
                 </div>
               </div>
               <div class="flex items-center gap-2 ml-4">
-                {#if expertMode.enabled && keyInfo.found}
+                {#if debugMode.enabled && keyInfo.found}
                   <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {getLookupMethodBadgeClass(keyInfo.lookupMethod)}">
                     {keyInfo.lookupMethod}
                   </span>
@@ -524,7 +524,7 @@
                   </div>
 
                   <!-- Expert Mode: Additional Details -->
-                  {#if expertMode.enabled}
+                  {#if debugMode.enabled}
                     <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
                       <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-2">Expert Details</h4>
                       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -681,7 +681,7 @@
               </div>
 
               <!-- Interpolated Variables (Expert Mode) -->
-              {#if expertMode.enabled && selectedKey.interpolatedVariables && Object.keys(selectedKey.interpolatedVariables).length > 0}
+              {#if debugMode.enabled && selectedKey.interpolatedVariables && Object.keys(selectedKey.interpolatedVariables).length > 0}
                 <div class="mb-6">
                   <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">Interpolated Variables</h4>
                   <div class="rounded-lg bg-gray-100 p-3 dark:bg-gray-900">
@@ -691,7 +691,7 @@
               {/if}
 
               <!-- All Values (Expert Mode) -->
-              {#if expertMode.enabled && selectedKey.allValues && selectedKey.allValues.length > 0}
+              {#if debugMode.enabled && selectedKey.allValues && selectedKey.allValues.length > 0}
                 <div>
                   <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-gray-100">All Hierarchy Values</h4>
                   <div class="space-y-2">
@@ -738,9 +738,9 @@
   {/if}
 
   <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && debugInfo}
+  {#if debugMode.enabled && debugInfo}
     <div class="mt-6">
-      <ExpertModeDebugPanel {debugInfo} />
+      <DebugPanel {debugInfo} />
     </div>
   {/if}
 </div>

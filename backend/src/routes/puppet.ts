@@ -7,13 +7,7 @@ import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
-
-/**
- * Request validation schemas
- */
-const NodeIdParamSchema = z.object({
-  id: z.string().min(1, "Node ID is required"),
-});
+import { NodeIdParamSchema } from "../validation/commonSchemas";
 
 const PuppetRunBodySchema = z.object({
   tags: z.array(z.string()).optional(),
@@ -287,21 +281,10 @@ export function createPuppetRouter(
               });
             }
 
-            // Set up streaming callback if expert mode is enabled and streaming manager is available
-            const streamingCallback =
-              expertMode && streamingManager
-                ? {
-                    onCommand: (cmd: string): void => {
-                      streamingManager.emitCommand(executionId, cmd);
-                    },
-                    onStdout: (chunk: string): void => {
-                      streamingManager.emitStdout(executionId, chunk);
-                    },
-                    onStderr: (chunk: string): void => {
-                      streamingManager.emitStderr(executionId, chunk);
-                    },
-                  }
-                : undefined;
+            const streamingCallback = streamingManager?.createStreamingCallback(
+              executionId,
+              expertMode
+            );
 
             logger.debug("Executing Puppet agent run", {
               component: "PuppetRouter",

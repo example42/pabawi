@@ -3,7 +3,7 @@
   import ReExecutionButton from './ReExecutionButton.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
   import { router } from '../lib/router.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
 
   interface ExecutionResult {
     id: string;

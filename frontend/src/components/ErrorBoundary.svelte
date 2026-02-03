@@ -23,8 +23,8 @@
       onError(err, errorInfo);
     }
 
-    // Log to console
-    console.error('ErrorBoundary caught an error:', err, errorInfo);
+    // Log to console - use $state.snapshot to avoid Svelte 5 proxy warnings
+    console.error('[snapshot] ErrorBoundary caught an error:', $state.snapshot(err), $state.snapshot(errorInfo));
 
     // Prevent default error handling
     event.preventDefault();
@@ -40,8 +40,8 @@
       onError(err, errorInfo);
     }
 
-    // Log to console
-    console.error('ErrorBoundary caught an unhandled rejection:', err, errorInfo);
+    // Log to console - use $state.snapshot to avoid Svelte 5 proxy warnings
+    console.error('[snapshot] ErrorBoundary caught an unhandled rejection:', $state.snapshot(err), $state.snapshot(errorInfo));
 
     // Prevent default error handling
     event.preventDefault();

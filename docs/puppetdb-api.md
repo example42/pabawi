@@ -1116,7 +1116,7 @@ List endpoints support pagination:
 - [Integrations API Documentation](./integrations-api.md) - Complete API reference for all integrations
 - [Authentication Guide](./authentication.md) - Authentication setup and troubleshooting
 - [Error Codes Reference](./error-codes.md) - Complete error code reference
-- [PuppetDB Integration Setup Guide](./puppetdb-integration-setup.md)
+- [PuppetDB Integration Setup Guide](./integrations/puppetdb.md)
 - [Pabawi Configuration Guide](./configuration.md)
 - [Pabawi User Guide](./user-guide.md)
 - [PuppetDB API Documentation](https://puppet.com/docs/puppetdb/latest/api/index.html)

@@ -2,7 +2,7 @@
  * API utility functions with retry logic and error handling
  */
 
-import { expertMode } from './expertMode.svelte';
+import { debugMode } from './debug';
 import { showWarning } from './toast.svelte';
 import { logger } from './logger.svelte';
 
@@ -359,7 +359,7 @@ export async function fetchWithRetry<T = unknown>(
 
   // Add expert mode header if enabled
   const headers = new Headers(options?.headers);
-  if (expertMode.enabled) {
+  if (debugMode.enabled) {
     headers.set('X-Expert-Mode', 'true');
   }
 

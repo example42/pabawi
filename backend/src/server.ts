@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import path from "path";
+import type { Database } from "sqlite3";
 import { ConfigService } from "./config/ConfigService";
 import { DatabaseService } from "./database/DatabaseService";
 import { BoltValidator, BoltValidationError } from "./validation/BoltValidator";
@@ -19,15 +20,21 @@ import { createStreamingRouter } from "./routes/streaming";
 import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
+import { createPluginsRouter } from "./routes/plugins";
+import { createSetupRouter } from "./routes/setup";
+import { createAuthRouter } from "./routes/auth";
+import { createUserRouter } from "./routes/users";
+import { createRoleRouter } from "./routes/roles";
+import { createGroupRouter } from "./routes/groups";
 import configRouter from "./routes/config";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
-import { errorHandler, requestIdMiddleware, expertModeMiddleware } from "./middleware";
+import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
+import { expertModeMiddleware } from "./middleware/expertMode";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
-import { BoltPlugin } from "./integrations/bolt";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
@@ -156,8 +163,10 @@ async function startServer(): Promise<Express> {
     })();
 
     // Initialize execution repository
+    // Note: ExecutionRepository still uses raw sqlite3 connection for backward compatibility
+    // This will be refactored in a future update to use the DatabaseAdapter interface
     const executionRepository = new ExecutionRepository(
-      databaseService.getConnection(),
+      databaseService.getConnection() as Database,
     );
 
     // Initialize command whitelist service
@@ -212,75 +221,8 @@ async function startServer(): Promise<Express> {
 
     const integrationManager = new IntegrationManager({ logger });
 
-    // Initialize Bolt integration only if configured
-    let boltPlugin: BoltPlugin | undefined;
-    const boltProjectPath = config.boltProjectPath;
-
-    // Check if Bolt is properly configured by looking for project files
-    let boltConfigured = false;
-    if (boltProjectPath && boltProjectPath !== '.') {
-      const fs = await import("fs");
-      const path = await import("path");
-
-      const inventoryYaml = path.join(boltProjectPath, "inventory.yaml");
-      const inventoryYml = path.join(boltProjectPath, "inventory.yml");
-      const boltProjectYaml = path.join(boltProjectPath, "bolt-project.yaml");
-      const boltProjectYml = path.join(boltProjectPath, "bolt-project.yml");
-
-      const hasInventory = fs.existsSync(inventoryYaml) || fs.existsSync(inventoryYml);
-      const hasBoltProject = fs.existsSync(boltProjectYaml) || fs.existsSync(boltProjectYml);
-
-      boltConfigured = hasInventory || hasBoltProject;
-    }
-
-    logger.info("=== Bolt Integration Setup ===", {
-      component: "Server",
-      operation: "initializeBolt",
-      metadata: {
-        configured: boltConfigured,
-        projectPath: boltProjectPath || 'not set',
-      },
-    });
-
-    if (boltConfigured) {
-      logger.info("Registering Bolt integration...", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
-      try {
-        boltPlugin = new BoltPlugin(boltService, logger, performanceMonitor);
-        const boltConfig: IntegrationConfig = {
-          enabled: true,
-          name: "bolt",
-          type: "both",
-          config: {
-            projectPath: config.boltProjectPath,
-          },
-          priority: 5, // Lower priority than PuppetDB
-        };
-        integrationManager.registerPlugin(boltPlugin, boltConfig);
-        logger.info("Bolt integration registered successfully", {
-          component: "Server",
-          operation: "initializeBolt",
-          metadata: { projectPath: config.boltProjectPath },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Bolt integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeBolt",
-        });
-        boltPlugin = undefined;
-      }
-    } else {
-      logger.warn("Bolt integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
-      logger.info("Set BOLT_PROJECT_PATH to a valid project directory to enable Bolt integration", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
-    }
+    // NOTE: Bolt plugin is now auto-discovered and loaded by PluginLoader v1.0.0
+    // See backend/src/integrations/bolt/index.ts for the createPlugin() factory
 
     // Initialize PuppetDB integration only if configured
     let puppetDBService: PuppetDBService | undefined;
@@ -662,6 +604,53 @@ async function startServer(): Promise<Express> {
     // Config routes (UI settings, etc.)
     app.use("/api/config", configRouter);
 
+    // Get database adapter for auth routes
+    const dbAdapter = databaseService.getAdapter();
+
+    // Setup routes (first-run admin creation - no auth required)
+    app.use(
+      "/api/setup",
+      createSetupRouter({ db: dbAdapter })
+    );
+
+    // Auth routes (login, logout, refresh - mostly no auth required)
+    const jwtSecret = process.env.JWT_SECRET || "pabawi-dev-secret-change-in-production";
+    const accessTokenExpiry = process.env.JWT_ACCESS_TOKEN_EXPIRY ? parseInt(process.env.JWT_ACCESS_TOKEN_EXPIRY, 10) : 3600;
+    const refreshTokenExpiry = process.env.JWT_REFRESH_TOKEN_EXPIRY ? parseInt(process.env.JWT_REFRESH_TOKEN_EXPIRY, 10) : 604800;
+
+    app.use(
+      "/api/auth",
+      createAuthRouter({
+        db: dbAdapter,
+        jwtSecret,
+        accessTokenExpiry,
+        refreshTokenExpiry,
+      })
+    );
+
+    // User management routes (admin only)
+    app.use(
+      "/api/users",
+      createUserRouter({ db: dbAdapter, jwtSecret })
+    );
+
+    // Role management routes (admin only)
+    app.use(
+      "/api/roles",
+      createRoleRouter({ db: dbAdapter, jwtSecret })
+    );
+
+    // Group management routes (admin only)
+    app.use(
+      "/api/groups",
+      createGroupRouter({ db: dbAdapter, jwtSecret })
+    );
+
+    logger.info("Authentication and authorization routes mounted", {
+      component: "Server",
+      operation: "startServer",
+    });
+
     // API Routes
     app.use(
       "/api/inventory",
@@ -742,6 +731,7 @@ async function startServer(): Promise<Express> {
       "/api/integrations",
       createIntegrationsRouter(
         integrationManager,
+        logger,
         puppetDBService,
         puppetserverService,
       ),
@@ -753,6 +743,10 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api/debug",
       createDebugRouter(),
+    );
+    app.use(
+      "/api/plugins",
+      createPluginsRouter(integrationManager),
     );
 
     // Serve static frontend files in production

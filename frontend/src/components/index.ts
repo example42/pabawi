@@ -1,3 +1,8 @@
+// Permission & Auth Components (v1.0.0 Phase 4, Step 20)
+export { default as PermissionGuard } from "./PermissionGuard.svelte";
+export { default as RequireAuth } from "./RequireAuth.svelte";
+export { default as AdminOnly } from "./AdminOnly.svelte";
+
 export { default as CatalogComparison } from "./CatalogComparison.svelte";
 export { default as CatalogViewer } from "./CatalogViewer.svelte";
 
@@ -9,8 +14,8 @@ export { default as ErrorAlert } from "./ErrorAlert.svelte";
 export { default as ErrorBoundary } from "./ErrorBoundary.svelte";
 export { default as EventsViewer } from "./EventsViewer.svelte";
 export { default as ExecutionList } from "./ExecutionList.svelte";
-export { default as ExpertModeDebugPanel } from "./ExpertModeDebugPanel.svelte";
-export { default as ExpertModeCopyButton } from "./ExpertModeCopyButton.svelte";
+export { default as DebugPanel } from "./DebugPanel.svelte";
+export { default as DebugCopyButton } from "./DebugCopyButton.svelte";
 export { default as FactsViewer } from "./FactsViewer.svelte";
 export { default as GlobalFactsTab } from "./GlobalFactsTab.svelte";
 export { default as GlobalHieraTab } from "./GlobalHieraTab.svelte";
@@ -20,7 +25,7 @@ export { default as MultiSourceFactsViewer } from "./MultiSourceFactsViewer.svel
 export { default as IntegrationStatus } from "./IntegrationStatus.svelte";
 export { default as LoadingSpinner } from "./LoadingSpinner.svelte";
 export { default as ManagedResourcesViewer } from "./ManagedResourcesViewer.svelte";
-export { default as Navigation } from "./Navigation.svelte";
+export { default as DynamicNavigation } from "./DynamicNavigation.svelte";
 export { default as NodeHieraTab } from "./NodeHieraTab.svelte";
 export { default as NodeStatus } from "./NodeStatus.svelte";
 export { default as PaginationControls } from "./PaginationControls.svelte";

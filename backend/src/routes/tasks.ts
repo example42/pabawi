@@ -14,13 +14,7 @@ import { asyncHandler } from "./asyncHandler";
 import type { BoltPlugin } from "../integrations/bolt/BoltPlugin";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
-
-/**
- * Request validation schemas
- */
-const NodeIdParamSchema = z.object({
-  id: z.string().min(1, "Node ID is required"),
-});
+import { NodeIdParamSchema } from "../validation/commonSchemas";
 
 const TaskExecutionBodySchema = z.object({
   taskName: z.string().min(1, "Task name is required"),
@@ -584,21 +578,10 @@ export function createTasksRouter(
         // We don't await here to return immediately with execution ID
         void (async (): Promise<void> => {
           try {
-            // Set up streaming callback if expert mode is enabled and streaming manager is available
-            const streamingCallback =
-              expertMode && streamingManager
-                ? {
-                    onCommand: (cmd: string): void => {
-                      streamingManager.emitCommand(executionId, cmd);
-                    },
-                    onStdout: (chunk: string): void => {
-                      streamingManager.emitStdout(executionId, chunk);
-                    },
-                    onStderr: (chunk: string): void => {
-                      streamingManager.emitStderr(executionId, chunk);
-                    },
-                  }
-                : undefined;
+            const streamingCallback = streamingManager?.createStreamingCallback(
+              executionId,
+              expertMode
+            );
 
             // Execute action through IntegrationManager
             const result = await integrationManager.executeAction("bolt", {

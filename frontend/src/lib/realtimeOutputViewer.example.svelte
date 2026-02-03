@@ -76,7 +76,7 @@ Example 3: Integration in Node Detail Page
 <script lang="ts">
   import { useExecutionStream } from '$lib/executionStream.svelte';
   import RealtimeOutputViewer from '$components/RealtimeOutputViewer.svelte';
-  import { expertMode } from '$lib/expertMode.svelte';
+  import { debugMode } from '$lib/debug';
 
   let executionId: string | null = null;
   let stream: ReturnType<typeof useExecutionStream> | null = null;
@@ -87,7 +87,7 @@ Example 3: Integration in Node Detail Page
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(expertMode.enabled && { 'X-Expert-Mode': 'true' }),
+        ...(debugMode.enabled && { 'X-Expert-Mode': 'true' }),
       },
       body: JSON.stringify({ command }),
     });

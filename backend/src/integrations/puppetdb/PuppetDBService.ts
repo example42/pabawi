@@ -20,6 +20,7 @@ import {
 } from "./PuppetDBClient";
 import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
+import { SimpleCache } from "../../utils/caching";
 
 // PQL parsing types
 interface PqlExpression {
@@ -66,14 +67,6 @@ import type {
  * Includes retry logic and circuit breaker for resilience.
  */
 /**
- * Cache entry with TTL
- */
-interface CacheEntry<T> {
-  data: T;
-  expiresAt: number;
-}
-
-/**
  * PuppetDB node response from API
  */
 interface PuppetDBNode {
@@ -89,68 +82,6 @@ interface PuppetDBFact {
   value: unknown;
 }
 
-/**
- * Simple in-memory cache with TTL
- */
-class SimpleCache {
-  private cache = new Map<string, CacheEntry<unknown>>();
-
-  /**
-   * Get cached value if not expired
-   *
-   * @param key - Cache key
-   * @returns Cached value or undefined if not found or expired
-   */
-  get(key: string): unknown {
-    const entry = this.cache.get(key);
-
-    if (!entry) {
-      return undefined;
-    }
-
-    // Check if expired
-    if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
-      return undefined;
-    }
-
-    return entry.data;
-  }
-
-  /**
-   * Set cached value with TTL
-   *
-   * @param key - Cache key
-   * @param value - Value to cache
-   * @param ttlMs - Time to live in milliseconds
-   */
-  set(key: string, value: unknown, ttlMs: number): void {
-    this.cache.set(key, {
-      data: value,
-      expiresAt: Date.now() + ttlMs,
-    });
-  }
-
-  /**
-   * Clear all cached values
-   */
-  clear(): void {
-    this.cache.clear();
-  }
-
-  /**
-   * Clear expired entries
-   */
-  clearExpired(): void {
-    const now = Date.now();
-    for (const [key, entry] of this.cache.entries()) {
-      if (now > entry.expiresAt) {
-        this.cache.delete(key);
-      }
-    }
-  }
-}
-
 export class PuppetDBService
   extends BasePlugin
   implements InformationSourcePlugin
@@ -160,14 +91,15 @@ export class PuppetDBService
   private circuitBreaker?: CircuitBreaker;
   private retryConfig?: RetryConfig;
   private puppetDBConfig?: PuppetDBConfig;
-  private cache = new SimpleCache();
   private cacheTTL = 300000; // Default 5 minutes
+  private cache: SimpleCache;
 
   /**
    * Create a new PuppetDB service
    */
   constructor(logger?: LoggerService, performanceMonitor?: PerformanceMonitorService) {
     super("puppetdb", "information", logger, performanceMonitor);
+    this.cache = new SimpleCache({ ttl: this.cacheTTL });
   }
 
   /**

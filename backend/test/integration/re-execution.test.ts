@@ -10,7 +10,7 @@ import express, { type Express } from "express";
 import request from "supertest";
 import { ExecutionRepository } from "../../src/database/ExecutionRepository";
 import { createExecutionsRouter } from "../../src/routes/executions";
-import { errorHandler, requestIdMiddleware } from "../../src/middleware";
+import { errorHandler, requestIdMiddleware } from "../../src/middleware/errorHandler";
 import type { Database } from "sqlite3";
 import type { ExecutionRecord } from "../../src/database/ExecutionRepository";
 

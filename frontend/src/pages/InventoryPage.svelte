@@ -1,16 +1,34 @@
 <script lang="ts">
+  /**
+   * Inventory Page
+   *
+   * Part of v1.0.0 Modular Plugin Architecture (Phase 4, Step 22)
+   *
+   * Multi-source inventory view with:
+   * - Plugin widget slots for inventory panels
+   * - PQL query support for PuppetDB filtering
+   * - Grid and list view modes
+   * - Expert mode debug panel
+   *
+   * @module pages/InventoryPage
+   */
   import { onMount } from 'svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
-  import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
+  import DebugPanel from '../components/DebugPanel.svelte';
+  import { WidgetSlot } from '../lib/plugins';
+  import { auth } from '../lib/auth.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
+  import { debugMode } from '../lib/debug';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
 
   const pageTitle = 'Pabawi - Inventory';
+
+  // Get user capabilities for widget filtering
+  let userCapabilities = $derived(auth.permissions?.allowed ?? []);
 
   interface Node {
     id: string;
@@ -791,14 +809,30 @@
     {/if}
   {/if}
 
+  <!-- Inventory Panel Widget Slot (v1.0.0 Plugin System) -->
+  <section class="mt-6 bg-white dark:bg-gray-800 shadow rounded-lg">
+    <div class="px-4 py-5 sm:p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-medium text-gray-900 dark:text-white">Inventory Widgets</h2>
+        <span class="text-xs text-gray-400 dark:text-gray-500">Additional tools from plugins</span>
+      </div>
+      <WidgetSlot
+        slot="inventory-panel"
+        layout="tabs"
+        {userCapabilities}
+        showEmptyState={false}
+        debug={debugMode.enabled}
+      />
+    </div>
+  </section>
+
   <!-- Expert Mode Debug Panel -->
-  <!-- Expert Mode Debug Panel -->
-  {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}
+  {#if debugMode.enabled && sortedDebugInfoBlocks.length > 0}
     <div class="mt-8 space-y-4">
       {#each sortedDebugInfoBlocks as block (block.label)}
         <div>
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">{block.label}</h3>
-          <ExpertModeDebugPanel debugInfo={block.debugInfo} />
+          <DebugPanel debugInfo={block.debugInfo} />
         </div>
       {/each}
     </div>

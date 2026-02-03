@@ -5,21 +5,204 @@ import {
   type WhitelistConfig,
 } from "./schema";
 import { z } from "zod";
+import {
+  YamlConfigLoader,
+  DEFAULT_CONFIG_PATHS,
+} from "./YamlConfigLoader";
+
+/**
+ * YAML configuration file structure
+ */
+interface ExternalPluginConfig {
+  path?: string;
+  package?: string;
+  enabled?: boolean;
+  priority?: number;
+  config?: Record<string, unknown>;
+}
+
+interface YamlIntegrationsConfig {
+  integrations?: Record<string, unknown>;
+  externalPlugins?: ExternalPluginConfig[];
+}
+
+interface YamlPermissionConfig {
+  capability: string;
+  action: "allow" | "deny";
+  description?: string;
+  conditions?: Record<string, unknown>;
+}
+
+interface YamlRoleConfig {
+  name: string;
+  description?: string;
+  priority?: number;
+  isSystem?: boolean;
+  permissions?: YamlPermissionConfig[];
+}
+
+interface YamlGroupConfig {
+  name: string;
+  description?: string;
+  roles?: string[];
+}
+
+interface YamlUserConfig {
+  username: string;
+  email?: string;
+  password?: string;
+  displayName?: string;
+  roles?: string[];
+  groups?: string[];
+  active?: boolean;
+}
+
+interface YamlRbacConfig {
+  auth?: {
+    enabled?: boolean;
+    jwt?: {
+      secret?: string;
+      accessTokenExpiry?: number;
+      refreshTokenExpiry?: number;
+      issuer?: string;
+    };
+    session?: {
+      maxActiveSessions?: number;
+      inactivityTimeout?: number;
+    };
+    password?: {
+      minLength?: number;
+      requireUppercase?: boolean;
+      requireLowercase?: boolean;
+      requireNumbers?: boolean;
+      requireSpecialChars?: boolean;
+    };
+  };
+  roles?: YamlRoleConfig[];
+  groups?: YamlGroupConfig[];
+  users?: YamlUserConfig[];
+}
+
+interface YamlDatabaseConfig {
+  database?: {
+    type?: "sqlite" | "postgresql" | "mysql";
+    path?: string;
+    host?: string;
+    port?: number;
+    database?: string;
+    username?: string;
+    password?: string;
+    ssl?: boolean;
+    poolMin?: number;
+    poolMax?: number;
+    connectionTimeout?: number;
+    debug?: boolean;
+  };
+  migrations?: {
+    autoRun?: boolean;
+    directory?: string;
+    lockTimeout?: number;
+  };
+}
+
+/**
+ * Combined YAML configuration
+ */
+export interface YamlConfig {
+  integrations: YamlIntegrationsConfig;
+  rbac: YamlRbacConfig;
+  database: YamlDatabaseConfig;
+}
 
 /**
  * Configuration service to load and validate application settings
- * from environment variables and .env file
+ * from environment variables, .env file, and YAML configuration files.
+ *
+ * Configuration Precedence (highest to lowest):
+ * 1. CLI arguments (when applicable)
+ * 2. Environment variables
+ * 3. YAML configuration files
+ * 4. Default values in schemas
  */
 export class ConfigService {
   private config: AppConfig;
+  private yamlConfig: YamlConfig | null = null;
+  private yamlLoader: YamlConfigLoader;
 
-  constructor() {
+  constructor(basePath?: string) {
     // Load .env file only if not in test environment
     if (process.env.NODE_ENV !== "test") {
       loadDotenv();
     }
 
+    // Initialize YAML loader
+    this.yamlLoader = new YamlConfigLoader(basePath);
+
+    // Load YAML configuration files
+    this.loadYamlConfigs();
+
     // Parse and validate configuration
+    this.config = this.loadConfiguration();
+  }
+
+  /**
+   * Load YAML configuration files from standard locations
+   */
+  private loadYamlConfigs(): void {
+    // Load integrations config
+    const integrationsResult = this.yamlLoader.loadFirst<YamlIntegrationsConfig>(
+      ...DEFAULT_CONFIG_PATHS.integrations,
+    );
+
+    // Load RBAC config
+    const rbacResult = this.yamlLoader.loadFirst<YamlRbacConfig>(
+      ...DEFAULT_CONFIG_PATHS.rbac,
+    );
+
+    // Load database config
+    const databaseResult = this.yamlLoader.loadFirst<YamlDatabaseConfig>(
+      ...DEFAULT_CONFIG_PATHS.database,
+    );
+
+    this.yamlConfig = {
+      integrations: integrationsResult.success && integrationsResult.data
+        ? integrationsResult.data
+        : {},
+      rbac: rbacResult.success && rbacResult.data ? rbacResult.data : {},
+      database: databaseResult.success && databaseResult.data
+        ? databaseResult.data
+        : {},
+    };
+  }
+
+  /**
+   * Get the loaded YAML configuration
+   */
+  public getYamlConfig(): YamlConfig | null {
+    return this.yamlConfig;
+  }
+
+  /**
+   * Get RBAC configuration from YAML
+   */
+  public getRbacConfig(): YamlRbacConfig {
+    return this.yamlConfig?.rbac ?? {};
+  }
+
+  /**
+   * Check if a YAML config file was loaded
+   */
+  public hasYamlConfig(type: "integrations" | "rbac" | "database"): boolean {
+    if (!this.yamlConfig) return false;
+    const config = this.yamlConfig[type];
+    return typeof config === "object" && Object.keys(config).length > 0;
+  }
+
+  /**
+   * Reload YAML configuration files
+   */
+  public reloadYamlConfigs(): void {
+    this.loadYamlConfigs();
     this.config = this.loadConfiguration();
   }
 
