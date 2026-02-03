@@ -2,361 +2,192 @@
 
 ## Overview
 
-This implementation plan covers the complete v1.0.0 release including plugin system finalization, Node Journal feature, Events integration type, API versioning, and legacy code removal. Tasks are organized to build incrementally, with each phase building on the previous.
+This implementation plan covers the v1.0.0 release with reorganized priorities:
 
-The implementation uses TypeScript for backend and Svelte with TailwindCSS for frontend, following the existing v1.x codebase patterns.
+1. **Plugin Code Migration** - Complete migration of all plugin-specific code to `plugins/` directory
+2. **Legacy 0.x Removal** - Remove all traces of legacy 0.x code from backend and frontend
+3. **Node Detail Widgets** - Complete widget implementations for node detail pages
+4. **UI Composition** - Dynamic page generation from plugin-provided widgets
+5. **Live Node Journal** - On-demand journal populated from integration data
+6. **API Versioning Cleanup** - Ensure clean v1 API structure
+
+### Key Design Decision: Plugin Directory as Single Source of Truth
+
+All plugin-specific code MUST reside in `plugins/native/{pluginName}/` directory. The `backend/src/integrations/` and `frontend/src/widgets/` directories should only contain shared infrastructure code (BasePlugin, CapabilityRegistry, etc.), not plugin-specific implementations.
 
 ## Tasks
 
-- [x] 1. Plugin Directory Restructuring
-  - [x] 1.1 Create new plugin directory structure
-    - Create `plugins/` directory at project root with `native/` and `external/` subdirectories
-    - Create plugin manifest schema (`plugin.json`) with Zod validation
-    - Define standard plugin structure: `backend/`, `frontend/`, `cli/`, `config/`, `README.md`
-    - _Requirements: 1.1, 1.2, 1.3_
-  
-  - [x] 1.2 Move BoltPlugin to new structure
-    - Create `plugins/native/bolt/` directory
-    - Move backend code from `backend/src/integrations/bolt/` to `plugins/native/bolt/backend/`
-    - Create `plugins/native/bolt/frontend/` for widget components
-    - Create `plugin.json` manifest for BoltPlugin
-    - Update imports and exports
-    - Verify BoltPlugin still initializes correctly
+### Phase 1: Complete Plugin Code Migration
+
+- [x] 1. Migrate Backend Plugin Code to plugins/ Directory
+  - [x] 1.1 Migrate BoltPlugin backend code
+    - Move `backend/src/integrations/bolt/BoltPlugin.ts` to `plugins/native/bolt/backend/`
+    - Move `backend/src/bolt/BoltService.ts` to `plugins/native/bolt/backend/services/`
+    - Move `backend/src/bolt/types.ts` to `plugins/native/bolt/backend/`
+    - Update all imports in the plugin to use relative paths
+    - Create re-export from `plugins/native/bolt/backend/index.ts`
     - _Requirements: 1.4, 1.8, 15.1_
   
-  - [x] 1.3 Move PuppetDBPlugin to new structure
-    - Create `plugins/native/puppetdb/` directory
-    - Move backend code from `backend/src/integrations/puppetdb/` to `plugins/native/puppetdb/backend/`
-    - Create `plugins/native/puppetdb/frontend/` for widget components
-    - Create `plugin.json` manifest for PuppetDBPlugin
-    - Update imports and exports
-    - Verify PuppetDBPlugin still initializes correctly
+  - [x] 1.2 Migrate PuppetDBPlugin backend code
+    - Move all files from `backend/src/integrations/puppetdb/` to `plugins/native/puppetdb/backend/`
+    - Include: PuppetDBPlugin.ts, PuppetDBService.ts, PuppetDBClient.ts, CircuitBreaker.ts, RetryLogic.ts, types.ts
+    - Update all imports in the plugin to use relative paths
+    - Create re-export from `plugins/native/puppetdb/backend/index.ts`
     - _Requirements: 1.4, 1.8, 15.2_
   
-  - [x] 1.4 Move PuppetserverPlugin to new structure
-    - Create `plugins/native/puppetserver/` directory
-    - Move backend code from `backend/src/integrations/puppetserver/` to `plugins/native/puppetserver/backend/`
-    - Create `plugins/native/puppetserver/frontend/` for widget components
-    - Create `plugin.json` manifest for PuppetserverPlugin
-    - Update imports and exports
-    - Verify PuppetserverPlugin still initializes correctly
+  - [x] 1.3 Migrate PuppetserverPlugin backend code
+    - Move all files from `backend/src/integrations/puppetserver/` to `plugins/native/puppetserver/backend/`
+    - Include: PuppetserverPlugin.ts, PuppetserverService.ts, PuppetserverClient.ts, errors.ts, types.ts
+    - Update all imports in the plugin to use relative paths
+    - Create re-export from `plugins/native/puppetserver/backend/index.ts`
     - _Requirements: 1.4, 1.8, 15.3_
   
-  - [x] 1.5 Move HieraPlugin to new structure
-    - Create `plugins/native/hiera/` directory
-    - Move backend code from `backend/src/integrations/hiera/` to `plugins/native/hiera/backend/`
-    - Create `plugins/native/hiera/frontend/` for widget components
-    - Create `plugin.json` manifest for HieraPlugin
-    - Update imports and exports
-    - Verify HieraPlugin still initializes correctly
+  - [x] 1.4 Migrate HieraPlugin backend code
+    - Move all files from `backend/src/integrations/hiera/` to `plugins/native/hiera/backend/`
+    - Include: HieraPlugin.ts, HieraPluginV1.ts, HieraService.ts, HieraParser.ts, HieraResolver.ts, HieraScanner.ts, CatalogCompiler.ts, CodeAnalyzer.ts, FactService.ts, ForgeClient.ts, PuppetfileParser.ts, types.ts
+    - Update all imports in the plugin to use relative paths
+    - Create re-export from `plugins/native/hiera/backend/index.ts`
     - _Requirements: 1.4, 1.8, 15.4_
-  
-  - [x] 1.6 Update PluginLoader for new directory structure
-    - Modify PluginLoader to scan `plugins/native/` and `plugins/external/`
-    - Add plugin manifest loading and validation
-    - Update plugin discovery to use manifest files
-    - Configure build system to include plugin frontend code
-    - _Requirements: 1.2, 1.7_
 
-- [x] 2. Checkpoint - Plugin restructuring complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify all 4 plugins load from new locations
-  - Verify existing functionality still works
-
-- [x] 3. API Versioning Implementation
-  - [x] 3.1 Create v1 API router structure
-    - Create `backend/src/routes/v1/` directory
-    - Create main v1 router that mounts all v1 routes under `/api/v1`
-    - Add `X-API-Version` response header middleware
-    - _Requirements: 4.1, 4.2, 4.7_
-  
-  - [x] 3.2 Create v1 plugins routes
-    - Create `/api/v1/plugins` routes (list, get, capabilities, widgets, health)
-    - Reference existing plugin route patterns from 0.x code
-    - _Requirements: 4.4, 4.6_
-  
-  - [x] 3.3 Create v1 capabilities routes
-    - Create `/api/v1/capabilities` routes (list, get, execute)
-    - Implement capability execution endpoint with RBAC
-    - _Requirements: 4.4, 4.5_
-  
-  - [x] 3.4 Create v1 nodes routes
-    - Create `/api/v1/nodes` routes (list, get, sources)
-    - Reference existing inventory/nodes routes from 0.x code for data structures
-    - _Requirements: 4.8_
-  
-  - [x] 3.5 Create v1 widgets routes
-    - Create `/api/v1/widgets` routes (list, by-slot)
-    - _Requirements: 4.4_
-  
-  - [ ]* 3.6 Write property test for API versioning compliance
-    - **Property 10: API Versioning Compliance**
-    - **Validates: Requirements 4.1, 4.3**
-
-- [x] 4. Checkpoint - API versioning complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify all v1 routes are accessible
-  - Verify response headers include API version
-
-- [ ] 5. Node Journal Backend Implementation
-  - [ ] 5.1 Create journal database schema
-    - Add `journal_entries` table to database schema
-    - Add indexes for efficient querying
-    - Create migration script
-    - _Requirements: 3.2, 3.9_
-  
-  - [ ] 5.2 Implement NodeJournalService
-    - Create `backend/src/services/NodeJournalService.ts`
-    - Implement `createEntry`, `getNodeEntries`, `getEntry`, `queryEntries` methods
-    - Implement filtering by type, plugin, date range, user
-    - _Requirements: 3.1, 3.2, 3.8_
-  
-  - [ ] 5.3 Create v1 journal routes
-    - Create `/api/v1/nodes/:id/journal` routes (list, create note)
-    - Add query parameter support for filtering
-    - _Requirements: 4.8_
-  
-  - [ ] 5.4 Integrate journal with capability execution
-    - Modify CapabilityRegistry to create journal entries on RemoteExecution
-    - Add journal entry creation for each target node
-    - _Requirements: 3.4, 11.4_
-  
-  - [ ]* 5.5 Write property test for automatic journal entry creation
-    - **Property 4: Automatic Journal Entry Creation**
-    - **Validates: Requirements 3.4, 3.5, 4.7, 11.4**
-  
-  - [ ]* 5.6 Write property test for journal entry filtering
-    - **Property 8: Journal Entry Filtering**
-    - **Validates: Requirements 3.8**
-
-- [ ] 6. Checkpoint - Node Journal backend complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify journal entries are created on capability execution
-  - Verify filtering works correctly
-
-- [ ] 7. Events Integration Type Implementation
-  - [ ] 7.1 Create events database schema
-    - Add `events` table to database schema
-    - Add foreign key to journal_entries
-    - Create migration script
-    - _Requirements: 4.3_
-  
-  - [ ] 7.2 Implement EventService
-    - Create `backend/src/services/EventService.ts`
-    - Implement event creation with automatic journal entry linking
-    - Implement event querying and filtering
-    - _Requirements: 4.1, 4.2, 4.3_
-  
-  - [ ] 7.3 Create v1 events routes
-    - Create `/api/v1/events` routes (list all events)
-    - Create `/api/v1/nodes/:id/events` routes (node-specific events)
-    - _Requirements: 4.9_
-  
-  - [ ] 7.4 Add Events capability to PuppetDBPlugin
-    - Implement `puppetdb.events.list` capability for Puppet run events
-    - Map Puppet report events to the standard Event format
-    - Create journal entries for Puppet events
-    - _Requirements: 4.5, 4.7_
-  
-  - [ ]* 7.5 Write property test for event-to-journal linking
-    - **Property 9: Event-to-Journal Linking**
-    - **Validates: Requirements 4.7**
-
-- [ ] 8. Checkpoint - Events implementation complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify events are created and linked to journal
-  - Verify PuppetDB events are captured
-
-- [ ] 9. Inventory Aggregation Implementation
-  - [ ] 9.1 Create unified nodes database schema
-    - Add `nodes` table for unified node records
-    - Add `node_sources` table for per-plugin data
-    - Create migration script
-    - _Requirements: 10.4_
-  
-  - [ ] 9.2 Implement InventoryAggregator service
-    - Create `backend/src/services/InventoryAggregator.ts`
-    - Implement node correlation by hostname, FQDN, IP, certname
-    - Implement data merging with conflict resolution
-    - _Requirements: 10.1, 10.2, 10.3, 10.6_
-  
-  - [ ] 9.3 Update v1 nodes routes for unified inventory
-    - Update `/api/v1/nodes` to return unified inventory
-    - Add `/api/v1/nodes/:id/sources` endpoint
-    - _Requirements: 10.4, 10.5_
-  
-  - [ ]* 9.4 Write property test for inventory node consolidation
-    - **Property 5: Inventory Node Consolidation**
-    - **Validates: Requirements 10.1, 10.2, 10.3, 10.4**
-
-- [ ] 10. Checkpoint - Inventory aggregation complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify nodes from multiple sources are consolidated
-  - Verify sources are tracked correctly
-
-- [ ] 11. Debug System Implementation
-  - [ ] 11.1 Implement DebugService
-    - Create `backend/src/services/DebugService.ts`
-    - Implement log capture for API requests, capability executions, tool outputs
-    - Implement filtering and clearing
-    - _Requirements: 16.2, 16.3, 16.4, 16.5, 16.6_
-  
-  - [ ] 11.2 Create debug middleware
-    - Create middleware to capture request/response data when debug enabled
-    - Add `_debug` field to responses when debug mode is on
-    - Include correlation ID, execution time, capability info
-    - _Requirements: 16.8, 16.9_
-  
-  - [ ] 11.3 Create v1 debug routes
-    - Create `/api/v1/debug/logs` routes (get, clear)
-    - Create `/api/v1/debug/status` and `/api/v1/debug/toggle` routes
-    - _Requirements: 16.1_
-  
-  - [ ] 11.4 Integrate debug with capability execution
-    - Capture raw tool output in CapabilityRegistry
-    - Include tool output in debug logs
-    - _Requirements: 16.4_
-  
-  - [ ]* 11.5 Write property test for debug information capture
-    - **Property 6: Debug Information Capture**
-    - **Validates: Requirements 16.2, 16.3, 16.4, 16.5**
-  
-  - [ ]* 11.6 Write property test for debug response metadata
-    - **Property 15: Debug Response Metadata**
-    - **Validates: Requirements 16.8, 16.9**
-
-- [ ] 12. Checkpoint - Debug system complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify debug logs capture all required information
-  - Verify _debug field appears in responses when enabled
-
-- [ ] 13. Widget System Enhancement
-  - [ ] 13.1 Add new widget slots to CapabilityRegistry
-    - Add `home-summary` and `node-journal` slots
-    - Update widget slot type definitions
-    - _Requirements: 6.6_
-  
-  - [ ] 13.2 Implement widget validation on registration
-    - Validate requiredCapabilities exist when registering widget
-    - Fail registration if capabilities are missing
-    - _Requirements: 6.2_
-  
-  - [ ] 13.3 Implement widget priority sorting
-    - Ensure widgets are returned sorted by priority (highest first)
-    - _Requirements: 6.3_
-  
-  - [ ]* 13.4 Write property test for widget priority sorting
-    - **Property 7: Widget Priority Sorting**
-    - **Validates: Requirements 6.3**
-  
-  - [ ]* 13.5 Write property test for widget registration validation
-    - **Property 11: Widget Registration Validation**
-    - **Validates: Requirements 6.2**
-
-- [ ] 14. Checkpoint - Widget system enhancement complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify new slots are available
-  - Verify widget validation works
-
-- [ ] 15. Home Widgets for Native Plugins
-  - [ ] 15.1 Create BoltPlugin HomeWidget
-    - Add `home-summary` widget to BoltPlugin
-    - Display node count, recent execution count, last execution status
-    - Use Bolt's orange color (#FFAE1A)
-    - Reference existing Bolt UI components from 0.x for functionality
+- [ ] 2. Migrate Frontend Widget Code to plugins/ Directory
+  - [ ] 2.1 Migrate Bolt frontend widgets
+    - Move all files from `frontend/src/widgets/bolt/` to `plugins/native/bolt/frontend/`
+    - Include: CommandExecutor.svelte, TaskRunner.svelte, TaskBrowser.svelte, InventoryViewer.svelte
+    - Update widget imports and exports
     - _Requirements: 1.6, 5.1_
   
-  - [ ] 15.2 Create PuppetDBPlugin HomeWidget
-    - Add `home-summary` widget to PuppetDBPlugin
-    - Display total nodes, recent reports summary, failed runs count
-    - Use PuppetDB's violet color (#9063CD)
-    - Reference existing PuppetDB UI components from 0.x for functionality
+  - [ ] 2.2 Migrate PuppetDB frontend widgets
+    - Move all files from `frontend/src/widgets/puppetdb/` to `plugins/native/puppetdb/frontend/`
+    - Include: FactsExplorer.svelte, ReportsViewer.svelte, ReportsSummary.svelte, EventsViewer.svelte, CatalogViewer.svelte, NodeBrowser.svelte
+    - Update widget imports and exports
     - _Requirements: 1.7, 5.2_
   
-  - [ ] 15.3 Create PuppetserverPlugin HomeWidget
-    - Add `home-summary` widget to PuppetserverPlugin
-    - Display environment count, catalog compilation status, server health
-    - Use Puppetserver's blue color (#2E3A87)
-    - Reference existing Puppetserver UI components from 0.x for functionality
+  - [ ] 2.3 Migrate Puppetserver frontend widgets
+    - Move all files from `frontend/src/widgets/puppetserver/` to `plugins/native/puppetserver/frontend/`
+    - Include: StatusDashboard.svelte, EnvironmentManager.svelte
+    - Update widget imports and exports
     - _Requirements: 1.8, 5.3_
   
-  - [ ] 15.4 Create HieraPlugin HomeWidget
-    - Add `home-summary` widget to HieraPlugin
-    - Display total keys indexed, hierarchy levels, last scan timestamp
-    - Use Hiera's red color (#C1272D)
-    - Reference existing Hiera UI components from 0.x for functionality
+  - [ ] 2.4 Migrate Hiera frontend widgets
+    - Move all files from `frontend/src/widgets/hiera/` to `plugins/native/hiera/frontend/`
+    - Include: HieraExplorer.svelte, KeyLookup.svelte, HierarchyViewer.svelte, NodeHieraData.svelte, CodeAnalysis.svelte, KeyValuesGrid.svelte
+    - Update widget imports and exports
     - _Requirements: 1.9, 5.4_
 
-- [ ] 16. Checkpoint - Home widgets complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify all 4 home widgets render correctly
-  - Verify colors and metrics are displayed
+- [ ] 3. Update PluginLoader for New Directory Structure
+  - [ ] 3.1 Update PluginLoader to load from plugins/ directory
+    - Modify PluginLoader to scan `plugins/native/` and `plugins/external/`
+    - Load plugin manifests from `plugin.json` files
+    - Support configurable external plugins directory
+    - _Requirements: 1.2, 1.5, 1.7_
+  
+  - [ ] 3.2 Update build system for plugin frontend code
+    - Configure Vite to include plugin frontend components
+    - Set up path aliases for plugin imports
+    - Ensure plugin widgets are bundled correctly
+    - _Requirements: 1.6_
 
-- [ ] 17. Frontend Page Implementation
-  - [ ] 17.1 Create new HomePage with widget slots
-    - Create new `frontend/src/pages/HomePage.svelte` using v1 patterns
-    - Implement `home-summary` widget slot rendering
-    - Add welcome section and system overview
-    - Reference existing HomePage from 0.x for layout inspiration
-    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
-  
-  - [ ] 17.2 Create IntegrationHomePage component
-    - Create `frontend/src/pages/IntegrationHomePage.svelte`
-    - Implement automatic tab generation from capability categories
-    - Display plugin metadata with color theming
-    - Include health status section and CLI reference
-    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 2.8_
-  
-  - [ ] 17.3 Create new NodeDetailPage with plugin tabs
-    - Create new `frontend/src/pages/NodeDetailPage.svelte` using v1 patterns
-    - Implement automatic tab generation from plugins with node-detail widgets
-    - Add Summary widget aggregating data from all integrations
-    - Add Journal tab for NodeJournal timeline
-    - Reference existing NodeDetailPage from 0.x for functionality
-    - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7, 3.8, 11.1, 11.2, 11.3, 11.4, 11.5_
-  
-  - [ ] 17.4 Create NodeJournal timeline component
-    - Create `frontend/src/components/NodeJournal.svelte`
-    - Display journal entries in chronological timeline
-    - Implement filtering by type, plugin, date range
-    - Use plugin colors for entry identification
-    - _Requirements: 3.7, 3.8, 13.5_
-  
-  - [ ] 17.5 Create DebugPanel component
-    - Create `frontend/src/components/DebugPanel.svelte`
-    - Display API requests, responses, tool outputs, errors
-    - Implement filtering and copy-to-clipboard
-    - Support real-time updates for streaming output
-    - Reference existing debug components from 0.x
-    - _Requirements: 16.2, 16.3, 16.4, 16.5, 16.6, 16.7, 16.10, 16.12_
-  
-  - [ ]* 17.6 Write property test for widget rendering correctness
-    - **Property 1: Widget Rendering Correctness**
-    - **Validates: Requirements 1.1, 1.2, 1.3, 1.5**
-  
-  - [ ]* 17.7 Write property test for tab generation from capabilities
-    - **Property 2: Tab Generation from Capabilities**
-    - **Validates: Requirements 2.2, 2.3, 7.1, 7.2**
-  
-  - [ ]* 17.8 Write property test for RBAC permission filtering
-    - **Property 3: RBAC Permission Filtering**
-    - **Validates: Requirements 2.6, 6.4, 7.3**
+- [ ] 4. Checkpoint - Plugin migration complete
+  - Verify all 4 plugins load from new locations
+  - Verify all tests pass
+  - Verify existing functionality still works
 
-- [ ] 18. Checkpoint - Frontend pages complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify HomePage renders home widgets
-  - Verify IntegrationHomePage generates tabs correctly
-  - Verify NodeDetailPage shows plugin tabs and journal
+### Phase 2: Legacy 0.x Code Removal
 
-- [ ] 19. Node Detail Widgets for Native Plugins
-  - [ ] 19.1 Create BoltPlugin node-detail widgets
+- [ ] 5. Remove Legacy Backend Code
+  - [ ] 5.1 Remove legacy interfaces from types.ts
+    - Remove `ExecutionToolPlugin`, `InformationSourcePlugin`, `IntegrationPlugin` interfaces
+    - Remove `IntegrationConfig`, `PluginRegistration` types
+    - Remove deprecated capability types
+    - Keep only v1.x types: `BasePluginInterface`, `PluginCapability`, `PluginWidget`
+    - _Requirements: 5.1, 5.4, 5.5, 5.6_
+  
+  - [ ] 5.2 Remove legacy IntegrationManager methods
+    - Remove `getExecutionTool()`, `getInformationSource()` methods
+    - Remove `getAllExecutionTools()`, `getAllInformationSources()` methods
+    - Remove `executionTools` and `informationSources` Maps
+    - Update any code that used these methods to use CapabilityRegistry
+    - _Requirements: 5.2_
+  
+  - [ ] 5.3 Remove empty integration directories
+    - Remove `backend/src/integrations/bolt/` directory (code moved to plugins/)
+    - Remove `backend/src/integrations/puppetdb/` directory (code moved to plugins/)
+    - Remove `backend/src/integrations/puppetserver/` directory (code moved to plugins/)
+    - Remove `backend/src/integrations/hiera/` directory (code moved to plugins/)
+    - Keep shared infrastructure: BasePlugin.ts, CapabilityRegistry.ts, IntegrationManager.ts, PluginLoader.ts, types.ts
+    - _Requirements: 5.1_
+  
+  - [ ] 5.4 Remove legacy BoltService from backend/src/bolt/
+    - Remove `backend/src/bolt/` directory (code moved to plugins/)
+    - Update any imports that referenced this location
+    - _Requirements: 5.1_
+
+- [ ] 6. Remove Legacy Frontend Code
+  - [ ] 6.1 Remove empty widget directories
+    - Remove `frontend/src/widgets/bolt/` directory (code moved to plugins/)
+    - Remove `frontend/src/widgets/puppetdb/` directory (code moved to plugins/)
+    - Remove `frontend/src/widgets/puppetserver/` directory (code moved to plugins/)
+    - Remove `frontend/src/widgets/hiera/` directory (code moved to plugins/)
+    - Update `frontend/src/widgets/index.ts` to export from plugin locations
+    - _Requirements: 5.7_
+  
+  - [ ] 6.2 Update frontend imports to use plugin paths
+    - Update all component imports to reference `plugins/native/{plugin}/frontend/`
+    - Update any hardcoded widget paths
+    - _Requirements: 5.7_
+
+- [ ] 7. Remove Legacy Route Files
+  - [ ] 7.1 Identify and remove unversioned routes
+    - Audit `backend/src/routes/` for unversioned route files
+    - Remove routes that duplicate v1 API functionality
+    - Keep only v1 routes under `/api/v1/`
+    - _Requirements: 5.3_
+  
+  - [ ] 7.2 Update server.ts to only mount v1 routes
+    - Remove any legacy route mounting
+    - Ensure all routes are prefixed with `/api/v1/`
+    - _Requirements: 4.1, 4.2_
+
+- [ ] 8. Remove Legacy Test Files
+  - [ ] 8.1 Remove .legacy test files
+    - Remove `backend/test/integration/bolt-plugin-integration.test.ts.legacy`
+    - Remove `backend/test/integration/integration-test-suite.test.ts.legacy`
+    - Remove any other .legacy suffixed files
+    - _Requirements: 5.1_
+  
+  - [ ] 8.2 Update test imports
+    - Update test files to import from new plugin locations
+    - Fix any broken test imports
+    - _Requirements: 5.1_
+
+- [ ] 9. Clean Up Documentation References
+  - [ ] 9.1 Update copilot-instructions.md
+    - Remove references to legacy `ExecutionToolPlugin`, `InformationSourcePlugin`
+    - Update plugin development instructions for new directory structure
+    - _Requirements: 5.1_
+  
+  - [ ] 9.2 Update architecture documentation
+    - Update docs to reflect new plugin directory structure
+    - Remove references to legacy patterns
+    - _Requirements: 5.1_
+
+- [ ] 10. Checkpoint - Legacy removal complete
+  - Verify no legacy interfaces remain in codebase
+  - Verify all tests pass
+  - Verify no broken imports
+  - Verify application starts and functions correctly
+
+### Phase 3: Node Detail Widgets Implementation
+
+- [ ] 11. Node Detail Widgets Implementation
+  - [ ] 11.1 Create BoltPlugin node-detail widgets
     - Add CommandExecutor widget for `node-detail` slot
     - Add TaskRunner widget for `node-detail` slot
     - Add FactsViewer widget for `node-detail` slot
     - Reference existing Bolt node components from 0.x
     - _Requirements: 3.9, 15.5_
   
-  - [ ] 19.2 Create PuppetDBPlugin node-detail widgets
+  - [ ] 11.2 Create PuppetDBPlugin node-detail widgets
     - Add FactsExplorer widget for `node-detail` slot
     - Add ReportsViewer widget for `node-detail` slot
     - Add EventsViewer widget for `node-detail` slot
@@ -364,103 +195,176 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
     - Reference existing PuppetDB node components from 0.x
     - _Requirements: 3.10, 15.5_
   
-  - [ ] 19.3 Create PuppetserverPlugin node-detail widgets
+  - [ ] 11.3 Create PuppetserverPlugin node-detail widgets
     - Add CatalogCompilation widget for `node-detail` slot
     - Add EnvironmentInfo widget for `node-detail` slot
     - Add NodeStatus widget for `node-detail` slot
     - Reference existing Puppetserver node components from 0.x
     - _Requirements: 3.11, 15.5_
   
-  - [ ] 19.4 Create HieraPlugin node-detail widgets
+  - [ ] 11.4 Create HieraPlugin node-detail widgets
     - Add KeyLookup widget for `node-detail` slot
     - Add HierarchyViewer widget for `node-detail` slot
     - Add NodeHieraData widget for `node-detail` slot
     - Reference existing Hiera node components from 0.x
     - _Requirements: 3.12, 15.5_
 
-- [ ] 20. Checkpoint - Node detail widgets complete
-  - Ensure all tests pass, ask the user if questions arise.
+- [ ] 12. Checkpoint - Node detail widgets complete
+  - Ensure all tests pass
   - Verify all plugin widgets render in node detail page
   - Verify widget functionality matches 0.x behavior
 
-- [ ] 21. Legacy Code Removal
-  - [ ] 21.1 Remove legacy interfaces from types.ts
-    - Remove `ExecutionToolPlugin`, `InformationSourcePlugin`, `IntegrationPlugin`
-    - Remove `IntegrationConfig`, `PluginRegistration`
-    - Remove deprecated capability types
-    - _Requirements: 5.1, 5.4, 5.5, 5.6_
-  
-  - [ ] 21.2 Remove legacy IntegrationManager methods
-    - Remove `getExecutionTool()`, `getInformationSource()`
-    - Remove `getAllExecutionTools()`, `getAllInformationSources()`
-    - Update any code that used these methods
-    - _Requirements: 5.2_
-  
-  - [ ] 21.3 Remove legacy route files
-    - Remove unversioned routes: `routes/inventory.ts`, `routes/facts.ts`, `routes/commands.ts`, `routes/tasks.ts`, `routes/puppet.ts`
-    - Remove any other 0.x route files not needed
-    - Update server.ts to only mount v1 routes
-    - _Requirements: 5.3_
-  
-  - [ ] 21.4 Remove legacy frontend code
-    - Remove old HomePage.svelte (replaced by new v1 version)
-    - Remove old NodeDetailPage.svelte (replaced by new v1 version)
-    - Remove legacy API calls and replace with v1 endpoints
-    - _Requirements: 5.7_
-  
-  - [ ] 21.5 Clean up old integrations directory
-    - Remove `backend/src/integrations/` directory after plugins are moved to `plugins/native/`
-    - Keep only shared utilities if any (move to `backend/src/shared/`)
-    - Update all imports throughout codebase
-    - _Requirements: 5.1_
+### Phase 4: Frontend Page Implementation (UI Composition)
 
-- [ ] 22. Checkpoint - Legacy code removal complete
-  - Ensure all tests pass, ask the user if questions arise.
-  - Verify no legacy code remains
-  - Verify application still functions correctly
+- [ ] 13. Frontend Pages with Widget Composition
+  - [ ] 13.1 Create new HomePage with widget slots
+    - Create new `frontend/src/pages/HomePage.svelte` using v1 patterns
+    - Implement `home-summary` widget slot rendering
+    - Fetch widgets from `/api/v1/widgets/slot/home-summary`
+    - Add welcome section and system overview
+    - Reference existing HomePage from 0.x for layout inspiration
+    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+  
+  - [ ] 13.2 Create IntegrationHomePage component
+    - Create `frontend/src/pages/IntegrationHomePage.svelte`
+    - Implement automatic tab generation from capability categories
+    - Display plugin metadata with color theming
+    - Include health status section and CLI reference
+    - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 2.8_
+  
+  - [ ] 13.3 Create new NodeDetailPage with plugin tabs
+    - Create new `frontend/src/pages/NodeDetailPage.svelte` using v1 patterns
+    - Implement automatic tab generation from plugins with node-detail widgets
+    - Add Summary widget aggregating data from all integrations
+    - Add Journal tab for live NodeJournal timeline
+    - Reference existing NodeDetailPage from 0.x for functionality
+    - _Requirements: 3.1, 3.2, 3.3, 3.7, 11.1, 11.2, 11.3, 11.5_
 
-- [ ] 23. Final Integration and Polish
-  - [ ] 23.1 Update routing configuration
+- [ ] 14. Checkpoint - Frontend pages complete
+  - Ensure all tests pass
+  - Verify HomePage renders home widgets
+  - Verify IntegrationHomePage generates tabs correctly
+  - Verify NodeDetailPage shows plugin tabs
+
+### Phase 5: Live Node Journal Implementation
+
+- [ ] 15. Live Node Journal Backend
+  - [ ] 15.1 Define JournalEntry interface
+    - Create `backend/src/services/NodeJournalService.ts`
+    - Define JournalEntry type with: timestamp, source plugin, entry type, title, description, metadata
+    - Entry types: `event`, `action`, `note`, `alert`
+    - _Requirements: 3.1, 3.2_
+  
+  - [ ] 15.2 Implement live journal aggregation
+    - Create method to fetch journal entries from all plugins on-demand
+    - Each plugin provides a `getJournalEntries(nodeId)` capability
+    - Aggregate and sort entries by timestamp
+    - _Requirements: 3.1, 3.4, 3.5_
+  
+  - [ ] 15.3 Create v1 journal routes
+    - Create `/api/v1/nodes/:id/journal` route (GET only - live fetch)
+    - Add query parameter support for filtering (type, plugin, date range)
+    - No POST endpoint needed (journal is read-only from integrations)
+    - _Requirements: 4.8_
+  
+  - [ ] 15.4 Add journal capability to plugins
+    - Add `bolt.journal.entries` capability to BoltPlugin (execution history)
+    - Add `puppetdb.journal.entries` capability to PuppetDBPlugin (reports, events)
+    - Add `puppetserver.journal.entries` capability to PuppetserverPlugin (catalog compilations)
+    - Add `hiera.journal.entries` capability to HieraPlugin (lookups, scans)
+    - _Requirements: 3.4, 3.5_
+
+- [ ] 16. Live Node Journal Frontend
+  - [ ] 16.1 Create NodeJournal timeline component
+    - Create `frontend/src/components/NodeJournal.svelte`
+    - Display journal entries in chronological timeline
+    - Implement filtering by type, plugin, date range
+    - Use plugin colors for entry identification
+    - Show loading state while fetching from integrations
+    - _Requirements: 3.7, 3.8, 13.5_
+  
+  - [ ] 16.2 Integrate journal into NodeDetailPage
+    - Add "Journal" tab to NodeDetailPage
+    - Fetch entries from `/api/v1/nodes/:id/journal` on tab activation
+    - Support real-time refresh
+    - _Requirements: 3.7_
+
+- [ ] 17. Checkpoint - Live Node Journal complete
+  - Ensure all tests pass
+  - Verify journal entries are fetched from integrations
+  - Verify filtering works correctly
+  - Verify timeline displays correctly
+
+### Phase 6: Widget System Enhancement
+
+- [ ] 18. Widget System Enhancement
+  - [ ] 18.1 Add new widget slots to CapabilityRegistry
+    - Add `home-summary` and `node-journal` slots
+    - Update widget slot type definitions
+    - _Requirements: 6.6_
+  
+  - [ ] 18.2 Implement widget validation on registration
+    - Validate requiredCapabilities exist when registering widget
+    - Fail registration if capabilities are missing
+    - _Requirements: 6.2_
+  
+  - [ ] 18.3 Implement widget priority sorting
+    - Ensure widgets are returned sorted by priority (highest first)
+    - _Requirements: 6.3_
+
+- [ ] 19. Checkpoint - Widget system enhancement complete
+  - Ensure all tests pass
+  - Verify new slots are available
+  - Verify widget validation works
+
+### Phase 7: Final Integration and Polish
+
+- [ ] 20. Final Integration
+  - [ ] 20.1 Update routing configuration
     - Configure frontend router for new page structure
     - Add routes for `/integrations/:pluginName`
     - Ensure all navigation works correctly
     - _Requirements: 2.1, 11.6_
   
-  - [ ] 23.2 Add health status indicators throughout UI
+  - [ ] 20.2 Add health status indicators throughout UI
     - Add health indicators to HomeWidgets
     - Add health section to IntegrationHomePage
     - Add error states to plugin tabs on NodeDetailPage
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 14.1, 14.2_
   
-  - [ ] 23.3 Implement color theming system
+  - [ ] 20.3 Implement color theming system
     - Create utility for generating light/dark color variants
     - Apply plugin colors consistently across UI
     - Support dark mode color adjustments
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 13.5_
-  
-  - [ ]* 23.4 Write property test for plugin health state display
-    - **Property 12: Plugin Health State Display**
-    - **Validates: Requirements 9.1, 9.2**
-  
-  - [ ]* 23.5 Write property test for node detail tab generation
-    - **Property 13: Node Detail Tab Generation**
-    - **Validates: Requirements 3.2, 3.3**
-  
-  - [ ]* 23.6 Write property test for capability category label transformation
-    - **Property 14: Capability Category Label Transformation**
-    - **Validates: Requirements 7.4**
 
-- [ ] 24. Final Checkpoint - v1.0.0 complete
-  - Ensure all tests pass, ask the user if questions arise.
+- [ ] 21. Final Checkpoint - v1.0.0 complete
+  - Ensure all tests pass
   - Verify all features work end-to-end
   - Verify no regressions from 0.x functionality
   - Review for any remaining legacy code
 
+### Optional: Property Tests
+
+These property tests can be added for additional validation but are not required for MVP:
+
+- [ ]* Property test: Widget Rendering Correctness (Requirements 1.1, 1.2, 1.3, 1.5)
+- [ ]* Property test: Tab Generation from Capabilities (Requirements 2.2, 2.3, 7.1, 7.2)
+- [ ]* Property test: RBAC Permission Filtering (Requirements 2.6, 6.4, 7.3)
+- [ ]* Property test: Widget Priority Sorting (Requirements 6.3)
+- [ ]* Property test: Journal Entry Filtering (Requirements 3.8)
+- [ ]* Property test: API Versioning Compliance (Requirements 4.1, 4.3)
+- [ ]* Property test: Widget Registration Validation (Requirements 6.2)
+- [ ]* Property test: Plugin Health State Display (Requirements 9.1, 9.2)
+- [ ]* Property test: Node Detail Tab Generation (Requirements 3.2, 3.3)
+- [ ]* Property test: Capability Category Label Transformation (Requirements 7.4)
+
 ## Notes
 
-- Tasks marked with `*` are optional and can be skipped for faster MVP
+- Tasks marked with `*` are optional property tests
 - Each task references specific requirements for traceability
 - Checkpoints ensure incremental validation
-- Property tests validate universal correctness properties
-- Unit tests validate specific examples and edge cases
-- Reference 0.x code for functionality but implement using v1.x patterns
+- **Plugin Directory**: All plugin code must reside in `plugins/native/{pluginName}/`
+- **Legacy Removal**: Priority is to remove all 0.x traces before adding new features
+- **Live Journal**: No database storage - entries fetched on-demand from integrations
+- **UI Composition**: Pages dynamically render widgets based on plugin registrations

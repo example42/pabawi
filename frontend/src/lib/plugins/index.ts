@@ -43,6 +43,19 @@ export { default as WidgetSlot } from './WidgetSlot.svelte';
 // Plugin loader
 export { PluginLoader, getPluginLoader, resetPluginLoader } from './PluginLoader.js';
 
+// Widget registry
+export {
+  getWidgetRegistry,
+  resetWidgetRegistry,
+  useSlotWidgets,
+  usePluginWidgets,
+  useWidget,
+  type WidgetFilterOptions,
+  type WidgetSortOptions,
+  type WidgetRegistryEvent,
+  type WidgetRegistryEventHandler,
+} from './WidgetRegistry.svelte.js';
+
 // Types
 export type {
   WidgetSlot as WidgetSlotType,

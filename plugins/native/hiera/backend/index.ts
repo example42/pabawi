@@ -3,119 +3,157 @@
  *
  * Puppet Hiera integration for hierarchical data lookup, key resolution, and code analysis.
  *
- * IMPORTANT: This plugin is SELF-CONTAINED. Dependencies are injected via
- * the createPlugin factory function. NO relative path imports to the main
- * codebase are allowed.
+ * This plugin is SELF-CONTAINED. All code resides within the plugin directory.
+ * The createPlugin() factory creates all required dependencies internally.
  *
  * @module plugins/native/hiera/backend
  * @version 1.0.0
  */
 
 import { HieraPlugin } from "./HieraPlugin.js";
+import { HieraService } from "./services/HieraService.js";
 
+// Re-export plugin class and types
 export {
   HieraPlugin,
   HieraPluginConfigSchema,
   type HieraPluginConfig,
 } from "./HieraPlugin.js";
 
-// =============================================================================
-// Service Interfaces (for dependency injection)
-// These match the interfaces defined in HieraPlugin.ts
-// =============================================================================
+// Re-export service
+export { HieraService } from "./services/HieraService.js";
 
-/** HieraService interface - what we need from the injected service */
-interface HieraServiceInterface {
-  isInitialized(): boolean;
-  getAllKeys(): Promise<unknown>;
-  searchKeys(query: string): Promise<unknown[]>;
-  resolveKey(node: string, key: string, environment?: string): Promise<unknown>;
-  getNodeHieraData(node: string): Promise<unknown>;
-  getKeyValuesAcrossNodes(key: string): Promise<unknown[]>;
-  getHieraConfig(): unknown;
-  invalidateCache(): void;
-  shutdown(): void;
-}
-
-/** CodeAnalyzer interface */
-interface CodeAnalyzerInterface {
-  analyze(): Promise<unknown>;
-  clearCache(): void;
-}
-
-/** LoggerService interface */
-interface LoggerServiceInterface {
-  info(message: string, context?: Record<string, unknown>): void;
-  warn(message: string, context?: Record<string, unknown>): void;
-  debug(message: string, context?: Record<string, unknown>): void;
-  error(message: string, context?: Record<string, unknown>): void;
-}
-
-/** PerformanceMonitorService interface */
-interface PerformanceMonitorServiceInterface {
-  startTimer(name: string): (metadata?: Record<string, unknown>) => void;
-}
-
-/** Dependencies required by HieraPlugin */
-export interface HieraPluginDependencies {
-  hieraService?: HieraServiceInterface;
-  codeAnalyzer?: CodeAnalyzerInterface;
-  logger: LoggerServiceInterface;
-  performanceMonitor: PerformanceMonitorServiceInterface;
-}
+// Re-export types
+export {
+  type HieraConfig,
+  type HieraDefaults,
+  type HierarchyLevel,
+  type LookupOptions,
+  type LookupMethod,
+  type HieraKey,
+  type HieraKeyLocation,
+  type HieraKeyIndex,
+  type HieraFileInfo,
+  type HieraResolution,
+  type ResolveOptions,
+  type MergeOptions,
+  type HierarchyFileInfo,
+  type NodeHieraData,
+  type KeyNodeValues,
+  type KeyUsageMap,
+  type Facts,
+  type FactResult,
+  type LocalFactFile,
+  type CodeAnalysisResult,
+  type UnusedCodeReport,
+  type UnusedItem,
+  type LintIssue,
+  type LintSeverity,
+  type ModuleUpdate,
+  type UsageStatistics,
+  type ClassUsage,
+  type ResourceUsage,
+  type HealthStatus,
+  type HieraHealthStatus,
+  type HieraErrorCode,
+  type HieraError,
+  HIERA_ERROR_CODES,
+  HieraServiceError,
+  HieraConfigurationError,
+  HieraParseError,
+  HieraResolutionError,
+} from "./types.js";
 
 // =============================================================================
 // Plugin Factory
 // =============================================================================
 
 /**
- * Factory function for PluginLoader
- *
- * Creates a HieraPlugin instance with injected dependencies.
- * This is called by PluginLoader when loading plugins dynamically.
- *
- * @param dependencies - Services injected by the PluginLoader
- * @returns Configured HieraPlugin instance
+ * Simple logger interface for the plugin
  */
-export function createPlugin(dependencies: HieraPluginDependencies): HieraPlugin {
-  const { hieraService, codeAnalyzer, logger, performanceMonitor } = dependencies;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plugin = new HieraPlugin(logger as any, performanceMonitor as any);
-
-  if (hieraService) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    plugin.setHieraService(hieraService as any);
-  }
-
-  if (codeAnalyzer) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    plugin.setCodeAnalyzer(codeAnalyzer as any);
-  }
-
-  return plugin;
+interface LoggerInterface {
+  info(message: string, context?: Record<string, unknown>): void;
+  warn(message: string, context?: Record<string, unknown>): void;
+  debug(message: string, context?: Record<string, unknown>): void;
+  error(message: string, context?: Record<string, unknown>, error?: Error): void;
 }
 
 /**
- * Alternative factory with explicit parameters (for backward compatibility)
+ * Simple performance monitor interface
  */
-export function createHieraPlugin(
-  logger: LoggerServiceInterface,
-  performanceMonitor: PerformanceMonitorServiceInterface,
-  hieraService?: HieraServiceInterface,
-  codeAnalyzer?: CodeAnalyzerInterface,
-): HieraPlugin {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plugin = new HieraPlugin(logger as any, performanceMonitor as any);
+interface PerformanceMonitorInterface {
+  startTimer(name: string): (metadata?: Record<string, unknown>) => void;
+}
 
-  if (hieraService) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    plugin.setHieraService(hieraService as any);
-  }
+/**
+ * Create a simple console logger
+ */
+function createSimpleLogger(): LoggerInterface {
+  return {
+    info: (message: string, context?: Record<string, unknown>) => {
+      console.log(`[INFO] ${message}`, context ?? "");
+    },
+    warn: (message: string, context?: Record<string, unknown>) => {
+      console.warn(`[WARN] ${message}`, context ?? "");
+    },
+    debug: (message: string, context?: Record<string, unknown>) => {
+      if (process.env.DEBUG) {
+        console.debug(`[DEBUG] ${message}`, context ?? "");
+      }
+    },
+    error: (message: string, context?: Record<string, unknown>, error?: Error) => {
+      console.error(`[ERROR] ${message}`, context ?? "", error ?? "");
+    },
+  };
+}
 
-  if (codeAnalyzer) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    plugin.setCodeAnalyzer(codeAnalyzer as any);
+/**
+ * Create a simple performance monitor
+ */
+function createSimplePerformanceMonitor(): PerformanceMonitorInterface {
+  return {
+    startTimer: (name: string) => {
+      const start = Date.now();
+      return (metadata?: Record<string, unknown>) => {
+        const duration = Date.now() - start;
+        if (process.env.DEBUG) {
+          console.debug(`[PERF] ${name}: ${duration}ms`, metadata ?? "");
+        }
+      };
+    },
+  };
+}
+
+/**
+ * Factory function for PluginLoader
+ *
+ * Creates a HieraPlugin instance with internally-created dependencies.
+ * This is called by PluginLoader when loading plugins dynamically.
+ *
+ * @returns Configured HieraPlugin instance
+ */
+export function createPlugin(): HieraPlugin {
+  // Get configuration from environment or use defaults
+  const controlRepoPath = process.env.BOLT_PROJECT_PATH ?? process.cwd();
+  const hieraConfigPath = process.env.HIERA_CONFIG_PATH ?? "hiera.yaml";
+
+  // Create internal dependencies
+  const logger = createSimpleLogger();
+  const performanceMonitor = createSimplePerformanceMonitor();
+
+  // Create the plugin
+  const plugin = new HieraPlugin(logger, performanceMonitor);
+
+  // Try to create and set HieraService if configuration is available
+  try {
+    const hieraService = new HieraService(hieraConfigPath, controlRepoPath, logger);
+    plugin.setHieraService(hieraService);
+  } catch (error) {
+    logger.warn("Could not initialize HieraService", {
+      component: "HieraPlugin",
+      operation: "createPlugin",
+      metadata: { error: String(error) },
+    });
   }
 
   return plugin;

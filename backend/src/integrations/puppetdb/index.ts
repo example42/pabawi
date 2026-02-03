@@ -1,7 +1,8 @@
 /**
- * PuppetDB Integration Plugin
+ * PuppetDB Integration - Service Exports
  *
- * PuppetDB integration for infrastructure data, facts, reports, and catalogs.
+ * This module exports the PuppetDB services and types.
+ * The actual plugin is loaded from plugins/native/puppetdb/backend/.
  *
  * @module integrations/puppetdb
  * @version 1.0.0
@@ -11,7 +12,6 @@ import { PuppetDBPlugin } from "./PuppetDBPlugin.js";
 import { PuppetDBService } from "./PuppetDBService.js";
 import { LoggerService } from "../../services/LoggerService.js";
 import { PerformanceMonitorService } from "../../services/PerformanceMonitorService.js";
-import { ConfigService } from "../../config/ConfigService.js";
 
 // Re-export plugin class and config
 export {
@@ -55,23 +55,6 @@ export {
   createPuppetDBRetryConfig,
   type RetryConfig,
 } from "./RetryLogic.js";
-
-/**
- * Factory function for PluginLoader auto-discovery
- *
- * Creates a PuppetDBPlugin instance with default dependencies.
- * This is called by PluginLoader when auto-discovering plugins.
- */
-export function createPlugin(): PuppetDBPlugin {
-  const configService = new ConfigService();
-  const config = configService.getConfig();
-
-  const logger = new LoggerService(config.logLevel);
-  const performanceMonitor = new PerformanceMonitorService();
-  const puppetDBService = new PuppetDBService(logger, performanceMonitor);
-
-  return new PuppetDBPlugin(puppetDBService, logger, performanceMonitor);
-}
 
 /**
  * Legacy factory function (for manual instantiation with custom dependencies)

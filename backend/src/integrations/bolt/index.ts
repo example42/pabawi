@@ -1,45 +1,24 @@
 /**
- * Bolt Integration Plugin
+ * Bolt Integration - Service Exports
  *
- * Puppet Bolt integration for remote command and task execution.
+ * This module exports the BoltPlugin class and related types.
+ *
+ * NOTE: The canonical location for Bolt plugin code is now plugins/native/bolt/backend/.
+ * This file is maintained for backward compatibility during the migration period.
  *
  * @module integrations/bolt
  * @version 1.0.0
- *
- * NOTE: This file re-exports from the new plugin location at plugins/native/bolt/backend/
- * for backward compatibility. New code should import directly from the plugin location.
+ * @deprecated Use plugins/native/bolt/backend/ for new code
  */
 
-// Re-export everything from the new plugin location
+import { BoltPlugin } from "./BoltPlugin.js";
+
+// Re-export plugin class and types (for backward compatibility)
 export {
   BoltPlugin,
   BoltPluginConfigSchema,
   type BoltPluginConfig,
   createBoltPlugin,
 } from "./BoltPlugin.js";
-
-// Re-export factory functions
-import { BoltPlugin } from "./BoltPlugin.js";
-import { BoltService } from "../../bolt/BoltService.js";
-import { LoggerService } from "../../services/LoggerService.js";
-import { PerformanceMonitorService } from "../../services/PerformanceMonitorService.js";
-import { ConfigService } from "../../config/ConfigService.js";
-
-/**
- * Factory function for PluginLoader auto-discovery
- *
- * Creates a BoltPlugin instance with default dependencies.
- * This is called by PluginLoader when auto-discovering plugins.
- */
-export function createPlugin(): BoltPlugin {
-  const configService = new ConfigService();
-  const config = configService.getConfig();
-
-  const logger = new LoggerService(config.logLevel);
-  const performanceMonitor = new PerformanceMonitorService();
-  const boltService = new BoltService(config.boltProjectPath);
-
-  return new BoltPlugin(boltService, logger, performanceMonitor);
-}
 
 export default BoltPlugin;

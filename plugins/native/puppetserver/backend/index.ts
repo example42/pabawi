@@ -3,184 +3,147 @@
  *
  * Puppetserver integration for catalog compilation, environments, and facts.
  *
- * IMPORTANT: This plugin is SELF-CONTAINED. Dependencies are injected via
- * the createPlugin factory function. NO relative path imports to the main
- * codebase are allowed.
+ * This plugin is SELF-CONTAINED. All code resides within the plugin directory.
+ * The createPlugin() factory creates all required dependencies internally.
  *
  * @module plugins/native/puppetserver/backend
  * @version 1.0.0
  */
 
 import { PuppetserverPlugin } from "./PuppetserverPlugin.js";
+import { PuppetserverService } from "./services/PuppetserverService.js";
 
+// Re-export plugin class and types
 export {
   PuppetserverPlugin,
   PuppetserverPluginConfigSchema,
   type PuppetserverPluginConfig,
 } from "./PuppetserverPlugin.js";
 
-// =============================================================================
-// Service Interfaces (for dependency injection)
-// These match the interfaces defined in PuppetserverPlugin.ts
-// =============================================================================
+// Re-export service
+export { PuppetserverService } from "./services/PuppetserverService.js";
 
-/** Environment interface */
-interface Environment {
-  name: string;
-  last_deployed?: string;
-  status?: "deployed" | "deploying" | "failed";
-  settings?: Record<string, unknown>;
-}
-
-/** Catalog interface */
-interface Catalog {
-  certname: string;
-  version: string;
-  environment: string;
-  transaction_uuid?: string;
-  producer_timestamp?: string;
-  resources: CatalogResource[];
-  edges?: CatalogEdge[];
-}
-
-/** Catalog resource interface */
-interface CatalogResource {
-  type: string;
-  title: string;
-  tags: string[];
-  exported: boolean;
-  file?: string;
-  line?: number;
-  parameters: Record<string, unknown>;
-}
-
-/** Catalog edge interface */
-interface CatalogEdge {
-  source: { type: string; title: string };
-  target: { type: string; title: string };
-  relationship: string;
-}
-
-/** Catalog diff interface */
-interface CatalogDiff {
-  environment1: string;
-  environment2: string;
-  added: CatalogResource[];
-  removed: CatalogResource[];
-  modified: ResourceDiff[];
-  unchanged: CatalogResource[];
-}
-
-/** Resource diff interface */
-interface ResourceDiff {
-  type: string;
-  title: string;
-  parameterChanges: ParameterDiff[];
-}
-
-/** Parameter diff interface */
-interface ParameterDiff {
-  parameter: string;
-  oldValue: unknown;
-  newValue: unknown;
-}
-
-/** Deployment result interface */
-interface DeploymentResult {
-  environment: string;
-  status: "success" | "failed";
-  message?: string;
-  timestamp: string;
-}
-
-/** Facts interface */
-interface Facts {
-  nodeId: string;
-  gatheredAt: string;
-  source: string;
-  facts: Record<string, unknown>;
-}
-
-/** Health status interface */
-interface HealthStatus {
-  healthy: boolean;
-  message?: string;
-  lastCheck: string;
-  details?: Record<string, unknown>;
-  degraded?: boolean;
-  workingCapabilities?: string[];
-  failingCapabilities?: string[];
-}
-
-/** PuppetserverService interface - what we need from the injected service */
-interface PuppetserverServiceInterface {
-  initialize(config: unknown): Promise<void>;
-  healthCheck(): Promise<HealthStatus>;
-  compileCatalog(certname: string, environment: string): Promise<Catalog>;
-  getNodeCatalog(certname: string): Promise<Catalog | null>;
-  compareCatalogs(certname: string, env1: string, env2: string): Promise<CatalogDiff>;
-  listEnvironments(): Promise<Environment[]>;
-  getEnvironment(name: string): Promise<Environment | null>;
-  deployEnvironment(name: string): Promise<DeploymentResult>;
-  flushEnvironmentCache(name?: string): Promise<DeploymentResult>;
-  getNodeFacts(nodeId: string): Promise<Facts>;
-  getSimpleStatus(): Promise<unknown>;
-  getServicesStatus(): Promise<unknown>;
-  getMetrics(mbean?: string): Promise<unknown>;
-  getAdminApiInfo(): Promise<unknown>;
-  clearCache(): void;
-}
-
-/** LoggerService interface */
-interface LoggerServiceInterface {
-  info(message: string, context?: Record<string, unknown>): void;
-  warn(message: string, context?: Record<string, unknown>): void;
-  debug(message: string, context?: Record<string, unknown>): void;
-  error(message: string, context?: Record<string, unknown>, error?: Error): void;
-}
-
-/** PerformanceMonitorService interface */
-interface PerformanceMonitorServiceInterface {
-  startTimer(name: string): (metadata?: Record<string, unknown>) => void;
-}
-
-/** Dependencies required by PuppetserverPlugin */
-export interface PuppetserverPluginDependencies {
-  puppetserverService: PuppetserverServiceInterface;
-  logger: LoggerServiceInterface;
-  performanceMonitor: PerformanceMonitorServiceInterface;
-}
+// Re-export types
+export {
+  type CertificateStatus,
+  type Certificate,
+  type NodeActivityCategory,
+  type NodeStatus,
+  type EnvironmentSettings,
+  type Environment,
+  type DeploymentResult,
+  type CatalogResource,
+  type Catalog,
+  type CatalogEdge,
+  type ParameterDiff,
+  type ResourceDiff,
+  type CatalogDiff,
+  type BulkOperationResult,
+  type PuppetserverClientConfig,
+  type PuppetserverCacheConfig,
+  type PuppetserverSSLConfig,
+  type PuppetserverConfig,
+  type Facts,
+  type HealthStatus,
+  PuppetserverError,
+  PuppetserverConnectionError,
+  PuppetserverAuthenticationError,
+  CatalogCompilationError,
+  EnvironmentDeploymentError,
+  PuppetserverTimeoutError,
+  PuppetserverConfigurationError,
+  PuppetserverValidationError,
+} from "./types.js";
 
 // =============================================================================
 // Plugin Factory
 // =============================================================================
 
 /**
- * Factory function for PluginLoader
- *
- * Creates a PuppetserverPlugin instance with injected dependencies.
- * This is called by PluginLoader when loading plugins dynamically.
- *
- * @param dependencies - Services injected by the PluginLoader
- * @returns Configured PuppetserverPlugin instance
+ * Simple logger interface for the plugin
  */
-export function createPlugin(dependencies: PuppetserverPluginDependencies): PuppetserverPlugin {
-  const { puppetserverService, logger, performanceMonitor } = dependencies;
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new PuppetserverPlugin(puppetserverService as any, logger as any, performanceMonitor as any);
+interface LoggerInterface {
+  info(message: string, context?: Record<string, unknown>): void;
+  warn(message: string, context?: Record<string, unknown>): void;
+  debug(message: string, context?: Record<string, unknown>): void;
+  error(message: string, context?: Record<string, unknown>, error?: Error): void;
 }
 
 /**
- * Alternative factory with explicit parameters (for backward compatibility)
+ * Simple performance monitor interface
  */
-export function createPuppetserverPlugin(
-  puppetserverService: PuppetserverServiceInterface,
-  logger: LoggerServiceInterface,
-  performanceMonitor: PerformanceMonitorServiceInterface,
-): PuppetserverPlugin {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new PuppetserverPlugin(puppetserverService as any, logger as any, performanceMonitor as any);
+interface PerformanceMonitorInterface {
+  startTimer(name: string): (metadata?: Record<string, unknown>) => void;
+}
+
+/**
+ * Create a simple console logger
+ */
+function createSimpleLogger(): LoggerInterface {
+  return {
+    info: (message: string, context?: Record<string, unknown>) => {
+      console.log(`[INFO] ${message}`, context ?? "");
+    },
+    warn: (message: string, context?: Record<string, unknown>) => {
+      console.warn(`[WARN] ${message}`, context ?? "");
+    },
+    debug: (message: string, context?: Record<string, unknown>) => {
+      if (process.env.DEBUG) {
+        console.debug(`[DEBUG] ${message}`, context ?? "");
+      }
+    },
+    error: (message: string, context?: Record<string, unknown>, error?: Error) => {
+      console.error(`[ERROR] ${message}`, context ?? "", error ?? "");
+    },
+  };
+}
+
+/**
+ * Create a simple performance monitor
+ */
+function createSimplePerformanceMonitor(): PerformanceMonitorInterface {
+  return {
+    startTimer: (name: string) => {
+      const start = Date.now();
+      return (metadata?: Record<string, unknown>) => {
+        const duration = Date.now() - start;
+        if (process.env.DEBUG) {
+          console.debug(`[PERF] ${name}: ${duration}ms`, metadata ?? "");
+        }
+      };
+    },
+  };
+}
+
+/**
+ * Factory function for PluginLoader
+ *
+ * Creates a PuppetserverPlugin instance with internally-created dependencies.
+ * This is called by PluginLoader when loading plugins dynamically.
+ *
+ * @returns Configured PuppetserverPlugin instance
+ */
+export function createPlugin(): PuppetserverPlugin {
+  // Get configuration from environment or use defaults
+  const serverUrl = process.env.PUPPETSERVER_URL ?? "https://localhost:8140";
+  const certPath = process.env.PUPPETSERVER_CERT_PATH;
+  const keyPath = process.env.PUPPETSERVER_KEY_PATH;
+  const caPath = process.env.PUPPETSERVER_CA_PATH;
+  const timeout = parseInt(process.env.PUPPETSERVER_TIMEOUT ?? "30000", 10);
+
+  // Create internal dependencies
+  const logger = createSimpleLogger();
+  const performanceMonitor = createSimplePerformanceMonitor();
+  const puppetserverService = new PuppetserverService(
+    serverUrl,
+    certPath,
+    keyPath,
+    caPath,
+    timeout,
+    logger,
+  );
+
+  return new PuppetserverPlugin(puppetserverService, logger, performanceMonitor);
 }
 
 export default PuppetserverPlugin;

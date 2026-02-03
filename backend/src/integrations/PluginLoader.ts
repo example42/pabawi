@@ -120,25 +120,6 @@ const DEFAULT_EXTERNAL_PATHS = [
 ];
 
 /**
- * Legacy plugin paths - direct paths to individual plugin directories
- *
- * TEMPORARY: These paths point to the working plugin implementations in
- * backend/src/integrations/. The plugins in plugins/native/ are manifest-only
- * stubs that require dependency injection which isn't fully implemented yet.
- *
- * This will be removed in task 21.5 when the full plugin migration is complete
- * and plugins are self-contained with their own service instantiation.
- *
- * @see .kiro/specs/v1-plugin-migration-finalization/tasks.md - Task 21.5
- */
-const LEGACY_PLUGIN_PATHS = [
-  path.join(__dirname, "bolt"),
-  path.join(__dirname, "puppetdb"),
-  path.join(__dirname, "puppetserver"),
-  path.join(__dirname, "hiera"),
-];
-
-/**
  * Plugin factory function type
  * Plugins export a createPlugin function that returns the plugin instance
  */
@@ -209,7 +190,7 @@ export class PluginLoader {
    * Discover all available plugins without loading them
    *
    * Scans native plugins (plugins/native/*), external plugins (plugins/external/*),
-   * legacy plugins (backend/src/integrations/*), and any additional local paths.
+   * and any additional local paths.
    * Uses plugin.json manifests for discovery when available.
    *
    * @returns Array of discovered plugin information
@@ -252,24 +233,6 @@ export class PluginLoader {
           component: "PluginLoader",
           operation: "discover",
           metadata: { path: basePath, error: String(error) },
-        });
-      }
-    }
-
-    // TEMPORARY: Discover legacy plugins (backend/src/integrations/*)
-    // These are the working implementations until task 21.5 completes the migration
-    for (const pluginPath of LEGACY_PLUGIN_PATHS) {
-      try {
-        const discovery = await this.discoverPlugin(pluginPath, "native");
-        if (discovery && !discoveredNames.has(discovery.name)) {
-          results.push(discovery);
-          discoveredNames.add(discovery.name);
-        }
-      } catch (error) {
-        this.logger.debug(`Failed to discover legacy plugin at ${pluginPath}`, {
-          component: "PluginLoader",
-          operation: "discover",
-          metadata: { path: pluginPath, error: String(error) },
         });
       }
     }

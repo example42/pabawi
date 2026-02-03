@@ -1,10 +1,13 @@
 /**
- * Puppetserver Integration Plugin
+ * Puppetserver Integration - Service Exports
  *
- * Puppetserver integration for catalog compilation, environments, and facts.
+ * @deprecated This module is deprecated. Import from 'plugins/native/puppetserver/backend' instead.
+ * This file is kept for backward compatibility only.
  *
- * Note: Certificate management has been removed in v0.4.
- * Node inventory should come from PuppetDB instead.
+ * The plugin code has been migrated to:
+ * - plugins/native/puppetserver/backend/PuppetserverPlugin.ts
+ * - plugins/native/puppetserver/backend/services/PuppetserverService.ts
+ * - plugins/native/puppetserver/backend/types.ts
  *
  * @module integrations/puppetserver
  * @version 1.0.0
@@ -14,7 +17,6 @@ import { PuppetserverPlugin } from "./PuppetserverPlugin.js";
 import { PuppetserverService } from "./PuppetserverService.js";
 import { LoggerService } from "../../services/LoggerService.js";
 import { PerformanceMonitorService } from "../../services/PerformanceMonitorService.js";
-import { ConfigService } from "../../config/ConfigService.js";
 
 // Re-export plugin class and config
 export {
@@ -59,23 +61,6 @@ export type {
   PuppetserverSSLConfig,
   PuppetserverConfig,
 } from "./types.js";
-
-/**
- * Factory function for PluginLoader auto-discovery
- *
- * Creates a PuppetserverPlugin instance with default dependencies.
- * This is called by PluginLoader when auto-discovering plugins.
- */
-export function createPlugin(): PuppetserverPlugin {
-  const configService = new ConfigService();
-  const config = configService.getConfig();
-
-  const logger = new LoggerService(config.logLevel);
-  const performanceMonitor = new PerformanceMonitorService();
-  const puppetserverService = new PuppetserverService(logger, performanceMonitor);
-
-  return new PuppetserverPlugin(puppetserverService, logger, performanceMonitor);
-}
 
 /**
  * Legacy factory function (for manual instantiation with custom dependencies)

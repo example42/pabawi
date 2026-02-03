@@ -1,7 +1,13 @@
 /**
- * Hiera Integration Plugin
+ * Hiera Integration - Service Exports
  *
- * Puppet Hiera integration for hierarchical data lookup, key resolution, and code analysis.
+ * @deprecated This module is deprecated. Import from 'plugins/native/hiera/backend' instead.
+ * This file is kept for backward compatibility only.
+ *
+ * The plugin code has been migrated to:
+ * - plugins/native/hiera/backend/HieraPlugin.ts
+ * - plugins/native/hiera/backend/services/HieraService.ts
+ * - plugins/native/hiera/backend/types.ts
  *
  * @module integrations/hiera
  * @version 1.0.0
@@ -12,7 +18,6 @@ import { HieraService } from "./HieraService.js";
 import { CodeAnalyzer } from "./CodeAnalyzer.js";
 import { LoggerService } from "../../services/LoggerService.js";
 import { PerformanceMonitorService } from "../../services/PerformanceMonitorService.js";
-import { ConfigService } from "../../config/ConfigService.js";
 import type { IntegrationManager } from "../IntegrationManager.js";
 
 // Re-export v1.0 plugin class and config
@@ -87,25 +92,6 @@ export type {
   HieraPluginConfig as HieraPluginConfigType,
   HieraHealthStatus,
 } from "./types.js";
-
-/**
- * Factory function for PluginLoader auto-discovery
- *
- * Creates a HieraPluginV1 instance with default dependencies.
- * This is called by PluginLoader when auto-discovering plugins.
- *
- * Note: The returned plugin requires setIntegrationManager() and setHieraService()
- * to be called before initialization for full functionality.
- */
-export function createPlugin(): HieraPluginV1 {
-  const configService = new ConfigService();
-  const config = configService.getConfig();
-
-  const logger = new LoggerService(config.logLevel);
-  const performanceMonitor = new PerformanceMonitorService();
-
-  return new HieraPluginV1(logger, performanceMonitor);
-}
 
 /**
  * Factory function with full dependency injection
