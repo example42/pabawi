@@ -220,9 +220,10 @@ export class IntegrationManager {
     const loadedPlugin: LoadedPlugin = {
       instance: plugin,
       discovery: {
-        path: "builtin",
-        source: "builtin",
+        path: "direct-registration",
+        source: "native",
         name: pluginName,
+        hasManifest: false,
         hasPackageJson: false,
         entryPoint: "direct-registration",
       },

@@ -12,6 +12,9 @@ export default defineConfig({
       // Convenience aliases for internal use
       '$lib': path.resolve(__dirname, 'src/lib'),
       '$components': path.resolve(__dirname, 'src/components'),
+      // Plugin frontend aliases - allows importing plugin widgets
+      '@plugins/native': path.resolve(__dirname, '..', 'plugins', 'native'),
+      '@plugins/external': path.resolve(__dirname, '..', 'plugins', 'external'),
     }
   },
   server: {
@@ -26,8 +29,25 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
-    chunkSizeWarningLimit: 1000
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      // Include plugin frontend directories in the build
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+      },
+    }
   },
   // Set public directory to serve static assets
-  publicDir: 'public'
+  publicDir: 'public',
+  // Optimize dependencies - include plugin frontend code
+  optimizeDeps: {
+    include: [],
+    // Allow scanning plugin directories for dependencies
+    entries: [
+      'src/**/*.svelte',
+      'src/**/*.ts',
+      '../plugins/native/*/frontend/**/*.svelte',
+      '../plugins/native/*/frontend/**/*.ts',
+    ]
+  }
 });

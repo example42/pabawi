@@ -51,14 +51,14 @@ The implementation uses TypeScript for backend and Svelte with TailwindCSS for f
     - Verify HieraPlugin still initializes correctly
     - _Requirements: 1.4, 1.8, 15.4_
   
-  - [ ] 1.6 Update PluginLoader for new directory structure
+  - [x] 1.6 Update PluginLoader for new directory structure
     - Modify PluginLoader to scan `plugins/native/` and `plugins/external/`
     - Add plugin manifest loading and validation
     - Update plugin discovery to use manifest files
     - Configure build system to include plugin frontend code
     - _Requirements: 1.2, 1.7_
 
-- [ ] 2. Checkpoint - Plugin restructuring complete
+- [x] 2. Checkpoint - Plugin restructuring complete
   - Ensure all tests pass, ask the user if questions arise.
   - Verify all 4 plugins load from new locations
   - Verify existing functionality still works

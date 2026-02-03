@@ -103,10 +103,16 @@ interface MenuResponse {
 /**
  * Integration type metadata for UI display
  */
-const INTEGRATION_TYPE_METADATA: Record<
+/**
+ * Integration type metadata for UI display
+ *
+ * Note: This is a partial mapping - only types that are currently used by plugins
+ * are included. Unknown types will get a default fallback in the menu generation.
+ */
+const INTEGRATION_TYPE_METADATA: Partial<Record<
   IntegrationType,
   { label: string; description: string; icon: string; priority: number }
-> = {
+>> = {
   RemoteExecution: {
     label: "Remote Execution",
     description: "Command and task execution on infrastructure",
@@ -131,7 +137,7 @@ const INTEGRATION_TYPE_METADATA: Record<
     icon: "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2",
     priority: 70,
   },
-  InstallSoftware: {
+  SoftwareInstall: {
     label: "Software Installation",
     description: "Package and software management",
     icon: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12",
@@ -161,9 +167,9 @@ const INTEGRATION_TYPE_METADATA: Record<
     icon: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z",
     priority: 20,
   },
-  ReportingAnalytics: {
-    label: "Reporting & Analytics",
-    description: "Data analysis and reporting",
+  Logging: {
+    label: "Logging & Analytics",
+    description: "Data analysis and logging",
     icon: "M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
     priority: 15,
   },
@@ -178,6 +184,24 @@ const INTEGRATION_TYPE_METADATA: Record<
     description: "Backup and disaster recovery",
     icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4",
     priority: 5,
+  },
+  Event: {
+    label: "Events",
+    description: "System events and alerts",
+    icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9",
+    priority: 75,
+  },
+  Deployment: {
+    label: "Deployment",
+    description: "Application deployment automation",
+    icon: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10",
+    priority: 55,
+  },
+  Schedule: {
+    label: "Scheduling",
+    description: "Scheduled operations and jobs",
+    icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+    priority: 35,
   },
 };
 
