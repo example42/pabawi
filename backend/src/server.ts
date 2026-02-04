@@ -392,11 +392,9 @@ async function startServer(): Promise<Express> {
       createIntegrationsRouter(
         integrationManager,
         logger,
-        undefined, // PuppetDBService - will be accessed via CapabilityRegistry
-        undefined, // PuppetserverService - will be accessed via CapabilityRegistry
       ),
     );
-    // NOTE: Hiera routes removed - functionality available via /api/v1/capabilities
+    // NOTE: Plugin-specific routes removed - functionality available via /api/v1/capabilities
     app.use(
       "/api/debug",
       createDebugRouter(),

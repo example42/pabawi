@@ -13,6 +13,7 @@ import type {
   PluginCapability,
   PluginWidget,
   PluginCLICommand,
+  PluginRoute,
   HealthStatus,
   IntegrationType,
 } from "./types";
@@ -64,6 +65,11 @@ export abstract class BasePlugin implements BasePluginInterface {
    * Optional CLI commands
    */
   cliCommands?: PluginCLICommand[];
+
+  /**
+   * Optional custom routes for plugin-specific endpoints
+   */
+  routes?: PluginRoute[];
 
   /**
    * Optional configuration schema

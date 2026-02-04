@@ -339,6 +339,33 @@ export interface PluginColors {
 }
 
 /**
+ * Plugin route handler function
+ * Handles HTTP requests for plugin-specific routes
+ */
+export type PluginRouteHandler = (
+  req: Record<string, unknown>,
+  res: Record<string, unknown>,
+  next: (error?: unknown) => void
+) => void | Promise<void>;
+
+/**
+ * Plugin route definition
+ * Defines a custom route that a plugin wants to register
+ */
+export interface PluginRoute {
+  /** HTTP method (GET, POST, PUT, DELETE, etc.) */
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  /** Route path relative to /api/v1/plugins/:pluginName/ (e.g., 'custom-action', 'data/:id') */
+  path: string;
+  /** Handler function for this route */
+  handler: PluginRouteHandler;
+  /** Description of what this route does */
+  description?: string;
+  /** Required permissions to access this route */
+  requiredPermissions?: string[];
+}
+
+/**
  * v1.0.0 Base Plugin Interface
  *
  * All plugins must implement this interface. It provides:
@@ -346,6 +373,7 @@ export interface PluginColors {
  * - Capabilities for functionality
  * - Optional widgets for frontend UI
  * - Optional CLI commands
+ * - Optional custom routes for plugin-specific endpoints
  * - Lifecycle methods (initialize, healthCheck)
  *
  * @example
@@ -371,6 +399,10 @@ export interface PluginColors {
  *   cliCommands = [
  *     { name: 'bolt', actions: [...] }
  *   ];
+ *
+ *   routes = [
+ *     { method: 'GET', path: 'custom-data', handler: async (req, res) => { ... } }
+ *   ];
  * }
  * ```
  */
@@ -386,6 +418,9 @@ export interface BasePluginInterface {
 
   /** Optional CLI commands */
   cliCommands?: PluginCLICommand[];
+
+  /** Optional custom routes for plugin-specific endpoints */
+  routes?: PluginRoute[];
 
   /** Optional Zod schema for plugin configuration validation */
   configSchema?: ZodSchema;

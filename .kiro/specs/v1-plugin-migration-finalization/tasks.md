@@ -95,12 +95,12 @@ All plugin discovery happens via auto-loading from `plugins/native/` directory.
     - _Goal: widgets/index.ts is plugin-agnostic_
 
 - [ ] 3. Remove Plugin-Specific Route Files
-  - [ ] 3.1 Remove hardcoded route files
+  - [x] 3.1 Remove hardcoded route files
     - Delete any route files that are plugin-specific (e.g., bolt.ts, puppetdb.ts, puppetserver.ts, hiera.ts)
     - Keep only generic route files (integrations.ts, widgets.ts, etc.)
     - _Goal: No plugin-specific route files exist_
   
-  - [ ] 3.2 Create generic plugin routes
+  - [x] 3.2 Create generic plugin routes
     - Create `/api/v1/plugins/:pluginName/*` route pattern
     - Route requests to plugins dynamically based on pluginName
     - Plugins register their own route handlers
