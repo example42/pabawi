@@ -419,14 +419,11 @@
   <div class="mb-6">
     <div class="flex items-center justify-between">
       <div>
-        <div class="flex items-center gap-3">
-          <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-            Executions
-          </h1>
-          <IntegrationBadge integration="bolt" variant="badge" size="sm" />
-        </div>
+        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+          Executions
+        </h1>
         <p class="mt-2 text-gray-600 dark:text-gray-400">
-          View and monitor execution history
+          View and monitor execution history from all remote execution plugins
         </p>
       </div>
       <button

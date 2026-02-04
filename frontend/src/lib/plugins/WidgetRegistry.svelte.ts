@@ -115,7 +115,7 @@ export type WidgetRegistryEventHandler = (event: WidgetRegistryEvent) => void;
  * const dashboardWidgets = registry.getWidgetsForSlot('dashboard', userCapabilities);
  *
  * // Get widget by ID
- * const widget = registry.getWidget('bolt:command-executor');
+ * const widget = registry.getWidget('plugin:widget-name');
  * ```
  */
 class WidgetRegistry {
@@ -622,7 +622,7 @@ class WidgetRegistry {
 
   /**
    * Match a capability against user capabilities
-   * Supports wildcard patterns (e.g., "bolt.*" matches "bolt.command", "bolt.task")
+   * Supports wildcard patterns (e.g., "plugin.*" matches "plugin.command", "plugin.task")
    */
   private matchCapability(required: string, userCapabilities: string[]): boolean {
     // Direct match

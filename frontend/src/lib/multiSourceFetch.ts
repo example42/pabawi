@@ -1,14 +1,14 @@
 /**
  * Multi-Source Data Fetching with Graceful Degradation
  *
- * Utilities for fetching data from multiple sources (PuppetDB, Puppetserver)
+ * Utilities for fetching data from multiple sources (e.g., multiple plugins)
  * with graceful degradation when one or more sources fail.
  *
  * Implements requirements:
  * - 1.5: Display error messages and continue showing data from other sources
  * - 4.5: Display error messages while preserving other node detail functionality
  * - 6.5: Display error messages while preserving facts from other sources
- * - 8.5: Operate normally when Puppetserver is not configured
+ * - 8.5: Operate normally when a plugin is not configured
  */
 
 export interface SourceResult<T> {
@@ -132,14 +132,8 @@ export function isNotConfiguredError(error?: {
 }): boolean {
   if (!error) return false;
 
-  const notConfiguredCodes = [
-    "PUPPETSERVER_NOT_CONFIGURED",
-    "PUPPETDB_NOT_CONFIGURED",
-    "PUPPETSERVER_NOT_INITIALIZED",
-    "PUPPETDB_NOT_INITIALIZED",
-  ];
-
-  return notConfiguredCodes.includes(error.code);
+  // Check for generic not configured error codes
+  return error.code.includes('NOT_CONFIGURED') || error.code.includes('NOT_INITIALIZED');
 }
 
 /**
@@ -154,13 +148,8 @@ export function isConnectionError(error?: {
 }): boolean {
   if (!error) return false;
 
-  const connectionErrorCodes = [
-    "PUPPETSERVER_CONNECTION_ERROR",
-    "PUPPETDB_CONNECTION_ERROR",
-    "FETCH_ERROR",
-  ];
-
-  return connectionErrorCodes.includes(error.code);
+  // Check for generic connection error codes
+  return error.code.includes('CONNECTION_ERROR') || error.code === 'FETCH_ERROR';
 }
 
 /**
@@ -188,21 +177,19 @@ export function getUserFriendlyErrorMessage(
 
   // Authentication errors
   if (
-    error.code === "PUPPETSERVER_AUTH_ERROR" ||
-    error.code === "PUPPETDB_AUTH_ERROR"
+    error.code.includes('AUTH_ERROR')
   ) {
     return `Authentication failed for ${source}. Please check your credentials and try again. Data from other sources will still be displayed.`;
   }
 
   // Timeout errors
-  if (error.code === "PUPPETSERVER_TIMEOUT_ERROR") {
+  if (error.code.includes('TIMEOUT_ERROR')) {
     return `Request to ${source} timed out. The server may be overloaded. Data from other sources will still be displayed.`;
   }
 
   // Configuration errors
   if (
-    error.code === "PUPPETSERVER_CONFIG_ERROR" ||
-    error.code === "PUPPETDB_CONFIG_ERROR"
+    error.code.includes('CONFIG_ERROR')
   ) {
     return `${source} configuration error: ${error.message}. Please check your configuration. Data from other sources will still be displayed.`;
   }

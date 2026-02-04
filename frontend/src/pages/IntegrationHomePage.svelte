@@ -74,18 +74,48 @@
   let widgetError = $state<string | null>(null);
 
   /**
-   * Widget component mapping for dynamic imports
-   * Uses @plugins/native alias configured in vite.config.ts
+   * Load widget component for the active tab
+   * Uses dynamic imports based on widget path from API
    */
-  const widgetComponents: Record<string, () => Promise<{ default: Component }>> = {
-    // PuppetDB widgets
-    'puppetdb:node-browser': () => import('@plugins/native/puppetdb/frontend/NodeBrowser.svelte'),
-    'puppetdb:facts-explorer': () => import('@plugins/native/puppetdb/frontend/FactsExplorer.svelte'),
-    'puppetdb:reports-viewer': () => import('@plugins/native/puppetdb/frontend/ReportsViewer.svelte'),
-    'puppetdb:reports-summary': () => import('@plugins/native/puppetdb/frontend/ReportsSummary.svelte'),
-    'puppetdb:events-viewer': () => import('@plugins/native/puppetdb/frontend/EventsViewer.svelte'),
-    'puppetdb:catalog-viewer': () => import('@plugins/native/puppetdb/frontend/CatalogViewer.svelte'),
-  };
+  async function loadWidgetForTab(tab: IntegrationTab) {
+    if (!tab.widget) {
+      widgetComponent = null;
+      return;
+    }
+
+    widgetLoading = true;
+    widgetError = null;
+
+    try {
+      // Widget path should be in format: "pluginName:widgetName"
+      // We'll dynamically import from @plugins/native/{pluginName}/frontend/{WidgetName}.svelte
+      const [pluginName, widgetName] = tab.widget.split(':');
+
+      if (!pluginName || !widgetName) {
+        throw new Error(`Invalid widget format: ${tab.widget}. Expected format: "pluginName:widgetName"`);
+      }
+
+      // Convert widget name to PascalCase for component filename
+      const componentName = widgetName
+        .split('-')
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+        .join('');
+
+      // Dynamic import using template literal
+      const widgetPath = `@plugins/native/${pluginName}/frontend/${componentName}.svelte`;
+
+      // Use dynamic import with variable
+      const module = await import(/* @vite-ignore */ widgetPath);
+      widgetComponent = module.default;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load widget';
+      widgetError = `Widget component not found: ${tab.widget}. ${message}`;
+      widgetComponent = null;
+      console.error(`Failed to load widget ${tab.widget}:`, err);
+    } finally {
+      widgetLoading = false;
+    }
+  }
 
   /**
    * Load integration data from menu API

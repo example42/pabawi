@@ -561,7 +561,7 @@ class AuthStore {
    * Check if user has a specific capability
    *
    * Uses local permission data for fast reactive checks.
-   * Supports wildcard patterns (e.g., "bolt.*" matches "bolt.command")
+   * Supports wildcard patterns (e.g., "plugin.*" matches "plugin.command")
    *
    * NOTE: When permissions is null (no authentication configured),
    * returns true to allow all capabilities. Pabawi is designed for
@@ -711,7 +711,7 @@ class AuthStore {
         return true;
       }
 
-      // Category wildcard (e.g., "bolt.*" matches "bolt.command")
+      // Category wildcard (e.g., "plugin.*" matches "plugin.command")
       if (pattern.endsWith(".*")) {
         const category = pattern.slice(0, -2);
         if (capability.startsWith(category + ".")) {

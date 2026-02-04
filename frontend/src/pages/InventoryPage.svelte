@@ -429,11 +429,15 @@
           <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
             Inventory
           </h1>
-          <IntegrationBadge integration="bolt" variant="badge" size="sm" />
-          <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+          <!-- Display badges for active inventory sources dynamically -->
+          {#if Object.keys(sources).length > 0}
+            {#each Object.keys(sources).sort() as source}
+              <IntegrationBadge integration={source} variant="badge" size="sm" />
+            {/each}
+          {/if}
         </div>
         <p class="mt-2 text-gray-600 dark:text-gray-400">
-          Manage and monitor your infrastructure nodes
+          Manage and monitor your infrastructure nodes from all inventory sources
         </p>
       </div>
       {#if Object.keys(sources).includes('puppetdb')}

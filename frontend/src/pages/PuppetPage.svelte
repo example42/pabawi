@@ -1,3 +1,16 @@
+<!--
+  LEGACY PAGE - Contains hardcoded plugin references
+  This page should be migrated to use the new IntegrationHomePage pattern
+  or removed entirely in favor of plugin-specific integration pages.
+
+  Current hardcoded imports:
+  - PuppetserverStatus
+  - PuppetDBAdmin
+  - GlobalHieraTab
+  - PuppetReportsListView
+  - GlobalFactsTab
+  - CodeAnalysisTab
+-->
 <script lang="ts">
   import { onMount } from 'svelte';
   import { get } from '../lib/api';

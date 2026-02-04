@@ -5,36 +5,28 @@
   import IntegrationBadge from './IntegrationBadge.svelte';
   import { getUserFriendlyErrorMessage, isNotConfiguredError } from '../lib/multiSourceFetch';
 
-  interface Props {
-    boltFacts?: {
-      facts: Record<string, unknown>;
-      gatheredAt: string;
-      command?: string;
-    } | null;
-    boltLoading?: boolean;
-    boltError?: string | null;
-    onGatherBoltFacts?: () => Promise<void>;
+  interface FactSource {
+    name: string;
+    facts: Record<string, unknown>;
+    timestamp: string;
+    command?: string;
+  }
 
-    puppetdbFacts?: {
-      facts: Record<string, unknown>;
-      timestamp: string;
-    } | null;
-    puppetdbLoading?: boolean;
-    puppetdbError?: string | null;
+  interface Props {
+    sources?: FactSource[];
+    loading?: boolean;
+    error?: string | null;
+    onRefresh?: (sourceName: string) => Promise<void>;
   }
 
   let {
-    boltFacts = null,
-    boltLoading = false,
-    boltError = null,
-    onGatherBoltFacts,
-    puppetdbFacts = null,
-    puppetdbLoading = false,
-    puppetdbError = null,
+    sources = [],
+    loading = false,
+    error = null,
+    onRefresh,
   }: Props = $props();
 
   type FactCategory = 'system' | 'network' | 'hardware' | 'custom';
-  type SourceType = 'bolt' | 'puppetdb';
 
   interface CategorizedFacts {
     system: Record<string, unknown>;
@@ -44,7 +36,7 @@
   }
 
   // Active source selection
-  let activeSource = $state<SourceType | 'all'>('all');
+  let activeSource = $state<string | 'all'>('all');
 
   // Categorize facts based on common patterns
   function categorizeFacts(facts: Record<string, unknown>): CategorizedFacts {
@@ -94,16 +86,19 @@
 
   // Get categorized facts for active source
   const categorizedFacts = $derived(() => {
-    if (activeSource === 'bolt' && boltFacts) {
-      return categorizeFacts(boltFacts.facts);
-    } else if (activeSource === 'puppetdb' && puppetdbFacts) {
-      return categorizeFacts(puppetdbFacts.facts);
-    } else if (activeSource === 'all') {
+    if (activeSource === 'all') {
       // Merge all sources
       const merged: Record<string, unknown> = {};
-      if (boltFacts) Object.assign(merged, boltFacts.facts);
-      if (puppetdbFacts) Object.assign(merged, puppetdbFacts.facts);
+      sources.forEach(source => {
+        Object.assign(merged, source.facts);
+      });
       return categorizeFacts(merged);
+    } else {
+      // Find specific source
+      const source = sources.find(s => s.name === activeSource);
+      if (source) {
+        return categorizeFacts(source.facts);
+      }
     }
     return { system: {}, network: {}, hardware: {}, custom: {} };
   });
@@ -117,19 +112,15 @@
 
   // Check if any facts are available
   const hasAnyFacts = $derived(
-    (boltFacts && Object.keys(boltFacts.facts).length > 0) ||
-    (puppetdbFacts && Object.keys(puppetdbFacts.facts).length > 0)
+    sources.some(source => Object.keys(source.facts).length > 0)
   );
 
   // Check if any source is loading
-  const anyLoading = $derived(boltLoading || puppetdbLoading);
+  const anyLoading = $derived(loading);
 
-  // Count available sources
+  // Get available sources
   const availableSources = $derived(() => {
-    const sources: SourceType[] = [];
-    if (boltFacts && Object.keys(boltFacts.facts).length > 0) sources.push('bolt');
-    if (puppetdbFacts && Object.keys(puppetdbFacts.facts).length > 0) sources.push('puppetdb');
-    return sources;
+    return sources.filter(source => Object.keys(source.facts).length > 0);
   });
 
   // Category display names
@@ -161,20 +152,21 @@
     let sourceLabel = '';
     let displayLabel = '';
 
-    if (activeSource === 'bolt' && boltFacts) {
-      factsToExport = boltFacts.facts;
-      sourceLabel = 'bolt';
-      displayLabel = 'Bolt';
-    } else if (activeSource === 'puppetdb' && puppetdbFacts) {
-      factsToExport = puppetdbFacts.facts;
-      sourceLabel = 'puppetdb';
-      displayLabel = 'PuppetDB';
-    } else if (activeSource === 'all') {
+    if (activeSource === 'all') {
       // Merge all sources
-      if (boltFacts) Object.assign(factsToExport, boltFacts.facts);
-      if (puppetdbFacts) Object.assign(factsToExport, puppetdbFacts.facts);
+      sources.forEach(source => {
+        Object.assign(factsToExport, source.facts);
+      });
       sourceLabel = 'all-sources';
       displayLabel = 'All Sources';
+    } else {
+      // Find specific source
+      const source = sources.find(s => s.name === activeSource);
+      if (source) {
+        factsToExport = source.facts;
+        sourceLabel = source.name;
+        displayLabel = source.name.charAt(0).toUpperCase() + source.name.slice(1);
+      }
     }
 
     return { facts: factsToExport, sourceLabel, displayLabel };
@@ -185,6 +177,11 @@
     const { facts } = getCurrentFactsAndSource();
     return convertToYAML(facts);
   });
+
+  // Helper to get source label
+  function getSourceLabel(sourceName: string): string {
+    return sourceName.charAt(0).toUpperCase() + sourceName.slice(1);
+  }
 
   // YAML export functionality (requirement 4.5)
   function exportToYAML(): void {
@@ -263,17 +260,17 @@
       {#each availableSources() as source}
         <button
           type="button"
-          class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {activeSource === source ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
-          onclick={() => activeSource = source}
+          class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {activeSource === source.name ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => activeSource = source.name}
         >
-          {getSourceLabel(source)}
+          {getSourceLabel(source.name)}
         </button>
       {/each}
     </div>
   {/if}
 
   <!-- Error Messages with Graceful Degradation -->
-  {#if (boltError || puppetdbError) && hasAnyFacts}
+  {#if error && hasAnyFacts}
     <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/50 dark:bg-yellow-900/20">
       <div class="flex items-start gap-3">
         <svg class="h-5 w-5 flex-shrink-0 text-yellow-600 dark:text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -284,12 +281,7 @@
             Some sources are unavailable
           </h3>
           <div class="mt-2 space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
-            {#if boltError}
-              <p>• Bolt: {boltError}</p>
-            {/if}
-            {#if puppetdbError}
-              <p>• PuppetDB: {puppetdbError}</p>
-            {/if}
+            <p>• {error}</p>
           </div>
           <p class="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
             Displaying facts from available sources. The system continues to operate normally.
@@ -371,74 +363,40 @@
 
   <!-- Source Information Cards -->
   <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-    <!-- Bolt Facts Card -->
-    <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-      <div class="mb-2 flex items-center justify-between">
-        <IntegrationBadge integration="bolt" variant="badge" size="sm" />
-        {#if onGatherBoltFacts}
-          <button
-            type="button"
-            class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
-            onclick={onGatherBoltFacts}
-            disabled={boltLoading}
-          >
-            {boltLoading ? 'Gathering...' : 'Refresh'}
-          </button>
+    {#each sources as source}
+      <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+        <div class="mb-2 flex items-center justify-between">
+          <IntegrationBadge integration={source.name} variant="badge" size="sm" />
+          {#if onRefresh}
+            <button
+              type="button"
+              class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
+              onclick={() => onRefresh?.(source.name)}
+              disabled={loading}
+            >
+              {loading ? 'Loading...' : 'Refresh'}
+            </button>
+          {/if}
+        </div>
+        {#if loading}
+          <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <LoadingSpinner size="sm" />
+            <span>Loading...</span>
+          </div>
+        {:else if Object.keys(source.facts).length > 0}
+          <div class="space-y-1">
+            <p class="text-sm text-gray-900 dark:text-white">
+              {Object.keys(source.facts).length} facts
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {formatTimestamp(source.timestamp)}
+            </p>
+          </div>
+        {:else}
+          <p class="text-xs text-gray-500 dark:text-gray-400">No facts available</p>
         {/if}
       </div>
-      {#if boltLoading}
-        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <LoadingSpinner size="sm" />
-          <span>Loading...</span>
-        </div>
-      {:else if boltError}
-        <div class="space-y-1">
-          <p class="text-xs text-red-600 dark:text-red-400">Error</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{boltError}</p>
-        </div>
-      {:else if boltFacts}
-        <div class="space-y-1">
-          <p class="text-sm text-gray-900 dark:text-white">
-            {Object.keys(boltFacts.facts).length} facts
-          </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
-            {formatTimestamp(boltFacts.gatheredAt)}
-          </p>
-        </div>
-      {:else}
-        <p class="text-xs text-gray-500 dark:text-gray-400">No facts available</p>
-      {/if}
-    </div>
-
-    <!-- PuppetDB Facts Card -->
-    <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-      <div class="mb-2 flex items-center justify-between">
-        <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
-      </div>
-      {#if puppetdbLoading}
-        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <LoadingSpinner size="sm" />
-          <span>Loading...</span>
-        </div>
-      {:else if puppetdbError}
-        <div class="space-y-1">
-          <p class="text-xs text-red-600 dark:text-red-400">Error</p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">{puppetdbError}</p>
-        </div>
-      {:else if puppetdbFacts}
-        <div class="space-y-1">
-          <p class="text-sm text-gray-900 dark:text-white">
-            {Object.keys(puppetdbFacts.facts).length} facts
-          </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
-            {formatTimestamp(puppetdbFacts.timestamp)}
-          </p>
-        </div>
-      {:else}
-        <p class="text-xs text-gray-500 dark:text-gray-400">No facts available</p>
-      {/if}
-    </div>
-
+    {/each}
   </div>
 
   <!-- Facts Display -->
@@ -451,11 +409,11 @@
       <p class="text-gray-500 dark:text-gray-400">
         No facts available from any source.
       </p>
-      {#if onGatherBoltFacts}
+      {#if onRefresh && sources.length > 0}
         <button
           type="button"
           class="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          onclick={onGatherBoltFacts}
+          onclick={() => onRefresh?.(sources[0].name)}
         >
           Gather Facts
         </button>

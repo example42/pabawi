@@ -64,31 +64,31 @@ All plugin discovery happens via auto-loading from `plugins/native/` directory.
     - _Goal: types.ts defines only generic plugin contracts_
 
 - [ ] 2. Audit and Remove Frontend Hardcoded References
-  - [ ] 2.1 Scan frontend for hardcoded plugin imports
+  - [x] 2.1 Scan frontend for hardcoded plugin imports
     - Search all files in `frontend/src/` for imports referencing bolt, puppetdb, puppetserver, hiera
     - Search for any direct imports from `plugins/native/`
     - List all files that need modification
     - _Goal: Identify every hardcoded reference_
   
-  - [ ] 2.2 Remove plugin-specific imports from pages
+  - [x] 2.2 Remove plugin-specific imports from pages
     - Audit all page components in `frontend/src/pages/`
     - Remove any direct plugin component imports
     - Pages should dynamically load widgets based on plugin registrations
     - _Goal: Pages are completely plugin-agnostic_
   
-  - [ ] 2.3 Remove plugin-specific imports from components
+  - [x] 2.3 Remove plugin-specific imports from components
     - Audit all components in `frontend/src/components/`
     - Remove any hardcoded plugin references
     - Components should work with generic plugin data
     - _Goal: Components are plugin-agnostic_
   
-  - [ ] 2.4 Remove plugin-specific code from lib/
+  - [x] 2.4 Remove plugin-specific code from lib/
     - Audit `frontend/src/lib/` for plugin references
     - Remove any hardcoded plugin names or capability names
     - Utility functions should be generic
     - _Goal: All lib code is plugin-agnostic_
   
-  - [ ] 2.5 Clean up widgets/index.ts
+  - [x] 2.5 Clean up widgets/index.ts
     - Remove any plugin-specific exports
     - Export only generic widget infrastructure
     - Widget discovery should happen via API calls

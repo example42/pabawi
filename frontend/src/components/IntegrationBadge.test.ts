@@ -73,7 +73,7 @@ describe('IntegrationBadge Component', () => {
         },
       });
 
-      const dot = screen.getByLabelText('PuppetDB indicator');
+      const dot = screen.getByLabelText('Puppetdb indicator');
       expect(dot.style.backgroundColor).toBe('rgb(144, 99, 205)'); // #9063CD
     });
 
@@ -295,7 +295,7 @@ describe('IntegrationBadge Component', () => {
         },
       });
 
-      expect(screen.getByText('PuppetDB')).toBeTruthy();
+      expect(screen.getByText('Puppetdb')).toBeTruthy();
     });
 
     it('should render correct label for puppetserver integration', () => {

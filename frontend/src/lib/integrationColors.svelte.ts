@@ -10,26 +10,21 @@ export interface IntegrationColorConfig {
 }
 
 /**
- * All integration colors
+ * All integration colors - dynamically loaded from backend
  */
-export interface IntegrationColors {
-  bolt: IntegrationColorConfig;
-  puppetdb: IntegrationColorConfig;
-  puppetserver: IntegrationColorConfig;
-  hiera: IntegrationColorConfig;
-}
+export type IntegrationColors = Record<string, IntegrationColorConfig>;
 
 /**
- * Integration type
+ * Integration type - any string representing a plugin name
  */
-export type IntegrationType = keyof IntegrationColors;
+export type IntegrationType = string;
 
 /**
  * API response for colors endpoint
  */
 interface ColorsApiResponse {
   colors: IntegrationColors;
-  integrations: IntegrationType[];
+  integrations: string[];
 }
 
 /**
@@ -105,12 +100,15 @@ class IntegrationColorStore {
   }
 
   /**
-   * Get list of valid integration names
+   * Get list of valid integration names from loaded colors
    *
    * @returns Array of valid integration names
    */
-  getValidIntegrations(): IntegrationType[] {
-    return ['bolt', 'puppetdb', 'puppetserver', 'hiera'];
+  getValidIntegrations(): string[] {
+    if (!this.colors) {
+      return []; // Return empty array if colors not loaded yet
+    }
+    return Object.keys(this.colors);
   }
 
   /**
@@ -126,30 +124,10 @@ class IntegrationColorStore {
 
   /**
    * Get default color palette (fallback if API fails)
+   * Returns empty object - colors should be loaded from API
    */
   private getDefaultColors(): IntegrationColors {
-    return {
-      bolt: {
-        primary: '#FFAE1A',
-        light: '#FFF4E0',
-        dark: '#CC8B15',
-      },
-      puppetdb: {
-        primary: '#9063CD',
-        light: '#F0E6FF',
-        dark: '#7249A8',
-      },
-      puppetserver: {
-        primary: '#2E3A87',
-        light: '#E8EAFF',
-        dark: '#1F2760',
-      },
-      hiera: {
-        primary: '#C1272D',
-        light: '#FFE8E9',
-        dark: '#9A1F24',
-      },
-    };
+    return {};
   }
 }
 

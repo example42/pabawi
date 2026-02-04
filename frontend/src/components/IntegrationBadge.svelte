@@ -17,14 +17,10 @@
 
   const color = $derived(integrationColors.getColor(integration));
 
-  const integrationLabels: Record<IntegrationType, string> = {
-    bolt: 'Bolt',
-    puppetdb: 'PuppetDB',
-    puppetserver: 'Puppetserver',
-    hiera: 'Hiera',
-  };
-
-  const label = $derived(integrationLabels[integration]);
+  // Generate label from integration name (capitalize first letter)
+  const label = $derived(
+    integration.charAt(0).toUpperCase() + integration.slice(1)
+  );
 
   // Size classes for different variants
   const dotSizeClasses = {

@@ -1,32 +1,21 @@
 /**
- * Widget Registry - Central Export
+ * Widget Infrastructure - Generic Widget System
  *
- * Aggregates all plugin widget manifests into a unified registry.
- * Used by PluginLoader and WidgetSlot for dynamic widget loading.
+ * Provides generic widget infrastructure and types for the plugin system.
+ * Widget discovery and loading happens dynamically via API calls.
+ * This file contains NO plugin-specific code or imports.
  *
  * @module widgets
  * @version 1.0.0
  */
 
 // ==========================================================================
-// Plugin Widget Manifests (from plugin directories via alias)
-// ==========================================================================
-
-import { BOLT_WIDGET_MANIFEST, getBoltWidgetIds, getBoltWidget } from '@plugins/native/bolt/frontend';
-import { PUPPETDB_WIDGET_MANIFEST, getPuppetDBWidgetIds, getPuppetDBWidget } from '@plugins/native/puppetdb/frontend';
-import { PUPPETSERVER_WIDGET_MANIFEST, getPuppetserverWidgetIds, getPuppetserverWidget } from '@plugins/native/puppetserver/frontend';
-import { HIERA_WIDGET_MANIFEST, getHieraWidgetIds, getHieraWidget } from '@plugins/native/hiera/frontend';
-
-// Re-export individual manifests
-export { BOLT_WIDGET_MANIFEST } from '@plugins/native/bolt/frontend';
-export { PUPPETDB_WIDGET_MANIFEST } from '@plugins/native/puppetdb/frontend';
-export { PUPPETSERVER_WIDGET_MANIFEST } from '@plugins/native/puppetserver/frontend';
-export { HIERA_WIDGET_MANIFEST } from '@plugins/native/hiera/frontend';
-
-// ==========================================================================
 // Types
 // ==========================================================================
 
+/**
+ * Widget manifest entry describing a widget's metadata and loading function
+ */
 export interface WidgetManifestEntry {
   id: string;
   name: string;
@@ -36,29 +25,63 @@ export interface WidgetManifestEntry {
   requiredCapabilities: string[];
 }
 
+/**
+ * Widget size dimensions
+ */
 export interface WidgetSize {
   width: number;
   height: number;
 }
 
+/**
+ * Widget slot types where widgets can be rendered
+ */
+export type WidgetSlot =
+  | 'home-summary'
+  | 'dashboard'
+  | 'node-detail'
+  | 'node-journal'
+  | 'inventory-panel'
+  | 'standalone-page'
+  | 'sidebar'
+  | 'modal';
+
 // ==========================================================================
-// Unified Widget Manifest
+// Widget Registry (Dynamic)
 // ==========================================================================
 
 /**
- * Combined widget manifest from all plugins.
- * Maps widget ID to its manifest entry.
+ * Dynamic widget manifest registry.
+ * Populated at runtime via API calls to /api/v1/widgets
+ * DO NOT hardcode plugin widgets here - they are discovered dynamically.
  */
-export const WIDGET_MANIFEST: Record<string, WidgetManifestEntry> = {
-  ...BOLT_WIDGET_MANIFEST,
-  ...PUPPETDB_WIDGET_MANIFEST,
-  ...PUPPETSERVER_WIDGET_MANIFEST,
-  ...HIERA_WIDGET_MANIFEST,
-};
+export const WIDGET_MANIFEST: Record<string, WidgetManifestEntry> = {};
 
 // ==========================================================================
 // Widget Registry Functions
 // ==========================================================================
+
+/**
+ * Register a widget in the manifest
+ * Called by the plugin loader when widgets are discovered
+ */
+export function registerWidget(widget: WidgetManifestEntry): void {
+  WIDGET_MANIFEST[widget.id] = widget;
+}
+
+/**
+ * Unregister a widget from the manifest
+ */
+export function unregisterWidget(widgetId: string): void {
+  delete WIDGET_MANIFEST[widgetId];
+}
+
+/**
+ * Clear all registered widgets
+ */
+export function clearWidgetRegistry(): void {
+  Object.keys(WIDGET_MANIFEST).forEach(key => delete WIDGET_MANIFEST[key]);
+}
 
 /**
  * Get all registered widget IDs
@@ -145,13 +168,27 @@ export function getAccessibleWidgetsForSlot(
 }
 
 // ==========================================================================
-// Plugin-Specific Helpers (Re-exports)
+// Capability Matching Utilities
 // ==========================================================================
 
-export { getBoltWidgetIds, getBoltWidget };
-export { getPuppetDBWidgetIds, getPuppetDBWidget };
-export { getPuppetserverWidgetIds, getPuppetserverWidget };
-export { getHieraWidgetIds, getHieraWidget };
+/**
+ * Check if a user has a specific capability
+ * Supports wildcard matching (e.g., "bolt:*" matches "bolt:command")
+ */
+export function hasCapability(userCapabilities: string[], requiredCapability: string): boolean {
+  if (userCapabilities.includes('*')) return true;
+  if (userCapabilities.includes(requiredCapability)) return true;
+
+  const [plugin] = requiredCapability.split(':');
+  return userCapabilities.includes(`${plugin}:*`);
+}
+
+/**
+ * Check if a user has all required capabilities
+ */
+export function hasAllCapabilities(userCapabilities: string[], requiredCapabilities: string[]): boolean {
+  return requiredCapabilities.every(cap => hasCapability(userCapabilities, cap));
+}
 
 // ==========================================================================
 // Default Export
@@ -159,6 +196,9 @@ export { getHieraWidgetIds, getHieraWidget };
 
 export default {
   manifest: WIDGET_MANIFEST,
+  registerWidget,
+  unregisterWidget,
+  clearWidgetRegistry,
   getAllWidgetIds,
   getWidget,
   getWidgetsForSlot,
@@ -167,4 +207,6 @@ export default {
   loadWidget,
   getAccessibleWidgets,
   getAccessibleWidgetsForSlot,
+  hasCapability,
+  hasAllCapabilities,
 };

@@ -150,7 +150,7 @@ export interface DebugInfo {
   timestamp: string;
   /** Unique identifier for the request */
   requestId: string;
-  /** Integration name (bolt, puppetdb, puppetserver, hiera) */
+  /** Integration/plugin name */
   integration?: string;
   /** Operation or endpoint being executed */
   operation: string;
@@ -647,11 +647,11 @@ export function getErrorGuidance(error: unknown): { message: string; guidance: s
       };
     }
 
-    // Bolt execution errors
-    if (message.includes('bolt')) {
+    // Remote execution errors
+    if (message.includes('execution') || message.includes('command')) {
       return {
-        message: 'Bolt execution failed',
-        guidance: 'The Bolt command failed to execute. Check the error details and verify your Bolt configuration.',
+        message: 'Remote execution failed',
+        guidance: 'The remote execution command failed. Check the error details and verify your configuration.',
       };
     }
 
