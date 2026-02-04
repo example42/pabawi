@@ -12,12 +12,10 @@
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager.js";
-import { BoltPlugin } from "../../src/integrations/bolt/BoltPlugin.js";
-import { BoltService } from "../../src/bolt/BoltService.js";
+import { BoltPlugin, BoltService, type Node } from "../../src/integrations/bolt/index.js";
 import { LoggerService } from "../../src/services/LoggerService.js";
 import { PerformanceMonitorService } from "../../src/services/PerformanceMonitorService.js";
 import { IntegrationType, type User } from "../../src/integrations/types.js";
-import type { Node } from "../../src/bolt/types.js";
 
 // Check if Bolt is available before running tests
 async function checkBoltAvailability(): Promise<boolean> {

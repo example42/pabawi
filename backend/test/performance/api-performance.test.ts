@@ -15,7 +15,7 @@ import { IntegrationManager } from '../../src/integrations/IntegrationManager';
 import { LoggerService } from '../../src/services/LoggerService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
-import { BoltPlugin } from '../../src/integrations/bolt/BoltPlugin';
+import { BoltPlugin } from '../../src/integrations/bolt';
 import type { Node } from '../../src/integrations/types';
 
 // Performance thresholds for API endpoints (in milliseconds)

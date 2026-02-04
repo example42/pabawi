@@ -16,7 +16,7 @@ import { IntegrationManager } from '../../src/integrations/IntegrationManager';
 import { LoggerService } from '../../src/services/LoggerService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
-import { BoltPlugin } from '../../src/integrations/bolt/BoltPlugin';
+import { BoltPlugin } from '../../src/integrations/bolt';
 import { NodeLinkingService } from '../../src/integrations/NodeLinkingService';
 import type { Node } from '../../src/integrations/types';
 

@@ -8,54 +8,25 @@ import { describe, it, expect } from "vitest";
 import {
   ReportFilterService,
   ReportFilters,
+  Report,
 } from "../../../src/services/ReportFilterService";
-import { Report } from "../../../src/integrations/puppetdb/types";
 
 describe("ReportFilterService", () => {
   const service = new ReportFilterService();
 
   // Helper function to create a test report
   const createReport = (overrides: Partial<Report> = {}): Report => ({
-    certname: "test-node",
-    hash: "abc123",
-    environment: "production",
     status: "changed",
-    noop: false,
-    puppet_version: "7.0.0",
-    report_format: 10,
-    configuration_version: "1234567890",
     start_time: "2024-01-01T10:00:00Z",
     end_time: "2024-01-01T10:05:00Z", // 5 minutes = 300 seconds
-    producer_timestamp: "2024-01-01T10:05:00Z",
-    receive_time: "2024-01-01T10:05:01Z",
-    transaction_uuid: "uuid-123",
     metrics: {
       resources: {
         total: 100,
-        skipped: 0,
-        failed: 0,
-        failed_to_restart: 0,
-        restarted: 0,
-        changed: 10,
-        out_of_sync: 10,
-        scheduled: 0,
       },
       time: {
         catalog_application: 30, // 30 seconds compile time
-        config_retrieval: 5,
-        total: 35,
-      },
-      changes: {
-        total: 10,
-      },
-      events: {
-        success: 10,
-        failure: 0,
-        total: 10,
       },
     },
-    logs: [],
-    resource_events: [],
     ...overrides,
   });
 

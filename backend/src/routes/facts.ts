@@ -2,11 +2,12 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import {
-  BoltNodeUnreachableError,
-  BoltExecutionError,
-  BoltParseError,
-  BoltInventoryNotFoundError,
-} from "../bolt/types";
+  NodeUnreachableError,
+  ExecutionError,
+  ParseError,
+  InventoryNotFoundError,
+  normalizePluginError,
+} from "../errors/PluginErrors";
 import { asyncHandler } from "./asyncHandler";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
@@ -270,20 +271,21 @@ export function createFactsRouter(
           return;
         }
 
-        if (error instanceof BoltNodeUnreachableError) {
+        if (error instanceof NodeUnreachableError || (error instanceof Error && error.name === 'BoltNodeUnreachableError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
           logger.error("Node unreachable", {
             component: "FactsRouter",
             integration: "bolt",
             operation: "gatherFacts",
-            metadata: { details: error.details },
-          }, error);
+            metadata: { details: normalizedError.details },
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Node unreachable: ${error.message}`,
-              stack: error.stack,
+              message: `Node unreachable: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -292,9 +294,9 @@ export function createFactsRouter(
 
           const errorResponse = {
             error: {
-              code: "NODE_UNREACHABLE",
-              message: error.message,
-              details: error.details,
+              code: normalizedError.code,
+              message: normalizedError.message,
+              details: normalizedError.details,
             },
           };
 
@@ -304,19 +306,20 @@ export function createFactsRouter(
           return;
         }
 
-        if (error instanceof BoltInventoryNotFoundError) {
-          logger.error("Bolt configuration missing", {
+        if (error instanceof InventoryNotFoundError || (error instanceof Error && error.name === 'BoltInventoryNotFoundError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Inventory configuration missing", {
             component: "FactsRouter",
             integration: "bolt",
             operation: "gatherFacts",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt configuration missing: ${error.message}`,
-              stack: error.stack,
+              message: `Inventory configuration missing: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -325,8 +328,8 @@ export function createFactsRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_CONFIG_MISSING",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 
@@ -336,20 +339,21 @@ export function createFactsRouter(
           return;
         }
 
-        if (error instanceof BoltExecutionError) {
-          logger.error("Bolt execution failed", {
+        if (error instanceof ExecutionError || (error instanceof Error && error.name === 'BoltExecutionError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Execution failed", {
             component: "FactsRouter",
             integration: "bolt",
             operation: "gatherFacts",
-            metadata: { stderr: error.stderr },
-          }, error);
+            metadata: { stderr: normalizedError instanceof ExecutionError ? normalizedError.stderr : undefined },
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt execution failed: ${error.message}`,
-              stack: error.stack,
+              message: `Execution failed: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -358,9 +362,9 @@ export function createFactsRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_EXECUTION_FAILED",
-              message: error.message,
-              details: error.stderr,
+              code: normalizedError.code,
+              message: normalizedError.message,
+              details: normalizedError instanceof ExecutionError ? normalizedError.stderr : undefined,
             },
           };
 
@@ -370,19 +374,20 @@ export function createFactsRouter(
           return;
         }
 
-        if (error instanceof BoltParseError) {
-          logger.error("Bolt parse error", {
+        if (error instanceof ParseError || (error instanceof Error && error.name === 'BoltParseError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Parse error", {
             component: "FactsRouter",
             integration: "bolt",
             operation: "gatherFacts",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt parse error: ${error.message}`,
-              stack: error.stack,
+              message: `Parse error: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -391,8 +396,8 @@ export function createFactsRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_PARSE_ERROR",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 

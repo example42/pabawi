@@ -1,15 +1,34 @@
 /**
  * ReportFilterService
  *
- * Service for filtering Puppet reports based on various criteria.
+ * Service for filtering reports based on various criteria.
  * Supports filtering by status, minimum duration, minimum compile time,
  * and minimum total resources. All filters use AND logic when combined.
+ *
+ * This service is plugin-agnostic and works with any plugin that provides
+ * report data through the standard Report interface.
  */
 
-import type { Report } from "../integrations/puppetdb/types";
+/**
+ * Generic report interface for filtering
+ * Plugins should provide reports that conform to this interface
+ */
+export interface Report {
+  status: 'success' | 'failed' | 'changed' | 'unchanged';
+  start_time: string;
+  end_time: string;
+  metrics: {
+    resources: {
+      total: number;
+    };
+    time: {
+      catalog_application?: number;
+    };
+  };
+}
 
 /**
- * Filter criteria for Puppet reports
+ * Filter criteria for reports
  */
 export interface ReportFilters {
   status?: ("success" | "failed" | "changed" | "unchanged")[];
@@ -27,14 +46,14 @@ export interface FilterValidation {
 }
 
 /**
- * Service for filtering Puppet reports
+ * Service for filtering reports from any reporting plugin
  */
 export class ReportFilterService {
   /**
    * Filter reports based on provided criteria
    * All filters use AND logic - a report must match ALL criteria to be included
    *
-   * @param reports - Array of Puppet reports to filter
+   * @param reports - Array of reports to filter
    * @param filters - Filter criteria to apply
    * @returns Filtered array of reports
    */
@@ -164,11 +183,11 @@ export class ReportFilterService {
    * Get compile time from report metrics
    * Compile time is stored in the time metrics under the 'catalog_application' key
    *
-   * @param report - Puppet report
+   * @param report - Report object
    * @returns Compile time in seconds
    */
   private getCompileTime(report: Report): number {
-    // PuppetDB stores compile time in the time metrics
+    // Report providers store compile time in the time metrics
     // Common keys: 'catalog_application', 'config_retrieval', 'total'
     return report.metrics.time.catalog_application || 0;
   }

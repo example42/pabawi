@@ -482,3 +482,83 @@ export interface User {
  * Generic key-value store for node facts
  */
 export type Facts = Record<string, unknown>;
+
+/**
+ * Generic Node interface for inventory
+ * Represents a node/system in the inventory from any source
+ */
+export interface Node {
+  /** Unique node identifier */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Connection URI (optional, depends on source) */
+  uri?: string;
+  /** Transport/connection method (optional) */
+  transport?: string;
+  /** Node configuration (source-specific) */
+  config?: Record<string, unknown>;
+  /** Source plugin that provided this node data */
+  source?: string;
+  /** Certificate status (for Puppet-managed nodes) */
+  certificateStatus?: "signed" | "requested" | "revoked";
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Result of executing a command or task on a single node
+ */
+export interface NodeResult {
+  /** Node identifier */
+  nodeId: string;
+  /** Execution status */
+  status: "success" | "failed";
+  /** Output from the execution */
+  output?: {
+    stdout?: string;
+    stderr?: string;
+    exitCode?: number;
+  };
+  /** Return value (for tasks) */
+  value?: unknown;
+  /** Error message if failed */
+  error?: string;
+  /** Execution duration in milliseconds */
+  duration: number;
+}
+
+/**
+ * Result of executing a command or task on target nodes
+ * Generic execution result that can be used by any plugin
+ */
+export interface ExecutionResult {
+  /** Unique execution identifier */
+  id: string;
+  /** Type of execution */
+  type: "command" | "task" | "facts" | "puppet" | "package" | "playbook" | "script";
+  /** Target node identifiers */
+  targetNodes: string[];
+  /** Action/command that was executed */
+  action: string;
+  /** Parameters passed to the action */
+  parameters?: Record<string, unknown>;
+  /** Overall execution status */
+  status: "running" | "success" | "failed" | "partial";
+  /** When execution started */
+  startedAt: string;
+  /** When execution completed (if finished) */
+  completedAt?: string;
+  /** Per-node results */
+  results: NodeResult[];
+  /** Error message if execution failed */
+  error?: string;
+  /** Original command (if applicable) */
+  command?: string;
+  /** Whether expert mode was enabled */
+  expertMode?: boolean;
+  /** Complete stdout output (when expert mode enabled) */
+  stdout?: string;
+  /** Complete stderr output (when expert mode enabled) */
+  stderr?: string;
+}

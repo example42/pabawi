@@ -8,7 +8,7 @@
  * @version 1.0.0
  */
 
-import type { Node } from "../bolt/types";
+import type { Node } from "./types";
 import type { IntegrationManager } from "./IntegrationManager";
 import { LoggerService } from "../services/LoggerService";
 import type { User } from "./CapabilityRegistry";
@@ -28,17 +28,7 @@ export interface LinkedNode extends Node {
  */
 export interface LinkedNodeData {
   node: LinkedNode;
-  dataBySource: Record<
-    string,
-    {
-      facts?: unknown;
-      status?: unknown;
-      certificate?: unknown;
-      reports?: unknown[];
-      catalog?: unknown;
-      events?: unknown[];
-    }
-  >;
+  dataBySource: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -107,18 +97,19 @@ export class NodeLinkingService {
         processedNodes.add(relatedNode);
 
         const nodeSource =
-          (relatedNode as Node & { source?: string }).source ?? "bolt";
+          (relatedNode as Node & { source?: string }).source ?? "unknown";
 
         if (!linkedNode.sources.includes(nodeSource)) {
           linkedNode.sources.push(nodeSource);
         }
 
-        // Merge certificate status (prefer from puppetserver)
-        if (nodeSource === "puppetserver") {
-          const nodeWithCert = relatedNode as Node & {
-            certificateStatus?: "signed" | "requested" | "revoked";
-          };
-          if (nodeWithCert.certificateStatus) {
+        // Merge certificate status from any source that provides it
+        const nodeWithCert = relatedNode as Node & {
+          certificateStatus?: "signed" | "requested" | "revoked";
+        };
+        if (nodeWithCert.certificateStatus) {
+          // Only update if not already set, or if current source has a more specific status
+          if (!linkedNode.certificateStatus) {
             linkedNode.certificateStatus = nodeWithCert.certificateStatus;
           }
         }
@@ -182,7 +173,7 @@ export class NodeLinkingService {
 
     for (const sourceName of linkedNode.sources) {
       try {
-        const sourceData: LinkedNodeData["dataBySource"][string] = {};
+        const sourceData: Record<string, unknown> = {};
 
         // Get facts using info.facts capability
         const factsResult = await capabilityRegistry.executeCapability<Record<string, unknown>>(
@@ -196,58 +187,30 @@ export class NodeLinkingService {
           sourceData.facts = factsResult.data;
         }
 
-        // Get additional data types based on source using capabilities
-        if (sourceName === "puppetdb") {
-          // Get PuppetDB-specific data via capabilities
-          const reportsResult = await capabilityRegistry.executeCapability<unknown[]>(
-            systemUser,
-            "reports.list",
-            { nodeId },
-            undefined
-          );
-          if (reportsResult.success && reportsResult.data) {
-            sourceData.reports = reportsResult.data;
-          }
+        // Dynamically query all available capabilities for this node
+        // Try common capability patterns that plugins might provide
+        const commonCapabilities = [
+          { name: "reports.list", key: "reports" },
+          { name: "catalog.get", key: "catalog" },
+          { name: "events.list", key: "events" },
+          { name: "certificate.get", key: "certificate" },
+          { name: "status.get", key: "status" },
+        ];
 
-          const catalogResult = await capabilityRegistry.executeCapability<unknown>(
-            systemUser,
-            "catalog.get",
-            { nodeId },
-            undefined
-          );
-          if (catalogResult.success && catalogResult.data) {
-            sourceData.catalog = catalogResult.data;
-          }
+        for (const { name: capabilityName, key } of commonCapabilities) {
+          try {
+            const result = await capabilityRegistry.executeCapability<unknown>(
+              systemUser,
+              capabilityName,
+              { nodeId },
+              undefined
+            );
 
-          const eventsResult = await capabilityRegistry.executeCapability<unknown[]>(
-            systemUser,
-            "events.list",
-            { nodeId },
-            undefined
-          );
-          if (eventsResult.success && eventsResult.data) {
-            sourceData.events = eventsResult.data;
-          }
-        } else if (sourceName === "puppetserver") {
-          // Get Puppetserver-specific data via capabilities
-          const certResult = await capabilityRegistry.executeCapability<unknown>(
-            systemUser,
-            "certificate.get",
-            { nodeId },
-            undefined
-          );
-          if (certResult.success && certResult.data) {
-            sourceData.certificate = certResult.data;
-          }
-
-          const statusResult = await capabilityRegistry.executeCapability<unknown>(
-            systemUser,
-            "status.get",
-            { nodeId },
-            undefined
-          );
-          if (statusResult.success && statusResult.data) {
-            sourceData.status = statusResult.data;
+            if (result.success && result.data && result.handledBy === sourceName) {
+              sourceData[key] = result.data;
+            }
+          } catch {
+            // Capability not available or failed - skip silently
           }
         }
 

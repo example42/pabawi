@@ -15,7 +15,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
-import type { Facts } from "../bolt/types";
+import type { Facts } from "../integrations/types";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";

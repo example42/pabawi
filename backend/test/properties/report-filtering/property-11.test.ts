@@ -9,8 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { ReportFilterService, ReportFilters } from '../../../src/services/ReportFilterService';
-import { Report } from '../../../src/integrations/puppetdb/types';
+import { ReportFilterService, ReportFilters, Report } from '../../../src/services/ReportFilterService';
 
 describe('Property 11: Report Filter Correctness', () => {
   const propertyTestConfig = {
@@ -25,59 +24,27 @@ describe('Property 11: Report Filter Correctness', () => {
 
   // Generator for a single report
   const reportArb = fc.record({
-    certname: fc.string({ minLength: 1, maxLength: 50 }),
-    hash: fc.string({ minLength: 40, maxLength: 40 }).map(s => s.replace(/[^0-9a-f]/g, 'a')),
-    environment: fc.constantFrom('production', 'development', 'staging', 'test'),
     status: statusArb,
-    noop: fc.boolean(),
-    puppet_version: fc.constantFrom('7.0.0', '7.1.0', '7.2.0', '8.0.0'),
-    report_format: fc.integer({ min: 1, max: 12 }),
-    configuration_version: fc.string({ minLength: 1, maxLength: 40 }),
     start_time: fc.integer({ min: 1704067200000, max: 1735689600000 }), // 2024-01-01 to 2025-01-01 in ms
     duration_ms: fc.integer({ min: 1000, max: 600000 }), // 1 second to 10 minutes
-    producer_timestamp: fc.integer({ min: 1704067200000, max: 1735689600000 }),
-    receive_time: fc.integer({ min: 1704067200000, max: 1735689600000 }),
-    transaction_uuid: fc.uuid(),
     metrics: fc.record({
       resources: fc.record({
         total: fc.integer({ min: 0, max: 1000 }),
-        skipped: fc.integer({ min: 0, max: 100 }),
-        failed: fc.integer({ min: 0, max: 50 }),
-        failed_to_restart: fc.integer({ min: 0, max: 10 }),
-        restarted: fc.integer({ min: 0, max: 50 }),
-        changed: fc.integer({ min: 0, max: 100 }),
-        out_of_sync: fc.integer({ min: 0, max: 100 }),
-        scheduled: fc.integer({ min: 0, max: 100 }),
       }),
       time: fc.record({
         catalog_application: fc.float({ min: 0, max: 300, noNaN: true }),
-        config_retrieval: fc.float({ min: 0, max: 60, noNaN: true }),
-        total: fc.float({ min: 0, max: 400, noNaN: true }),
-      }),
-      changes: fc.record({
-        total: fc.integer({ min: 0, max: 100 }),
-      }),
-      events: fc.record({
-        success: fc.integer({ min: 0, max: 500 }),
-        failure: fc.integer({ min: 0, max: 50 }),
-        total: fc.integer({ min: 0, max: 600 }),
       }),
     }),
-    logs: fc.constant([]),
-    resource_events: fc.constant([]),
   }).map(report => {
     // Convert timestamps to ISO strings and ensure end_time is after start_time
     const startTime = new Date(report.start_time);
     const endTime = new Date(report.start_time + report.duration_ms);
-    const producerTimestamp = new Date(report.producer_timestamp);
-    const receiveTime = new Date(report.receive_time);
 
     return {
-      ...report,
+      status: report.status,
       start_time: startTime.toISOString(),
       end_time: endTime.toISOString(),
-      producer_timestamp: producerTimestamp.toISOString(),
-      receive_time: receiveTime.toISOString(),
+      metrics: report.metrics,
     } as Report;
   });
 
@@ -276,15 +243,10 @@ describe('Property 11: Report Filter Correctness', () => {
           const filtered = service.filterReports(reports, filters);
 
           // Check that filtered reports maintain their relative order from original array
-          // We need to track indices to handle duplicate hashes
+          // We track indices to verify order preservation
           const originalIndices = filtered.map(filteredReport => {
-            // Find the index in the original array, starting from the last found index
-            for (let i = 0; i < reports.length; i++) {
-              if (reports[i] === filteredReport) {
-                return i;
-              }
-            }
-            return -1;
+            // Find the index in the original array
+            return reports.indexOf(filteredReport);
           });
 
           // Check that indices are in ascending order
@@ -318,7 +280,7 @@ describe('Property 11: Report Filter Correctness', () => {
 
           // Filtering twice should produce the same result
           return filtered1.length === filtered2.length &&
-                 filtered1.every((report, index) => report.hash === filtered2[index].hash);
+                 filtered1.every((report, index) => report === filtered2[index]);
         }
       ),
       propertyTestConfig
@@ -407,7 +369,7 @@ describe('Property 11: Report Filter Correctness', () => {
 
           // Results should match
           return filtered.length === manuallyFiltered.length &&
-                 filtered.every((report, index) => report.hash === manuallyFiltered[index].hash);
+                 filtered.every((report, index) => report === manuallyFiltered[index]);
         }
       ),
       propertyTestConfig

@@ -2,10 +2,10 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { PuppetDBService } from "../../integrations/puppetdb/PuppetDBService";
 import {
-  PuppetDBConnectionError,
-  PuppetDBQueryError,
-  PuppetDBAuthenticationError,
-} from "../../integrations/puppetdb/PuppetDBClient";
+  ConnectionError,
+  QueryError,
+  AuthenticationError,
+} from "../../errors/PluginErrors";
 import { asyncHandler } from "../asyncHandler";
 import { requestDeduplication } from "../../middleware/deduplication";
 import {
@@ -196,7 +196,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -226,7 +226,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -258,7 +258,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -516,7 +516,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -546,7 +546,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -788,7 +788,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -818,7 +818,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -849,7 +849,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1130,7 +1130,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1160,7 +1160,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1191,7 +1191,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1536,7 +1536,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1566,7 +1566,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1821,7 +1821,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1851,7 +1851,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -1882,7 +1882,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2187,7 +2187,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2217,7 +2217,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2248,7 +2248,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2573,7 +2573,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2603,7 +2603,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2634,7 +2634,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2885,7 +2885,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2915,7 +2915,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -2946,7 +2946,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -3242,7 +3242,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -3272,7 +3272,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -3303,7 +3303,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBQueryError) {
+        if (error instanceof QueryError || (error instanceof Error && error.name === 'PuppetDBQueryError')) {
           logger.error("PuppetDB query error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -3512,7 +3512,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
       } catch (error: unknown) {
         const duration = Date.now() - startTime;
 
-        if (error instanceof PuppetDBAuthenticationError) {
+        if (error instanceof AuthenticationError || (error instanceof Error && error.name === 'PuppetDBAuthenticationError')) {
           logger.error("PuppetDB authentication error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",
@@ -3542,7 +3542,7 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
           return;
         }
 
-        if (error instanceof PuppetDBConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetDBConnectionError')) {
           logger.error("PuppetDB connection error", {
             component: "PuppetDBRouter",
             integration: "puppetdb",

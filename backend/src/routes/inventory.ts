@@ -1,12 +1,11 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../bolt/BoltService";
 import {
-  BoltInventoryNotFoundError,
-  BoltExecutionError,
-  BoltParseError,
-  type Node,
-} from "../bolt/types";
+  InventoryNotFoundError,
+  ExecutionError,
+  ParseError,
+  normalizePluginError,
+} from "../errors/PluginErrors";
 import { asyncHandler } from "./asyncHandler";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { ExpertModeService } from "../services/ExpertModeService";
@@ -14,6 +13,14 @@ import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import type { User } from "../integrations/CapabilityRegistry";
+
+// Import Node type from integrations/types for plugin-agnostic typing
+interface Node {
+  id: string;
+  name: string;
+  source?: string;
+  [key: string]: unknown;
+}
 
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
@@ -24,10 +31,12 @@ const InventoryQuerySchema = z.object({
 
 /**
  * Create inventory router
+ *
+ * @deprecated This route is maintained for backward compatibility.
+ * New code should use the v1 API routes which are fully plugin-agnostic.
  */
 export function createInventoryRouter(
-  boltService: BoltService,
-  integrationManager?: IntegrationManager,
+  integrationManager: IntegrationManager,
 ): Router {
   const router = Router();
   const logger = new LoggerService();
@@ -82,28 +91,51 @@ export function createInventoryRouter(
           });
         }
 
-        // If integration manager is available and sources include more than just bolt
-        if (
-          integrationManager &&
-          integrationManager.isInitialized() &&
-          (requestedSources.includes("all") ||
-            requestedSources.some((s) => s !== "bolt"))
-        ) {
-          logger.debug("Using integration manager for linked inventory", {
+        // Use integration manager for linked inventory
+        if (!integrationManager.isInitialized()) {
+          logger.warn("Integration manager not initialized", {
             component: "InventoryRouter",
             operation: "getInventory",
           });
 
-          // Capture debug in expert mode
           if (debugInfo) {
-            expertModeService.addDebug(debugInfo, {
-              message: "Using integration manager for linked inventory",
-              level: 'debug',
+            debugInfo.duration = Date.now() - startTime;
+            expertModeService.addWarning(debugInfo, {
+              message: "Integration manager not initialized",
+              level: 'warn',
             });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
           }
 
-          // Get linked inventory from all sources (Requirement 3.3)
-          const aggregated = await integrationManager.getLinkedInventory();
+          const errorResponse = {
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Integration manager not initialized",
+            },
+          };
+
+          res.status(503).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse
+          );
+          return;
+        }
+
+        logger.debug("Using integration manager for linked inventory", {
+          component: "InventoryRouter",
+          operation: "getInventory",
+        });
+
+        // Capture debug in expert mode
+        if (debugInfo) {
+          expertModeService.addDebug(debugInfo, {
+            message: "Using integration manager for linked inventory",
+            level: 'debug',
+          });
+        }
+
+        // Get linked inventory from all sources (Requirement 3.3)
+        const aggregated = await integrationManager.getLinkedInventory();
 
           // Filter by requested sources if specified
           let filteredNodes = aggregated.nodes;
@@ -335,65 +367,6 @@ export function createInventoryRouter(
           } else {
             res.json(responseData);
           }
-          return;
-        }
-
-        // Fallback to Bolt-only inventory
-        logger.debug("Using Bolt-only inventory", {
-          component: "InventoryRouter",
-          integration: "bolt",
-          operation: "getInventory",
-        });
-
-        // Capture debug in expert mode
-        if (debugInfo) {
-          expertModeService.addDebug(debugInfo, {
-            message: "Using Bolt-only inventory",
-            level: 'debug',
-          });
-        }
-
-        const nodes = await boltService.getInventory();
-        const duration = Date.now() - startTime;
-
-        logger.info("Bolt inventory fetched successfully", {
-          component: "InventoryRouter",
-          integration: "bolt",
-          operation: "getInventory",
-          metadata: { nodeCount: nodes.length, duration },
-        });
-
-        const responseData = {
-          nodes,
-          sources: {
-            bolt: {
-              nodeCount: nodes.length,
-              lastSync: new Date().toISOString(),
-              status: "healthy" as const,
-            },
-          },
-        };
-
-        // Attach debug info if expert mode is enabled
-        if (debugInfo) {
-          debugInfo.duration = duration;
-          expertModeService.setIntegration(debugInfo, 'bolt');
-          expertModeService.addMetadata(debugInfo, 'nodeCount', nodes.length);
-          expertModeService.addInfo(debugInfo, {
-            message: `Retrieved ${String(nodes.length)} nodes from Bolt`,
-            level: 'info',
-          });
-
-          // Add performance metrics
-          debugInfo.performance = expertModeService.collectPerformanceMetrics();
-
-          // Add request context
-          debugInfo.context = expertModeService.collectRequestContext(req);
-
-          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
-        } else {
-          res.json(responseData);
-        }
       } catch (error) {
         const duration = Date.now() - startTime;
 
@@ -430,8 +403,9 @@ export function createInventoryRouter(
           return;
         }
 
-        if (error instanceof BoltInventoryNotFoundError) {
-          logger.warn("Bolt inventory not found", {
+        if (error instanceof InventoryNotFoundError || (error instanceof Error && error.name === 'BoltInventoryNotFoundError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.warn("Inventory not found", {
             component: "InventoryRouter",
             integration: "bolt",
             operation: "getInventory",
@@ -442,8 +416,8 @@ export function createInventoryRouter(
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addWarning(debugInfo, {
-              message: "Bolt inventory not found",
-              context: error.message,
+              message: "Inventory not found",
+              context: normalizedError.message,
               level: 'warn',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -452,8 +426,8 @@ export function createInventoryRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_CONFIG_MISSING",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 
@@ -463,20 +437,21 @@ export function createInventoryRouter(
           return;
         }
 
-        if (error instanceof BoltExecutionError) {
-          logger.error("Bolt execution failed", {
+        if (error instanceof ExecutionError || (error instanceof Error && error.name === 'BoltExecutionError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Execution failed", {
             component: "InventoryRouter",
             integration: "bolt",
             operation: "getInventory",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           // Capture error in expert mode
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt execution failed: ${error.message}`,
-              stack: error.stack,
+              message: `Execution failed: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -485,9 +460,9 @@ export function createInventoryRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_EXECUTION_FAILED",
-              message: error.message,
-              details: error.stderr,
+              code: normalizedError.code,
+              message: normalizedError.message,
+              details: normalizedError instanceof ExecutionError ? normalizedError.stderr : undefined,
             },
           };
 
@@ -497,20 +472,21 @@ export function createInventoryRouter(
           return;
         }
 
-        if (error instanceof BoltParseError) {
-          logger.error("Bolt parse error", {
+        if (error instanceof ParseError || (error instanceof Error && error.name === 'BoltParseError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Parse error", {
             component: "InventoryRouter",
             integration: "bolt",
             operation: "getInventory",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           // Capture error in expert mode
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt parse error: ${error.message}`,
-              stack: error.stack,
+              message: `Parse error: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -519,8 +495,8 @@ export function createInventoryRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_PARSE_ERROR",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 
@@ -580,27 +556,43 @@ export function createInventoryRouter(
       });
 
       try {
-        if (integrationManager?.isInitialized()) {
-          logger.debug("Checking health status for all plugins", {
+        if (!integrationManager.isInitialized()) {
+          logger.warn("Integration manager not initialized", {
             component: "InventoryRouter",
             operation: "getSources",
           });
 
-          // Capture debug in expert mode
-          if (req.expertMode) {
-            const debugInfo = expertModeService.createDebugInfo(
-              'GET /api/inventory/sources',
-              requestId,
-              Date.now() - startTime
-            );
-            expertModeService.addDebug(debugInfo, {
-              message: "Checking health status for all plugins",
-              level: 'debug',
-            });
-          }
+          const errorResponse = {
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Integration manager not initialized",
+            },
+          };
 
-          // Get health status for all plugins
-          const healthStatuses = await integrationManager.healthCheckAll(true);
+          res.status(503).json(errorResponse);
+          return;
+        }
+
+        logger.debug("Checking health status for all plugins", {
+          component: "InventoryRouter",
+          operation: "getSources",
+        });
+
+        // Capture debug in expert mode
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/inventory/sources',
+            requestId,
+            Date.now() - startTime
+          );
+          expertModeService.addDebug(debugInfo, {
+            message: "Checking health status for all plugins",
+            level: 'debug',
+          });
+        }
+
+        // Get health status for all plugins
+        const healthStatuses = await integrationManager.healthCheckAll(true);
 
           const sources: Record<
             string,
@@ -683,63 +675,6 @@ export function createInventoryRouter(
           } else {
             res.json(responseData);
           }
-          return;
-        }
-
-        // Fallback to Bolt-only
-        logger.debug("Using Bolt-only sources", {
-          component: "InventoryRouter",
-          integration: "bolt",
-          operation: "getSources",
-        });
-
-        // Capture debug in expert mode
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'GET /api/inventory/sources',
-            requestId,
-            Date.now() - startTime
-          );
-          expertModeService.addDebug(debugInfo, {
-            message: "Using Bolt-only sources",
-            level: 'debug',
-          });
-        }
-
-        const duration = Date.now() - startTime;
-        const responseData = {
-          sources: {
-            bolt: {
-              type: "execution",
-              status: "connected" as const,
-              lastCheck: new Date().toISOString(),
-            },
-          },
-        };
-
-        // Attach debug info if expert mode is enabled
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'GET /api/inventory/sources',
-            requestId,
-            duration
-          );
-          expertModeService.setIntegration(debugInfo, 'bolt');
-          expertModeService.addInfo(debugInfo, {
-            message: 'Retrieved Bolt source only',
-            level: 'info',
-          });
-
-          // Add performance metrics
-          debugInfo.performance = expertModeService.collectPerformanceMetrics();
-
-          // Add request context
-          debugInfo.context = expertModeService.collectRequestContext(req);
-
-          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
-        } else {
-          res.json(responseData);
-        }
       } catch (error) {
         const duration = Date.now() - startTime;
 
@@ -814,56 +749,49 @@ export function createInventoryRouter(
           });
         }
 
-        let node: Node | undefined;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let node: any;
 
-        // If integration manager is available, search across all sources
-        if (integrationManager?.isInitialized()) {
-          logger.debug("Searching across all inventory sources", {
+        // Check if integration manager is initialized
+        if (!integrationManager.isInitialized()) {
+          logger.warn("Integration manager not initialized", {
             component: "InventoryRouter",
             operation: "getNode",
           });
 
-          // Capture debug in expert mode
-          if (req.expertMode) {
-            const debugInfo = expertModeService.createDebugInfo(
-              'GET /api/inventory/:id',
-              requestId,
-              Date.now() - startTime
-            );
-            expertModeService.addDebug(debugInfo, {
-              message: "Searching across all inventory sources",
-              level: 'debug',
-            });
-          }
+          const errorResponse = {
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Integration manager not initialized",
+            },
+          };
 
-          const aggregated = await integrationManager.getLinkedInventory();
-          node = aggregated.nodes.find(
-            (n) => n.id === nodeId || n.name === nodeId,
-          );
-        } else {
-          logger.debug("Searching in Bolt inventory only", {
-            component: "InventoryRouter",
-            integration: "bolt",
-            operation: "getNode",
-          });
-
-          // Capture debug in expert mode
-          if (req.expertMode) {
-            const debugInfo = expertModeService.createDebugInfo(
-              'GET /api/inventory/:id',
-              requestId,
-              Date.now() - startTime
-            );
-            expertModeService.addDebug(debugInfo, {
-              message: "Searching in Bolt inventory only",
-              level: 'debug',
-            });
-          }
-
-          // Fallback to Bolt-only inventory
-          const nodes = await boltService.getInventory();
-          node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
+          res.status(503).json(errorResponse);
+          return;
         }
+
+        logger.debug("Searching across all inventory sources", {
+          component: "InventoryRouter",
+          operation: "getNode",
+        });
+
+        // Capture debug in expert mode
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            'GET /api/inventory/:id',
+            requestId,
+            Date.now() - startTime
+          );
+          expertModeService.addDebug(debugInfo, {
+            message: "Searching across all inventory sources",
+            level: 'debug',
+          });
+        }
+
+        const aggregated = await integrationManager.getLinkedInventory();
+        node = aggregated.nodes.find(
+          (n) => n.id === nodeId || n.name === nodeId,
+        );
 
         if (!node) {
           const duration = Date.now() - startTime;
@@ -975,8 +903,9 @@ export function createInventoryRouter(
           return;
         }
 
-        if (error instanceof BoltInventoryNotFoundError) {
-          logger.warn("Bolt inventory not found", {
+        if (error instanceof InventoryNotFoundError || (error instanceof Error && error.name === 'BoltInventoryNotFoundError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.warn("Inventory not found", {
             component: "InventoryRouter",
             integration: "bolt",
             operation: "getNode",
@@ -990,27 +919,28 @@ export function createInventoryRouter(
               duration
             );
             expertModeService.addWarning(debugInfo, {
-              message: "Bolt inventory not found",
-              context: error.message,
+              message: "Inventory not found",
+              context: normalizedError.message,
               level: 'warn',
             });
           }
 
           res.status(404).json({
             error: {
-              code: "BOLT_CONFIG_MISSING",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           });
           return;
         }
 
-        if (error instanceof BoltExecutionError) {
-          logger.error("Bolt execution failed", {
+        if (error instanceof ExecutionError || (error instanceof Error && error.name === 'BoltExecutionError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Execution failed", {
             component: "InventoryRouter",
             integration: "bolt",
             operation: "getNode",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           // Capture error in expert mode (already exists below, but ensuring consistency)
           if (req.expertMode) {
@@ -1020,17 +950,17 @@ export function createInventoryRouter(
               duration
             );
             expertModeService.addError(debugInfo, {
-              message: "Bolt execution failed",
-              stack: error.stack,
+              message: "Execution failed",
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
           }
 
           res.status(500).json({
             error: {
-              code: "BOLT_EXECUTION_FAILED",
-              message: error.message,
-              details: error.stderr,
+              code: normalizedError.code,
+              message: normalizedError.message,
+              details: normalizedError instanceof ExecutionError ? normalizedError.stderr : undefined,
             },
           });
           return;

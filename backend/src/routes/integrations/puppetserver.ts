@@ -3,11 +3,11 @@ import { z } from "zod";
 import type { PuppetserverService } from "../../integrations/puppetserver/PuppetserverService";
 import type { PuppetDBService } from "../../integrations/puppetdb/PuppetDBService";
 import {
-  PuppetserverConnectionError,
-  PuppetserverConfigurationError,
+  ConnectionError,
+  ConfigurationError,
   CatalogCompilationError,
   EnvironmentDeploymentError,
-} from "../../integrations/puppetserver/errors";
+} from "../../errors/PluginErrors";
 import { asyncHandler } from "../asyncHandler";
 import {
   CertnameParamSchema,
@@ -184,7 +184,7 @@ export function createPuppetserverRouter(
           debugInfo.context = expertModeService.collectRequestContext(req);
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -204,7 +204,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -463,7 +463,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -483,7 +483,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -843,7 +843,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -859,7 +859,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1086,7 +1086,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1106,7 +1106,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1376,7 +1376,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1396,7 +1396,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1658,7 +1658,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1678,7 +1678,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1872,7 +1872,7 @@ export function createPuppetserverRouter(
           debugInfo.context = expertModeService.collectRequestContext(req);
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -1892,7 +1892,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -2142,7 +2142,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -2162,7 +2162,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -2627,7 +2627,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -2647,7 +2647,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -2835,7 +2835,7 @@ export function createPuppetserverRouter(
           debugInfo.context = expertModeService.collectRequestContext(req);
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -2855,7 +2855,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -3042,7 +3042,7 @@ export function createPuppetserverRouter(
           debugInfo.context = expertModeService.collectRequestContext(req);
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -3062,7 +3062,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -3249,7 +3249,7 @@ export function createPuppetserverRouter(
           debugInfo.context = expertModeService.collectRequestContext(req);
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -3269,7 +3269,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -3479,7 +3479,7 @@ export function createPuppetserverRouter(
           debugInfo.context = expertModeService.collectRequestContext(req);
         }
 
-        if (error instanceof PuppetserverConfigurationError) {
+        if (error instanceof ConfigurationError || (error instanceof Error && error.name === 'PuppetserverConfigurationError')) {
           logger.error("Puppetserver configuration error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",
@@ -3499,7 +3499,7 @@ export function createPuppetserverRouter(
           return;
         }
 
-        if (error instanceof PuppetserverConnectionError) {
+        if (error instanceof ConnectionError || (error instanceof Error && error.name === 'PuppetserverConnectionError')) {
           logger.error("Puppetserver connection error", {
             component: "PuppetserverRouter",
             integration: "puppetserver",

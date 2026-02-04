@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { NodeLinkingService } from "../../src/integrations/NodeLinkingService";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
-import type { Node } from "../../src/bolt/types";
+import type { Node } from "../../src/integrations/bolt";
 
 describe("NodeLinkingService", () => {
   let service: NodeLinkingService;

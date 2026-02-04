@@ -13,7 +13,7 @@ import type {
   ExecutionToolPlugin,
   Action,
 } from "../../src/integrations/types";
-import type { Node, Facts, ExecutionResult } from "../../src/bolt/types";
+import type { Node, Facts, ExecutionResult } from "../../src/integrations/bolt";
 
 /**
  * Mock information source plugin for testing

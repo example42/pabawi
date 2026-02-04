@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../bolt/BoltService";
+import type { BoltService } from "../integrations/bolt";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
-import { BoltInventoryNotFoundError } from "../bolt/types";
+import { InventoryNotFoundError, normalizePluginError } from "../errors/PluginErrors";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { LoggerService } from "../services/LoggerService";
@@ -487,12 +487,13 @@ export function createPuppetRouter(
           return;
         }
 
-        if (error instanceof BoltInventoryNotFoundError) {
-          logger.error("Bolt configuration missing", {
+        if (error instanceof InventoryNotFoundError || (error instanceof Error && error.name === 'BoltInventoryNotFoundError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Inventory configuration missing", {
             component: "PuppetRouter",
             integration: "bolt",
             operation: "puppet-run",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           // Capture error in expert mode
           if (req.expertMode) {
@@ -502,16 +503,16 @@ export function createPuppetRouter(
               duration
             );
             expertModeService.addError(debugInfo, {
-              message: "Bolt configuration missing",
-              stack: error.stack,
+              message: "Inventory configuration missing",
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
           }
 
           res.status(404).json({
             error: {
-              code: "BOLT_CONFIG_MISSING",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           });
           return;

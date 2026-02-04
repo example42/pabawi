@@ -4,12 +4,13 @@ import type { ExecutionRepository } from "../database/ExecutionRepository";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import {
-  BoltExecutionError,
-  BoltParseError,
-  BoltInventoryNotFoundError,
-  BoltTaskNotFoundError,
-  BoltTaskParameterError,
-} from "../bolt/types";
+  ExecutionError,
+  ParseError,
+  InventoryNotFoundError,
+  TaskNotFoundError,
+  TaskParameterError,
+  normalizePluginError,
+} from "../errors/PluginErrors";
 import { asyncHandler } from "./asyncHandler";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
@@ -185,20 +186,23 @@ export function createTasksRouter(
       } catch (error) {
         const duration = Date.now() - startTime;
 
-        if (error instanceof BoltExecutionError) {
-          logger.error("Bolt execution failed", {
+        // Normalize plugin errors for consistent handling
+        const normalizedError = normalizePluginError(error, 'bolt');
+
+        if (normalizedError instanceof ExecutionError || (error instanceof Error && error.name === 'BoltExecutionError')) {
+          logger.error("Execution failed", {
             component: "TasksRouter",
             integration: "bolt",
             operation: "listTasks",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt execution failed: ${error.message}`,
-              stack: error.stack,
+              message: `Execution failed: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -207,9 +211,9 @@ export function createTasksRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_EXECUTION_FAILED",
-              message: error.message,
-              details: error.stderr,
+              code: normalizedError.code,
+              message: normalizedError.message,
+              details: normalizedError instanceof ExecutionError ? normalizedError.stderr : undefined,
             },
           };
 
@@ -219,20 +223,20 @@ export function createTasksRouter(
           return;
         }
 
-        if (error instanceof BoltParseError) {
-          logger.error("Bolt parse error", {
+        if (normalizedError instanceof ParseError || (error instanceof Error && error.name === 'BoltParseError')) {
+          logger.error("Parse error", {
             component: "TasksRouter",
             integration: "bolt",
             operation: "listTasks",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt parse error: ${error.message}`,
-              stack: error.stack,
+              message: `Parse error: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -241,8 +245,8 @@ export function createTasksRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_PARSE_ERROR",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 
@@ -439,20 +443,23 @@ export function createTasksRouter(
       } catch (error) {
         const duration = Date.now() - startTime;
 
-        if (error instanceof BoltExecutionError) {
-          logger.error("Bolt execution failed", {
+        // Normalize plugin errors for consistent handling
+        const normalizedError = normalizePluginError(error, 'bolt');
+
+        if (normalizedError instanceof ExecutionError || (error instanceof Error && error.name === 'BoltExecutionError')) {
+          logger.error("Execution failed", {
             component: "TasksRouter",
             integration: "bolt",
             operation: "listTasksByModule",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt execution failed: ${error.message}`,
-              stack: error.stack,
+              message: `Execution failed: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -461,9 +468,9 @@ export function createTasksRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_EXECUTION_FAILED",
-              message: error.message,
-              details: error.stderr,
+              code: normalizedError.code,
+              message: normalizedError.message,
+              details: normalizedError instanceof ExecutionError ? normalizedError.stderr : undefined,
             },
           };
 
@@ -473,20 +480,20 @@ export function createTasksRouter(
           return;
         }
 
-        if (error instanceof BoltParseError) {
-          logger.error("Bolt parse error", {
+        if (normalizedError instanceof ParseError || (error instanceof Error && error.name === 'BoltParseError')) {
+          logger.error("Parse error", {
             component: "TasksRouter",
             integration: "bolt",
             operation: "listTasksByModule",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt parse error: ${error.message}`,
-              stack: error.stack,
+              message: `Parse error: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -495,8 +502,8 @@ export function createTasksRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_PARSE_ERROR",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 
@@ -706,15 +713,9 @@ export function createTasksRouter(
               metadata: { executionId, nodeId, taskName },
             }, error instanceof Error ? error : undefined);
 
-            let errorMessage = "Unknown error";
-
-            if (error instanceof BoltTaskNotFoundError) {
-              errorMessage = error.message;
-            } else if (error instanceof BoltTaskParameterError) {
-              errorMessage = error.message;
-            } else if (error instanceof Error) {
-              errorMessage = error.message;
-            }
+            // Normalize plugin errors for consistent handling
+            const normalizedError = normalizePluginError(error, 'bolt');
+            const errorMessage = normalizedError.message;
 
             // Update execution record with error
             await executionRepository.update(executionId, {
@@ -813,20 +814,21 @@ export function createTasksRouter(
           return;
         }
 
-        if (error instanceof BoltInventoryNotFoundError) {
-          logger.error("Bolt configuration missing", {
+        if (error instanceof InventoryNotFoundError || (error instanceof Error && error.name === 'BoltInventoryNotFoundError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Inventory configuration missing", {
             component: "TasksRouter",
             integration: "bolt",
             operation: "executeTask",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
           expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt configuration missing: ${error.message}`,
-              stack: error.stack,
+              message: `Inventory configuration missing: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -835,8 +837,8 @@ export function createTasksRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_CONFIG_MISSING",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 

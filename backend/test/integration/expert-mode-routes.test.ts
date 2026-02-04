@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import express, { type Express } from "express";
-import { BoltService } from "../../src/bolt/BoltService";
+import { BoltService, type Node } from "../../src/integrations/bolt";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { createInventoryRouter } from "../../src/routes/inventory";
 import { createIntegrationsRouter } from "../../src/routes/integrations";
 import { requestIdMiddleware } from "../../src/middleware/errorHandler";
 import { expertModeMiddleware } from "../../src/middleware/expertMode";
-import type { Node } from "../../src/bolt/types";
 
 // Mock child_process to avoid actual Bolt CLI execution
 vi.mock("child_process", () => ({

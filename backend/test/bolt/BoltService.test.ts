@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { BoltService } from "../../src/bolt/BoltService";
+import { BoltService } from "../../src/integrations/bolt";
 
 describe("BoltService - gatherFacts", () => {
   let boltService: BoltService;

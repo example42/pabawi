@@ -11,9 +11,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { BoltPlugin } from "../../../src/integrations/bolt/BoltPlugin.js";
+import { BoltPlugin, type BoltService } from "../../../src/integrations/bolt/index.js";
 import { IntegrationType } from "../../../src/integrations/types.js";
-import type { BoltService } from "../../../src/bolt/BoltService.js";
 import type { LoggerService } from "../../../src/services/LoggerService.js";
 import type { PerformanceMonitorService } from "../../../src/services/PerformanceMonitorService.js";
 import type { ExecutionContext } from "../../../src/integrations/types.js";

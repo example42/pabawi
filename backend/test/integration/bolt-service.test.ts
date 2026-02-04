@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { BoltService } from '../../src/bolt/BoltService';
+import { BoltService } from '../../src/integrations/bolt';
 import { spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';

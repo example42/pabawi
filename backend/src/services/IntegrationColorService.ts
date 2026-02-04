@@ -8,19 +8,9 @@ export interface IntegrationColorConfig {
 }
 
 /**
- * All integration colors
+ * Map of integration names to their color configurations
  */
-export interface IntegrationColors {
-  bolt: IntegrationColorConfig;
-  puppetdb: IntegrationColorConfig;
-  puppetserver: IntegrationColorConfig;
-  hiera: IntegrationColorConfig;
-}
-
-/**
- * Integration type
- */
-export type IntegrationType = keyof IntegrationColors;
+export type IntegrationColors = Record<string, IntegrationColorConfig>;
 
 import { LoggerService } from "./LoggerService";
 
@@ -35,8 +25,9 @@ export class IntegrationColorService {
 
   constructor() {
     this.logger = new LoggerService();
-    // Define color palette for each integration
+    // Define default color palette for native integrations
     // Colors inspired by Puppet logo for better visibility and brand consistency
+    // These can be overridden by plugin configurations
     this.colors = {
       bolt: {
         primary: '#FFAE1A',  // Bright orange from Puppet logo
@@ -72,6 +63,31 @@ export class IntegrationColorService {
   }
 
   /**
+   * Register a color configuration for an integration
+   * This allows plugins to register their own colors dynamically
+   *
+   * @param integration - The integration name
+   * @param colorConfig - Color configuration for the integration
+   */
+  public registerColor(integration: string, colorConfig: IntegrationColorConfig): void {
+    const normalizedIntegration = integration.toLowerCase();
+
+    // Validate the color configuration
+    this.validateColorConfig(colorConfig);
+
+    this.colors[normalizedIntegration] = colorConfig;
+
+    this.logger.info(`Registered color for integration "${integration}"`, {
+      component: "IntegrationColorService",
+      operation: "registerColor",
+      metadata: {
+        integration: normalizedIntegration,
+        primary: colorConfig.primary,
+      },
+    });
+  }
+
+  /**
    * Get color configuration for a specific integration
    * Returns default gray color if integration is unknown
    *
@@ -79,9 +95,9 @@ export class IntegrationColorService {
    * @returns Color configuration for the integration
    */
   public getColor(integration: string): IntegrationColorConfig {
-    const normalizedIntegration = integration.toLowerCase() as IntegrationType;
+    const normalizedIntegration = integration.toLowerCase();
 
-    if (this.isValidIntegration(normalizedIntegration)) {
+    if (normalizedIntegration in this.colors) {
       return this.colors[normalizedIntegration];
     }
 
@@ -112,18 +128,27 @@ export class IntegrationColorService {
    *
    * @returns Array of valid integration names
    */
-  public getValidIntegrations(): IntegrationType[] {
-    return Object.keys(this.colors) as IntegrationType[];
+  public getValidIntegrations(): string[] {
+    return Object.keys(this.colors);
   }
 
   /**
-   * Check if an integration name is valid
+   * Validate a single color configuration
+   * Throws error if any color is invalid
    *
-   * @param integration - The integration name to check
-   * @returns True if the integration is valid
+   * @param colorConfig - Color configuration to validate
    */
-  private isValidIntegration(integration: string): integration is IntegrationType {
-    return integration in this.colors;
+  private validateColorConfig(colorConfig: IntegrationColorConfig): void {
+    const hexColorRegex = /^#[0-9A-F]{6}$/i;
+
+    const config = colorConfig as Record<string, string>;
+    for (const [variant, color] of Object.entries(config)) {
+      if (!hexColorRegex.test(color)) {
+        throw new Error(
+          `Invalid color format for ${variant}: "${color}". Expected hex format (e.g., #FF6B35)`
+        );
+      }
+    }
   }
 
   /**
@@ -131,27 +156,17 @@ export class IntegrationColorService {
    * Throws error if any color is invalid
    */
   private validateColors(): void {
-    const hexColorRegex = /^#[0-9A-F]{6}$/i;
-
     for (const [integration, colorConfig] of Object.entries(this.colors)) {
-      const config = colorConfig as Record<string, string>;
-      for (const [variant, color] of Object.entries(config)) {
-        if (!hexColorRegex.test(color)) {
-          throw new Error(
-            `Invalid color format for ${integration}.${variant}: "${color}". Expected hex format (e.g., #FF6B35)`
-          );
-        }
+      try {
+        this.validateColorConfig(colorConfig);
+      } catch (error) {
+        throw new Error(
+          `Invalid color configuration for integration "${integration}": ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     }
 
     // Validate default color as well
-    const defaultConfig = this.defaultColor as unknown as Record<string, string>;
-    for (const [variant, color] of Object.entries(defaultConfig)) {
-      if (!hexColorRegex.test(color)) {
-        throw new Error(
-          `Invalid default color format for ${variant}: "${color}". Expected hex format (e.g., #6B7280)`
-        );
-      }
-    }
+    this.validateColorConfig(this.defaultColor);
   }
 }

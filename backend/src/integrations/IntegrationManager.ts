@@ -28,8 +28,9 @@ import type {
   BasePluginInterface,
   PluginRegistrationV1,
   Facts,
+  Node,
+  ExecutionResult,
 } from "./types";
-import type { Node, ExecutionResult } from "../bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
 import { LoggerService } from "../services/LoggerService";
 import {

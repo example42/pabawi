@@ -16,7 +16,7 @@ import type {
   HealthStatus,
   InformationSourcePlugin,
 } from "../../src/integrations/types";
-import type { Node, Facts } from "../../src/bolt/types";
+import type { Node, Facts } from "../../src/integrations/bolt";
 
 /**
  * Mock information source plugin for testing

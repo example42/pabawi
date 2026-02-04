@@ -15,8 +15,16 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
-import type { Node } from "../bolt/types";
 import { LoggerService } from "../services/LoggerService";
+
+// Generic InventoryNode type for plugin-agnostic inventory
+// Using a different name to avoid conflicts with plugin-specific Node types
+type InventoryNode = {
+  id: string;
+  name: string;
+  source?: string;
+  [key: string]: unknown;
+};
 import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { asyncHandler } from "./asyncHandler";
@@ -115,7 +123,7 @@ export function createInventoryRouterV1(
         // Filter by source if specified
         if (!requestedSources.includes("all")) {
           filteredNodes = filteredNodes.filter(node => {
-            const nodeSource = (node as Node & { source?: string }).source ?? "bolt";
+            const nodeSource = (node as InventoryNode).source ?? "bolt";
             return requestedSources.includes(nodeSource);
           });
 
@@ -158,7 +166,7 @@ export function createInventoryRouterV1(
 
               // Filter to only PuppetDB nodes that match
               filteredNodes = filteredNodes.filter(node => {
-                const nodeSource = (node as Node & { source?: string }).source ?? "bolt";
+                const nodeSource = (node as InventoryNode).source ?? "bolt";
                 return nodeSource === "puppetdb" && pqlNodeIds.has(node.id);
               });
 
@@ -193,8 +201,8 @@ export function createInventoryRouterV1(
           const sortMultiplier = sortOrder === "asc" ? 1 : -1;
 
           filteredNodes.sort((a, b) => {
-            const nodeA = a as Node & { source?: string };
-            const nodeB = b as Node & { source?: string };
+            const nodeA = a as InventoryNode;
+            const nodeB = b as InventoryNode;
 
             switch (query.sortBy) {
               case "name":
@@ -384,7 +392,7 @@ export function createInventoryRouterV1(
 
         const responseData = {
           node,
-          source: (node as Node & { source?: string }).source ?? "bolt",
+          source: (node as InventoryNode).source ?? "bolt",
         };
 
         if (debugInfo) {

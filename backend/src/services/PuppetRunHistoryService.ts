@@ -1,13 +1,51 @@
 /**
  * Puppet Run History Service
  *
- * Service for aggregating and analyzing puppet run history data.
+ * Service for aggregating and analyzing run history data from reporting plugins.
  * Provides methods to get run history for individual nodes or all nodes,
  * with summary statistics and grouping by date and status.
+ *
+ * This service is plugin-agnostic and works with any plugin that provides
+ * report data through the standard Report interface.
  */
 
-import type { Report } from "../integrations/puppetdb/types";
-import type { PuppetDBService } from "../integrations/puppetdb/PuppetDBService";
+/**
+ * Generic report interface for run history
+ * Plugins should provide reports that conform to this interface
+ */
+export interface Report {
+  producer_timestamp: string;
+  start_time: string;
+  end_time: string;
+  status: 'success' | 'failed' | 'changed' | 'unchanged';
+  metrics: {
+    resources: {
+      total: number;
+    };
+    time: {
+      catalog_application?: number;
+    };
+  };
+}
+
+/**
+ * Interface for services that provide report data
+ */
+export interface ReportProvider {
+  getNodeReportCountsByDateAndStatus(
+    nodeId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; status: string; count: number }>>;
+
+  getNodeReports(nodeId: string, limit: number): Promise<Report[]>;
+
+  getReportCountsByDateAndStatus(
+    startDate: string,
+    endDate: string
+  ): Promise<Array<{ date: string; status: string; count: number }>>;
+}
+
 import type { LoggerService } from "./LoggerService";
 
 /**
@@ -36,21 +74,21 @@ export interface NodeRunHistory {
 }
 
 /**
- * Service for managing puppet run history data
+ * Service for managing run history data from reporting plugins
  */
 export class PuppetRunHistoryService {
-  private puppetDBService: PuppetDBService;
+  private reportProvider: ReportProvider;
   private logger?: LoggerService;
 
-  constructor(puppetDBService: PuppetDBService, logger?: LoggerService) {
-    this.puppetDBService = puppetDBService;
+  constructor(reportProvider: ReportProvider, logger?: LoggerService) {
+    this.reportProvider = reportProvider;
     this.logger = logger;
   }
 
   /**
    * Get run history for a specific node
    *
-   * Uses PuppetDB's aggregate query for efficient chart data,
+   * Uses the report provider's aggregate query for efficient chart data,
    * and fetches a small number of recent reports for summary statistics.
    *
    * @param nodeId - Node identifier (certname)
@@ -72,7 +110,7 @@ export class PuppetRunHistoryService {
       startDate.setHours(0, 0, 0, 0);
 
       // Use the efficient aggregate query to get counts by date and status
-      const counts = await this.puppetDBService.getNodeReportCountsByDateAndStatus(
+      const counts = await this.reportProvider.getNodeReportCountsByDateAndStatus(
         nodeId,
         startDate.toISOString(),
         endDate.toISOString()
@@ -85,7 +123,7 @@ export class PuppetRunHistoryService {
 
       // Fetch a small number of recent reports for summary statistics
       // We only need enough to calculate avgDuration and get lastRun
-      const recentReports = await this.puppetDBService.getNodeReports(nodeId, 10);
+      const recentReports = await this.reportProvider.getNodeReports(nodeId, 10);
 
       // Filter to date range for accurate summary
       const filteredReports = recentReports.filter((report) => {
@@ -110,7 +148,7 @@ export class PuppetRunHistoryService {
   /**
    * Get aggregated run history for all nodes
    *
-   * Uses PuppetDB's aggregate query to efficiently get counts grouped by date and status.
+   * Uses the report provider's aggregate query to efficiently get counts grouped by date and status.
    * This avoids fetching all reports and instead queries only the counts needed.
    *
    * @param days - Number of days to look back (default: 7)
@@ -131,12 +169,12 @@ export class PuppetRunHistoryService {
       startDate.setHours(0, 0, 0, 0);
 
       // Use the efficient aggregate query to get counts by date and status
-      const counts = await this.puppetDBService.getReportCountsByDateAndStatus(
+      const counts = await this.reportProvider.getReportCountsByDateAndStatus(
         startDate.toISOString(),
         endDate.toISOString()
       );
 
-      this.log(`Got ${String(counts.length)} date/status combinations from PuppetDB`);
+      this.log(`Got ${String(counts.length)} date/status combinations from report provider`);
 
       // Convert counts to RunHistoryData format
       const history = this.convertCountsToHistory(counts, startDate, endDate);

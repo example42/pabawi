@@ -1,68 +1,40 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PuppetRunHistoryService } from '../../src/services/PuppetRunHistoryService';
-import type { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
+import { PuppetRunHistoryService, ReportProvider, Report } from '../../src/services/PuppetRunHistoryService';
 import type { LoggerService } from '../../src/services/LoggerService';
-import type { Report } from '../../src/integrations/puppetdb/types';
 
 describe('PuppetRunHistoryService', () => {
   let service: PuppetRunHistoryService;
-  let mockPuppetDBService: PuppetDBService;
+  let mockReportProvider: ReportProvider;
   let mockLogger: LoggerService;
 
   // Helper function to create mock reports
   const createMockReport = (
-    certname: string,
     status: 'unchanged' | 'changed' | 'failed',
     timestamp: string,
     startTime: string,
     endTime: string
   ): Report => ({
-    certname,
-    hash: `hash-${certname}-${timestamp}`,
-    environment: 'production',
     status,
-    noop: false,
-    puppet_version: '7.0.0',
-    report_format: 11,
-    configuration_version: '1234567890',
     start_time: startTime,
     end_time: endTime,
     producer_timestamp: timestamp,
-    receive_time: timestamp,
-    transaction_uuid: `uuid-${certname}-${timestamp}`,
     metrics: {
       resources: {
         total: 100,
-        skipped: 0,
-        failed: status === 'failed' ? 5 : 0,
-        failed_to_restart: 0,
-        restarted: 0,
-        changed: status === 'changed' ? 10 : 0,
-        out_of_sync: 0,
-        scheduled: 0,
       },
-      time: {},
-      changes: {
-        total: status === 'changed' ? 10 : 0,
-      },
-      events: {
-        success: status === 'failed' ? 95 : 100,
-        failure: status === 'failed' ? 5 : 0,
-        total: 100,
+      time: {
+        catalog_application: 30,
       },
     },
-    logs: [],
-    resource_events: [],
   });
 
   beforeEach(() => {
-    // Create mock PuppetDB service
-    mockPuppetDBService = {
+    // Create mock report provider
+    mockReportProvider = {
       getNodeReports: vi.fn(),
-      getAllReports: vi.fn(),
       getReportCountsByDateAndStatus: vi.fn(),
       getNodeReportCountsByDateAndStatus: vi.fn(),
-    } as unknown as PuppetDBService;
+    } as unknown as ReportProvider;
 
     // Create mock logger
     mockLogger = {
@@ -73,19 +45,19 @@ describe('PuppetRunHistoryService', () => {
     } as unknown as LoggerService;
 
     // Create service instance
-    service = new PuppetRunHistoryService(mockPuppetDBService, mockLogger);
+    service = new PuppetRunHistoryService(mockReportProvider, mockLogger);
   });
 
   describe('getNodeHistory', () => {
     describe('date range handling', () => {
-      it('should query PuppetDB with correct date range for node', async () => {
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+      it('should query report provider with correct date range for node', async () => {
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         await service.getNodeHistory('node1', 7);
 
         // Verify it called getNodeReportCountsByDateAndStatus with nodeId and date range
-        expect(mockPuppetDBService.getNodeReportCountsByDateAndStatus).toHaveBeenCalledWith(
+        expect(mockReportProvider.getNodeReportCountsByDateAndStatus).toHaveBeenCalledWith(
           'node1',
           expect.any(String), // startDate ISO string
           expect.any(String)  // endDate ISO string
@@ -99,10 +71,10 @@ describe('PuppetRunHistoryService', () => {
         const oneDayAgoStr = oneDayAgo.toISOString().split('T')[0];
 
         // Mock aggregate counts - only data from 1 day ago
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: oneDayAgoStr, status: 'unchanged', count: 1 },
         ]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         // Request only 3 days of history
         const result = await service.getNodeHistory('node1', 3);
@@ -114,19 +86,19 @@ describe('PuppetRunHistoryService', () => {
       });
 
       it('should default to 7 days when no days parameter provided', async () => {
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         await service.getNodeHistory('node1');
 
         // Verify it called getNodeReportCountsByDateAndStatus
-        expect(mockPuppetDBService.getNodeReportCountsByDateAndStatus).toHaveBeenCalledWith(
+        expect(mockReportProvider.getNodeReportCountsByDateAndStatus).toHaveBeenCalledWith(
           'node1',
           expect.any(String),
           expect.any(String)
         );
         // Verify it fetched 10 recent reports for summary stats
-        expect(mockPuppetDBService.getNodeReports).toHaveBeenCalledWith('node1', 10);
+        expect(mockReportProvider.getNodeReports).toHaveBeenCalledWith('node1', 10);
       });
     });
 
@@ -141,12 +113,12 @@ describe('PuppetRunHistoryService', () => {
         const date2Str = date2.toISOString().split('T')[0];
 
         // Mock aggregate counts
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: date1Str, status: 'unchanged', count: 1 },
           { date: date1Str, status: 'changed', count: 1 },
           { date: date2Str, status: 'failed', count: 1 },
         ]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -171,12 +143,12 @@ describe('PuppetRunHistoryService', () => {
         const dateStr = date.toISOString().split('T')[0];
 
         // Mock aggregate counts
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 1 },
           { date: dateStr, status: 'changed', count: 1 },
           { date: dateStr, status: 'failed', count: 1 },
         ]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -191,8 +163,8 @@ describe('PuppetRunHistoryService', () => {
       });
 
       it('should sort history by date in ascending order', async () => {
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -211,12 +183,12 @@ describe('PuppetRunHistoryService', () => {
         const dateStr = date.toISOString().split('T')[0];
 
         // Mock aggregate counts
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 1 },
           { date: dateStr, status: 'changed', count: 1 },
           { date: dateStr, status: 'failed', count: 1 },
         ]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -230,12 +202,12 @@ describe('PuppetRunHistoryService', () => {
         const dateStr = date.toISOString().split('T')[0];
 
         // Mock aggregate counts: 2 successful (unchanged + changed), 2 failed
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 1 },
           { date: dateStr, status: 'changed', count: 1 },
           { date: dateStr, status: 'failed', count: 2 },
         ]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -250,7 +222,7 @@ describe('PuppetRunHistoryService', () => {
         const dateStr = date.toISOString().split('T')[0];
 
         // Mock aggregate counts
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 2 },
         ]);
 
@@ -258,7 +230,6 @@ describe('PuppetRunHistoryService', () => {
         const reports: Report[] = [
           // Duration: 60 seconds
           createMockReport(
-            'node1',
             'unchanged',
             date.toISOString(),
             date.toISOString(),
@@ -266,14 +237,13 @@ describe('PuppetRunHistoryService', () => {
           ),
           // Duration: 120 seconds
           createMockReport(
-            'node1',
             'unchanged',
             date.toISOString(),
             date.toISOString(),
             new Date(date.getTime() + 120000).toISOString()
           ),
         ];
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue(reports);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue(reports);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -291,7 +261,7 @@ describe('PuppetRunHistoryService', () => {
         const date2Str = date2.toISOString().split('T')[0];
 
         // Mock aggregate counts
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: date1Str, status: 'unchanged', count: 1 },
           { date: date2Str, status: 'changed', count: 1 },
         ]);
@@ -313,7 +283,7 @@ describe('PuppetRunHistoryService', () => {
             new Date(date2.getTime() + 60000).toISOString()
           ),
         ];
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue(reports);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue(reports);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -328,11 +298,11 @@ describe('PuppetRunHistoryService', () => {
         const dateStr = date.toISOString().split('T')[0];
 
         // Mock aggregate counts: 1 successful, 2 failed = 33.33%
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 1 },
           { date: dateStr, status: 'failed', count: 2 },
         ]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -347,7 +317,7 @@ describe('PuppetRunHistoryService', () => {
         const dateStr = date.toISOString().split('T')[0];
 
         // Mock aggregate counts
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 3 },
         ]);
 
@@ -378,7 +348,7 @@ describe('PuppetRunHistoryService', () => {
             new Date(date.getTime() + 150000).toISOString()
           ),
         ];
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue(reports);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue(reports);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -389,8 +359,8 @@ describe('PuppetRunHistoryService', () => {
 
     describe('missing data handling', () => {
       it('should return all days with zero counts when no data', async () => {
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -410,8 +380,8 @@ describe('PuppetRunHistoryService', () => {
       });
 
       it('should return correct day count for custom range with no data', async () => {
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 3);
 
@@ -428,7 +398,7 @@ describe('PuppetRunHistoryService', () => {
 
       it('should handle PuppetDB service errors on aggregate query', async () => {
         const error = new Error('PuppetDB connection failed');
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockRejectedValue(error);
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockRejectedValue(error);
 
         await expect(service.getNodeHistory('node1', 7)).rejects.toThrow(
           'PuppetDB connection failed'
@@ -447,10 +417,10 @@ describe('PuppetRunHistoryService', () => {
         date.setDate(date.getDate() - 1);
         const dateStr = date.toISOString().split('T')[0];
 
-        vi.mocked(mockPuppetDBService.getNodeReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getNodeReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 1 },
         ]);
-        vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getNodeReports).mockResolvedValue([]);
 
         const result = await service.getNodeHistory('node1', 7);
 
@@ -465,19 +435,19 @@ describe('PuppetRunHistoryService', () => {
   describe('getAggregatedHistory', () => {
     describe('date range handling', () => {
       it('should query PuppetDB with correct date range', async () => {
-        vi.mocked(mockPuppetDBService.getReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getReportCountsByDateAndStatus).mockResolvedValue([]);
 
         await service.getAggregatedHistory(7);
 
         // Verify it called getReportCountsByDateAndStatus with date range
-        expect(mockPuppetDBService.getReportCountsByDateAndStatus).toHaveBeenCalledWith(
+        expect(mockReportProvider.getReportCountsByDateAndStatus).toHaveBeenCalledWith(
           expect.any(String), // startDate ISO string
           expect.any(String)  // endDate ISO string
         );
       });
 
       it('should return all days in range even with no data', async () => {
-        vi.mocked(mockPuppetDBService.getReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getReportCountsByDateAndStatus).mockResolvedValue([]);
 
         const result = await service.getAggregatedHistory(7);
 
@@ -500,7 +470,7 @@ describe('PuppetRunHistoryService', () => {
         const dateStr = date.toISOString().split('T')[0];
 
         // Mock PuppetDB returning counts grouped by date and status
-        vi.mocked(mockPuppetDBService.getReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getReportCountsByDateAndStatus).mockResolvedValue([
           { date: dateStr, status: 'unchanged', count: 10 },
           { date: dateStr, status: 'changed', count: 5 },
           { date: dateStr, status: 'failed', count: 2 },
@@ -528,7 +498,7 @@ describe('PuppetRunHistoryService', () => {
         const date1Str = date1.toISOString().split('T')[0];
         const date2Str = date2.toISOString().split('T')[0];
 
-        vi.mocked(mockPuppetDBService.getReportCountsByDateAndStatus).mockResolvedValue([
+        vi.mocked(mockReportProvider.getReportCountsByDateAndStatus).mockResolvedValue([
           { date: date1Str, status: 'unchanged', count: 5 },
           { date: date1Str, status: 'changed', count: 3 },
           { date: date2Str, status: 'failed', count: 1 },
@@ -553,7 +523,7 @@ describe('PuppetRunHistoryService', () => {
       });
 
       it('should sort history by date in ascending order', async () => {
-        vi.mocked(mockPuppetDBService.getReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getReportCountsByDateAndStatus).mockResolvedValue([]);
 
         const result = await service.getAggregatedHistory(7);
 
@@ -566,7 +536,7 @@ describe('PuppetRunHistoryService', () => {
 
     describe('missing data handling', () => {
       it('should return all days with zero counts when report list is empty', async () => {
-        vi.mocked(mockPuppetDBService.getReportCountsByDateAndStatus).mockResolvedValue([]);
+        vi.mocked(mockReportProvider.getReportCountsByDateAndStatus).mockResolvedValue([]);
 
         const result = await service.getAggregatedHistory(7);
 
@@ -582,7 +552,7 @@ describe('PuppetRunHistoryService', () => {
 
       it('should handle PuppetDB service errors', async () => {
         const error = new Error('PuppetDB connection failed');
-        vi.mocked(mockPuppetDBService.getReportCountsByDateAndStatus).mockRejectedValue(error);
+        vi.mocked(mockReportProvider.getReportCountsByDateAndStatus).mockRejectedValue(error);
 
         await expect(service.getAggregatedHistory(7)).rejects.toThrow(
           'PuppetDB connection failed'

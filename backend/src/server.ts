@@ -4,21 +4,15 @@ import path from "path";
 import type { Database } from "sqlite3";
 import { ConfigService } from "./config/ConfigService";
 import { DatabaseService } from "./database/DatabaseService";
-import { BoltValidator, BoltValidationError } from "./validation/BoltValidator";
-import { BoltService } from "./bolt/BoltService";
 import { ExecutionRepository } from "./database/ExecutionRepository";
 import { CommandWhitelistService } from "./validation/CommandWhitelistService";
-import { createInventoryRouter } from "./routes/inventory";
 import { createFactsRouter } from "./routes/facts";
 import { createCommandsRouter } from "./routes/commands";
 import { createTasksRouter } from "./routes/tasks";
 import { createExecutionsRouter } from "./routes/executions";
-import { createPuppetRouter } from "./routes/puppet";
 import { createPuppetHistoryRouter } from "./routes/puppetHistory";
-import { createPackagesRouter } from "./routes/packages";
 import { createStreamingRouter } from "./routes/streaming";
 import { createIntegrationsRouter } from "./routes/integrations";
-import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
 import { createPluginsRouter } from "./routes/plugins";
 import { createSetupRouter } from "./routes/setup";
@@ -66,44 +60,6 @@ async function startServer(): Promise<Express> {
       },
     });
 
-    // Validate Bolt configuration (non-blocking)
-    logger.info("Validating Bolt configuration...", {
-      component: "Server",
-      operation: "startServer",
-    });
-    const boltValidator = new BoltValidator(config.boltProjectPath);
-    try {
-      boltValidator.validate();
-      logger.info("Bolt configuration validated successfully", {
-        component: "Server",
-        operation: "startServer",
-      });
-    } catch (error) {
-      if (error instanceof BoltValidationError) {
-        logger.warn(`Bolt validation failed: ${error.message}`, {
-          component: "Server",
-          operation: "startServer",
-          metadata: {
-            details: error.details,
-            missingFiles: error.missingFiles,
-          },
-        });
-        logger.warn("Server will continue to start, but Bolt operations may be limited", {
-          component: "Server",
-          operation: "startServer",
-        });
-      } else {
-        logger.warn(`Unexpected error during Bolt validation: ${String(error)}`, {
-          component: "Server",
-          operation: "startServer",
-        });
-        logger.warn("Server will continue to start, but Bolt operations may be limited", {
-          component: "Server",
-          operation: "startServer",
-        });
-      }
-    }
-
     // Initialize database
     logger.info("Initializing database...", {
       component: "Server",
@@ -115,48 +71,6 @@ async function startServer(): Promise<Express> {
       component: "Server",
       operation: "startServer",
     });
-
-    // Initialize Bolt service
-    logger.info("Initializing Bolt service...", {
-      component: "Server",
-      operation: "startServer",
-    });
-    const boltService = new BoltService(
-      config.boltProjectPath,
-      config.executionTimeout,
-      config.cache,
-    );
-    logger.info("Bolt service initialized successfully", {
-      component: "Server",
-      operation: "startServer",
-    });
-
-    // Defer package task validation to avoid blocking startup
-    // Validation will occur on-demand when package operations are requested
-    void (async (): Promise<void> => {
-      try {
-        const tasks = await boltService.listTasks();
-        for (const packageTask of config.packageTasks) {
-          const task = tasks.find((t) => t.name === packageTask.name);
-          if (task) {
-            logger.info(`✓ Package task '${packageTask.name}' (${packageTask.label}) is available`, {
-              component: "Server",
-              operation: "validatePackageTasks",
-            });
-          } else {
-            logger.warn(`✗ WARNING: Package task '${packageTask.name}' (${packageTask.label}) not found`, {
-              component: "Server",
-              operation: "validatePackageTasks",
-            });
-          }
-        }
-      } catch (error) {
-        logger.warn(`WARNING: Could not validate package installation tasks: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "validatePackageTasks",
-        });
-      }
-    })();
 
     // Initialize execution repository
     // Note: ExecutionRepository still uses raw sqlite3 connection for backward compatibility
@@ -417,15 +331,14 @@ async function startServer(): Promise<Express> {
     });
 
     // API Routes
-    app.use(
-      "/api/inventory",
-      createInventoryRouter(boltService, integrationManager),
-    );
-    app.use(
-      "/api/nodes",
-      createInventoryRouter(boltService, integrationManager),
-    );
+    // NOTE: Legacy routes using boltService directly have been removed.
+    // All plugin functionality is now accessed via IntegrationManager and CapabilityRegistry.
+    // See /api/v1/* routes for the new capability-based API.
+
+    // Facts routes - uses IntegrationManager
     app.use("/api/nodes", createFactsRouter(integrationManager));
+
+    // Commands routes - uses IntegrationManager
     app.use(
       "/api/nodes",
       createCommandsRouter(
@@ -435,6 +348,8 @@ async function startServer(): Promise<Express> {
         streamingManager,
       ),
     );
+
+    // Tasks routes - uses IntegrationManager
     app.use(
       "/api/nodes",
       createTasksRouter(
@@ -443,10 +358,7 @@ async function startServer(): Promise<Express> {
         streamingManager,
       ),
     );
-    app.use(
-      "/api/nodes",
-      createPuppetRouter(boltService, executionRepository, streamingManager),
-    );
+
     // Add puppet history routes if PuppetDB is available
     if (puppetRunHistoryService) {
       app.use(
@@ -454,24 +366,7 @@ async function startServer(): Promise<Express> {
         createPuppetHistoryRouter(puppetRunHistoryService),
       );
     }
-    app.use(
-      "/api",
-      createPackagesRouter(
-        boltService,
-        executionRepository,
-        config.packageTasks,
-        streamingManager,
-      ),
-    );
-    app.use(
-      "/api/nodes",
-      createPackagesRouter(
-        boltService,
-        executionRepository,
-        config.packageTasks,
-        streamingManager,
-      ),
-    );
+
     app.use(
       "/api/tasks",
       createTasksRouter(
@@ -501,10 +396,7 @@ async function startServer(): Promise<Express> {
         undefined, // PuppetserverService - will be accessed via CapabilityRegistry
       ),
     );
-    app.use(
-      "/api/integrations/hiera",
-      createHieraRouter(integrationManager),
-    );
+    // NOTE: Hiera routes removed - functionality available via /api/v1/capabilities
     app.use(
       "/api/debug",
       createDebugRouter(),
@@ -520,6 +412,9 @@ async function startServer(): Promise<Express> {
       createV1Router({
         integrationManager,
         logger,
+        executionRepository,
+        commandWhitelistService,
+        streamingManager,
       }),
     );
 

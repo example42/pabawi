@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import type { CommandWhitelistService } from "../validation/CommandWhitelistService";
 import { CommandNotAllowedError } from "../validation/CommandWhitelistService";
-import { BoltInventoryNotFoundError } from "../bolt/types";
+import { InventoryNotFoundError, normalizePluginError } from "../errors/PluginErrors";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
@@ -336,19 +336,20 @@ export function createCommandsRouter(
           return;
         }
 
-        if (error instanceof BoltInventoryNotFoundError) {
-          logger.error("Bolt configuration missing", {
+        if (error instanceof InventoryNotFoundError || (error instanceof Error && error.name === 'BoltInventoryNotFoundError')) {
+          const normalizedError = normalizePluginError(error, 'bolt');
+          logger.error("Inventory configuration missing", {
             component: "CommandsRouter",
             integration: "bolt",
             operation: "executeCommand",
-          }, error);
+          }, error instanceof Error ? error : undefined);
 
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addError(debugInfo, {
-              message: `Bolt configuration missing: ${error.message}`,
-              stack: error.stack,
+              message: `Inventory configuration missing: ${normalizedError.message}`,
+              stack: error instanceof Error ? error.stack : undefined,
               level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
@@ -357,8 +358,8 @@ export function createCommandsRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_CONFIG_MISSING",
-              message: error.message,
+              code: normalizedError.code,
+              message: normalizedError.message,
             },
           };
 
