@@ -61,6 +61,7 @@
   let error = $state<string | null>(null);
   let searchQuery = $state('');
   let filterMode = $state<'all' | 'used' | 'unused'>('used');
+  let foundFilter = $state<'all' | 'found' | 'not-found'>('all');
   let expandedKeys = $state<Set<string>>(new Set());
   let selectedKey = $state<HieraResolutionInfo | null>(null);
   let debugInfo = $state<DebugInfo | null>(null);
@@ -107,11 +108,18 @@
 
     let keys = hieraData.keys;
 
-    // Apply filter mode
+    // Apply usage filter mode
     if (filterMode === 'used') {
       keys = keys.filter(k => hieraData.usedKeys.includes(k.key));
     } else if (filterMode === 'unused') {
       keys = keys.filter(k => hieraData.unusedKeys.includes(k.key));
+    }
+
+    // Apply found/not found filter
+    if (foundFilter === 'found') {
+      keys = keys.filter(k => k.found);
+    } else if (foundFilter === 'not-found') {
+      keys = keys.filter(k => !k.found);
     }
 
     // Apply search filter
@@ -243,6 +251,7 @@
           <span>{hieraData.keys.length} total keys</span>
           <span class="text-green-600 dark:text-green-400">{hieraData.usedKeys.length} used</span>
           <span class="text-gray-500 dark:text-gray-500">{hieraData.unusedKeys.length} unused</span>
+          <span class="text-orange-600 dark:text-orange-400">{hieraData.keys.filter(k => !k.found).length} not found</span>
         </div>
       </div>
 
@@ -419,7 +428,35 @@
         </div>
       </div>
 
-      {#if searchQuery || filterMode !== 'all'}
+      <!-- Found/Not Found Filter Row -->
+      <div class="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+        <span class="text-sm text-gray-600 dark:text-gray-400">Resolution:</span>
+        <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm font-medium rounded-l-lg {foundFilter === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+            onclick={() => foundFilter = 'all'}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 {foundFilter === 'found' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+            onclick={() => foundFilter = 'found'}
+          >
+            Found
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 rounded-r-lg {foundFilter === 'not-found' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+            onclick={() => foundFilter = 'not-found'}
+          >
+            Not Found
+          </button>
+        </div>
+      </div>
+
+      {#if searchQuery || filterMode !== 'all' || foundFilter !== 'all'}
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
           Showing {filteredKeys.length} of {hieraData.keys.length} keys
         </p>

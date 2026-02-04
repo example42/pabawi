@@ -107,8 +107,8 @@ describe('PuppetRunHistoryService', () => {
         // Request only 3 days of history
         const result = await service.getNodeHistory('node1', 3);
 
-        // Should return 4 days (today + 3 days back)
-        expect(result.history.length).toBe(4);
+        // Should return 3 days (including today)
+        expect(result.history.length).toBe(3);
         // Total runs from counts
         expect(result.summary.totalRuns).toBe(1);
       });
@@ -150,8 +150,8 @@ describe('PuppetRunHistoryService', () => {
 
         const result = await service.getNodeHistory('node1', 7);
 
-        // Should return 8 days (today + 7 days back), with data on 2 of them
-        expect(result.history.length).toBe(8);
+        // Should return 7 days (including today), with data on 2 of them
+        expect(result.history.length).toBe(7);
 
         // Find the entries for our specific dates
         const date1Entry = result.history.find(h => h.date === date1Str);
@@ -395,8 +395,8 @@ describe('PuppetRunHistoryService', () => {
         const result = await service.getNodeHistory('node1', 7);
 
         expect(result.nodeId).toBe('node1');
-        // Should return 8 days (today + 7 days back) with zero counts
-        expect(result.history.length).toBe(8);
+        // Should return 7 days (including today) with zero counts
+        expect(result.history.length).toBe(7);
         result.history.forEach(day => {
           expect(day.success).toBe(0);
           expect(day.failed).toBe(0);
@@ -415,8 +415,8 @@ describe('PuppetRunHistoryService', () => {
 
         const result = await service.getNodeHistory('node1', 3);
 
-        // Should return 4 days (today + 3 days back) with zero counts
-        expect(result.history.length).toBe(4);
+        // Should return 3 days (including today) with zero counts
+        expect(result.history.length).toBe(3);
         result.history.forEach(day => {
           expect(day.success).toBe(0);
           expect(day.failed).toBe(0);
@@ -481,8 +481,8 @@ describe('PuppetRunHistoryService', () => {
 
         const result = await service.getAggregatedHistory(7);
 
-        // Should return 8 days (today + 7 days back) with zero counts
-        expect(result.length).toBe(8);
+        // Should return 7 days (including today) with zero counts
+        expect(result.length).toBe(7);
         result.forEach(day => {
           expect(day.success).toBe(0);
           expect(day.failed).toBe(0);
@@ -508,8 +508,8 @@ describe('PuppetRunHistoryService', () => {
 
         const result = await service.getAggregatedHistory(7);
 
-        // Should return 8 days with data on the specific date
-        expect(result.length).toBe(8);
+        // Should return 7 days with data on the specific date
+        expect(result.length).toBe(7);
 
         const dateEntry = result.find(h => h.date === dateStr);
         expect(dateEntry).toBeDefined();
@@ -537,8 +537,8 @@ describe('PuppetRunHistoryService', () => {
 
         const result = await service.getAggregatedHistory(7);
 
-        // Should return 8 days with data on 2 specific dates
-        expect(result.length).toBe(8);
+        // Should return 7 days with data on 2 specific dates
+        expect(result.length).toBe(7);
 
         const date1Entry = result.find(h => h.date === date1Str);
         const date2Entry = result.find(h => h.date === date2Str);
@@ -570,8 +570,8 @@ describe('PuppetRunHistoryService', () => {
 
         const result = await service.getAggregatedHistory(7);
 
-        // Should return 8 days (today + 7 days back) with zero counts
-        expect(result.length).toBe(8);
+        // Should return 7 days (including today) with zero counts
+        expect(result.length).toBe(7);
         result.forEach(day => {
           expect(day.success).toBe(0);
           expect(day.failed).toBe(0);

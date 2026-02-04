@@ -63,11 +63,10 @@ export class PuppetRunHistoryService {
     try {
       // Calculate date range
       const endDate = new Date();
-      // Set end date to end of today
-      endDate.setHours(23, 59, 59, 999);
+      // Set end date to current moment (not end of day) to show partial data for today
 
       const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
+      startDate.setDate(startDate.getDate() - (days - 1)); // Include today in the count
       // Set start date to beginning of that day
       startDate.setHours(0, 0, 0, 0);
 
@@ -122,13 +121,14 @@ export class PuppetRunHistoryService {
     try {
       // Calculate date range
       const endDate = new Date();
-      // Set end date to end of today
-      endDate.setHours(23, 59, 59, 999);
+      // Set end date to current moment (not end of day) to show partial data for today
 
       const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
+      startDate.setDate(startDate.getDate() - (days - 1)); // Include today in the count
       // Set start date to beginning of that day
       startDate.setHours(0, 0, 0, 0);
+
+      this.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
 
       // Use the efficient aggregate query to get counts by date and status
       const counts = await this.puppetDBService.getReportCountsByDateAndStatus(
@@ -140,6 +140,8 @@ export class PuppetRunHistoryService {
 
       // Convert counts to RunHistoryData format
       const history = this.convertCountsToHistory(counts, startDate, endDate);
+
+      this.log(`Converted to ${String(history.length)} days of history`);
 
       return history;
     } catch (error) {
@@ -164,7 +166,10 @@ export class PuppetRunHistoryService {
     // Pre-populate all days with zero counts
     const dateMap = new Map<string, RunHistoryData>();
     const currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
+    const endDateOnly = new Date(endDate);
+    endDateOnly.setHours(0, 0, 0, 0); // Normalize to start of day for comparison
+
+    while (currentDate <= endDateOnly) {
       const dateKey = currentDate.toISOString().split("T")[0];
       dateMap.set(dateKey, {
         date: dateKey,
