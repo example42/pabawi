@@ -476,7 +476,7 @@
           {:else if aggregatedRunHistory.length > 0}
             <div class="mb-4 flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <h3 class="text-lg font-semibold">Aggregated Puppet Run History (All Nodes - Last 7 Days)</h3>
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Aggregated Puppet Run History (All Nodes - Last 7 Days)</h3>
                 {#if runHistoryLastUpdate}
                   <span class="text-sm text-gray-500 dark:text-gray-400">
                     Last updated: {runHistoryLastUpdate.toLocaleTimeString()}
