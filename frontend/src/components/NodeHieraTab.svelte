@@ -45,6 +45,7 @@
     warnings?: string[];
     hierarchyFiles: HierarchyFileInfo[];
     totalKeys: number;
+    classes?: string[];
     _debug?: DebugInfo;
   }
 
@@ -60,10 +61,10 @@
   let error = $state<string | null>(null);
   let searchQuery = $state('');
   let filterMode = $state<'all' | 'used' | 'unused'>('used');
-  let classificationMode = $state<'found' | 'classes'>('found');
   let expandedKeys = $state<Set<string>>(new Set());
   let selectedKey = $state<HieraResolutionInfo | null>(null);
   let debugInfo = $state<DebugInfo | null>(null);
+  let showClasses = $state(false);
 
   // Fetch Hiera data for the node
   async function fetchHieraData(): Promise<void> {
@@ -245,6 +246,57 @@
         </div>
       </div>
 
+      <!-- Node Classes Section -->
+      {#if hieraData.classes && hieraData.classes.length > 0}
+        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            type="button"
+            class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+            onclick={() => showClasses = !showClasses}
+          >
+            <svg
+              class="h-4 w-4 transition-transform {showClasses ? 'rotate-90' : ''}"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <span>Node Classes ({hieraData.classes.length})</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">
+              - Used to determine key usage
+            </span>
+          </button>
+
+          {#if showClasses}
+            <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+              <div class="flex flex-wrap gap-2">
+                {#each hieraData.classes as className}
+                  <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-mono bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400">
+                    {className}
+                  </span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+        </div>
+      {:else}
+        <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-900/20">
+            <div class="flex items-start gap-2">
+              <svg class="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div class="flex-1">
+                <p class="text-sm text-yellow-800 dark:text-yellow-400">
+                  No catalog classes found for this node. All keys are marked as unused since usage cannot be determined without class information.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
       <!-- Warnings -->
       {#if hieraData.warnings && hieraData.warnings.length > 0}
         <div class="mt-3 rounded-lg border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-900/20">
@@ -339,54 +391,30 @@
         </div>
 
         <!-- Filter Buttons -->
-        <div class="flex items-center gap-4">
-          <!-- Classification Mode Toggle -->
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600 dark:text-gray-400">Classification:</span>
-            <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
-              <button
-                type="button"
-                class="px-3 py-1.5 text-sm font-medium rounded-l-lg {classificationMode === 'found' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                onclick={() => classificationMode = 'found'}
-              >
-                Found Keys
-              </button>
-              <button
-                type="button"
-                class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 rounded-r-lg {classificationMode === 'classes' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                onclick={() => classificationMode = 'classes'}
-              >
-                Class-Matched
-              </button>
-            </div>
-          </div>
-
-          <!-- Filter Mode Toggle -->
-          <div class="flex items-center gap-2">
-            <span class="text-sm text-gray-600 dark:text-gray-400">Filter:</span>
-            <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
-              <button
-                type="button"
-                class="px-3 py-1.5 text-sm font-medium rounded-l-lg {filterMode === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                onclick={() => filterMode = 'all'}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 {filterMode === 'used' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                onclick={() => filterMode = 'used'}
-              >
-                Used
-              </button>
-              <button
-                type="button"
-                class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 rounded-r-lg {filterMode === 'unused' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                onclick={() => filterMode = 'unused'}
-              >
-                Unused
-              </button>
-            </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-600 dark:text-gray-400">Show:</span>
+          <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
+            <button
+              type="button"
+              class="px-3 py-1.5 text-sm font-medium rounded-l-lg {filterMode === 'all' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+              onclick={() => filterMode = 'all'}
+            >
+              All Keys
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 {filterMode === 'used' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+              onclick={() => filterMode = 'used'}
+            >
+              Used by Classes
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 text-sm font-medium border-l border-gray-300 dark:border-gray-600 rounded-r-lg {filterMode === 'unused' ? 'bg-primary-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+              onclick={() => filterMode = 'unused'}
+            >
+              Not Used
+            </button>
           </div>
         </div>
       </div>
@@ -395,23 +423,6 @@
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
           Showing {filteredKeys.length} of {hieraData.keys.length} keys
         </p>
-      {/if}
-
-      <!-- Classification Mode Info -->
-      {#if classificationMode === 'classes'}
-        <div class="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-          <div class="flex items-start gap-2">
-            <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div class="flex-1">
-              <p class="text-sm text-blue-800 dark:text-blue-400">
-                Class-Matched mode shows the same results as Found Keys mode until class detection is fixed.
-                Currently showing all keys with resolved values as "used".
-              </p>
-            </div>
-          </div>
-        </div>
       {/if}
     </div>
 

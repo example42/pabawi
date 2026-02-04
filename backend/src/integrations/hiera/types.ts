@@ -160,6 +160,7 @@ export interface NodeHieraData {
   usedKeys: Set<string>;
   unusedKeys: Set<string>;
   hierarchyFiles: HierarchyFileInfo[];
+  classes?: string[];
 }
 
 /**
@@ -353,6 +354,7 @@ export interface NodeHieraDataResponse {
   warnings?: string[];
   hierarchyFiles: HierarchyFileInfo[];
   totalKeys: number;
+  classes?: string[];
 }
 
 /**

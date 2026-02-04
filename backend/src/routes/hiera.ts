@@ -1002,6 +1002,7 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
           factSource,
           totalKeys: keysArray.length,
           hierarchyFiles: nodeData.hierarchyFiles,
+          classes: nodeData.classes,
         };
 
         if (debugInfo) {
