@@ -15,7 +15,6 @@ import type {
   PluginCLICommand,
   PluginRoute,
   HealthStatus,
-  IntegrationType,
 } from "./types";
 import type { ZodSchema } from "zod";
 import { LoggerService } from "../services/LoggerService";
@@ -48,13 +47,15 @@ export abstract class BasePlugin implements BasePluginInterface {
 
   /**
    * Plugin metadata - must be implemented by subclasses
+   * REQUIRED: All plugins must define metadata
    */
-  abstract metadata: PluginMetadata;
+  abstract readonly metadata: PluginMetadata;
 
   /**
    * Capabilities provided by this plugin - must be implemented by subclasses
+   * REQUIRED: All plugins must define capabilities (can be empty array)
    */
-  abstract capabilities: PluginCapability[];
+  abstract readonly capabilities: PluginCapability[];
 
   /**
    * Optional frontend widgets
@@ -274,6 +275,10 @@ export abstract class BasePlugin implements BasePluginInterface {
 
   /**
    * Optional cleanup method called during shutdown
+   * Subclasses can override this to perform cleanup operations
    */
-  async shutdown?(): Promise<void>;
+  async shutdown(): Promise<void> {
+    // Default implementation does nothing
+    // Subclasses can override to perform cleanup
+  }
 }

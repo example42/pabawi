@@ -61,33 +61,6 @@ interface PluginInfo {
 }
 
 /**
- * Get integration color based on name
- * Matches frontend integration color scheme
- */
-function getIntegrationColor(name: string): string {
-  const colors: Record<string, string> = {
-    bolt: "#FFAE1A",
-    puppetdb: "#9063CD",
-    puppetserver: "#2E3A87",
-    hiera: "#C1272D",
-  };
-  return colors[name.toLowerCase()] ?? "#6B7280";
-}
-
-/**
- * Get integration icon based on name
- */
-function getIntegrationIcon(name: string): string {
-  const icons: Record<string, string> = {
-    bolt: "zap",
-    puppetdb: "database",
-    puppetserver: "server",
-    hiera: "layers",
-  };
-  return icons[name.toLowerCase()] ?? "puzzle";
-}
-
-/**
  * Create the v1 plugins router
  *
  * @param integrationManager - Integration manager instance
@@ -183,34 +156,7 @@ export function createV1PluginsRouter(
         });
       }
 
-      // Also include legacy plugins
-      const legacyPlugins = integrationManager.getAllPlugins();
-      for (const registration of legacyPlugins) {
-        // Skip if already added from v1 plugins
-        if (plugins.some((p) => p.metadata.name === registration.plugin.name)) {
-          continue;
-        }
-
-        plugins.push({
-          metadata: {
-            name: registration.plugin.name,
-            version: "1.0.0",
-            author: "Pabawi",
-            description: `${registration.plugin.name} integration (legacy)`,
-            integrationType:
-              registration.plugin.type === "execution"
-                ? "RemoteExecution"
-                : "InventorySource",
-            color: getIntegrationColor(registration.plugin.name),
-            icon: getIntegrationIcon(registration.plugin.name),
-          },
-          enabled: registration.config.enabled,
-          healthy: registration.plugin.isInitialized(),
-          widgets: [],
-          capabilities: [],
-          priority: registration.config.priority ?? 10,
-        });
-      }
+      // Legacy plugin registration removed - only v1.x plugins are supported
 
       logger.info(`Returning ${plugins.length} plugins via v1 API`, {
         component: "V1PluginsRouter",
@@ -301,34 +247,7 @@ export function createV1PluginsRouter(
         return;
       }
 
-      // Try legacy plugin
-      const legacyPlugins = integrationManager.getAllPlugins();
-      const legacyPlugin = legacyPlugins.find((p) => p.plugin.name === name);
-
-      if (legacyPlugin) {
-        const pluginInfo: PluginInfo = {
-          metadata: {
-            name: legacyPlugin.plugin.name,
-            version: "1.0.0",
-            author: "Pabawi",
-            description: `${legacyPlugin.plugin.name} integration (legacy)`,
-            integrationType:
-              legacyPlugin.plugin.type === "execution"
-                ? "RemoteExecution"
-                : "InventorySource",
-            color: getIntegrationColor(legacyPlugin.plugin.name),
-            icon: getIntegrationIcon(legacyPlugin.plugin.name),
-          },
-          enabled: legacyPlugin.config.enabled,
-          healthy: legacyPlugin.plugin.isInitialized(),
-          widgets: [],
-          capabilities: [],
-          priority: legacyPlugin.config.priority ?? 10,
-        };
-
-        res.json(pluginInfo);
-        return;
-      }
+      // Legacy plugin lookup removed - only v1.x plugins are supported
 
       // Plugin not found
       logger.warn(`Plugin not found: ${name}`, {
@@ -432,10 +351,8 @@ export function createV1PluginsRouter(
 
       // Check if plugin exists
       const metadata = integrationManager.getPluginMetadata(name);
-      const legacyPlugins = integrationManager.getAllPlugins();
-      const legacyPlugin = legacyPlugins.find((p) => p.plugin.name === name);
 
-      if (!metadata && !legacyPlugin) {
+      if (!metadata) {
         res.status(404).json({
           error: {
             code: "PLUGIN_NOT_FOUND",

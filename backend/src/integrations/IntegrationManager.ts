@@ -307,6 +307,28 @@ export class IntegrationManager {
     return Array.from(this.plugins.values());
   }
 
+  /**
+   * Get a specific plugin by name
+   *
+   * @param name - Plugin name
+   * @returns Plugin registration or undefined if not found
+   */
+  getPlugin(name: string): PluginRegistrationV1 | undefined {
+    return this.plugins.get(name);
+  }
+
+  /**
+   * Get plugins by integration type
+   *
+   * @param type - Integration type to filter by
+   * @returns Array of plugin registrations matching the type
+   */
+  getPluginsByType(type: string): PluginRegistrationV1[] {
+    return Array.from(this.plugins.values()).filter(
+      (registration) => registration.plugin.metadata.integrationType === type
+    );
+  }
+
   // ============================================================================
   // v1.0.0 Capability-Based Data Access Methods
   // ============================================================================

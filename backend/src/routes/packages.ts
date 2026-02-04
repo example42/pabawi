@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../integrations/bolt";
+// TODO: BoltService removed - this route needs to be reimplemented using v1.x plugin system
+// import type { BoltService } from "../integrations/bolt";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
@@ -36,13 +37,16 @@ interface PackageTaskConfig {
 /**
  * Create router for package installation endpoints
  *
- * @param boltService - Bolt service instance
+ * TODO: This route needs to be reimplemented using v1.x plugin system
+ * BoltService has been removed as part of the v1.0 migration
+ *
+ * @param boltService - Bolt service instance (DEPRECATED)
  * @param executionRepository - Execution repository instance
  * @param packageTasks - Array of available package installation tasks
  * @returns Express router
  */
 export function createPackagesRouter(
-  boltService: BoltService,
+  boltService: any, // TODO: Replace with v1.x plugin capability
   executionRepository: ExecutionRepository,
   packageTasks: PackageTaskConfig[],
   streamingManager?: StreamingExecutionManager,

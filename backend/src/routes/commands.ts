@@ -195,43 +195,43 @@ export function createCommandsRouter(
           });
         }
 
-        // Execute command asynchronously using IntegrationManager
-        // We don't await here to return immediately with execution ID
+        // TODO: Execute command asynchronously using capability-based routing
+        // This needs to be reimplemented using CapabilityRegistry.executeCapability()
+        // For now, mark as failed with a message
         void (async (): Promise<void> => {
           try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode
-            );
+            // STUB: Command execution via capability-based routing not yet implemented
+            // This will be implemented in a future task
+            const errorMessage = "Command execution via v1.x capability system not yet implemented";
 
-            // Execute action through IntegrationManager
-            const result = await integrationManager.executeAction("bolt", {
-              type: "command",
-              target: nodeId,
-              action: command,
-              metadata: {
-                streamingCallback,
-              },
+            logger.warn("Command execution stubbed - not yet implemented", {
+              component: "CommandsRouter",
+              integration: "bolt",
+              operation: "executeCommand",
+              metadata: { executionId, nodeId, command },
             });
 
-            // Update execution record with results
-            // Include stdout/stderr when expert mode is enabled
+            // Update execution record with stub message
             await executionRepository.update(executionId, {
-              status: result.status,
-              completedAt: result.completedAt,
-              results: result.results,
-              error: result.error,
-              command: result.command,
-              stdout: expertMode ? result.stdout : undefined,
-              stderr: expertMode ? result.stderr : undefined,
+              status: "failed",
+              completedAt: new Date().toISOString(),
+              results: [
+                {
+                  nodeId,
+                  status: "failed",
+                  error: errorMessage,
+                  duration: 0,
+                },
+              ],
+              error: errorMessage,
             });
 
-            // Emit completion event if streaming
+            // Emit error event if streaming
             if (streamingManager) {
-              streamingManager.emitComplete(executionId, result);
+              streamingManager.emitError(executionId, errorMessage);
             }
           } catch (error) {
-            logger.error("Error executing command", {
+            logger.error("Error in command execution stub", {
               component: "CommandsRouter",
               integration: "bolt",
               operation: "executeCommand",

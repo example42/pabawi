@@ -11,7 +11,6 @@ export interface ExecutionContext {
   method: string;
   userId?: string;
   nodeId?: string;
-  boltCommand?: string;
   additionalData?: Record<string, unknown>;
 }
 
@@ -44,7 +43,6 @@ export interface DetailedErrorResponse {
   timestamp?: string;
   rawResponse?: unknown;
   executionContext?: ExecutionContext;
-  boltCommand?: string;
 }
 
 /**
@@ -125,11 +123,6 @@ export class ErrorHandlingService {
         errorResponse.requestId = context.requestId;
         errorResponse.timestamp = context.timestamp;
         errorResponse.executionContext = context;
-
-        // Include Bolt command if available
-        if (context.boltCommand) {
-          errorResponse.boltCommand = context.boltCommand;
-        }
       }
 
       // Include raw Bolt output if available
@@ -593,7 +586,6 @@ export class ErrorHandlingService {
       metadata: {
         requestId: context.requestId,
         nodeId: context.nodeId,
-        boltCommand: context.boltCommand,
         additionalData: context.additionalData,
       },
     }, error);

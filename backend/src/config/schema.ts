@@ -96,213 +96,35 @@ export const ExecutionQueueConfigSchema = z.object({
 export type ExecutionQueueConfig = z.infer<typeof ExecutionQueueConfigSchema>;
 
 /**
- * SSL configuration schema for secure connections
+ * Generic plugin configuration schema (v1.0.0)
+ *
+ * Plugins are now loaded dynamically from plugin directories.
+ * Plugin-specific configuration is handled by each plugin's configSchema.
  */
-export const SSLConfigSchema = z.object({
+export const PluginConfigSchema = z.object({
   enabled: z.boolean().default(true),
-  ca: z.string().optional(),
-  cert: z.string().optional(),
-  key: z.string().optional(),
-  rejectUnauthorized: z.boolean().default(true),
+  priority: z.number().int().nonnegative().default(10),
+  config: z.record(z.unknown()).default({}),
 });
 
-export type SSLConfig = z.infer<typeof SSLConfigSchema>;
+export type PluginConfig = z.infer<typeof PluginConfigSchema>;
 
 /**
- * PuppetDB cache configuration schema
+ * Plugins configuration schema (v1.0.0)
+ *
+ * Maps plugin names to their configuration.
+ * Example: { "bolt": { enabled: true, config: { ... } } }
  */
-export const PuppetDBCacheConfigSchema = z.object({
-  ttl: z.number().int().positive().default(300000), // 5 minutes default
-});
+export const PluginsConfigSchema = z.record(PluginConfigSchema).default({});
 
-export type PuppetDBCacheConfig = z.infer<typeof PuppetDBCacheConfigSchema>;
+export type PluginsConfig = z.infer<typeof PluginsConfigSchema>;
 
 /**
- * PuppetDB circuit breaker configuration schema
- */
-export const PuppetDBCircuitBreakerConfigSchema = z.object({
-  threshold: z.number().int().positive().default(5),
-  timeout: z.number().int().positive().default(60000), // 60 seconds
-  resetTimeout: z.number().int().positive().default(30000), // 30 seconds
-});
-
-export type PuppetDBCircuitBreakerConfig = z.infer<
-  typeof PuppetDBCircuitBreakerConfigSchema
->;
-
-/**
- * PuppetDB integration configuration schema
- */
-export const PuppetDBConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  serverUrl: z.string().url(),
-  port: z.number().int().positive().optional(),
-  token: z.string().optional(),
-  ssl: SSLConfigSchema.optional(),
-  timeout: z.number().int().positive().default(30000), // 30 seconds
-  retryAttempts: z.number().int().nonnegative().default(3),
-  retryDelay: z.number().int().positive().default(1000), // 1 second
-  cache: PuppetDBCacheConfigSchema.optional(),
-  circuitBreaker: PuppetDBCircuitBreakerConfigSchema.optional(),
-});
-
-export type PuppetDBConfig = z.infer<typeof PuppetDBConfigSchema>;
-
-/**
- * Integration configuration schema
- */
-export const IntegrationConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  name: z.string(),
-  type: z.enum(["execution", "information", "both"]),
-  config: z.record(z.unknown()),
-  priority: z.number().int().nonnegative().optional(),
-});
-
-export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
-
-/**
- * Puppetserver cache configuration schema
- */
-export const PuppetserverCacheConfigSchema = z.object({
-  ttl: z.number().int().positive().default(300000), // 5 minutes default
-});
-
-export type PuppetserverCacheConfig = z.infer<
-  typeof PuppetserverCacheConfigSchema
->;
-
-/**
- * Puppetserver circuit breaker configuration schema
- */
-export const PuppetserverCircuitBreakerConfigSchema = z.object({
-  threshold: z.number().int().positive().default(5),
-  timeout: z.number().int().positive().default(60000), // 60 seconds
-  resetTimeout: z.number().int().positive().default(30000), // 30 seconds
-});
-
-export type PuppetserverCircuitBreakerConfig = z.infer<
-  typeof PuppetserverCircuitBreakerConfigSchema
->;
-
-/**
- * Puppetserver integration configuration schema
- */
-export const PuppetserverConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  serverUrl: z.string().url(),
-  port: z.number().int().positive().max(65535).optional(),
-  token: z.string().optional(),
-  ssl: SSLConfigSchema.optional(),
-  timeout: z.number().int().positive().default(30000), // 30 seconds
-  retryAttempts: z.number().int().nonnegative().default(3),
-  retryDelay: z.number().int().positive().default(1000), // 1 second
-  inactivityThreshold: z.number().int().positive().default(3600), // 1 hour in seconds
-  cache: PuppetserverCacheConfigSchema.optional(),
-  circuitBreaker: PuppetserverCircuitBreakerConfigSchema.optional(),
-});
-
-export type PuppetserverConfig = z.infer<typeof PuppetserverConfigSchema>;
-
-/**
- * Hiera fact source configuration schema
- */
-export const HieraFactSourceConfigSchema = z.object({
-  preferPuppetDB: z.boolean().default(true),
-  localFactsPath: z.string().optional(),
-});
-
-export type HieraFactSourceConfig = z.infer<typeof HieraFactSourceConfigSchema>;
-
-/**
- * Hiera catalog compilation configuration schema
- */
-export const HieraCatalogCompilationConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  timeout: z.number().int().positive().default(60000), // 60 seconds
-  cacheTTL: z.number().int().positive().default(300000), // 5 minutes
-});
-
-export type HieraCatalogCompilationConfig = z.infer<
-  typeof HieraCatalogCompilationConfigSchema
->;
-
-/**
- * Hiera cache configuration schema
- */
-export const HieraCacheConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  ttl: z.number().int().positive().default(300000), // 5 minutes
-  maxEntries: z.number().int().positive().default(10000),
-});
-
-export type HieraCacheConfig = z.infer<typeof HieraCacheConfigSchema>;
-
-/**
- * Hiera code analysis configuration schema
- */
-export const HieraCodeAnalysisConfigSchema = z.object({
-  enabled: z.boolean().default(true),
-  lintEnabled: z.boolean().default(true),
-  moduleUpdateCheck: z.boolean().default(true),
-  analysisInterval: z.number().int().positive().default(3600000), // 1 hour
-  exclusionPatterns: z.array(z.string()).default([]),
-});
-
-export type HieraCodeAnalysisConfig = z.infer<
-  typeof HieraCodeAnalysisConfigSchema
->;
-
-/**
- * Hiera integration configuration schema
- */
-export const HieraConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  controlRepoPath: z.string(),
-  hieraConfigPath: z.string().default("hiera.yaml"),
-  environments: z.array(z.string()).default(["production"]),
-  factSources: HieraFactSourceConfigSchema.default({
-    preferPuppetDB: true,
-  }),
-  catalogCompilation: HieraCatalogCompilationConfigSchema.default({
-    enabled: false,
-    timeout: 60000,
-    cacheTTL: 300000,
-  }),
-  cache: HieraCacheConfigSchema.default({
-    enabled: true,
-    ttl: 300000,
-    maxEntries: 10000,
-  }),
-  codeAnalysis: HieraCodeAnalysisConfigSchema.default({
-    enabled: true,
-    lintEnabled: true,
-    moduleUpdateCheck: true,
-    analysisInterval: 3600000,
-    exclusionPatterns: [],
-  }),
-});
-
-export type HieraConfig = z.infer<typeof HieraConfigSchema>;
-
-/**
- * Integrations configuration schema
- */
-export const IntegrationsConfigSchema = z.object({
-  puppetdb: PuppetDBConfigSchema.optional(),
-  puppetserver: PuppetserverConfigSchema.optional(),
-  hiera: HieraConfigSchema.optional(),
-});
-
-export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
-
-/**
- * Application configuration schema with Zod validation
+ * Application configuration schema with Zod validation (v1.0.0)
  */
 export const AppConfigSchema = z.object({
   port: z.number().int().positive().default(3000),
   host: z.string().default("localhost"),
-  boltProjectPath: z.string().default(process.cwd()),
   commandWhitelist: WhitelistConfigSchema,
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes
   logLevel: z.enum(["error", "warn", "info", "debug"]).default("info"),
@@ -324,7 +146,8 @@ export const AppConfigSchema = z.object({
   streaming: StreamingConfigSchema,
   cache: CacheConfigSchema,
   executionQueue: ExecutionQueueConfigSchema,
-  integrations: IntegrationsConfigSchema.default({}),
+  // Generic plugin configuration (v1.0.0)
+  plugins: PluginsConfigSchema,
   ui: UIConfigSchema.default({ showHomePageRunChart: true }),
 });
 

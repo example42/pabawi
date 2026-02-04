@@ -21,8 +21,12 @@ interface ExternalPluginConfig {
   config?: Record<string, unknown>;
 }
 
-interface YamlIntegrationsConfig {
-  integrations?: Record<string, unknown>;
+interface YamlPluginsConfig {
+  plugins?: Record<string, {
+    enabled?: boolean;
+    priority?: number;
+    config?: Record<string, unknown>;
+  }>;
   externalPlugins?: ExternalPluginConfig[];
 }
 
@@ -109,7 +113,7 @@ interface YamlDatabaseConfig {
  * Combined YAML configuration
  */
 export interface YamlConfig {
-  integrations: YamlIntegrationsConfig;
+  plugins: YamlPluginsConfig;
   rbac: YamlRbacConfig;
   database: YamlDatabaseConfig;
 }
@@ -149,9 +153,9 @@ export class ConfigService {
    * Load YAML configuration files from standard locations
    */
   private loadYamlConfigs(): void {
-    // Load integrations config
-    const integrationsResult = this.yamlLoader.loadFirst<YamlIntegrationsConfig>(
-      ...DEFAULT_CONFIG_PATHS.integrations,
+    // Load plugins config (formerly integrations)
+    const pluginsResult = this.yamlLoader.loadFirst<YamlPluginsConfig>(
+      ...DEFAULT_CONFIG_PATHS.integrations, // Keep same path for backward compatibility
     );
 
     // Load RBAC config
@@ -165,8 +169,8 @@ export class ConfigService {
     );
 
     this.yamlConfig = {
-      integrations: integrationsResult.success && integrationsResult.data
-        ? integrationsResult.data
+      plugins: pluginsResult.success && pluginsResult.data
+        ? pluginsResult.data
         : {},
       rbac: rbacResult.success && rbacResult.data ? rbacResult.data : {},
       database: databaseResult.success && databaseResult.data
@@ -192,7 +196,7 @@ export class ConfigService {
   /**
    * Check if a YAML config file was loaded
    */
-  public hasYamlConfig(type: "integrations" | "rbac" | "database"): boolean {
+  public hasYamlConfig(type: "plugins" | "rbac" | "database"): boolean {
     if (!this.yamlConfig) return false;
     const config = this.yamlConfig[type];
     return typeof config === "object" && Object.keys(config).length > 0;
@@ -207,361 +211,32 @@ export class ConfigService {
   }
 
   /**
-   * Parse integrations configuration from environment variables
+   * Parse generic plugins configuration from environment variables
+   *
+   * Environment variables for plugins follow the pattern:
+   * PLUGIN_{PLUGIN_NAME}_{CONFIG_KEY}
+   *
+   * Example: PLUGIN_BOLT_ENABLED=true
    */
-  private parseIntegrationsConfig(): {
-    puppetdb?: {
-      enabled: boolean;
-      serverUrl: string;
-      port?: number;
-      token?: string;
-      ssl?: {
-        enabled: boolean;
-        ca?: string;
-        cert?: string;
-        key?: string;
-        rejectUnauthorized?: boolean;
-      };
-      timeout?: number;
-      retryAttempts?: number;
-      retryDelay?: number;
-      cache?: {
-        ttl?: number;
-      };
-      circuitBreaker?: {
-        threshold?: number;
-        timeout?: number;
-        resetTimeout?: number;
-      };
-    };
-    puppetserver?: {
-      enabled: boolean;
-      serverUrl: string;
-      port?: number;
-      token?: string;
-      ssl?: {
-        enabled: boolean;
-        ca?: string;
-        cert?: string;
-        key?: string;
-        rejectUnauthorized?: boolean;
-      };
-      timeout?: number;
-      retryAttempts?: number;
-      retryDelay?: number;
-      inactivityThreshold?: number;
-      cache?: {
-        ttl?: number;
-      };
-      circuitBreaker?: {
-        threshold?: number;
-        timeout?: number;
-        resetTimeout?: number;
-      };
-    };
-    hiera?: {
-      enabled: boolean;
-      controlRepoPath: string;
-      hieraConfigPath?: string;
-      environments?: string[];
-      factSources?: {
-        preferPuppetDB?: boolean;
-        localFactsPath?: string;
-      };
-      catalogCompilation?: {
-        enabled?: boolean;
-        timeout?: number;
-        cacheTTL?: number;
-      };
-      cache?: {
-        enabled?: boolean;
-        ttl?: number;
-        maxEntries?: number;
-      };
-      codeAnalysis?: {
-        enabled?: boolean;
-        lintEnabled?: boolean;
-        moduleUpdateCheck?: boolean;
-        analysisInterval?: number;
-        exclusionPatterns?: string[];
-      };
-    };
-  } {
-    const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
+  private parsePluginsConfig(): Record<string, {
+    enabled?: boolean;
+    priority?: number;
+    config?: Record<string, unknown>;
+  }> {
+    const plugins: Record<string, {
+      enabled?: boolean;
+      priority?: number;
+      config?: Record<string, unknown>;
+    }> = {};
 
-    // Parse PuppetDB configuration
-    if (process.env.PUPPETDB_ENABLED === "true") {
-      const serverUrl = process.env.PUPPETDB_SERVER_URL;
-      if (!serverUrl) {
-        throw new Error(
-          "PUPPETDB_SERVER_URL is required when PUPPETDB_ENABLED is true",
-        );
-      }
+    // Parse environment variables for plugin configuration
+    // This is a generic approach that allows any plugin to be configured via env vars
+    // Format: PLUGIN_{PLUGIN_NAME}_ENABLED, PLUGIN_{PLUGIN_NAME}_PRIORITY, etc.
 
-      integrations.puppetdb = {
-        enabled: true,
-        serverUrl,
-        port: process.env.PUPPETDB_PORT
-          ? parseInt(process.env.PUPPETDB_PORT, 10)
-          : undefined,
-        token: process.env.PUPPETDB_TOKEN,
-        timeout: process.env.PUPPETDB_TIMEOUT
-          ? parseInt(process.env.PUPPETDB_TIMEOUT, 10)
-          : undefined,
-        retryAttempts: process.env.PUPPETDB_RETRY_ATTEMPTS
-          ? parseInt(process.env.PUPPETDB_RETRY_ATTEMPTS, 10)
-          : undefined,
-        retryDelay: process.env.PUPPETDB_RETRY_DELAY
-          ? parseInt(process.env.PUPPETDB_RETRY_DELAY, 10)
-          : undefined,
-      };
+    // For now, we'll keep this simple and let plugins handle their own config
+    // The YAML config will be the primary way to configure plugins
 
-      // Parse SSL configuration if any SSL-related env vars are set
-      if (
-        process.env.PUPPETDB_SSL_ENABLED !== undefined ||
-        process.env.PUPPETDB_SSL_CA ||
-        process.env.PUPPETDB_SSL_CERT ||
-        process.env.PUPPETDB_SSL_KEY ||
-        process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED !== undefined
-      ) {
-        integrations.puppetdb.ssl = {
-          enabled: process.env.PUPPETDB_SSL_ENABLED !== "false",
-          ca: process.env.PUPPETDB_SSL_CA,
-          cert: process.env.PUPPETDB_SSL_CERT,
-          key: process.env.PUPPETDB_SSL_KEY,
-          rejectUnauthorized:
-            process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED !== "false",
-        };
-      }
-
-      // Parse cache configuration
-      if (process.env.PUPPETDB_CACHE_TTL) {
-        integrations.puppetdb.cache = {
-          ttl: parseInt(process.env.PUPPETDB_CACHE_TTL, 10),
-        };
-      }
-
-      // Parse circuit breaker configuration
-      if (
-        process.env.PUPPETDB_CIRCUIT_BREAKER_THRESHOLD ||
-        process.env.PUPPETDB_CIRCUIT_BREAKER_TIMEOUT ||
-        process.env.PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT
-      ) {
-        integrations.puppetdb.circuitBreaker = {
-          threshold: process.env.PUPPETDB_CIRCUIT_BREAKER_THRESHOLD
-            ? parseInt(process.env.PUPPETDB_CIRCUIT_BREAKER_THRESHOLD, 10)
-            : undefined,
-          timeout: process.env.PUPPETDB_CIRCUIT_BREAKER_TIMEOUT
-            ? parseInt(process.env.PUPPETDB_CIRCUIT_BREAKER_TIMEOUT, 10)
-            : undefined,
-          resetTimeout: process.env.PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT
-            ? parseInt(
-                process.env.PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT,
-                10,
-              )
-            : undefined,
-        };
-      }
-    }
-
-    // Parse Puppetserver configuration
-    if (process.env.PUPPETSERVER_ENABLED === "true") {
-      const serverUrl = process.env.PUPPETSERVER_SERVER_URL;
-      if (!serverUrl) {
-        throw new Error(
-          "PUPPETSERVER_SERVER_URL is required when PUPPETSERVER_ENABLED is true",
-        );
-      }
-
-      integrations.puppetserver = {
-        enabled: true,
-        serverUrl,
-        port: process.env.PUPPETSERVER_PORT
-          ? parseInt(process.env.PUPPETSERVER_PORT, 10)
-          : undefined,
-        token: process.env.PUPPETSERVER_TOKEN,
-        timeout: process.env.PUPPETSERVER_TIMEOUT
-          ? parseInt(process.env.PUPPETSERVER_TIMEOUT, 10)
-          : undefined,
-        retryAttempts: process.env.PUPPETSERVER_RETRY_ATTEMPTS
-          ? parseInt(process.env.PUPPETSERVER_RETRY_ATTEMPTS, 10)
-          : undefined,
-        retryDelay: process.env.PUPPETSERVER_RETRY_DELAY
-          ? parseInt(process.env.PUPPETSERVER_RETRY_DELAY, 10)
-          : undefined,
-        inactivityThreshold: process.env.PUPPETSERVER_INACTIVITY_THRESHOLD
-          ? parseInt(process.env.PUPPETSERVER_INACTIVITY_THRESHOLD, 10)
-          : undefined,
-      };
-
-      // Parse SSL configuration if any SSL-related env vars are set
-      if (
-        process.env.PUPPETSERVER_SSL_ENABLED !== undefined ||
-        process.env.PUPPETSERVER_SSL_CA ||
-        process.env.PUPPETSERVER_SSL_CERT ||
-        process.env.PUPPETSERVER_SSL_KEY ||
-        process.env.PUPPETSERVER_SSL_REJECT_UNAUTHORIZED !== undefined
-      ) {
-        integrations.puppetserver.ssl = {
-          enabled: process.env.PUPPETSERVER_SSL_ENABLED !== "false",
-          ca: process.env.PUPPETSERVER_SSL_CA,
-          cert: process.env.PUPPETSERVER_SSL_CERT,
-          key: process.env.PUPPETSERVER_SSL_KEY,
-          rejectUnauthorized:
-            process.env.PUPPETSERVER_SSL_REJECT_UNAUTHORIZED !== "false",
-        };
-      }
-
-      // Parse cache configuration
-      if (process.env.PUPPETSERVER_CACHE_TTL) {
-        integrations.puppetserver.cache = {
-          ttl: parseInt(process.env.PUPPETSERVER_CACHE_TTL, 10),
-        };
-      }
-
-      // Parse circuit breaker configuration
-      if (
-        process.env.PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD ||
-        process.env.PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT ||
-        process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT
-      ) {
-        integrations.puppetserver.circuitBreaker = {
-          threshold: process.env.PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD
-            ? parseInt(process.env.PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD, 10)
-            : undefined,
-          timeout: process.env.PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT
-            ? parseInt(process.env.PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT, 10)
-            : undefined,
-          resetTimeout: process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT
-            ? parseInt(
-                process.env.PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT,
-                10,
-              )
-            : undefined,
-        };
-      }
-    }
-
-    // Parse Hiera configuration
-    if (process.env.HIERA_ENABLED === "true") {
-      const controlRepoPath = process.env.HIERA_CONTROL_REPO_PATH;
-      if (!controlRepoPath) {
-        throw new Error(
-          "HIERA_CONTROL_REPO_PATH is required when HIERA_ENABLED is true",
-        );
-      }
-
-      // Parse environments from JSON array
-      let environments: string[] | undefined;
-      if (process.env.HIERA_ENVIRONMENTS) {
-        try {
-          const parsed = JSON.parse(process.env.HIERA_ENVIRONMENTS) as unknown;
-          if (Array.isArray(parsed)) {
-            environments = parsed.filter(
-              (item): item is string => typeof item === "string",
-            );
-          }
-        } catch {
-          throw new Error(
-            "HIERA_ENVIRONMENTS must be a valid JSON array of strings",
-          );
-        }
-      }
-
-      integrations.hiera = {
-        enabled: true,
-        controlRepoPath,
-        hieraConfigPath: process.env.HIERA_CONFIG_PATH,
-        environments,
-      };
-
-      // Parse fact source configuration
-      if (
-        process.env.HIERA_FACT_SOURCE_PREFER_PUPPETDB !== undefined ||
-        process.env.HIERA_FACT_SOURCE_LOCAL_PATH
-      ) {
-        integrations.hiera.factSources = {
-          preferPuppetDB:
-            process.env.HIERA_FACT_SOURCE_PREFER_PUPPETDB !== "false",
-          localFactsPath: process.env.HIERA_FACT_SOURCE_LOCAL_PATH,
-        };
-      }
-
-      // Parse catalog compilation configuration
-      if (
-        process.env.HIERA_CATALOG_COMPILATION_ENABLED !== undefined ||
-        process.env.HIERA_CATALOG_COMPILATION_TIMEOUT ||
-        process.env.HIERA_CATALOG_COMPILATION_CACHE_TTL
-      ) {
-        integrations.hiera.catalogCompilation = {
-          enabled: process.env.HIERA_CATALOG_COMPILATION_ENABLED === "true",
-          timeout: process.env.HIERA_CATALOG_COMPILATION_TIMEOUT
-            ? parseInt(process.env.HIERA_CATALOG_COMPILATION_TIMEOUT, 10)
-            : undefined,
-          cacheTTL: process.env.HIERA_CATALOG_COMPILATION_CACHE_TTL
-            ? parseInt(process.env.HIERA_CATALOG_COMPILATION_CACHE_TTL, 10)
-            : undefined,
-        };
-      }
-
-      // Parse cache configuration
-      if (
-        process.env.HIERA_CACHE_ENABLED !== undefined ||
-        process.env.HIERA_CACHE_TTL ||
-        process.env.HIERA_CACHE_MAX_ENTRIES
-      ) {
-        integrations.hiera.cache = {
-          enabled: process.env.HIERA_CACHE_ENABLED !== "false",
-          ttl: process.env.HIERA_CACHE_TTL
-            ? parseInt(process.env.HIERA_CACHE_TTL, 10)
-            : undefined,
-          maxEntries: process.env.HIERA_CACHE_MAX_ENTRIES
-            ? parseInt(process.env.HIERA_CACHE_MAX_ENTRIES, 10)
-            : undefined,
-        };
-      }
-
-      // Parse code analysis configuration
-      if (
-        process.env.HIERA_CODE_ANALYSIS_ENABLED !== undefined ||
-        process.env.HIERA_CODE_ANALYSIS_LINT_ENABLED !== undefined ||
-        process.env.HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK !== undefined ||
-        process.env.HIERA_CODE_ANALYSIS_INTERVAL ||
-        process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS
-      ) {
-        // Parse exclusion patterns from JSON array
-        let exclusionPatterns: string[] | undefined;
-        if (process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS) {
-          try {
-            const parsed = JSON.parse(
-              process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS,
-            ) as unknown;
-            if (Array.isArray(parsed)) {
-              exclusionPatterns = parsed.filter(
-                (item): item is string => typeof item === "string",
-              );
-            }
-          } catch {
-            throw new Error(
-              "HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS must be a valid JSON array of strings",
-            );
-          }
-        }
-
-        integrations.hiera.codeAnalysis = {
-          enabled: process.env.HIERA_CODE_ANALYSIS_ENABLED !== "false",
-          lintEnabled: process.env.HIERA_CODE_ANALYSIS_LINT_ENABLED !== "false",
-          moduleUpdateCheck:
-            process.env.HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK !== "false",
-          analysisInterval: process.env.HIERA_CODE_ANALYSIS_INTERVAL
-            ? parseInt(process.env.HIERA_CODE_ANALYSIS_INTERVAL, 10)
-            : undefined,
-          exclusionPatterns,
-        };
-      }
-    }
-
-    return integrations;
+    return plugins;
   }
 
   /**
@@ -639,8 +314,8 @@ export class ConfigService {
           : undefined,
       };
 
-      // Parse integrations configuration
-      const integrations = this.parseIntegrationsConfig();
+      // Parse generic plugins configuration
+      const plugins = this.parsePluginsConfig();
 
       // Parse UI configuration
       const ui = {
@@ -652,7 +327,6 @@ export class ConfigService {
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
         host: process.env.HOST,
-        boltProjectPath: process.env.BOLT_PROJECT_PATH,
         commandWhitelist,
         executionTimeout: process.env.BOLT_EXECUTION_TIMEOUT
           ? parseInt(process.env.BOLT_EXECUTION_TIMEOUT, 10)
@@ -663,7 +337,7 @@ export class ConfigService {
         streaming,
         cache,
         executionQueue,
-        integrations,
+        plugins,
         ui,
       };
 
@@ -706,13 +380,6 @@ export class ConfigService {
    */
   public getHost(): string {
     return this.config.host;
-  }
-
-  /**
-   * Get Bolt project path
-   */
-  public getBoltProjectPath(): string {
-    return this.config.boltProjectPath;
   }
 
   /**
@@ -772,49 +439,29 @@ export class ConfigService {
   }
 
   /**
-   * Get integrations configuration
+   * Get generic plugins configuration (v1.0.0)
    */
-  public getIntegrationsConfig(): typeof this.config.integrations {
-    return this.config.integrations;
+  public getPluginsConfig(): typeof this.config.plugins {
+    return this.config.plugins;
   }
 
   /**
-   * Get PuppetDB configuration if enabled
+   * Get configuration for a specific plugin
    */
-  public getPuppetDBConfig():
-    | (typeof this.config.integrations.puppetdb & { enabled: true })
-    | null {
-    const puppetdb = this.config.integrations.puppetdb;
-    if (puppetdb?.enabled) {
-      return puppetdb as typeof puppetdb & { enabled: true };
+  public getPluginConfig(pluginName: string): {
+    enabled: boolean;
+    priority: number;
+    config: Record<string, unknown>;
+  } | null {
+    const pluginConfig = this.config.plugins[pluginName];
+    if (!pluginConfig) {
+      return null;
     }
-    return null;
-  }
-
-  /**
-   * Get Puppetserver configuration if enabled
-   */
-  public getPuppetserverConfig():
-    | (typeof this.config.integrations.puppetserver & { enabled: true })
-    | null {
-    const puppetserver = this.config.integrations.puppetserver;
-    if (puppetserver?.enabled) {
-      return puppetserver as typeof puppetserver & { enabled: true };
-    }
-    return null;
-  }
-
-  /**
-   * Get Hiera configuration if enabled
-   */
-  public getHieraConfig():
-    | (typeof this.config.integrations.hiera & { enabled: true })
-    | null {
-    const hiera = this.config.integrations.hiera;
-    if (hiera?.enabled) {
-      return hiera as typeof hiera & { enabled: true };
-    }
-    return null;
+    return {
+      enabled: pluginConfig.enabled ?? true,
+      priority: pluginConfig.priority ?? 10,
+      config: pluginConfig.config ?? {},
+    };
   }
 
   /**

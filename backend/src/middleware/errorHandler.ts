@@ -8,7 +8,6 @@ declare global {
   namespace Express {
     interface Request {
       id?: string;
-      boltCommand?: string;
     }
   }
 }
@@ -37,7 +36,6 @@ export function errorHandler(
     endpoint: req.path,
     method: req.method,
     nodeId: req.params.id || req.params.nodeId,
-    boltCommand: req.boltCommand,
   };
 
   // Log the error with full context

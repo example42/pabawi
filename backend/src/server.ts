@@ -52,7 +52,7 @@ async function startServer(): Promise<Express> {
       metadata: {
         host: config.host,
         port: config.port,
-        boltProjectPath: config.boltProjectPath,
+        // boltProjectPath removed - now handled by plugin configuration
         databasePath: config.databasePath,
         executionTimeout: config.executionTimeout,
         commandWhitelistAllowAll: config.commandWhitelist.allowAll,
@@ -259,7 +259,7 @@ async function startServer(): Promise<Express> {
         status: "ok",
         message: "Backend API is running",
         config: {
-          boltProjectPath: config.boltProjectPath,
+          // boltProjectPath removed - now handled by plugin configuration
           commandWhitelistEnabled: !config.commandWhitelist.allowAll,
           databaseInitialized: databaseService.isInitialized(),
         },

@@ -141,8 +141,14 @@ export class IntegrationColorService {
   private validateColorConfig(colorConfig: IntegrationColorConfig): void {
     const hexColorRegex = /^#[0-9A-F]{6}$/i;
 
-    const config = colorConfig as Record<string, string>;
-    for (const [variant, color] of Object.entries(config)) {
+    // Validate each color property
+    const colors: Array<[string, string]> = [
+      ['primary', colorConfig.primary],
+      ['light', colorConfig.light],
+      ['dark', colorConfig.dark],
+    ];
+
+    for (const [variant, color] of colors) {
       if (!hexColorRegex.test(color)) {
         throw new Error(
           `Invalid color format for ${variant}: "${color}". Expected hex format (e.g., #FF6B35)`

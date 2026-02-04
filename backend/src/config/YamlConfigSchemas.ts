@@ -16,15 +16,56 @@
 import { z } from "zod";
 import {
   DatabaseConfigSchema,
-  PuppetDBCacheConfigSchema,
-  PuppetDBCircuitBreakerConfigSchema,
-  PuppetserverCacheConfigSchema,
-  PuppetserverCircuitBreakerConfigSchema,
-  HieraCacheConfigSchema,
-  HieraFactSourceConfigSchema,
-  HieraCatalogCompilationConfigSchema,
-  HieraCodeAnalysisConfigSchema,
 } from "./schema";
+
+// ============================================================================
+// Legacy Plugin Configuration Schemas (for backward compatibility)
+// These will be removed once all plugins migrate to v1.0 architecture
+// ============================================================================
+
+/**
+ * Generic cache configuration schema
+ */
+const CacheConfigSchema = z.object({
+  ttl: z.number().int().positive().default(300000),
+});
+
+/**
+ * Generic circuit breaker configuration schema
+ */
+const CircuitBreakerConfigSchema = z.object({
+  threshold: z.number().int().positive().default(5),
+  timeout: z.number().int().positive().default(60000),
+  resetTimeout: z.number().int().positive().default(30000),
+});
+
+/**
+ * Generic fact source configuration schema
+ */
+const FactSourceConfigSchema = z.object({
+  preferPuppetDB: z.boolean().default(true),
+  localFactsPath: z.string().optional(),
+});
+
+/**
+ * Generic catalog compilation configuration schema
+ */
+const CatalogCompilationConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  timeout: z.number().int().positive().default(60000),
+  cacheTTL: z.number().int().positive().default(300000),
+});
+
+/**
+ * Generic code analysis configuration schema
+ */
+const CodeAnalysisConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  lintEnabled: z.boolean().default(true),
+  moduleUpdateCheck: z.boolean().default(true),
+  analysisInterval: z.number().int().positive().default(3600000),
+  exclusionPatterns: z.array(z.string()).default([]),
+});
 
 // ============================================================================
 // Common Schemas
@@ -136,8 +177,8 @@ export const YamlPuppetDBConfigSchema = z.object({
   retryAttempts: z.number().int().nonnegative().default(3),
   retryDelay: z.number().int().positive().default(1000),
   ssl: YamlSSLConfigSchema.optional(),
-  cache: PuppetDBCacheConfigSchema.optional(),
-  circuitBreaker: PuppetDBCircuitBreakerConfigSchema.optional(),
+  cache: CacheConfigSchema.optional(),
+  circuitBreaker: CircuitBreakerConfigSchema.optional(),
 });
 
 export type YamlPuppetDBConfig = z.infer<typeof YamlPuppetDBConfigSchema>;
@@ -167,8 +208,8 @@ export const YamlPuppetserverConfigSchema = z.object({
   retryDelay: z.number().int().positive().default(1000),
   inactivityThreshold: z.number().int().positive().default(3600).describe("Inactivity threshold in seconds"),
   ssl: YamlSSLConfigSchema.optional(),
-  cache: PuppetserverCacheConfigSchema.optional(),
-  circuitBreaker: PuppetserverCircuitBreakerConfigSchema.optional(),
+  cache: CacheConfigSchema.optional(),
+  circuitBreaker: CircuitBreakerConfigSchema.optional(),
 });
 
 export type YamlPuppetserverConfig = z.infer<typeof YamlPuppetserverConfigSchema>;
@@ -193,10 +234,10 @@ export const YamlHieraConfigSchema = z.object({
   controlRepoPath: z.string().describe("Path to Puppet control repository"),
   hieraConfigPath: z.string().default("hiera.yaml").describe("Path to hiera.yaml relative to control repo"),
   environments: z.array(z.string()).default(["production"]).describe("Available environments"),
-  factSources: HieraFactSourceConfigSchema.optional(),
-  catalogCompilation: HieraCatalogCompilationConfigSchema.optional(),
-  cache: HieraCacheConfigSchema.optional(),
-  codeAnalysis: HieraCodeAnalysisConfigSchema.optional(),
+  factSources: FactSourceConfigSchema.optional(),
+  catalogCompilation: CatalogCompilationConfigSchema.optional(),
+  cache: CacheConfigSchema.optional(),
+  codeAnalysis: CodeAnalysisConfigSchema.optional(),
 });
 
 export type YamlHieraConfig = z.infer<typeof YamlHieraConfigSchema>;

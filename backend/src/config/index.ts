@@ -51,11 +51,8 @@ export {
   CacheConfigSchema,
   UIConfigSchema,
   ExecutionQueueConfigSchema,
-  SSLConfigSchema,
-  PuppetDBConfigSchema,
-  PuppetserverConfigSchema,
-  HieraConfigSchema,
-  IntegrationsConfigSchema,
+  PluginConfigSchema,
+  PluginsConfigSchema,
 } from "./schema";
 
 export type {
@@ -67,11 +64,8 @@ export type {
   CacheConfig,
   UIConfig,
   ExecutionQueueConfig,
-  SSLConfig,
-  PuppetDBConfig,
-  PuppetserverConfig,
-  HieraConfig,
-  IntegrationsConfig,
+  PluginConfig,
+  PluginsConfig,
 } from "./schema";
 
 // YAML configuration schemas

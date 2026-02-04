@@ -7,8 +7,6 @@ import {
   ExecutionError,
   ParseError,
   InventoryNotFoundError,
-  TaskNotFoundError,
-  TaskParameterError,
   normalizePluginError,
 } from "../errors/PluginErrors";
 import { asyncHandler } from "./asyncHandler";
@@ -669,44 +667,43 @@ export function createTasksRouter(
           });
         }
 
-        // Execute task asynchronously using IntegrationManager
-        // We don't await here to return immediately with execution ID
+        // TODO: Execute task asynchronously using capability-based routing
+        // This needs to be reimplemented using CapabilityRegistry.executeCapability()
+        // For now, mark as failed with a message
         void (async (): Promise<void> => {
           try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode
-            );
+            // STUB: Task execution via capability-based routing not yet implemented
+            // This will be implemented in a future task
+            const errorMessage = "Task execution via v1.x capability system not yet implemented";
 
-            // Execute action through IntegrationManager
-            const result = await integrationManager.executeAction("bolt", {
-              type: "task",
-              target: nodeId,
-              action: taskName,
-              parameters,
-              metadata: {
-                streamingCallback,
-              },
+            logger.warn("Task execution stubbed - not yet implemented", {
+              component: "TasksRouter",
+              integration: "bolt",
+              operation: "executeTask",
+              metadata: { executionId, nodeId, taskName },
             });
 
-            // Update execution record with results
-            // Include stdout/stderr when expert mode is enabled
+            // Update execution record with stub message
             await executionRepository.update(executionId, {
-              status: result.status,
-              completedAt: result.completedAt,
-              results: result.results,
-              error: result.error,
-              command: result.command,
-              stdout: expertMode ? result.stdout : undefined,
-              stderr: expertMode ? result.stderr : undefined,
+              status: "failed",
+              completedAt: new Date().toISOString(),
+              results: [
+                {
+                  nodeId,
+                  status: "failed",
+                  error: errorMessage,
+                  duration: 0,
+                },
+              ],
+              error: errorMessage,
             });
 
-            // Emit completion event if streaming
+            // Emit error event if streaming
             if (streamingManager) {
-              streamingManager.emitComplete(executionId, result);
+              streamingManager.emitError(executionId, errorMessage);
             }
           } catch (error) {
-            logger.error("Error executing task", {
+            logger.error("Error in task execution stub", {
               component: "TasksRouter",
               integration: "bolt",
               operation: "executeTask",
