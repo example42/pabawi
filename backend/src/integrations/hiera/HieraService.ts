@@ -12,7 +12,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import type { IntegrationManager } from "../IntegrationManager";
-import type { Catalog } from "../puppetdb/types";
+import type { Resource } from "../puppetdb/types";
 import { HieraParser } from "./HieraParser";
 import { HieraScanner } from "./HieraScanner";
 import { HieraResolver } from "./HieraResolver";
@@ -439,7 +439,7 @@ export class HieraService {
     const keys = await this.resolveAllKeys(nodeId);
 
     // Classify keys as used/unused based on catalog analysis
-    const { usedKeys, unusedKeys } = await this.classifyKeyUsage(nodeId, keys);
+    const { usedKeys, unusedKeys, classes } = await this.classifyKeyUsage(nodeId, keys);
 
     // Generate hierarchy file information
     const hierarchyFiles = await this.getHierarchyFiles(nodeId, facts);
@@ -451,6 +451,7 @@ export class HieraService {
       usedKeys,
       unusedKeys,
       hierarchyFiles,
+      classes,
     };
 
     // Update cache
@@ -470,14 +471,14 @@ export class HieraService {
    *
    * @param nodeId - Node identifier
    * @param keys - Map of resolved keys
-   * @returns Object with usedKeys and unusedKeys sets
+   * @returns Object with usedKeys, unusedKeys sets, and classes array
    *
    * Requirements: 6.6
    */
   private async classifyKeyUsage(
     nodeId: string,
     keys: Map<string, HieraResolution>
-  ): Promise<{ usedKeys: Set<string>; unusedKeys: Set<string> }> {
+  ): Promise<{ usedKeys: Set<string>; unusedKeys: Set<string>; classes: string[] }> {
     const usedKeys = new Set<string>();
     const unusedKeys = new Set<string>();
 
@@ -491,7 +492,7 @@ export class HieraService {
         unusedKeys.add(keyName);
       }
       this.log(`No-catalog classification: ${String(usedKeys.size)} used keys, ${String(unusedKeys.size)} unused keys`);
-      return { usedKeys, unusedKeys };
+      return { usedKeys, unusedKeys, classes: [] };
     }
 
     // Build class prefixes for matching
@@ -509,7 +510,7 @@ export class HieraService {
     }
 
     this.log(`Class-based classification: ${String(usedKeys.size)} used keys, ${String(unusedKeys.size)} unused keys`);
-    return { usedKeys, unusedKeys };
+    return { usedKeys, unusedKeys, classes: includedClasses };
   }
 
   /**
@@ -530,37 +531,33 @@ export class HieraService {
         return [];
       }
 
-      // Use the same method as Managed Resources: call getNodeCatalog directly
-      // This ensures we get the properly transformed catalog data
-      const catalog = await (puppetdb as unknown as { getNodeCatalog: (nodeId: string) => Promise<Catalog | null> }).getNodeCatalog(nodeId);
+      // Use getNodeResources to get all resources including Class resources
+      // This is more reliable than using the catalog endpoint
+      const resourcesByType = await (puppetdb as unknown as { getNodeResources: (nodeId: string) => Promise<Record<string, Resource[]>> }).getNodeResources(nodeId);
 
-      if (!catalog) {
-        this.log(`No catalog data available for node: ${nodeId}`);
+      if (!resourcesByType) {
+        this.log(`No resources data available for node: ${nodeId}`);
         return [];
       }
 
-      // Extract class names from catalog resources
-      if (!Array.isArray(catalog.resources)) {
-        this.log(`Catalog for node ${nodeId} has no resources array`);
-        return [];
-      }
+      // Get Class resources specifically
+      const classResources = resourcesByType["Class"] || [];
 
-      // Filter for Class resources and extract titles
-      const classes = catalog.resources
-        .filter(resource => resource.type === "Class")
-        .map(resource => resource.title.toLowerCase());
+      this.log(`Found ${String(classResources.length)} Class resources for node: ${nodeId}`);
 
-      this.log(`Found ${String(classes.length)} classes in catalog for node: ${nodeId}`);
+      // Extract class titles and convert to lowercase
+      const classes = classResources.map(resource => resource.title.toLowerCase());
 
-      // Log some example classes for debugging
+      // Log all classes for debugging
       if (classes.length > 0) {
-        const exampleClasses = classes.slice(0, 5).join(", ");
-        this.log(`Example classes: ${exampleClasses}`);
+        this.log(`All classes: ${classes.join(", ")}`);
+      } else {
+        this.log(`WARNING: No Class resources found. This may indicate the node has no catalog or no classes included.`);
       }
 
       return classes;
     } catch (error) {
-      this.log(`Failed to get catalog for key usage analysis: ${error instanceof Error ? error.message : String(error)}`);
+      this.log(`Failed to get resources for key usage analysis: ${error instanceof Error ? error.message : String(error)}`);
       return [];
     }
   }
