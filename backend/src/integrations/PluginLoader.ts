@@ -491,32 +491,53 @@ export class PluginLoader {
     // Load the module
     let pluginModule: PluginModule;
     try {
-      // Try different entry points
+      // Convert .ts to .js for runtime loading (TypeScript files are compiled to JavaScript)
+      const runtimeEntryPoint = discovery.entryPoint.replace(/\.ts$/, ".js");
+
+      // Try different entry points, prioritizing .js files for runtime
       const entryPoints = [
-        discovery.entryPoint,
-        path.join(pluginPath, "backend", "index.ts"),
+        runtimeEntryPoint,
         path.join(pluginPath, "backend", "index.js"),
-        path.join(pluginPath, "index.ts"),
         path.join(pluginPath, "index.js"),
-        path.join(pluginPath, "plugin.ts"),
         path.join(pluginPath, "plugin.js"),
+        discovery.entryPoint, // Try original in case it's already .js
+        path.join(pluginPath, "backend", "index.ts"),
+        path.join(pluginPath, "index.ts"),
+        path.join(pluginPath, "plugin.ts"),
       ];
 
       let loaded = false;
+      let lastError: Error | undefined;
       for (const entryPoint of entryPoints) {
         try {
-          // Use require for .js/.ts files
+          // Ensure absolute path for require
+          const absolutePath = path.isAbsolute(entryPoint)
+            ? entryPoint
+            : path.resolve(entryPoint);
+
+          // Use require for .js files (Node.js cannot require .ts files directly)
+          // Clear the require cache first to ensure fresh load
+          delete require.cache[absolutePath];
+
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          pluginModule = require(entryPoint);
+          pluginModule = require(absolutePath);
           loaded = true;
+          this.logger.debug(`Successfully loaded plugin from: ${absolutePath}`, {
+            component: "PluginLoader",
+            operation: "loadPlugin",
+            metadata: { pluginPath, entryPoint: absolutePath },
+          });
           break;
-        } catch {
+        } catch (err) {
+          // Store last error for debugging
+          lastError = err instanceof Error ? err : new Error(String(err));
           // Try next entry point
         }
       }
 
       if (!loaded) {
-        throw new Error(`No valid entry point found for plugin at ${pluginPath}`);
+        const errorMsg = lastError ? `: ${lastError.message}` : "";
+        throw new Error(`No valid entry point found for plugin at ${pluginPath}${errorMsg}`);
       }
     } catch (error) {
       this.logger.error(`Failed to load plugin module: ${pluginPath}`, {

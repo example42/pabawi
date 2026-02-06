@@ -17,6 +17,7 @@
     onRetry?: () => void;
     timeRange?: number;
     onTimeRangeChange?: (hours: number) => void;
+    integration?: string;
   }
 
   let {
@@ -25,7 +26,8 @@
     error = null,
     onRetry,
     timeRange = 1,
-    onTimeRangeChange
+    onTimeRangeChange,
+    integration = 'puppetdb'
   }: PuppetReportsSummaryProps = $props();
 
   function getStatusColor(status: string): string {
@@ -68,7 +70,7 @@
       <h2 class="text-xl font-bold text-gray-900 dark:text-white">
         Puppet Reports
       </h2>
-      <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+      <IntegrationBadge integration={integration} variant="badge" size="sm" />
     </div>
     <button
       type="button"

@@ -97,18 +97,18 @@
   // Check integration status
   async function checkIntegrationStatus(): Promise<void> {
     try {
-      const data = await get<{ integrations: Array<{ name: string; status: string }> }>(
-        '/api/integrations/status',
+      const data = await get<{ plugins: Array<{ metadata: { name: string }; enabled: boolean; healthy: boolean }> }>(
+        '/api/v1/plugins',
         { maxRetries: 2 }
       );
 
-      const puppetDB = data.integrations.find(i => i.name === 'puppetdb');
-      const puppetserver = data.integrations.find(i => i.name === 'puppetserver');
-      const hiera = data.integrations.find(i => i.name === 'hiera');
+      const puppetDB = data.plugins.find(p => p.metadata.name === 'puppetdb');
+      const puppetserver = data.plugins.find(p => p.metadata.name === 'puppetserver');
+      const hiera = data.plugins.find(p => p.metadata.name === 'hiera');
 
-      isPuppetDBActive = puppetDB?.status === 'connected';
-      isPuppetserverActive = puppetserver?.status === 'connected';
-      isHieraActive = hiera?.status === 'connected';
+      isPuppetDBActive = puppetDB?.enabled && puppetDB?.healthy;
+      isPuppetserverActive = puppetserver?.enabled && puppetserver?.healthy;
+      isHieraActive = hiera?.enabled && hiera?.healthy;
 
       // Fetch run history if PuppetDB is active and we're on the reports tab
       if (isPuppetDBActive && activeTab === 'reports') {

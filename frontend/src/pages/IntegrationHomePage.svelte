@@ -20,6 +20,36 @@
   import type { Component } from 'svelte';
 
   // Types
+  interface PluginInfo {
+    metadata: {
+      name: string;
+      version: string;
+      description: string;
+      integrationType: string;
+      color?: string;
+      icon?: string;
+    };
+    enabled: boolean;
+    healthy: boolean;
+    widgets: Array<{
+      id: string;
+      name: string;
+      component: string;
+      slots: string[];
+      size: string;
+      requiredCapabilities: string[];
+      config?: Record<string, unknown>;
+      icon?: string;
+      priority?: number;
+    }>;
+    capabilities: Array<{
+      name: string;
+      category: string;
+      description: string;
+      riskLevel: string;
+    }>;
+  }
+
   interface IntegrationTab {
     id: string;
     label: string;
@@ -27,31 +57,6 @@
     widget?: string;
     icon?: string;
     priority: number;
-  }
-
-  interface Integration {
-    name: string;
-    displayName: string;
-    description: string;
-    color?: string;
-    icon?: string;
-    enabled: boolean;
-    healthy: boolean;
-    path: string;
-    tabs: IntegrationTab[];
-  }
-
-  interface MenuResponse {
-    categories: Array<{
-      type: string;
-      label: string;
-      integrations: Integration[];
-    }>;
-    legacy: Array<{
-      label: string;
-      path: string;
-      icon?: string;
-    }>;
   }
 
   // Get integration name from route params
@@ -65,7 +70,8 @@
   const userCapabilities = $derived(auth.permissions?.allowed ?? []);
 
   // State
-  let integration = $state<Integration | null>(null);
+  let integration = $state<PluginInfo | null>(null);
+  let tabs = $state<IntegrationTab[]>([]);
   let currentTab = $state<IntegrationTab | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -118,30 +124,49 @@
   }
 
   /**
-   * Load integration data from menu API
+   * Load integration data from v1 plugins API
    */
   async function loadIntegration() {
     loading = true;
     error = null;
 
     try {
-      const menuData = await get<MenuResponse>('/api/integrations/menu');
+      // Fetch plugin info from v1 API
+      const pluginData = await get<PluginInfo>(`/api/v1/plugins/${integrationName}`);
 
-      // Find this integration in the menu data
-      for (const category of menuData.categories) {
-        const found = category.integrations.find(i => i.name === integrationName);
-        if (found) {
-          integration = found;
+      integration = pluginData;
 
-          // Set current tab (from URL param or first tab)
-          if (initialTab) {
-            currentTab = found.tabs.find(t => t.id === initialTab) || found.tabs[0] || null;
-          } else {
-            currentTab = found.tabs[0] || null;
-          }
+      // Generate tabs from capabilities grouped by category
+      const tabsMap = new Map<string, IntegrationTab>();
 
-          break;
+      for (const capability of pluginData.capabilities) {
+        const category = capability.category;
+        const tabId = category.toLowerCase().replace(/\s+/g, '-');
+
+        if (!tabsMap.has(tabId)) {
+          // Find a widget for this category if available
+          const categoryWidget = pluginData.widgets.find(w =>
+            w.requiredCapabilities.some(cap => cap.startsWith(`${pluginData.metadata.name}.${category}`))
+          );
+
+          tabsMap.set(tabId, {
+            id: tabId,
+            label: category.charAt(0).toUpperCase() + category.slice(1),
+            capability: capability.name,
+            widget: categoryWidget ? `${pluginData.metadata.name}:${categoryWidget.id}` : undefined,
+            icon: categoryWidget?.icon,
+            priority: categoryWidget?.priority ?? 0,
+          });
         }
+      }
+
+      tabs = Array.from(tabsMap.values()).sort((a, b) => b.priority - a.priority);
+
+      // Set current tab (from URL param or first tab)
+      if (initialTab) {
+        currentTab = tabs.find(t => t.id === initialTab) || tabs[0] || null;
+      } else {
+        currentTab = tabs[0] || null;
       }
 
       if (!integration) {
@@ -171,38 +196,6 @@
 
     // Load widget for this tab
     void loadWidgetForTab(tab);
-  }
-
-  /**
-   * Load widget component for the active tab
-   */
-  async function loadWidgetForTab(tab: IntegrationTab) {
-    if (!tab.widget) {
-      widgetComponent = null;
-      return;
-    }
-
-    const loader = widgetComponents[tab.widget];
-    if (!loader) {
-      widgetError = `Widget component not found: ${tab.widget}`;
-      widgetComponent = null;
-      return;
-    }
-
-    widgetLoading = true;
-    widgetError = null;
-
-    try {
-      const module = await loader();
-      widgetComponent = module.default;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load widget';
-      widgetError = message;
-      widgetComponent = null;
-      console.error(`Failed to load widget ${tab.widget}:`, err);
-    } finally {
-      widgetLoading = false;
-    }
   }
 
   /**
@@ -270,10 +263,10 @@
       <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div class="flex items-center gap-4">
           <!-- Icon -->
-          {#if integration.icon}
-            <div class="flex h-16 w-16 items-center justify-center rounded-lg" style="background-color: {integration.color}20; color: {integration.color}">
+          {#if integration.metadata.icon}
+            <div class="flex h-16 w-16 items-center justify-center rounded-lg" style="background-color: {integration.metadata.color}20; color: {integration.metadata.color}">
               <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getIconPath(integration.icon)} />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getIconPath(integration.metadata.icon)} />
               </svg>
             </div>
           {/if}
@@ -281,10 +274,10 @@
           <!-- Title and Description -->
           <div class="flex-1">
             <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-              {integration.displayName}
+              {integration.metadata.name}
             </h1>
             <p class="mt-1 text-gray-600 dark:text-gray-400">
-              {integration.description}
+              {integration.metadata.description}
             </p>
           </div>
 
@@ -305,9 +298,9 @@
         </div>
 
         <!-- Tab Navigation -->
-        {#if integration.tabs.length > 0}
+        {#if tabs.length > 0}
           <nav class="mt-6 flex gap-1 border-b border-gray-200 dark:border-gray-700" aria-label="Tabs">
-            {#each integration.tabs as tab}
+            {#each tabs as tab}
               <button
                 onclick={() => setTab(tab)}
                 class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors"
@@ -372,7 +365,7 @@
               {:else if widgetComponent}
                 <!-- Dynamically render the widget component -->
                 {@const Component = widgetComponent}
-                <Component integration={integration.name} />
+                <Component integration={integration.metadata.name} />
               {:else}
                 <div class="rounded-lg bg-yellow-50 p-4 dark:bg-yellow-900/20">
                   <p class="text-yellow-800 dark:text-yellow-400">

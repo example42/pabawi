@@ -112,7 +112,7 @@
 
       // Get debug info from API if expert mode
       if (debugMode.enabled) {
-        const response = await get<{ plugins: PluginInfo[]; _debug?: DebugInfo }>('/api/plugins');
+        const response = await get<{ plugins: PluginInfo[]; _debug?: DebugInfo }>('/api/v1/plugins');
         if (response._debug) {
           debugInfo = response._debug;
         }

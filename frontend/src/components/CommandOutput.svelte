@@ -5,10 +5,10 @@
     stdout?: string;
     stderr?: string;
     exitCode?: number;
-    boltCommand?: string;
+    command?: string;
   }
 
-  let { stdout, stderr, exitCode, boltCommand }: Props = $props();
+  let { stdout, stderr, exitCode, command }: Props = $props();
 
   const hasOutput = $derived(stdout || stderr || exitCode !== undefined);
 
@@ -123,15 +123,15 @@
 
 {#if hasOutput}
   <div class="command-output space-y-3">
-    {#if debugMode.enabled && boltCommand}
+    {#if debugMode.enabled && command}
       <div>
-        <h4 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Bolt Command:</h4>
+        <h4 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Command:</h4>
         <div class="relative rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-          <pre class="overflow-x-auto pr-10 font-mono text-sm text-blue-900 dark:text-blue-100">{boltCommand}</pre>
+          <pre class="overflow-x-auto pr-10 font-mono text-sm text-blue-900 dark:text-blue-100">{command}</pre>
           <button
             type="button"
             class="absolute right-2 top-2 rounded p-1.5 text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-800"
-            onclick={() => copyToClipboard(boltCommand)}
+            onclick={() => copyToClipboard(command)}
             title="Copy to clipboard"
           >
             <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

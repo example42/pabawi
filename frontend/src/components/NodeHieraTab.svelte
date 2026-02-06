@@ -3,7 +3,7 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import DebugPanel from './DebugPanel.svelte';
-  import { get } from '../lib/api';
+  import { post } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import { debugMode } from '../lib/debug';
@@ -71,8 +71,9 @@
     error = null;
 
     try {
-      const data = await get<NodeHieraDataResponse>(
-        `/api/integrations/hiera/nodes/${nodeId}/data`,
+      const data = await post<NodeHieraDataResponse>(
+        `/api/v1/capabilities/hiera.node/execute`,
+        { nodeId },
         { maxRetries: 2 }
       );
       hieraData = data;

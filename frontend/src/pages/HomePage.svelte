@@ -25,30 +25,33 @@
   // Get user capabilities for widget filtering
   let userCapabilities = $derived(auth.permissions?.allowed ?? []);
 
-  // Updated: Using menu API format instead of old status API
-  interface IntegrationMenuItem {
-    name: string;
-    displayName: string;
-    description: string;
-    color?: string;
-    icon?: string;
+  // Using v1 API for plugin discovery
+  interface PluginInfo {
+    metadata: {
+      name: string;
+      version: string;
+      author: string;
+      description: string;
+      integrationType: string;
+      homepage?: string;
+      color?: string;
+      icon?: string;
+    };
     enabled: boolean;
     healthy: boolean;
-    path: string;
+    widgets: Array<{
+      id: string;
+      name: string;
+      slots: string[];
+    }>;
+    capabilities: Array<{
+      name: string;
+      category: string;
+    }>;
   }
 
-  interface IntegrationCategory {
-    type: string;
-    label: string;
-    description?: string;
-    icon?: string;
-    priority: number;
-    integrations: IntegrationMenuItem[];
-  }
-
-  interface MenuResponse {
-    categories: IntegrationCategory[];
-    legacy: Array<{ label: string; path: string; icon?: string }>;
+  interface PluginsResponse {
+    plugins: PluginInfo[];
   }
 
   // Converted to match old IntegrationStatus component expectations
@@ -91,59 +94,46 @@
     }
   }
 
-  /**
-   * Convert integration type to old API format
-   */
-  function mapIntegrationType(type: string): 'execution' | 'information' | 'both' {
-    const typeMap: Record<string, 'execution' | 'information' | 'both'> = {
-      'RemoteExecution': 'execution',
-      'Info': 'information',
-      'ConfigurationManagement': 'both',
-      'InventorySource': 'information',
-      'Monitoring': 'information',
-      'ReportingAnalytics': 'information',
-    };
-    return typeMap[type] ?? 'both';
-  }
-
   async function fetchIntegrationStatus(refresh = false): Promise<void> {
     integrationsLoading = true;
     integrationsError = null;
 
     try {
-      // Using new menu API instead of old status API
-      const data = await get<MenuResponse & { _debug?: DebugInfo }>('/api/integrations/menu');
+      // Using v1 plugins API for dynamic plugin discovery
+      const data = await get<PluginsResponse & { _debug?: DebugInfo }>('/api/v1/plugins');
 
-      console.log('[HomePage] Menu API response:', data);
+      console.log('[HomePage] Plugins API response:', data);
 
-      // Convert menu format to status format for IntegrationStatus component
-      const convertedIntegrations: IntegrationStatusData[] = [];
+      // Convert plugin format to status format for IntegrationStatus component
+      const convertedIntegrations: IntegrationStatusData[] = data.plugins.map(plugin => {
+        // Map integration type to old format
+        const typeMap: Record<string, 'execution' | 'information' | 'both'> = {
+          'RemoteExecution': 'execution',
+          'Info': 'information',
+          'ConfigurationManagement': 'both',
+          'Inventory': 'information',
+          'Monitoring': 'information',
+          'Events': 'information',
+        };
 
-      for (const category of data.categories) {
-        for (const integration of category.integrations) {
-          // Show as connected if enabled, regardless of health check
-          // Health checks may fail due to configuration but integrations can still work
-          const status = integration.enabled ? 'connected' : 'not_configured';
-          const message = integration.healthy
-            ? 'Operational'
-            : 'Connected (health check pending)';
+        const status = plugin.enabled ? 'connected' : 'not_configured';
+        const message = plugin.healthy ? 'Operational' : 'Connected (health check pending)';
 
-          convertedIntegrations.push({
-            name: integration.displayName,
-            type: mapIntegrationType(category.type),
-            status,
-            lastCheck: new Date().toISOString(),
-            message,
-            details: {
-              category: category.label,
-              path: integration.path,
-              color: integration.color,
-              icon: integration.icon,
-              healthy: integration.healthy,
-            },
-          });
-        }
-      }
+        return {
+          name: plugin.metadata.name,
+          type: typeMap[plugin.metadata.integrationType] ?? 'both',
+          status,
+          lastCheck: new Date().toISOString(),
+          message,
+          details: {
+            color: plugin.metadata.color,
+            icon: plugin.metadata.icon,
+            healthy: plugin.healthy,
+            capabilities: plugin.capabilities.length,
+            widgets: plugin.widgets.length,
+          },
+        };
+      });
 
       integrations = convertedIntegrations;
       console.log('[HomePage] Converted integrations:', $state.snapshot(integrations));

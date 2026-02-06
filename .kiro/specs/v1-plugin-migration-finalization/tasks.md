@@ -113,7 +113,7 @@ All legacy plugin directories have been removed from `backend/src/integrations/`
 
 **Goal:** Get basic API endpoints responding (even if with empty data)
 
-- [ ] P2.1 Create stub v1 routes
+- [x] P2.1 Create stub v1 routes
   - Create `/api/v1/plugins` - return empty array initially
   - Create `/api/v1/capabilities` - return empty array initially
   - Create `/api/v1/widgets` - return empty array initially
@@ -121,21 +121,21 @@ All legacy plugin directories have been removed from `backend/src/integrations/`
   - Mount v1 routes in server.ts
   - _Goal: v1 API endpoints exist and respond_
 
-- [ ] P2.2 Update server.ts initialization
+- [x] P2.2 Update server.ts initialization
   - Remove any hardcoded plugin initialization
   - Use PluginLoader to discover plugins from `plugins/native/`
   - Register discovered plugins with IntegrationManager
   - Handle initialization errors gracefully
   - _Goal: Server starts without errors_
 
-- [ ] P2.3 Fix PluginLoader
+- [x] P2.3 Fix PluginLoader
   - Ensure PluginLoader can discover plugins from `plugins/native/`
   - Load plugin.json manifests
   - Dynamically import plugin backend code
   - Register capabilities with CapabilityRegistry
   - _Goal: Plugins are auto-discovered_
 
-- [ ] P2.4 Checkpoint - Server starts
+- [x] P2.4 Checkpoint - Server starts
   - Run `npm start` in backend directory
   - Verify server starts on port 3000
   - Verify `/api/v1/plugins` endpoint responds
@@ -147,7 +147,7 @@ All legacy plugin directories have been removed from `backend/src/integrations/`
 
 **Goal:** Make frontend compile and remove hardcoded API endpoints
 
-- [ ] P3.1 Fix frontend components - Remove hardcoded endpoints
+- [x] P3.1 Fix frontend components - Remove hardcoded endpoints
   - Fix `CatalogComparison.svelte` - remove `/api/integrations/puppetserver/` endpoints
   - Fix `EnvironmentSelector.svelte` - remove `/api/integrations/puppetserver/` endpoints
   - Fix `PuppetserverStatus.svelte` - remove `/api/integrations/puppetserver/` endpoints
@@ -156,25 +156,25 @@ All legacy plugin directories have been removed from `backend/src/integrations/`
   - Replace with dynamic API calls to `/api/v1/capabilities/:name/execute`
   - _Goal: No hardcoded plugin endpoints in components_
 
-- [ ] P3.2 Fix frontend components - Remove plugin-specific logic
+- [x] P3.2 Fix frontend components - Remove plugin-specific logic
   - Fix `PackageInstallInterface.svelte` - remove hardcoded "bolt" references
   - Fix `CommandOutput.svelte` - remove `boltCommand` field
   - Fix `DetailedErrorDisplay.svelte` - remove `boltCommand` field
   - Fix `PuppetReportsSummary.svelte` - make integration badge dynamic
   - _Goal: Components are plugin-agnostic_
 
-- [ ] P3.3 Fix frontend pages
+- [x] P3.3 Fix frontend pages
   - Update pages to fetch plugins from `/api/v1/plugins`
   - Update pages to fetch widgets from `/api/v1/widgets/slot/:slotName`
   - Remove any hardcoded plugin assumptions
   - _Goal: Pages use dynamic plugin discovery_
 
-- [ ] P3.4 Fix frontend lib utilities
+- [x] P3.4 Fix frontend lib utilities
   - Update API client to use v1 endpoints
   - Remove any hardcoded plugin names from utilities
   - _Goal: Utilities are plugin-agnostic_
 
-- [ ] P3.5 Checkpoint - Frontend compiles
+- [x] P3.5 Checkpoint - Frontend compiles
   - Run `npm run build` in frontend directory
   - Verify 0 TypeScript/Svelte errors
   - _Goal: Clean compilation_

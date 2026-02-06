@@ -27,7 +27,8 @@ export interface ApiError {
   timestamp?: string;
   rawResponse?: unknown;
   executionContext?: unknown;
-  boltCommand?: string;
+  // Generic command/action that was executed (plugin-agnostic)
+  executedCommand?: string;
 }
 
 /**
@@ -261,7 +262,7 @@ async function parseErrorResponse(response: Response): Promise<ApiError> {
         timestamp: error.timestamp,
         rawResponse: error.rawResponse,
         executionContext: error.executionContext,
-        boltCommand: error.boltCommand,
+        executedCommand: error.executedCommand,
       };
     }
     // If no error field, fall through to default error

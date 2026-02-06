@@ -254,7 +254,7 @@ export interface PluginLoaderConfig {
  * Default plugin loader configuration
  */
 export const DEFAULT_PLUGIN_LOADER_CONFIG: PluginLoaderConfig = {
-  apiBaseUrl: "/api",
+  apiBaseUrl: "/api/v1",
   assetsBaseUrl: "/plugins",
   lazyLoadWidgets: true,
   metadataCacheTTL: 60000, // 1 minute

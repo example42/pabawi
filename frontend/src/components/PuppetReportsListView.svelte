@@ -5,7 +5,7 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import PaginationControls from './PaginationControls.svelte';
   import { reportFilters } from '../lib/reportFilters.svelte';
-  import { get } from '../lib/api';
+  import { post } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { loadPageSize, savePageSize } from '../lib/sessionStorage';
 
@@ -108,16 +108,41 @@
 
       const queryString = queryParams.toString();
       const url = certname
-        ? `/api/integrations/puppetdb/nodes/${certname}/reports${queryString ? `?${queryString}` : ''}`
-        : `/api/integrations/puppetdb/reports${queryString ? `?${queryString}` : ''}`;
+        ? `/api/v1/capabilities/puppetdb.reports/execute`
+        : `/api/v1/capabilities/puppetdb.reports.all/execute`;
 
-      const data = await get<{
+      // Build request body with filters
+      const requestBody: Record<string, any> = {
+        limit: pageSize,
+        offset: (currentPage - 1) * pageSize,
+      };
+
+      // Add certname if fetching for specific node
+      if (certname) {
+        requestBody.certname = certname;
+      }
+
+      // Add filter parameters
+      if (filters.status && filters.status.length > 0) {
+        requestBody.status = filters.status;
+      }
+      if (filters.minDuration !== undefined && filters.minDuration > 0) {
+        requestBody.minDuration = filters.minDuration;
+      }
+      if (filters.minCompileTime !== undefined && filters.minCompileTime > 0) {
+        requestBody.minCompileTime = filters.minCompileTime;
+      }
+      if (filters.minTotalResources !== undefined && filters.minTotalResources > 0) {
+        requestBody.minTotalResources = filters.minTotalResources;
+      }
+
+      const data = await post<{
         reports: Report[];
         count: number;
         totalCount: number;
         hasMore: boolean;
         _debug?: DebugInfo
-      }>(url, { maxRetries: 2 });
+      }>(url, requestBody, { maxRetries: 2 });
 
       internalReports = data.reports || [];
       totalCount = data.totalCount || 0;

@@ -49,14 +49,27 @@ class IntegrationColorStore {
     this.error = null;
 
     try {
-      const response = await fetch('/api/integrations/colors');
+      // Use v1 API endpoint for plugin colors
+      const response = await fetch('/api/v1/plugins');
 
       if (!response.ok) {
-        throw new Error(`Failed to load integration colors: ${response.statusText}`);
+        throw new Error(`Failed to load plugin colors: ${response.statusText}`);
       }
 
-      const data = await response.json() as ColorsApiResponse;
-      this.colors = data.colors;
+      const data = await response.json() as { plugins?: Array<{ metadata: { name: string; color?: string } }> };
+
+      // Build colors map from plugin metadata
+      const colorsMap: IntegrationColors = {};
+      if (data.plugins) {
+        for (const plugin of data.plugins) {
+          if (plugin.metadata.color) {
+            const name = plugin.metadata.name.toLowerCase();
+            colorsMap[name] = this.generateColorConfig(plugin.metadata.color);
+          }
+        }
+      }
+
+      this.colors = colorsMap;
     } catch (err: unknown) {
       this.error = err instanceof Error ? err.message : 'Unknown error loading colors';
       console.error('Error loading integration colors:', err);
@@ -120,6 +133,60 @@ class IntegrationColorStore {
       light: '#F3F4F6',
       dark: '#4B5563',
     };
+  }
+
+  /**
+   * Generate color configuration from a primary hex color
+   * Creates light and dark variants automatically
+   */
+  private generateColorConfig(primaryColor: string): IntegrationColorConfig {
+    // For now, use the primary color and generate simple variants
+    // In the future, this could use a color manipulation library
+    return {
+      primary: primaryColor,
+      light: this.lightenColor(primaryColor),
+      dark: this.darkenColor(primaryColor),
+    };
+  }
+
+  /**
+   * Lighten a hex color (simple implementation)
+   */
+  private lightenColor(hex: string): string {
+    // Remove # if present
+    const color = hex.replace('#', '');
+
+    // Parse RGB
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+
+    // Lighten by mixing with white (80% original, 20% white)
+    const newR = Math.round(r * 0.8 + 255 * 0.2);
+    const newG = Math.round(g * 0.8 + 255 * 0.2);
+    const newB = Math.round(b * 0.8 + 255 * 0.2);
+
+    return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
+  }
+
+  /**
+   * Darken a hex color (simple implementation)
+   */
+  private darkenColor(hex: string): string {
+    // Remove # if present
+    const color = hex.replace('#', '');
+
+    // Parse RGB
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+
+    // Darken by reducing brightness (70% of original)
+    const newR = Math.round(r * 0.7);
+    const newG = Math.round(g * 0.7);
+    const newB = Math.round(b * 0.7);
+
+    return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
   }
 
   /**

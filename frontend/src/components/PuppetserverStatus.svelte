@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { get } from '../lib/api';
+  import { post } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import { debugMode } from '../lib/debug';
@@ -35,12 +35,12 @@
 
     if (debugMode.enabled) {
       console.log('[PuppetserverStatus] Fetching services status');
-      console.log('[PuppetserverStatus] API endpoint: GET /api/integrations/puppetserver/status/services');
+      console.log('[PuppetserverStatus] API endpoint: POST /api/v1/capabilities/puppetserver.status.services/execute');
     }
 
     try {
       const startTime = performance.now();
-      const data = await get<{ services: any; _debug?: DebugInfo }>('/api/integrations/puppetserver/status/services');
+      const data = await post<{ services: any; _debug?: DebugInfo }>('/api/v1/capabilities/puppetserver.status.services/execute', {});
       const endTime = performance.now();
 
       servicesStatus = data.services;
@@ -71,12 +71,12 @@
 
     if (debugMode.enabled) {
       console.log('[PuppetserverStatus] Fetching simple status');
-      console.log('[PuppetserverStatus] API endpoint: GET /api/integrations/puppetserver/status/simple');
+      console.log('[PuppetserverStatus] API endpoint: POST /api/v1/capabilities/puppetserver.status/execute');
     }
 
     try {
       const startTime = performance.now();
-      const data = await get<{ status: any; _debug?: DebugInfo }>('/api/integrations/puppetserver/status/simple');
+      const data = await post<{ status: any; _debug?: DebugInfo }>('/api/v1/capabilities/puppetserver.status/execute', {});
       const endTime = performance.now();
 
       simpleStatus = data.status;
@@ -109,13 +109,13 @@
 
     if (debugMode.enabled) {
       console.log('[PuppetserverStatus] Fetching metrics');
-      console.log('[PuppetserverStatus] API endpoint: GET /api/integrations/puppetserver/metrics');
+      console.log('[PuppetserverStatus] API endpoint: POST /api/v1/capabilities/puppetserver.metrics/execute');
       console.log('[PuppetserverStatus] WARNING: This endpoint can be resource-intensive');
     }
 
     try {
       const startTime = performance.now();
-      const data = await get<{ metrics: any; _debug?: DebugInfo }>('/api/integrations/puppetserver/metrics');
+      const data = await post<{ metrics: any; _debug?: DebugInfo }>('/api/v1/capabilities/puppetserver.metrics/execute', {});
       const endTime = performance.now();
 
       metrics = data.metrics;
@@ -170,10 +170,9 @@
             <div>
               <p class="font-medium">API Endpoints:</p>
               <ul class="ml-4 mt-1 list-disc space-y-1">
-                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /status/v1/simple</code> - Basic health check</li>
-                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /status/v1/services</code> - Detailed service status</li>
-
-                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">GET /metrics/v2</code> - JMX metrics via Jolokia (resource-intensive)</li>
+                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">POST /api/v1/capabilities/puppetserver.status/execute</code> - Basic health check</li>
+                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">POST /api/v1/capabilities/puppetserver.status.services/execute</code> - Detailed service status</li>
+                <li><code class="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-900/50">POST /api/v1/capabilities/puppetserver.metrics/execute</code> - JMX metrics via Jolokia (resource-intensive)</li>
               </ul>
             </div>
             <div>
@@ -216,7 +215,7 @@
 
     {#if debugMode.enabled && !simpleLoading && !simpleError}
       <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
-        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /status/v1/simple</code>
+        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">POST /api/v1/capabilities/puppetserver.status/execute</code>
       </div>
     {/if}
 
@@ -251,7 +250,7 @@
 
     {#if debugMode.enabled && !servicesLoading && !servicesError}
       <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
-        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /status/v1/services</code>
+        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">POST /api/v1/capabilities/puppetserver.status.services/execute</code>
       </div>
     {/if}
 
@@ -290,7 +289,7 @@
 
     {#if debugMode.enabled && !showMetricsWarning && !metricsLoading && !metricsError}
       <div class="mb-3 text-xs text-gray-600 dark:text-gray-400">
-        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">GET /metrics/v2</code>
+        <span class="font-medium">Endpoint:</span> <code class="rounded bg-gray-100 px-1 py-0.5 dark:bg-gray-800">POST /api/v1/capabilities/puppetserver.metrics/execute</code>
         <span class="ml-2 text-red-600 dark:text-red-400 font-medium">⚠️ Resource-intensive operation</span>
       </div>
     {/if}

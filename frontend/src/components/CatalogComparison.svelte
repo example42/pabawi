@@ -106,7 +106,7 @@
       console.log('[CatalogComparison] Certname:', certname);
       console.log('[CatalogComparison] Environment 1:', environment1);
       console.log('[CatalogComparison] Environment 2:', environment2);
-      console.log('[CatalogComparison] API endpoint: POST /api/integrations/puppetserver/catalog/compare');
+      console.log('[CatalogComparison] API endpoint: POST /api/v1/capabilities/puppetserver.catalog.compare/execute');
     }
 
     try {
@@ -116,7 +116,7 @@
 
       const startTime = performance.now();
       const result = await post<{ diff: CatalogDiff; source: string }>(
-        '/api/integrations/puppetserver/catalog/compare',
+        '/api/v1/capabilities/puppetserver.catalog.compare/execute',
         {
           certname,
           environment1,

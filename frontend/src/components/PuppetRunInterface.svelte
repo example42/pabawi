@@ -452,10 +452,10 @@
                 </div>
               {/if}
 
-              <!-- Show Bolt command if available -->
+              <!-- Show command if available -->
               {#if result.command}
                 <div class="mt-2">
-                  <CommandOutput boltCommand={result.command} />
+                  <CommandOutput command={result.command} />
                 </div>
               {/if}
 

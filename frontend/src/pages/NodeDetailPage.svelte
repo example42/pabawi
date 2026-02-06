@@ -1676,7 +1676,7 @@
                   stdout={result.output.stdout}
                   stderr={result.output.stderr}
                   exitCode={result.output.exitCode}
-                  boltCommand={commandResult.command}
+                  command={commandResult.command}
                 />
               {/if}
             {/each}

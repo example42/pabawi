@@ -91,7 +91,7 @@
   <!-- Expert Mode Details -->
   {#if debugMode.enabled}
     <div class="space-y-2">
-      <!-- Bolt Command (if available) -->
+      <!-- Command (if available) -->
       {#if error.boltCommand}
         <div class="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
           <div class="flex items-center justify-between p-3">
@@ -99,7 +99,7 @@
               <svg class="h-5 w-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <span class="text-sm font-medium text-amber-800 dark:text-amber-200">Bolt Command</span>
+              <span class="text-sm font-medium text-amber-800 dark:text-amber-200">Command</span>
             </div>
             <button
               type="button"

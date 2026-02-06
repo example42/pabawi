@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { get, del } from '../lib/api';
+  import { post } from '../lib/api';
   import type { DebugInfo } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { debugMode } from '../lib/debug';
@@ -47,14 +47,14 @@
   async function loadEnvironments(): Promise<void> {
     if (debugMode.enabled) {
       console.log('[EnvironmentSelector] Loading environments');
-      console.log('[EnvironmentSelector] API endpoint: GET /api/integrations/puppetserver/environments');
+      console.log('[EnvironmentSelector] API endpoint: POST /api/v1/capabilities/puppetserver.environments/execute');
     }
 
     try {
       loading = true;
       error = null;
       const startTime = performance.now();
-      const data = await get<{ environments: Environment[]; source: string; count: number; _debug?: DebugInfo }>('/api/integrations/puppetserver/environments');
+      const data = await post<{ environments: Environment[]; source: string; count: number; _debug?: DebugInfo }>('/api/v1/capabilities/puppetserver.environments/execute', {});
       const endTime = performance.now();
 
       environments = data.environments;
@@ -100,13 +100,13 @@
   async function flushEnvironmentCache(environmentName: string): Promise<void> {
     if (debugMode.enabled) {
       console.log('[EnvironmentSelector] Flushing cache for environment:', environmentName);
-      console.log('[EnvironmentSelector] API endpoint: DELETE /api/integrations/puppetserver/environments/' + environmentName + '/cache');
+      console.log('[EnvironmentSelector] API endpoint: POST /api/v1/capabilities/puppetserver.environment.cache.flush/execute');
     }
 
     try {
       flushingEnvironment = environmentName;
       const startTime = performance.now();
-      await del(`/api/integrations/puppetserver/environments/${environmentName}/cache`);
+      await post(`/api/v1/capabilities/puppetserver.environment.cache.flush/execute`, { name: environmentName });
       const endTime = performance.now();
 
       if (debugMode.enabled) {

@@ -582,7 +582,7 @@
             </div>
 
             {#if executionResult.command}
-              <CommandOutput boltCommand={executionResult.command} />
+              <CommandOutput command={executionResult.command} />
             {/if}
 
             {#if executionResult.results.length > 0}

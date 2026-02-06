@@ -72,7 +72,7 @@
     }
 
     try {
-      const data = await get<{ integrations: unknown[]; _debug?: DebugInfo }>('/api/integrations/status');
+      const data = await get<{ plugins: unknown[]; _debug?: DebugInfo }>('/api/v1/plugins');
 
       // Store debug info if present
       if (data._debug) {

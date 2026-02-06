@@ -143,8 +143,8 @@
       polledData.status = execution.status || null;
 
       // Extract command if available (from expert mode)
-      if (execution.boltCommand) {
-        polledData.command = execution.boltCommand;
+      if (execution.command) {
+        polledData.command = execution.command;
       }
 
       // Stop polling if execution is complete
