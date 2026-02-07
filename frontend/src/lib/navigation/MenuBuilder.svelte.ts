@@ -37,59 +37,22 @@ import { DEFAULT_MENU_BUILDER_CONFIG, INTEGRATION_TYPE_METADATA } from "./types"
 // =============================================================================
 
 /**
- * Tab definition from backend
+ * Lightweight plugin metadata from /api/v1/plugins
+ * Used for fast menu building without loading full plugin data
  */
-interface IntegrationTab {
-  id: string;
-  label: string;
-  capability: string;
-  widget?: string;
-  icon?: string;
-  priority: number;
-}
-
-/**
- * Integration menu item from backend
- */
-interface IntegrationMenuItem {
+interface PluginMetadata {
   name: string;
   displayName: string;
   description: string;
+  integrationType: string;
   color?: string;
   icon?: string;
   enabled: boolean;
   healthy: boolean;
-  path: string;
-  tabs: IntegrationTab[];
-}
-
-/**
- * Integration category from backend
- */
-interface IntegrationCategory {
-  type: IntegrationType;
-  label: string;
-  description?: string;
-  icon?: string;
-  priority: number;
-  integrations: IntegrationMenuItem[];
-}
-
-/**
- * Legacy route from backend
- */
-interface LegacyRoute {
-  label: string;
-  path: string;
-  icon?: string;
-}
-
-/**
- * Menu response from backend
- */
-interface MenuResponse {
-  categories: IntegrationCategory[];
-  legacy: LegacyRoute[];
+  capabilities: {
+    name: string;
+    category: string;
+  }[];
 }
 
 // =============================================================================
@@ -197,6 +160,17 @@ class MenuBuilder {
   menu = $state<Menu | null>(null);
   isBuilding = $state(false);
   lastError = $state<string | null>(null);
+  private initialized = $state(false);
+
+  // Metadata caching (30 seconds)
+  private metadataCache: {
+    data: PluginMetadata[] | null;
+    timestamp: number;
+  } = {
+    data: null,
+    timestamp: 0,
+  };
+  private readonly METADATA_CACHE_TTL = 30000; // 30 seconds in milliseconds
 
   // Plugin contributions (auto-generated from loaded plugins)
   private pluginContributions = new Map<string, PluginMenuContribution>();
@@ -229,19 +203,180 @@ class MenuBuilder {
   // ===========================================================================
 
   /**
-   * Load plugins and register them with widget registry
+   * Check if metadata cache is still valid
    */
-  private async loadPlugins(): Promise<void> {
+  private isCacheValid(): boolean {
+    if (!this.metadataCache.data && this.metadataCache.timestamp === 0) {
+      return false;
+    }
+    const now = Date.now();
+    const age = now - this.metadataCache.timestamp;
+    return age < this.METADATA_CACHE_TTL;
+  }
+
+  /**
+   * Fetch plugin metadata from backend API
+   * Uses /api/v1/plugins endpoint for lightweight metadata only
+   * Target response time: < 100ms
+   */
+  private async fetchMetadata(): Promise<PluginMetadata[]> {
     try {
+      // Check cache first
+      if (this.isCacheValid() && this.metadataCache.data) {
+        this.log("debug", "Using cached plugin metadata");
+        return this.metadataCache.data;
+      }
+
+      this.log("debug", "Fetching plugin metadata from /api/v1/plugins");
+      const startTime = Date.now();
+
+      interface PluginsMetadataResponse {
+        plugins: PluginMetadata[];
+      }
+
+      const response = await apiGet<PluginsMetadataResponse>("/api/v1/plugins");
+      const duration = Date.now() - startTime;
+
+      this.log("info", `Fetched ${response.plugins.length} plugin metadata in ${duration}ms`);
+
+      // Warn if response time exceeds target
+      if (duration > 100) {
+        this.log("warn", `Metadata fetch exceeded target response time: ${duration}ms > 100ms`);
+      }
+
+      // Update cache
+      this.metadataCache = {
+        data: response.plugins,
+        timestamp: Date.now(),
+      };
+
+      return response.plugins;
+    } catch (error) {
+      this.log("error", `Failed to fetch plugin metadata: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Build menu from plugin metadata (synchronous)
+   * No data fetching - just menu structure from metadata
+   */
+  private buildFromMetadata(plugins: PluginMetadata[]): void {
+    this.log("debug", `Building menu from ${plugins.length} plugin metadata`);
+
+    // Clear existing plugin contributions
+    this.pluginContributions.clear();
+
+    // Build contributions from plugin metadata
+    for (const plugin of plugins) {
+      // Skip disabled plugins
+      if (!plugin.enabled) {
+        this.log("debug", `Skipping disabled plugin: ${plugin.name}`);
+        continue;
+      }
+
+      // Create menu item for this plugin
+      const menuItem: LinkMenuItem = {
+        id: `integration-${plugin.name}`,
+        type: "link",
+        label: plugin.displayName,
+        path: `/integrations/${plugin.name}`,
+        icon: plugin.icon,
+        priority: 500, // Default priority for integrations
+        requiredCapabilities: [], // No capability filtering yet
+        badge: !plugin.healthy ? "offline" : undefined,
+      };
+
+      // Create contribution for this plugin
+      this.pluginContributions.set(plugin.name, {
+        pluginName: plugin.name,
+        displayName: plugin.displayName,
+        integrationType: plugin.integrationType as IntegrationType,
+        items: [menuItem],
+        priority: 500,
+      });
+    }
+
+    this.log("info", `Built ${this.pluginContributions.size} plugin contributions from metadata`);
+  }
+
+  /**
+   * Initialize the menu builder with metadata-only approach
+   *
+   * This method:
+   * 1. Fetches lightweight plugin metadata from /api/v1/plugins
+   * 2. Builds menu synchronously from metadata (no data loading)
+   * 3. Loads plugins and registers widgets in background (non-blocking)
+   *
+   * This method is idempotent - safe to call multiple times.
+   * Returns early if already initialized and cache is still valid.
+   */
+  async initialize(): Promise<void> {
+    // Idempotent: Return early if already initialized and cache is still valid
+    if (this.initialized && this.isCacheValid() && this.menu !== null) {
+      this.log("debug", "Menu already initialized and cache is valid, skipping re-initialization");
+      return;
+    }
+
+    // Prevent concurrent builds
+    if (this.isBuilding) {
+      this.log("debug", "Menu initialization already in progress, skipping");
+      return;
+    }
+
+    this.log("debug", "Initializing menu builder with metadata-only approach");
+    this.isBuilding = true;
+    this.lastError = null;
+
+    try {
+      // Step 1: Fetch lightweight plugin metadata (fast, < 100ms target)
+      this.log("debug", "Fetching plugin metadata");
+      const plugins = await this.fetchMetadata();
+      this.log("info", `Fetched ${plugins.length} plugin metadata`);
+
+      // Step 2: Build menu synchronously from metadata (no data loading)
+      this.log("debug", "Building menu from metadata");
+      this.buildFromMetadata(plugins);
+      this.log("info", "Menu built from metadata");
+
+      // Step 3: Rebuild menu with contributions
+      this.rebuild();
+
+      // Mark as initialized
+      this.initialized = true;
+      this.log("info", "Menu builder initialization complete");
+
+      // Step 4: Load plugins and register widgets in background (non-blocking)
+      // This happens after menu is built so it doesn't block rendering
+      this.loadPluginsInBackground();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to initialize menu";
+      this.lastError = message;
+      this.log("error", `Menu initialization failed: ${message}`);
+
+      // Still build the menu with core items even if metadata fetch fails
+      this.rebuild();
+    } finally {
+      this.isBuilding = false;
+    }
+  }
+
+  /**
+   * Load plugins and register widgets in background (non-blocking)
+   * This happens after menu is built so it doesn't block rendering
+   */
+  private async loadPluginsInBackground(): Promise<void> {
+    try {
+      this.log("debug", "Loading plugins and registering widgets in background");
+
       // Dynamically import plugin loader and widget registry
       const { getPluginLoader, getWidgetRegistry } = await import("../plugins");
 
       const pluginLoader = getPluginLoader();
       const widgetRegistry = getWidgetRegistry();
 
-      this.log("debug", "Loading plugins for widget registry...");
       const loadedPlugins = await pluginLoader.loadAll();
-      this.log("info", `Successfully loaded ${loadedPlugins.length} plugins`);
+      this.log("info", `Loaded ${loadedPlugins.length} plugins in background`);
 
       // Register plugins with widget registry
       for (const plugin of loadedPlugins) {
@@ -251,99 +386,14 @@ class MenuBuilder {
 
       // Log widget count
       const totalWidgets = loadedPlugins.reduce((sum, p) => sum + p.widgets.length, 0);
-      this.log("info", `Total widgets loaded: ${totalWidgets}`);
+      this.log("info", `Total widgets loaded in background: ${totalWidgets}`);
 
       // Verify widgets are in registry
       const registryWidgetCount = widgetRegistry.widgetCount;
       this.log("debug", `Widgets in registry: ${registryWidgetCount}`);
     } catch (error) {
-      this.log("error", `Failed to load plugins: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Fetch integration menu data from backend API
-   */
-  private async fetchIntegrationMenu(): Promise<void> {
-    try {
-      const response = await apiGet<MenuResponse>("/api/integrations/menu");
-
-      // Clear existing plugin contributions
-      this.pluginContributions.clear();
-
-      // Build contributions from integration menu categories
-      for (const category of response.categories) {
-        for (const integration of category.integrations) {
-          // Create a contribution for each integration
-          this.pluginContributions.set(integration.name, {
-            pluginName: integration.name,
-            displayName: integration.displayName,
-            integrationType: category.type,
-            items: [
-              {
-                id: `integration-${integration.name}`,
-                type: "link",
-                label: integration.displayName,
-                path: integration.path,
-                icon: integration.icon || category.icon,
-                priority: 500 - category.priority, // Higher backend priority = lower frontend priority number
-                requiredCapabilities: [], // No capability filtering yet
-                badge: integration.enabled && !integration.healthy ? "offline" : undefined,
-                metadata: {
-                  description: integration.description,
-                  color: integration.color,
-                  tabCount: integration.tabs.length,
-                },
-              } as LinkMenuItem,
-            ],
-            priority: category.priority,
-          });
-        }
-      }
-
-      // Legacy routes are no longer added - they should be migrated to plugins
-      this.log("info", `Loaded ${response.categories.length} categories from integration menu`);
-    } catch (error) {
-      this.log("error", `Failed to fetch integration menu: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Initialize the menu builder, load plugins, fetch integration menu data, and build menu
-   *
-   * This method:
-   * 1. Loads plugins and registers widgets with widget registry
-   * 2. Fetches dynamic integration menu from backend
-   * 3. Builds menu with categories, integrations, and admin sections
-   */
-  async initialize(): Promise<void> {
-    this.log("debug", "Initializing menu builder");
-    this.isBuilding = true;
-
-    try {
-      // Step 1: Load plugins and register widgets
-      this.log("debug", "Loading plugins and registering widgets");
-      await this.loadPlugins();
-      this.log("info", "Plugins loaded and widgets registered");
-
-      // Step 2: Fetch integration menu data from backend
-      this.log("debug", "Fetching integration menu from backend");
-      await this.fetchIntegrationMenu();
-      this.log("info", "Integration menu data loaded");
-
-      // Step 3: Build menu with fetched data
-      this.rebuild();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to initialize menu";
-      this.lastError = message;
-      this.log("error", `Menu initialization failed: ${message}`);
-
-      // Still build the menu with core items even if integrations fail
-      this.rebuild();
-    } finally {
-      this.isBuilding = false;
+      this.log("error", `Failed to load plugins in background: ${error instanceof Error ? error.message : String(error)}`);
+      // Don't throw - this is non-blocking background work
     }
   }
 
@@ -355,6 +405,12 @@ class MenuBuilder {
     this.customContributions.clear();
     this.eventHandlers.clear();
     this.menu = null;
+    this.initialized = false;
+    // Clear cache on destroy
+    this.metadataCache = {
+      data: null,
+      timestamp: 0,
+    };
   }
 
   /**
@@ -541,7 +597,7 @@ class MenuBuilder {
             children: groupItems,
             collapsed: false, // Expanded within the dropdown
             priority: metadata.priority,
-            integrationType: integrationType as IntegrationType,
+            integrationType: integrationType,
           };
           integrationTypeGroups.push(typeGroup);
         }

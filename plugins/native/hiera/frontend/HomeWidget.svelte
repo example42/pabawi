@@ -25,23 +25,17 @@
   // Types
   // ==========================================================================
 
-  interface HealthStatus {
-    healthy: boolean;
-    message?: string;
-    lastCheck: string;
-    details?: {
-      keyCount?: number;
-      fileCount?: number;
-      lastScan?: string;
-      hieraConfigValid?: boolean;
+  interface PluginSummary {
+    pluginName: string;
+    displayName: string;
+    metrics: {
+      keyCount: number;
+      fileCount: number;
+      lastScan: string;
     };
-    degraded?: boolean;
-  }
-
-  interface KeysResponse {
-    totalKeys: number;
-    totalFiles: number;
-    lastScan: string;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
   }
 
   // ==========================================================================
@@ -61,29 +55,26 @@
 
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let keyCount = $state(0);
-  let fileCount = $state(0);
-  let lastScan = $state<string | null>(null);
-  let healthStatus = $state<HealthStatus | null>(null);
+  let summary = $state<PluginSummary | null>(null);
 
   // ==========================================================================
   // Derived
   // ==========================================================================
 
-  let isHealthy = $derived(healthStatus?.healthy ?? false);
-  let isDegraded = $derived(healthStatus?.degraded ?? false);
+  let isHealthy = $derived(summary?.healthy ?? false);
+  let keyCount = $derived(summary?.metrics.keyCount ?? 0);
+  let fileCount = $derived(summary?.metrics.fileCount ?? 0);
+  let lastScan = $derived(summary?.metrics.lastScan ?? null);
 
   let statusColor = $derived.by(() => {
-    if (!healthStatus) return 'bg-gray-400';
-    if (healthStatus.healthy) return 'bg-green-500';
-    if (healthStatus.degraded) return 'bg-yellow-500';
+    if (!summary) return 'bg-gray-400';
+    if (summary.healthy) return 'bg-green-500';
     return 'bg-red-500';
   });
 
   let statusText = $derived.by(() => {
-    if (!healthStatus) return 'Unknown';
-    if (healthStatus.healthy) return 'Healthy';
-    if (healthStatus.degraded) return 'Degraded';
+    if (!summary) return 'Unknown';
+    if (summary.healthy) return 'Healthy';
     return 'Unhealthy';
   });
 
@@ -114,28 +105,11 @@
     error = null;
 
     try {
-      // Load health status
-      const healthResponse = await api.get<HealthStatus>('/api/integrations/hiera/health');
-      healthStatus = healthResponse;
-
-      // Use health status details if available
-      if (healthStatus?.details) {
-        keyCount = healthStatus.details.keyCount ?? 0;
-        fileCount = healthStatus.details.fileCount ?? 0;
-        lastScan = healthStatus.details.lastScan ?? null;
-      }
-
-      // Try to get more detailed key info
-      try {
-        const keysResponse = await api.get<KeysResponse>('/api/integrations/hiera/keys');
-        keyCount = keysResponse.totalKeys ?? keyCount;
-        fileCount = keysResponse.totalFiles ?? fileCount;
-        lastScan = keysResponse.lastScan ?? lastScan;
-      } catch {
-        // Non-critical, continue with health status data
-      }
+      // Fetch lightweight summary data from new endpoint
+      summary = await api.get<PluginSummary>('/api/v1/plugins/hiera/summary');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load Hiera status';
+      error = err instanceof Error ? err.message : 'Failed to load Hiera summary';
+      summary = null;
     } finally {
       loading = false;
     }

@@ -162,6 +162,31 @@ interface BasePluginInterface {
   getConfig(): Record<string, unknown>;
   isInitialized(): boolean;
   shutdown?(): Promise<void>;
+  /**
+   * Get lightweight summary for home page tile
+   * Must return in under 500ms with minimal data
+   */
+  getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }>;
+  /**
+   * Get full plugin data for plugin home page
+   * Called on-demand when navigating to plugin page
+   */
+  getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+    error?: string;
+  }>;
 }
 
 // =============================================================================

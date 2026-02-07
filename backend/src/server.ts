@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
 import path from "path";
 import { ConfigService } from "./config/ConfigService";
@@ -218,7 +218,7 @@ async function startServer(): Promise<Express> {
     app.use(expertModeMiddleware);
 
     // Request logging middleware
-    app.use((req: Request, res: Response, next) => {
+    app.use((req: Request, res: Response, next: NextFunction) => {
       const startTime = Date.now();
 
       logger.debug(`${req.method} ${req.path}`, {

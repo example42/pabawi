@@ -149,7 +149,7 @@ export class NodeJournalService {
     ];
 
     try {
-      const result = await this.db.execute(sql, params);
+      await this.db.execute(sql, params);
 
       this.logger.debug('Journal entry written', {
         component: 'NodeJournalService',
@@ -420,16 +420,20 @@ export class NodeJournalService {
       };
 
       for (const row of rows) {
-        stats.totalEntries += row.total;
-        stats.byType[row.entry_type as JournalEntryType] =
-          (stats.byType[row.entry_type as JournalEntryType] || 0) + row.total;
+        const total = row.total as number;
+        const entryType = row.entry_type as JournalEntryType;
+        const status = row.status as string | null;
+        const lastActivity = row.last_activity as string;
 
-        if (row.status) {
-          stats.byStatus[row.status] = (stats.byStatus[row.status] || 0) + row.total;
+        stats.totalEntries += total;
+        stats.byType[entryType] = (stats.byType[entryType] || 0) + total;
+
+        if (status) {
+          stats.byStatus[status] = (stats.byStatus[status] || 0) + total;
         }
 
-        if (!stats.lastActivity || row.last_activity > stats.lastActivity) {
-          stats.lastActivity = row.last_activity;
+        if (!stats.lastActivity || lastActivity > stats.lastActivity) {
+          stats.lastActivity = lastActivity;
         }
       }
 

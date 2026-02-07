@@ -195,6 +195,30 @@ interface BasePluginInterface {
   getConfig(): Record<string, unknown>;
   isInitialized(): boolean;
   shutdown?(): Promise<void>;
+  /**
+   * Get lightweight summary for home page tiles
+   * Must return in under 500ms with minimal data (counts, status only)
+   */
+  getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }>;
+  /**
+   * Get full plugin data for plugin home pages
+   * Called on-demand when navigating to plugin page
+   */
+  getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+  }>;
 }
 
 // =============================================================================
@@ -1717,6 +1741,201 @@ export class PuppetDBPlugin implements BasePluginInterface, InventoryCapability,
       operation: "shutdown",
     });
     this._initialized = false;
+  }
+
+  /**
+   * Get lightweight summary for home page tiles
+   * Must return in under 500ms with minimal data (counts, status only)
+   */
+  async getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("puppetdb:v1:getSummary");
+    const startTime = Date.now();
+
+    try {
+      this.logger.debug("Getting plugin summary", {
+        component: "PuppetDBPlugin",
+        operation: "getSummary",
+      });
+
+      // Check if plugin is initialized
+      if (!this._initialized) {
+        complete({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "puppetdb",
+          displayName: "PuppetDB",
+          metrics: {},
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          error: "Plugin not initialized",
+        };
+      }
+
+      // Get health status first
+      const healthStatus = await this.puppetDBService.healthCheck();
+
+      // If unhealthy, return minimal summary
+      if (!healthStatus.healthy) {
+        complete({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "puppetdb",
+          displayName: "PuppetDB",
+          metrics: {
+            nodeCount: 0,
+            healthyNodes: 0,
+          },
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          error: healthStatus.message || "PuppetDB is unhealthy",
+        };
+      }
+
+      // Fetch lightweight data in parallel
+      const [nodes, reportsSummary] = await Promise.allSettled([
+        // Get node count (lightweight)
+        this.puppetDBService.getInventory().then(n => n.length).catch(() => 0),
+        // Get reports summary (lightweight)
+        this.puppetDBService.getReportsSummary(100, 24).catch(() => null),
+      ]);
+
+      const nodeCount = nodes.status === "fulfilled" ? nodes.value : 0;
+      const reports = reportsSummary.status === "fulfilled" ? reportsSummary.value : null;
+
+      const duration = Date.now() - startTime;
+
+      // Log warning if exceeds target time
+      if (duration > 500) {
+        this.logger.warn("getSummary exceeded target response time", {
+          component: "PuppetDBPlugin",
+          operation: "getSummary",
+          metadata: { durationMs: duration },
+        });
+      }
+
+      complete({ healthy: true, duration, nodeCount });
+
+      return {
+        pluginName: "puppetdb",
+        displayName: "PuppetDB",
+        metrics: {
+          nodeCount,
+          healthyNodes: reports ? reports.total - reports.failed : 0,
+          failedNodes: reports?.failed || 0,
+          totalReports: reports?.total || 0,
+          successRate: reports && reports.total > 0
+            ? Math.round(((reports.unchanged + reports.noop) / reports.total) * 100)
+            : 0,
+        },
+        healthy: true,
+        lastUpdate: new Date().toISOString(),
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to get plugin summary", {
+        component: "PuppetDBPlugin",
+        operation: "getSummary",
+        metadata: { error: errorMessage, duration },
+      });
+
+      complete({ error: errorMessage, duration });
+
+      return {
+        pluginName: "puppetdb",
+        displayName: "PuppetDB",
+        metrics: {},
+        healthy: false,
+        lastUpdate: new Date().toISOString(),
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Get full plugin data for plugin home pages
+   * Called on-demand when navigating to plugin page
+   */
+  async getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+  }> {
+    const complete = this.performanceMonitor.startTimer("puppetdb:v1:getData");
+
+    try {
+      this.logger.debug("Getting full plugin data", {
+        component: "PuppetDBPlugin",
+        operation: "getData",
+      });
+
+      // Check if plugin is initialized
+      if (!this._initialized) {
+        complete({ healthy: false });
+        return {
+          pluginName: "puppetdb",
+          displayName: "PuppetDB",
+          data: null,
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          capabilities: [],
+        };
+      }
+
+      // Get health status
+      const healthStatus = await this.puppetDBService.healthCheck();
+
+      // Get full data (can take longer than summary)
+      const [nodes, reports, stats] = await Promise.allSettled([
+        this.puppetDBService.getInventory(),
+        this.puppetDBService.getAllReports(50, 0),
+        this.puppetDBService.getSummaryStats(),
+      ]);
+
+      complete({ healthy: healthStatus.healthy });
+
+      return {
+        pluginName: "puppetdb",
+        displayName: "PuppetDB",
+        data: {
+          health: healthStatus,
+          nodes: nodes.status === "fulfilled" ? nodes.value : [],
+          recentReports: reports.status === "fulfilled" ? reports.value : [],
+          stats: stats.status === "fulfilled" ? stats.value : {},
+        },
+        healthy: healthStatus.healthy,
+        lastUpdate: new Date().toISOString(),
+        capabilities: this.capabilities.map(c => c.name),
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to get full plugin data", {
+        component: "PuppetDBPlugin",
+        operation: "getData",
+        metadata: { error: errorMessage },
+      });
+
+      complete({ error: errorMessage });
+
+      return {
+        pluginName: "puppetdb",
+        displayName: "PuppetDB",
+        data: null,
+        healthy: false,
+        lastUpdate: new Date().toISOString(),
+        capabilities: [],
+      };
+    }
   }
 
   // =========================================================================

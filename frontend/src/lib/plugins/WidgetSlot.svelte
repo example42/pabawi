@@ -93,11 +93,12 @@
 
   // Registry version counter to trigger reactivity when widgets change
   let registryVersion = $state(0);
+  let registryUpdateTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Subscribe to registry events to trigger re-renders
+  // Subscribe to registry events to trigger re-renders (debounced)
   onMount(() => {
     const unsubscribe = registry.subscribe((event) => {
-      // Increment version on any widget change to trigger $derived recalculation
+      // Debounce registry updates to prevent excessive re-renders
       if (
         event.type === "widget:registered" ||
         event.type === "widget:unregistered" ||
@@ -105,14 +106,26 @@
         event.type === "registry:refreshed" ||
         event.type === "registry:cleared"
       ) {
-        registryVersion++;
-        if (debug) {
-          log("debug", `Registry event: ${event.type}, triggering re-render`);
+        // Clear existing timer
+        if (registryUpdateTimer) {
+          clearTimeout(registryUpdateTimer);
         }
+
+        // Set new timer to batch updates
+        registryUpdateTimer = setTimeout(() => {
+          registryVersion++;
+          registryUpdateTimer = null;
+          if (debug) {
+            log("debug", `Registry event: ${event.type}, triggering re-render (debounced)`);
+          }
+        }, 100); // 100ms debounce
       }
     });
 
     return () => {
+      if (registryUpdateTimer) {
+        clearTimeout(registryUpdateTimer);
+      }
       unsubscribe();
     };
   });
@@ -145,9 +158,24 @@
   });
 
   // Load widget components when widgets change
+  // Track which widgets we've already started loading to prevent duplicates
+  let loadedWidgetIds = $state(new Set<string>());
+
   $effect(() => {
-    for (const widget of widgets) {
-      loadWidgetComponent(widget);
+    const currentWidgets = widgets;
+    for (const widget of currentWidgets) {
+      // Skip if we've already started loading this widget
+      if (loadedWidgetIds.has(widget.id)) {
+        continue;
+      }
+
+      // Only load if not already loaded or loading
+      const existing = widgetStates.get(widget.id);
+      if (!existing?.component && !existing?.loading) {
+        loadedWidgetIds.add(widget.id);
+        loadedWidgetIds = new Set(loadedWidgetIds); // Trigger reactivity
+        loadWidgetComponent(widget);
+      }
     }
   });
 
@@ -162,7 +190,14 @@
     // Skip if already loaded or loading
     const existing = widgetStates.get(widget.id);
     if (existing?.component || existing?.loading) {
+      if (debug) {
+        log("debug", `Skipping load for ${widget.id} - already ${existing.component ? 'loaded' : 'loading'}`);
+      }
       return;
+    }
+
+    if (debug) {
+      log("debug", `Starting load for widget: ${widget.id}`);
     }
 
     // Set loading state
@@ -184,6 +219,9 @@
           error: null,
         });
         widgetStates = new Map(widgetStates);
+        if (debug) {
+          log("debug", `Used cached component for widget: ${widget.id}`);
+        }
         return;
       }
 

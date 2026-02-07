@@ -21,7 +21,6 @@
   import SettingsPage from './pages/admin/SettingsPage.svelte';
   import { router, navigate } from './lib/router.svelte';
   import { get } from './lib/api';
-  import { getPluginLoader } from './lib/plugins';
   import { auth } from './lib/auth.svelte';
 
   interface SetupStatus {
@@ -98,8 +97,8 @@
   // Check if initial setup is required on app load
   onMount(async () => {
     try {
-      // Only check if not already on setup page
-      if (router.currentPath !== '/setup') {
+      // Only check if not already on setup or login page
+      if (router.currentPath !== '/setup' && router.currentPath !== '/login') {
         const status = await get<SetupStatus>('/api/setup/status');
 
         // If setup is required, redirect to setup page
@@ -122,40 +121,59 @@
             return;
           }
         }
+
+        // No initialization blocking - app shell renders immediately
+        console.log('[App] App shell rendered, components will load their own data');
+      } else if (router.currentPath === '/login') {
+        // On login page, check if auth is required but don't initialize yet
+        try {
+          const status = await get<SetupStatus>('/api/setup/status');
+          if (status.setupRequired) {
+            navigate('/setup');
+            return;
+          }
+          if (status.initialized && status.userCount > 0) {
+            authRequired = true;
+          }
+        } catch (err) {
+          console.warn('Could not check setup status on login page:', err);
+        }
       }
     } catch (err) {
       // If setup endpoint fails, it might not be implemented yet
       // Don't block the app from loading
       console.warn('Could not check setup status:', err);
     }
-
-    // Plugin loading is now handled by DynamicNavigation's MenuBuilder initialization
-    // which loads plugins and registers widgets automatically
-    console.log('[App] Initialization complete - plugins will be loaded by MenuBuilder');
   });
 </script>
 
 <ErrorBoundary onError={handleError}>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
-    <DynamicNavigation currentPath={router.currentPath} />
+    <!-- Render shell immediately - no blocking on initialization -->
+    {#if !isPublicRoute(router.currentPath)}
+      <DynamicNavigation currentPath={router.currentPath} />
+    {/if}
+
     <main class="flex-1">
       <Router {routes} />
     </main>
 
     <!-- Footer -->
-    <footer class="mt-auto py-8 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-      <div class="max-w-7xl mx-auto px-4 text-left">
-        <p class="text-sm text-gray-500 dark:text-gray-400">
-          Made by Alessandro Franceschi <a
-            href="https://example42.com"
-            target="_blank"
-            class="text-blue-600 dark:text-blue-400 hover:underline"
-          > (example42.com)</a> and his AI assistants
-        </p>
-      </div>
-    </footer>
-  </div>
+    {#if !isPublicRoute(router.currentPath)}
+      <footer class="mt-auto py-8 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <div class="max-w-7xl mx-auto px-4 text-left">
+          <p class="text-sm text-gray-500 dark:text-gray-400">
+            Made by Alessandro Franceschi <a
+              href="https://example42.com"
+              target="_blank"
+              class="text-blue-600 dark:text-blue-400 hover:underline"
+            > (example42.com)</a> and his AI assistants
+          </p>
+        </div>
+      </footer>
+    {/if}
 
-  <!-- Toast notifications -->
-  <ToastContainer />
+    <!-- Toast notifications -->
+    <ToastContainer />
+  </div>
 </ErrorBoundary>

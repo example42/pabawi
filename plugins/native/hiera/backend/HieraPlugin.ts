@@ -163,6 +163,31 @@ interface BasePluginInterface {
   getConfig(): Record<string, unknown>;
   isInitialized(): boolean;
   shutdown?(): Promise<void>;
+  /**
+   * Get lightweight summary data for home page tile
+   * Must return in under 500ms with minimal data
+   */
+  getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }>;
+  /**
+   * Get full plugin data for plugin home page
+   * Called on-demand when navigating to plugin page
+   */
+  getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    description: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+  }>;
 }
 
 // =============================================================================
@@ -964,6 +989,182 @@ export class HieraPlugin implements BasePluginInterface {
     }
 
     this._initialized = false;
+  }
+
+  /**
+   * Get lightweight summary data for home page tile
+   * Must return in under 500ms with minimal data
+   */
+  async getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("hiera:v1:getSummary");
+    const startTime = Date.now();
+    const now = new Date().toISOString();
+
+    try {
+      this.logger.debug("Getting Hiera summary", {
+        component: "HieraPlugin",
+        operation: "getSummary",
+      });
+
+      // Check if service is available
+      if (!this.hieraService || !this.hieraService.isInitialized()) {
+        complete({ healthy: false });
+        return {
+          pluginName: "hiera",
+          displayName: "Hiera",
+          metrics: {
+            keyCount: 0,
+            fileCount: 0,
+          },
+          healthy: false,
+          lastUpdate: now,
+          error: "Hiera service not initialized",
+        };
+      }
+
+      // Get key index (should be cached, fast)
+      const keyIndex = await this.hieraService.getAllKeys();
+
+      const duration = Date.now() - startTime;
+
+      // Log warning if exceeds target time
+      if (duration > 500) {
+        this.logger.warn("getSummary exceeded target response time", {
+          component: "HieraPlugin",
+          operation: "getSummary",
+          metadata: { durationMs: duration, targetMs: 500 },
+        });
+      }
+
+      complete({ healthy: true, durationMs: duration });
+
+      return {
+        pluginName: "hiera",
+        displayName: "Hiera",
+        metrics: {
+          keyCount: keyIndex.totalKeys,
+          fileCount: keyIndex.totalFiles,
+          lastScan: keyIndex.lastScan,
+        },
+        healthy: true,
+        lastUpdate: now,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to get Hiera summary", {
+        component: "HieraPlugin",
+        operation: "getSummary",
+        metadata: { error: errorMessage, durationMs: duration },
+      });
+
+      complete({ healthy: false, error: errorMessage });
+
+      return {
+        pluginName: "hiera",
+        displayName: "Hiera",
+        metrics: {
+          keyCount: 0,
+          fileCount: 0,
+        },
+        healthy: false,
+        lastUpdate: now,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Get full plugin data for plugin home page
+   * Called on-demand when navigating to plugin page
+   */
+  async getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    description: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+  }> {
+    const complete = this.performanceMonitor.startTimer("hiera:v1:getData");
+    const now = new Date().toISOString();
+
+    try {
+      this.logger.debug("Getting full Hiera data", {
+        component: "HieraPlugin",
+        operation: "getData",
+      });
+
+      // Check if service is available
+      if (!this.hieraService || !this.hieraService.isInitialized()) {
+        complete({ healthy: false });
+        return {
+          pluginName: "hiera",
+          displayName: "Hiera",
+          description: this.metadata.description,
+          data: {},
+          healthy: false,
+          lastUpdate: now,
+          capabilities: this.capabilities.map((c) => c.name),
+        };
+      }
+
+      // Get comprehensive data
+      const [keyIndex, hieraConfig] = await Promise.all([
+        this.hieraService.getAllKeys(),
+        Promise.resolve(this.hieraService.getHieraConfig()),
+      ]);
+
+      complete({ healthy: true });
+
+      return {
+        pluginName: "hiera",
+        displayName: "Hiera",
+        description: this.metadata.description,
+        data: {
+          keyIndex: {
+            totalKeys: keyIndex.totalKeys,
+            totalFiles: keyIndex.totalFiles,
+            lastScan: keyIndex.lastScan,
+            keys: Array.from(keyIndex.keys.values()).slice(0, 100), // Limit to first 100 keys
+          },
+          hieraConfig,
+          hasCodeAnalyzer: !!this.codeAnalyzer,
+        },
+        healthy: true,
+        lastUpdate: now,
+        capabilities: this.capabilities.map((c) => c.name),
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to get full Hiera data", {
+        component: "HieraPlugin",
+        operation: "getData",
+        metadata: { error: errorMessage },
+      });
+
+      complete({ healthy: false, error: errorMessage });
+
+      return {
+        pluginName: "hiera",
+        displayName: "Hiera",
+        description: this.metadata.description,
+        data: {},
+        healthy: false,
+        lastUpdate: now,
+        capabilities: this.capabilities.map((c) => c.name),
+      };
+    }
   }
 
   // =========================================================================

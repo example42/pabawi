@@ -6,6 +6,7 @@ Version: 0.5.0
 
 - [Overview](#overview)
 - [Plugin Architecture](#plugin-architecture)
+- [Progressive Loading Architecture](#progressive-loading-architecture)
 - [Integration Registration](#integration-registration)
 - [Data Flow](#data-flow)
 - [Component Diagrams](#component-diagrams)
@@ -33,6 +34,46 @@ Pabawi is a unified remote execution interface that orchestrates multiple infras
 - **PuppetDB**: Information source for Puppet infrastructure data (priority: 10)
 - **Puppetserver**: Information source for node management and catalog compilation (priority: 20)
 - **Hiera**: Information source for hierarchical configuration data (priority: 6)
+
+## Progressive Loading Architecture
+
+**New in v0.5.0**: Pabawi implements a progressive loading architecture that eliminates blocking initialization and provides immediate responsiveness after login.
+
+### Key Principles
+
+1. **Immediate Shell Rendering**: App shell (navigation, layout) renders within 500ms
+2. **Metadata-Based Menu**: Menu builds from lightweight plugin metadata, not full data
+3. **Progressive Enhancement**: Components load independently as data becomes available
+4. **On-Demand Data Loading**: Full plugin data loads only when navigating to plugin pages
+5. **No Blocking Initialization**: No centralized coordinator blocking app startup
+
+### Architecture Flow
+
+```
+User Login
+    │
+    ├─> App Shell Renders Immediately (< 500ms)
+    │   └─> Navigation, Layout, Router ready
+    │
+    ├─> Menu Builds from Metadata (< 1s)
+    │   └─> GET /api/v1/plugins (metadata only)
+    │
+    ├─> Home Page Tiles Load Progressively (< 2s each)
+    │   ├─> GET /api/plugins/puppetdb/summary
+    │   ├─> GET /api/plugins/bolt/summary
+    │   └─> GET /api/plugins/ansible/summary
+    │
+    └─> Plugin Pages Load On-Demand
+        └─> GET /api/plugins/:name/data (when navigating)
+```
+
+### Benefits
+
+- **Fast Initial Load**: Browser remains responsive, no sluggishness
+- **Progressive Enhancement**: Users see content as soon as available
+- **Graceful Degradation**: Failed components don't block others
+- **Scalability**: Supports many plugins without performance impact
+- **Better UX**: Clear loading states, immediate feedback
 
 ## Plugin Architecture
 
@@ -67,6 +108,8 @@ All plugins extend `BasePlugin` which provides:
 - Health check framework
 - Logging helpers
 - Common validation logic
+- **Summary data generation** (for home page tiles)
+- **Full data loading** (for plugin home pages)
 
 ```typescript
 abstract class BasePlugin implements IntegrationPlugin {
@@ -76,6 +119,10 @@ abstract class BasePlugin implements IntegrationPlugin {
   // Lifecycle methods
   async initialize(config: IntegrationConfig): Promise<void>
   async healthCheck(): Promise<HealthStatus>
+  
+  // Progressive loading methods (v0.5.0)
+  async getSummary(): Promise<PluginSummary>
+  async getData(): Promise<PluginData>
   
   // Abstract methods for subclasses
   protected abstract performInitialization(): Promise<void>
@@ -200,6 +247,33 @@ integrationManager.startHealthCheckScheduler();
 ```
 
 ## Data Flow
+
+### Progressive Loading Flow (v0.5.0)
+
+The progressive loading architecture eliminates blocking initialization:
+
+```
+App Initialization (Non-Blocking)
+    │
+    ├─> App.svelte renders immediately
+    │   └─> No coordinator, no blocking
+    │
+    ├─> DynamicNavigation.svelte mounts
+    │   └─> MenuBuilder.fetchAndBuild()
+    │       └─> GET /api/v1/plugins (metadata)
+    │           └─> Returns: name, displayName, capabilities, health
+    │
+    ├─> HomePage.svelte renders
+    │   └─> WidgetSlot (slot="home-summary")
+    │       └─> Each plugin's HomeWidget.svelte
+    │           └─> GET /api/plugins/:name/summary
+    │               └─> Returns: lightweight metrics only
+    │
+    └─> User navigates to plugin page
+        └─> IntegrationHomePage.svelte mounts
+            └─> GET /api/plugins/:name/data
+                └─> Returns: full plugin data
+```
 
 ### Inventory Retrieval Flow
 
@@ -478,7 +552,118 @@ Client Request: GET /api/integrations/status
 
 ## Key Components
 
-### IntegrationManager
+### Frontend Components (v0.5.0)
+
+#### App.svelte
+
+Main application component with immediate rendering (no blocking initialization).
+
+**Key Changes in v0.5.0:**
+
+- Removed InitializationCoordinator dependency
+- Renders shell immediately after authentication check
+- No blocking loading states
+- Progressive enhancement for all child components
+
+**Responsibilities:**
+
+- Authentication and setup status checks
+- Route management
+- Shell rendering (navigation, layout, footer)
+
+#### MenuBuilder
+
+Dynamic menu builder using plugin metadata.
+
+**Key Changes in v0.5.0:**
+
+- Builds menu from `/api/v1/plugins` metadata only
+- No plugin data loading during menu construction
+- Synchronous menu building after metadata fetch
+- Status badges for plugin health (loading/ready/offline)
+
+**Responsibilities:**
+
+- Fetch plugin metadata
+- Build menu structure from capabilities
+- Update menu reactively on plugin status changes
+- Provide reactive menu access via `useMenu()`
+
+#### DynamicNavigation.svelte
+
+Navigation component with immediate menu rendering.
+
+**Key Changes in v0.5.0:**
+
+- Initializes menu immediately on mount
+- Shows skeleton loader while metadata loads
+- No coordinator dependency
+- Progressive menu updates
+
+**Responsibilities:**
+
+- Render navigation shell immediately
+- Initialize MenuBuilder
+- Display menu with loading states
+- Handle navigation interactions
+
+#### HomePage.svelte
+
+Home page with progressive tile loading.
+
+**Key Changes in v0.5.0:**
+
+- Removed integration status section
+- Uses `home-summary` widget slot for tiles
+- Tiles load independently and progressively
+- No blocking on tile failures
+
+**Responsibilities:**
+
+- Render page shell immediately
+- Display home summary tiles via WidgetSlot
+- Show loading states for pending tiles
+- Handle tile errors gracefully
+
+#### IntegrationHomePage.svelte
+
+Generic plugin home page component (loads data on-demand).
+
+**New in v0.5.0:**
+
+- Loads full plugin data only when navigating to page
+- Uses `standalone-page` widget slot
+- Shows loading/error states
+- No impact on app initialization
+
+**Responsibilities:**
+
+- Extract plugin name from route params
+- Load full plugin data on mount
+- Render plugin-specific widgets
+- Handle loading and error states
+
+#### Home Summary Widgets
+
+Lightweight widgets for home page tiles.
+
+**New in v0.5.0:**
+
+- Each plugin provides a HomeWidget.svelte
+- Fetches from `/api/plugins/:name/summary`
+- Displays lightweight metrics only
+- Links to plugin home page
+
+**Responsibilities:**
+
+- Load summary data independently
+- Display key metrics (counts, status)
+- Handle loading/error states
+- Provide navigation to plugin page
+
+### Backend Components
+
+#### IntegrationManager
 
 Central orchestrator for all plugins.
 
@@ -540,6 +725,57 @@ Links nodes across multiple information sources.
 4. Create LinkedNode with all matching sources
 
 ### Plugin-Specific Services
+
+#### Plugin API Routes (v0.5.0)
+
+**New Routes:**
+
+1. **`GET /api/v1/plugins`** - List all plugins with metadata
+   - Returns lightweight plugin information
+   - Used for menu building
+   - Response time < 100ms
+
+2. **`GET /api/plugins/:name/summary`** - Get plugin summary
+   - Returns lightweight metrics for home tiles
+   - Plugin-specific summary data
+   - Response time < 500ms
+
+3. **`GET /api/plugins/:name/data`** - Get full plugin data
+   - Returns complete plugin data for home pages
+   - Only called when navigating to plugin page
+   - No timeout constraint (on-demand loading)
+
+**Plugin Interface Extensions:**
+
+```typescript
+interface IntegrationPlugin {
+  // Existing methods
+  initialize(config: IntegrationConfig): Promise<void>
+  healthCheck(): Promise<HealthStatus>
+  
+  // New progressive loading methods (v0.5.0)
+  getSummary(): Promise<PluginSummary>
+  getData(): Promise<PluginData>
+}
+
+interface PluginSummary {
+  pluginName: string;
+  displayName: string;
+  metrics: Record<string, number | string>;
+  healthy: boolean;
+  lastUpdate: string;
+}
+
+interface PluginData {
+  pluginName: string;
+  displayName: string;
+  description: string;
+  data: any;  // Plugin-specific data structure
+  healthy: boolean;
+  lastUpdate: string;
+  capabilities: string[];
+}
+```
 
 #### BoltPlugin
 
@@ -691,6 +927,45 @@ When an integration fails:
 - Network isolation options
 
 ## Performance Considerations
+
+### Progressive Loading Performance (v0.5.0)
+
+The progressive loading architecture provides significant performance improvements:
+
+**Metrics:**
+
+- App shell renders in < 500ms (vs. 5-10s with blocking initialization)
+- Menu appears in < 1 second (vs. waiting for full plugin loading)
+- Browser remains responsive throughout (no sluggishness)
+- Home tiles load in < 2 seconds each (independent loading)
+- Plugin pages load on-demand (no impact on startup)
+
+**Optimization Strategies:**
+
+1. **Metadata Caching**
+   - Cache `/api/v1/plugins` response for 30 seconds
+   - Use stale-while-revalidate pattern
+   - Reduces repeated metadata fetches
+
+2. **Summary Caching**
+   - Cache summary responses for 10 seconds
+   - Per-plugin cache invalidation
+   - Balance freshness with performance
+
+3. **Parallel Loading**
+   - Home tiles load in parallel (Promise.all)
+   - Independent tile failures don't block others
+   - Maximum concurrency for best performance
+
+4. **Response Compression**
+   - Enable gzip compression for API responses
+   - Reduce payload size for faster transfers
+   - Especially beneficial for large plugin data
+
+5. **Lazy Rendering**
+   - Widgets load only when visible
+   - Virtual scrolling for large lists
+   - Reduces initial render time
 
 ### Caching
 

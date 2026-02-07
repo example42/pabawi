@@ -1,17 +1,19 @@
 <!--
   Bolt Home Widget
 
-  A summary tile displayed on the home page showing Bolt integration status.
+  A lightweight summary tile displayed on the home page showing Bolt integration status.
   Uses Bolt's orange color (#FFAE1A) for theming.
 
   Features:
   - Node count from inventory
-  - Recent execution count
-  - Last execution status
+  - Available tasks count
+  - Health status indicator
   - Quick link to Bolt integration page
 
+  Loads independently from /api/plugins/bolt/summary endpoint.
+
   @module plugins/native/bolt/frontend/HomeWidget
-  @version 1.0.0
+  @version 1.1.0
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -25,42 +27,17 @@
   // Types
   // ==========================================================================
 
-  interface HealthStatus {
-    healthy: boolean;
-    message?: string;
-    lastCheck: string;
-    details?: {
-      nodeCount?: number;
+  interface PluginSummary {
+    pluginName: string;
+    displayName: string;
+    metrics: {
+      nodeCount: number;
+      tasksAvailable: number;
       projectPath?: string;
-      capabilities?: string[];
     };
-    degraded?: boolean;
-  }
-
-  interface InventoryResponse {
-    nodes: Array<{ id: string; name: string }>;
-  }
-
-  interface ExecutionsResponse {
-    executions: Array<{
-      id: string;
-      status: string;
-      type: string;
-      startedAt: string;
-    }>;
-    pagination: {
-      page: number;
-      pageSize: number;
-      hasMore: boolean;
-    };
-    summary: {
-      success: number;
-      failed: number;
-      running: number;
-      partial: number;
-      cancelled: number;
-      total: number;
-    };
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
   }
 
   // ==========================================================================
@@ -80,37 +57,24 @@
 
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let nodeCount = $state(0);
-  let executionSummary = $state<ExecutionsResponse['summary'] | null>(null);
-  let lastExecutionStatus = $state<string | null>(null);
-  let healthStatus = $state<HealthStatus | null>(null);
+  let summary = $state<PluginSummary | null>(null);
 
   // ==========================================================================
   // Derived
   // ==========================================================================
 
-  let isHealthy = $derived(healthStatus?.healthy ?? false);
-  let isDegraded = $derived(healthStatus?.degraded ?? false);
+  let isHealthy = $derived(summary?.healthy ?? false);
+  let nodeCount = $derived(summary?.metrics.nodeCount ?? 0);
+  let tasksAvailable = $derived(summary?.metrics.tasksAvailable ?? 0);
 
   let statusColor = $derived.by(() => {
-    if (!healthStatus) return 'bg-gray-400';
-    if (healthStatus.healthy) return 'bg-green-500';
-    if (healthStatus.degraded) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (!summary) return 'bg-gray-400';
+    return summary.healthy ? 'bg-green-500' : 'bg-red-500';
   });
 
   let statusText = $derived.by(() => {
-    if (!healthStatus) return 'Unknown';
-    if (healthStatus.healthy) return 'Healthy';
-    if (healthStatus.degraded) return 'Degraded';
-    return 'Unhealthy';
-  });
-
-  let totalExecutions = $derived(executionSummary?.total ?? 0);
-  let successRate = $derived.by(() => {
-    if (!executionSummary || executionSummary.total === 0) return 0;
-    const successCount = executionSummary.success + (executionSummary.partial ?? 0);
-    return Math.round((successCount / executionSummary.total) * 100);
+    if (!summary) return 'Unknown';
+    return summary.healthy ? 'Healthy' : 'Unhealthy';
   });
 
   // ==========================================================================
@@ -130,33 +94,11 @@
     error = null;
 
     try {
-      // Load health status
-      const healthResponse = await api.get<HealthStatus>('/api/integrations/bolt/health');
-      healthStatus = healthResponse;
-
-      // Load inventory count
-      try {
-        const inventoryResponse = await api.get<InventoryResponse>('/api/inventory?source=bolt');
-        nodeCount = inventoryResponse.nodes?.length ?? 0;
-      } catch {
-        // Use health status node count as fallback
-        nodeCount = healthStatus?.details?.nodeCount ?? 0;
-      }
-
-      // Load recent executions
-      try {
-        const executionsResponse = await api.get<ExecutionsResponse>('/api/executions?limit=100');
-        executionSummary = executionsResponse.summary;
-
-        // Get last execution status
-        if (executionsResponse.executions?.length > 0) {
-          lastExecutionStatus = executionsResponse.executions[0].status;
-        }
-      } catch {
-        // Non-critical, continue without execution data
-      }
+      // Fetch lightweight summary data from new endpoint
+      summary = await api.get<PluginSummary>('/api/plugins/bolt/summary');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load Bolt status';
+      error = err instanceof Error ? err.message : 'Failed to load Bolt summary';
+      console.error('Failed to load Bolt summary:', err);
     } finally {
       loading = false;
     }
@@ -179,22 +121,6 @@
     event.stopPropagation();
     router.navigate('/integrations/bolt?tab=inventory');
   }
-
-  function getLastExecutionColor(status: string | null): string {
-    switch (status) {
-      case 'success': return 'text-green-600 dark:text-green-400';
-      case 'failed': return 'text-red-600 dark:text-red-400';
-      case 'running': return 'text-blue-600 dark:text-blue-400';
-      case 'partial': return 'text-yellow-600 dark:text-yellow-400';
-      default: return 'text-gray-500 dark:text-gray-400';
-    }
-  }
-
-  function getSuccessRateColor(rate: number): string {
-    if (rate >= 90) return 'text-green-600 dark:text-green-400';
-    if (rate >= 70) return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
-  }
 </script>
 
 <button
@@ -212,8 +138,15 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
       </svg>
       <span class="text-xs text-red-600 dark:text-red-400">{error}</span>
+      <button
+        type="button"
+        onclick={(e) => { e.stopPropagation(); void loadData(); }}
+        class="mt-2 text-xs text-amber-600 dark:text-amber-400 hover:underline"
+      >
+        Retry
+      </button>
     </div>
-  {:else}
+  {:else if summary}
     <!-- Header -->
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
@@ -240,18 +173,18 @@
         <span class="text-lg font-bold text-amber-600 dark:text-amber-400">{nodeCount}</span>
       </div>
 
-      <!-- Total Executions -->
+      <!-- Available Tasks -->
       <div class="flex items-center justify-between">
-        <span class="text-sm text-gray-600 dark:text-gray-400">Executions</span>
-        <span class="text-lg font-bold text-gray-700 dark:text-gray-300">{totalExecutions}</span>
+        <span class="text-sm text-gray-600 dark:text-gray-400">Tasks Available</span>
+        <span class="text-lg font-bold text-gray-700 dark:text-gray-300">{tasksAvailable}</span>
       </div>
 
-      <!-- Success Rate -->
-      {#if totalExecutions > 0}
+      <!-- Last Update -->
+      {#if summary.lastUpdate}
         <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600 dark:text-gray-400">Success Rate</span>
-          <span class="text-lg font-bold {getSuccessRateColor(successRate)}">
-            {successRate}%
+          <span class="text-xs text-gray-500 dark:text-gray-400">Last Update</span>
+          <span class="text-xs text-gray-600 dark:text-gray-300">
+            {new Date(summary.lastUpdate).toLocaleTimeString()}
           </span>
         </div>
       {/if}

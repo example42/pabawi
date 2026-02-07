@@ -78,7 +78,7 @@ const mockAuthStore = {
 // Helper to create mock plugin info
 function createMockPluginInfo(
   name: string,
-  integrationType: string = "RemoteExecution",
+  integrationType = "RemoteExecution",
   capabilities: { name: string; category: string }[] = []
 ): PluginInfo {
   return {
@@ -109,7 +109,7 @@ function createMockPluginInfo(
 // Helper to create mock loaded plugin
 function createMockLoadedPlugin(
   name: string,
-  integrationType: string = "RemoteExecution",
+  integrationType = "RemoteExecution",
   capabilities: { name: string; category: string }[] = []
 ): LoadedPlugin {
   return {

@@ -494,33 +494,40 @@ export class PluginLoader {
       // Convert .ts to .js for runtime loading (TypeScript files are compiled to JavaScript)
       const runtimeEntryPoint = discovery.entryPoint.replace(/\.ts$/, ".js");
 
-      // Try different entry points, prioritizing .js files for runtime
+      // Try different entry points, prioritizing .ts files for tsx/ts-node, then .js for compiled
       const entryPoints = [
-        runtimeEntryPoint,
-        path.join(pluginPath, "backend", "index.js"),
-        path.join(pluginPath, "index.js"),
-        path.join(pluginPath, "plugin.js"),
-        discovery.entryPoint, // Try original in case it's already .js
+        discovery.entryPoint, // Try manifest entry point first
         path.join(pluginPath, "backend", "index.ts"),
+        path.join(pluginPath, "backend", "index.js"),
+        runtimeEntryPoint,
         path.join(pluginPath, "index.ts"),
+        path.join(pluginPath, "index.js"),
         path.join(pluginPath, "plugin.ts"),
+        path.join(pluginPath, "plugin.js"),
       ];
 
       let loaded = false;
       let lastError: Error | undefined;
       for (const entryPoint of entryPoints) {
         try {
-          // Ensure absolute path for require
+          // Ensure absolute path
           const absolutePath = path.isAbsolute(entryPoint)
             ? entryPoint
             : path.resolve(entryPoint);
 
-          // Use require for .js files (Node.js cannot require .ts files directly)
-          // Clear the require cache first to ensure fresh load
-          delete require.cache[absolutePath];
+          // Use dynamic import for TypeScript files (works with tsx/ts-node)
+          // Use require for JavaScript files
+          if (absolutePath.endsWith('.ts')) {
+            // Convert to file URL for dynamic import (required for tsx)
+            const fileUrl = `file://${absolutePath}`;
+            pluginModule = await import(fileUrl);
+          } else {
+            // Clear the require cache first to ensure fresh load
+            delete require.cache[absolutePath];
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            pluginModule = require(absolutePath);
+          }
 
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          pluginModule = require(absolutePath);
           loaded = true;
           this.logger.debug(`Successfully loaded plugin from: ${absolutePath}`, {
             component: "PluginLoader",

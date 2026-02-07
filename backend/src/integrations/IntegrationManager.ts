@@ -282,6 +282,7 @@ export class IntegrationManager {
     }
 
     this.initialized = true;
+
     this.logger.info(
       `Plugin initialization complete. ${String(errors.length)} errors.`,
       {

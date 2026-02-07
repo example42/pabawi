@@ -390,6 +390,21 @@ export interface BasePluginInterface {
      */
     healthCheck(): Promise<HealthStatus>;
     /**
+     * Get lightweight summary for home page tiles
+     * Must return in under 500ms with minimal data (counts, status only)
+     * Called by /api/plugins/:name/summary endpoint
+     * @returns Plugin summary with metrics
+     */
+    getSummary(): Promise<PluginSummary>;
+    /**
+     * Get full plugin data for plugin home pages
+     * Called on-demand when navigating to plugin page
+     * Can load complete data (no strict time limit like getSummary)
+     * Called by /api/plugins/:name/data endpoint
+     * @returns Full plugin data
+     */
+    getData(): Promise<PluginData>;
+    /**
      * Get current plugin configuration
      * @returns Configuration object
      */
@@ -440,6 +455,45 @@ export interface HealthStatus {
      * List of failing capabilities when degraded
      */
     failingCapabilities?: string[];
+}
+/**
+ * Lightweight plugin summary for home page tiles
+ * Must return in under 500ms with minimal data
+ */
+export interface PluginSummary {
+    /** Plugin identifier */
+    pluginName: string;
+    /** Human-readable plugin name */
+    displayName: string;
+    /** Summary metrics (plugin-specific counts, status, etc.) */
+    metrics: Record<string, number | string | boolean>;
+    /** Health status */
+    healthy: boolean;
+    /** Last update timestamp (ISO 8601) */
+    lastUpdate: string;
+    /** Optional error message if summary generation failed */
+    error?: string;
+}
+/**
+ * Full plugin data for plugin home pages
+ * Called on-demand when navigating to plugin page
+ * Can take longer than summary (no strict time limit)
+ */
+export interface PluginData {
+    /** Plugin identifier */
+    pluginName: string;
+    /** Human-readable plugin name */
+    displayName: string;
+    /** Full plugin-specific data (structure varies by plugin) */
+    data: unknown;
+    /** Health status */
+    healthy: boolean;
+    /** Last update timestamp (ISO 8601) */
+    lastUpdate: string;
+    /** List of available capabilities */
+    capabilities: string[];
+    /** Optional error message if data loading failed */
+    error?: string;
 }
 /**
  * User type for capability execution context

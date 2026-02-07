@@ -1,96 +1,170 @@
 {
+  "$schema": "../../plugin-manifest.schema.json",
   "name": "ansible",
-  "displayName": "Ansible",
   "version": "1.0.0",
-  "description": "Ansible integration for remote execution and inventory management",
   "author": "Pabawi Team",
+  "description": "Ansible integration for remote execution and inventory management",
   "integrationType": "RemoteExecution",
+  "integrationTypes": ["RemoteExecution", "InventorySource"],
+  "homepage": "https://www.ansible.com/",
+  "color": "#EE0000",
+  "icon": "terminal",
+  "tags": ["ansible", "automation", "remote-execution", "playbooks", "inventory"],
+  "minPabawiVersion": "1.0.0",
+  "dependencies": [],
+  "entryPoint": "./backend/index.js",
+  "frontendEntryPoint": "./frontend/index.ts",
   "capabilities": [
-    "command.execute",
-    "task.execute",
-    "script.execute",
-    "inventory.list",
-    "inventory.get",
-    "inventory.groups",
-    "inventory.filter"
-  ],
-  "backend": {
-    "entry": "backend/index.js"
-  },
-  "frontend": {
-    "entry": "frontend/index.ts",
-    "widgets": [
-      {
-        "id": "ansible-home",
-        "name": "Ansible Home",
-        "component": "PluginHomePage",
-        "type": "page",
-        "route": "/plugins/ansible"
-      },
-      {
-        "id": "ansible-playbook-runner",
-        "name": "Playbook Runner",
-        "component": "PlaybookRunner",
-        "type": "dashboard"
-      },
-      {
-        "id": "ansible-command-executor",
-        "name": "Command Executor",
-        "component": "CommandExecutor",
-        "type": "dashboard"
-      },
-      {
-        "id": "ansible-inventory-viewer",
-        "name": "Inventory Viewer",
-        "component": "InventoryViewer",
-        "type": "inventory"
-      }
-    ],
-    "nodeDetailTabs": [
-      {
-        "id": "ansible-execute-command",
-        "label": "Execute Command",
-        "component": "NodeDetailTabs",
-        "order": 100
-      },
-      {
-        "id": "ansible-run-playbook",
-        "label": "Run Playbook",
-        "component": "NodeDetailTabs",
-        "order": 101
-      },
-      {
-        "id": "ansible-facts",
-        "label": "Facts",
-        "component": "NodeDetailTabs",
-        "order": 102
-      }
-    ]
-  },
-  "permissions": {
-    "default": ["read"],
-    "required": ["execute"]
-  },
-  "config": {
-    "inventoryPath": {
-      "type": "string",
-      "default": "/etc/ansible/hosts",
-      "description": "Path to Ansible inventory file or directory"
+    {
+      "name": "command.execute",
+      "category": "command",
+      "description": "Execute shell commands on target nodes via Ansible (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["ansible.command.execute"]
     },
-    "playbookPath": {
-      "type": "string",
-      "default": "/etc/ansible/playbooks",
-      "description": "Path to Ansible playbooks directory"
+    {
+      "name": "task.execute",
+      "category": "task",
+      "description": "Execute Ansible tasks on target nodes (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["ansible.task.execute"]
     },
-    "defaultTimeout": {
-      "type": "number",
-      "default": 300000,
-      "description": "Default timeout for executions in milliseconds"
+    {
+      "name": "script.execute",
+      "category": "command",
+      "description": "Execute scripts on target nodes via Ansible (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["ansible.command.execute"]
     },
-    "ansibleConfig": {
-      "type": "string",
-      "default": "",
-      "description": "Path to ansible.cfg file (optional)"
+    {
+      "name": "inventory.list",
+      "category": "inventory",
+      "description": "List all nodes from Ansible inventory (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ansible.inventory.list"]
+    },
+    {
+      "name": "inventory.get",
+      "category": "inventory",
+      "description": "Get specific node details from Ansible inventory (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ansible.inventory.list"]
+    },
+    {
+      "name": "inventory.groups",
+      "category": "inventory",
+      "description": "List available groups from Ansible inventory (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ansible.inventory.list"]
+    },
+    {
+      "name": "inventory.filter",
+      "category": "inventory",
+      "description": "Filter nodes by criteria (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ansible.inventory.list"]
     }
+  ],
+  "widgets": [
+    {
+      "id": "ansible:home-widget",
+      "name": "Ansible Summary",
+      "component": "frontend/HomeWidget.svelte",
+      "slots": ["home-summary"],
+      "size": "medium",
+      "requiredCapabilities": ["inventory.list"],
+      "priority": 20
+    },
+    {
+      "id": "ansible:home-page",
+      "name": "Ansible Home",
+      "component": "frontend/PluginHomePage.svelte",
+      "slots": ["standalone-page"],
+      "size": "full",
+      "requiredCapabilities": ["inventory.list"],
+      "route": "/integrations/ansible"
+    },
+    {
+      "id": "ansible:playbook-runner",
+      "name": "Playbook Runner",
+      "component": "frontend/PlaybookRunner.svelte",
+      "slots": ["dashboard", "node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["task.execute"],
+      "category": "task",
+      "nodeScoped": true
+    },
+    {
+      "id": "ansible:command-executor",
+      "name": "Command Executor",
+      "component": "frontend/CommandExecutor.svelte",
+      "slots": ["dashboard", "node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["command.execute"],
+      "category": "command",
+      "nodeScoped": true
+    },
+    {
+      "id": "ansible:inventory-viewer",
+      "name": "Inventory Viewer",
+      "component": "frontend/InventoryViewer.svelte",
+      "slots": ["dashboard", "inventory-panel"],
+      "size": "medium",
+      "requiredCapabilities": ["inventory.list"]
+    },
+    {
+      "id": "ansible:node-detail-tabs",
+      "name": "Ansible Node Actions",
+      "component": "frontend/NodeDetailTabs.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["command.execute"],
+      "nodeScoped": true,
+      "priority": 5
+    }
+  ],
+  "cliCommands": [
+    {
+      "name": "ansible",
+      "actions": [
+        {
+          "name": "run",
+          "capability": "command.execute",
+          "description": "Run a command on target nodes via Ansible",
+          "aliases": ["cmd"],
+          "examples": [
+            "pab ansible run 'hostname' --targets node1.example.com",
+            "pab ansible run 'uptime' --targets all"
+          ]
+        },
+        {
+          "name": "playbook",
+          "capability": "task.execute",
+          "description": "Run an Ansible playbook on target nodes",
+          "examples": [
+            "pab ansible playbook site.yml --targets all",
+            "pab ansible playbook deploy.yml --targets webservers"
+          ]
+        },
+        {
+          "name": "inventory",
+          "capability": "inventory.list",
+          "description": "List nodes from Ansible inventory",
+          "examples": ["pab ansible inventory", "pab ansible inventory --format json"]
+        }
+      ]
+    }
+  ],
+  "defaultPermissions": {
+    "command.execute": ["admin", "operator"],
+    "task.execute": ["admin", "operator"],
+    "script.execute": ["admin", "operator"],
+    "inventory.list": ["admin", "operator", "viewer"],
+    "inventory.get": ["admin", "operator", "viewer"],
+    "inventory.groups": ["admin", "operator", "viewer"],
+    "inventory.filter": ["admin", "operator", "viewer"],
+    "ansible.command.execute": ["admin", "operator"],
+    "ansible.task.execute": ["admin", "operator"],
+    "ansible.inventory.list": ["admin", "operator", "viewer"]
   }
 }

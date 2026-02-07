@@ -163,7 +163,7 @@
       "id": "bolt:plugin-home-page",
       "name": "Bolt Home Page",
       "component": "frontend/PluginHomePage.svelte",
-      "slots": ["plugin-home"],
+      "slots": ["standalone-page"],
       "size": "full",
       "requiredCapabilities": ["inventory.list"],
       "route": "/integrations/bolt"

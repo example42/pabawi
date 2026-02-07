@@ -300,7 +300,7 @@ export class ExecutionLogger {
 
     if (this.debug) {
       this.logger.debug(
-        `Retrieved execution history: ${result.executions.length} records`,
+        `Retrieved execution history: ${result.length} records`,
         {
           component: 'ExecutionLogger',
           operation: 'getExecutionHistory',
@@ -309,7 +309,7 @@ export class ExecutionLogger {
       );
     }
 
-    return result.executions;
+    return result;
   }
 
   /**
@@ -342,8 +342,7 @@ export class ExecutionLogger {
     }
 
     // Get all executions in the time range
-    const result = await this.repository.findAll(filters, { page: 1, pageSize: 10000 });
-    const executions = result.executions;
+    const executions = await this.repository.findAll(filters, { page: 1, pageSize: 10000 });
 
     if (executions.length === 0) {
       return {
@@ -356,14 +355,14 @@ export class ExecutionLogger {
     }
 
     // Calculate metrics
-    const successCount = executions.filter(e => e.status === 'success').length;
-    const failedCount = executions.filter(e => e.status === 'failed').length;
-    const totalTargets = executions.reduce((sum, e) => sum + e.targetNodes.length, 0);
+    const successCount = executions.filter((e: ExecutionRecord) => e.status === 'success').length;
+    const failedCount = executions.filter((e: ExecutionRecord) => e.status === 'failed').length;
+    const totalTargets = executions.reduce((sum: number, e: ExecutionRecord) => sum + e.targetNodes.length, 0);
 
     // Calculate average duration for completed executions
-    const completedExecutions = executions.filter(e => e.completedAt);
-    const totalDuration = completedExecutions.reduce((sum, e) => {
-      const duration = new Date(e.completedAt).getTime() - new Date(e.startedAt).getTime();
+    const completedExecutions = executions.filter((e: ExecutionRecord) => e.completedAt);
+    const totalDuration = completedExecutions.reduce((sum: number, e: ExecutionRecord) => {
+      const duration = new Date(e.completedAt as string).getTime() - new Date(e.startedAt).getTime();
       return sum + duration;
     }, 0);
     const averageDuration = completedExecutions.length > 0
@@ -384,7 +383,7 @@ export class ExecutionLogger {
         {
           component: 'ExecutionLogger',
           operation: 'getExecutionMetrics',
-          metadata: metrics,
+          metadata: { ...metrics },
         }
       );
     }

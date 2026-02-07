@@ -57,7 +57,17 @@
       "requiredPermissions": ["ssh.inventory.list"]
     }
   ],
-  "widgets": [],
+  "widgets": [
+    {
+      "id": "ssh:home-widget",
+      "name": "SSH Summary",
+      "component": "frontend/HomeWidget.svelte",
+      "slots": ["home-summary"],
+      "size": "medium",
+      "requiredCapabilities": ["inventory.list"],
+      "priority": 20
+    }
+  ],
   "cliCommands": [
     {
       "name": "ssh",

@@ -159,6 +159,23 @@ interface BasePluginInterface {
   defaultPermissions?: Record<string, string[]>;
   initialize(): Promise<void>;
   healthCheck(): Promise<HealthStatus>;
+  getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }>;
+  getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+    error?: string;
+  }>;
   getConfig(): Record<string, unknown>;
   isInitialized(): boolean;
   shutdown?(): Promise<void>;
@@ -1451,6 +1468,209 @@ export class BoltPlugin implements BasePluginInterface {
       operation: "shutdown",
     });
     this._initialized = false;
+  }
+
+  /**
+   * Get lightweight summary for home page tile
+   * Must return in under 500ms with minimal data (counts, status only)
+   */
+  async getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:getSummary");
+    const startTime = Date.now();
+    const now = new Date().toISOString();
+
+    try {
+      this.logger.debug("Getting Bolt summary", {
+        component: "BoltPlugin",
+        operation: "getSummary",
+      });
+
+      // Check if plugin is initialized
+      if (!this._initialized) {
+        complete({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "bolt",
+          displayName: "Bolt",
+          metrics: {},
+          healthy: false,
+          lastUpdate: now,
+          error: "Plugin not initialized",
+        };
+      }
+
+      // Get health status (fast check)
+      const health = await this.healthCheck();
+
+      // Get lightweight metrics
+      let taskCount = 0;
+      let inventoryCount = 0;
+
+      try {
+        // Get task count (lightweight)
+        const tasks = await this.boltService.listTasks();
+        taskCount = tasks.length;
+      } catch (error) {
+        this.logger.warn("Failed to get task count for summary", {
+          component: "BoltPlugin",
+          operation: "getSummary",
+          metadata: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+
+      try {
+        // Get inventory count (lightweight)
+        const inventory = await this.boltService.getInventory();
+        inventoryCount = inventory.length;
+      } catch (error) {
+        this.logger.warn("Failed to get inventory count for summary", {
+          component: "BoltPlugin",
+          operation: "getSummary",
+          metadata: { error: error instanceof Error ? error.message : String(error) },
+        });
+      }
+
+      const duration = Date.now() - startTime;
+
+      // Log warning if exceeds target time
+      if (duration > 500) {
+        this.logger.warn("getSummary exceeded target response time", {
+          component: "BoltPlugin",
+          operation: "getSummary",
+          metadata: { durationMs: duration, targetMs: 500 },
+        });
+      }
+
+      complete({ healthy: health.healthy, duration, taskCount, inventoryCount });
+
+      return {
+        pluginName: "bolt",
+        displayName: "Bolt",
+        metrics: {
+          taskCount,
+          inventoryCount,
+          boltVersion: health.healthy ? "available" : "unknown",
+        },
+        healthy: health.healthy,
+        lastUpdate: now,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to get Bolt summary", {
+        component: "BoltPlugin",
+        operation: "getSummary",
+        metadata: { error: errorMessage, durationMs: duration },
+      });
+
+      complete({ healthy: false, error: errorMessage });
+
+      return {
+        pluginName: "bolt",
+        displayName: "Bolt",
+        metrics: {},
+        healthy: false,
+        lastUpdate: now,
+        error: errorMessage,
+      };
+    }
+  }
+
+  /**
+   * Get full plugin data for plugin home page
+   * Called on-demand when navigating to plugin page
+   */
+  async getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:getData");
+    const startTime = Date.now();
+
+    try {
+      this.logger.debug("Getting full plugin data", {
+        component: "BoltPlugin",
+        operation: "getData",
+      });
+
+      // Check if plugin is initialized
+      if (!this._initialized) {
+        complete({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "bolt",
+          displayName: "Bolt",
+          data: null,
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          capabilities: [],
+          error: "Plugin not initialized",
+        };
+      }
+
+      // Get health status
+      const healthStatus = await this.healthCheck();
+
+      // Fetch full data in parallel
+      const [inventory, tasks, config] = await Promise.allSettled([
+        this.boltService.getInventory(),
+        this.boltService.listTasks(),
+        Promise.resolve(this.getConfig()),
+      ]);
+
+      const inventoryData = inventory.status === "fulfilled" ? inventory.value : [];
+      const tasksData = tasks.status === "fulfilled" ? tasks.value : [];
+      const configData = config.status === "fulfilled" ? config.value : {};
+
+      const duration = Date.now() - startTime;
+      complete({ healthy: healthStatus.healthy, duration });
+
+      return {
+        pluginName: "bolt",
+        displayName: "Bolt",
+        data: {
+          inventory: inventoryData,
+          tasks: tasksData,
+          config: configData,
+          health: healthStatus,
+        },
+        healthy: healthStatus.healthy,
+        lastUpdate: new Date().toISOString(),
+        capabilities: this.capabilities.map(c => c.name),
+        error: healthStatus.healthy ? undefined : healthStatus.message,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const duration = Date.now() - startTime;
+      complete({ error: errorMessage, duration });
+
+      this.logger.error("Failed to get full plugin data", {
+        component: "BoltPlugin",
+        operation: "getData",
+        metadata: { duration },
+      }, error instanceof Error ? error : undefined);
+
+      return {
+        pluginName: "bolt",
+        displayName: "Bolt",
+        data: null,
+        healthy: false,
+        lastUpdate: new Date().toISOString(),
+        capabilities: [],
+        error: errorMessage,
+      };
+    }
   }
 
   // =========================================================================

@@ -112,6 +112,111 @@ For detailed integration-specific API documentation, see:
 http://localhost:3000/api
 ```
 
+## Progressive Loading Endpoints (v0.5.0)
+
+Pabawi v0.5.0 introduces new endpoints for progressive loading architecture:
+
+### Get Plugin Metadata
+
+Retrieve lightweight metadata for all plugins (used for menu building).
+
+**Request:**
+
+```http
+GET /api/v1/plugins
+```
+
+**Response:**
+
+```json
+{
+  "plugins": [
+    {
+      "name": "puppetdb",
+      "displayName": "PuppetDB",
+      "description": "Puppet infrastructure data source",
+      "integrationType": "Information",
+      "color": "#ffae1a",
+      "icon": "database",
+      "enabled": true,
+      "healthy": true,
+      "capabilities": [
+        {
+          "name": "nodes.list",
+          "category": "inventory"
+        },
+        {
+          "name": "facts.get",
+          "category": "facts"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Get Plugin Summary
+
+Retrieve lightweight summary data for home page tiles.
+
+**Request:**
+
+```http
+GET /api/plugins/:name/summary
+```
+
+**Path Parameters:**
+
+- `name` (string, required): Plugin name (e.g., "puppetdb", "bolt")
+
+**Response:**
+
+```json
+{
+  "pluginName": "puppetdb",
+  "displayName": "PuppetDB",
+  "metrics": {
+    "nodeCount": 150,
+    "healthyNodes": 145,
+    "lastReportTime": "2024-01-15T10:00:00.000Z"
+  },
+  "healthy": true,
+  "lastUpdate": "2024-01-15T10:05:00.000Z"
+}
+```
+
+### Get Plugin Data
+
+Retrieve full plugin data for plugin home pages (loaded on-demand).
+
+**Request:**
+
+```http
+GET /api/plugins/:name/data
+```
+
+**Path Parameters:**
+
+- `name` (string, required): Plugin name
+
+**Response:**
+
+```json
+{
+  "pluginName": "puppetdb",
+  "displayName": "PuppetDB",
+  "description": "Puppet infrastructure data source",
+  "data": {
+    "nodes": [...],
+    "reports": [...],
+    "facts": [...]
+  },
+  "healthy": true,
+  "lastUpdate": "2024-01-15T10:05:00.000Z",
+  "capabilities": ["nodes.list", "facts.get", "reports.list"]
+}
+```
+
 ## Error Handling
 
 All error responses follow a consistent format:

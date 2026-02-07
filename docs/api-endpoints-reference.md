@@ -14,12 +14,29 @@ This document provides a quick reference table of all Pabawi API endpoints based
 | GET | `/api/config` | Get configuration | No |
 | GET | `/api/config/ui` | Get UI configuration | No |
 
+## Plugin Discovery Endpoints (v0.5.0)
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/v1/plugins` | List all plugins with metadata | No |
+| GET | `/api/v1/plugins/:name` | Get plugin details | No |
+| GET | `/api/v1/plugins/:name/capabilities` | Get plugin capabilities | No |
+| GET | `/api/v1/plugins/:name/widgets` | Get plugin widgets | No |
+| GET | `/api/v1/plugins/:name/health` | Get plugin health status | No |
+| GET | `/api/v1/plugins/:name/summary` | Get lightweight plugin summary | No |
+| GET | `/api/v1/plugins/:name/data` | Get full plugin data | No |
+| GET | `/api/plugins/:name/summary` | Get plugin summary (legacy) | No |
+| GET | `/api/plugins/:name/data` | Get plugin data (legacy) | No |
+
 ## Integration Status
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | GET | `/api/integrations/status` | Get all integration status | No |
 | GET | `/api/integrations/colors` | Get integration color palette | No |
+| GET | `/api/integrations/menu` | Get integration menu (deprecated) | No |
+
+**Note**: The `/api/integrations/menu` endpoint is deprecated in v0.5.0. Use `/api/v1/plugins` for plugin metadata instead.
 
 ## Inventory Endpoints
 

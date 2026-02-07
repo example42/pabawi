@@ -2,71 +2,30 @@
   /**
    * Dashboard Page (HomePage)
    *
-   * Part of v1.0.0 Modular Plugin Architecture (Phase 4, Step 22)
+   * Part of Progressive Loading Architecture (home-page-loading-fixes)
    *
    * Main landing page with:
-   * - Integration status overview (from menu API)
-   * - Plugin widget slots for dashboard widgets
+   * - Home summary tiles (progressive loading via home-summary widget slot)
+   * - Dashboard widget slots
    * - Expert mode debug panel
+   *
+   * Page renders immediately with no blocking data fetching.
+   * Tiles load independently and progressively.
    *
    * @module pages/HomePage
    */
   import { onMount } from 'svelte';
-  import IntegrationStatus from '../components/IntegrationStatus.svelte';
   import DebugPanel from '../components/DebugPanel.svelte';
+  import IntegrationStatus from '../components/IntegrationStatus.svelte';
   import { WidgetSlot } from '../lib/plugins';
   import { auth } from '../lib/auth.svelte';
-  import { get } from '../lib/api';
   import { debugMode } from '../lib/debug';
-  import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
+  import type { LabeledDebugInfo } from '../lib/api';
 
   const pageTitle = 'Pabawi - Dashboard';
 
   // Get user capabilities for widget filtering
   let userCapabilities = $derived(auth.permissions?.allowed ?? []);
-
-  // Using v1 API for plugin discovery
-  interface PluginInfo {
-    metadata: {
-      name: string;
-      version: string;
-      author: string;
-      description: string;
-      integrationType: string;
-      homepage?: string;
-      color?: string;
-      icon?: string;
-    };
-    enabled: boolean;
-    healthy: boolean;
-    widgets: Array<{
-      id: string;
-      name: string;
-      slots: string[];
-    }>;
-    capabilities: Array<{
-      name: string;
-      category: string;
-    }>;
-  }
-
-  interface PluginsResponse {
-    plugins: PluginInfo[];
-  }
-
-  // Converted to match old IntegrationStatus component expectations
-  interface IntegrationStatusData {
-    name: string;
-    type: 'execution' | 'information' | 'both';
-    status: 'connected' | 'disconnected' | 'error' | 'not_configured';
-    lastCheck: string;
-    message?: string;
-    details?: unknown;
-  }
-
-  let integrations = $state<IntegrationStatusData[]>([]);
-  let integrationsLoading = $state(true);
-  let integrationsError = $state<string | null>(null);
 
   // Debug info state for expert mode
   let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
@@ -80,82 +39,68 @@
     });
   });
 
-  // Callback to receive debug info from API calls
-  function handleDebugInfo(label: string, info: DebugInfo | null): void {
-    if (info) {
-      const existingIndex = debugInfoBlocks.findIndex(block => block.label === label);
-      if (existingIndex >= 0) {
-        debugInfoBlocks[existingIndex] = { label, debugInfo: info };
-      } else {
-        debugInfoBlocks = [...debugInfoBlocks, { label, debugInfo: info }];
-      }
-    } else {
-      debugInfoBlocks = debugInfoBlocks.filter(block => block.label !== label);
-    }
+  // Integration status state
+  let integrations = $state<IntegrationStatusData[]>([]);
+  let integrationsLoading = $state(true);
+  let integrationsError = $state<string | null>(null);
+
+  interface IntegrationStatusData {
+    name: string;
+    type: 'execution' | 'information' | 'both';
+    status: 'connected' | 'disconnected' | 'error' | 'not_configured' | 'degraded';
+    lastCheck: string;
+    message?: string;
+    details?: unknown;
+    workingCapabilities?: string[];
+    failingCapabilities?: string[];
   }
 
+  /**
+   * Fetch integration status from backend
+   */
   async function fetchIntegrationStatus(refresh = false): Promise<void> {
     integrationsLoading = true;
     integrationsError = null;
 
     try {
-      // Using v1 plugins API for dynamic plugin discovery
-      const data = await get<PluginsResponse & { _debug?: DebugInfo }>('/api/v1/plugins');
+      const { get } = await import('../lib/api');
 
-      console.log('[HomePage] Plugins API response:', data);
-
-      // Convert plugin format to status format for IntegrationStatus component
-      const convertedIntegrations: IntegrationStatusData[] = data.plugins.map(plugin => {
-        // Map integration type to old format
-        const typeMap: Record<string, 'execution' | 'information' | 'both'> = {
-          'RemoteExecution': 'execution',
-          'Info': 'information',
-          'ConfigurationManagement': 'both',
-          'Inventory': 'information',
-          'Monitoring': 'information',
-          'Events': 'information',
-        };
-
-        const status = plugin.enabled ? 'connected' : 'not_configured';
-        const message = plugin.healthy ? 'Operational' : 'Connected (health check pending)';
-
-        return {
-          name: plugin.metadata.name,
-          type: typeMap[plugin.metadata.integrationType] ?? 'both',
-          status,
-          lastCheck: new Date().toISOString(),
-          message,
-          details: {
-            color: plugin.metadata.color,
-            icon: plugin.metadata.icon,
-            healthy: plugin.healthy,
-            capabilities: plugin.capabilities.length,
-            widgets: plugin.widgets.length,
-          },
-        };
-      });
-
-      integrations = convertedIntegrations;
-      console.log('[HomePage] Converted integrations:', $state.snapshot(integrations));
-
-      if (data._debug) {
-        handleDebugInfo('Integration Status', data._debug);
+      interface PluginsResponse {
+        plugins: Array<{
+          name: string;
+          displayName: string;
+          description: string;
+          integrationType: string;
+          enabled: boolean;
+          healthy: boolean;
+          capabilities: Array<{
+            name: string;
+            category: string;
+          }>;
+        }>;
       }
+
+      const data = await get<PluginsResponse>('/api/v1/plugins');
+
+      // Convert plugin data to integration status format
+      integrations = data.plugins.map(plugin => ({
+        name: plugin.name,
+        type: 'both' as const, // Default to both for now
+        status: plugin.healthy ? 'connected' as const : 'disconnected' as const,
+        lastCheck: new Date().toISOString(),
+        message: plugin.healthy ? 'Connected' : 'Disconnected',
+      }));
     } catch (err) {
       integrationsError = err instanceof Error ? err.message : 'Failed to load integration status';
-      console.error('[HomePage] Error fetching integration status:', err);
-      integrations = [];
+      console.error('Failed to fetch integration status:', err);
     } finally {
       integrationsLoading = false;
     }
   }
 
-  function handleRefreshIntegrations(): void {
-    void fetchIntegrationStatus(true);
-  }
-
   onMount(() => {
     document.title = pageTitle;
+    // Fetch integration status on mount
     void fetchIntegrationStatus();
   });
 </script>
@@ -171,49 +116,36 @@
     </div>
   </div>
 
-  <!-- Integration Status Section -->
-  <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
+  <!-- Integration Status Panels -->
+  <section class="bg-white dark:bg-gray-800 shadow rounded-lg">
     <div class="px-4 py-5 sm:p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-medium text-gray-900 dark:text-white">Integration Status</h2>
-        <button
-          onclick={handleRefreshIntegrations}
-          disabled={integrationsLoading}
-          class="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {#if integrationsLoading}
-            <svg class="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Refreshing...
-          {:else}
-            <svg class="-ml-1 mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-          {/if}
-        </button>
-      </div>
-
-      {#if integrationsError}
-        <div class="rounded-md bg-red-50 dark:bg-red-900/20 p-4 mb-4">
-          <div class="flex">
-            <div class="flex-shrink-0">
-              <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-              </svg>
-            </div>
-            <div class="ml-3">
-              <p class="text-sm text-red-700 dark:text-red-200">{integrationsError}</p>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      <IntegrationStatus {integrations} loading={integrationsLoading} />
+      <IntegrationStatus
+        {integrations}
+        loading={integrationsLoading}
+        onRefresh={() => fetchIntegrationStatus(true)}
+      />
     </div>
-  </div>
+  </section>
+
+  <!-- Home Summary Tiles (Progressive Loading) -->
+  <section class="bg-white dark:bg-gray-800 shadow rounded-lg">
+    <div class="px-4 py-5 sm:p-6">
+      <h2 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Quick Overview</h2>
+
+      <!-- Widget slot for home-summary tiles -->
+      <!-- Each tile loads independently, no blocking -->
+      <WidgetSlot
+        slot="home-summary"
+        layout="grid"
+        columns={3}
+        gap="4"
+        {userCapabilities}
+        showEmptyState={true}
+        emptyMessage="No summary widgets available."
+        debug={debugMode.enabled}
+      />
+    </div>
+  </section>
 
   <!-- Dashboard Widget Slot (v1.0.0 Plugin System) -->
   <section class="bg-white dark:bg-gray-800 shadow rounded-lg">

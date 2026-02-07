@@ -14,7 +14,7 @@
   @version 1.0.0
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount } from 'svelte';
   import { link, navigate } from "../lib/router.svelte";
   import { debugMode } from "../lib/debug";
   import { themeManager } from "../lib/theme.svelte";
@@ -28,7 +28,6 @@
     type GroupMenuItem,
     INTEGRATION_TYPE_METADATA,
   } from "../lib/navigation";
-  import { getPluginLoader } from "../lib/plugins";
 
   interface Props {
     currentPath?: string;
@@ -37,35 +36,14 @@
   let { currentPath = "" }: Props = $props();
 
   // Menu state
+  const menuBuilder = getMenuBuilder();
   const menu = useMenu();
-  let menuError = $state<string | null>(null);
-  let menuLoading = $state(true);
   let collapsedGroups = $state<Set<string>>(new Set());
   let userMenuOpen = $state(false);
 
-  // Initialize menu builder on mount
-  onMount(() => {
-    const menuBuilder = getMenuBuilder();
-
-    // Subscribe to menu events for error handling
-    const unsubscribe = menuBuilder.subscribe((event) => {
-      if (event.type === "error") {
-        menuError = event.error;
-        menuLoading = false;
-      } else if (event.type === "menu:built" || event.type === "menu:updated") {
-        menuError = null;
-        menuLoading = false;
-      }
-    });
-
-    // Initialize the menu builder (loads plugins and builds menu)
-    void menuBuilder.initialize().finally(() => {
-      menuLoading = false;
-    });
-
-    return () => {
-      unsubscribe();
-    };
+  // Initialize menu immediately on mount - don't wait for coordinator
+  onMount(async () => {
+    await menuBuilder.initialize();
   });
 
   /**
@@ -311,7 +289,7 @@
               {/if}
             {/each}
           {:else}
-            <!-- Loading state -->
+            <!-- Menu loading - show skeleton or empty state -->
             <div class="flex items-center gap-2 text-gray-400">
               <svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -484,10 +462,4 @@
       </div>
     </div>
   </div>
-
-  {#if menuError}
-    <div class="border-t border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
-      Menu error: {menuError}
-    </div>
-  {/if}
 </nav>

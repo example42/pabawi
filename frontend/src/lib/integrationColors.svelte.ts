@@ -20,14 +20,6 @@ export type IntegrationColors = Record<string, IntegrationColorConfig>;
 export type IntegrationType = string;
 
 /**
- * API response for colors endpoint
- */
-interface ColorsApiResponse {
-  colors: IntegrationColors;
-  integrations: string[];
-}
-
-/**
  * Store for managing integration colors
  * Loads colors from backend API and provides access to color configurations
  */
@@ -56,7 +48,7 @@ class IntegrationColorStore {
         throw new Error(`Failed to load plugin colors: ${response.statusText}`);
       }
 
-      const data = await response.json() as { plugins?: Array<{ metadata: { name: string; color?: string } }> };
+      const data = await response.json() as { plugins?: { metadata: { name: string; color?: string } }[] };
 
       // Build colors map from plugin metadata
       const colorsMap: IntegrationColors = {};
@@ -93,7 +85,7 @@ class IntegrationColorStore {
       return this.getDefaultColor();
     }
 
-    const normalizedIntegration = integration.toLowerCase() as IntegrationType;
+    const normalizedIntegration = integration.toLowerCase();
 
     if (normalizedIntegration in this.colors) {
       return this.colors[normalizedIntegration];

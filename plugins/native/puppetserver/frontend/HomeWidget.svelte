@@ -25,20 +25,17 @@
   // Types
   // ==========================================================================
 
-  interface HealthStatus {
-    healthy: boolean;
-    message?: string;
-    lastCheck: string;
-    details?: {
-      environmentCount?: number;
-      capabilities?: string[];
+  interface PluginSummary {
+    pluginName: string;
+    displayName: string;
+    metrics: {
+      environmentCount: number;
+      serverStatus: string;
+      catalogCompilation: string;
     };
-    degraded?: boolean;
-  }
-
-  interface Environment {
-    name: string;
-    status?: string;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
   }
 
   // ==========================================================================
@@ -58,28 +55,26 @@
 
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let environmentCount = $state(0);
-  let healthStatus = $state<HealthStatus | null>(null);
-  let serverStatus = $state<string>('unknown');
+  let summary = $state<PluginSummary | null>(null);
 
   // ==========================================================================
   // Derived
   // ==========================================================================
 
-  let isHealthy = $derived(healthStatus?.healthy ?? false);
-  let isDegraded = $derived(healthStatus?.degraded ?? false);
+  let isHealthy = $derived(summary?.healthy ?? false);
+  let environmentCount = $derived(summary?.metrics.environmentCount ?? 0);
+  let serverStatus = $derived(summary?.metrics.serverStatus ?? 'unknown');
+  let catalogCompilation = $derived(summary?.metrics.catalogCompilation ?? 'unknown');
 
   let statusColor = $derived.by(() => {
-    if (!healthStatus) return 'bg-gray-400';
-    if (healthStatus.healthy) return 'bg-green-500';
-    if (healthStatus.degraded) return 'bg-yellow-500';
+    if (!summary) return 'bg-gray-400';
+    if (summary.healthy) return 'bg-green-500';
     return 'bg-red-500';
   });
 
   let statusText = $derived.by(() => {
-    if (!healthStatus) return 'Unknown';
-    if (healthStatus.healthy) return 'Healthy';
-    if (healthStatus.degraded) return 'Degraded';
+    if (!summary) return 'Unknown';
+    if (summary.healthy) return 'Healthy';
     return 'Unhealthy';
   });
 
@@ -100,32 +95,12 @@
     error = null;
 
     try {
-      // Load health status
-      const healthResponse = await api.get<HealthStatus>('/api/integrations/puppetserver/health');
-      healthStatus = healthResponse;
-
-      // Load environment count
-      try {
-        const envsResponse = await api.get<Environment[]>('/api/puppetserver/environments');
-        if (Array.isArray(envsResponse)) {
-          environmentCount = envsResponse.length;
-        } else {
-          environmentCount = healthStatus?.details?.environmentCount ?? 0;
-        }
-      } catch {
-        // Use health status environment count as fallback
-        environmentCount = healthStatus?.details?.environmentCount ?? 0;
-      }
-
-      // Load server status
-      try {
-        const statusResponse = await api.get<{ status?: string }>('/api/puppetserver/status');
-        serverStatus = statusResponse?.status ?? (healthStatus?.healthy ? 'running' : 'unknown');
-      } catch {
-        serverStatus = healthStatus?.healthy ? 'running' : 'unknown';
-      }
+      // Fetch lightweight summary from new endpoint
+      // This endpoint is designed to return in under 500ms with minimal data
+      const summaryResponse = await api.get<PluginSummary>('/api/plugins/puppetserver/summary');
+      summary = summaryResponse;
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load Puppetserver status';
+      error = err instanceof Error ? err.message : 'Failed to load Puppetserver summary';
     } finally {
       loading = false;
     }
@@ -194,8 +169,8 @@
       <!-- Catalog Compilation -->
       <div class="flex items-center justify-between">
         <span class="text-sm text-gray-600 dark:text-gray-400">Catalog Compilation</span>
-        <span class="text-sm font-medium {isHealthy ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}">
-          {isHealthy ? 'Available' : 'Limited'}
+        <span class="text-sm font-medium {catalogCompilation === 'available' ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}">
+          {catalogCompilation === 'available' ? 'Available' : 'Limited'}
         </span>
       </div>
     </div>

@@ -364,5 +364,154 @@ export function createPluginsRouter(
     }
   });
 
+  /**
+   * GET /api/plugins/:name/summary
+   *
+   * Returns lightweight summary data for a plugin (for home page tiles).
+   * Must return in under 500ms with minimal data.
+   */
+  router.get("/:name/summary", async (req: Request, res: Response) => {
+    const { name } = req.params;
+
+    try {
+      logger.debug(`Fetching summary for plugin: ${name}`, {
+        component: "PluginsRouter",
+        operation: "getPluginSummary",
+        metadata: { pluginName: name },
+      });
+
+      // Get the plugin instance
+      const pluginRegistration = integrationManager.getPlugin(name);
+
+      if (!pluginRegistration) {
+        logger.warn(`Plugin not found for summary: ${name}`, {
+          component: "PluginsRouter",
+          operation: "getPluginSummary",
+          metadata: { pluginName: name },
+        });
+
+        return res.status(404).json({
+          error: "Plugin not found",
+          message: `No plugin found with name: ${name}`,
+        });
+      }
+
+      const plugin = pluginRegistration.plugin;
+
+      // Check if plugin has getSummary method
+      if (typeof (plugin as any).getSummary !== "function") {
+        logger.warn(`Plugin ${name} does not implement getSummary`, {
+          component: "PluginsRouter",
+          operation: "getPluginSummary",
+          metadata: { pluginName: name },
+        });
+
+        return res.status(501).json({
+          error: "Not implemented",
+          message: `Plugin ${name} does not support summary endpoint`,
+        });
+      }
+
+      // Call getSummary with timeout
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Summary timeout (500ms exceeded)")), 500);
+      });
+
+      const summaryPromise = (plugin as any).getSummary();
+      const summary = await Promise.race([summaryPromise, timeoutPromise]);
+
+      logger.debug(`Returning summary for plugin: ${name}`, {
+        component: "PluginsRouter",
+        operation: "getPluginSummary",
+        metadata: { pluginName: name },
+      });
+
+      return res.json(summary);
+    } catch (error) {
+      logger.error(`Failed to fetch summary for plugin: ${name}`, {
+        component: "PluginsRouter",
+        operation: "getPluginSummary",
+        metadata: { pluginName: name },
+      }, error instanceof Error ? error : new Error(String(error)));
+
+      return res.status(500).json({
+        error: "Failed to fetch plugin summary",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  /**
+   * GET /api/plugins/:name/data
+   *
+   * Returns full plugin data for plugin home pages.
+   * Called on-demand when navigating to plugin page.
+   */
+  router.get("/:name/data", async (req: Request, res: Response) => {
+    const { name } = req.params;
+
+    try {
+      logger.debug(`Fetching full data for plugin: ${name}`, {
+        component: "PluginsRouter",
+        operation: "getPluginData",
+        metadata: { pluginName: name },
+      });
+
+      // Get the plugin instance
+      const pluginRegistration = integrationManager.getPlugin(name);
+
+      if (!pluginRegistration) {
+        logger.warn(`Plugin not found for data: ${name}`, {
+          component: "PluginsRouter",
+          operation: "getPluginData",
+          metadata: { pluginName: name },
+        });
+
+        return res.status(404).json({
+          error: "Plugin not found",
+          message: `No plugin found with name: ${name}`,
+        });
+      }
+
+      const plugin = pluginRegistration.plugin;
+
+      // Check if plugin has getData method
+      if (typeof (plugin as any).getData !== "function") {
+        logger.warn(`Plugin ${name} does not implement getData`, {
+          component: "PluginsRouter",
+          operation: "getPluginData",
+          metadata: { pluginName: name },
+        });
+
+        return res.status(501).json({
+          error: "Not implemented",
+          message: `Plugin ${name} does not support data endpoint`,
+        });
+      }
+
+      // Call getData (no strict timeout for full data)
+      const data = await (plugin as any).getData();
+
+      logger.debug(`Returning full data for plugin: ${name}`, {
+        component: "PluginsRouter",
+        operation: "getPluginData",
+        metadata: { pluginName: name },
+      });
+
+      return res.json(data);
+    } catch (error) {
+      logger.error(`Failed to fetch data for plugin: ${name}`, {
+        component: "PluginsRouter",
+        operation: "getPluginData",
+        metadata: { pluginName: name },
+      }, error instanceof Error ? error : new Error(String(error)));
+
+      return res.status(500).json({
+        error: "Failed to fetch plugin data",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
   return router;
 }

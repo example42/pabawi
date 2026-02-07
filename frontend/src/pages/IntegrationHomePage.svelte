@@ -1,14 +1,14 @@
 <!--
   Integration Home Page
 
-  Dynamic page for displaying integration capabilities with tab navigation.
-  Auto-generates tabs from plugin capabilities and embeds appropriate widgets.
+  Generic page for displaying plugin home pages with capabilities, widgets, and data.
+  Loads full plugin info only when navigating to this page (not during app init).
 
   Route: /integrations/:integrationName
-  Deep linking: /integrations/bolt?tab=commands
 
   @component
-  @version 1.0.0
+  @version 2.0.0
+  @spec home-page-loading-fixes
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -16,16 +16,19 @@
   import { get } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
   import SkeletonLoader from '../components/SkeletonLoader.svelte';
+  import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import { auth } from '../lib/auth.svelte';
-  import type { Component } from 'svelte';
+  import WidgetSlot from '../lib/plugins/WidgetSlot.svelte';
 
   // Types
   interface PluginInfo {
     metadata: {
       name: string;
       version: string;
+      author: string;
       description: string;
       integrationType: string;
+      homepage?: string;
       color?: string;
       icon?: string;
     };
@@ -38,8 +41,6 @@
       slots: string[];
       size: string;
       requiredCapabilities: string[];
-      config?: Record<string, unknown>;
-      icon?: string;
       priority?: number;
     }>;
     capabilities: Array<{
@@ -47,361 +48,344 @@
       category: string;
       description: string;
       riskLevel: string;
+      requiredPermissions: string[];
     }>;
-  }
-
-  interface IntegrationTab {
-    id: string;
-    label: string;
-    capability: string;
-    widget?: string;
-    icon?: string;
     priority: number;
   }
 
-  // Get integration name from route params
-  const integrationName = $derived(router.params.integrationName as string);
-
-  // Get active tab from query params
-  const urlParams = new URLSearchParams(window.location.search);
-  const initialTab = urlParams.get('tab');
+  // Get plugin name from route params
+  const pluginName = $derived(router.params.integrationName as string);
 
   // Get user capabilities for widget filtering
   const userCapabilities = $derived(auth.permissions?.allowed ?? []);
 
-  // State
-  let integration = $state<PluginInfo | null>(null);
-  let tabs = $state<IntegrationTab[]>([]);
-  let currentTab = $state<IntegrationTab | null>(null);
+  // Plugin info (loaded on-demand)
+  let pluginInfo = $state<PluginInfo | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let widgetComponent = $state<Component | null>(null);
-  let widgetLoading = $state(false);
-  let widgetError = $state<string | null>(null);
+  let activeTab = $state<'overview' | 'capabilities' | 'widgets'>('overview');
 
   /**
-   * Load widget component for the active tab
-   * Uses dynamic imports based on widget path from API
+   * Load plugin info when page mounts
+   * This is the ONLY place where full plugin info is loaded
    */
-  async function loadWidgetForTab(tab: IntegrationTab) {
-    if (!tab.widget) {
-      widgetComponent = null;
-      return;
-    }
-
-    widgetLoading = true;
-    widgetError = null;
-
-    try {
-      // Widget path should be in format: "pluginName:widgetName"
-      // We'll dynamically import from @plugins/native/{pluginName}/frontend/{WidgetName}.svelte
-      const [pluginName, widgetName] = tab.widget.split(':');
-
-      if (!pluginName || !widgetName) {
-        throw new Error(`Invalid widget format: ${tab.widget}. Expected format: "pluginName:widgetName"`);
-      }
-
-      // Convert widget name to PascalCase for component filename
-      const componentName = widgetName
-        .split('-')
-        .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-        .join('');
-
-      // Dynamic import using template literal
-      const widgetPath = `@plugins/native/${pluginName}/frontend/${componentName}.svelte`;
-
-      // Use dynamic import with variable
-      const module = await import(/* @vite-ignore */ widgetPath);
-      widgetComponent = module.default;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load widget';
-      widgetError = `Widget component not found: ${tab.widget}. ${message}`;
-      widgetComponent = null;
-      console.error(`Failed to load widget ${tab.widget}:`, err);
-    } finally {
-      widgetLoading = false;
-    }
-  }
-
-  /**
-   * Load integration data from v1 plugins API
-   */
-  async function loadIntegration() {
+  async function loadPluginInfo() {
     loading = true;
     error = null;
 
     try {
-      // Fetch plugin info from v1 API
-      const pluginData = await get<PluginInfo>(`/api/v1/plugins/${integrationName}`);
-
-      integration = pluginData;
-
-      // Generate tabs from capabilities grouped by category
-      const tabsMap = new Map<string, IntegrationTab>();
-
-      for (const capability of pluginData.capabilities) {
-        const category = capability.category;
-        const tabId = category.toLowerCase().replace(/\s+/g, '-');
-
-        if (!tabsMap.has(tabId)) {
-          // Find a widget for this category if available
-          const categoryWidget = pluginData.widgets.find(w =>
-            w.requiredCapabilities.some(cap => cap.startsWith(`${pluginData.metadata.name}.${category}`))
-          );
-
-          tabsMap.set(tabId, {
-            id: tabId,
-            label: category.charAt(0).toUpperCase() + category.slice(1),
-            capability: capability.name,
-            widget: categoryWidget ? `${pluginData.metadata.name}:${categoryWidget.id}` : undefined,
-            icon: categoryWidget?.icon,
-            priority: categoryWidget?.priority ?? 0,
-          });
-        }
-      }
-
-      tabs = Array.from(tabsMap.values()).sort((a, b) => b.priority - a.priority);
-
-      // Set current tab (from URL param or first tab)
-      if (initialTab) {
-        currentTab = tabs.find(t => t.id === initialTab) || tabs[0] || null;
-      } else {
-        currentTab = tabs[0] || null;
-      }
-
-      if (!integration) {
-        error = `Integration "${integrationName}" not found`;
-        showError(`Integration "${integrationName}" not found`);
-      }
+      // Fetch full plugin info (only when navigating to this page)
+      const data = await get<PluginInfo>(`/api/v1/plugins/${pluginName}`);
+      pluginInfo = data;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load integration';
+      const message = err instanceof Error ? err.message : 'Failed to load plugin info';
       error = message;
-      showError(message);
-      console.error('Failed to load integration:', err);
+      showError(`Failed to load ${pluginName}: ${message}`);
+      console.error('Failed to load plugin info:', err);
     } finally {
       loading = false;
     }
   }
 
   /**
-   * Set active tab and update URL
+   * Retry loading plugin info
    */
-  function setTab(tab: IntegrationTab) {
-    currentTab = tab;
-
-    // Update URL with tab query param
-    const url = new URL(window.location.href);
-    url.searchParams.set('tab', tab.id);
-    window.history.pushState({}, '', url.toString());
-
-    // Load widget for this tab
-    void loadWidgetForTab(tab);
+  function retryLoad() {
+    void loadPluginInfo();
   }
 
   /**
-   * Get SVG path for icon
+   * Get risk level color for capability badges
    */
-  function getIconPath(icon?: string): string {
-    if (!icon) return '';
-
-    // Icon mapping for common icons
-    const iconPaths: Record<string, string> = {
-      terminal: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
-      play: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-      server: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2',
-      database: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
-      info: 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
-      list: 'M4 6h16M4 12h16M4 18h16',
-      folder: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
-      'file-text': 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
-      'pie-chart': 'M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z',
-    };
-
-    return iconPaths[icon] || iconPaths.info;
+  function getRiskLevelColor(level: string): string {
+    switch (level) {
+      case 'read':
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+      case 'write':
+        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
+      case 'execute':
+        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
+      case 'admin':
+        return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+      default:
+        return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400';
+    }
   }
 
-  // Load integration on mount
+  // Load plugin info on mount
   onMount(() => {
-    void loadIntegration();
-  });
-
-  // Load widget when currentTab changes
-  $effect(() => {
-    if (currentTab) {
-      void loadWidgetForTab(currentTab);
-    }
+    void loadPluginInfo();
   });
 </script>
 
-{#if loading}
-  <div class="p-6">
-    <SkeletonLoader height="200px" />
-    <div class="mt-4">
-      <SkeletonLoader height="400px" />
-    </div>
-  </div>
-{:else if error}
-  <div class="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-    <div class="rounded-lg bg-white p-8 text-center shadow-lg dark:bg-gray-800">
-      <svg class="mx-auto h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-      <h2 class="mt-4 text-xl font-semibold text-gray-900 dark:text-white">Integration Not Found</h2>
-      <p class="mt-2 text-gray-600 dark:text-gray-400">{error}</p>
-      <button
-        onclick={() => router.navigate('/')}
-        class="mt-6 rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600"
-      >
-        Go to Home
-      </button>
-    </div>
-  </div>
-{:else if integration}
-  <div class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <!-- Integration Header -->
-    <header class="border-b bg-white dark:border-gray-700 dark:bg-gray-800" style="border-bottom-color: {integration.color || '#6B7280'}">
-      <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div class="flex items-center gap-4">
-          <!-- Icon -->
-          {#if integration.metadata.icon}
-            <div class="flex h-16 w-16 items-center justify-center rounded-lg" style="background-color: {integration.metadata.color}20; color: {integration.metadata.color}">
-              <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getIconPath(integration.metadata.icon)} />
-              </svg>
-            </div>
-          {/if}
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900">
+  {#if loading}
+    <!-- Loading State -->
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div class="space-y-6">
+        <!-- Header Skeleton -->
+        <div class="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+          <SkeletonLoader height="80px" />
+        </div>
 
-          <!-- Title and Description -->
-          <div class="flex-1">
-            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-              {integration.metadata.name}
-            </h1>
-            <p class="mt-1 text-gray-600 dark:text-gray-400">
-              {integration.metadata.description}
-            </p>
+        <!-- Content Skeleton -->
+        <div class="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+          <SkeletonLoader height="400px" />
+        </div>
+      </div>
+    </div>
+  {:else if error}
+    <!-- Error State -->
+    <div class="flex min-h-screen items-center justify-center">
+      <div class="rounded-lg bg-white p-8 text-center shadow-lg dark:bg-gray-800 max-w-md">
+        <svg class="mx-auto h-12 w-12 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <h2 class="mt-4 text-xl font-semibold text-gray-900 dark:text-white">Failed to Load Plugin</h2>
+        <p class="mt-2 text-gray-600 dark:text-gray-400">{error}</p>
+        <div class="mt-6 flex gap-3 justify-center">
+          <button
+            onclick={retryLoad}
+            class="rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 transition-colors"
+          >
+            Retry
+          </button>
+          <button
+            onclick={() => router.navigate('/')}
+            class="rounded-lg bg-gray-200 px-4 py-2 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
+    </div>
+  {:else if pluginInfo}
+    <!-- Success State - Plugin Loaded -->
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <!-- Plugin Header -->
+      <div class="mb-6 rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+        <div class="flex items-start justify-between">
+          <div class="flex items-center gap-4">
+            <!-- Plugin Icon -->
+            <div class="flex h-16 w-16 items-center justify-center rounded-lg" style="background-color: {pluginInfo.metadata.color || '#6B7280'}20;">
+              {#if pluginInfo.metadata.icon}
+                <span class="text-3xl">{pluginInfo.metadata.icon}</span>
+              {:else}
+                <svg class="h-8 w-8" style="color: {pluginInfo.metadata.color || '#6B7280'};" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
+                </svg>
+              {/if}
+            </div>
+            <div class="flex-1">
+              <div class="flex items-center gap-3">
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
+                  {pluginInfo.metadata.name}
+                </h1>
+                <span class="text-sm text-gray-500 dark:text-gray-400">
+                  v{pluginInfo.metadata.version}
+                </span>
+              </div>
+              <p class="mt-1 text-gray-600 dark:text-gray-400">
+                {pluginInfo.metadata.description}
+              </p>
+              <div class="mt-2 flex items-center gap-3">
+                <IntegrationBadge integration={pluginInfo.metadata.integrationType} variant="badge" size="sm" />
+                <span class="text-sm text-gray-500 dark:text-gray-400">
+                  by {pluginInfo.metadata.author}
+                </span>
+              </div>
+            </div>
           </div>
 
-          <!-- Health Status -->
+          <!-- Health Status Badge -->
           <div class="flex items-center gap-2">
-            {#if integration.healthy}
+            {#if pluginInfo.healthy}
               <span class="flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
                 <span class="h-2 w-2 rounded-full bg-green-600 dark:bg-green-400"></span>
                 Healthy
               </span>
             {:else}
-              <span class="flex items-center gap-2 rounded-full bg-yellow-100 px-3 py-1 text-sm font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
-                <span class="h-2 w-2 rounded-full bg-yellow-600 dark:bg-yellow-400"></span>
-                Degraded
+              <span class="flex items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                <span class="h-2 w-2 rounded-full bg-red-600 dark:bg-red-400"></span>
+                Offline
               </span>
             {/if}
           </div>
         </div>
-
-        <!-- Tab Navigation -->
-        {#if tabs.length > 0}
-          <nav class="mt-6 flex gap-1 border-b border-gray-200 dark:border-gray-700" aria-label="Tabs">
-            {#each tabs as tab}
-              <button
-                onclick={() => setTab(tab)}
-                class="flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors"
-                class:border-primary-600={currentTab?.id === tab.id}
-                class:text-primary-600={currentTab?.id === tab.id}
-                class:dark:border-primary-400={currentTab?.id === tab.id}
-                class:dark:text-primary-400={currentTab?.id === tab.id}
-                class:border-transparent={currentTab?.id !== tab.id}
-                class:text-gray-600={currentTab?.id !== tab.id}
-                class:hover:text-gray-900={currentTab?.id !== tab.id}
-                class:dark:text-gray-400={currentTab?.id !== tab.id}
-                class:dark:hover:text-gray-300={currentTab?.id !== tab.id}
-                aria-current={currentTab?.id === tab.id ? 'page' : undefined}
-              >
-                {#if tab.icon}
-                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getIconPath(tab.icon)} />
-                  </svg>
-                {/if}
-                <span>{tab.label}</span>
-              </button>
-            {/each}
-          </nav>
-        {/if}
       </div>
-    </header>
 
-    <!-- Tab Content -->
-    <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      {#if currentTab}
-        {#if currentTab.widget}
-          <!-- Render widget using dynamic component loading -->
-          <div class="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
-            <div class="mb-4 flex items-center gap-2 border-b border-gray-200 pb-4 dark:border-gray-700">
-              <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={getIconPath(currentTab.icon)} />
-              </svg>
-              <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{currentTab.label}</h2>
-            </div>
+      <!-- Tabs -->
+      <div class="mb-6 rounded-lg bg-white shadow dark:bg-gray-800">
+        <div class="border-b border-gray-200 dark:border-gray-700">
+          <nav class="flex -mb-px">
+            <button
+              type="button"
+              onclick={() => activeTab = 'overview'}
+              class="flex-1 border-b-2 py-3 text-center text-sm font-medium transition-colors {activeTab === 'overview' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+            >
+              Overview
+            </button>
+            <button
+              type="button"
+              onclick={() => activeTab = 'capabilities'}
+              class="flex-1 border-b-2 py-3 text-center text-sm font-medium transition-colors {activeTab === 'capabilities' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+            >
+              Capabilities ({pluginInfo.capabilities.length})
+            </button>
+            <button
+              type="button"
+              onclick={() => activeTab = 'widgets'}
+              class="flex-1 border-b-2 py-3 text-center text-sm font-medium transition-colors {activeTab === 'widgets' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+            >
+              Widgets ({pluginInfo.widgets.length})
+            </button>
+          </nav>
+        </div>
 
-            <!-- Widget Content -->
-            <div class="widget-container">
-              {#if widgetLoading}
-                <div class="flex items-center justify-center py-12">
-                  <div class="text-center">
-                    <div class="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-gray-200 border-t-primary-600"></div>
-                    <p class="mt-4 text-gray-600 dark:text-gray-400">Loading widget...</p>
-                  </div>
+        <!-- Tab Content -->
+        <div class="p-6">
+          {#if activeTab === 'overview'}
+            <!-- Overview Tab -->
+            <div class="space-y-6">
+              <!-- Stats -->
+              <div class="grid grid-cols-3 gap-4">
+                <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{pluginInfo.capabilities.length}</div>
+                  <div class="text-sm text-gray-500 dark:text-gray-400">Capabilities</div>
                 </div>
-              {:else if widgetError}
-                <div class="rounded-lg bg-red-50 p-4 dark:bg-red-900/20">
-                  <div class="flex">
-                    <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                    </svg>
-                    <div class="ml-3">
-                      <h3 class="text-sm font-medium text-red-800 dark:text-red-400">Widget Load Error</h3>
-                      <p class="mt-1 text-sm text-red-700 dark:text-red-300">{widgetError}</p>
-                    </div>
-                  </div>
+                <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{pluginInfo.widgets.length}</div>
+                  <div class="text-sm text-gray-500 dark:text-gray-400">Widgets</div>
                 </div>
-              {:else if widgetComponent}
-                <!-- Dynamically render the widget component -->
-                {@const Component = widgetComponent}
-                <Component integration={integration.metadata.name} />
-              {:else}
-                <div class="rounded-lg bg-yellow-50 p-4 dark:bg-yellow-900/20">
-                  <p class="text-yellow-800 dark:text-yellow-400">
-                    Widget <code class="rounded bg-yellow-100 px-2 py-1 font-mono text-xs dark:bg-yellow-800">{currentTab.widget}</code> is not available.
-                  </p>
+                <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
+                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{pluginInfo.priority}</div>
+                  <div class="text-sm text-gray-500 dark:text-gray-400">Priority</div>
+                </div>
+              </div>
+
+              {#if pluginInfo.metadata.homepage}
+                <div>
+                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Homepage</h3>
+                  <a
+                    href={pluginInfo.metadata.homepage}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-1 block text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                  >
+                    {pluginInfo.metadata.homepage} ↗
+                  </a>
                 </div>
               {/if}
-            </div>
-          </div>
-        {:else}
-          <!-- No widget available - show capability info -->
-          <div class="rounded-lg bg-white p-8 text-center shadow dark:bg-gray-800">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white">No Widget Available</h3>
-            <p class="mt-2 text-gray-600 dark:text-gray-400">
-              No widget is configured for {currentTab.label}
-            </p>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-500">
-              Capability: <code class="rounded bg-gray-100 px-2 py-1 font-mono text-xs dark:bg-gray-700">{currentTab.capability}</code>
-            </p>
-          </div>
-        {/if}
-      {:else}
-        <div class="rounded-lg bg-white p-8 text-center shadow dark:bg-gray-800">
-          <p class="text-gray-600 dark:text-gray-400">No tabs available for this integration.</p>
-        </div>
-      {/if}
-    </main>
-  </div>
-{/if}
 
-<style>
-  /* Ensure smooth transitions for tab switching */
-  .widget-container {
-    min-height: 400px;
-  }
-</style>
+              <!-- Plugin-specific widgets (standalone-page slot) -->
+              <div>
+                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase mb-4">Plugin Content</h3>
+                <WidgetSlot
+                  slot="standalone-page"
+                  layout="stack"
+                  context={{ pluginName, pluginInfo }}
+                  {userCapabilities}
+                  showEmptyState={true}
+                  emptyMessage="No content widgets available for this plugin."
+                  showLoadingStates={true}
+                />
+              </div>
+            </div>
+          {:else if activeTab === 'capabilities'}
+            <!-- Capabilities Tab -->
+            <div class="space-y-4">
+              {#if pluginInfo.capabilities.length === 0}
+                <p class="text-center text-gray-500 dark:text-gray-400 py-8">
+                  No capabilities registered for this plugin.
+                </p>
+              {:else}
+                {#each pluginInfo.capabilities as capability}
+                  <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1">
+                        <h4 class="font-medium text-gray-900 dark:text-white">
+                          {capability.name}
+                        </h4>
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                          {capability.description}
+                        </p>
+                        <div class="mt-2 flex items-center gap-2">
+                          <span class="text-xs text-gray-500 dark:text-gray-400">Category:</span>
+                          <span class="text-xs text-gray-700 dark:text-gray-300">{capability.category}</span>
+                        </div>
+                        {#if capability.requiredPermissions.length > 0}
+                          <div class="mt-2">
+                            <span class="text-xs text-gray-500 dark:text-gray-400">Required Permissions:</span>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                              {#each capability.requiredPermissions as perm}
+                                <span class="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                  {perm}
+                                </span>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                      <span class="ml-4 rounded-full px-2.5 py-0.5 text-xs font-medium {getRiskLevelColor(capability.riskLevel)}">
+                        {capability.riskLevel}
+                      </span>
+                    </div>
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          {:else if activeTab === 'widgets'}
+            <!-- Widgets Tab -->
+            <div class="space-y-4">
+              {#if pluginInfo.widgets.length === 0}
+                <p class="text-center text-gray-500 dark:text-gray-400 py-8">
+                  No widgets registered for this plugin.
+                </p>
+              {:else}
+                {#each pluginInfo.widgets as widget}
+                  <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1">
+                        <h4 class="font-medium text-gray-900 dark:text-white">
+                          {widget.name}
+                        </h4>
+                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          ID: {widget.id}
+                        </p>
+                        <div class="mt-2">
+                          <span class="text-xs text-gray-500 dark:text-gray-400">Slots:</span>
+                          <div class="mt-1 flex flex-wrap gap-1">
+                            {#each widget.slots as slot}
+                              <span class="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                {slot}
+                              </span>
+                            {/each}
+                          </div>
+                        </div>
+                        {#if widget.requiredCapabilities.length > 0}
+                          <div class="mt-2">
+                            <span class="text-xs text-gray-500 dark:text-gray-400">Required Capabilities:</span>
+                            <div class="mt-1 flex flex-wrap gap-1">
+                              {#each widget.requiredCapabilities as cap}
+                                <span class="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                  {cap}
+                                </span>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
+                      </div>
+                      <span class="ml-4 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                        {widget.size}
+                      </span>
+                    </div>
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
+</div>

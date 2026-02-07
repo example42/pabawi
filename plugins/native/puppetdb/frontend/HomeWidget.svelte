@@ -25,29 +25,19 @@
   // Types
   // ==========================================================================
 
-  interface HealthStatus {
-    healthy: boolean;
-    message?: string;
-    lastCheck: string;
-    details?: {
-      nodeCount?: number;
-      capabilities?: string[];
+  interface PluginSummary {
+    pluginName: string;
+    displayName: string;
+    metrics: {
+      nodeCount: number;
+      healthyNodes: number;
+      failedNodes: number;
+      totalReports: number;
+      successRate: number;
     };
-    degraded?: boolean;
-  }
-
-  interface ReportsSummary {
-    total: number;
-    failed: number;
-    changed: number;
-    unchanged: number;
-    noop: number;
-    success?: number;
-  }
-
-  interface NodesResponse {
-    nodes?: Array<{ certname: string }>;
-    length?: number;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
   }
 
   // ==========================================================================
@@ -67,37 +57,28 @@
 
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let nodeCount = $state(0);
-  let reportsSummary = $state<ReportsSummary | null>(null);
-  let healthStatus = $state<HealthStatus | null>(null);
+  let summary = $state<PluginSummary | null>(null);
 
   // ==========================================================================
   // Derived
   // ==========================================================================
 
-  let isHealthy = $derived(healthStatus?.healthy ?? false);
-  let isDegraded = $derived(healthStatus?.degraded ?? false);
+  let isHealthy = $derived(summary?.healthy ?? false);
+  let nodeCount = $derived(summary?.metrics.nodeCount ?? 0);
+  let healthyNodes = $derived(summary?.metrics.healthyNodes ?? 0);
+  let totalReports = $derived(summary?.metrics.totalReports ?? 0);
+  let successRate = $derived(summary?.metrics.successRate ?? 0);
 
   let statusColor = $derived.by(() => {
-    if (!healthStatus) return 'bg-gray-400';
-    if (healthStatus.healthy) return 'bg-green-500';
-    if (healthStatus.degraded) return 'bg-yellow-500';
+    if (!summary) return 'bg-gray-400';
+    if (summary.healthy) return 'bg-green-500';
     return 'bg-red-500';
   });
 
   let statusText = $derived.by(() => {
-    if (!healthStatus) return 'Unknown';
-    if (healthStatus.healthy) return 'Healthy';
-    if (healthStatus.degraded) return 'Degraded';
+    if (!summary) return 'Unknown';
+    if (summary.healthy) return 'Healthy';
     return 'Unhealthy';
-  });
-
-  let failedCount = $derived(reportsSummary?.failed ?? 0);
-  let totalReports = $derived(reportsSummary?.total ?? 0);
-  let successRate = $derived.by(() => {
-    if (!reportsSummary || reportsSummary.total === 0) return 0;
-    const successCount = (reportsSummary.success ?? 0) + (reportsSummary.unchanged ?? 0) + (reportsSummary.noop ?? 0);
-    return Math.round((successCount / reportsSummary.total) * 100);
   });
 
   // ==========================================================================
@@ -117,34 +98,12 @@
     error = null;
 
     try {
-      // Load health status
-      const healthResponse = await api.get<HealthStatus>('/api/integrations/puppetdb/health');
-      healthStatus = healthResponse;
-
-      // Load node count
-      try {
-        const nodesResponse = await api.get<NodesResponse>('/api/puppetdb/nodes');
-        if (Array.isArray(nodesResponse)) {
-          nodeCount = nodesResponse.length;
-        } else if (nodesResponse.nodes) {
-          nodeCount = nodesResponse.nodes.length;
-        } else {
-          nodeCount = healthStatus?.details?.nodeCount ?? 0;
-        }
-      } catch {
-        // Use health status node count as fallback
-        nodeCount = healthStatus?.details?.nodeCount ?? 0;
-      }
-
-      // Load reports summary
-      try {
-        const summaryResponse = await api.get<ReportsSummary>('/api/puppetdb/reports/summary');
-        reportsSummary = summaryResponse;
-      } catch {
-        // Non-critical, continue without reports data
-      }
+      // Fetch lightweight summary from the new endpoint
+      // This endpoint calls the plugin's getSummary() method
+      summary = await api.get<PluginSummary>('/api/v1/plugins/puppetdb/summary');
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load PuppetDB status';
+      error = err instanceof Error ? err.message : 'Failed to load PuppetDB summary';
+      summary = null;
     } finally {
       loading = false;
     }

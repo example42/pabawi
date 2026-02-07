@@ -15,11 +15,11 @@ export declare const InventoryListParamsSchema: z.ZodObject<{
     refresh: z.ZodOptional<z.ZodBoolean>;
     groups: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
-    groups?: string[];
-    refresh?: boolean;
+    refresh?: boolean | undefined;
+    groups?: string[] | undefined;
 }, {
-    groups?: string[];
-    refresh?: boolean;
+    refresh?: boolean | undefined;
+    groups?: string[] | undefined;
 }>;
 /**
  * Schema for inventory.get parameters
@@ -27,9 +27,9 @@ export declare const InventoryListParamsSchema: z.ZodObject<{
 export declare const InventoryGetParamsSchema: z.ZodObject<{
     nodeId: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    nodeId?: string;
+    nodeId: string;
 }, {
-    nodeId?: string;
+    nodeId: string;
 }>;
 /**
  * Schema for inventory.groups parameters
@@ -37,9 +37,9 @@ export declare const InventoryGetParamsSchema: z.ZodObject<{
 export declare const InventoryGroupsParamsSchema: z.ZodObject<{
     refresh: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
-    refresh?: boolean;
+    refresh?: boolean | undefined;
 }, {
-    refresh?: boolean;
+    refresh?: boolean | undefined;
 }>;
 /**
  * Schema for inventory.filter parameters
@@ -48,11 +48,11 @@ export declare const InventoryFilterParamsSchema: z.ZodObject<{
     criteria: z.ZodRecord<z.ZodString, z.ZodUnknown>;
     groups: z.ZodOptional<z.ZodArray<z.ZodString, "many">>;
 }, "strip", z.ZodTypeAny, {
-    groups?: string[];
-    criteria?: Record<string, unknown>;
+    criteria: Record<string, unknown>;
+    groups?: string[] | undefined;
 }, {
-    groups?: string[];
-    criteria?: Record<string, unknown>;
+    criteria: Record<string, unknown>;
+    groups?: string[] | undefined;
 }>;
 export type InventoryListParams = z.infer<typeof InventoryListParamsSchema>;
 export type InventoryGetParams = z.infer<typeof InventoryGetParamsSchema>;

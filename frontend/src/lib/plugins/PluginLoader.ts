@@ -39,12 +39,12 @@ import { hasLocalWidget, loadLocalWidgetComponent } from "./WidgetBridge";
  */
 export class PluginLoader {
   private config: PluginLoaderConfig;
-  private plugins: Map<string, LoadedPlugin> = new Map();
-  private widgetComponents: Map<string, Component> = new Map();
-  private pluginModules: Map<string, PluginFrontendModule> = new Map();
-  private metadataCache: Map<string, { data: PluginInfo; timestamp: number }> = new Map();
-  private eventHandlers: Set<PluginEventHandler> = new Set();
-  private loadingPromises: Map<string, Promise<LoadedPlugin | null>> = new Map();
+  private plugins = new Map<string, LoadedPlugin>();
+  private widgetComponents = new Map<string, Component>();
+  private pluginModules = new Map<string, PluginFrontendModule>();
+  private metadataCache = new Map<string, { data: PluginInfo; timestamp: number }>();
+  private eventHandlers = new Set<PluginEventHandler>();
+  private loadingPromises = new Map<string, Promise<LoadedPlugin | null>>();
 
   constructor(config: Partial<PluginLoaderConfig> = {}) {
     this.config = { ...DEFAULT_PLUGIN_LOADER_CONFIG, ...config };
@@ -86,7 +86,7 @@ export class PluginLoader {
   async loadPlugin(pluginName: string): Promise<LoadedPlugin | null> {
     // Check if already loaded
     const existing = this.plugins.get(pluginName);
-    if (existing && existing.loadState === "loaded") {
+    if (existing?.loadState === "loaded") {
       return existing;
     }
 
@@ -447,13 +447,50 @@ export class PluginLoader {
     }
 
     const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
+    if (!contentType?.includes('application/json')) {
       const text = await response.text();
       throw new Error(`Expected JSON response but got ${contentType || 'unknown type'}. Response: ${text.substring(0, 200)}`);
     }
 
-    const data = await response.json();
-    return data.plugins ?? [];
+    interface PluginMetadataResponse {
+      plugins: {
+        name: string;
+        displayName: string;
+        description: string;
+        integrationType: string;
+        color?: string;
+        icon?: string;
+        enabled: boolean;
+        healthy: boolean;
+        capabilities: {
+          name: string;
+          category: string;
+        }[];
+      }[];
+    }
+
+    const data = await response.json() as PluginMetadataResponse;
+
+    // Map lightweight metadata to PluginInfo structure
+    // We'll fetch full details when loading individual plugins
+    const pluginInfos: PluginInfo[] = (data.plugins ?? []).map(plugin => ({
+      metadata: {
+        name: plugin.name,
+        version: '1.0.0', // Will be fetched when loading individual plugin
+        author: 'Unknown', // Will be fetched when loading individual plugin
+        description: plugin.description,
+        integrationType: plugin.integrationType,
+        color: plugin.color,
+        icon: plugin.icon,
+      },
+      enabled: plugin.enabled,
+      healthy: plugin.healthy,
+      widgets: [], // Will be fetched when loading individual plugin
+      capabilities: [], // Will be fetched when loading individual plugin
+      priority: 10, // Default priority
+    }));
+
+    return pluginInfos;
   }
 
   /**
@@ -477,7 +514,7 @@ export class PluginLoader {
     }
 
     const contentType = response.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
+    if (!contentType?.includes('application/json')) {
       const text = await response.text();
       throw new Error(`Expected JSON response but got ${contentType || 'unknown type'}. Response: ${text.substring(0, 200)}`);
     }

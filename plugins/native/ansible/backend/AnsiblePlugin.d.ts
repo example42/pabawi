@@ -47,6 +47,13 @@ interface PerformanceMonitorServiceInterface {
  */
 export declare class AnsiblePlugin implements BasePluginInterface, InventoryCapability, RemoteExecutionCapability {
     readonly metadata: PluginMetadata;
+    readonly capabilities: Array<{
+        name: string;
+        category: string;
+        description: string;
+        riskLevel: string;
+        requiredPermissions: string[];
+    }>;
     private config;
     private logger;
     private performanceMonitor;
@@ -107,10 +114,31 @@ export declare class AnsiblePlugin implements BasePluginInterface, InventoryCapa
      * Get the Ansible service instance (for testing)
      */
     getAnsibleService(): AnsibleServiceInterface;
+    /**
+     * Get lightweight summary for home page tile
+     * Must return in under 500ms with minimal data (counts, status only)
+     */
+    getSummary(): Promise<{
+        pluginName: string;
+        displayName: string;
+        metrics: Record<string, number | string | boolean>;
+        healthy: boolean;
+        lastUpdate: string;
+        error?: string;
+    }>;
+    /**
+     * Get full plugin data for plugin home page
+     * Called on-demand when navigating to plugin page
+     */
+    getData(): Promise<{
+        pluginName: string;
+        displayName: string;
+        data: unknown;
+        healthy: boolean;
+        lastUpdate: string;
+        capabilities: string[];
+        error?: string;
+    }>;
 }
-/**
- * Factory function to create AnsiblePlugin instance
- */
-export declare function createAnsiblePlugin(config: Record<string, unknown>, logger: LoggerServiceInterface, performanceMonitor: PerformanceMonitorServiceInterface): AnsiblePlugin;
 export {};
 //# sourceMappingURL=AnsiblePlugin.d.ts.map

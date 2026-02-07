@@ -15,6 +15,8 @@ import type {
   PluginCLICommand,
   PluginRoute,
   HealthStatus,
+  PluginSummary,
+  PluginData,
 } from "./types";
 import type { ZodSchema } from "zod";
 import { LoggerService } from "../services/LoggerService";
@@ -195,6 +197,29 @@ export abstract class BasePlugin implements BasePluginInterface {
   protected abstract performHealthCheck(): Promise<
     Omit<HealthStatus, "lastCheck">
   >;
+
+  /**
+   * Get lightweight summary for home page tiles
+   *
+   * Subclasses must implement this to provide plugin-specific summary data.
+   * Must return in under 500ms with minimal data (counts, status only).
+   * Called by /api/plugins/:name/summary endpoint.
+   *
+   * @returns Plugin summary with metrics
+   */
+  abstract getSummary(): Promise<PluginSummary>;
+
+  /**
+   * Get full plugin data for plugin home pages
+   *
+   * Subclasses must implement this to provide complete plugin data.
+   * Called on-demand when navigating to plugin page.
+   * Can load complete data (no strict time limit like getSummary).
+   * Called by /api/plugins/:name/data endpoint.
+   *
+   * @returns Full plugin data
+   */
+  abstract getData(): Promise<PluginData>;
 
   /**
    * Get the current configuration

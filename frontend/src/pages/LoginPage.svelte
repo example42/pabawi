@@ -55,6 +55,11 @@
 
       if (success) {
         showSuccess(`Welcome back, ${auth.user?.displayName || auth.user?.username || username}!`);
+
+        // No initialization needed - app shell renders immediately
+        // Components will load their own data progressively
+        console.log('[LoginPage] Login successful, navigating to app');
+
         router.navigate(redirectUrl);
       } else {
         error = 'Login failed. Please check your credentials.';

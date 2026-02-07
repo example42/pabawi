@@ -97,6 +97,64 @@ export class AnsiblePlugin
     ],
   };
 
+  public readonly capabilities: Array<{
+    name: string;
+    category: string;
+    description: string;
+    riskLevel: string;
+    requiredPermissions: string[];
+  }> = [
+    {
+      name: "command.execute",
+      category: "command",
+      description: "Execute shell commands on target nodes via Ansible",
+      riskLevel: "execute",
+      requiredPermissions: ["ansible.command.execute"],
+    },
+    {
+      name: "task.execute",
+      category: "task",
+      description: "Execute Ansible tasks on target nodes",
+      riskLevel: "execute",
+      requiredPermissions: ["ansible.task.execute"],
+    },
+    {
+      name: "script.execute",
+      category: "command",
+      description: "Execute scripts on target nodes via Ansible",
+      riskLevel: "execute",
+      requiredPermissions: ["ansible.command.execute"],
+    },
+    {
+      name: "inventory.list",
+      category: "inventory",
+      description: "List all nodes from Ansible inventory",
+      riskLevel: "read",
+      requiredPermissions: ["ansible.inventory.list"],
+    },
+    {
+      name: "inventory.get",
+      category: "inventory",
+      description: "Get specific node details from Ansible inventory",
+      riskLevel: "read",
+      requiredPermissions: ["ansible.inventory.list"],
+    },
+    {
+      name: "inventory.groups",
+      category: "inventory",
+      description: "List available groups from Ansible inventory",
+      riskLevel: "read",
+      requiredPermissions: ["ansible.inventory.list"],
+    },
+    {
+      name: "inventory.filter",
+      category: "inventory",
+      description: "Filter nodes by criteria",
+      riskLevel: "read",
+      requiredPermissions: ["ansible.inventory.list"],
+    },
+  ];
+
   private config: AnsibleConfig;
   private logger: LoggerServiceInterface;
   private performanceMonitor: PerformanceMonitorServiceInterface;
@@ -524,15 +582,174 @@ export class AnsiblePlugin
   getAnsibleService(): AnsibleServiceInterface {
     return this.ansibleService;
   }
-}
 
-/**
- * Factory function to create AnsiblePlugin instance
- */
-export function createAnsiblePlugin(
-  config: Record<string, unknown>,
-  logger: LoggerServiceInterface,
-  performanceMonitor: PerformanceMonitorServiceInterface,
-): AnsiblePlugin {
-  return new AnsiblePlugin(config, logger, performanceMonitor);
+
+  /**
+   * Get lightweight summary for home page tile
+   * Must return in under 500ms with minimal data (counts, status only)
+   */
+  async getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }> {
+    const endTimer = this.performanceMonitor.startTimer("ansible.getSummary");
+    const startTime = Date.now();
+
+    try {
+      this.logger.debug("Getting Ansible summary");
+
+      // Check if plugin is initialized
+      if (!this.initialized) {
+        endTimer({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "ansible",
+          displayName: "Ansible",
+          metrics: {
+            nodeCount: 0,
+            playbookCount: 0,
+            recentRuns: 0,
+          },
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          error: "Plugin not initialized",
+        };
+      }
+
+      // Get health status
+      const healthStatus = await this.healthCheck();
+
+      // Fetch lightweight summary data in parallel
+      const [inventoryResult, playbooksResult] = await Promise.allSettled([
+        this.inventoryList({ refresh: false }),
+        this.ansibleService.listPlaybooks(),
+      ]);
+
+      const nodeCount = inventoryResult.status === "fulfilled" ? inventoryResult.value.length : 0;
+      const playbookCount = playbooksResult.status === "fulfilled" ? playbooksResult.value.length : 0;
+
+      const duration = Date.now() - startTime;
+      endTimer({ healthy: healthStatus.healthy, duration });
+
+      return {
+        pluginName: "ansible",
+        displayName: "Ansible",
+        metrics: {
+          nodeCount,
+          playbookCount,
+          recentRuns: 0, // TODO: Track execution history
+        },
+        healthy: healthStatus.healthy,
+        lastUpdate: new Date().toISOString(),
+        error: healthStatus.healthy ? undefined : healthStatus.message,
+      };
+    } catch (error) {
+      this.logger.error("Failed to get Ansible summary", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      endTimer({ success: false, error: String(error) });
+
+      return {
+        pluginName: "ansible",
+        displayName: "Ansible",
+        metrics: {
+          nodeCount: 0,
+          playbookCount: 0,
+          recentRuns: 0,
+        },
+        healthy: false,
+        lastUpdate: new Date().toISOString(),
+        error: error instanceof Error ? error.message : "Failed to get summary",
+      };
+    }
+  }
+
+  /**
+   * Get full plugin data for plugin home page
+   * Called on-demand when navigating to plugin page
+   */
+  async getData(): Promise<{
+    pluginName: string;
+    displayName: string;
+    data: unknown;
+    healthy: boolean;
+    lastUpdate: string;
+    capabilities: string[];
+    error?: string;
+  }> {
+    const endTimer = this.performanceMonitor.startTimer("ansible.getData");
+    const startTime = Date.now();
+
+    try {
+      this.logger.debug("Getting full Ansible plugin data");
+
+      // Check if plugin is initialized
+      if (!this.initialized) {
+        endTimer({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "ansible",
+          displayName: "Ansible",
+          data: null,
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          capabilities: [],
+          error: "Plugin not initialized",
+        };
+      }
+
+      // Get health status
+      const healthStatus = await this.healthCheck();
+
+      // Fetch full data in parallel
+      const [inventory, playbooks, groups, config] = await Promise.allSettled([
+        this.inventoryList({ refresh: false }),
+        this.ansibleService.listPlaybooks(),
+        this.inventoryGroups({ refresh: false }),
+        Promise.resolve(this.getConfig()),
+      ]);
+
+      const inventoryData = inventory.status === "fulfilled" ? inventory.value : [];
+      const playbooksData = playbooks.status === "fulfilled" ? playbooks.value : [];
+      const groupsData = groups.status === "fulfilled" ? groups.value : [];
+      const configData = config.status === "fulfilled" ? config.value : {};
+
+      const duration = Date.now() - startTime;
+      endTimer({ healthy: healthStatus.healthy, duration });
+
+      return {
+        pluginName: "ansible",
+        displayName: "Ansible",
+        data: {
+          inventory: inventoryData,
+          playbooks: playbooksData,
+          groups: groupsData,
+          config: configData,
+          health: healthStatus,
+        },
+        healthy: healthStatus.healthy,
+        lastUpdate: new Date().toISOString(),
+        capabilities: this.metadata.capabilities,
+        error: healthStatus.healthy ? undefined : healthStatus.message,
+      };
+    } catch (error) {
+      this.logger.error("Failed to get Ansible plugin data", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      endTimer({ success: false, error: String(error) });
+
+      return {
+        pluginName: "ansible",
+        displayName: "Ansible",
+        data: null,
+        healthy: false,
+        lastUpdate: new Date().toISOString(),
+        capabilities: [],
+        error: error instanceof Error ? error.message : "Failed to get plugin data",
+      };
+    }
+  }
+
 }

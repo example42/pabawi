@@ -1,123 +1,131 @@
 # Requirements: Home Page Loading and Menu Initialization Fixes
 
+## CRITICAL PRIORITY: Browser Performance Issue
+
+**URGENT**: After login, the browser becomes extremely sluggish and nothing renders. The current implementation loads ALL plugin data before showing anything, causing severe performance degradation.
+
 ## Overview
 
-The home page sometimes fails to load or gets stuck at "menu loading" due to race conditions and initialization issues in the plugin loading and menu building flow.
+The home page has critical performance issues after login - browser becomes unresponsive due to loading all plugin data upfront. Need progressive loading architecture where menu and home page render based on capability availability, not full data loading.
 
 ## Problem Analysis
 
 ### Current Issues
 
-1. **Race Condition in App.svelte**: Plugin initialization happens in `onMount` but menu builder also tries to initialize independently
-2. **Duplicate Plugin Loading**: Both `App.svelte` and `MenuBuilder` try to load plugins
-3. **Menu Builder Timing**: Menu builder calls `/api/integrations/menu` which depends on plugins being loaded on backend, but frontend doesn't wait for backend initialization
-4. **Error Handling**: Silent failures in plugin loading don't surface to the user
-5. **Loading States**: No clear loading indicators when menu is building or plugins are loading
+1. **CRITICAL - Browser Hangs After Login**: Browser becomes extremely sluggish after login, nothing renders
+2. **Loading All Data Upfront**: System tries to load ALL plugin data before showing anything
+3. **No Progressive Rendering**: Menu and home page wait for complete initialization instead of rendering progressively
+4. **Missing Plugin Home Pages**: Plugins (puppetdb, puppetserver, hiera, bolt, ansible, ssh) need dedicated home pages
+5. **No Home Tiles**: Home page should show summary tiles from each plugin, not full data
+6. **Menu Not Capability-Based**: Menu should build based on capability availability, not full plugin loading
 
 ### Root Causes
 
-1. **Uncoordinated Initialization**: Multiple components trying to initialize the same systems independently
-2. **Missing Dependencies**: Menu builder doesn't wait for plugin loader to complete
-3. **Backend Timing**: Backend plugin initialization might not be complete when frontend requests menu data
-4. **Error Swallowing**: Errors in plugin loading or menu building are logged but not shown to users
+1. **Blocking Architecture**: Current design blocks all rendering until full initialization completes
+2. **Data Over-fetching**: Loading complete plugin data instead of just metadata for menu/home
+3. **No Lazy Loading**: All plugin widgets and data loaded upfront instead of on-demand
+4. **Missing Progressive Enhancement**: No incremental rendering as capabilities become available
+5. **Monolithic Home Page**: Home page tries to load all widgets instead of lightweight summary tiles
 
 ## User Stories
 
-### 1. Reliable Home Page Loading
+### 1. Fast, Progressive Home Page Loading (CRITICAL)
 
 **As a** user  
-**I want** the home page to load reliably every time  
-**So that** I can access the dashboard without refresh loops
+**I want** the home page to load immediately after login with progressive enhancement  
+**So that** the browser remains responsive and I can start working quickly
 
 **Acceptance Criteria:**
 
-1.1. Home page loads successfully on first visit  
-1.2. Menu appears within 3 seconds of page load  
-1.3. If loading fails, user sees clear error message  
-1.4. Loading spinner shows while menu is building  
-1.5. Page doesn't get stuck in loading state
+1.1. Home page shell renders within 500ms of login  
+1.2. Menu appears within 1 second based on capability metadata  
+1.3. Home tiles load progressively as plugins report readiness  
+1.4. Browser remains responsive throughout loading  
+1.5. No blocking on full plugin data loading
 
-### 2. Clear Loading States
+### 2. Capability-Based Menu Building
 
 **As a** user  
-**I want** to see what's happening during page load  
-**So that** I know the system is working and not frozen
+**I want** the menu to build based on available capabilities  
+**So that** I can navigate immediately without waiting for full data loading
 
 **Acceptance Criteria:**
 
-2.1. Loading spinner shows while plugins are loading  
-2.2. Loading spinner shows while menu is building  
-2.3. Progress indication shows which step is happening  
-2.4. Timeout after 10 seconds with error message  
-2.5. Retry button available if loading fails
+2.1. Menu builds from capability metadata only (no data fetching)  
+2.2. Menu items appear as capabilities become available  
+2.3. Menu shows plugin status (loading/ready/error) with badges  
+2.4. Clicking menu item navigates to plugin page (loads data on-demand)  
+2.5. Menu updates reactively as plugin status changes
 
-### 3. Graceful Error Handling
+### 3. Plugin Home Pages
 
 **As a** user  
-**I want** clear error messages when loading fails  
-**So that** I can understand what went wrong and how to fix it
+**I want** each plugin to have its own dedicated home page  
+**So that** I can see plugin-specific dashboards and functionality
 
 **Acceptance Criteria:**
 
-3.1. Plugin loading errors show in UI  
-3.2. Menu building errors show in UI  
-3.3. Backend API errors show in UI  
-3.4. Error messages are actionable (suggest refresh, check logs, etc.)  
-3.5. Partial failures allow page to load with available data
+3.1. PuppetDB plugin has home page at `/integrations/puppetdb`  
+3.2. Puppetserver plugin has home page at `/integrations/puppetserver`  
+3.3. Hiera plugin has home page at `/integrations/hiera`  
+3.4. Bolt plugin has home page at `/integrations/bolt`  
+3.5. Ansible plugin has home page at `/integrations/ansible`  
+3.6. SSH plugin has home page at `/integrations/ssh`  
+3.7. Each home page loads data on-demand (not during app init)
 
-### 4. Coordinated Initialization
+### 4. Home Page Summary Tiles
 
-**As a** developer  
-**I want** a single, coordinated initialization flow  
-**So that** components don't race or duplicate work
+**As a** user  
+**I want** the home page to show lightweight summary tiles from each plugin  
+**So that** I get an overview without loading heavy data
 
 **Acceptance Criteria:**
 
-4.1. Single source of truth for plugin loading state  
-4.2. Menu builder waits for plugin loader to complete  
-4.3. Components subscribe to loading events  
-4.4. No duplicate API calls for same data  
-4.5. Clear initialization sequence documented
+4.1. Each plugin provides a home tile widget (slot: "home-summary")  
+4.2. Home tiles show summary metrics only (counts, status, health)  
+4.3. Home tiles load independently and progressively  
+4.4. Failed tile loads don't block other tiles  
+4.5. Clicking tile navigates to plugin home page for details
 
 ## Technical Requirements
 
-### 5. Initialization Sequence
+### 5. Lazy Loading Architecture
 
 **As a** system  
-**I need** a well-defined initialization sequence  
-**So that** components load in the correct order
+**I need** lazy loading for plugin data  
+**So that** initial page load is fast and browser stays responsive
 
 **Acceptance Criteria:**
 
-5.1. Backend plugins initialize before accepting menu requests  
-5.2. Frontend plugin loader completes before menu builder starts  
-5.3. Menu builder waits for backend readiness  
-5.4. Components can query initialization state  
-5.5. Initialization is idempotent (safe to call multiple times)
+5.1. Menu builds from capability metadata only (no data API calls)  
+5.2. Home tiles fetch summary data independently  
+5.3. Plugin home pages load full data only when navigated to  
+5.4. Widget registry loads widget definitions but not widget data  
+5.5. No blocking API calls during app initialization
 
-### 6. State Management
+### 6. Progressive Enhancement
 
 **As a** system  
-**I need** centralized state for loading status  
-**So that** all components see consistent state
+**I need** progressive rendering as capabilities become available  
+**So that** users see content as soon as possible
 
 **Acceptance Criteria:**
 
-6.1. Single loading state store  
-6.2. Loading state includes: idle, loading, loaded, error  
-6.3. Error state includes error message and retry function  
-6.4. State is reactive (Svelte 5 runes)  
-6.5. State persists across component remounts
+6.1. App shell renders immediately (navigation, layout)  
+6.2. Menu items appear as backend reports capabilities  
+6.3. Home tiles appear as plugins report readiness  
+6.4. Loading states show for pending items  
+6.5. Errors show for failed items without blocking others
 
 ## Non-Functional Requirements
 
-### 7. Performance
+### 7. Performance (CRITICAL)
 
-7.1. Home page loads in under 3 seconds on normal connection  
-7.2. Menu appears in under 2 seconds  
-7.3. No unnecessary API calls  
-7.4. Caching used where appropriate  
-7.5. Parallel loading where possible
+7.1. Home page shell renders in under 500ms  
+7.2. Menu appears in under 1 second  
+7.3. Browser remains responsive (no sluggishness)  
+7.4. Home tiles load in under 2 seconds each  
+7.5. No blocking on full plugin data during initialization
 
 ### 8. Reliability
 
@@ -145,8 +153,10 @@ The home page sometimes fails to load or gets stuck at "menu loading" due to rac
 
 ## Success Metrics
 
-- Home page load success rate > 99%
-- Average load time < 2 seconds
-- Menu build time < 1 second
-- Zero infinite loading loops
-- User-reported loading issues < 1% of sessions
+- Home page shell renders < 500ms after login
+- Menu appears < 1 second after login
+- Browser remains responsive (no sluggishness)
+- Home tiles load progressively < 2 seconds each
+- Plugin home pages exist for all 6 core plugins
+- Zero blocking on full plugin data during init
+- User-reported performance issues < 1% of sessions

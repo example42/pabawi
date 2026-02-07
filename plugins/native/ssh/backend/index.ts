@@ -35,11 +35,6 @@ export async function createPlugin(config?: Record<string, unknown>) {
   // Create plugin instance
   const plugin = new SSHPlugin(sshService, logger, performanceMonitor);
 
-  // Set configuration
-  if (config) {
-    plugin.setConfig?.({ enabled: true, ...config });
-  }
-
   return plugin;
 }
 

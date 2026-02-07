@@ -158,6 +158,14 @@ interface BasePluginInterface {
   getConfig(): Record<string, unknown>;
   isInitialized(): boolean;
   shutdown?(): Promise<void>;
+  getSummary?(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }>;
 }
 
 /** LoggerService interface */
@@ -757,6 +765,122 @@ export class SSHPlugin implements BasePluginInterface {
       operation: "shutdown",
     });
     this._initialized = false;
+  }
+
+  /**
+   * Get lightweight summary for home page tiles
+   * Must return in under 500ms with minimal data (counts, status only)
+   */
+  async getSummary(): Promise<{
+    pluginName: string;
+    displayName: string;
+    metrics: Record<string, number | string | boolean>;
+    healthy: boolean;
+    lastUpdate: string;
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("ssh:v1:getSummary");
+    const startTime = Date.now();
+
+    try {
+      this.logger.debug("Getting plugin summary", {
+        component: "SSHPlugin",
+        operation: "getSummary",
+      });
+
+      // Check if plugin is initialized
+      if (!this._initialized) {
+        complete({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "ssh",
+          displayName: "SSH",
+          metrics: {},
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          error: "Plugin not initialized",
+        };
+      }
+
+      // Get health status first
+      const healthStatus = await this.healthCheck();
+
+      // If unhealthy, return minimal summary
+      if (!healthStatus.healthy) {
+        complete({ healthy: false, duration: Date.now() - startTime });
+        return {
+          pluginName: "ssh",
+          displayName: "SSH",
+          metrics: {
+            connectionCount: 0,
+            activeSessions: 0,
+          },
+          healthy: false,
+          lastUpdate: new Date().toISOString(),
+          error: healthStatus.message || "SSH is unhealthy",
+        };
+      }
+
+      // Fetch lightweight data - just count nodes from SSH config
+      const nodes = await this.sshService.getInventory();
+      const connectionCount = nodes.length;
+
+      // Get groups count
+      const groupsSet = new Set<string>();
+      for (const node of nodes) {
+        if (node.config.groups && Array.isArray(node.config.groups)) {
+          for (const group of node.config.groups as string[]) {
+            groupsSet.add(group);
+          }
+        }
+      }
+      const groupCount = groupsSet.size;
+
+      const duration = Date.now() - startTime;
+
+      // Log warning if exceeds target time
+      if (duration > 500) {
+        this.logger.warn("getSummary exceeded target response time", {
+          component: "SSHPlugin",
+          operation: "getSummary",
+          metadata: { durationMs: duration },
+        });
+      }
+
+      complete({ healthy: true, duration, connectionCount });
+
+      return {
+        pluginName: "ssh",
+        displayName: "SSH",
+        metrics: {
+          connectionCount,
+          groupCount,
+          activeSessions: 0, // SSH doesn't track active sessions in this implementation
+          sshConfigPath: this.sshService.getSSHConfigPath(),
+        },
+        healthy: true,
+        lastUpdate: new Date().toISOString(),
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to get plugin summary", {
+        component: "SSHPlugin",
+        operation: "getSummary",
+        metadata: { error: errorMessage, duration },
+      });
+
+      complete({ error: errorMessage, duration });
+
+      return {
+        pluginName: "ssh",
+        displayName: "SSH",
+        metrics: {},
+        healthy: false,
+        lastUpdate: new Date().toISOString(),
+        error: errorMessage,
+      };
+    }
   }
 
   // =========================================================================
