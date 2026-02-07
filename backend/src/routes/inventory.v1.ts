@@ -19,12 +19,12 @@ import { LoggerService } from "../services/LoggerService";
 
 // Generic InventoryNode type for plugin-agnostic inventory
 // Using a different name to avoid conflicts with plugin-specific Node types
-type InventoryNode = {
+interface InventoryNode {
   id: string;
   name: string;
   source?: string;
   [key: string]: unknown;
-};
+}
 import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { asyncHandler } from "./asyncHandler";
@@ -208,7 +208,7 @@ export function createInventoryRouterV1(
               case "name":
                 return (nodeA.name ?? "").localeCompare(nodeB.name ?? "") * sortMultiplier;
               case "source":
-                return ((nodeA.source ?? "") as string).localeCompare((nodeB.source ?? "") as string) * sortMultiplier;
+                return ((nodeA.source ?? "")).localeCompare((nodeB.source ?? "")) * sortMultiplier;
               default:
                 return 0;
             }

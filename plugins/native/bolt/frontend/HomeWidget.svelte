@@ -48,7 +48,19 @@
       type: string;
       startedAt: string;
     }>;
-    total: number;
+    pagination: {
+      page: number;
+      pageSize: number;
+      hasMore: boolean;
+    };
+    summary: {
+      success: number;
+      failed: number;
+      running: number;
+      partial: number;
+      cancelled: number;
+      total: number;
+    };
   }
 
   // ==========================================================================
@@ -69,7 +81,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let nodeCount = $state(0);
-  let recentExecutionCount = $state(0);
+  let executionSummary = $state<ExecutionsResponse['summary'] | null>(null);
   let lastExecutionStatus = $state<string | null>(null);
   let healthStatus = $state<HealthStatus | null>(null);
 
@@ -92,6 +104,13 @@
     if (healthStatus.healthy) return 'Healthy';
     if (healthStatus.degraded) return 'Degraded';
     return 'Unhealthy';
+  });
+
+  let totalExecutions = $derived(executionSummary?.total ?? 0);
+  let successRate = $derived.by(() => {
+    if (!executionSummary || executionSummary.total === 0) return 0;
+    const successCount = executionSummary.success + (executionSummary.partial ?? 0);
+    return Math.round((successCount / executionSummary.total) * 100);
   });
 
   // ==========================================================================
@@ -126,8 +145,8 @@
 
       // Load recent executions
       try {
-        const executionsResponse = await api.get<ExecutionsResponse>('/api/executions?type=command,task&limit=10');
-        recentExecutionCount = executionsResponse.total ?? 0;
+        const executionsResponse = await api.get<ExecutionsResponse>('/api/executions?limit=100');
+        executionSummary = executionsResponse.summary;
 
         // Get last execution status
         if (executionsResponse.executions?.length > 0) {
@@ -151,6 +170,16 @@
     router.navigate('/integrations/bolt');
   }
 
+  function executeCommand(event: MouseEvent): void {
+    event.stopPropagation();
+    router.navigate('/integrations/bolt?tab=execute');
+  }
+
+  function viewInventory(event: MouseEvent): void {
+    event.stopPropagation();
+    router.navigate('/integrations/bolt?tab=inventory');
+  }
+
   function getLastExecutionColor(status: string | null): string {
     switch (status) {
       case 'success': return 'text-green-600 dark:text-green-400';
@@ -159,6 +188,12 @@
       case 'partial': return 'text-yellow-600 dark:text-yellow-400';
       default: return 'text-gray-500 dark:text-gray-400';
     }
+  }
+
+  function getSuccessRateColor(rate: number): string {
+    if (rate >= 90) return 'text-green-600 dark:text-green-400';
+    if (rate >= 70) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-red-600 dark:text-red-400';
   }
 </script>
 
@@ -205,25 +240,51 @@
         <span class="text-lg font-bold text-amber-600 dark:text-amber-400">{nodeCount}</span>
       </div>
 
-      <!-- Recent Executions -->
+      <!-- Total Executions -->
       <div class="flex items-center justify-between">
         <span class="text-sm text-gray-600 dark:text-gray-400">Executions</span>
-        <span class="text-lg font-bold text-gray-700 dark:text-gray-300">{recentExecutionCount}</span>
+        <span class="text-lg font-bold text-gray-700 dark:text-gray-300">{totalExecutions}</span>
       </div>
 
-      <!-- Last Execution Status -->
-      {#if lastExecutionStatus}
+      <!-- Success Rate -->
+      {#if totalExecutions > 0}
         <div class="flex items-center justify-between">
-          <span class="text-sm text-gray-600 dark:text-gray-400">Last Run</span>
-          <span class="text-sm font-medium {getLastExecutionColor(lastExecutionStatus)} capitalize">
-            {lastExecutionStatus}
+          <span class="text-sm text-gray-600 dark:text-gray-400">Success Rate</span>
+          <span class="text-lg font-bold {getSuccessRateColor(successRate)}">
+            {successRate}%
           </span>
         </div>
       {/if}
     </div>
 
+    <!-- Quick Actions -->
+    <div class="mt-3 pt-3 border-t border-amber-200/50 dark:border-amber-800/50">
+      <div class="flex gap-2">
+        <button
+          type="button"
+          onclick={executeCommand}
+          class="flex-1 px-2 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded transition-colors"
+          title="Execute Command"
+        >
+          <svg class="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onclick={viewInventory}
+          class="flex-1 px-2 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 rounded transition-colors"
+          title="View Inventory"
+        >
+          <svg class="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <!-- Footer -->
-    <div class="mt-3 pt-3 border-t border-amber-200/50 dark:border-amber-800/50 flex items-center justify-between">
+    <div class="mt-2 flex items-center justify-between">
       <span class="text-xs text-gray-500 dark:text-gray-400">Remote Execution</span>
       <svg class="w-4 h-4 text-amber-500 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

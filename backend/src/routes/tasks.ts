@@ -111,7 +111,7 @@ export function createTasksRouter(
           });
         }
 
-        const tasksResult = await capabilityRegistry.executeCapability<Array<{ name: string; description?: string }>>(
+        const tasksResult = await capabilityRegistry.executeCapability<{ name: string; description?: string }[]>(
           systemUser,
           "task.list",
           {},
@@ -368,7 +368,7 @@ export function createTasksRouter(
           });
         }
 
-        const tasksResult = await capabilityRegistry.executeCapability<Record<string, Array<{ name: string; description?: string }>>>(
+        const tasksResult = await capabilityRegistry.executeCapability<Record<string, { name: string; description?: string }[]>>(
           systemUser,
           "task.listByModule",
           {},

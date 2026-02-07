@@ -1,0 +1,96 @@
+{
+  "name": "ansible",
+  "displayName": "Ansible",
+  "version": "1.0.0",
+  "description": "Ansible integration for remote execution and inventory management",
+  "author": "Pabawi Team",
+  "integrationType": "RemoteExecution",
+  "capabilities": [
+    "command.execute",
+    "task.execute",
+    "script.execute",
+    "inventory.list",
+    "inventory.get",
+    "inventory.groups",
+    "inventory.filter"
+  ],
+  "backend": {
+    "entry": "backend/index.js"
+  },
+  "frontend": {
+    "entry": "frontend/index.ts",
+    "widgets": [
+      {
+        "id": "ansible-home",
+        "name": "Ansible Home",
+        "component": "PluginHomePage",
+        "type": "page",
+        "route": "/plugins/ansible"
+      },
+      {
+        "id": "ansible-playbook-runner",
+        "name": "Playbook Runner",
+        "component": "PlaybookRunner",
+        "type": "dashboard"
+      },
+      {
+        "id": "ansible-command-executor",
+        "name": "Command Executor",
+        "component": "CommandExecutor",
+        "type": "dashboard"
+      },
+      {
+        "id": "ansible-inventory-viewer",
+        "name": "Inventory Viewer",
+        "component": "InventoryViewer",
+        "type": "inventory"
+      }
+    ],
+    "nodeDetailTabs": [
+      {
+        "id": "ansible-execute-command",
+        "label": "Execute Command",
+        "component": "NodeDetailTabs",
+        "order": 100
+      },
+      {
+        "id": "ansible-run-playbook",
+        "label": "Run Playbook",
+        "component": "NodeDetailTabs",
+        "order": 101
+      },
+      {
+        "id": "ansible-facts",
+        "label": "Facts",
+        "component": "NodeDetailTabs",
+        "order": 102
+      }
+    ]
+  },
+  "permissions": {
+    "default": ["read"],
+    "required": ["execute"]
+  },
+  "config": {
+    "inventoryPath": {
+      "type": "string",
+      "default": "/etc/ansible/hosts",
+      "description": "Path to Ansible inventory file or directory"
+    },
+    "playbookPath": {
+      "type": "string",
+      "default": "/etc/ansible/playbooks",
+      "description": "Path to Ansible playbooks directory"
+    },
+    "defaultTimeout": {
+      "type": "number",
+      "default": 300000,
+      "description": "Default timeout for executions in milliseconds"
+    },
+    "ansibleConfig": {
+      "type": "string",
+      "default": "",
+      "description": "Path to ansible.cfg file (optional)"
+    }
+  }
+}

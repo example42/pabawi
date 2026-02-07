@@ -199,7 +199,7 @@ export class NodeLinkingService {
 
         for (const { name: capabilityName, key } of commonCapabilities) {
           try {
-            const result = await capabilityRegistry.executeCapability<unknown>(
+            const result = await capabilityRegistry.executeCapability(
               systemUser,
               capabilityName,
               { nodeId },

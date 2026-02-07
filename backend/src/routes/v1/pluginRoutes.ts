@@ -43,8 +43,8 @@ export function createPluginRoutesRouter(
    * plugin's registered route handler if one exists.
    */
   router.all("/:pluginName/*", async (req: Request, res: Response, next: NextFunction) => {
-    const pluginName = req.params.pluginName as string;
-    const remainingPath = req.params[0] as string; // The * wildcard capture
+    const pluginName = req.params.pluginName;
+    const remainingPath = req.params[0]; // The * wildcard capture
     const method = req.method.toUpperCase();
 
     logger.debug(`Plugin route request: ${method} /plugins/${pluginName}/${remainingPath}`, {

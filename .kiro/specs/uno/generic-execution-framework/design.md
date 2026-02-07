@@ -622,221 +622,305 @@ interface PluginConfig {
 *For any* valid command text, target node list, and execution options, the execution interface should accept them without validation errors
 **Validates: Requirements 1.1**
 
-**Property 2: Async execution returns ID immediately**
+**Property 2: Execution mode support**
+*For any* command execution, both synchronous and asynchronous execution modes should be supported and function correctly
+**Validates: Requirements 1.2**
+
+**Property 3: Async execution returns ID immediately**
 *For any* asynchronous command execution, an execution ID should be returned immediately without waiting for completion
 **Validates: Requirements 1.3**
 
-**Property 3: Output stream separation**
+**Property 4: Output stream separation**
 *For any* command execution that produces output, stdout and stderr should be captured in separate streams
 **Validates: Requirements 1.4**
 
-**Property 4: Exit code capture**
+**Property 5: Exit code capture**
 *For any* completed command execution, each target node result should include an exit code
 **Validates: Requirements 1.5**
 
-**Property 5: Timeout termination**
+**Property 6: Timeout termination**
 *For any* command execution that exceeds its timeout, the execution should be terminated with timeout status
 **Validates: Requirements 1.6**
 
-**Property 6: Environment variable support**
+**Property 7: Environment variable support**
 *For any* command execution with environment variables specified, those variables should be available during execution
 **Validates: Requirements 1.7**
 
-**Property 7: Error information capture**
+**Property 8: Error information capture**
 *For any* failed command execution, the result should include detailed error information with the failure reason
 **Validates: Requirements 1.8**
 
 ### Task Orchestration Properties
 
-**Property 8: Task state machine**
-*For any* task, the state transitions should follow the valid sequence: queued → running → (completed | failed | cancelled)
+**Property 9: Task definition acceptance**
+*For any* valid task definition with name, parameters, targets, and execution options, the task orchestrator should accept it without validation errors
+**Validates: Requirements 2.1**
+
+**Property 10: Task state machine**
+*For any* task, the state transitions should follow the valid sequence: queued → running → (completed | failed | cancelled), with initial state always being queued
 **Validates: Requirements 2.2, 2.3, 2.4, 2.5**
 
-**Property 9: Progress tracking accuracy**
+**Property 11: Progress tracking accuracy**
 *For any* task execution, the progress (completed/total) should accurately reflect the number of processed targets
 **Validates: Requirements 2.6**
 
-**Property 10: Dependency ordering**
+**Property 12: Dependency ordering**
 *For any* task with dependencies, execution should not start until all prerequisite tasks have completed
 **Validates: Requirements 2.7, 2.10**
 
-**Property 11: Parallel execution concurrency**
+**Property 13: Parallel execution concurrency**
 *For any* task in parallel execution mode, multiple targets should be processed concurrently (not sequentially)
 **Validates: Requirements 2.8**
 
-**Property 12: Sequential execution ordering**
+**Property 14: Sequential execution ordering**
 *For any* task in sequential execution mode, targets should be processed one at a time in order
 **Validates: Requirements 2.9**
 
 ### Inventory Properties
 
-**Property 13: Group filtering correctness**
+**Property 15: Inventory interface returns nodes**
+*For any* inventory query, the interface should return a list of available nodes
+**Validates: Requirements 3.1**
+
+**Property 16: Node grouping support**
+*For any* node, it should be assignable to arbitrary group names and queryable by those groups
+**Validates: Requirements 3.2**
+
+**Property 17: Group filtering correctness**
 *For any* inventory query filtered by group, all returned nodes should be members of that group
 **Validates: Requirements 3.3**
 
-**Property 14: Cache behavior**
-*For any* cached inventory data, repeated queries within the TTL should return cached data without querying sources
+**Property 18: Dynamic inventory refresh**
+*For any* inventory source, it should support on-demand refresh that updates the cached inventory data
+**Validates: Requirements 3.4**
+
+**Property 19: Inventory cache behavior**
+*For any* cached inventory data, repeated queries within the TTL should return cached data without querying sources, and expired cache should trigger automatic refresh
 **Validates: Requirements 3.5, 3.6**
 
-**Property 15: Multi-source aggregation**
+**Property 20: Multi-source aggregation**
 *For any* inventory query with multiple sources, results should include nodes from all sources
 **Validates: Requirements 3.7**
 
-**Property 16: Node deduplication with priority**
+**Property 21: Node deduplication with priority**
 *For any* node present in multiple inventory sources, the final node data should come from the highest priority source
 **Validates: Requirements 3.8**
 
-**Property 17: Inventory metadata as facts**
+**Property 22: Inventory metadata as facts**
 *For any* node with inventory metadata, that metadata should be accessible as facts in the node detail view
 **Validates: Requirements 3.9**
 
+**Property 23: Inventory format mapping**
+*For any* inventory plugin data, it should be correctly mapped to the common inventory API format
+**Validates: Requirements 3.10**
+
 ### Fact Collection Properties
 
-**Property 18: Fact cache behavior**
-*For any* node facts, repeated queries within the cache TTL should return cached facts without querying providers
+**Property 24: Fact collection interface**
+*For any* valid node identifier, the fact collection interface should accept it and return node facts
+**Validates: Requirements 4.1**
+
+**Property 25: Fact provider registration**
+*For any* custom fact provider, it should be registrable with the framework and participate in fact collection
+**Validates: Requirements 4.5**
+
+**Property 26: Fact cache behavior**
+*For any* node facts, repeated queries within the cache TTL should return cached facts without querying providers, and expired cache should trigger provider queries
 **Validates: Requirements 4.2, 4.3, 4.4**
 
-**Property 19: Multi-provider fact aggregation**
+**Property 27: Multi-provider fact aggregation**
 *For any* node with multiple fact providers, facts should be aggregated from all registered providers
 **Validates: Requirements 4.6**
 
-**Property 20: Fact priority merging**
+**Property 28: Fact priority merging**
 *For any* fact key returned by multiple providers, the value from the highest priority provider should be used
 **Validates: Requirements 4.7**
 
-**Property 21: Force refresh bypasses cache**
+**Property 29: Force refresh bypasses cache**
 *For any* fact query with refresh flag set, facts should be retrieved from providers regardless of cache state
 **Validates: Requirements 4.8**
 
 ### Logging and Reporting Properties
 
-**Property 22: Execution logging completeness**
+**Property 30: Execution logging completeness**
 *For any* command or task execution, a structured log entry should be created with execution ID, user, targets, action, status, and timestamps
 **Validates: Requirements 5.1, 5.2, 5.3**
 
-**Property 23: Execution history persistence**
+**Property 31: Real-time progress updates**
+*For any* execution in progress, real-time progress updates should be provided through callbacks or subscriptions
+**Validates: Requirements 5.4**
+
+**Property 32: Execution history persistence**
 *For any* completed execution, it should be queryable from the execution history
 **Validates: Requirements 5.5**
 
-**Property 24: Error diagnostic logging**
+**Property 33: Error diagnostic logging**
 *For any* failed execution, the log entry should include detailed error diagnostics including stack traces
 **Validates: Requirements 5.6**
 
-**Property 25: History query filtering**
+**Property 34: Performance metrics collection**
+*For any* execution, performance metrics (duration, target count, success rate) should be collected and queryable
+**Validates: Requirements 5.7**
+
+**Property 35: History query filtering**
 *For any* execution history query with filters (time range, user, target, status), only matching executions should be returned
 **Validates: Requirements 5.8**
 
-**Property 26: Debug mode output capture**
+**Property 36: Debug mode output capture**
 *For any* execution with debug mode enabled, complete stdout and stderr should be captured and returned
 **Validates: Requirements 5.10**
 
-**Property 27: Normal mode output summarization**
+**Property 37: Normal mode output summarization**
 *For any* execution with debug mode disabled, output should be summarized to reduce data transfer
 **Validates: Requirements 5.11**
 
+**Property 38: Debug mode toggle**
+*For any* execution request, debug mode should be configurable per execution independently
+**Validates: Requirements 5.12**
+
 ### Plugin Integration Properties
 
-**Property 28: Plugin interface validation**
+**Property 39: Plugin configuration passing**
+*For any* plugin initialization, plugin-specific configuration should be passed to the plugin correctly
+**Validates: Requirements 6.2**
+
+**Property 40: Capability registration**
+*For any* plugin capability, it should be registrable with the CapabilityRegistry
+**Validates: Requirements 6.3**
+
+**Property 41: Plugin interface validation**
 *For any* plugin attempting to register a capability, the framework should validate that required interface methods are implemented
 **Validates: Requirements 6.4**
 
-**Property 29: RBAC permission enforcement**
+**Property 42: RBAC permission enforcement**
 *For any* capability invocation, RBAC permissions should be checked before execution, and unauthorized users should be rejected
 **Validates: Requirements 6.5, 6.6**
 
-**Property 30: Plugin priority ordering**
+**Property 43: Plugin lifecycle hooks**
+*For any* plugin, lifecycle hooks (initialization, health checks, shutdown) should be called at appropriate times
+**Validates: Requirements 6.7**
+
+**Property 44: Plugin priority ordering**
 *For any* capability provided by multiple plugins, the highest priority plugin should be selected for execution
 **Validates: Requirements 6.8**
 
 ### Error Handling Properties
 
-**Property 31: Partial failure isolation**
+**Property 45: Partial failure isolation**
 *For any* multi-node execution where some nodes are unreachable, the unreachable nodes should be marked as failed and remaining nodes should continue processing
 **Validates: Requirements 7.1**
 
-**Property 32: Partial success status**
+**Property 46: Partial success status**
 *For any* multi-node execution with some failures and some successes, the overall status should be "partial"
 **Validates: Requirements 7.2**
 
-**Property 33: Error message completeness**
+**Property 47: Error message completeness**
 *For any* execution error, the error message should include the node ID, error type, and failure reason
 **Validates: Requirements 7.3**
 
-**Property 34: Exception handling**
+**Property 48: Exception handling**
 *For any* plugin exception during execution, the framework should catch the exception and return a structured error (not crash)
 **Validates: Requirements 7.4**
 
-**Property 35: Retry execution**
-*For any* failed execution with retry count > 0, the execution should be retried up to the configured count with the specified backoff strategy
+**Property 49: Retry execution with logging**
+*For any* failed execution with retry count > 0, the execution should be retried up to the configured count with the specified backoff strategy, and each retry attempt should be logged
 **Validates: Requirements 7.5, 7.6**
 
-**Property 36: Circuit breaker behavior**
-*For any* component with repeated failures exceeding the threshold, the circuit breaker should open and reject new requests
+**Property 50: Circuit breaker behavior**
+*For any* component with repeated failures exceeding the threshold, the circuit breaker should open and reject new requests with circuit state logged
 **Validates: Requirements 7.7, 7.8**
 
 ### Performance Properties
 
-**Property 37: Concurrency limit enforcement**
+**Property 51: Concurrent execution support**
+*For any* multi-node execution, multiple target nodes should be processed concurrently
+**Validates: Requirements 8.1**
+
+**Property 52: Concurrency limit enforcement**
 *For any* execution, the number of concurrent operations should not exceed the configured concurrency limit
 **Validates: Requirements 8.2**
 
-**Property 38: Execution cancellation**
+**Property 53: Performance metrics availability**
+*For any* time range, performance metrics (throughput, execution count, success rate) should be queryable for monitoring
+**Validates: Requirements 8.7**
+
+**Property 54: Execution cancellation**
 *For any* in-progress execution, calling cancel should terminate the execution and update its status to cancelled
 **Validates: Requirements 8.8**
 
 ### Validation Properties
 
-**Property 39: Parameter validation**
+**Property 55: Parameter validation**
 *For any* execution request with invalid parameters (missing required, wrong type, or invalid value), a validation error should be returned before execution starts
-**Validates: Requirements 9.2, 9.3, 9.4, 9.5**
+**Validates: Requirements 9.3, 9.4, 9.5**
 
-**Property 40: Validation error clarity**
+**Property 56: Validation error clarity**
 *For any* validation error, the error message should clearly identify which parameter is invalid and why
 **Validates: Requirements 9.6**
 
-**Property 41: Plugin configuration validation**
+**Property 57: Plugin configuration validation**
 *For any* plugin initialization with invalid configuration, the initialization should fail with a validation error
 **Validates: Requirements 9.8**
 
 ### Integration Properties
 
-**Property 42: ExecutionQueue integration**
+**Property 58: ExecutionQueue integration**
 *For any* asynchronous execution, the framework should acquire a slot from ExecutionQueue before starting and release it upon completion
 **Validates: Requirements 10.1**
 
-**Property 43: CapabilityRegistry integration**
+**Property 59: CapabilityRegistry integration**
 *For any* plugin capability, it should be registered with CapabilityRegistry and routable via capability name
 **Validates: Requirements 10.2**
 
-**Property 44: Backward compatibility**
+**Property 60: Backward compatibility**
 *For any* existing v1.x plugin, it should work with the framework without requiring code changes
 **Validates: Requirements 10.4, 10.8**
 
 ### Node Journal Properties
 
-**Property 45: Journal entry creation**
+**Property 61: Journal entry creation per node**
 *For any* execution (command, task, package, provisioning, event), when Node Journal is implemented, a journal entry should be created for each affected node
 **Validates: Requirements 11.1, 11.2, 11.3, 11.4, 11.5, 11.10**
 
-**Property 46: Journal entry completeness**
+**Property 62: Manual journal entry support**
+*For any* manual journal entry created from the web interface, when Node Journal is implemented, it should be stored and queryable
+**Validates: Requirements 11.6**
+
+**Property 63: Journal entry completeness**
 *For any* journal entry, it should include entry type, execution ID, timestamp, user, action, and result status
 **Validates: Requirements 11.7**
 
-**Property 47: Journal entry linking**
+**Property 64: Journal logging level configuration**
+*For any* plugin, journal logging levels should be configurable independently
+**Validates: Requirements 11.8**
+
+**Property 65: Selective journaling**
+*For any* plugin, it should be able to specify which execution types should be journaled
+**Validates: Requirements 11.9**
+
+**Property 66: Journal entry linking**
 *For any* journal entry created from an execution, it should reference the original execution record for traceability
 **Validates: Requirements 11.11**
 
+**Property 67: Custom event interface**
+*For any* plugin, it should be able to write custom events using the journal entry interface
+**Validates: Requirements 11.12**
+
 ### CLI Properties
 
-**Property 48: CLI interface consistency**
+**Property 68: CLI interface consistency**
 *For any* plugin implementing inventory, execution, info, or event capabilities, the generated CLI commands should follow the common interface patterns for that capability type
 **Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7**
 
-**Property 49: CLI help generation**
+**Property 69: CLI extensibility**
+*For any* plugin-specific CLI extension, it should work while maintaining common interface patterns
+**Validates: Requirements 12.8**
+
+**Property 70: CLI help generation**
 *For any* capability with a schema, CLI help documentation should be automatically generated from the schema
 **Validates: Requirements 12.9**
 
-**Property 50: CLI argument validation**
+**Property 71: CLI argument validation**
 *For any* CLI command invocation, arguments should be validated against the capability schema before execution
 **Validates: Requirements 12.10**
 

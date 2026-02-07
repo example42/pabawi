@@ -18,37 +18,135 @@
     {
       "name": "command.execute",
       "category": "command",
-      "description": "Execute shell commands on target nodes via Bolt",
+      "description": "Execute shell commands on target nodes (standardized interface)",
       "riskLevel": "execute",
       "requiredPermissions": ["bolt.command.execute"]
     },
     {
       "name": "task.execute",
       "category": "task",
-      "description": "Execute Bolt tasks on target nodes",
+      "description": "Execute tasks on target nodes (standardized interface)",
       "riskLevel": "execute",
       "requiredPermissions": ["bolt.task.execute"]
     },
     {
-      "name": "task.list",
+      "name": "script.execute",
+      "category": "command",
+      "description": "Execute scripts on target nodes (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.command.execute"]
+    },
+    {
+      "name": "inventory.list",
+      "category": "inventory",
+      "description": "List all nodes from Bolt inventory (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.inventory.list"]
+    },
+    {
+      "name": "inventory.get",
+      "category": "inventory",
+      "description": "Get specific node details (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.inventory.list"]
+    },
+    {
+      "name": "inventory.groups",
+      "category": "inventory",
+      "description": "List available groups (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.inventory.list"]
+    },
+    {
+      "name": "inventory.filter",
+      "category": "inventory",
+      "description": "Filter nodes by criteria (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.inventory.list"]
+    },
+    {
+      "name": "info.facts",
+      "category": "info",
+      "description": "Get facts for a node (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.facts.query"]
+    },
+    {
+      "name": "info.refresh",
+      "category": "info",
+      "description": "Force refresh facts (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.facts.query"]
+    },
+    {
+      "name": "bolt.command.execute",
+      "category": "command",
+      "description": "Execute shell commands on target nodes via Bolt (legacy)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.command.execute"]
+    },
+    {
+      "name": "bolt.task.execute",
+      "category": "task",
+      "description": "Execute Bolt tasks on target nodes (legacy)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.task.execute"]
+    },
+    {
+      "name": "bolt.task.list",
       "category": "task",
       "description": "List available Bolt tasks",
       "riskLevel": "read",
       "requiredPermissions": ["bolt.task.list"]
     },
     {
-      "name": "inventory.list",
+      "name": "bolt.inventory.list",
       "category": "inventory",
-      "description": "List nodes from Bolt inventory",
+      "description": "List nodes from Bolt inventory (legacy)",
       "riskLevel": "read",
       "requiredPermissions": ["bolt.inventory.list"]
     },
     {
-      "name": "facts.query",
+      "name": "bolt.facts.query",
       "category": "info",
-      "description": "Query facts from nodes via Bolt",
+      "description": "Query facts from nodes via Bolt (legacy)",
       "riskLevel": "read",
       "requiredPermissions": ["bolt.facts.query"]
+    },
+    {
+      "name": "package.install",
+      "category": "package",
+      "description": "Install software packages on target nodes (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.package.manage"]
+    },
+    {
+      "name": "package.uninstall",
+      "category": "package",
+      "description": "Uninstall software packages from target nodes (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.package.manage"]
+    },
+    {
+      "name": "package.update",
+      "category": "package",
+      "description": "Update software packages on target nodes (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["bolt.package.manage"]
+    },
+    {
+      "name": "package.list",
+      "category": "package",
+      "description": "List installed packages on a node (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.package.query"]
+    },
+    {
+      "name": "package.search",
+      "category": "package",
+      "description": "Search available packages (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["bolt.package.query"]
     }
   ],
   "widgets": [
@@ -60,6 +158,15 @@
       "size": "medium",
       "requiredCapabilities": ["inventory.list"],
       "priority": 10
+    },
+    {
+      "id": "bolt:plugin-home-page",
+      "name": "Bolt Home Page",
+      "component": "frontend/PluginHomePage.svelte",
+      "slots": ["plugin-home"],
+      "size": "full",
+      "requiredCapabilities": ["inventory.list"],
+      "route": "/integrations/bolt"
     },
     {
       "id": "bolt:command-executor",
@@ -77,7 +184,7 @@
       "component": "frontend/TaskRunner.svelte",
       "slots": ["node-detail", "dashboard"],
       "size": "large",
-      "requiredCapabilities": ["task.execute", "task.list"],
+      "requiredCapabilities": ["task.execute", "bolt.task.list"],
       "category": "task",
       "nodeScoped": true
     },
@@ -87,8 +194,28 @@
       "component": "frontend/FactsViewer.svelte",
       "slots": ["node-detail"],
       "size": "medium",
-      "requiredCapabilities": ["facts.query"],
+      "requiredCapabilities": ["info.facts"],
       "category": "info",
+      "nodeScoped": true
+    },
+    {
+      "id": "bolt:node-detail-tabs",
+      "name": "Bolt Node Actions",
+      "component": "frontend/NodeDetailTabs.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["command.execute"],
+      "nodeScoped": true,
+      "priority": 5
+    },
+    {
+      "id": "bolt:package-manager",
+      "name": "Package Manager",
+      "component": "frontend/PackageManager.svelte",
+      "slots": ["node-detail", "dashboard"],
+      "size": "large",
+      "requiredCapabilities": ["package.list"],
+      "category": "package",
       "nodeScoped": true
     }
   ],
@@ -117,7 +244,7 @@
         },
         {
           "name": "tasks",
-          "capability": "task.list",
+          "capability": "bolt.task.list",
           "description": "List available Bolt tasks",
           "examples": ["pab bolt tasks", "pab bolt tasks --filter package"]
         },
@@ -129,7 +256,7 @@
         },
         {
           "name": "facts",
-          "capability": "facts.query",
+          "capability": "info.facts",
           "description": "Query facts from nodes",
           "examples": [
             "pab bolt facts node1.example.com",
@@ -142,8 +269,19 @@
   "defaultPermissions": {
     "command.execute": ["admin", "operator"],
     "task.execute": ["admin", "operator"],
-    "task.list": ["admin", "operator", "viewer"],
+    "script.execute": ["admin", "operator"],
     "inventory.list": ["admin", "operator", "viewer"],
-    "facts.query": ["admin", "operator", "viewer"]
+    "inventory.get": ["admin", "operator", "viewer"],
+    "inventory.groups": ["admin", "operator", "viewer"],
+    "inventory.filter": ["admin", "operator", "viewer"],
+    "info.facts": ["admin", "operator", "viewer"],
+    "info.refresh": ["admin", "operator", "viewer"],
+    "bolt.command.execute": ["admin", "operator"],
+    "bolt.task.execute": ["admin", "operator"],
+    "bolt.task.list": ["admin", "operator", "viewer"],
+    "bolt.inventory.list": ["admin", "operator", "viewer"],
+    "bolt.facts.query": ["admin", "operator", "viewer"],
+    "bolt.package.manage": ["admin", "operator"],
+    "bolt.package.query": ["admin", "operator", "viewer"]
   }
 }

@@ -109,6 +109,18 @@ function createStubPuppetDBService(logger: LoggerInterface): any {
     getNodeCatalog: async () => null,
     getCatalogResources: async () => ({}),
     getSummaryStats: async () => ({}),
+    getResourceTypes: async () => {
+      logger.warn("PuppetDBService stub - getResourceTypes called but not implemented");
+      return [];
+    },
+    getResourcesByType: async () => {
+      logger.warn("PuppetDBService stub - getResourcesByType called but not implemented");
+      return [];
+    },
+    getResource: async () => {
+      logger.warn("PuppetDBService stub - getResource called but not implemented");
+      return null;
+    },
   };
 }
 

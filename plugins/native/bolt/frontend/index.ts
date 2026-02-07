@@ -18,6 +18,9 @@ export { default as TaskRunner } from './TaskRunner.svelte';
 export { default as InventoryViewer } from './InventoryViewer.svelte';
 export { default as TaskBrowser } from './TaskBrowser.svelte';
 export { default as FactsViewer } from './FactsViewer.svelte';
+export { default as PluginHomePage } from './PluginHomePage.svelte';
+export { default as NodeDetailTabs } from './NodeDetailTabs.svelte';
+export { default as PackageManager } from './PackageManager.svelte';
 
 // ==========================================================================
 // Widget Manifest for Dynamic Loading
@@ -76,6 +79,30 @@ export const BOLT_WIDGET_MANIFEST = {
     slots: ['node-detail'] as string[],
     defaultSize: { width: 2, height: 2 },
     requiredCapabilities: ['bolt.facts.query'],
+  },
+  'bolt:plugin-home-page': {
+    id: 'bolt:plugin-home-page',
+    name: 'Bolt Home Page',
+    load: () => import('./PluginHomePage.svelte'),
+    slots: ['plugin-home'] as string[],
+    defaultSize: { width: 4, height: 4 },
+    requiredCapabilities: ['inventory.list'],
+  },
+  'bolt:node-detail-tabs': {
+    id: 'bolt:node-detail-tabs',
+    name: 'Bolt Node Actions',
+    load: () => import('./NodeDetailTabs.svelte'),
+    slots: ['node-detail'] as string[],
+    defaultSize: { width: 4, height: 3 },
+    requiredCapabilities: ['command.execute'],
+  },
+  'bolt:package-manager': {
+    id: 'bolt:package-manager',
+    name: 'Package Manager',
+    load: () => import('./PackageManager.svelte'),
+    slots: ['node-detail', 'dashboard'] as string[],
+    defaultSize: { width: 3, height: 3 },
+    requiredCapabilities: ['package.list'],
   },
 };
 /* eslint-enable @typescript-eslint/explicit-function-return-type */

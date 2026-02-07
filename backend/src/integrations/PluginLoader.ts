@@ -98,13 +98,13 @@ export interface PluginLoaderOptions {
    * Additional external plugin configurations from YAML config
    * Each entry can specify a path or package name
    */
-  additionalPlugins?: Array<{
+  additionalPlugins?: {
     path?: string;
     package?: string;
     enabled?: boolean;
     priority?: number;
     config?: Record<string, unknown>;
-  }>;
+  }[];
 }
 
 /**

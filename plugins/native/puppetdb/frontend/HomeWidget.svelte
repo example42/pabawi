@@ -42,6 +42,7 @@
     changed: number;
     unchanged: number;
     noop: number;
+    success?: number;
   }
 
   interface NodesResponse {
@@ -93,6 +94,11 @@
 
   let failedCount = $derived(reportsSummary?.failed ?? 0);
   let totalReports = $derived(reportsSummary?.total ?? 0);
+  let successRate = $derived.by(() => {
+    if (!reportsSummary || reportsSummary.total === 0) return 0;
+    const successCount = (reportsSummary.success ?? 0) + (reportsSummary.unchanged ?? 0) + (reportsSummary.noop ?? 0);
+    return Math.round((successCount / reportsSummary.total) * 100);
+  });
 
   // ==========================================================================
   // Lifecycle
@@ -151,6 +157,22 @@
   function navigateToPuppetDB(): void {
     router.navigate('/integrations/puppetdb');
   }
+
+  function viewReports(event: MouseEvent): void {
+    event.stopPropagation();
+    router.navigate('/integrations/puppetdb?tab=reports');
+  }
+
+  function viewNodes(event: MouseEvent): void {
+    event.stopPropagation();
+    router.navigate('/integrations/puppetdb?tab=nodes');
+  }
+
+  function getSuccessRateColor(rate: number): string {
+    if (rate >= 90) return 'text-green-600 dark:text-green-400';
+    if (rate >= 70) return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-red-600 dark:text-red-400';
+  }
 </script>
 
 <button
@@ -198,21 +220,49 @@
 
       <!-- Recent Reports -->
       <div class="flex items-center justify-between">
-        <span class="text-sm text-gray-600 dark:text-gray-400">Recent Reports</span>
+        <span class="text-sm text-gray-600 dark:text-gray-400">Reports</span>
         <span class="text-lg font-bold text-gray-700 dark:text-gray-300">{totalReports}</span>
       </div>
 
-      <!-- Failed Runs -->
-      <div class="flex items-center justify-between">
-        <span class="text-sm text-gray-600 dark:text-gray-400">Failed Runs</span>
-        <span class="text-lg font-bold {failedCount > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}">
-          {failedCount}
-        </span>
+      <!-- Success Rate -->
+      {#if totalReports > 0}
+        <div class="flex items-center justify-between">
+          <span class="text-sm text-gray-600 dark:text-gray-400">Success Rate</span>
+          <span class="text-lg font-bold {getSuccessRateColor(successRate)}">
+            {successRate}%
+          </span>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="mt-3 pt-3 border-t border-violet-200/50 dark:border-violet-800/50">
+      <div class="flex gap-2">
+        <button
+          type="button"
+          onclick={viewReports}
+          class="flex-1 px-2 py-1.5 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 hover:bg-violet-200 dark:hover:bg-violet-900/50 rounded transition-colors"
+          title="View Reports"
+        >
+          <svg class="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onclick={viewNodes}
+          class="flex-1 px-2 py-1.5 text-xs font-medium text-violet-700 dark:text-violet-300 bg-violet-100 dark:bg-violet-900/30 hover:bg-violet-200 dark:hover:bg-violet-900/50 rounded transition-colors"
+          title="View Nodes"
+        >
+          <svg class="w-3.5 h-3.5 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+          </svg>
+        </button>
       </div>
     </div>
 
     <!-- Footer -->
-    <div class="mt-3 pt-3 border-t border-violet-200/50 dark:border-violet-800/50 flex items-center justify-between">
+    <div class="mt-2 flex items-center justify-between">
       <span class="text-xs text-gray-500 dark:text-gray-400">Infrastructure Data</span>
       <svg class="w-4 h-4 text-violet-500 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

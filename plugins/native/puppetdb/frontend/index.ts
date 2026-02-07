@@ -19,6 +19,7 @@ export { default as ReportsSummary } from './ReportsSummary.svelte';
 export { default as EventsViewer } from './EventsViewer.svelte';
 export { default as CatalogViewer } from './CatalogViewer.svelte';
 export { default as NodeBrowser } from './NodeBrowser.svelte';
+export { default as NodeDetailTabs } from './NodeDetailTabs.svelte';
 
 // ==========================================================================
 // Widget Manifest for Dynamic Loading
@@ -85,6 +86,14 @@ export const PUPPETDB_WIDGET_MANIFEST = {
     slots: ['node-detail', 'standalone-page'] as string[],
     defaultSize: { width: 2, height: 2 },
     requiredCapabilities: ['puppetdb.catalog'],
+  },
+  'puppetdb:node-detail-tabs': {
+    id: 'puppetdb:node-detail-tabs',
+    name: 'PuppetDB Node Details',
+    load: () => import('./NodeDetailTabs.svelte'),
+    slots: ['node-detail'] as string[],
+    defaultSize: { width: 2, height: 2 },
+    requiredCapabilities: ['puppetdb.facts'],
   },
 };
 /* eslint-enable @typescript-eslint/explicit-function-return-type */

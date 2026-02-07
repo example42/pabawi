@@ -466,9 +466,9 @@ export function createTasksRouterV1(
               };
 
               await executionRepository.update(executionId, {
-                status: execResult.status as ExecutionStatus,
+                status: execResult.status,
                 completedAt: execResult.completedAt ?? new Date().toISOString(),
-                results: execResult.results as NodeResult[],
+                results: execResult.results,
                 error: execResult.error,
                 stdout: expertMode ? execResult.stdout : undefined,
                 stderr: expertMode ? execResult.stderr : undefined,

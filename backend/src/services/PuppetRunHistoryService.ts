@@ -36,14 +36,14 @@ export interface ReportProvider {
     nodeId: string,
     startDate: string,
     endDate: string
-  ): Promise<Array<{ date: string; status: string; count: number }>>;
+  ): Promise<{ date: string; status: string; count: number }[]>;
 
   getNodeReports(nodeId: string, limit: number): Promise<Report[]>;
 
   getReportCountsByDateAndStatus(
     startDate: string,
     endDate: string
-  ): Promise<Array<{ date: string; status: string; count: number }>>;
+  ): Promise<{ date: string; status: string; count: number }[]>;
 }
 
 import type { LoggerService } from "./LoggerService";

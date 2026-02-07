@@ -34,7 +34,7 @@ interface PluginInfo {
   };
   enabled: boolean;
   healthy: boolean;
-  widgets: Array<{
+  widgets: {
     id: string;
     name: string;
     component: string;
@@ -44,14 +44,14 @@ interface PluginInfo {
     config?: Record<string, unknown>;
     icon?: string;
     priority?: number;
-  }>;
-  capabilities: Array<{
+  }[];
+  capabilities: {
     name: string;
     category: string;
     description: string;
     riskLevel: string;
     requiredPermissions: string[];
-  }>;
+  }[];
   priority: number;
 }
 

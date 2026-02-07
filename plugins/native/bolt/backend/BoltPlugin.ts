@@ -348,6 +348,11 @@ export type BoltPluginConfig = z.infer<typeof BoltPluginConfigSchema>;
  * - facts.query: Gather facts from target nodes
  * - task.list: List available Bolt tasks
  * - task.details: Get task metadata and parameters
+ *
+ * Implements standardized capability interfaces:
+ * - InventoryCapability: inventory.list, inventory.get, inventory.groups, inventory.filter
+ * - FactsCapability: info.facts, info.refresh
+ * - RemoteExecutionCapability: command.execute, task.execute, script.execute
  */
 export class BoltPlugin implements BasePluginInterface {
   // =========================================================================
@@ -553,7 +558,7 @@ export class BoltPlugin implements BasePluginInterface {
    */
   private createCapabilities(): PluginCapability[] {
     return [
-      // Command Execution
+      // Command Execution (legacy handler)
       {
         category: "command",
         name: "bolt.command.execute",
@@ -587,7 +592,62 @@ export class BoltPlugin implements BasePluginInterface {
         },
       },
 
-      // Task Execution
+      // Standardized Remote Execution Capabilities (Phase 1)
+      {
+        category: "command",
+        name: "command.execute",
+        description: "Execute shell command on target nodes (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.commandExecute(params as {
+          command: string;
+          targets: string[];
+          timeout?: number;
+          environment?: Record<string, string>;
+          async?: boolean;
+          debugMode?: boolean;
+        }),
+        requiredPermissions: ["bolt.command.execute", "command.execute"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            command: {
+              type: "string",
+              description: "Shell command to execute",
+              required: true,
+            },
+            targets: {
+              type: "array",
+              description: "Target node identifiers",
+              required: true,
+            },
+            timeout: {
+              type: "number",
+              description: "Execution timeout in milliseconds",
+              required: false,
+            },
+            environment: {
+              type: "object",
+              description: "Environment variables",
+              required: false,
+            },
+            async: {
+              type: "boolean",
+              description: "Execute asynchronously",
+              required: false,
+            },
+            debugMode: {
+              type: "boolean",
+              description: "Enable debug mode for detailed output",
+              required: false,
+            },
+          },
+          returns: {
+            type: "ExecutionResult",
+            description: "Execution result with per-node results",
+          },
+        },
+      },
+
+      // Task Execution (legacy handler)
       {
         category: "task",
         name: "bolt.task.execute",
@@ -626,7 +686,135 @@ export class BoltPlugin implements BasePluginInterface {
         },
       },
 
-      // Inventory Listing
+      // Standardized Task Execution (Phase 1)
+      {
+        category: "task",
+        name: "task.execute",
+        description: "Execute task or playbook on target nodes (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.taskExecute(params as {
+          taskName: string;
+          targets: string[];
+          parameters?: Record<string, unknown>;
+          timeout?: number;
+          environment?: Record<string, string>;
+          async?: boolean;
+          debugMode?: boolean;
+        }),
+        requiredPermissions: ["bolt.task.execute", "task.execute"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            taskName: {
+              type: "string",
+              description: "Task or playbook name",
+              required: true,
+            },
+            targets: {
+              type: "array",
+              description: "Target node identifiers",
+              required: true,
+            },
+            parameters: {
+              type: "object",
+              description: "Task parameters",
+              required: false,
+            },
+            timeout: {
+              type: "number",
+              description: "Execution timeout in milliseconds",
+              required: false,
+            },
+            environment: {
+              type: "object",
+              description: "Environment variables",
+              required: false,
+            },
+            async: {
+              type: "boolean",
+              description: "Execute asynchronously",
+              required: false,
+            },
+            debugMode: {
+              type: "boolean",
+              description: "Enable debug mode for detailed output",
+              required: false,
+            },
+          },
+          returns: {
+            type: "ExecutionResult",
+            description: "Task execution result with per-node results",
+          },
+        },
+      },
+
+      // Standardized Script Execution (Phase 1)
+      {
+        category: "command",
+        name: "script.execute",
+        description: "Execute script on target nodes (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.scriptExecute(params as {
+          script: string;
+          targets: string[];
+          scriptType?: "bash" | "powershell" | "python" | "ruby";
+          arguments?: string[];
+          timeout?: number;
+          environment?: Record<string, string>;
+          async?: boolean;
+          debugMode?: boolean;
+        }),
+        requiredPermissions: ["bolt.command.execute", "command.execute"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            script: {
+              type: "string",
+              description: "Script content or path",
+              required: true,
+            },
+            targets: {
+              type: "array",
+              description: "Target node identifiers",
+              required: true,
+            },
+            scriptType: {
+              type: "string",
+              description: "Script interpreter type",
+              required: false,
+            },
+            arguments: {
+              type: "array",
+              description: "Script arguments",
+              required: false,
+            },
+            timeout: {
+              type: "number",
+              description: "Execution timeout in milliseconds",
+              required: false,
+            },
+            environment: {
+              type: "object",
+              description: "Environment variables",
+              required: false,
+            },
+            async: {
+              type: "boolean",
+              description: "Execute asynchronously",
+              required: false,
+            },
+            debugMode: {
+              type: "boolean",
+              description: "Enable debug mode for detailed output",
+              required: false,
+            },
+          },
+          returns: {
+            type: "ExecutionResult",
+            description: "Script execution result with per-node results",
+          },
+        },
+      },
+
+      // Inventory Listing (legacy handler)
       {
         category: "inventory",
         name: "bolt.inventory.list",
@@ -650,7 +838,108 @@ export class BoltPlugin implements BasePluginInterface {
         },
       },
 
-      // Facts Query
+      // Standardized Inventory Capabilities (Phase 1)
+      {
+        category: "inventory",
+        name: "inventory.list",
+        description: "List all nodes from Bolt inventory (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.inventoryList(params as { refresh?: boolean; groups?: string[] }),
+        requiredPermissions: ["bolt.inventory.list", "inventory.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            refresh: {
+              type: "boolean",
+              description: "Force refresh from source",
+              required: false,
+              default: false,
+            },
+            groups: {
+              type: "array",
+              description: "Filter by group membership",
+              required: false,
+            },
+          },
+          returns: {
+            type: "Node[]",
+            description: "Array of nodes from inventory",
+          },
+        },
+      },
+
+      {
+        category: "inventory",
+        name: "inventory.get",
+        description: "Get specific node details (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.inventoryGet(params as { nodeId: string }),
+        requiredPermissions: ["bolt.inventory.list", "inventory.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            nodeId: {
+              type: "string",
+              description: "Node identifier",
+              required: true,
+            },
+          },
+          returns: {
+            type: "Node",
+            description: "Node details or null if not found",
+          },
+        },
+      },
+
+      {
+        category: "inventory",
+        name: "inventory.groups",
+        description: "List available groups (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.inventoryGroups(params as { refresh?: boolean }),
+        requiredPermissions: ["bolt.inventory.list", "inventory.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            refresh: {
+              type: "boolean",
+              description: "Force refresh from source",
+              required: false,
+              default: false,
+            },
+          },
+          returns: {
+            type: "string[]",
+            description: "Array of group names",
+          },
+        },
+      },
+
+      {
+        category: "inventory",
+        name: "inventory.filter",
+        description: "Filter nodes by criteria (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.inventoryFilter(params as { criteria: Record<string, unknown>; groups?: string[] }),
+        requiredPermissions: ["bolt.inventory.list", "inventory.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            criteria: {
+              type: "object",
+              description: "Filter criteria as key-value pairs",
+              required: true,
+            },
+            groups: {
+              type: "array",
+              description: "Filter by group membership",
+              required: false,
+            },
+          },
+          returns: {
+            type: "Node[]",
+            description: "Array of matching nodes",
+          },
+        },
+      },
+
+      // Facts Query (legacy handler)
       {
         category: "info",
         name: "bolt.facts.query",
@@ -675,6 +964,61 @@ export class BoltPlugin implements BasePluginInterface {
           returns: {
             type: "Facts",
             description: "System facts for the target node",
+          },
+        },
+      },
+
+      // Standardized Facts Capabilities (Phase 1)
+      {
+        category: "info",
+        name: "info.facts",
+        description: "Get facts for a node (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.factsGet(params as { nodeId: string; providers?: string[] }),
+        requiredPermissions: ["bolt.facts.query", "facts.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            nodeId: {
+              type: "string",
+              description: "Node identifier",
+              required: true,
+            },
+            providers: {
+              type: "array",
+              description: "Specific fact providers to use",
+              required: false,
+            },
+          },
+          returns: {
+            type: "Facts",
+            description: "Facts object with key-value pairs",
+          },
+        },
+      },
+
+      {
+        category: "info",
+        name: "info.refresh",
+        description: "Force refresh facts (bypass cache) (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.factsRefresh(params as { nodeId: string; providers?: string[] }),
+        requiredPermissions: ["bolt.facts.query", "facts.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            nodeId: {
+              type: "string",
+              description: "Node identifier",
+              required: true,
+            },
+            providers: {
+              type: "array",
+              description: "Specific fact providers to refresh",
+              required: false,
+            },
+          },
+          returns: {
+            type: "Facts",
+            description: "Refreshed facts object",
           },
         },
       },
@@ -721,6 +1065,195 @@ export class BoltPlugin implements BasePluginInterface {
           returns: {
             type: "Task",
             description: "Task metadata and parameters",
+          },
+        },
+      },
+
+      // Package Management
+      {
+        category: "package",
+        name: "package.install",
+        description: "Install software packages on target nodes (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.packageInstall(params as {
+          packageName: string;
+          version?: string;
+          targets: string[];
+          options?: Record<string, unknown>;
+          async?: boolean;
+        }),
+        requiredPermissions: ["bolt.package.manage", "package.write"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            packageName: {
+              type: "string",
+              description: "Package name to install",
+              required: true,
+            },
+            version: {
+              type: "string",
+              description: "Specific version to install",
+              required: false,
+            },
+            targets: {
+              type: "array",
+              description: "Target node identifiers",
+              required: true,
+            },
+            options: {
+              type: "object",
+              description: "Installation options",
+              required: false,
+            },
+            async: {
+              type: "boolean",
+              description: "Execute asynchronously",
+              required: false,
+            },
+          },
+          returns: {
+            type: "PackageOperationResult",
+            description: "Package installation result",
+          },
+        },
+      },
+      {
+        category: "package",
+        name: "package.uninstall",
+        description: "Uninstall software packages from target nodes (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.packageUninstall(params as {
+          packageName: string;
+          targets: string[];
+          purge?: boolean;
+          async?: boolean;
+        }),
+        requiredPermissions: ["bolt.package.manage", "package.write"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            packageName: {
+              type: "string",
+              description: "Package name to uninstall",
+              required: true,
+            },
+            targets: {
+              type: "array",
+              description: "Target node identifiers",
+              required: true,
+            },
+            purge: {
+              type: "boolean",
+              description: "Remove configuration files",
+              required: false,
+            },
+            async: {
+              type: "boolean",
+              description: "Execute asynchronously",
+              required: false,
+            },
+          },
+          returns: {
+            type: "PackageOperationResult",
+            description: "Package uninstallation result",
+          },
+        },
+      },
+      {
+        category: "package",
+        name: "package.update",
+        description: "Update software packages on target nodes (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.packageUpdate(params as {
+          packageName: string;
+          version?: string;
+          targets: string[];
+          async?: boolean;
+        }),
+        requiredPermissions: ["bolt.package.manage", "package.write"],
+        riskLevel: "execute",
+        schema: {
+          arguments: {
+            packageName: {
+              type: "string",
+              description: "Package name to update",
+              required: true,
+            },
+            version: {
+              type: "string",
+              description: "Specific version to update to",
+              required: false,
+            },
+            targets: {
+              type: "array",
+              description: "Target node identifiers",
+              required: true,
+            },
+            async: {
+              type: "boolean",
+              description: "Execute asynchronously",
+              required: false,
+            },
+          },
+          returns: {
+            type: "PackageOperationResult",
+            description: "Package update result",
+          },
+        },
+      },
+      {
+        category: "package",
+        name: "package.list",
+        description: "List installed packages on a node (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.packageList(params as {
+          nodeId: string;
+          filter?: string;
+        }),
+        requiredPermissions: ["bolt.package.query", "package.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            nodeId: {
+              type: "string",
+              description: "Node identifier",
+              required: true,
+            },
+            filter: {
+              type: "string",
+              description: "Filter packages by name pattern",
+              required: false,
+            },
+          },
+          returns: {
+            type: "PackageInfo[]",
+            description: "Array of installed packages",
+          },
+        },
+      },
+      {
+        category: "package",
+        name: "package.search",
+        description: "Search available packages (standardized interface)",
+        handler: async (params: Record<string, unknown>) => this.packageSearch(params as {
+          query: string;
+          limit?: number;
+        }),
+        requiredPermissions: ["bolt.package.query", "package.read"],
+        riskLevel: "read",
+        schema: {
+          arguments: {
+            query: {
+              type: "string",
+              description: "Search query",
+              required: true,
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of results",
+              required: false,
+            },
+          },
+          returns: {
+            type: "AvailablePackage[]",
+            description: "Array of available packages",
           },
         },
       },
@@ -1139,6 +1672,1039 @@ export class BoltPlugin implements BasePluginInterface {
     } catch (error) {
       complete({ error: error instanceof Error ? error.message : String(error) });
       throw error;
+    }
+  }
+
+  // =========================================================================
+  // Standardized Capability Interface Methods (Phase 1)
+  // =========================================================================
+
+  /**
+   * List all nodes from Bolt inventory
+   * Implements InventoryCapability.inventoryList
+   */
+  async inventoryList(params: { refresh?: boolean; groups?: string[] }): Promise<Node[]> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:inventoryList");
+
+    try {
+      this.logger.debug("Listing inventory (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "inventoryList",
+        metadata: { refresh: params.refresh, groups: params.groups },
+      });
+
+      let nodes = await this.boltService.getInventory();
+
+      // Filter by groups if specified
+      if (params.groups && params.groups.length > 0) {
+        nodes = nodes.filter(node =>
+          node.config.groups &&
+          Array.isArray(node.config.groups) &&
+          params.groups!.some(g => (node.config.groups as string[]).includes(g))
+        );
+      }
+
+      complete({ nodeCount: nodes.length, filtered: !!params.groups });
+      return nodes;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Get specific node details
+   * Implements InventoryCapability.inventoryGet
+   */
+  async inventoryGet(params: { nodeId: string }): Promise<Node | null> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:inventoryGet");
+
+    try {
+      this.logger.debug("Getting node details (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "inventoryGet",
+        metadata: { nodeId: params.nodeId },
+      });
+
+      const nodes = await this.boltService.getInventory();
+      const node = nodes.find(n => n.id === params.nodeId || n.name === params.nodeId);
+
+      complete({ nodeId: params.nodeId, found: !!node });
+      return node ?? null;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * List available groups
+   * Implements InventoryCapability.inventoryGroups
+   */
+  async inventoryGroups(params: { refresh?: boolean }): Promise<string[]> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:inventoryGroups");
+
+    try {
+      this.logger.debug("Listing inventory groups (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "inventoryGroups",
+        metadata: { refresh: params.refresh },
+      });
+
+      const nodes = await this.boltService.getInventory();
+      const groupsSet = new Set<string>();
+
+      // Extract groups from node configs
+      for (const node of nodes) {
+        if (node.config.groups && Array.isArray(node.config.groups)) {
+          for (const group of node.config.groups as string[]) {
+            groupsSet.add(group);
+          }
+        }
+      }
+
+      const groups = Array.from(groupsSet).sort();
+      complete({ groupCount: groups.length });
+      return groups;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Filter nodes by criteria
+   * Implements InventoryCapability.inventoryFilter
+   */
+  async inventoryFilter(params: { criteria: Record<string, unknown>; groups?: string[] }): Promise<Node[]> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:inventoryFilter");
+
+    try {
+      this.logger.debug("Filtering inventory (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "inventoryFilter",
+        metadata: { criteria: params.criteria, groups: params.groups },
+      });
+
+      let nodes = await this.boltService.getInventory();
+
+      // Filter by groups first if specified
+      if (params.groups && params.groups.length > 0) {
+        nodes = nodes.filter(node =>
+          node.config.groups &&
+          Array.isArray(node.config.groups) &&
+          params.groups!.some(g => (node.config.groups as string[]).includes(g))
+        );
+      }
+
+      // Filter by criteria
+      nodes = nodes.filter(node => {
+        for (const [key, value] of Object.entries(params.criteria)) {
+          // Check in node config
+          if (node.config[key] !== value) {
+            // Also check nested paths (e.g., "transport" or "config.user")
+            const parts = key.split(".");
+            let current: unknown = node;
+            for (const part of parts) {
+              if (current && typeof current === "object" && part in current) {
+                current = (current as Record<string, unknown>)[part];
+              } else {
+                return false;
+              }
+            }
+            if (current !== value) {
+              return false;
+            }
+          }
+        }
+        return true;
+      });
+
+      complete({ matchCount: nodes.length, criteriaCount: Object.keys(params.criteria).length });
+      return nodes;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Get facts for a node
+   * Implements FactsCapability.factsGet
+   */
+  async factsGet(params: { nodeId: string; providers?: string[] }): Promise<Facts> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:factsGet");
+
+    try {
+      this.logger.debug("Getting facts (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "factsGet",
+        metadata: { nodeId: params.nodeId, providers: params.providers },
+      });
+
+      const facts = await this.boltService.gatherFacts(params.nodeId);
+
+      complete({ nodeId: params.nodeId });
+      return facts;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Force refresh facts (bypass cache)
+   * Implements FactsCapability.factsRefresh
+   */
+  async factsRefresh(params: { nodeId: string; providers?: string[] }): Promise<Facts> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:factsRefresh");
+
+    try {
+      this.logger.debug("Refreshing facts (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "factsRefresh",
+        metadata: { nodeId: params.nodeId, providers: params.providers },
+      });
+
+      // For Bolt, refresh is the same as get since we always query live
+      const facts = await this.boltService.gatherFacts(params.nodeId);
+
+      complete({ nodeId: params.nodeId });
+      return facts;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Get fact provider information for this plugin
+   * Implements FactsCapability.getFactProvider
+   */
+  getFactProvider(): { name: string; priority: number; supportedFactKeys: string[] } {
+    return {
+      name: "bolt",
+      priority: 50, // Medium priority (PuppetDB would be higher at 100)
+      supportedFactKeys: [
+        "os",
+        "kernel",
+        "processors",
+        "memory",
+        "networking",
+        "hostname",
+        "fqdn",
+        "ipaddress",
+        "macaddress",
+        "architecture",
+        "operatingsystem",
+        "operatingsystemrelease",
+        "osfamily",
+      ],
+    };
+  }
+
+  /**
+   * Execute shell command on target nodes
+   * Implements RemoteExecutionCapability.commandExecute
+   */
+  async commandExecute(params: {
+    command: string;
+    targets: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
+  }): Promise<ExecutionResult> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:commandExecute");
+    const executionId = `cmd-${Date.now()}`;
+
+    try {
+      this.logger.info("Executing command (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "commandExecute",
+        metadata: {
+          executionId,
+          command: params.command,
+          targets: params.targets,
+          async: params.async,
+          debugMode: params.debugMode,
+        },
+      });
+
+      // For now, execute on first target (multi-target support would require ExecutionQueue integration)
+      const target = params.targets[0];
+
+      // Extract streaming callback from environment if present
+      const streamingCallback = params.environment?.streamingCallback as StreamingCallback | undefined;
+
+      const result = await this.boltService.runCommand(
+        target,
+        params.command,
+        streamingCallback,
+      );
+
+      // Set debug mode flag if requested
+      if (params.debugMode) {
+        result.expertMode = true;
+      }
+
+      // Log to Node Journal (when available)
+      for (const nodeResult of result.results) {
+        await this.logCommandToJournal({
+          executionId,
+          nodeId: nodeResult.nodeId,
+          command: params.command,
+          status: nodeResult.status,
+          output: nodeResult.output,
+          error: nodeResult.error,
+        });
+      }
+
+      complete({ status: result.status, targets: params.targets.length });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute task or playbook on target nodes
+   * Implements RemoteExecutionCapability.taskExecute
+   */
+  async taskExecute(params: {
+    taskName: string;
+    targets: string[];
+    parameters?: Record<string, unknown>;
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
+  }): Promise<ExecutionResult> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:taskExecute");
+    const executionId = `task-${Date.now()}`;
+
+    try {
+      this.logger.info("Executing task (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "taskExecute",
+        metadata: {
+          executionId,
+          taskName: params.taskName,
+          targets: params.targets,
+          hasParameters: !!params.parameters,
+          async: params.async,
+          debugMode: params.debugMode,
+        },
+      });
+
+      // For now, execute on first target (multi-target support would require ExecutionQueue integration)
+      const target = params.targets[0];
+
+      // Extract streaming callback from environment if present
+      const streamingCallback = params.environment?.streamingCallback as StreamingCallback | undefined;
+
+      const result = await this.boltService.runTask(
+        target,
+        params.taskName,
+        params.parameters as Record<string, string> | undefined,
+        streamingCallback,
+      );
+
+      // Set debug mode flag if requested
+      if (params.debugMode) {
+        result.expertMode = true;
+      }
+
+      // Log to Node Journal (when available)
+      for (const nodeResult of result.results) {
+        await this.logTaskToJournal({
+          executionId,
+          nodeId: nodeResult.nodeId,
+          taskName: params.taskName,
+          parameters: params.parameters,
+          status: nodeResult.status,
+          error: nodeResult.error,
+        });
+      }
+
+      complete({ status: result.status, targets: params.targets.length, taskName: params.taskName });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Execute script on target nodes
+   * Implements RemoteExecutionCapability.scriptExecute
+   */
+  async scriptExecute(params: {
+    script: string;
+    targets: string[];
+    scriptType?: "bash" | "powershell" | "python" | "ruby";
+    arguments?: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
+  }): Promise<ExecutionResult> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:scriptExecute");
+
+    try {
+      this.logger.info("Executing script (standardized interface)", {
+        component: "BoltPlugin",
+        operation: "scriptExecute",
+        metadata: {
+          scriptType: params.scriptType,
+          targets: params.targets,
+          hasArguments: !!params.arguments,
+          async: params.async,
+          debugMode: params.debugMode,
+        },
+      });
+
+      // For Bolt, we can execute scripts as commands
+      // Build the command based on script type
+      let command = params.script;
+      if (params.scriptType === "bash") {
+        command = `bash -c '${params.script.replace(/'/g, "'\\''")}'`;
+      } else if (params.scriptType === "powershell") {
+        command = `powershell -Command "${params.script.replace(/"/g, '\\"')}"`;
+      } else if (params.scriptType === "python") {
+        command = `python -c '${params.script.replace(/'/g, "'\\''")}'`;
+      } else if (params.scriptType === "ruby") {
+        command = `ruby -e '${params.script.replace(/'/g, "'\\''")}'`;
+      }
+
+      // Add arguments if provided
+      if (params.arguments && params.arguments.length > 0) {
+        command += " " + params.arguments.join(" ");
+      }
+
+      // Execute as command
+      const target = params.targets[0];
+      const streamingCallback = params.environment?.streamingCallback as StreamingCallback | undefined;
+
+      const result = await this.boltService.runCommand(
+        target,
+        command,
+        streamingCallback,
+      );
+
+      // Set debug mode flag if requested
+      if (params.debugMode) {
+        result.expertMode = true;
+      }
+
+      complete({ status: result.status, targets: params.targets.length, scriptType: params.scriptType });
+      return result;
+    } catch (error) {
+      complete({ error: error instanceof Error ? error.message : String(error) });
+      throw error;
+    }
+  }
+
+  /**
+   * Stream output from an execution
+   * Implements RemoteExecutionCapability.streamOutput
+   *
+   * Note: Bolt executions are synchronous, so streaming happens during execution.
+   * This method is a placeholder for future async execution support.
+   */
+  async streamOutput(executionId: string, callback: (chunk: { nodeId: string; stream: "stdout" | "stderr"; data: string; timestamp: string }) => void): Promise<void> {
+    this.logger.debug("Stream output requested (not yet implemented for Bolt)", {
+      component: "BoltPlugin",
+      operation: "streamOutput",
+      metadata: { executionId },
+    });
+
+    // For Bolt, streaming happens during execution via StreamingCallback
+    // This method would be used with ExecutionQueue for async executions
+    throw new Error("Stream output not yet implemented for Bolt - use streaming callback during execution");
+  }
+
+  /**
+   * Cancel an in-progress execution
+   * Implements RemoteExecutionCapability.cancelExecution
+   *
+   * Note: Bolt executions are synchronous and cannot be cancelled mid-execution.
+   * This method is a placeholder for future async execution support.
+   */
+  async cancelExecution(executionId: string): Promise<boolean> {
+    this.logger.debug("Cancel execution requested (not yet implemented for Bolt)", {
+      component: "BoltPlugin",
+      operation: "cancelExecution",
+      metadata: { executionId },
+    });
+
+    // For Bolt, executions are synchronous and cannot be cancelled
+    // This would require ExecutionQueue integration for async executions
+    return false;
+  }
+
+  // =========================================================================
+  // Package Management Methods (SoftwareInstallationCapability)
+  // =========================================================================
+
+  /**
+   * Install a package on target nodes
+   * Implements SoftwareInstallationCapability.packageInstall
+   */
+  async packageInstall(params: {
+    packageName: string;
+    version?: string;
+    targets: string[];
+    options?: Record<string, unknown>;
+    async?: boolean;
+  }): Promise<{
+    id: string;
+    operation: "install";
+    packageName: string;
+    targetNodes: string[];
+    status: "running" | "success" | "failed" | "partial";
+    startedAt: string;
+    completedAt?: string;
+    results: Array<{
+      nodeId: string;
+      status: "success" | "failed";
+      packageName: string;
+      version?: string;
+      error?: string;
+      duration: number;
+    }>;
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:packageInstall");
+    const startTime = Date.now();
+    const executionId = `pkg-install-${Date.now()}`;
+
+    try {
+      this.logger.info("Installing package via Bolt", {
+        component: "BoltPlugin",
+        operation: "packageInstall",
+        metadata: { executionId, packageName: params.packageName, version: params.version, targets: params.targets },
+      });
+
+      // Use Bolt task to install package
+      const taskName = "package";
+      const taskParams = {
+        action: "install",
+        name: params.packageName,
+        ...(params.version && { version: params.version }),
+        ...(params.options || {}),
+      };
+
+      const result = await this.boltService.executeTask(
+        taskName,
+        params.targets,
+        taskParams,
+        { timeout: 300000 }, // 5 minute timeout for package operations
+      );
+
+      const operationResult = {
+        id: executionId,
+        operation: "install" as const,
+        packageName: params.packageName,
+        targetNodes: params.targets,
+        status: result.status as "running" | "success" | "failed" | "partial",
+        startedAt: new Date(startTime).toISOString(),
+        completedAt: new Date().toISOString(),
+        results: result.results.map(r => ({
+          nodeId: r.nodeId,
+          status: r.status,
+          packageName: params.packageName,
+          version: params.version,
+          error: r.error,
+          duration: r.duration,
+        })),
+        error: result.error,
+      };
+
+      // Log to Node Journal (when available)
+      for (const nodeResult of result.results) {
+        await this.logPackageToJournal({
+          executionId,
+          nodeId: nodeResult.nodeId,
+          operation: 'install',
+          packageName: params.packageName,
+          version: params.version,
+          status: nodeResult.status,
+          error: nodeResult.error,
+        });
+      }
+
+      complete({ status: result.status });
+      return operationResult;
+    } catch (error) {
+      complete({ status: "error" });
+      throw error;
+    }
+  }
+
+  /**
+   * Uninstall a package from target nodes
+   * Implements SoftwareInstallationCapability.packageUninstall
+   */
+  async packageUninstall(params: {
+    packageName: string;
+    targets: string[];
+    purge?: boolean;
+    async?: boolean;
+  }): Promise<{
+    id: string;
+    operation: "uninstall";
+    packageName: string;
+    targetNodes: string[];
+    status: "running" | "success" | "failed" | "partial";
+    startedAt: string;
+    completedAt?: string;
+    results: Array<{
+      nodeId: string;
+      status: "success" | "failed";
+      packageName: string;
+      version?: string;
+      error?: string;
+      duration: number;
+    }>;
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:packageUninstall");
+    const startTime = Date.now();
+    const executionId = `pkg-uninstall-${Date.now()}`;
+
+    try {
+      this.logger.info("Uninstalling package via Bolt", {
+        component: "BoltPlugin",
+        operation: "packageUninstall",
+        metadata: { executionId, packageName: params.packageName, targets: params.targets, purge: params.purge },
+      });
+
+      const taskName = "package";
+      const taskParams = {
+        action: "uninstall",
+        name: params.packageName,
+        ...(params.purge && { purge: true }),
+      };
+
+      const result = await this.boltService.executeTask(
+        taskName,
+        params.targets,
+        taskParams,
+        { timeout: 300000 },
+      );
+
+      const operationResult = {
+        id: executionId,
+        operation: "uninstall" as const,
+        packageName: params.packageName,
+        targetNodes: params.targets,
+        status: result.status as "running" | "success" | "failed" | "partial",
+        startedAt: new Date(startTime).toISOString(),
+        completedAt: new Date().toISOString(),
+        results: result.results.map(r => ({
+          nodeId: r.nodeId,
+          status: r.status,
+          packageName: params.packageName,
+          error: r.error,
+          duration: r.duration,
+        })),
+        error: result.error,
+      };
+
+      // Log to Node Journal (when available)
+      for (const nodeResult of result.results) {
+        await this.logPackageToJournal({
+          executionId,
+          nodeId: nodeResult.nodeId,
+          operation: 'uninstall',
+          packageName: params.packageName,
+          status: nodeResult.status,
+          error: nodeResult.error,
+        });
+      }
+
+      complete({ status: result.status });
+      return operationResult;
+    } catch (error) {
+      complete({ status: "error" });
+      throw error;
+    }
+  }
+
+  /**
+   * Update a package on target nodes
+   * Implements SoftwareInstallationCapability.packageUpdate
+   */
+  async packageUpdate(params: {
+    packageName: string;
+    version?: string;
+    targets: string[];
+    async?: boolean;
+  }): Promise<{
+    id: string;
+    operation: "update";
+    packageName: string;
+    targetNodes: string[];
+    status: "running" | "success" | "failed" | "partial";
+    startedAt: string;
+    completedAt?: string;
+    results: Array<{
+      nodeId: string;
+      status: "success" | "failed";
+      packageName: string;
+      version?: string;
+      error?: string;
+      duration: number;
+    }>;
+    error?: string;
+  }> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:packageUpdate");
+    const startTime = Date.now();
+    const executionId = `pkg-update-${Date.now()}`;
+
+    try {
+      this.logger.info("Updating package via Bolt", {
+        component: "BoltPlugin",
+        operation: "packageUpdate",
+        metadata: { executionId, packageName: params.packageName, version: params.version, targets: params.targets },
+      });
+
+      const taskName = "package";
+      const taskParams = {
+        action: "upgrade",
+        name: params.packageName,
+        ...(params.version && { version: params.version }),
+      };
+
+      const result = await this.boltService.executeTask(
+        taskName,
+        params.targets,
+        taskParams,
+        { timeout: 300000 },
+      );
+
+      const operationResult = {
+        id: executionId,
+        operation: "update" as const,
+        packageName: params.packageName,
+        targetNodes: params.targets,
+        status: result.status as "running" | "success" | "failed" | "partial",
+        startedAt: new Date(startTime).toISOString(),
+        completedAt: new Date().toISOString(),
+        results: result.results.map(r => ({
+          nodeId: r.nodeId,
+          status: r.status,
+          packageName: params.packageName,
+          version: params.version,
+          error: r.error,
+          duration: r.duration,
+        })),
+        error: result.error,
+      };
+
+      // Log to Node Journal (when available)
+      for (const nodeResult of result.results) {
+        await this.logPackageToJournal({
+          executionId,
+          nodeId: nodeResult.nodeId,
+          operation: 'update',
+          packageName: params.packageName,
+          version: params.version,
+          status: nodeResult.status,
+          error: nodeResult.error,
+        });
+      }
+
+      complete({ status: result.status });
+      return operationResult;
+    } catch (error) {
+      complete({ status: "error" });
+      throw error;
+    }
+  }
+
+  /**
+   * List installed packages on a node
+   * Implements SoftwareInstallationCapability.packageList
+   */
+  async packageList(params: {
+    nodeId: string;
+    filter?: string;
+  }): Promise<Array<{
+    name: string;
+    version?: string;
+    availableVersion?: string;
+    status: "installed" | "not_installed" | "upgradable" | "broken";
+    description?: string;
+    size?: string;
+    installedAt?: string;
+    repository?: string;
+    metadata?: Record<string, unknown>;
+  }>> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:packageList");
+
+    try {
+      this.logger.info("Listing packages via Bolt", {
+        component: "BoltPlugin",
+        operation: "packageList",
+        metadata: { nodeId: params.nodeId, filter: params.filter },
+      });
+
+      // Use Bolt task to list packages
+      const taskName = "package";
+      const taskParams = {
+        action: "status",
+        ...(params.filter && { name: params.filter }),
+      };
+
+      const result = await this.boltService.executeTask(
+        taskName,
+        [params.nodeId],
+        taskParams,
+        { timeout: 60000 },
+      );
+
+      // Parse package list from result
+      const packages: Array<{
+        name: string;
+        version?: string;
+        availableVersion?: string;
+        status: "installed" | "not_installed" | "upgradable" | "broken";
+        description?: string;
+        size?: string;
+        installedAt?: string;
+        repository?: string;
+        metadata?: Record<string, unknown>;
+      }> = [];
+
+      if (result.results[0]?.value) {
+        const packageData = result.results[0].value as Record<string, unknown>;
+        // Parse package data based on Bolt's package task output format
+        if (Array.isArray(packageData.packages)) {
+          packages.push(...packageData.packages);
+        }
+      }
+
+      complete({ status: "success" });
+      return packages;
+    } catch (error) {
+      complete({ status: "error" });
+      throw error;
+    }
+  }
+
+  /**
+   * Search available packages
+   * Implements SoftwareInstallationCapability.packageSearch
+   */
+  async packageSearch(params: {
+    query: string;
+    limit?: number;
+  }): Promise<Array<{
+    name: string;
+    version: string;
+    description?: string;
+    repository?: string;
+    size?: string;
+    metadata?: Record<string, unknown>;
+  }>> {
+    const complete = this.performanceMonitor.startTimer("bolt:v1:packageSearch");
+
+    try {
+      this.logger.info("Searching packages via Bolt", {
+        component: "BoltPlugin",
+        operation: "packageSearch",
+        metadata: { query: params.query, limit: params.limit },
+      });
+
+      // Note: Package search typically requires a target node to query the package manager
+      // This is a simplified implementation that returns an empty array
+      // In a real implementation, you would need to specify a target node
+      this.logger.warn("Package search not fully implemented - requires target node", {
+        component: "BoltPlugin",
+        operation: "packageSearch",
+      });
+
+      complete({ status: "success" });
+      return [];
+    } catch (error) {
+      complete({ status: "error" });
+      throw error;
+    }
+  }
+
+  // =========================================================================
+  // Journal Integration (Node Journal Service)
+  // =========================================================================
+
+  /**
+   * Log command execution to Node Journal (when available)
+   * @private
+   */
+  private async logCommandToJournal(params: {
+    executionId: string;
+    nodeId: string;
+    command: string;
+    status: 'success' | 'failed';
+    user?: string;
+    output?: { stdout?: string; stderr?: string; exitCode?: number };
+    error?: string;
+  }): Promise<void> {
+    try {
+      // TODO: Integrate with Node Journal service when implemented
+      // For now, log to standard logger
+      this.logger.info("Command execution journal entry", {
+        component: "BoltPlugin",
+        operation: "journalEntry",
+        entryType: "command_execution",
+        metadata: {
+          executionId: params.executionId,
+          nodeId: params.nodeId,
+          command: params.command,
+          status: params.status,
+          user: params.user,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      // When Node Journal is implemented, call:
+      // await this.nodeJournal.writeEntry({
+      //   nodeId: params.nodeId,
+      //   entryType: 'execution',
+      //   timestamp: new Date().toISOString(),
+      //   user: params.user,
+      //   action: 'command.execute',
+      //   details: {
+      //     executionId: params.executionId,
+      //     command: params.command,
+      //     status: params.status,
+      //     output: params.output,
+      //     error: params.error,
+      //   },
+      //   executionId: params.executionId,
+      //   status: params.status,
+      // });
+    } catch (error) {
+      this.logger.warn("Failed to write command execution to journal", {
+        component: "BoltPlugin",
+        operation: "logCommandToJournal",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Log task execution to Node Journal (when available)
+   * @private
+   */
+  private async logTaskToJournal(params: {
+    executionId: string;
+    nodeId: string;
+    taskName: string;
+    parameters?: Record<string, unknown>;
+    status: 'success' | 'failed';
+    user?: string;
+    error?: string;
+  }): Promise<void> {
+    try {
+      this.logger.info("Task execution journal entry", {
+        component: "BoltPlugin",
+        operation: "journalEntry",
+        entryType: "task_execution",
+        metadata: {
+          executionId: params.executionId,
+          nodeId: params.nodeId,
+          taskName: params.taskName,
+          parameters: params.parameters,
+          status: params.status,
+          user: params.user,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      // When Node Journal is implemented, call:
+      // await this.nodeJournal.writeEntry({
+      //   nodeId: params.nodeId,
+      //   entryType: 'execution',
+      //   timestamp: new Date().toISOString(),
+      //   user: params.user,
+      //   action: 'task.execute',
+      //   details: {
+      //     executionId: params.executionId,
+      //     taskName: params.taskName,
+      //     parameters: params.parameters,
+      //     status: params.status,
+      //     error: params.error,
+      //   },
+      //   executionId: params.executionId,
+      //   status: params.status,
+      // });
+    } catch (error) {
+      this.logger.warn("Failed to write task execution to journal", {
+        component: "BoltPlugin",
+        operation: "logTaskToJournal",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Log package installation to Node Journal (when available)
+   * @private
+   */
+  private async logPackageToJournal(params: {
+    executionId: string;
+    nodeId: string;
+    operation: 'install' | 'uninstall' | 'update';
+    packageName: string;
+    version?: string;
+    status: 'success' | 'failed';
+    user?: string;
+    error?: string;
+  }): Promise<void> {
+    try {
+      this.logger.info("Package operation journal entry", {
+        component: "BoltPlugin",
+        operation: "journalEntry",
+        entryType: "package_operation",
+        metadata: {
+          executionId: params.executionId,
+          nodeId: params.nodeId,
+          packageOperation: params.operation,
+          packageName: params.packageName,
+          version: params.version,
+          status: params.status,
+          user: params.user,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      // When Node Journal is implemented, call:
+      // await this.nodeJournal.writeEntry({
+      //   nodeId: params.nodeId,
+      //   entryType: 'package',
+      //   timestamp: new Date().toISOString(),
+      //   user: params.user,
+      //   action: `package.${params.operation}`,
+      //   details: {
+      //     executionId: params.executionId,
+      //     packageName: params.packageName,
+      //     version: params.version,
+      //     operation: params.operation,
+      //     status: params.status,
+      //     error: params.error,
+      //   },
+      //   executionId: params.executionId,
+      //   status: params.status,
+      // });
+    } catch (error) {
+      this.logger.warn("Failed to write package operation to journal", {
+        component: "BoltPlugin",
+        operation: "logPackageToJournal",
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

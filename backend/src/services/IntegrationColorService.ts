@@ -142,7 +142,7 @@ export class IntegrationColorService {
     const hexColorRegex = /^#[0-9A-F]{6}$/i;
 
     // Validate each color property
-    const colors: Array<[string, string]> = [
+    const colors: [string, string][] = [
       ['primary', colorConfig.primary],
       ['light', colorConfig.light],
       ['dark', colorConfig.dark],

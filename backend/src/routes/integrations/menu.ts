@@ -391,19 +391,8 @@ export function createMenuRouter(
           ),
         }));
 
-      // Legacy routes
-      const legacy: LegacyRoute[] = [
-        {
-          label: "Inventory",
-          path: "/inventory",
-          icon: "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2",
-        },
-        {
-          label: "Executions",
-          path: "/executions",
-          icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
-        },
-      ];
+      // Legacy routes - no longer used, all routes should be plugin-based
+      const legacy: LegacyRoute[] = [];
 
       const response: MenuResponse = {
         categories,

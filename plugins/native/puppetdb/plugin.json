@@ -16,37 +16,121 @@
   "frontendEntryPoint": "./frontend/index.ts",
   "capabilities": [
     {
-      "name": "nodes.list",
+      "name": "inventory.list",
       "category": "inventory",
-      "description": "List all nodes from PuppetDB",
+      "description": "List all nodes from PuppetDB (standardized interface)",
       "riskLevel": "read",
-      "requiredPermissions": ["puppetdb.nodes"]
+      "requiredPermissions": ["puppetdb.nodes", "inventory.read"]
     },
     {
-      "name": "facts.query",
-      "category": "info",
-      "description": "Query facts for nodes from PuppetDB",
+      "name": "inventory.get",
+      "category": "inventory",
+      "description": "Get specific node details (standardized interface)",
       "riskLevel": "read",
-      "requiredPermissions": ["puppetdb.facts"]
+      "requiredPermissions": ["puppetdb.nodes", "inventory.read"]
+    },
+    {
+      "name": "inventory.groups",
+      "category": "inventory",
+      "description": "List available groups (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.nodes", "inventory.read"]
+    },
+    {
+      "name": "inventory.filter",
+      "category": "inventory",
+      "description": "Filter nodes by criteria (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.nodes", "inventory.read"]
+    },
+    {
+      "name": "info.facts",
+      "category": "info",
+      "description": "Get facts for a node (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.facts", "facts.read"]
+    },
+    {
+      "name": "info.refresh",
+      "category": "info",
+      "description": "Force refresh facts (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.facts", "facts.read"]
     },
     {
       "name": "reports.list",
       "category": "info",
-      "description": "List Puppet reports from PuppetDB",
+      "description": "List available reports (standardized interface)",
       "riskLevel": "read",
       "requiredPermissions": ["puppetdb.reports"]
     },
     {
       "name": "reports.get",
       "category": "info",
-      "description": "Get a specific Puppet report",
+      "description": "Get specific report (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.reports"]
+    },
+    {
+      "name": "reports.query",
+      "category": "info",
+      "description": "Query reports with filters (standardized interface)",
       "riskLevel": "read",
       "requiredPermissions": ["puppetdb.reports"]
     },
     {
       "name": "events.list",
       "category": "info",
-      "description": "List Puppet run events from PuppetDB",
+      "description": "List events for a node (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.events"]
+    },
+    {
+      "name": "events.stream",
+      "category": "info",
+      "description": "Stream live events (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.events"]
+    },
+    {
+      "name": "events.query",
+      "category": "info",
+      "description": "Query events with filters (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.events"]
+    },
+    {
+      "name": "nodes.list",
+      "category": "inventory",
+      "description": "List all nodes from PuppetDB (legacy)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.nodes"]
+    },
+    {
+      "name": "facts.query",
+      "category": "info",
+      "description": "Query facts for nodes from PuppetDB (legacy)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.facts"]
+    },
+    {
+      "name": "reports.list",
+      "category": "info",
+      "description": "List Puppet reports from PuppetDB (legacy)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.reports"]
+    },
+    {
+      "name": "reports.get",
+      "category": "info",
+      "description": "Get a specific Puppet report (legacy)",
+      "riskLevel": "read",
+      "requiredPermissions": ["puppetdb.reports"]
+    },
+    {
+      "name": "events.list",
+      "category": "info",
+      "description": "List Puppet run events from PuppetDB (legacy)",
       "riskLevel": "read",
       "requiredPermissions": ["puppetdb.events"]
     },
@@ -114,6 +198,16 @@
       "requiredCapabilities": ["catalog.get"],
       "category": "info",
       "nodeScoped": true
+    },
+    {
+      "id": "puppetdb:node-detail-tabs",
+      "name": "PuppetDB Node Details",
+      "component": "frontend/NodeDetailTabs.svelte",
+      "slots": ["node-detail"],
+      "size": "large",
+      "requiredCapabilities": ["facts.query"],
+      "nodeScoped": true,
+      "priority": 5
     }
   ],
   "cliCommands": [

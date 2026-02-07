@@ -133,7 +133,7 @@ export function createV1NodesRouter(
                 };
 
                 // Query PuppetDB with PQL filter using the inventory.query capability
-                const pqlResult = await capabilityRegistry.executeCapability<Array<{ id: string }>>(
+                const pqlResult = await capabilityRegistry.executeCapability<{ id: string }[]>(
                   systemUser,
                   "inventory.query",
                   { pql: query.pql },
@@ -529,12 +529,12 @@ export function createV1NodesRouter(
         });
 
         // Get node data from all sources
-        const sources: Array<{
+        const sources: {
           plugin: string;
           hasData: boolean;
           lastUpdated?: string;
           dataPreview?: Record<string, unknown>;
-        }> = [];
+        }[] = [];
 
         if (integrationManager?.isInitialized()) {
           // Get all registered plugins and check if they have data for this node

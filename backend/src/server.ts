@@ -1,7 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import path from "path";
-import type { Database } from "sqlite3";
 import { ConfigService } from "./config/ConfigService";
 import { DatabaseService } from "./database/DatabaseService";
 import { ExecutionRepository } from "./database/ExecutionRepository";
@@ -28,7 +27,7 @@ import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
 import { expertModeMiddleware } from "./middleware/expertMode";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { LoggerService } from "./services/LoggerService";
-import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
+import type { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
 
 /**
  * Initialize and start the application
@@ -72,11 +71,9 @@ async function startServer(): Promise<Express> {
       operation: "startServer",
     });
 
-    // Initialize execution repository
-    // Note: ExecutionRepository still uses raw sqlite3 connection for backward compatibility
-    // This will be refactored in a future update to use the DatabaseAdapter interface
+    // Initialize execution repository with generic database adapter
     const executionRepository = new ExecutionRepository(
-      databaseService.getConnection() as Database,
+      databaseService.getAdapter(),
     );
 
     // Initialize command whitelist service

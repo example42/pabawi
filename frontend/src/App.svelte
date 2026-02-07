@@ -95,7 +95,7 @@
     }
   });
 
-  // Check if initial setup is required and initialize plugins on app load
+  // Check if initial setup is required on app load
   onMount(async () => {
     try {
       // Only check if not already on setup page
@@ -129,40 +129,9 @@
       console.warn('Could not check setup status:', err);
     }
 
-    // Initialize plugin loader to populate widget registry
-    try {
-      console.log('[App] Starting plugin initialization...');
-      const pluginLoader = getPluginLoader();
-      const { getWidgetRegistry } = await import('./lib/plugins');
-      const widgetRegistry = getWidgetRegistry();
-
-      console.log('[App] Loading plugins for widget registry...');
-      const loadedPlugins = await pluginLoader.loadAll();
-      console.log(`[App] Successfully loaded ${loadedPlugins.length} plugins:`,
-        loadedPlugins.map(p => p.info.metadata.name));
-
-      // Manually register plugins with widget registry
-      for (const plugin of loadedPlugins) {
-        console.log(`[App] Registering ${plugin.widgets.length} widgets from ${plugin.info.metadata.name}`);
-        widgetRegistry.registerPluginWidgets(plugin);
-      }
-
-      // Log widget count
-      const totalWidgets = loadedPlugins.reduce((sum, p) => sum + p.widgets.length, 0);
-      console.log(`[App] Total widgets loaded: ${totalWidgets}`);
-
-      // Verify widgets are in registry
-      const registryWidgetCount = widgetRegistry.widgetCount;
-      console.log(`[App] Widgets in registry: ${registryWidgetCount}`);
-
-      // Log widgets with dashboard slot
-      const dashboardWidgets = widgetRegistry.getWidgetsForSlot('dashboard');
-      console.log(`[App] Dashboard widgets in registry: ${dashboardWidgets.length}`,
-        dashboardWidgets.map(w => w.id));
-    } catch (err) {
-      console.error('[App] Failed to load plugins:', err);
-      // Don't block the app if plugin loading fails
-    }
+    // Plugin loading is now handled by DynamicNavigation's MenuBuilder initialization
+    // which loads plugins and registers widgets automatically
+    console.log('[App] Initialization complete - plugins will be loaded by MenuBuilder');
   });
 </script>
 

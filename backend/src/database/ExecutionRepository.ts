@@ -1,5 +1,5 @@
-import type sqlite3 from "sqlite3";
 import { randomUUID } from "crypto";
+import type { DatabaseAdapter } from "./interfaces/DatabaseInterface";
 
 /**
  * Database row type
@@ -107,12 +107,12 @@ export interface StatusCounts {
 }
 
 /**
- * Repository for managing execution records in SQLite
+ * Repository for managing execution records using generic database interface
  */
 export class ExecutionRepository {
-  private db: sqlite3.Database;
+  private db: DatabaseAdapter;
 
-  constructor(db: sqlite3.Database) {
+  constructor(db: DatabaseAdapter) {
     this.db = db;
   }
 
@@ -154,7 +154,7 @@ export class ExecutionRepository {
     ];
 
     try {
-      await this.run(sql, params);
+      await this.db.execute(sql, params);
       return id;
     } catch (error) {
       throw new Error(
@@ -210,7 +210,7 @@ export class ExecutionRepository {
     const sql = `UPDATE executions SET ${updateFields.join(", ")} WHERE id = ?`;
 
     try {
-      await this.run(sql, params);
+      await this.db.execute(sql, params);
     } catch (error) {
       // Provide detailed error information for debugging
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -234,7 +234,7 @@ export class ExecutionRepository {
     const sql = "SELECT * FROM executions WHERE id = ?";
 
     try {
-      const row = await this.get(sql, [id]);
+      const row = await this.db.queryOne<DbRow>(sql, [id]);
       return row ? this.mapRowToRecord(row) : null;
     } catch (error) {
       throw new Error(
@@ -292,7 +292,7 @@ export class ExecutionRepository {
     params.push(pagination.pageSize, offset);
 
     try {
-      const rows = await this.all(sql, params);
+      const rows = await this.db.query<DbRow>(sql, params);
       return rows.map((row) => this.mapRowToRecord(row));
     } catch (error) {
       throw new Error(
@@ -315,7 +315,7 @@ export class ExecutionRepository {
     `;
 
     try {
-      const row = await this.get(sql, [executionId]);
+      const row = await this.db.queryOne<DbRow>(sql, [executionId]);
       return row ? this.mapRowToRecord(row) : null;
     } catch (error) {
       throw new Error(
@@ -338,7 +338,7 @@ export class ExecutionRepository {
     `;
 
     try {
-      const rows = await this.all(sql, [originalExecutionId]);
+      const rows = await this.db.query<DbRow>(sql, [originalExecutionId]);
       return rows.map((row) => this.mapRowToRecord(row));
     } catch (error) {
       throw new Error(
@@ -391,7 +391,7 @@ export class ExecutionRepository {
     `;
 
     try {
-      const row = await this.get(sql, []);
+      const row = await this.db.queryOne<DbRow>(sql, []);
       return {
         total: row?.total ?? 0,
         running: row?.running ?? 0,
@@ -404,51 +404,6 @@ export class ExecutionRepository {
         `Failed to count executions by status: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
-  }
-
-  /**
-   * Execute SQL statement with parameters (INSERT, UPDATE, DELETE)
-   */
-  private run(sql: string, params: unknown[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  /**
-   * Get single row from database
-   */
-  private get(sql: string, params: unknown[]): Promise<DbRow | undefined> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row: DbRow | undefined) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
-  }
-
-  /**
-   * Get all rows from database
-   */
-  private all(sql: string, params: unknown[]): Promise<DbRow[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows as DbRow[]);
-        }
-      });
-    });
   }
 
   /**

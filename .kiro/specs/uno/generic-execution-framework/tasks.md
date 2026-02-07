@@ -18,7 +18,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
 
 **Goal:** Create TypeScript interfaces for the 5 plugin capability types that all execution plugins will implement
 
-- [ ] 1. Create standardized capability type interfaces
+- [x] 1. Create standardized capability type interfaces
   - Create `backend/src/integrations/capability-types/` directory
   - Define `InventoryCapability` interface in `inventory.ts`
   - Define `FactsCapability` interface in `facts.ts`
@@ -28,7 +28,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Export all interfaces from `index.ts`
   - _Requirements: 1.1, 3.1, 4.1, 5.1_
 
-- [ ] 1.1 Define Inventory capability interface
+- [x] 1.1 Define Inventory capability interface
   - `inventory.list` - List all nodes from this source
   - `inventory.get` - Get specific node details
   - `inventory.groups` - List available groups
@@ -36,14 +36,14 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Include Zod schemas for validation
   - _Requirements: 3.1, 3.2, 3.3_
 
-- [ ] 1.2 Define Facts capability interface
+- [x] 1.2 Define Facts capability interface
   - `info.facts` - Get facts for a node
   - `info.refresh` - Force refresh facts (bypass cache)
   - Include fact provider priority system
   - Include Zod schemas for validation
   - _Requirements: 4.1, 4.5, 4.8_
 
-- [ ] 1.3 Define Remote Execution capability interface
+- [x] 1.3 Define Remote Execution capability interface
   - `command.execute` - Execute shell command on targets
   - `task.execute` - Execute task/playbook on targets
   - `script.execute` - Execute script on targets
@@ -52,21 +52,21 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Include Zod schemas for validation
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 1.4 Define Reports capability interface
+- [x] 1.4 Define Reports capability interface
   - `reports.list` - List available reports
   - `reports.get` - Get specific report
   - `reports.query` - Query reports with filters
   - Include Zod schemas for validation
   - _Requirements: 5.1, 5.5, 5.8_
 
-- [ ] 1.5 Define Events capability interface
+- [x] 1.5 Define Events capability interface
   - `events.list` - List events for a node
   - `events.stream` - Stream live events
   - `events.query` - Query events with filters
   - Include Zod schemas for validation
   - _Requirements: 5.1, 5.4, 11.1_
 
-- [ ] 1.6 Define Provisioning capability interface (future)
+- [x] 1.6 Define Provisioning capability interface (future)
   - `provision.create` - Provision new infrastructure/nodes
   - `provision.status` - Get provisioning status
   - `provision.list` - List provisioned resources
@@ -75,7 +75,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Include Zod schemas for validation
   - _Requirements: 11.4_
 
-- [ ] 1.7 Define Software Installation capability interface (future)
+- [x] 1.7 Define Software Installation capability interface (future)
   - `package.install` - Install software packages
   - `package.uninstall` - Uninstall software packages
   - `package.update` - Update software packages
@@ -84,7 +84,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Include Zod schemas for validation
   - _Requirements: 11.3_
 
-- [ ] 1.8 Define Deployment capability interface (future)
+- [x] 1.8 Define Deployment capability interface (future)
   - `deploy.execute` - Deploy application/service
   - `deploy.status` - Get deployment status
   - `deploy.rollback` - Rollback deployment
@@ -92,7 +92,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Include Zod schemas for validation
   - _Requirements: 2.1_
 
-- [ ] 1.9 Define Alert capability interface (future)
+- [x] 1.9 Define Alert capability interface (future)
   - `alert.list` - List alerts for nodes/services
   - `alert.get` - Get specific alert details
   - `alert.acknowledge` - Acknowledge an alert
@@ -105,34 +105,34 @@ The framework will provide **shared capability interfaces** that plugins impleme
 
 **Goal:** Get Bolt plugin working end-to-end using the standardized interfaces
 
-- [ ] 2. Create Bolt plugin structure
+- [x] 2. Create Bolt plugin structure
   - Create `plugins/native/bolt/backend/` directory
   - Create `plugins/native/bolt/frontend/` directory
   - Create `plugins/native/bolt/plugin.json` manifest
   - _Requirements: 6.1, 6.2_
 
-- [ ] 2.1 Implement BoltPlugin class
+- [x] 2.1 Implement BoltPlugin class
   - Extend BasePlugin
   - Define metadata (name, version, integrationType: RemoteExecution)
   - Implement `performInitialization()` - validate Bolt installation
   - Implement `performHealthCheck()` - check Bolt connectivity
   - _Requirements: 6.1, 6.7, 10.4_
 
-- [ ] 2.2 Implement Bolt inventory capabilities
+- [x] 2.2 Implement Bolt inventory capabilities
   - Implement `inventory.list` capability
   - Use Bolt inventory command to list nodes
   - Map Bolt inventory format to standard Node interface
   - Register capability with CapabilityRegistry
   - _Requirements: 3.1, 3.10_
 
-- [ ] 2.3 Implement Bolt facts capabilities
+- [x] 2.3 Implement Bolt facts capabilities
   - Implement `info.facts` capability
   - Use Bolt facts command to collect node facts
   - Map Bolt facts format to standard Facts interface
   - Register capability with CapabilityRegistry
   - _Requirements: 4.1_
 
-- [ ] 2.4 Implement Bolt command execution capability
+- [x] 2.4 Implement Bolt command execution capability
   - Implement `command.execute` capability
   - Integrate with ExecutionQueue for concurrency control
   - Integrate with StreamingExecutionManager for output streaming
@@ -142,7 +142,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Register capability with CapabilityRegistry
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 10.1_
 
-- [ ] 2.5 Implement Bolt task execution capability
+- [x] 2.5 Implement Bolt task execution capability
   - Implement `task.execute` capability
   - Use Bolt task run command
   - Support task parameters
@@ -150,14 +150,14 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Register capability with CapabilityRegistry
   - _Requirements: 2.1, 2.2, 2.3, 2.4_
 
-- [ ] 2.6 Create Bolt plugin manifest
+- [x] 2.6 Create Bolt plugin manifest
   - Define plugin.json with metadata
   - List all capabilities
   - Define default permissions
   - Specify frontend entry point (if widgets exist)
   - _Requirements: 6.2, 6.3_
 
-- [ ] 2.7 Test Bolt plugin end-to-end
+- [x] 2.7 Test Bolt plugin end-to-end
   - Load plugin via PluginLoader
   - Verify capabilities registered
   - Test inventory.list via API
@@ -172,21 +172,21 @@ The framework will provide **shared capability interfaces** that plugins impleme
 
 **Goal:** Create optional helper services that plugins can use for common patterns
 
-- [ ] 3. Create InventoryCache helper service
+- [x] 3. Create InventoryCache helper service
   - Implement in-memory cache with TTL
   - Support cache invalidation
   - Support refresh on expiry
   - Plugins can opt-in to use this for caching
   - _Requirements: 3.5, 3.6_
 
-- [ ] 3.1 Create FactsCache helper service
+- [x] 3.1 Create FactsCache helper service
   - Implement in-memory cache with configurable TTL
   - Support force refresh
   - Support per-node caching
   - Plugins can opt-in to use this for caching
   - _Requirements: 4.2, 4.3, 4.4_
 
-- [ ] 3.2 Create ExecutionLogger helper service
+- [x] 3.2 Create ExecutionLogger helper service
   - Structured logging for executions
   - Integration with existing LoggerService
   - Execution history storage
@@ -194,7 +194,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Plugins can opt-in to use this for logging
   - _Requirements: 5.1, 5.2, 5.3, 5.6, 5.7_
 
-- [ ] 3.3 Create ErrorHandler helper service
+- [x] 3.3 Create ErrorHandler helper service
   - Error categorization (ValidationError, TimeoutError, etc.)
   - Structured error responses
   - Retry logic with backoff strategies
@@ -205,7 +205,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
 
 **Goal:** Implement PuppetDB, Puppetserver, and other plugins using the standardized interfaces
 
-- [ ] 4. Implement PuppetDB plugin
+- [x] 4. Implement PuppetDB plugin
   - Create plugin structure
   - Implement inventory capabilities (nodes from PuppetDB)
   - Implement facts capabilities (facts from PuppetDB)
@@ -214,7 +214,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Register all capabilities
   - _Requirements: 3.1, 4.1, 5.1_
 
-- [ ] 4.1 Implement Puppetserver plugin
+- [x] 4.1 Implement Puppetserver plugin
   - Create plugin structure
   - Implement catalog capabilities
   - Implement environment capabilities
@@ -222,14 +222,14 @@ The framework will provide **shared capability interfaces** that plugins impleme
   - Register all capabilities
   - _Requirements: 5.1_
 
-- [ ] 4.2 Implement SSH plugin (future)
+- [x] 4.2 Implement SSH plugin (future)
   - Create plugin structure
   - Implement remote execution capabilities
   - Implement inventory capabilities (from SSH config)
   - Register all capabilities
   - _Requirements: 1.1, 3.1_
 
-- [ ] 4.3 Implement Ansible plugin (future)
+- [x] 4.3 Implement Ansible plugin (future)
   - Create plugin structure
   - Implement playbook execution capabilities
   - Implement inventory capabilities (from Ansible inventory)
@@ -269,7 +269,7 @@ The framework will provide **shared capability interfaces** that plugins impleme
 
 **Goal:** Integrate with Node Journal when implemented
 
-- [ ] 5. Implement Node Journal integration
+- [x] 5. Implement Node Journal integration
   - Create JournalEntry interface
   - Implement journal writing for executions
   - Implement journal writing for package installations
@@ -282,25 +282,100 @@ The framework will provide **shared capability interfaces** that plugins impleme
 
 **Goal:** Create frontend widgets for each plugin
 
-- [ ] 6. Create Bolt frontend widgets
+- [x] 6. Create Bolt frontend widgets
   - Create CommandExecutor widget for dashboard
   - Create InventoryViewer widget for inventory panel
   - Create TaskRunner widget for dashboard
   - Register widgets in plugin.json
   - _Requirements: 6.1_
 
-- [ ] 6.1 Create PuppetDB frontend widgets
+- [x] 6.1 Create PuppetDB frontend widgets
   - Create ReportsViewer widget
   - Create EventsViewer widget
   - Create FactsViewer widget
   - Register widgets in plugin.json
   - _Requirements: 6.1_
 
-### Phase 7: CLI Generation (Future)
+### Phase 7: Plugin Finalization (Bolt & PuppetDB Standards)
+
+**Goal:** Finalize Bolt and PuppetDB plugins to set the standard for all future plugins
+
+- [x] 7. Enhance Bolt plugin home page
+  - Create PluginHomePage.svelte with tabbed interface
+  - Add "Inventory" tab showing all nodes (global view)
+  - Add "Tasks" tab showing available tasks (global view)
+  - Add "Executions" tab showing execution history (global view)
+  - Add "Packages" tab for package management (global view)
+  - Register home page route in plugin.json
+  - _Requirements: 6.1_
+
+- [x] 7.1 Enhance Bolt node detail tabs
+  - Create NodeDetailTabs.svelte component
+  - Add "Execute Command" tab (node-specific)
+  - Add "Run Task" tab (node-specific)
+  - Add "Manage Packages" tab (node-specific)
+  - Add "Facts" tab (node-specific)
+  - Register node tabs in plugin.json
+  - _Requirements: 6.1_
+
+- [x] 7.2 Add Bolt package management capability
+  - Implement `package.install` capability
+  - Implement `package.uninstall` capability
+  - Implement `package.update` capability
+  - Implement `package.list` capability
+  - Create PackageManager.svelte widget
+  - Register capabilities with CapabilityRegistry
+  - _Requirements: 11.3_
+
+- [x] 7.3 Add Bolt journal integration
+  - Integrate with Node Journal service (when available)
+  - Log command executions to journal
+  - Log task executions to journal
+  - Log package installations to journal
+  - Include execution ID, user, timestamp, status
+  - _Requirements: 11.1, 11.2, 11.3_
+
+- [x] 7.4 Enhance PuppetDB plugin home page
+  - Create PluginHomePage.svelte with tabbed interface
+  - Add "Nodes" tab showing all nodes (global view)
+  - Add "Reports" tab showing recent reports (global view)
+  - Add "Events" tab showing recent events (global view)
+  - Add "Resources" tab showing resource types (global view)
+  - Add "Query" tab for PQL queries (global view)
+  - Register home page route in plugin.json
+  - _Requirements: 6.1_
+
+- [x] 7.5 Enhance PuppetDB node detail tabs
+  - Create NodeDetailTabs.svelte component
+  - Add "Facts" tab (node-specific)
+  - Add "Reports" tab (node-specific)
+  - Add "Events" tab (node-specific)
+  - Add "Catalog" tab (node-specific)
+  - Add "Resources" tab showing node resources (node-specific)
+  - Register node tabs in plugin.json
+  - _Requirements: 6.1_
+
+- [x] 7.6 Add PuppetDB resource types capability
+  - Implement `resources.types` capability to list all resource types
+  - Implement `resources.list` capability to list resources by type
+  - Implement `resources.get` capability to get specific resource details
+  - Create ResourceTypesViewer.svelte widget
+  - Register capabilities with CapabilityRegistry
+  - _Requirements: 5.1_
+
+- [x] 7.7 Enhance home page summary tiles
+  - Update Bolt HomeWidget to show color-coded health status
+  - Update PuppetDB HomeWidget to show color-coded health status
+  - Add metrics: node count, execution count, success rate
+  - Add quick action buttons
+  - Link to plugin home pages
+  - _Requirements: 6.1_
+
+### Phase 8: CLI Generation (Future)
 
 **Goal:** Auto-generate CLI commands from capability schemas
 
-- [ ] 7. Implement CLI generator
+- [ ] 8. Implement CLI generator
   - Create CLIGenerator class
   - Generate commands from capability schemas
   - Generate help documentation

@@ -130,13 +130,6 @@ const DEFAULT_SECTIONS: MenuSection[] = [
     showTitle: false, // Don't show title since we have category groups
   },
   {
-    id: "legacy",
-    title: "Legacy",
-    items: [],
-    priority: 300,
-    showTitle: true,
-  },
-  {
     id: "admin",
     title: "Administration",
     items: [],
@@ -236,6 +229,40 @@ class MenuBuilder {
   // ===========================================================================
 
   /**
+   * Load plugins and register them with widget registry
+   */
+  private async loadPlugins(): Promise<void> {
+    try {
+      // Dynamically import plugin loader and widget registry
+      const { getPluginLoader, getWidgetRegistry } = await import("../plugins");
+
+      const pluginLoader = getPluginLoader();
+      const widgetRegistry = getWidgetRegistry();
+
+      this.log("debug", "Loading plugins for widget registry...");
+      const loadedPlugins = await pluginLoader.loadAll();
+      this.log("info", `Successfully loaded ${loadedPlugins.length} plugins`);
+
+      // Register plugins with widget registry
+      for (const plugin of loadedPlugins) {
+        this.log("debug", `Registering ${plugin.widgets.length} widgets from ${plugin.info.metadata.name}`);
+        widgetRegistry.registerPluginWidgets(plugin);
+      }
+
+      // Log widget count
+      const totalWidgets = loadedPlugins.reduce((sum, p) => sum + p.widgets.length, 0);
+      this.log("info", `Total widgets loaded: ${totalWidgets}`);
+
+      // Verify widgets are in registry
+      const registryWidgetCount = widgetRegistry.widgetCount;
+      this.log("debug", `Widgets in registry: ${registryWidgetCount}`);
+    } catch (error) {
+      this.log("error", `Failed to load plugins: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
+  }
+
+  /**
    * Fetch integration menu data from backend API
    */
   private async fetchIntegrationMenu(): Promise<void> {
@@ -275,28 +302,8 @@ class MenuBuilder {
         }
       }
 
-      // Add legacy routes as custom contributions
-      for (const legacyRoute of response.legacy) {
-        const legacyId = legacyRoute.path.split("/").filter(Boolean).join("-") || "legacy";
-        this.customContributions.set(`legacy-${legacyId}`, {
-          pluginName: `legacy-${legacyId}`,
-          displayName: legacyRoute.label,
-          integrationType: "Info" as IntegrationType, // Placeholder type
-          items: [
-            {
-              id: `legacy-${legacyId}`,
-              type: "link",
-              label: legacyRoute.label,
-              path: legacyRoute.path,
-              icon: legacyRoute.icon,
-              priority: 800, // Between core (1000) and categories (500)
-            } as LinkMenuItem,
-          ],
-          priority: 800,
-        });
-      }
-
-      this.log("info", `Loaded ${response.categories.length} categories, ${response.legacy.length} legacy routes`);
+      // Legacy routes are no longer added - they should be migrated to plugins
+      this.log("info", `Loaded ${response.categories.length} categories from integration menu`);
     } catch (error) {
       this.log("error", `Failed to fetch integration menu: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
@@ -304,23 +311,29 @@ class MenuBuilder {
   }
 
   /**
-   * Initialize the menu builder, fetch integration menu data, and build menu
+   * Initialize the menu builder, load plugins, fetch integration menu data, and build menu
    *
    * This method:
-   * 1. Fetches dynamic integration menu from backend
-   * 2. Builds menu with categories, integrations, legacy, and admin sections
+   * 1. Loads plugins and registers widgets with widget registry
+   * 2. Fetches dynamic integration menu from backend
+   * 3. Builds menu with categories, integrations, and admin sections
    */
   async initialize(): Promise<void> {
     this.log("debug", "Initializing menu builder");
     this.isBuilding = true;
 
     try {
-      // Fetch integration menu data from backend
+      // Step 1: Load plugins and register widgets
+      this.log("debug", "Loading plugins and registering widgets");
+      await this.loadPlugins();
+      this.log("info", "Plugins loaded and widgets registered");
+
+      // Step 2: Fetch integration menu data from backend
       this.log("debug", "Fetching integration menu from backend");
       await this.fetchIntegrationMenu();
       this.log("info", "Integration menu data loaded");
 
-      // Build menu with fetched data
+      // Step 3: Build menu with fetched data
       this.rebuild();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to initialize menu";
@@ -581,45 +594,6 @@ class MenuBuilder {
     const integrationsSectionIndex = sections.findIndex((s) => s.id === "integrations");
     if (integrationsSectionIndex !== -1) {
       sections.splice(integrationsSectionIndex, 1);
-    }
-
-    // Add legacy items as a single dropdown group in the core section
-    if (coreSection) {
-      const legacyItems: MenuItem[] = [];
-      for (const [key, contrib] of this.customContributions) {
-        if (key.startsWith("legacy-")) {
-          const filteredItems = this.filterItemsByPermission(
-            contrib.items,
-            authStore
-          );
-          legacyItems.push(...filteredItems);
-        }
-      }
-
-      // Sort legacy items by priority
-      if (this.config.sortByPriority) {
-        legacyItems.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-      }
-
-      // Create group dropdown for legacy items
-      if (legacyItems.length > 0) {
-        const legacyGroup: GroupMenuItem = {
-          id: "legacy-group",
-          type: "group",
-          label: "LEGACY",
-          icon: "M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z",
-          children: legacyItems,
-          collapsed: false,
-          priority: 300,
-        };
-        coreSection.items.push(legacyGroup);
-      }
-    }
-
-    // Remove the legacy section since we're adding it to core
-    const legacySectionIndex = sections.findIndex((s) => s.id === "legacy");
-    if (legacySectionIndex !== -1) {
-      sections.splice(legacySectionIndex, 1);
     }
 
     // Add admin items as a single dropdown group in the core section

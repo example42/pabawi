@@ -1,0 +1,94 @@
+{
+  "$schema": "../../plugin-manifest.schema.json",
+  "name": "ssh",
+  "version": "1.0.0",
+  "author": "Pabawi Team",
+  "description": "SSH integration for remote command execution and inventory management",
+  "integrationType": "RemoteExecution",
+  "integrationTypes": ["RemoteExecution", "InventorySource"],
+  "homepage": "https://www.openssh.com/",
+  "color": "#4A90E2",
+  "icon": "terminal",
+  "tags": ["ssh", "remote-execution", "commands", "inventory"],
+  "minPabawiVersion": "1.0.0",
+  "dependencies": [],
+  "entryPoint": "./backend/index.ts",
+  "capabilities": [
+    {
+      "name": "command.execute",
+      "category": "command",
+      "description": "Execute shell commands on target nodes via SSH (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["ssh.command.execute"]
+    },
+    {
+      "name": "script.execute",
+      "category": "command",
+      "description": "Execute scripts on target nodes via SSH (standardized interface)",
+      "riskLevel": "execute",
+      "requiredPermissions": ["ssh.command.execute"]
+    },
+    {
+      "name": "inventory.list",
+      "category": "inventory",
+      "description": "List all nodes from SSH config (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ssh.inventory.list"]
+    },
+    {
+      "name": "inventory.get",
+      "category": "inventory",
+      "description": "Get specific node details from SSH config (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ssh.inventory.list"]
+    },
+    {
+      "name": "inventory.groups",
+      "category": "inventory",
+      "description": "List available groups from SSH config (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ssh.inventory.list"]
+    },
+    {
+      "name": "inventory.filter",
+      "category": "inventory",
+      "description": "Filter nodes by criteria (standardized interface)",
+      "riskLevel": "read",
+      "requiredPermissions": ["ssh.inventory.list"]
+    }
+  ],
+  "widgets": [],
+  "cliCommands": [
+    {
+      "name": "ssh",
+      "actions": [
+        {
+          "name": "run",
+          "capability": "command.execute",
+          "description": "Run a command on target nodes via SSH",
+          "aliases": ["cmd", "exec"],
+          "examples": [
+            "pab ssh run 'hostname' --targets node1.example.com",
+            "pab ssh run 'uptime' --targets all"
+          ]
+        },
+        {
+          "name": "inventory",
+          "capability": "inventory.list",
+          "description": "List nodes from SSH config",
+          "examples": ["pab ssh inventory", "pab ssh inventory --format json"]
+        }
+      ]
+    }
+  ],
+  "defaultPermissions": {
+    "command.execute": ["admin", "operator"],
+    "script.execute": ["admin", "operator"],
+    "inventory.list": ["admin", "operator", "viewer"],
+    "inventory.get": ["admin", "operator", "viewer"],
+    "inventory.groups": ["admin", "operator", "viewer"],
+    "inventory.filter": ["admin", "operator", "viewer"],
+    "ssh.command.execute": ["admin", "operator"],
+    "ssh.inventory.list": ["admin", "operator", "viewer"]
+  }
+}

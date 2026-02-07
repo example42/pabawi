@@ -208,9 +208,9 @@ export function createCommandsRouterV1(
               };
 
               await executionRepository.update(executionId, {
-                status: execResult.status as ExecutionStatus,
+                status: execResult.status,
                 completedAt: execResult.completedAt ?? new Date().toISOString(),
-                results: execResult.results as NodeResult[],
+                results: execResult.results,
                 error: execResult.error,
                 command: execResult.command,
                 stdout: expertMode ? execResult.stdout : undefined,
