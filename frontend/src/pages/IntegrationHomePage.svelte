@@ -21,6 +21,10 @@
   import WidgetSlot from '../lib/plugins/WidgetSlot.svelte';
 
   // Types
+  interface Props {
+    params?: Record<string, string>;
+  }
+
   interface PluginInfo {
     metadata: {
       name: string;
@@ -53,8 +57,11 @@
     priority: number;
   }
 
+  // Receive params as component prop (passed by Router)
+  let { params }: Props = $props();
+
   // Get plugin name from route params
-  const pluginName = $derived(router.params.integrationName as string);
+  const pluginName = $derived(params?.integrationName || '');
 
   // Get user capabilities for widget filtering
   const userCapabilities = $derived(auth.permissions?.allowed ?? []);
@@ -63,7 +70,6 @@
   let pluginInfo = $state<PluginInfo | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let activeTab = $state<'overview' | 'capabilities' | 'widgets'>('overview');
 
   /**
    * Load plugin info when page mounts
@@ -94,23 +100,7 @@
     void loadPluginInfo();
   }
 
-  /**
-   * Get risk level color for capability badges
-   */
-  function getRiskLevelColor(level: string): string {
-    switch (level) {
-      case 'read':
-        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
-      case 'write':
-        return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400';
-      case 'execute':
-        return 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400';
-      case 'admin':
-        return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
-      default:
-        return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400';
-    }
-  }
+
 
   // Load plugin info on mount
   onMount(() => {
@@ -214,177 +204,32 @@
         </div>
       </div>
 
-      <!-- Tabs -->
-      <div class="mb-6 rounded-lg bg-white shadow dark:bg-gray-800">
-        <div class="border-b border-gray-200 dark:border-gray-700">
-          <nav class="flex -mb-px">
-            <button
-              type="button"
-              onclick={() => activeTab = 'overview'}
-              class="flex-1 border-b-2 py-3 text-center text-sm font-medium transition-colors {activeTab === 'overview' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+      <!-- Plugin Content -->
+      <div class="space-y-6">
+        {#if pluginInfo.metadata.homepage}
+          <div class="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Homepage</h3>
+            <a
+              href={pluginInfo.metadata.homepage}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-1 block text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
             >
-              Overview
-            </button>
-            <button
-              type="button"
-              onclick={() => activeTab = 'capabilities'}
-              class="flex-1 border-b-2 py-3 text-center text-sm font-medium transition-colors {activeTab === 'capabilities' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
-            >
-              Capabilities ({pluginInfo.capabilities.length})
-            </button>
-            <button
-              type="button"
-              onclick={() => activeTab = 'widgets'}
-              class="flex-1 border-b-2 py-3 text-center text-sm font-medium transition-colors {activeTab === 'widgets' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
-            >
-              Widgets ({pluginInfo.widgets.length})
-            </button>
-          </nav>
-        </div>
+              {pluginInfo.metadata.homepage} ↗
+            </a>
+          </div>
+        {/if}
 
-        <!-- Tab Content -->
-        <div class="p-6">
-          {#if activeTab === 'overview'}
-            <!-- Overview Tab -->
-            <div class="space-y-6">
-              <!-- Stats -->
-              <div class="grid grid-cols-3 gap-4">
-                <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
-                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{pluginInfo.capabilities.length}</div>
-                  <div class="text-sm text-gray-500 dark:text-gray-400">Capabilities</div>
-                </div>
-                <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
-                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{pluginInfo.widgets.length}</div>
-                  <div class="text-sm text-gray-500 dark:text-gray-400">Widgets</div>
-                </div>
-                <div class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900">
-                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{pluginInfo.priority}</div>
-                  <div class="text-sm text-gray-500 dark:text-gray-400">Priority</div>
-                </div>
-              </div>
-
-              {#if pluginInfo.metadata.homepage}
-                <div>
-                  <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Homepage</h3>
-                  <a
-                    href={pluginInfo.metadata.homepage}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="mt-1 block text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                  >
-                    {pluginInfo.metadata.homepage} ↗
-                  </a>
-                </div>
-              {/if}
-
-              <!-- Plugin-specific widgets (standalone-page slot) -->
-              <div>
-                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase mb-4">Plugin Content</h3>
-                <WidgetSlot
-                  slot="standalone-page"
-                  layout="stack"
-                  context={{ pluginName, pluginInfo }}
-                  {userCapabilities}
-                  showEmptyState={true}
-                  emptyMessage="No content widgets available for this plugin."
-                  showLoadingStates={true}
-                />
-              </div>
-            </div>
-          {:else if activeTab === 'capabilities'}
-            <!-- Capabilities Tab -->
-            <div class="space-y-4">
-              {#if pluginInfo.capabilities.length === 0}
-                <p class="text-center text-gray-500 dark:text-gray-400 py-8">
-                  No capabilities registered for this plugin.
-                </p>
-              {:else}
-                {#each pluginInfo.capabilities as capability}
-                  <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-                    <div class="flex items-start justify-between">
-                      <div class="flex-1">
-                        <h4 class="font-medium text-gray-900 dark:text-white">
-                          {capability.name}
-                        </h4>
-                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                          {capability.description}
-                        </p>
-                        <div class="mt-2 flex items-center gap-2">
-                          <span class="text-xs text-gray-500 dark:text-gray-400">Category:</span>
-                          <span class="text-xs text-gray-700 dark:text-gray-300">{capability.category}</span>
-                        </div>
-                        {#if capability.requiredPermissions.length > 0}
-                          <div class="mt-2">
-                            <span class="text-xs text-gray-500 dark:text-gray-400">Required Permissions:</span>
-                            <div class="mt-1 flex flex-wrap gap-1">
-                              {#each capability.requiredPermissions as perm}
-                                <span class="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                                  {perm}
-                                </span>
-                              {/each}
-                            </div>
-                          </div>
-                        {/if}
-                      </div>
-                      <span class="ml-4 rounded-full px-2.5 py-0.5 text-xs font-medium {getRiskLevelColor(capability.riskLevel)}">
-                        {capability.riskLevel}
-                      </span>
-                    </div>
-                  </div>
-                {/each}
-              {/if}
-            </div>
-          {:else if activeTab === 'widgets'}
-            <!-- Widgets Tab -->
-            <div class="space-y-4">
-              {#if pluginInfo.widgets.length === 0}
-                <p class="text-center text-gray-500 dark:text-gray-400 py-8">
-                  No widgets registered for this plugin.
-                </p>
-              {:else}
-                {#each pluginInfo.widgets as widget}
-                  <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-                    <div class="flex items-start justify-between">
-                      <div class="flex-1">
-                        <h4 class="font-medium text-gray-900 dark:text-white">
-                          {widget.name}
-                        </h4>
-                        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          ID: {widget.id}
-                        </p>
-                        <div class="mt-2">
-                          <span class="text-xs text-gray-500 dark:text-gray-400">Slots:</span>
-                          <div class="mt-1 flex flex-wrap gap-1">
-                            {#each widget.slots as slot}
-                              <span class="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                                {slot}
-                              </span>
-                            {/each}
-                          </div>
-                        </div>
-                        {#if widget.requiredCapabilities.length > 0}
-                          <div class="mt-2">
-                            <span class="text-xs text-gray-500 dark:text-gray-400">Required Capabilities:</span>
-                            <div class="mt-1 flex flex-wrap gap-1">
-                              {#each widget.requiredCapabilities as cap}
-                                <span class="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                                  {cap}
-                                </span>
-                              {/each}
-                            </div>
-                          </div>
-                        {/if}
-                      </div>
-                      <span class="ml-4 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-gray-700 dark:text-gray-300">
-                        {widget.size}
-                      </span>
-                    </div>
-                  </div>
-                {/each}
-              {/if}
-            </div>
-          {/if}
-        </div>
+        <!-- Plugin-specific widgets (standalone-page slot) -->
+        <WidgetSlot
+          slot="standalone-page"
+          layout="stack"
+          context={{ pluginName, pluginInfo }}
+          {userCapabilities}
+          showEmptyState={true}
+          emptyMessage="No content widgets available for this plugin."
+          showLoadingStates={true}
+        />
       </div>
     </div>
   {/if}

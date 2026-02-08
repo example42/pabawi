@@ -22,6 +22,7 @@
   import { router, navigate } from './lib/router.svelte';
   import { get } from './lib/api';
   import { auth } from './lib/auth.svelte';
+  import { registerAllPluginWidgets } from './widgets/registerPluginWidgets';
 
   interface SetupStatus {
     setupRequired: boolean;
@@ -96,6 +97,13 @@
 
   // Check if initial setup is required on app load
   onMount(async () => {
+    // Register all plugin widgets first
+    try {
+      await registerAllPluginWidgets();
+    } catch (err) {
+      console.error('[App] Failed to register plugin widgets:', err);
+    }
+
     try {
       // Only check if not already on setup or login page
       if (router.currentPath !== '/setup' && router.currentPath !== '/login') {
