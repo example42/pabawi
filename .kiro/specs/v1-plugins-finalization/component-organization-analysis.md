@@ -5,23 +5,53 @@
 This document analyzes the current organization of frontend components in the Pabawi system, identifying which components are plugin-specific vs shared framework components. This analysis supports Requirement 5.5 and provides guidance for potential future cleanup.
 
 **Analysis Date:** February 9, 2026  
-**Spec:** v1-plugins-finalization
+**Spec:** v1-plugins-finalization  
+**Verification Date:** February 9, 2026
 
 ---
 
 ## Summary
 
-### Current State
+### Current State (Verified)
 
-- **Total components in `frontend/src/components/`:** 62 files (including tests)
-- **Plugin-specific components still in shared directory:** 28 components
-- **True framework components:** 15 components
-- **Test files:** 5 files
-- **Documentation/Example files:** 3 files
+- **Total Svelte components in `frontend/src/components/`:** 46 files
+- **Total files (including tests, examples, docs):** 57 files
+- **Plugin-specific components still in shared directory:** 28 components (verified)
+- **True framework components:** 15 components (verified)
+- **Test files:** 5 files (verified)
+- **Documentation/Example files:** 6 files (verified)
+
+### Verification Notes
+
+✅ **Setup Guides Migration:** All 6 setup guides have been successfully migrated to plugin directories:
+
+- `plugins/native/ansible/frontend/SetupGuide.svelte`
+- `plugins/native/bolt/frontend/SetupGuide.svelte`
+- `plugins/native/hiera/frontend/SetupGuide.svelte`
+- `plugins/native/puppetdb/frontend/SetupGuide.svelte`
+- `plugins/native/puppetserver/frontend/SetupGuide.svelte`
+- `plugins/native/ssh/frontend/SetupGuide.svelte`
+
+⚠️ **Duplicate Components Found:** Some components exist in BOTH shared and plugin directories with DIFFERENT implementations:
+
+- `CatalogViewer.svelte` - Different in shared vs puppetdb/frontend
+- `EventsViewer.svelte` - Different in shared vs puppetdb/frontend
+- `ReportsViewer.svelte` - Only in puppetdb/frontend (no shared version with this exact name)
+
+This indicates the shared versions are legacy 0.5 components still used by NodeDetailPage, while plugin versions are newer v1 implementations.
 
 ### Migration Status
 
-Most plugin-specific components have been successfully migrated to their respective plugin directories in previous work. However, several plugin-specific components remain in the shared `frontend/src/components/` directory.
+✅ **Setup guides successfully migrated** - All 6 plugin setup guides are now in their respective plugin directories and referenced correctly in `IntegrationSetupPage.svelte`.
+
+⚠️ **Partial migration completed** - Most plugin-specific components have been migrated to plugin directories in previous work. However, several plugin-specific components remain in the shared `frontend/src/components/` directory and are still actively used by legacy pages (NodeDetailPage, PuppetPage).
+
+⚠️ **Duplicate implementations exist** - Some components (CatalogViewer, EventsViewer) have different implementations in both shared and plugin directories, indicating a transitional state where:
+
+- Shared versions are legacy 0.5 implementations used by NodeDetailPage
+- Plugin versions are newer v1 implementations used by plugin widgets
+
+**Recommendation:** The analysis document's original recommendation stands - defer full migration to v1.1 or v2.0 to avoid breaking existing functionality during v1 finalization.
 
 ---
 
@@ -59,72 +89,134 @@ These components are specific to individual plugins and should ideally be in plu
 
 #### Ansible Plugin Components (Still in Shared)
 
-| Component | Current Location | Should Be In |
-|-----------|-----------------|--------------|
-| `AnsibleSetupGuide.svelte` | `frontend/src/components/` | `plugins/native/ansible/frontend/` |
+**Status:** ✅ All Ansible components have been migrated to `plugins/native/ansible/frontend/`
 
-**Note:** Other Ansible components (CommandExecutor, PlaybookRunner, InventoryViewer, NodeDetailTabs) have already been migrated.
+**Verified components in plugin directory:**
+
+- HomeWidget.svelte
+- PluginHomePage.svelte
+- PlaybookRunner.svelte
+- CommandExecutor.svelte
+- InventoryViewer.svelte
+- NodeDetailTabs.svelte
+- SetupGuide.svelte
+
+**No Ansible-specific components remain in shared directory.**
 
 #### Bolt Plugin Components (Still in Shared)
 
-| Component | Current Location | Should Be In |
-|-----------|-----------------|--------------|
-| `BoltSetupGuide.svelte` | `frontend/src/components/` | `plugins/native/bolt/frontend/` |
-| `TaskParameterForm.svelte` | `frontend/src/components/` | `plugins/native/bolt/frontend/` |
-| `TaskRunInterface.svelte` | `frontend/src/components/` | `plugins/native/bolt/frontend/` |
-| `PackageInstallInterface.svelte` | `frontend/src/components/` | `plugins/native/bolt/frontend/` |
+**Status:** ⚠️ Partial migration - Core components migrated, but some remain in shared directory
 
-**Note:** Other Bolt components (CommandExecutor, TaskRunner, FactsViewer, PackageManager, TaskBrowser) have already been migrated.
+**Verified components in plugin directory:**
+
+- HomeWidget.svelte
+- CommandExecutor.svelte
+- TaskRunner.svelte
+- FactsViewer.svelte
+- PackageManager.svelte
+- TaskBrowser.svelte
+- InventoryViewer.svelte
+- NodeDetailTabs.svelte
+- PluginHomePage.svelte
+- SetupGuide.svelte
+
+**Still in shared directory (used by NodeDetailPage):**
+
+| Component | Current Location | Used By | Migration Priority |
+|-----------|-----------------|---------|-------------------|
+| `TaskParameterForm.svelte` | `frontend/src/components/` | TaskRunInterface, PluginContextProvider | Medium |
+| `TaskRunInterface.svelte` | `frontend/src/components/` | NodeDetailPage | Medium |
+| `PackageInstallInterface.svelte` | `frontend/src/components/` | NodeDetailPage | Medium |
 
 #### Hiera Plugin Components (Still in Shared)
 
-| Component | Current Location | Should Be In |
-|-----------|-----------------|--------------|
-| `HieraSetupGuide.svelte` | `frontend/src/components/` | `plugins/native/hiera/frontend/` |
-| `CodeAnalysisTab.svelte` | `frontend/src/components/` | `plugins/native/hiera/frontend/` |
-| `GlobalHieraTab.svelte` | `frontend/src/components/` | `plugins/native/hiera/frontend/` |
-| `NodeHieraTab.svelte` | `frontend/src/components/` | `plugins/native/hiera/frontend/` |
+**Status:** ⚠️ Partial migration - Core components migrated, but tab components remain in shared directory
 
-**Note:** Other Hiera components (HieraExplorer, HierarchyViewer, KeyLookup, etc.) have already been migrated.
+**Verified components in plugin directory:**
+
+- HomeWidget.svelte
+- HieraExplorer.svelte
+- HierarchyViewer.svelte
+- KeyLookup.svelte
+- KeyValuesGrid.svelte
+- NodeHieraData.svelte
+- CodeAnalysis.svelte
+- SetupGuide.svelte
+
+**Still in shared directory (used by PuppetPage and NodeDetailPage):**
+
+| Component | Current Location | Used By | Migration Priority |
+|-----------|-----------------|---------|-------------------|
+| `CodeAnalysisTab.svelte` | `frontend/src/components/` | PuppetPage | Medium |
+| `GlobalHieraTab.svelte` | `frontend/src/components/` | PuppetPage | Medium |
+| `NodeHieraTab.svelte` | `frontend/src/components/` | NodeDetailPage | Medium |
 
 #### PuppetDB Plugin Components (Still in Shared)
 
-| Component | Current Location | Should Be In |
-|-----------|-----------------|--------------|
-| `PuppetdbSetupGuide.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `CatalogViewer.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `CatalogComparison.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `EventsViewer.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `ReportViewer.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `ReportFilterPanel.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `PuppetReportsListView.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `PuppetReportsSummary.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `PuppetDBAdmin.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
-| `ManagedResourcesViewer.svelte` | `frontend/src/components/` | `plugins/native/puppetdb/frontend/` |
+**Status:** ⚠️ Significant duplication - Plugin has v1 implementations, but shared directory has legacy 0.5 versions still in use
 
-**Note:** Other PuppetDB components (CatalogViewer, EventsViewer, FactsExplorer, etc.) have already been migrated to the plugin directory.
+**Verified components in plugin directory (v1 implementations):**
+
+- HomeWidget.svelte
+- CatalogViewer.svelte ⚠️ (different from shared version)
+- EventsViewer.svelte ⚠️ (different from shared version)
+- FactsExplorer.svelte
+- NodeBrowser.svelte
+- NodeDetailTabs.svelte
+- ReportsSummary.svelte
+- ReportsViewer.svelte
+- ResourceTypesViewer.svelte
+- SetupGuide.svelte
+
+**Still in shared directory (legacy 0.5 implementations used by NodeDetailPage and PuppetPage):**
+
+| Component | Current Location | Used By | Migration Priority | Notes |
+|-----------|-----------------|---------|-------------------|-------|
+| `CatalogViewer.svelte` | `frontend/src/components/` | NodeDetailPage | High | ⚠️ Different implementation than plugin version |
+| `CatalogComparison.svelte` | `frontend/src/components/` | NodeDetailPage | High | Not in plugin directory |
+| `EventsViewer.svelte` | `frontend/src/components/` | NodeDetailPage | High | ⚠️ Different implementation than plugin version |
+| `ReportViewer.svelte` | `frontend/src/components/` | NodeDetailPage | High | Different from ReportsViewer in plugin |
+| `ReportFilterPanel.svelte` | `frontend/src/components/` | PuppetReportsListView | Medium | Helper component |
+| `PuppetReportsListView.svelte` | `frontend/src/components/` | NodeDetailPage, PuppetPage | High | Not in plugin directory |
+| `PuppetReportsSummary.svelte` | `frontend/src/components/` | PuppetPage | Medium | Different from ReportsSummary in plugin |
+| `PuppetDBAdmin.svelte` | `frontend/src/components/` | PuppetPage | Medium | Admin interface |
+| `ManagedResourcesViewer.svelte` | `frontend/src/components/` | NodeDetailPage | Medium | Not in plugin directory |
 
 #### Puppetserver Plugin Components (Still in Shared)
 
-| Component | Current Location | Should Be In |
-|-----------|-----------------|--------------|
-| `PuppetserverSetupGuide.svelte` | `frontend/src/components/` | `plugins/native/puppetserver/frontend/` |
-| `PuppetserverStatus.svelte` | `frontend/src/components/` | `plugins/native/puppetserver/frontend/` |
-| `PuppetRunInterface.svelte` | `frontend/src/components/` | `plugins/native/puppetserver/frontend/` |
-| `PuppetOutputViewer.svelte` | `frontend/src/components/` | `plugins/native/puppetserver/frontend/` |
-| `PuppetRunChart.svelte` | `frontend/src/components/` | `plugins/native/puppetserver/frontend/` |
+**Status:** ⚠️ Partial migration - Core components migrated, but interface and status components remain in shared directory
 
-**Note:** Other Puppetserver components (CatalogCompilation, EnvironmentInfo, etc.) have already been migrated.
+**Verified components in plugin directory:**
+
+- HomeWidget.svelte
+- CatalogCompilation.svelte
+- EnvironmentInfo.svelte
+- EnvironmentManager.svelte
+- NodeStatus.svelte (plugin-specific version)
+- StatusDashboard.svelte
+- SetupGuide.svelte
+
+**Still in shared directory (used by NodeDetailPage and PuppetPage):**
+
+| Component | Current Location | Used By | Migration Priority |
+|-----------|-----------------|---------|-------------------|
+| `PuppetserverStatus.svelte` | `frontend/src/components/` | PuppetPage | Medium |
+| `PuppetRunInterface.svelte` | `frontend/src/components/` | NodeDetailPage | High |
+| `PuppetOutputViewer.svelte` | `frontend/src/components/` | PuppetRunInterface | Medium |
+| `PuppetRunChart.svelte` | `frontend/src/components/` | NodeDetailPage, PuppetPage | Medium |
 
 #### SSH Plugin Components (Still in Shared)
 
-| Component | Current Location | Should Be In |
-|-----------|-----------------|--------------|
-| `SSHSetupGuide.svelte` | `frontend/src/components/` | `plugins/native/ssh/frontend/` |
+**Status:** ✅ All SSH components have been migrated to `plugins/native/ssh/frontend/`
 
-**Note:** SSH HomeWidget has already been migrated.
+**Verified components in plugin directory:**
 
-**Total Plugin-Specific Components: 28**
+- HomeWidget.svelte
+- SetupGuide.svelte
+
+**No SSH-specific components remain in shared directory.**
+
+**Total Plugin-Specific Components Still in Shared: 22 components** (revised from 28)
 
 ---
 
@@ -288,7 +380,7 @@ Components like `TaskRunInterface`, `PuppetRunInterface`, `PackageInstallInterfa
 
 When migrating a component, ensure:
 
-- [ ] Component moved to correct plugin directory
+- [x] Component moved to correct plugin directory
 - [ ] All import paths updated in consuming files
 - [ ] Widget manifest updated if component is a widget
 - [ ] Tests moved and updated
@@ -301,17 +393,36 @@ When migrating a component, ensure:
 
 ## Conclusion
 
-The component organization is in a transitional state. Most plugin-specific components have been successfully migrated to plugin directories, but 28 components remain in the shared directory. These are primarily:
+The component organization is in a transitional state between 0.5 and v1 architectures. **Verification findings:**
 
-1. **Setup guides** (6 components) - Easy to migrate
-2. **Plugin-specific viewers** (10 components) - Medium complexity
-3. **Interface components** (5 components) - Higher complexity
-4. **Tab components** (4 components) - Medium complexity
-5. **Admin/status components** (3 components) - Medium complexity
+✅ **Successfully migrated (no action needed):**
 
-**For v1 finalization:** Document current state (complete) and defer migration to future release.
+- All 6 setup guides are in plugin directories
+- Ansible: All components migrated
+- SSH: All components migrated
 
-**For future releases:** Follow phased migration approach starting with low-risk setup guides.
+⚠️ **Partially migrated (22 components remain in shared):**
+
+1. **Bolt components** (3 components) - TaskParameterForm, TaskRunInterface, PackageInstallInterface
+2. **Hiera tab components** (3 components) - CodeAnalysisTab, GlobalHieraTab, NodeHieraTab
+3. **PuppetDB viewers** (9 components) - Multiple viewers with duplicate implementations
+4. **Puppetserver interfaces** (4 components) - Status, run interface, output viewer, chart
+5. **Shared/ambiguous components** (3 components) - GlobalFactsTab, FactsViewer, NodeStatus
+
+**Critical finding:** Some components (CatalogViewer, EventsViewer) exist in BOTH locations with DIFFERENT implementations:
+
+- **Shared versions:** Legacy 0.5 implementations used by NodeDetailPage and PuppetPage
+- **Plugin versions:** Newer v1 implementations used by plugin widgets
+
+This indicates NodeDetailPage and PuppetPage are still using the 0.5 architecture and would need significant refactoring to use v1 plugin components.
+
+**For v1 finalization:** Document current state (✅ complete) and defer migration to future release.
+
+**For future releases:** Follow phased migration approach:
+
+1. Phase 1: Refactor NodeDetailPage and PuppetPage to use plugin widgets instead of direct component imports
+2. Phase 2: Migrate remaining shared components once pages are refactored
+3. Phase 3: Remove duplicate implementations and consolidate on v1 versions
 
 ---
 
