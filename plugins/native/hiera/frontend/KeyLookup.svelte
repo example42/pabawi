@@ -67,13 +67,17 @@
   // State
   // ==========================================================================
 
-  const initialKeyValue = initialKey;
-  let keyInput = $state(initialKeyValue);
+  let keyInput = $state('');
   let result = $state<LookupResult | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let recentKeys = $state<string[]>([]);
   let showSuggestions = $state(false);
+
+  // Sync initialKey prop to keyInput state
+  $effect(() => {
+    keyInput = initialKey;
+  });
   let copied = $state(false);
 
   // ==========================================================================

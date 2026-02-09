@@ -23,19 +23,19 @@ export declare const CommandExecuteParamsSchema: z.ZodObject<{
     async: z.ZodOptional<z.ZodBoolean>;
     debugMode: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
-    command: string;
-    targets: string[];
-    timeout?: number | undefined;
-    environment?: Record<string, string> | undefined;
-    async?: boolean | undefined;
-    debugMode?: boolean | undefined;
+    command?: string;
+    targets?: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
 }, {
-    command: string;
-    targets: string[];
-    timeout?: number | undefined;
-    environment?: Record<string, string> | undefined;
-    async?: boolean | undefined;
-    debugMode?: boolean | undefined;
+    command?: string;
+    targets?: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
 }>;
 /**
  * Schema for task.execute parameters
@@ -49,21 +49,21 @@ export declare const TaskExecuteParamsSchema: z.ZodObject<{
     async: z.ZodOptional<z.ZodBoolean>;
     debugMode: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
-    targets: string[];
-    taskName: string;
-    parameters?: Record<string, unknown> | undefined;
-    timeout?: number | undefined;
-    environment?: Record<string, string> | undefined;
-    async?: boolean | undefined;
-    debugMode?: boolean | undefined;
+    parameters?: Record<string, unknown>;
+    targets?: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
+    taskName?: string;
 }, {
-    targets: string[];
-    taskName: string;
-    parameters?: Record<string, unknown> | undefined;
-    timeout?: number | undefined;
-    environment?: Record<string, string> | undefined;
-    async?: boolean | undefined;
-    debugMode?: boolean | undefined;
+    parameters?: Record<string, unknown>;
+    targets?: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
+    taskName?: string;
 }>;
 /**
  * Schema for script.execute parameters
@@ -78,23 +78,23 @@ export declare const ScriptExecuteParamsSchema: z.ZodObject<{
     async: z.ZodOptional<z.ZodBoolean>;
     debugMode: z.ZodOptional<z.ZodBoolean>;
 }, "strip", z.ZodTypeAny, {
-    script: string;
-    targets: string[];
-    timeout?: number | undefined;
-    environment?: Record<string, string> | undefined;
-    async?: boolean | undefined;
-    debugMode?: boolean | undefined;
-    scriptType?: "bash" | "powershell" | "python" | "ruby" | undefined;
-    arguments?: string[] | undefined;
+    script?: string;
+    targets?: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
+    scriptType?: "bash" | "powershell" | "python" | "ruby";
+    arguments?: string[];
 }, {
-    script: string;
-    targets: string[];
-    timeout?: number | undefined;
-    environment?: Record<string, string> | undefined;
-    async?: boolean | undefined;
-    debugMode?: boolean | undefined;
-    scriptType?: "bash" | "powershell" | "python" | "ruby" | undefined;
-    arguments?: string[] | undefined;
+    script?: string;
+    targets?: string[];
+    timeout?: number;
+    environment?: Record<string, string>;
+    async?: boolean;
+    debugMode?: boolean;
+    scriptType?: "bash" | "powershell" | "python" | "ruby";
+    arguments?: string[];
 }>;
 export type CommandExecuteParams = z.infer<typeof CommandExecuteParamsSchema>;
 export type TaskExecuteParams = z.infer<typeof TaskExecuteParamsSchema>;

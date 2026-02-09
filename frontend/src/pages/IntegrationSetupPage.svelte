@@ -32,10 +32,12 @@
 
   // Component mapping for dynamic imports
   const setupComponents: Record<string, () => Promise<{ default: Component }>> = {
-    'puppetserver': () => import('../components/PuppetserverSetupGuide.svelte'),
-    'puppetdb': () => import('../components/PuppetdbSetupGuide.svelte'),
-    'bolt': () => import('../components/BoltSetupGuide.svelte'),
-    'hiera': () => import('../components/HieraSetupGuide.svelte'),
+    'puppetserver': () => import('../../../plugins/native/puppetserver/frontend/SetupGuide.svelte'),
+    'puppetdb': () => import('../../../plugins/native/puppetdb/frontend/SetupGuide.svelte'),
+    'bolt': () => import('../../../plugins/native/bolt/frontend/SetupGuide.svelte'),
+    'hiera': () => import('../../../plugins/native/hiera/frontend/SetupGuide.svelte'),
+    'ansible': () => import('../../../plugins/native/ansible/frontend/SetupGuide.svelte'),
+    'ssh': () => import('../../../plugins/native/ssh/frontend/SetupGuide.svelte'),
   };
 
   async function loadSetupComponent(integrationName: string): Promise<void> {

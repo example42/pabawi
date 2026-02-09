@@ -106,12 +106,16 @@
   // State
   // ==========================================================================
 
-  const initialTargets = normalizeTargets(targetNodes);
   let command = $state('');
-  let selectedTargets = $state<string[]>(initialTargets);
+  let selectedTargets = $state<string[]>([]);
   let nodes = $state<Node[]>([]);
   let nodesLoading = $state(false);
   let nodesError = $state<string | null>(null);
+
+  // Sync targetNodes prop to selectedTargets state
+  $effect(() => {
+    selectedTargets = normalizeTargets(targetNodes);
+  });
 
   let executing = $state(false);
   let executionError = $state<string | null>(null);

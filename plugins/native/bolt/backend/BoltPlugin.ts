@@ -49,6 +49,7 @@ interface PluginMetadata {
   author: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[];
   homepage?: string;
   dependencies?: string[];
   frontendEntryPoint?: string;
@@ -382,6 +383,7 @@ export class BoltPlugin implements BasePluginInterface {
     author: "Pabawi Team",
     description: "Puppet Bolt integration for remote command and task execution",
     integrationType: IntegrationType.RemoteExecution,
+    integrationTypes: [IntegrationType.RemoteExecution, IntegrationType.InventorySource, IntegrationType.Info],
     homepage: "https://puppet.com/docs/bolt/latest/bolt.html",
     color: "#FFAE1A", // Puppet/Bolt orange
     icon: "terminal",

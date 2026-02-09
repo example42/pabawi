@@ -126,9 +126,6 @@
   // State
   // ==========================================================================
 
-  const initialTargets = normalizeTargets(targetNodes);
-  const initialParams = { ...initialParameters };
-
   let tasksByModule = $state<TasksByModule>({});
   let tasksLoading = $state(false);
   let tasksError = $state<string | null>(null);
@@ -138,11 +135,17 @@
 
   let nodes = $state<Node[]>([]);
   let nodesLoading = $state(false);
-  let selectedTargets = $state<string[]>(initialTargets);
+  let selectedTargets = $state<string[]>([]);
 
-  let taskParameters = $state<Record<string, unknown>>(initialParams);
+  let taskParameters = $state<Record<string, unknown>>({});
   let executing = $state(false);
   let executionError = $state<string | null>(null);
+
+  // Sync props to state
+  $effect(() => {
+    selectedTargets = normalizeTargets(targetNodes);
+    taskParameters = { ...initialParameters };
+  });
   let executionResult = $state<ExecutionResult | null>(null);
   let execStream = $state<ReturnType<typeof execStreamFactory.create> | null>(null);
 

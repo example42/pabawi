@@ -50,6 +50,7 @@ interface PluginMetadata {
   author: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[];
   homepage?: string;
   dependencies?: string[];
   frontendEntryPoint?: string;
@@ -419,6 +420,7 @@ export class HieraPlugin implements BasePluginInterface {
     author: "Pabawi Team",
     description: "Puppet Hiera integration for hierarchical data lookup, key resolution, and code analysis",
     integrationType: IntegrationType.ConfigurationManagement,
+    integrationTypes: [IntegrationType.ConfigurationManagement, IntegrationType.Info],
     homepage: "https://puppet.com/docs/puppet/latest/hiera.html",
     color: "#C1272D", // Hiera red
     icon: "layers",

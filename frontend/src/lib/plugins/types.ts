@@ -53,6 +53,10 @@ export interface PluginWidget {
   icon?: string;
   /** Priority for ordering (higher = first) */
   priority?: number;
+  /** Optional category for grouping (inventory, command, task, info, events, reports, package) */
+  category?: string;
+  /** Whether widget requires node context (for node-scoped widgets) */
+  nodeScoped?: boolean;
 }
 
 /**

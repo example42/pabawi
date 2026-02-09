@@ -4,7 +4,7 @@
    * Provides overview and quick access to Ansible capabilities
    */
 
-  let activeTab = "inventory";
+  let activeTab = $state("inventory");
 
   const tabs = [
     { id: "inventory", label: "Inventory" },
@@ -24,7 +24,7 @@
       <button
         class="tab"
         class:active={activeTab === tab.id}
-        on:click={() => (activeTab = tab.id)}
+        onclick={() => (activeTab = tab.id)}
       >
         {tab.label}
       </button>

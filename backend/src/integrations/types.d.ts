@@ -271,6 +271,8 @@ export interface PluginMetadata {
     description: string;
     /** Integration type for categorization */
     integrationType: IntegrationType;
+    /** Multiple integration types for multi-category plugins (e.g., RemoteExecution + InventorySource) */
+    integrationTypes?: IntegrationType[];
     /** Homepage or documentation URL */
     homepage?: string;
     /** Other plugins this plugin depends on */

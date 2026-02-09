@@ -45,6 +45,7 @@ interface PluginMetadata {
   author: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[];
   homepage?: string;
   dependencies?: string[];
   frontendEntryPoint?: string;
@@ -271,6 +272,7 @@ export class SSHPlugin implements BasePluginInterface {
     author: "Pabawi Team",
     description: "SSH integration for remote command execution and inventory management",
     integrationType: IntegrationType.RemoteExecution,
+    integrationTypes: [IntegrationType.RemoteExecution, IntegrationType.InventorySource],
     homepage: "https://www.openssh.com/",
     color: "#4A90E2",
     icon: "terminal",

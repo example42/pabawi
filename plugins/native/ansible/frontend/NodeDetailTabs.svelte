@@ -4,12 +4,16 @@
    * Provides node-specific Ansible actions
    */
 
-  export let nodeId: string;
+  interface Props {
+    nodeId: string;
+  }
 
-  let activeTab = "command";
-  let command = "";
-  let selectedPlaybook = "";
-  let executing = false;
+  let { nodeId }: Props = $props();
+
+  let activeTab = $state("command");
+  let command = $state("");
+  let selectedPlaybook = $state("");
+  let executing = $state(false);
 
   const tabs = [
     { id: "command", label: "Execute Command" },
@@ -50,7 +54,7 @@
       <button
         class="tab"
         class:active={activeTab === tab.id}
-        on:click={() => (activeTab = tab.id)}
+        onclick={() => (activeTab = tab.id)}
       >
         {tab.label}
       </button>
@@ -71,7 +75,7 @@
         </div>
         <button
           class="execute-btn"
-          on:click={executeCommand}
+          onclick={executeCommand}
           disabled={executing || !command}
         >
           {executing ? "Executing..." : "Execute"}
@@ -88,7 +92,7 @@
         </div>
         <button
           class="execute-btn"
-          on:click={executePlaybook}
+          onclick={executePlaybook}
           disabled={executing || !selectedPlaybook}
         >
           {executing ? "Executing..." : "Execute"}

@@ -12,6 +12,7 @@ interface PluginMetadata {
     version: string;
     description: string;
     integrationType: string;
+    integrationTypes?: string[];
     capabilities: string[];
 }
 interface HealthStatus {

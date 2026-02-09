@@ -40,8 +40,13 @@
   // State
   // ==========================================================================
 
-  let activeTab = $state<typeof initialTab>(initialTab);
+  let activeTab = $state<'facts' | 'reports' | 'events' | 'catalog'>('facts');
   let loading = $state(false);
+
+  // Sync initialTab prop to activeTab state
+  $effect(() => {
+    activeTab = initialTab;
+  });
 
   // ==========================================================================
   // Lifecycle

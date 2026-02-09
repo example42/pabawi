@@ -141,27 +141,7 @@
         gap="4"
         {userCapabilities}
         showEmptyState={true}
-        emptyMessage="No summary widgets available."
-        debug={debugMode.enabled}
-      />
-    </div>
-  </section>
-
-  <!-- Dashboard Widget Slot (v1.0.0 Plugin System) -->
-  <section class="bg-white dark:bg-gray-800 shadow rounded-lg">
-    <div class="px-4 py-5 sm:p-6">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-medium text-gray-900 dark:text-white">Dashboard Widgets</h2>
-        <span class="text-xs text-gray-400 dark:text-gray-500">Widgets from enabled plugins</span>
-      </div>
-      <WidgetSlot
-        slot="dashboard"
-        layout="grid"
-        columns={2}
-        gap="4"
-        {userCapabilities}
-        showEmptyState={true}
-        emptyMessage="No dashboard widgets available. Enable plugins to add widgets here."
+        emptyMessage="No summary widgets available. Enable plugins to see summaries."
         debug={debugMode.enabled}
       />
     </div>

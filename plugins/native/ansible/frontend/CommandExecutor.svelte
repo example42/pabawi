@@ -4,10 +4,10 @@
    * Allows users to execute ad-hoc commands via Ansible
    */
 
-  let command = "";
-  let selectedTargets: string[] = [];
-  let executing = false;
-  let output = "";
+  let command = $state("");
+  let selectedTargets = $state<string[]>([]);
+  let executing = $state(false);
+  let output = $state("");
 
   async function executeCommand() {
     if (!command || selectedTargets.length === 0) {
@@ -58,7 +58,7 @@
 
   <button
     class="execute-btn"
-    on:click={executeCommand}
+    onclick={executeCommand}
     disabled={executing || !command || selectedTargets.length === 0}
   >
     {executing ? "Executing..." : "Execute Command"}

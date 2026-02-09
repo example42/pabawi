@@ -45,7 +45,7 @@ var IntegrationType;
     /** Application deployment automation */
     IntegrationType["Deployment"] = "Deployment";
     /** Secret and credential management */
-    IntegrationType["SecretManagement"] = "SecretManagement"; //pragma: allowlist secret
+    IntegrationType["SecretManagement"] = "SecretManagement"; // pragma: allowlist secret
     /** Scheduled operations and jobs */
     IntegrationType["Schedule"] = "Schedule";
     /** Software installation via package managers */

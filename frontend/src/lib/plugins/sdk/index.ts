@@ -317,6 +317,31 @@ export interface PluginExecutionStream {
 // =============================================================================
 
 /**
+ * Widget-specific context data
+ * This contains additional context passed to widgets beyond the core plugin context
+ */
+export interface WidgetContext {
+  /** Plugin name */
+  pluginName?: string;
+
+  /** Full plugin info from API */
+  pluginInfo?: unknown;
+
+  /** Node context for node-scoped widgets */
+  node?: {
+    id: string;
+    name: string;
+    [key: string]: unknown;
+  };
+
+  /** Current category (for category tabs) */
+  category?: string;
+
+  /** Additional custom context */
+  [key: string]: unknown;
+}
+
+/**
  * Complete plugin context provided by Pabawi
  *
  * This is the main interface plugins use to interact with Pabawi.
@@ -347,6 +372,9 @@ export interface PluginContext {
     version: string;
     color: string;
   };
+
+  /** Widget-specific context (pluginInfo, node, etc.) */
+  widgetContext?: WidgetContext;
 }
 
 // =============================================================================

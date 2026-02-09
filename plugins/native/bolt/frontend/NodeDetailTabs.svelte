@@ -61,9 +61,14 @@
   // State
   // ==========================================================================
 
-  let activeTab = $state<typeof initialTab>(initialTab);
+  let activeTab = $state<'facts' | 'tasks' | 'command' | 'packages'>('command');
   let loading = $state(false);
   let error = $state<string | null>(null);
+
+  // Sync initialTab prop to activeTab state
+  $effect(() => {
+    activeTab = initialTab;
+  });
 
   // Command tab state
   let command = $state('');

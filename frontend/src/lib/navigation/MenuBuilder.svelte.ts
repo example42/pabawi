@@ -45,6 +45,7 @@ interface PluginMetadata {
   displayName: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[]; // Support for multi-type plugins
   color?: string;
   icon?: string;
   enabled: boolean;
@@ -71,6 +72,14 @@ const CORE_NAV_ITEMS: MenuItem[] = [
     exact: true,
     icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
     priority: 1000,
+  },
+  {
+    id: "inventory",
+    type: "link",
+    label: "Inventory",
+    path: "/inventory",
+    icon: "M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4",
+    priority: 900,
   },
 ];
 
@@ -287,14 +296,24 @@ class MenuBuilder {
         badge: !plugin.healthy ? "offline" : undefined,
       };
 
-      // Create contribution for this plugin
-      this.pluginContributions.set(plugin.name, {
-        pluginName: plugin.name,
-        displayName: plugin.displayName,
-        integrationType: plugin.integrationType as IntegrationType,
-        items: [menuItem],
-        priority: 500,
-      });
+      // Determine integration types - use integrationTypes array if available, otherwise single integrationType
+      const integrationTypes = plugin.integrationTypes && plugin.integrationTypes.length > 0
+        ? plugin.integrationTypes
+        : [plugin.integrationType];
+
+      // Create contribution for each integration type
+      // This ensures multi-type plugins appear in all relevant integration type groups
+      for (const integrationType of integrationTypes) {
+        const contributionKey = `${plugin.name}-${integrationType}`;
+
+        this.pluginContributions.set(contributionKey, {
+          pluginName: plugin.name,
+          displayName: plugin.displayName,
+          integrationType: integrationType as IntegrationType,
+          items: [menuItem],
+          priority: 500,
+        });
+      }
     }
 
     this.log("info", `Built ${this.pluginContributions.size} plugin contributions from metadata`);

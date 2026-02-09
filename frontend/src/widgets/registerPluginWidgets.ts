@@ -17,23 +17,29 @@ import { registerWidget } from './index';
 export async function registerAllPluginWidgets(): Promise<void> {
   // Import all plugin widget manifests
   const [
+    { ANSIBLE_WIDGET_MANIFEST },
     { BOLT_WIDGET_MANIFEST },
     { HIERA_WIDGET_MANIFEST },
     { PUPPETDB_WIDGET_MANIFEST },
     { PUPPETSERVER_WIDGET_MANIFEST },
+    { SSH_WIDGET_MANIFEST },
   ] = await Promise.all([
+    import('../../../plugins/native/ansible/frontend/index'),
     import('../../../plugins/native/bolt/frontend/index'),
     import('../../../plugins/native/hiera/frontend/index'),
     import('../../../plugins/native/puppetdb/frontend/index'),
     import('../../../plugins/native/puppetserver/frontend/index'),
+    import('../../../plugins/native/ssh/frontend/index'),
   ]);
 
   // Register all widgets from each plugin
   const manifests = [
+    ANSIBLE_WIDGET_MANIFEST,
     BOLT_WIDGET_MANIFEST,
     HIERA_WIDGET_MANIFEST,
     PUPPETDB_WIDGET_MANIFEST,
     PUPPETSERVER_WIDGET_MANIFEST,
+    SSH_WIDGET_MANIFEST,
   ];
 
   let totalRegistered = 0;

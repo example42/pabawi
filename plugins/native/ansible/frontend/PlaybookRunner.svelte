@@ -4,10 +4,10 @@
    * Allows users to select and execute Ansible playbooks
    */
 
-  let selectedPlaybook = "";
-  let selectedTargets: string[] = [];
-  let parameters: Record<string, string> = {};
-  let executing = false;
+  let selectedPlaybook = $state("");
+  let selectedTargets = $state<string[]>([]);
+  let parameters = $state<Record<string, string>>({});
+  let executing = $state(false);
 
   async function executePlaybook() {
     if (!selectedPlaybook || selectedTargets.length === 0) {
@@ -54,7 +54,7 @@
   <div class="form-group">
     <label>Extra Variables (optional)</label>
     <textarea
-      placeholder='{"key": "value"}'
+      placeholder='&#123;"key": "value"&#125;'
       rows="4"
       disabled={executing}
     ></textarea>
@@ -62,7 +62,7 @@
 
   <button
     class="execute-btn"
-    on:click={executePlaybook}
+    onclick={executePlaybook}
     disabled={executing || !selectedPlaybook || selectedTargets.length === 0}
   >
     {executing ? "Executing..." : "Execute Playbook"}

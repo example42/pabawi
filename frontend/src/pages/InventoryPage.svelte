@@ -268,7 +268,7 @@
         params.append('sortOrder', sortOrder);
       }
 
-      const url = `/api/inventory${params.toString() ? `?${params.toString()}` : ''}`;
+      const url = `/api/v1/inventory${params.toString() ? `?${params.toString()}` : ''}`;
 
       const data = await get<InventoryResponse & { _debug?: DebugInfo }>(url, {
         maxRetries: 2,

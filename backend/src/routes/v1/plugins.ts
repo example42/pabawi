@@ -66,11 +66,12 @@ interface PluginInfo {
  * Lightweight plugin metadata structure for menu building
  * No widgets or full capability details - just metadata for fast loading
  */
-interface PluginMetadata {
+interface PluginMetadataResponse {
   name: string;
   displayName: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[]; // Support for multi-type plugins
   color?: string;
   icon?: string;
   enabled: boolean;
@@ -112,7 +113,7 @@ export function createV1PluginsRouter(
         operation: "listPluginsMetadata",
       });
 
-      const plugins: PluginMetadata[] = [];
+      const plugins: PluginMetadataResponse[] = [];
       const capabilityRegistry = integrationManager.getCapabilityRegistry();
 
       // Get v1.0.0 plugins
@@ -145,6 +146,7 @@ export function createV1PluginsRouter(
           displayName: metadata.name, // Use name as displayName for now
           description: metadata.description,
           integrationType: metadata.integrationType,
+          integrationTypes: metadata.integrationTypes, // Include multi-type support
           color: metadata.color,
           icon: metadata.icon,
           enabled: true,

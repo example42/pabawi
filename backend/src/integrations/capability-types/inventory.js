@@ -10,7 +10,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.InventoryFilterParamsSchema = exports.InventoryGroupsParamsSchema = exports.InventoryGetParamsSchema = exports.InventoryListParamsSchema = void 0;
 exports.hasInventoryCapability = hasInventoryCapability;
-const zod_1 = require("zod");
+var zod_1 = require("zod");
 // =============================================================================
 // Zod Schemas for Validation
 // =============================================================================

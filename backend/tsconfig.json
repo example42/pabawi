@@ -26,6 +26,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*", "test/routes/health-ready.test.ts"],
+  "include": ["src/**/*", "test/routes/health-ready.test.ts", "test/integrations/inventory-endpoints.test.ts"],
   "exclude": ["node_modules", "dist", "test"]
 }

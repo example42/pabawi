@@ -44,6 +44,8 @@
     pluginVersion?: string;
     /** Plugin color */
     pluginColor?: string;
+    /** Widget-specific context (pluginInfo, node, etc.) */
+    widgetContext?: Record<string, unknown>;
     /** Child content */
     children: Snippet;
   }
@@ -52,6 +54,7 @@
     pluginName,
     pluginVersion = '1.0.0',
     pluginColor = '#6B7280',
+    widgetContext = {},
     children,
   }: Props = $props();
 
@@ -175,6 +178,12 @@
       get name() { return pluginName; },
       get version() { return pluginVersion; },
       get color() { return pluginColor; },
+    },
+    get widgetContext() {
+      return {
+        pluginName,
+        ...widgetContext,
+      };
     },
   };
 

@@ -23,6 +23,7 @@ interface PluginMetadata {
     author: string;
     description: string;
     integrationType: string;
+    integrationTypes?: string[];
     homepage?: string;
     dependencies?: string[];
     frontendEntryPoint?: string;
@@ -121,6 +122,23 @@ interface BasePluginInterface {
     defaultPermissions?: Record<string, string[]>;
     initialize(): Promise<void>;
     healthCheck(): Promise<HealthStatus>;
+    getSummary(): Promise<{
+        pluginName: string;
+        displayName: string;
+        metrics: Record<string, number | string | boolean>;
+        healthy: boolean;
+        lastUpdate: string;
+        error?: string;
+    }>;
+    getData(): Promise<{
+        pluginName: string;
+        displayName: string;
+        data: unknown;
+        healthy: boolean;
+        lastUpdate: string;
+        capabilities: string[];
+        error?: string;
+    }>;
     getConfig(): Record<string, unknown>;
     isInitialized(): boolean;
     shutdown?(): Promise<void>;
@@ -221,26 +239,26 @@ export declare const BoltPluginConfigSchema: z.ZodObject<{
         inventoryTtl: z.ZodOptional<z.ZodNumber>;
         factsTtl: z.ZodOptional<z.ZodNumber>;
     }, "strip", z.ZodTypeAny, {
-        inventoryTtl?: number | undefined;
-        factsTtl?: number | undefined;
+        inventoryTtl?: number;
+        factsTtl?: number;
     }, {
-        inventoryTtl?: number | undefined;
-        factsTtl?: number | undefined;
+        inventoryTtl?: number;
+        factsTtl?: number;
     }>>;
 }, "strip", z.ZodTypeAny, {
+    projectPath?: string;
+    executionTimeout?: number;
     cache?: {
-        inventoryTtl?: number | undefined;
-        factsTtl?: number | undefined;
-    } | undefined;
-    executionTimeout?: number | undefined;
-    projectPath?: string | undefined;
+        inventoryTtl?: number;
+        factsTtl?: number;
+    };
 }, {
+    projectPath?: string;
+    executionTimeout?: number;
     cache?: {
-        inventoryTtl?: number | undefined;
-        factsTtl?: number | undefined;
-    } | undefined;
-    executionTimeout?: number | undefined;
-    projectPath?: string | undefined;
+        inventoryTtl?: number;
+        factsTtl?: number;
+    };
 }>;
 export type BoltPluginConfig = z.infer<typeof BoltPluginConfigSchema>;
 /**
@@ -253,6 +271,11 @@ export type BoltPluginConfig = z.infer<typeof BoltPluginConfigSchema>;
  * - facts.query: Gather facts from target nodes
  * - task.list: List available Bolt tasks
  * - task.details: Get task metadata and parameters
+ *
+ * Implements standardized capability interfaces:
+ * - InventoryCapability: inventory.list, inventory.get, inventory.groups, inventory.filter
+ * - FactsCapability: info.facts, info.refresh
+ * - RemoteExecutionCapability: command.execute, task.execute, script.execute
  */
 export declare class BoltPlugin implements BasePluginInterface {
     readonly metadata: PluginMetadata;
@@ -292,6 +315,31 @@ export declare class BoltPlugin implements BasePluginInterface {
      */
     shutdown(): Promise<void>;
     /**
+     * Get lightweight summary for home page tile
+     * Must return in under 500ms with minimal data (counts, status only)
+     */
+    getSummary(): Promise<{
+        pluginName: string;
+        displayName: string;
+        metrics: Record<string, number | string | boolean>;
+        healthy: boolean;
+        lastUpdate: string;
+        error?: string;
+    }>;
+    /**
+     * Get full plugin data for plugin home page
+     * Called on-demand when navigating to plugin page
+     */
+    getData(): Promise<{
+        pluginName: string;
+        displayName: string;
+        data: unknown;
+        healthy: boolean;
+        lastUpdate: string;
+        capabilities: string[];
+        error?: string;
+    }>;
+    /**
      * Execute a command on target nodes
      */
     private executeCommand;
@@ -315,6 +363,251 @@ export declare class BoltPlugin implements BasePluginInterface {
      * Get task details
      */
     private getTaskDetails;
+    /**
+     * List all nodes from Bolt inventory
+     * Implements InventoryCapability.inventoryList
+     */
+    inventoryList(params: {
+        refresh?: boolean;
+        groups?: string[];
+    }): Promise<Node[]>;
+    /**
+     * Get specific node details
+     * Implements InventoryCapability.inventoryGet
+     */
+    inventoryGet(params: {
+        nodeId: string;
+    }): Promise<Node | null>;
+    /**
+     * List available groups
+     * Implements InventoryCapability.inventoryGroups
+     */
+    inventoryGroups(params: {
+        refresh?: boolean;
+    }): Promise<string[]>;
+    /**
+     * Filter nodes by criteria
+     * Implements InventoryCapability.inventoryFilter
+     */
+    inventoryFilter(params: {
+        criteria: Record<string, unknown>;
+        groups?: string[];
+    }): Promise<Node[]>;
+    /**
+     * Get facts for a node
+     * Implements FactsCapability.factsGet
+     */
+    factsGet(params: {
+        nodeId: string;
+        providers?: string[];
+    }): Promise<Facts>;
+    /**
+     * Force refresh facts (bypass cache)
+     * Implements FactsCapability.factsRefresh
+     */
+    factsRefresh(params: {
+        nodeId: string;
+        providers?: string[];
+    }): Promise<Facts>;
+    /**
+     * Get fact provider information for this plugin
+     * Implements FactsCapability.getFactProvider
+     */
+    getFactProvider(): {
+        name: string;
+        priority: number;
+        supportedFactKeys: string[];
+    };
+    /**
+     * Execute shell command on target nodes
+     * Implements RemoteExecutionCapability.commandExecute
+     */
+    commandExecute(params: {
+        command: string;
+        targets: string[];
+        timeout?: number;
+        environment?: Record<string, string>;
+        async?: boolean;
+        debugMode?: boolean;
+    }): Promise<ExecutionResult>;
+    /**
+     * Execute task or playbook on target nodes
+     * Implements RemoteExecutionCapability.taskExecute
+     */
+    taskExecute(params: {
+        taskName: string;
+        targets: string[];
+        parameters?: Record<string, unknown>;
+        timeout?: number;
+        environment?: Record<string, string>;
+        async?: boolean;
+        debugMode?: boolean;
+    }): Promise<ExecutionResult>;
+    /**
+     * Execute script on target nodes
+     * Implements RemoteExecutionCapability.scriptExecute
+     */
+    scriptExecute(params: {
+        script: string;
+        targets: string[];
+        scriptType?: "bash" | "powershell" | "python" | "ruby";
+        arguments?: string[];
+        timeout?: number;
+        environment?: Record<string, string>;
+        async?: boolean;
+        debugMode?: boolean;
+    }): Promise<ExecutionResult>;
+    /**
+     * Stream output from an execution
+     * Implements RemoteExecutionCapability.streamOutput
+     *
+     * Note: Bolt executions are synchronous, so streaming happens during execution.
+     * This method is a placeholder for future async execution support.
+     */
+    streamOutput(executionId: string, callback: (chunk: {
+        nodeId: string;
+        stream: "stdout" | "stderr";
+        data: string;
+        timestamp: string;
+    }) => void): Promise<void>;
+    /**
+     * Cancel an in-progress execution
+     * Implements RemoteExecutionCapability.cancelExecution
+     *
+     * Note: Bolt executions are synchronous and cannot be cancelled mid-execution.
+     * This method is a placeholder for future async execution support.
+     */
+    cancelExecution(executionId: string): Promise<boolean>;
+    /**
+     * Install a package on target nodes
+     * Implements SoftwareInstallationCapability.packageInstall
+     */
+    packageInstall(params: {
+        packageName: string;
+        version?: string;
+        targets: string[];
+        options?: Record<string, unknown>;
+        async?: boolean;
+    }): Promise<{
+        id: string;
+        operation: "install";
+        packageName: string;
+        targetNodes: string[];
+        status: "running" | "success" | "failed" | "partial";
+        startedAt: string;
+        completedAt?: string;
+        results: Array<{
+            nodeId: string;
+            status: "success" | "failed";
+            packageName: string;
+            version?: string;
+            error?: string;
+            duration: number;
+        }>;
+        error?: string;
+    }>;
+    /**
+     * Uninstall a package from target nodes
+     * Implements SoftwareInstallationCapability.packageUninstall
+     */
+    packageUninstall(params: {
+        packageName: string;
+        targets: string[];
+        purge?: boolean;
+        async?: boolean;
+    }): Promise<{
+        id: string;
+        operation: "uninstall";
+        packageName: string;
+        targetNodes: string[];
+        status: "running" | "success" | "failed" | "partial";
+        startedAt: string;
+        completedAt?: string;
+        results: Array<{
+            nodeId: string;
+            status: "success" | "failed";
+            packageName: string;
+            version?: string;
+            error?: string;
+            duration: number;
+        }>;
+        error?: string;
+    }>;
+    /**
+     * Update a package on target nodes
+     * Implements SoftwareInstallationCapability.packageUpdate
+     */
+    packageUpdate(params: {
+        packageName: string;
+        version?: string;
+        targets: string[];
+        async?: boolean;
+    }): Promise<{
+        id: string;
+        operation: "update";
+        packageName: string;
+        targetNodes: string[];
+        status: "running" | "success" | "failed" | "partial";
+        startedAt: string;
+        completedAt?: string;
+        results: Array<{
+            nodeId: string;
+            status: "success" | "failed";
+            packageName: string;
+            version?: string;
+            error?: string;
+            duration: number;
+        }>;
+        error?: string;
+    }>;
+    /**
+     * List installed packages on a node
+     * Implements SoftwareInstallationCapability.packageList
+     */
+    packageList(params: {
+        nodeId: string;
+        filter?: string;
+    }): Promise<Array<{
+        name: string;
+        version?: string;
+        availableVersion?: string;
+        status: "installed" | "not_installed" | "upgradable" | "broken";
+        description?: string;
+        size?: string;
+        installedAt?: string;
+        repository?: string;
+        metadata?: Record<string, unknown>;
+    }>>;
+    /**
+     * Search available packages
+     * Implements SoftwareInstallationCapability.packageSearch
+     */
+    packageSearch(params: {
+        query: string;
+        limit?: number;
+    }): Promise<Array<{
+        name: string;
+        version: string;
+        description?: string;
+        repository?: string;
+        size?: string;
+        metadata?: Record<string, unknown>;
+    }>>;
+    /**
+     * Log command execution to Node Journal (when available)
+     * @private
+     */
+    private logCommandToJournal;
+    /**
+     * Log task execution to Node Journal (when available)
+     * @private
+     */
+    private logTaskToJournal;
+    /**
+     * Log package installation to Node Journal (when available)
+     * @private
+     */
+    private logPackageToJournal;
     /**
      * Get the underlying BoltService instance
      * @deprecated Use capability handlers instead

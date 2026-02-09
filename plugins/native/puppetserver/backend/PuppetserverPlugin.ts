@@ -49,6 +49,7 @@ interface PluginMetadata {
   author: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[];
   homepage?: string;
   dependencies?: string[];
   frontendEntryPoint?: string;
@@ -403,6 +404,7 @@ export class PuppetserverPlugin implements BasePluginInterface {
     author: "Pabawi Team",
     description: "Puppetserver integration for catalog compilation, environments, and facts",
     integrationType: IntegrationType.ConfigurationManagement,
+    integrationTypes: [IntegrationType.ConfigurationManagement, IntegrationType.Info],
     homepage: "https://puppet.com/docs/puppet/latest/server/",
     color: "#2E3A87", // Puppetserver blue
     icon: "server",

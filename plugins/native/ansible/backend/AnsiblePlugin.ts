@@ -37,6 +37,7 @@ interface PluginMetadata {
   version: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[];
   capabilities: string[];
 }
 
@@ -86,6 +87,7 @@ export class AnsiblePlugin
     version: "1.0.0",
     description: "Ansible integration for remote execution and inventory management",
     integrationType: "RemoteExecution",
+    integrationTypes: ["RemoteExecution", "InventorySource"],
     capabilities: [
       "command.execute",
       "task.execute",

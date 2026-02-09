@@ -26,13 +26,13 @@ import type {
   InventoryGetParams,
   InventoryGroupsParams,
   InventoryFilterParams,
-} from "../../../backend/src/integrations/capability-types/inventory";
+} from "../../../../backend/dist/integrations/capability-types/inventory";
 import type {
   FactsCapability,
   FactsGetParams,
   FactsRefreshParams,
   FactProvider,
-} from "../../../backend/src/integrations/capability-types/facts";
+} from "../../../../backend/dist/integrations/capability-types/facts";
 import type {
   ReportsCapability,
   ReportsListParams,
@@ -40,7 +40,7 @@ import type {
   ReportsQueryParams,
   Report as StandardReport,
   ReportListResult,
-} from "../../../backend/src/integrations/capability-types/reports";
+} from "../../../../backend/dist/integrations/capability-types/reports";
 import type {
   EventsCapability,
   EventsListParams,
@@ -49,7 +49,7 @@ import type {
   Event as StandardEvent,
   EventListResult,
   EventStreamCallback,
-} from "../../../backend/src/integrations/capability-types/events";
+} from "../../../../backend/dist/integrations/capability-types/events";
 
 // =============================================================================
 // Type-only imports - These are resolved at compile time, not runtime
@@ -82,6 +82,7 @@ interface PluginMetadata {
   author: string;
   description: string;
   integrationType: string;
+  integrationTypes?: string[];
   homepage?: string;
   dependencies?: string[];
   frontendEntryPoint?: string;
@@ -448,9 +449,9 @@ const CatalogResourcesSchema = z.object({
 /**
  * Schema for resource types query
  */
-const ResourceTypesSchema = z.object({
-  // No parameters needed for listing all resource types
-});
+// const ResourceTypesSchema = z.object({
+//   // No parameters needed for listing all resource types
+// });
 
 /**
  * Schema for resources by type query
@@ -540,6 +541,7 @@ export class PuppetDBPlugin implements BasePluginInterface, InventoryCapability,
     author: "Pabawi Team",
     description: "PuppetDB integration for infrastructure data, facts, reports, and catalogs",
     integrationType: IntegrationType.Info,
+    integrationTypes: [IntegrationType.Info, IntegrationType.InventorySource, IntegrationType.Event],
     homepage: "https://puppet.com/docs/puppetdb/latest/index.html",
     color: "#9063CD", // PuppetDB violet
     icon: "database",
@@ -2451,7 +2453,7 @@ export class PuppetDBPlugin implements BasePluginInterface, InventoryCapability,
         nodes = nodes.filter(node =>
           node.config.groups &&
           Array.isArray(node.config.groups) &&
-          params.groups!.some(g => (node.config.groups as string[]).includes(g))
+          params.groups!.some((g: string) => (node.config.groups as string[]).includes(g))
         );
       }
 
@@ -2544,7 +2546,7 @@ export class PuppetDBPlugin implements BasePluginInterface, InventoryCapability,
         nodes = nodes.filter(node =>
           node.config.groups &&
           Array.isArray(node.config.groups) &&
-          params.groups!.some(g => (node.config.groups as string[]).includes(g))
+          params.groups!.some((g: string) => (node.config.groups as string[]).includes(g))
         );
       }
 
@@ -2935,7 +2937,7 @@ export class PuppetDBPlugin implements BasePluginInterface, InventoryCapability,
    *
    * Note: PuppetDB doesn't support real-time streaming, so this polls for new events
    */
-  async eventsStream(params: EventsStreamParams, callback: EventStreamCallback): Promise<void> {
+  async eventsStream(params: EventsStreamParams, _callback: EventStreamCallback): Promise<void> {
     const complete = this.performanceMonitor.startTimer("puppetdb:v1:eventsStream");
 
     try {

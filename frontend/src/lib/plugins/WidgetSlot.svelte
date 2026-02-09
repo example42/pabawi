@@ -9,6 +9,13 @@
   - Error boundaries for individual widgets
   - Loading states with skeletons
   - Responsive grid layouts
+  - Context provision to widgets (pluginInfo, node, etc.)
+
+  Context Provision:
+  - Widgets receive context through PluginContextProvider
+  - Context includes pluginName, pluginInfo, node (for node-scoped widgets), and custom data
+  - Node-scoped widgets (nodeScoped: true) should receive node context
+  - Context is accessible via getPluginContext().widgetContext in widget components
 
   @module lib/plugins/WidgetSlot
   @version 1.0.0
@@ -21,6 +28,7 @@
   import { getPluginLoader } from "./PluginLoader";
   import { logger } from "../logger.svelte";
   import LoadingSpinner from "../../components/LoadingSpinner.svelte";
+  import PluginContextProvider from "./PluginContextProvider.svelte";
 
   // ==========================================================================
   // Types
@@ -64,6 +72,10 @@
     debug?: boolean;
     /** Additional CSS classes */
     class?: string;
+    /** Filter widgets by category (for category tabs) */
+    filterByCategory?: string;
+    /** Context to pass to widgets (pluginName, pluginInfo, node, etc.) */
+    context?: Record<string, unknown>;
   }
 
   let {
@@ -76,6 +88,8 @@
     emptyMessage = "No widgets available for this section",
     debug = false,
     class: className = "",
+    filterByCategory,
+    context = {},
   }: Props = $props();
 
   // ==========================================================================
@@ -139,15 +153,47 @@
   let widgets = $derived.by(() => {
     // Access registryVersion to establish reactive dependency
     void registryVersion;
-    const slotWidgets = registry.getWidgetsForSlot(slot, userCapabilities);
+    let slotWidgets = registry.getWidgetsForSlot(slot, userCapabilities);
+
+    // Apply category filtering if specified
+    if (filterByCategory) {
+      slotWidgets = slotWidgets.filter(widget => {
+        // If widget has a category, it must match the filter
+        // If widget has no category, show it in overview (when filterByCategory is undefined)
+        return widget.category === filterByCategory;
+      });
+    }
+
     console.log(`[WidgetSlot] Slot '${slot}' query result: ${slotWidgets.length} widgets`,
       slotWidgets.map(w => w.id));
     console.log(`[WidgetSlot] Registry widget count: ${registry.widgetCount}`);
     console.log(`[WidgetSlot] User capabilities:`, userCapabilities);
+    if (filterByCategory) {
+      console.log(`[WidgetSlot] Category filter: ${filterByCategory}`);
+    }
     if (debug) {
-      log("debug", `Found ${slotWidgets.length} widgets for slot: ${slot}`);
+      log("debug", `Found ${slotWidgets.length} widgets for slot: ${slot}${filterByCategory ? ` (category: ${filterByCategory})` : ''}`);
     }
     return slotWidgets;
+  });
+
+  // Generate contextual empty state message
+  let contextualEmptyMessage = $derived.by(() => {
+    if (filterByCategory) {
+      // Category-specific empty messages
+      const categoryLabels: Record<string, string> = {
+        inventory: 'Inventory',
+        command: 'Commands',
+        task: 'Tasks',
+        info: 'Information',
+        events: 'Events',
+        reports: 'Reports',
+        package: 'Packages',
+      };
+      const categoryLabel = categoryLabels[filterByCategory] || filterByCategory;
+      return `No ${categoryLabel.toLowerCase()} widgets available for this plugin.`;
+    }
+    return emptyMessage;
   });
 
   // Set default active tab when widgets change
@@ -371,7 +417,7 @@
           d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
         />
       </svg>
-      <p class="text-sm">{emptyMessage}</p>
+      <p class="text-sm">{contextualEmptyMessage}</p>
     </div>
   {/if}
 {:else if layout === "grid"}
@@ -444,7 +490,9 @@
             {:else if state?.component}
               <!-- Render Widget Component -->
               {@const WidgetComponent = state.component}
-              <WidgetComponent {widget} />
+              <PluginContextProvider pluginName={widget.pluginName} widgetContext={context}>
+                <WidgetComponent {widget} />
+              </PluginContextProvider>
             {:else}
               <!-- Pending State -->
               <div class="animate-pulse">
@@ -516,7 +564,9 @@
             </div>
           {:else if state?.component}
             {@const WidgetComponent = state.component}
-            <WidgetComponent {widget} />
+            <PluginContextProvider pluginName={widget.pluginName} widgetContext={context}>
+              <WidgetComponent {widget} />
+            </PluginContextProvider>
           {:else}
             <div class="animate-pulse">
               <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-2"></div>
@@ -586,7 +636,9 @@
             </div>
           {:else if state?.component}
             {@const WidgetComponent = state.component}
-            <WidgetComponent {widget} />
+            <PluginContextProvider pluginName={widget.pluginName} widgetContext={context}>
+              <WidgetComponent {widget} />
+            </PluginContextProvider>
           {:else}
             <div class="animate-pulse py-8">
               <div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-3"></div>

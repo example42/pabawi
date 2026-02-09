@@ -4,9 +4,9 @@
    * Displays nodes from Ansible inventory
    */
 
-  let nodes: any[] = [];
-  let loading = false;
-  let selectedGroup = "all";
+  let nodes = $state<any[]>([]);
+  let loading = $state(false);
+  let selectedGroup = $state("all");
 
   async function loadInventory() {
     loading = true;
@@ -21,9 +21,11 @@
     }
   }
 
-  $: if (selectedGroup) {
-    loadInventory();
-  }
+  $effect(() => {
+    if (selectedGroup) {
+      void loadInventory();
+    }
+  });
 </script>
 
 <div class="inventory-viewer">
@@ -34,7 +36,7 @@
         <option value="all">All Nodes</option>
         <!-- Group options would be loaded dynamically -->
       </select>
-      <button on:click={loadInventory} disabled={loading}>
+      <button onclick={loadInventory} disabled={loading}>
         {loading ? "Loading..." : "Refresh"}
       </button>
     </div>

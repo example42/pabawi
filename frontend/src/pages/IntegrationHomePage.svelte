@@ -11,7 +11,7 @@
   @spec home-page-loading-fixes
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
   import { showError } from '../lib/toast.svelte';
@@ -19,6 +19,9 @@
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import { auth } from '../lib/auth.svelte';
   import WidgetSlot from '../lib/plugins/WidgetSlot.svelte';
+
+  // Health check polling interval (30 seconds)
+  const HEALTH_CHECK_INTERVAL = 30000;
 
   // Types
   interface Props {
@@ -32,6 +35,7 @@
       author: string;
       description: string;
       integrationType: string;
+      integrationTypes?: string[];
       homepage?: string;
       color?: string;
       icon?: string;
@@ -57,6 +61,21 @@
     priority: number;
   }
 
+  interface HealthStatus {
+    plugin: string;
+    healthy: boolean;
+    message: string;
+    lastCheck: string;
+    workingCapabilities?: string[];
+    failingCapabilities?: string[];
+  }
+
+  interface CategoryTab {
+    id: string;
+    label: string;
+    count: number;
+  }
+
   // Receive params as component prop (passed by Router)
   let { params }: Props = $props();
 
@@ -68,8 +87,54 @@
 
   // Plugin info (loaded on-demand)
   let pluginInfo = $state<PluginInfo | null>(null);
+  let healthStatus = $state<HealthStatus | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let activeTab = $state<string>('overview');
+  let categoryTabs = $state<CategoryTab[]>([]);
+  let healthCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Group capabilities by category and create tabs
+   */
+  function buildCategoryTabs(info: PluginInfo): CategoryTab[] {
+    const categories = new Map<string, number>();
+
+    // Count capabilities per category
+    for (const cap of info.capabilities) {
+      const count = categories.get(cap.category) || 0;
+      categories.set(cap.category, count + 1);
+    }
+
+    // Create tabs for categories with capabilities
+    const tabs: CategoryTab[] = [
+      { id: 'overview', label: 'Overview', count: 0 }
+    ];
+
+    const categoryOrder = ['inventory', 'command', 'task', 'info', 'events', 'reports', 'package'];
+    const categoryLabels: Record<string, string> = {
+      inventory: 'Inventory',
+      command: 'Commands',
+      task: 'Tasks',
+      info: 'Information',
+      events: 'Events',
+      reports: 'Reports',
+      package: 'Packages',
+    };
+
+    for (const category of categoryOrder) {
+      const count = categories.get(category);
+      if (count && count > 0) {
+        tabs.push({
+          id: category,
+          label: categoryLabels[category] || category,
+          count,
+        });
+      }
+    }
+
+    return tabs;
+  }
 
   /**
    * Load plugin info when page mounts
@@ -83,6 +148,10 @@
       // Fetch full plugin info (only when navigating to this page)
       const data = await get<PluginInfo>(`/api/v1/plugins/${pluginName}`);
       pluginInfo = data;
+      categoryTabs = buildCategoryTabs(data);
+
+      // Also fetch health status separately for more detailed information
+      await loadHealthStatus();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load plugin info';
       error = message;
@@ -90,6 +159,50 @@
       console.error('Failed to load plugin info:', err);
     } finally {
       loading = false;
+    }
+  }
+
+  /**
+   * Load health status for the plugin
+   */
+  async function loadHealthStatus() {
+    try {
+      const health = await get<HealthStatus>(`/api/v1/plugins/${pluginName}/health`);
+      healthStatus = health;
+
+      // Update pluginInfo.healthy to match health status
+      if (pluginInfo) {
+        pluginInfo.healthy = health.healthy;
+      }
+    } catch (err) {
+      console.error('Failed to load health status:', err);
+      // Don't show error toast for health check failures - just log it
+      // The UI will show the basic healthy status from pluginInfo
+    }
+  }
+
+  /**
+   * Start polling for health status updates
+   */
+  function startHealthPolling() {
+    // Clear any existing interval
+    if (healthCheckInterval) {
+      clearInterval(healthCheckInterval);
+    }
+
+    // Poll health status every 30 seconds
+    healthCheckInterval = setInterval(() => {
+      void loadHealthStatus();
+    }, HEALTH_CHECK_INTERVAL);
+  }
+
+  /**
+   * Stop polling for health status updates
+   */
+  function stopHealthPolling() {
+    if (healthCheckInterval) {
+      clearInterval(healthCheckInterval);
+      healthCheckInterval = null;
     }
   }
 
@@ -105,6 +218,13 @@
   // Load plugin info on mount
   onMount(() => {
     void loadPluginInfo();
+    // Start polling for health status updates
+    startHealthPolling();
+  });
+
+  // Cleanup on unmount
+  onDestroy(() => {
+    stopHealthPolling();
   });
 </script>
 
@@ -178,8 +298,14 @@
               <p class="mt-1 text-gray-600 dark:text-gray-400">
                 {pluginInfo.metadata.description}
               </p>
-              <div class="mt-2 flex items-center gap-3">
-                <IntegrationBadge integration={pluginInfo.metadata.integrationType} variant="badge" size="sm" />
+              <div class="mt-2 flex items-center gap-3 flex-wrap">
+                {#if pluginInfo.metadata.integrationTypes}
+                  {#each pluginInfo.metadata.integrationTypes as integrationType}
+                    <IntegrationBadge integration={integrationType} variant="badge" size="sm" />
+                  {/each}
+                {:else}
+                  <IntegrationBadge integration={pluginInfo.metadata.integrationType} variant="badge" size="sm" />
+                {/if}
                 <span class="text-sm text-gray-500 dark:text-gray-400">
                   by {pluginInfo.metadata.author}
                 </span>
@@ -190,15 +316,29 @@
           <!-- Health Status Badge -->
           <div class="flex items-center gap-2">
             {#if pluginInfo.healthy}
-              <span class="flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                <span class="h-2 w-2 rounded-full bg-green-600 dark:bg-green-400"></span>
-                Healthy
-              </span>
+              <div class="flex flex-col items-end gap-1">
+                <span class="flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <span class="h-2 w-2 rounded-full bg-green-600 dark:bg-green-400"></span>
+                  Healthy
+                </span>
+                {#if healthStatus?.lastCheck}
+                  <span class="text-xs text-gray-500 dark:text-gray-400">
+                    Last checked: {new Date(healthStatus.lastCheck).toLocaleTimeString()}
+                  </span>
+                {/if}
+              </div>
             {:else}
-              <span class="flex items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
-                <span class="h-2 w-2 rounded-full bg-red-600 dark:bg-red-400"></span>
-                Offline
-              </span>
+              <div class="flex flex-col items-end gap-1">
+                <span class="flex items-center gap-2 rounded-full bg-red-100 px-3 py-1 text-sm font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                  <span class="h-2 w-2 rounded-full bg-red-600 dark:bg-red-400"></span>
+                  Offline
+                </span>
+                {#if healthStatus?.message}
+                  <span class="text-xs text-red-600 dark:text-red-400 max-w-xs text-right">
+                    {healthStatus.message}
+                  </span>
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -206,6 +346,92 @@
 
       <!-- Plugin Content -->
       <div class="space-y-6">
+        <!-- Health Status Details (shown when offline or has failing capabilities) -->
+        {#if healthStatus && (!pluginInfo.healthy || (healthStatus.failingCapabilities && healthStatus.failingCapabilities.length > 0))}
+          <div class="rounded-lg bg-red-50 p-6 shadow dark:bg-red-900/10 border border-red-200 dark:border-red-800">
+            <div class="flex items-start gap-3">
+              <svg class="h-6 w-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div class="flex-1">
+                <h3 class="text-lg font-semibold text-red-900 dark:text-red-200">
+                  Plugin Health Issues
+                </h3>
+                <p class="mt-1 text-sm text-red-800 dark:text-red-300">
+                  {healthStatus.message}
+                </p>
+
+                {#if healthStatus.failingCapabilities && healthStatus.failingCapabilities.length > 0}
+                  <div class="mt-4">
+                    <h4 class="text-sm font-medium text-red-900 dark:text-red-200">
+                      Failing Capabilities:
+                    </h4>
+                    <ul class="mt-2 space-y-1">
+                      {#each healthStatus.failingCapabilities as capability}
+                        <li class="text-sm text-red-800 dark:text-red-300 flex items-center gap-2">
+                          <span class="h-1.5 w-1.5 rounded-full bg-red-600 dark:bg-red-400"></span>
+                          {capability}
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
+                {/if}
+
+                {#if healthStatus.workingCapabilities && healthStatus.workingCapabilities.length > 0}
+                  <div class="mt-4">
+                    <h4 class="text-sm font-medium text-green-900 dark:text-green-200">
+                      Working Capabilities:
+                    </h4>
+                    <ul class="mt-2 space-y-1">
+                      {#each healthStatus.workingCapabilities as capability}
+                        <li class="text-sm text-green-800 dark:text-green-300 flex items-center gap-2">
+                          <span class="h-1.5 w-1.5 rounded-full bg-green-600 dark:bg-green-400"></span>
+                          {capability}
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
+                {/if}
+
+                <div class="mt-4">
+                  <p class="text-sm text-red-800 dark:text-red-300">
+                    Check the plugin configuration and ensure all required services are running.
+                    {#if pluginInfo.metadata.homepage}
+                      Visit the <a href={pluginInfo.metadata.homepage} target="_blank" rel="noopener noreferrer" class="underline hover:text-red-900 dark:hover:text-red-200">plugin homepage</a> for setup instructions.
+                    {/if}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Category Tabs -->
+        {#if categoryTabs.length > 1}
+          <div class="rounded-lg bg-white shadow dark:bg-gray-800">
+            <div class="border-b border-gray-200 dark:border-gray-700">
+              <nav class="-mb-px flex space-x-8 px-6" aria-label="Tabs">
+                {#each categoryTabs as tab}
+                  <button
+                    onclick={() => activeTab = tab.id}
+                    class="whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors
+                      {activeTab === tab.id
+                        ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+                  >
+                    {tab.label}
+                    {#if tab.count > 0}
+                      <span class="ml-2 rounded-full bg-gray-100 px-2 py-0.5 text-xs dark:bg-gray-700">
+                        {tab.count}
+                      </span>
+                    {/if}
+                  </button>
+                {/each}
+              </nav>
+            </div>
+          </div>
+        {/if}
+
         {#if pluginInfo.metadata.homepage}
           <div class="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Homepage</h3>
@@ -220,16 +446,58 @@
           </div>
         {/if}
 
-        <!-- Plugin-specific widgets (standalone-page slot) -->
-        <WidgetSlot
-          slot="standalone-page"
-          layout="stack"
-          context={{ pluginName, pluginInfo }}
-          {userCapabilities}
-          showEmptyState={true}
-          emptyMessage="No content widgets available for this plugin."
-          showLoadingStates={true}
-        />
+        <!-- Tab Content -->
+        {#if activeTab === 'overview'}
+          <!-- Overview Tab - Show dashboard and standalone-page widgets -->
+          <div class="space-y-6">
+            <!-- Dashboard widgets (detailed tools) -->
+            <WidgetSlot
+              slot="dashboard"
+              layout="grid"
+              context={{ pluginName, pluginInfo }}
+              {userCapabilities}
+              showEmptyState={false}
+              showLoadingStates={true}
+            />
+
+            <!-- Standalone page widgets (full-page content) -->
+            <WidgetSlot
+              slot="standalone-page"
+              layout="stack"
+              context={{ pluginName, pluginInfo }}
+              {userCapabilities}
+              showEmptyState={true}
+              emptyMessage="No content widgets available for this plugin."
+              showLoadingStates={true}
+            />
+          </div>
+        {:else}
+          <!-- Category Tab - Show filtered dashboard and standalone-page widgets -->
+          <div class="space-y-6">
+            <!-- Dashboard widgets filtered by category -->
+            <WidgetSlot
+              slot="dashboard"
+              layout="grid"
+              context={{ pluginName, pluginInfo, category: activeTab }}
+              {userCapabilities}
+              filterByCategory={activeTab}
+              showEmptyState={false}
+              showLoadingStates={true}
+            />
+
+            <!-- Standalone page widgets filtered by category -->
+            <WidgetSlot
+              slot="standalone-page"
+              layout="stack"
+              context={{ pluginName, pluginInfo, category: activeTab }}
+              {userCapabilities}
+              filterByCategory={activeTab}
+              showEmptyState={true}
+              emptyMessage="No widgets available for this category."
+              showLoadingStates={true}
+            />
+          </div>
+        {/if}
       </div>
     </div>
   {/if}

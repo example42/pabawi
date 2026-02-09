@@ -83,7 +83,12 @@
   let sortDirection = $state<SortDirection>('asc');
   let selectedItem = $state<HieraKeyValue | null>(null);
   let showValueModal = $state(false);
-  let internalLevelFilter = $state(levelFilter);
+  let internalLevelFilter = $state('');
+
+  // Sync levelFilter prop to internal state
+  $effect(() => {
+    internalLevelFilter = levelFilter || '';
+  });
 
   // ==========================================================================
   // Derived
