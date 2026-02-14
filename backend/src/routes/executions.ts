@@ -819,6 +819,7 @@ export function createExecutionsRouter(
           results: [] as NodeResult[],
           command: (modifications.command ?? originalExecution.command),
           expertMode: (modifications.expertMode ?? originalExecution.expertMode),
+          executionTool: originalExecution.executionTool,
         };
 
         logger.debug("Creating re-execution with parameters", {

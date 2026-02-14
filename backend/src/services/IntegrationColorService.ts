@@ -12,6 +12,7 @@ export interface IntegrationColorConfig {
  */
 export interface IntegrationColors {
   bolt: IntegrationColorConfig;
+  ansible: IntegrationColorConfig;
   puppetdb: IntegrationColorConfig;
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
@@ -42,6 +43,11 @@ export class IntegrationColorService {
         primary: '#FFAE1A',  // Bright orange from Puppet logo
         light: '#FFF4E0',
         dark: '#CC8B15',
+      },
+      ansible: {
+        primary: '#1A4D8F',
+        light: '#E8F1FF',
+        dark: '#133A6D',
       },
       puppetdb: {
         primary: '#9063CD',  // Violet/purple from Puppet logo

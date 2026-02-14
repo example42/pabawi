@@ -14,6 +14,7 @@ export interface IntegrationColorConfig {
  */
 export interface IntegrationColors {
   bolt: IntegrationColorConfig;
+  ansible: IntegrationColorConfig;
   puppetdb: IntegrationColorConfig;
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
@@ -110,7 +111,7 @@ class IntegrationColorStore {
    * @returns Array of valid integration names
    */
   getValidIntegrations(): IntegrationType[] {
-    return ['bolt', 'puppetdb', 'puppetserver', 'hiera'];
+    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera'];
   }
 
   /**
@@ -133,6 +134,11 @@ class IntegrationColorStore {
         primary: '#FFAE1A',
         light: '#FFF4E0',
         dark: '#CC8B15',
+      },
+      ansible: {
+        primary: '#1A4D8F',
+        light: '#E8F1FF',
+        dark: '#133A6D',
       },
       puppetdb: {
         primary: '#9063CD',

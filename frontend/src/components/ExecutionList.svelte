@@ -3,7 +3,6 @@
   import ReExecutionButton from './ReExecutionButton.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
   import { router } from '../lib/router.svelte';
-  import { expertMode } from '../lib/expertMode.svelte';
 
   interface ExecutionResult {
     id: string;
@@ -18,6 +17,7 @@
     error?: string;
     command?: string;
     expertMode?: boolean;
+    executionTool?: 'bolt' | 'ansible';
   }
 
   interface Props {
@@ -116,6 +116,9 @@
             Status
           </th>
           <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+            Tool
+          </th>
+          <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
             Started
           </th>
           <th scope="col" class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -181,6 +184,9 @@
             {/if}
             <td class="whitespace-nowrap px-6 py-4 text-sm">
               <StatusBadge status={execution.status} size="sm" />
+            </td>
+            <td class="whitespace-nowrap px-6 py-4 text-sm">
+              <IntegrationBadge integration={execution.executionTool ?? 'bolt'} variant="badge" size="sm" />
             </td>
             <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
               {formatTimestamp(execution.startedAt)}

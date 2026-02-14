@@ -27,3 +27,7 @@ ALTER TABLE executions ADD COLUMN stdout TEXT;
 
 -- Add stderr column if it doesn't exist
 ALTER TABLE executions ADD COLUMN stderr TEXT;
+
+-- Migration: Add execution_tool column to indicate which execution engine was used
+-- Values: bolt, ansible
+ALTER TABLE executions ADD COLUMN execution_tool TEXT DEFAULT 'bolt';

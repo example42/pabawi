@@ -19,6 +19,7 @@
 
   const integrationLabels: Record<IntegrationType, string> = {
     bolt: 'Bolt',
+    ansible: 'Ansible',
     puppetdb: 'PuppetDB',
     puppetserver: 'Puppetserver',
     hiera: 'Hiera',
