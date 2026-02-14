@@ -11,6 +11,7 @@
   import TaskRunInterface from '../components/TaskRunInterface.svelte';
   import PuppetRunInterface from '../components/PuppetRunInterface.svelte';
   import PackageInstallInterface from '../components/PackageInstallInterface.svelte';
+  import AnsiblePlaybookInterface from '../components/AnsiblePlaybookInterface.svelte';
   import ReportViewer from '../components/ReportViewer.svelte';
   import PuppetReportsListView from '../components/PuppetReportsListView.svelte';
   import CatalogViewer from '../components/CatalogViewer.svelte';
@@ -70,6 +71,13 @@
     error?: string;
     command?: string;
     expertMode?: boolean;
+    executionTool?: 'bolt' | 'ansible';
+  }
+
+  interface IntegrationStatus {
+    name: string;
+    status: 'connected' | 'degraded' | 'not_configured' | 'error' | 'disconnected';
+    type: 'execution' | 'information' | 'both';
   }
 
   interface NodeResult {
@@ -121,11 +129,13 @@
 
   // Command execution state
   let commandInput = $state('');
+  let commandTool = $state<'bolt' | 'ansible'>('bolt');
   let commandExecuting = $state(false);
   let commandError = $state<string | null>(null);
   let commandResult = $state<ExecutionResult | null>(null);
   let commandExecutionId = $state<string | null>(null);
   let commandStream = $state<ExecutionStream | null>(null);
+  let availableExecutionTools = $state<Array<'bolt' | 'ansible'>>(['bolt']);
 
   // Re-execution state
   let initialTaskName = $state<string | undefined>(undefined);
@@ -302,7 +312,7 @@
 
       const data = await post<{ executionId: string }>(
         `/api/nodes/${nodeId}/command`,
-        { command: commandInput, expertMode: expertMode.enabled },
+        { command: commandInput, expertMode: expertMode.enabled, tool: commandTool },
         { maxRetries: 0 } // Don't retry command executions
       );
 
@@ -409,6 +419,31 @@
       commandWhitelist = data.commandWhitelist;
     } catch (err) {
       console.error('Error fetching command whitelist:', err);
+    }
+  }
+
+  async function fetchExecutionTools(): Promise<void> {
+    try {
+      const data = await get<{ integrations: IntegrationStatus[] }>('/api/integrations/status', {
+        maxRetries: 1,
+      });
+
+      const executionIntegrations = data.integrations.filter(
+        (integration) => (integration.type === 'execution' || integration.type === 'both')
+          && (integration.status === 'connected' || integration.status === 'degraded')
+          && (integration.name === 'bolt' || integration.name === 'ansible'),
+      ) as Array<IntegrationStatus & { name: 'bolt' | 'ansible' }>;
+
+      if (executionIntegrations.length > 0) {
+        availableExecutionTools = executionIntegrations.map((integration) => integration.name);
+      }
+
+      if (!availableExecutionTools.includes(commandTool)) {
+        commandTool = availableExecutionTools[0] ?? 'bolt';
+      }
+    } catch {
+      availableExecutionTools = ['bolt'];
+      commandTool = 'bolt';
     }
   }
 
@@ -987,9 +1022,14 @@
   function checkReExecutionParams(): void {
     // Check for command re-execution
     const reExecuteCommand = sessionStorage.getItem('reExecuteCommand');
+    const reExecuteCommandTool = sessionStorage.getItem('reExecuteCommandTool');
     if (reExecuteCommand) {
       commandInput = reExecuteCommand;
       sessionStorage.removeItem('reExecuteCommand');
+      sessionStorage.removeItem('reExecuteCommandTool');
+      if (reExecuteCommandTool === 'ansible' || reExecuteCommandTool === 'bolt') {
+        commandTool = reExecuteCommandTool;
+      }
       showInfo('Command pre-filled from previous execution');
     }
 
@@ -1152,6 +1192,7 @@
     fetchNode();
     fetchExecutions();
     fetchCommandWhitelist();
+    fetchExecutionTools();
 
     // Load overview tab data if it's the active tab
     if (activeTab === 'overview') {
@@ -1565,15 +1606,21 @@
           <div>
             <PackageInstallInterface
               nodeId={nodeId}
+              availableExecutionTools={availableExecutionTools}
               onExecutionComplete={fetchExecutions}
             />
+          </div>
+
+          <!-- Playbook Execution Section -->
+          <div>
+            <AnsiblePlaybookInterface nodeId={nodeId} onExecutionComplete={fetchExecutions} />
           </div>
 
           <!-- Command Execution Section -->
     <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div class="mb-4 flex items-center gap-3">
         <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Execute Command</h2>
-        <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+        <IntegrationBadge integration={commandTool} variant="badge" size="sm" />
       </div>
 
       <!-- Available Commands Display -->
@@ -1619,6 +1666,25 @@
           <label for="command-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Command
           </label>
+
+          {#if availableExecutionTools.length > 1}
+            <div class="mt-2">
+              <label for="command-tool" class="block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                Tool
+              </label>
+              <select
+                id="command-tool"
+                bind:value={commandTool}
+                class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                disabled={commandExecuting}
+              >
+                {#each availableExecutionTools as tool}
+                  <option value={tool}>{tool === 'bolt' ? 'Bolt' : 'Ansible'}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+
           <input
             id="command-input"
             type="text"
@@ -1655,7 +1721,7 @@
         <!-- Real-time output viewer for running executions in expert mode -->
         <div class="mt-4">
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
-          <RealtimeOutputViewer stream={commandStream} autoConnect={false} />
+          <RealtimeOutputViewer stream={commandStream} executionId={commandExecutionId ?? ''} autoConnect={false} />
         </div>
       {:else if commandResult}
         <!-- Static output for completed executions or when expert mode is disabled -->

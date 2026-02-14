@@ -13,6 +13,7 @@ Pabawi is designed to work with minimal configuration by using your existing Bol
 - [Bolt Project Requirements](#bolt-project-requirements)
 - [Command Whitelist Configuration](#command-whitelist-configuration)
 - [Package Installation Configuration](#package-installation-configuration)
+- [Ansible Integration](#ansible-integration)
 - [Expert Mode](#expert-mode)
 - [Streaming Configuration](#streaming-configuration)
 - [Caching Configuration](#caching-configuration)
@@ -111,6 +112,10 @@ All configuration is managed through environment variables. You can set these in
 ### Bolt Integration
 
 For detailed Bolt configuration, security whitelisting, and package task setup, please refer to the dedicated [Bolt Integration Setup Guide](./integrations/bolt.md).
+
+### Ansible Integration
+
+For detailed Ansible configuration, inventory requirements, playbook usage, and troubleshooting, please refer to the dedicated [Ansible Integration Setup Guide](./integrations/ansible.md).
 
 ### Hiera Integration
 
@@ -273,6 +278,12 @@ For detailed command whitelist configuration, security modes, and examples, plea
 ## Package Installation Configuration
 
 For detailed package installation configuration, including how to define available tasks and parameter mappings, please refer to the dedicated [Bolt Integration Setup Guide](./integrations/bolt.md).
+
+## Ansible Integration
+
+Pabawi supports Ansible as an execution integration for commands, package operations, and playbooks.
+
+For the complete setup process and environment variable reference (`ANSIBLE_ENABLED`, `ANSIBLE_PROJECT_PATH`, `ANSIBLE_INVENTORY_PATH`, `ANSIBLE_EXECUTION_TIMEOUT`), see the [Ansible Integration Setup Guide](./integrations/ansible.md).
 
 ## Expert Mode
 

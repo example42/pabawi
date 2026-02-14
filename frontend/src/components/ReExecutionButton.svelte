@@ -9,6 +9,7 @@
     parameters?: Record<string, unknown>;
     status: 'running' | 'success' | 'failed' | 'partial';
     command?: string;
+    executionTool?: 'bolt' | 'ansible';
   }
 
   interface Props {
@@ -44,12 +45,14 @@
             const nodeId = targetNodes[0];
             // Store command in sessionStorage for pre-filling
             sessionStorage.setItem('reExecuteCommand', execution.action);
+            sessionStorage.setItem('reExecuteCommandTool', execution.executionTool || 'bolt');
             router.navigate(`/nodes/${nodeId}?tab=actions`);
           } else {
             // For multiple nodes, we'd need a multi-node command interface
             // For now, navigate to first node
             const nodeId = targetNodes[0];
             sessionStorage.setItem('reExecuteCommand', execution.action);
+            sessionStorage.setItem('reExecuteCommandTool', execution.executionTool || 'bolt');
             router.navigate(`/nodes/${nodeId}?tab=actions`);
           }
           break;
@@ -61,7 +64,8 @@
             // Store task info in sessionStorage for pre-filling
             sessionStorage.setItem('reExecuteTask', JSON.stringify({
               taskName: execution.action,
-              parameters: execution.parameters || {}
+              parameters: execution.parameters || {},
+              executionTool: execution.executionTool || 'bolt'
             }));
             router.navigate(`/nodes/${nodeId}?tab=actions`);
           } else {
@@ -69,7 +73,8 @@
             const nodeId = targetNodes[0];
             sessionStorage.setItem('reExecuteTask', JSON.stringify({
               taskName: execution.action,
-              parameters: execution.parameters || {}
+              parameters: execution.parameters || {},
+              executionTool: execution.executionTool || 'bolt'
             }));
             router.navigate(`/nodes/${nodeId}?tab=actions`);
           }
@@ -91,7 +96,8 @@
           if (targetNodes.length === 1) {
             const nodeId = targetNodes[0];
             sessionStorage.setItem('reExecutePackage', JSON.stringify({
-              parameters: execution.parameters || {}
+              parameters: execution.parameters || {},
+              executionTool: execution.executionTool || 'bolt'
             }));
             router.navigate(`/nodes/${nodeId}?tab=actions`);
           }

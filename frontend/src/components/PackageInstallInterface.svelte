@@ -12,6 +12,7 @@
 
   interface Props {
     nodeId: string;
+    availableExecutionTools?: Array<'bolt' | 'ansible'>;
     onExecutionComplete?: () => void;
   }
 
@@ -38,6 +39,7 @@
     results: NodeResult[];
     error?: string;
     command?: string;
+    executionTool?: 'bolt' | 'ansible';
   }
 
   interface NodeResult {
@@ -53,12 +55,13 @@
     duration: number;
   }
 
-  let { nodeId, onExecutionComplete }: Props = $props();
+  let { nodeId, availableExecutionTools = ['bolt'], onExecutionComplete }: Props = $props();
 
   // State
   let expanded = $state(false);
   let availableTasks = $state<PackageTask[]>([]);
   let selectedTask = $state<string>('');
+  let selectedTool = $state<'bolt' | 'ansible'>('bolt');
   let packageName = $state('');
   let packageVersion = $state('');
   let ensure = $state<'present' | 'absent' | 'latest'>('present');
@@ -66,6 +69,7 @@
   let executing = $state(false);
   let error = $state<string | null>(null);
   let result = $state<ExecutionResult | null>(null);
+  let currentExecutionId = $state<string>('');
   let tasksLoading = $state(false);
   let tasksFetched = $state(false);
   let executionStream = $state<ExecutionStream | null>(null);
@@ -97,6 +101,8 @@
     availableTasks.find((t) => t.name === selectedTask)
   );
 
+  const shouldShowToolSelector = $derived(availableExecutionTools.length > 1);
+
   // Check if settings are supported by the selected task
   const supportsSettings = $derived(
     selectedTaskConfig?.parameterMapping.settings !== undefined
@@ -105,7 +111,7 @@
   function validateForm(): boolean {
     validationError = null;
 
-    if (!selectedTask) {
+    if (selectedTool === 'bolt' && !selectedTask) {
       validationError = 'Please select a package task';
       return false;
     }
@@ -145,6 +151,7 @@
     executing = true;
     error = null;
     result = null;
+    currentExecutionId = '';
     executionStream = null;
 
     try {
@@ -152,11 +159,15 @@
 
       // Build parameters
       const parameters: Record<string, unknown> = {
-        taskName: selectedTask,
         packageName: packageName.trim(),
         ensure,
         expertMode: expertMode.enabled,
+        tool: selectedTool,
       };
+
+      if (selectedTool === 'bolt') {
+        parameters.taskName = selectedTask;
+      }
 
       if (packageVersion.trim()) {
         parameters.version = packageVersion.trim();
@@ -173,6 +184,7 @@
       );
 
       const executionId = data.executionId;
+      currentExecutionId = executionId;
 
       // If expert mode is enabled, create a stream for real-time output
       if (expertMode.enabled) {
@@ -253,7 +265,21 @@
   $effect(() => {
     if (expanded && !tasksFetched) {
       tasksFetched = true;
+      if (selectedTool === 'bolt') {
+        fetchPackageTasks();
+      }
+    }
+  });
+
+  $effect(() => {
+    if (expanded && selectedTool === 'bolt' && availableTasks.length === 0 && !tasksLoading) {
       fetchPackageTasks();
+    }
+  });
+
+  $effect(() => {
+    if (!availableExecutionTools.includes(selectedTool)) {
+      selectedTool = availableExecutionTools[0] ?? 'bolt';
     }
   });
 </script>
@@ -266,7 +292,7 @@
   >
     <h2 class="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
       Install Software
-      <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+      <IntegrationBadge integration={selectedTool} variant="badge" size="sm" />
     </h2>
     <svg
       class="h-5 w-5 transform text-gray-500 transition-transform dark:text-gray-400"
@@ -286,7 +312,26 @@
       </p>
 
       <form onsubmit={installPackage} class="space-y-4">
+        {#if shouldShowToolSelector}
+          <div>
+            <label for="package-tool-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Tool
+            </label>
+            <select
+              id="package-tool-select"
+              bind:value={selectedTool}
+              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+              disabled={executing}
+            >
+              {#each availableExecutionTools as tool}
+                <option value={tool}>{tool === 'bolt' ? 'Bolt' : 'Ansible'}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
         <!-- Task Selection -->
+        {#if selectedTool === 'bolt'}
         <div>
           <label for="task-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Package Task <span class="text-red-500">*</span>
@@ -319,6 +364,7 @@
             {/if}
           {/if}
         </div>
+        {/if}
 
         <!-- Package Name -->
         <div>
@@ -401,7 +447,7 @@
           <button
             type="submit"
             class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={executing || !packageName.trim() || !selectedTask || availableTasks.length === 0}
+            disabled={executing || !packageName.trim() || (selectedTool === 'bolt' && (!selectedTask || availableTasks.length === 0))}
           >
             {executing ? 'Installing...' : 'Install Package'}
           </button>
@@ -433,7 +479,7 @@
       {#if executionStream && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
         <div class="mt-4">
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
-          <RealtimeOutputViewer stream={executionStream} autoConnect={false} />
+          <RealtimeOutputViewer stream={executionStream} executionId={currentExecutionId} autoConnect={false} />
         </div>
       {:else if result}
         <!-- Static Installation Result -->

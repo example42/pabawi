@@ -21,6 +21,7 @@ interface DbRow {
   re_execution_count: number | null;
   stdout: string | null;
   stderr: string | null;
+  execution_tool: string | null;
   total?: number;
   running?: number;
   success?: number;
@@ -32,6 +33,8 @@ interface DbRow {
  * Execution types
  */
 export type ExecutionType = "command" | "task" | "facts" | "puppet" | "package";
+
+export type ExecutionTool = "bolt" | "ansible";
 
 /**
  * Execution status
@@ -74,6 +77,7 @@ export interface ExecutionRecord {
   reExecutionCount?: number;
   stdout?: string;
   stderr?: string;
+  executionTool?: ExecutionTool;
 }
 
 /**
@@ -130,8 +134,8 @@ export class ExecutionRepository {
       INSERT INTO executions (
         id, type, target_nodes, action, parameters, status,
         started_at, completed_at, results, error, command, expert_mode,
-        original_execution_id, re_execution_count, stdout, stderr
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        original_execution_id, re_execution_count, stdout, stderr, execution_tool
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -151,6 +155,7 @@ export class ExecutionRepository {
       record.reExecutionCount ?? 0,
       record.stdout ?? null,
       record.stderr ?? null,
+      record.executionTool ?? "bolt",
     ];
 
     try {
@@ -181,6 +186,7 @@ export class ExecutionRepository {
       "reExecutionCount",
       "stdout",
       "stderr",
+      "executionTool",
     ];
     const updateFields: string[] = [];
     const params: unknown[] = [];
@@ -474,6 +480,10 @@ export class ExecutionRepository {
       reExecutionCount: row.re_execution_count ?? 0,
       stdout: row.stdout ?? undefined,
       stderr: row.stderr ?? undefined,
+      executionTool:
+        row.execution_tool === "ansible"
+          ? "ansible"
+          : "bolt",
     };
   }
 

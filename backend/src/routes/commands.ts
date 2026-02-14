@@ -14,6 +14,7 @@ import { NodeIdParamSchema } from "../validation/commonSchemas";
 const CommandExecutionBodySchema = z.object({
   command: z.string().min(1, "Command is required"),
   expertMode: z.boolean().optional(),
+  tool: z.enum(["bolt", "ansible"]).optional(),
 });
 
 /**
@@ -65,6 +66,26 @@ export function createCommandsRouter(
         const nodeId = params.id;
         const command = body.command;
         const expertMode = body.expertMode ?? false;
+        const requestedTool = body.tool;
+
+        const boltTool = integrationManager.getExecutionTool("bolt");
+        const ansibleTool = integrationManager.getExecutionTool("ansible");
+        const selectedTool = requestedTool
+          ?? (boltTool ? "bolt" : ansibleTool ? "ansible" : "bolt");
+
+        if (!integrationManager.getExecutionTool(selectedTool)) {
+          const errorResponse = {
+            error: {
+              code: "EXECUTION_TOOL_NOT_AVAILABLE",
+              message: `Execution tool '${selectedTool}' is not available`,
+            },
+          };
+
+          res.status(503).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse,
+          );
+          return;
+        }
 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
@@ -178,6 +199,7 @@ export function createCommandsRouter(
           startedAt: new Date().toISOString(),
           results: [],
           expertMode,
+          executionTool: selectedTool,
         });
 
         logger.info("Execution record created, starting command execution", {
@@ -205,7 +227,7 @@ export function createCommandsRouter(
             );
 
             // Execute action through IntegrationManager
-            const result = await integrationManager.executeAction("bolt", {
+            const result = await integrationManager.executeAction(selectedTool, {
               type: "command",
               target: nodeId,
               action: command,
@@ -282,10 +304,11 @@ export function createCommandsRouter(
         // Attach debug info if expert mode is enabled
         if (debugInfo) {
           debugInfo.duration = duration;
-          expertModeService.setIntegration(debugInfo, 'bolt');
+          expertModeService.setIntegration(debugInfo, selectedTool);
           expertModeService.addMetadata(debugInfo, 'executionId', executionId);
           expertModeService.addMetadata(debugInfo, 'nodeId', nodeId);
           expertModeService.addMetadata(debugInfo, 'command', command);
+          expertModeService.addMetadata(debugInfo, 'tool', selectedTool);
           expertModeService.addInfo(debugInfo, {
             message: "Command execution started",
             context: JSON.stringify({ executionId, nodeId, command }),

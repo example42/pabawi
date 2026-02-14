@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS executions (
   original_execution_id TEXT,  -- Reference to original execution if this is a re-execution
   re_execution_count INTEGER DEFAULT 0,  -- Number of times this execution has been re-executed
   stdout TEXT,  -- Complete stdout output (stored when expert mode enabled)
-  stderr TEXT  -- Complete stderr output (stored when expert mode enabled)
+  stderr TEXT,  -- Complete stderr output (stored when expert mode enabled)
+  execution_tool TEXT DEFAULT 'bolt' CHECK(execution_tool IN ('bolt', 'ansible'))
 );
 
 -- Index Strategy:

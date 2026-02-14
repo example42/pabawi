@@ -27,6 +27,12 @@ export class ConfigService {
    * Parse integrations configuration from environment variables
    */
   private parseIntegrationsConfig(): {
+    ansible?: {
+      enabled: boolean;
+      projectPath: string;
+      inventoryPath?: string;
+      timeout?: number;
+    };
     puppetdb?: {
       enabled: boolean;
       serverUrl: string;
@@ -105,6 +111,18 @@ export class ConfigService {
     };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
+
+    // Parse Ansible configuration
+    if (process.env.ANSIBLE_ENABLED === "true") {
+      integrations.ansible = {
+        enabled: true,
+        projectPath: process.env.ANSIBLE_PROJECT_PATH || process.cwd(),
+        inventoryPath: process.env.ANSIBLE_INVENTORY_PATH,
+        timeout: process.env.ANSIBLE_EXECUTION_TIMEOUT
+          ? parseInt(process.env.ANSIBLE_EXECUTION_TIMEOUT, 10)
+          : undefined,
+      };
+    }
 
     // Parse PuppetDB configuration
     if (process.env.PUPPETDB_ENABLED === "true") {
@@ -604,6 +622,19 @@ export class ConfigService {
     const puppetdb = this.config.integrations.puppetdb;
     if (puppetdb?.enabled) {
       return puppetdb as typeof puppetdb & { enabled: true };
+    }
+    return null;
+  }
+
+  /**
+   * Get Ansible configuration if enabled
+   */
+  public getAnsibleConfig():
+    | (typeof this.config.integrations.ansible & { enabled: true })
+    | null {
+    const ansible = this.config.integrations.ansible;
+    if (ansible?.enabled) {
+      return ansible as typeof ansible & { enabled: true };
     }
     return null;
   }

@@ -7,7 +7,7 @@
 </td>
 <td>
   <h3>Classic Infrastructures Command & Control Awesomeness</h3>
-  <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It currently provides integrations with Puppet, Bolt, PuppetDB, and Hiera. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.</p>
+  <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It currently provides integrations with Puppet, Bolt, Ansible, PuppetDB, and Hiera. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.</p>
 </td>
 </tr>
 </table>
@@ -22,6 +22,7 @@
 - [Screenshots](#screenshots)
 - [Prerequisites](#prerequisites)
   - [Bolt Integration](#bolt-integration)
+  - [Ansible Integration](#ansible-integration)
   - [PuppetDB Integration](#puppetdb-integration)
   - [PuppetServer Integration](#puppetserver-integration)
   - [Hiera Integration](#hiera-integration)
@@ -126,6 +127,13 @@ To have an idea of Pabawi awesomeness, here some random screenshots
 - Any required SSH keys used in Bolt configuration
 - For details: [Bolt Setup](docs/integrations/bolt.md)
 
+### Ansible Integration
+
+- Ansible CLI installed (`ansible` and `ansible-playbook`)
+- A valid local Ansible inventory file
+- SSH (or configured Ansible transport) access to target nodes
+- For details: [Ansible Setup](docs/integrations/ansible.md)
+
 ### PuppetDB Integration
 
 - Network access to PuppetDB port 8081
@@ -201,7 +209,7 @@ For comprehensive Docker deployment instructions including all integrations, see
 
 Pabawi uses a `.env` file for configuration. Use `backend/.env.example` as reference.
 
-For detailed configuration options including Bolt, PuppetDB, PuppetServer, and Hiera integration settings, please refer to the [Configuration Guide](docs/configuration.md).
+For detailed configuration options including Bolt, Ansible, PuppetDB, PuppetServer, and Hiera integration settings, please refer to the [Configuration Guide](docs/configuration.md).
 
 For API details, see the [Integrations API Documentation](docs/integrations-api.md).
 
@@ -219,7 +227,7 @@ For details of the repository files and configurations check the [Repository Str
 
 ### Planned Features
 
-- **Additional Integrations**: Ansible, Tiny Puppet
+- **Additional Integrations**: Tiny Puppet
 - **Additional Integrations (to evaluate)**: Terraform, AWS CLI, Azure CLI, Kubernetes, Choria, Icinga
 - **Scheduled Executions**: Cron-like scheduling for recurring tasks
 - **Custom Dashboards**: User-configurable dashboard widgets
@@ -229,6 +237,8 @@ For details of the repository files and configurations check the [Repository Str
 
 ### Version History
 
+- **v0.7.0**: Ansible Integration. Used classed aware hiera lookups
+- **v0.6.0**: Code consolidation and fixing
 - **v0.5.0**: Report filtering, puppet run history visualization, enhanced expert mode with frontend logging
 - **v0.4.0**: Hiera integration, puppetserver CA management removal, enhanced plugin architecture
 - **v0.3.0**: Puppetserver integration, interface enhancements
@@ -262,6 +272,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 #### Integration Setup
 
 - [Bolt Setup](docs/integrations/bolt.md) - Bolt configuration guide
+- [Ansible Setup](docs/integrations/ansible.md) - Ansible configuration guide
 - [Hiera Setup](docs/integrations/hiera.md) - Hiera configuration guide
 - [PuppetDB Integration Setup](docs/integrations/puppetdb.md) - PuppetDB configuration guide
 - [Puppetserver Setup](docs/integrations/puppetserver.md) - Puppetserver configuration guide

@@ -11,6 +11,7 @@ import { createInventoryRouter } from "./routes/inventory";
 import { createFactsRouter } from "./routes/facts";
 import { createCommandsRouter } from "./routes/commands";
 import { createTasksRouter } from "./routes/tasks";
+import { createPlaybooksRouter } from "./routes/playbooks";
 import { createExecutionsRouter } from "./routes/executions";
 import { createPuppetRouter } from "./routes/puppet";
 import { createPuppetHistoryRouter } from "./routes/puppetHistory";
@@ -29,6 +30,8 @@ import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import { BoltPlugin } from "./integrations/bolt/BoltPlugin";
+import { AnsibleService } from "./integrations/ansible/AnsibleService";
+import { AnsiblePlugin } from "./integrations/ansible/AnsiblePlugin";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
@@ -280,6 +283,62 @@ async function startServer(): Promise<Express> {
       logger.info("Set BOLT_PROJECT_PATH to a valid project directory to enable Bolt integration", {
         component: "Server",
         operation: "initializeBolt",
+      });
+    }
+
+    // Initialize Ansible integration only if configured
+    let ansiblePlugin: AnsiblePlugin | undefined;
+    const ansibleConfig = config.integrations.ansible;
+    const ansibleConfigured = ansibleConfig?.enabled === true;
+
+    if (ansibleConfigured && ansibleConfig) {
+      logger.info("Initializing Ansible integration...", {
+        component: "Server",
+        operation: "initializeAnsible",
+      });
+
+      try {
+        const ansibleService = new AnsibleService(
+          ansibleConfig.projectPath,
+          ansibleConfig.inventoryPath,
+          ansibleConfig.timeout,
+        );
+
+        ansiblePlugin = new AnsiblePlugin(ansibleService, logger, performanceMonitor);
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: true,
+          name: "ansible",
+          type: "execution",
+          config: {
+            projectPath: ansibleConfig.projectPath,
+            inventoryPath: ansibleConfig.inventoryPath,
+            timeout: ansibleConfig.timeout,
+          },
+          priority: 5,
+        };
+
+        integrationManager.registerPlugin(ansiblePlugin, integrationConfig);
+
+        logger.info("Ansible integration registered successfully", {
+          component: "Server",
+          operation: "initializeAnsible",
+          metadata: {
+            projectPath: ansibleConfig.projectPath,
+            inventoryPath: ansibleConfig.inventoryPath,
+          },
+        });
+      } catch (error) {
+        logger.warn(`WARNING: Failed to initialize Ansible integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeAnsible",
+        });
+        ansiblePlugin = undefined;
+      }
+    } else {
+      logger.warn("Ansible integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeAnsible",
       });
     }
 
@@ -692,6 +751,14 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/nodes",
+      createPlaybooksRouter(
+        integrationManager,
+        executionRepository,
+        streamingManager,
+      ),
+    );
+    app.use(
+      "/api/nodes",
       createPuppetRouter(boltService, executionRepository, streamingManager),
     );
     // Add puppet history routes if PuppetDB is available
@@ -704,6 +771,7 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api",
       createPackagesRouter(
+        integrationManager,
         boltService,
         executionRepository,
         config.packageTasks,
@@ -713,6 +781,7 @@ async function startServer(): Promise<Express> {
     app.use(
       "/api/nodes",
       createPackagesRouter(
+        integrationManager,
         boltService,
         executionRepository,
         config.packageTasks,

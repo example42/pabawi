@@ -177,6 +177,18 @@ export const PuppetserverConfigSchema = z.object({
 export type PuppetserverConfig = z.infer<typeof PuppetserverConfigSchema>;
 
 /**
+ * Ansible integration configuration schema
+ */
+export const AnsibleConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  projectPath: z.string().default(process.cwd()),
+  inventoryPath: z.string().default("inventory/hosts"),
+  timeout: z.number().int().positive().default(300000),
+});
+
+export type AnsibleConfig = z.infer<typeof AnsibleConfigSchema>;
+
+/**
  * Hiera fact source configuration schema
  */
 export const HieraFactSourceConfigSchema = z.object({
@@ -261,6 +273,7 @@ export type HieraConfig = z.infer<typeof HieraConfigSchema>;
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
+  ansible: AnsibleConfigSchema.optional(),
   puppetdb: PuppetDBConfigSchema.optional(),
   puppetserver: PuppetserverConfigSchema.optional(),
   hiera: HieraConfigSchema.optional(),

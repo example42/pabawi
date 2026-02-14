@@ -32,6 +32,7 @@
     error?: string;
     command?: string;
     expertMode?: boolean;
+    executionTool?: 'bolt' | 'ansible';
   }
 
   interface NodeResult {

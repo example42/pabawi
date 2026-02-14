@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { BoltService } from "../integrations/bolt/BoltService";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
+import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { LoggerService } from "../services/LoggerService";
@@ -11,12 +12,13 @@ import { ExpertModeService } from "../services/ExpertModeService";
  * Request body schema for package installation
  */
 const InstallPackageRequestSchema = z.object({
-  taskName: z.string().min(1, "Task name is required"),
+  taskName: z.string().min(1, "Task name is required").optional(),
   packageName: z.string().min(1, "Package name is required"),
   ensure: z.enum(["present", "absent", "latest"]).optional().default("present"),
   version: z.string().optional(),
   settings: z.record(z.unknown()).optional(),
   expertMode: z.boolean().optional().default(false),
+  tool: z.enum(["bolt", "ansible"]).optional(),
 });
 
 /**
@@ -42,6 +44,7 @@ interface PackageTaskConfig {
  * @returns Express router
  */
 export function createPackagesRouter(
+  integrationManager: IntegrationManager,
   boltService: BoltService,
   executionRepository: ExecutionRepository,
   packageTasks: PackageTaskConfig[],
@@ -178,25 +181,51 @@ export function createPackagesRouter(
           return;
         }
 
-        const { taskName, packageName, ensure, version, settings, expertMode } =
+        const {
+          taskName,
+          packageName,
+          ensure,
+          version,
+          settings,
+          expertMode,
+          tool,
+        } =
           validationResult.data;
+
+        const boltTool = integrationManager.getExecutionTool("bolt");
+        const ansibleTool = integrationManager.getExecutionTool("ansible");
+        const selectedTool = tool ?? (boltTool ? "bolt" : ansibleTool ? "ansible" : "bolt");
+
+        if (!integrationManager.getExecutionTool(selectedTool)) {
+          const errorResponse = {
+            error: {
+              code: "EXECUTION_TOOL_NOT_AVAILABLE",
+              message: `Execution tool '${selectedTool}' is not available`,
+            },
+          };
+
+          res.status(503).json(
+            debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse,
+          );
+          return;
+        }
 
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {
-            message: "Finding task configuration",
-            context: JSON.stringify({ taskName }),
+            message: "Determining package execution mode",
+            context: JSON.stringify({ taskName, selectedTool }),
             level: 'debug',
           });
         }
 
-        // Find the task configuration
-        const taskConfig = packageTasks.find((t) => t.name === taskName);
-        if (!taskConfig) {
+        // Find the task configuration (required for Bolt only)
+        const taskConfig = taskName ? packageTasks.find((t) => t.name === taskName) : undefined;
+        if (selectedTool === "bolt" && !taskConfig) {
           logger.warn("Package installation task not configured", {
             component: "PackagesRouter",
             integration: "bolt",
             operation: "installPackage",
-            metadata: { taskName, availableTasks: packageTasks.map((t) => t.name) },
+            metadata: { taskName: taskName ?? "", availableTasks: packageTasks.map((t) => t.name) },
           });
 
           if (debugInfo) {
@@ -214,7 +243,7 @@ export function createPackagesRouter(
           const errorResponse = {
             error: {
               code: "INVALID_TASK",
-              message: `Package installation task '${taskName}' is not configured`,
+              message: `Package installation task '${taskName ?? ""}' is not configured`,
               details: `Available tasks: ${packageTasks.map((t) => t.name).join(", ")}`,
             },
           };
@@ -237,19 +266,20 @@ export function createPackagesRouter(
         const executionId = await executionRepository.create({
           type: "package",
           targetNodes: [nodeId],
-          action: taskName,
+          action: selectedTool === "ansible" ? "ansible.builtin.package" : (taskName ?? "package"),
           parameters: { packageName, ensure, version, settings },
           status: "running",
           startedAt: new Date().toISOString(),
           results: [],
           expertMode,
+          executionTool: selectedTool,
         });
 
         logger.info("Execution record created, starting package installation", {
           component: "PackagesRouter",
           integration: "bolt",
           operation: "installPackage",
-          metadata: { executionId, nodeId, taskName, packageName },
+          metadata: { executionId, nodeId, taskName: taskName ?? "", packageName, selectedTool },
         });
 
         if (debugInfo) {
@@ -269,18 +299,33 @@ export function createPackagesRouter(
             );
 
             // Execute package installation task with parameter mapping
-            const result = await boltService.installPackage(
-              nodeId,
-              taskName,
-              {
-                packageName,
-                ensure,
-                version,
-                settings,
-              },
-              taskConfig.parameterMapping,
-              streamingCallback,
-            );
+            const result = selectedTool === "ansible"
+              ? await integrationManager.executeAction("ansible", {
+                type: "task",
+                target: nodeId,
+                action: "package",
+                parameters: {
+                  packageName,
+                  ensure,
+                  version,
+                  settings,
+                },
+                metadata: {
+                  streamingCallback,
+                },
+              })
+              : await boltService.installPackage(
+                nodeId,
+                taskName ?? "package",
+                {
+                  packageName,
+                  ensure,
+                  version,
+                  settings,
+                },
+                taskConfig!.parameterMapping,
+                streamingCallback,
+              );
 
             // Update execution record with results
             // Include stdout/stderr when expert mode is enabled
@@ -301,9 +346,9 @@ export function createPackagesRouter(
           } catch (error) {
             logger.error("Error installing package", {
               component: "PackagesRouter",
-              integration: "bolt",
+              integration: selectedTool,
               operation: "installPackage",
-              metadata: { executionId, nodeId, taskName, packageName },
+              metadata: { executionId, nodeId, taskName: taskName ?? "", packageName },
             }, error instanceof Error ? error : undefined);
 
             let errorMessage = "Unknown error";
@@ -337,9 +382,9 @@ export function createPackagesRouter(
 
         logger.info("Package installation request accepted", {
           component: "PackagesRouter",
-          integration: "bolt",
+          integration: selectedTool,
           operation: "installPackage",
-          metadata: { executionId, nodeId, taskName, packageName, duration },
+          metadata: { executionId, nodeId, taskName: taskName ?? "", packageName, duration, selectedTool },
         });
 
         // Return execution ID and initial status immediately
@@ -352,14 +397,15 @@ export function createPackagesRouter(
         // Attach debug info if expert mode is enabled
         if (debugInfo) {
           debugInfo.duration = duration;
-          expertModeService.setIntegration(debugInfo, 'bolt');
+          expertModeService.setIntegration(debugInfo, selectedTool);
           expertModeService.addMetadata(debugInfo, 'executionId', executionId);
           expertModeService.addMetadata(debugInfo, 'nodeId', nodeId);
-          expertModeService.addMetadata(debugInfo, 'taskName', taskName);
+          expertModeService.addMetadata(debugInfo, 'taskName', taskName ?? 'ansible.builtin.package');
           expertModeService.addMetadata(debugInfo, 'packageName', packageName);
+          expertModeService.addMetadata(debugInfo, 'tool', selectedTool);
           expertModeService.addInfo(debugInfo, {
             message: "Package installation started",
-            context: JSON.stringify({ executionId, nodeId, taskName, packageName }),
+            context: JSON.stringify({ executionId, nodeId, taskName, packageName, selectedTool }),
             level: 'info',
           });
 
