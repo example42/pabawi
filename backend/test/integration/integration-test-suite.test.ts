@@ -15,12 +15,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
 import { LoggerService } from '../../src/services/LoggerService';
 import { BoltPlugin } from '../../src/integrations/bolt/BoltPlugin';
-import { BoltService } from '../../src/bolt/BoltService';
+import { BoltService } from '../../src/integrations/bolt/BoltService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
 import { NodeLinkingService } from '../../src/integrations/NodeLinkingService';
 import type { IntegrationConfig, Action } from '../../src/integrations/types';
-import type { Node, Facts } from '../../src/bolt/types';
+import type { Node, Facts } from '../../src/integrations/bolt/types';
 
 describe('Comprehensive Integration Test Suite', () => {
   let integrationManager: IntegrationManager;

@@ -13,8 +13,8 @@ import type {
   Action,
   Capability,
 } from "../types";
-import type { BoltService } from "../../bolt/BoltService";
-import type { ExecutionResult, Node, Facts } from "../../bolt/types";
+import type { BoltService } from "./BoltService";
+import type { ExecutionResult, Node, Facts } from "./types";
 import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 

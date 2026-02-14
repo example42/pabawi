@@ -8,7 +8,7 @@ import * as path from "path";
 import { FactService } from "../../src/integrations/hiera/FactService";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import type { InformationSourcePlugin } from "../../src/integrations/types";
-import type { Facts } from "../../src/bolt/types";
+import type { Facts } from "../../src/integrations/bolt/types";
 
 // Mock fs module
 vi.mock("fs");

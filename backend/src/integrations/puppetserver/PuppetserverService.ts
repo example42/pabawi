@@ -12,7 +12,7 @@
 
 import { BasePlugin } from "../BasePlugin";
 import type { InformationSourcePlugin, HealthStatus } from "../types";
-import type { Node, Facts } from "../../bolt/types";
+import type { Node, Facts } from "../bolt/types";
 import type { PuppetserverConfig } from "../../config/schema";
 import { PuppetserverClient } from "./PuppetserverClient";
 import type { LoggerService } from "../../services/LoggerService";

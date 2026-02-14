@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../bolt/BoltService";
+import type { BoltService } from "../integrations/bolt/BoltService";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
-import { BoltInventoryNotFoundError } from "../bolt/types";
+import { BoltInventoryNotFoundError } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { LoggerService } from "../services/LoggerService";

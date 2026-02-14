@@ -8,7 +8,7 @@ import {
   beforeEach,
 } from "vitest";
 import express, { type Express } from "express";
-import { BoltService } from "../../src/bolt/BoltService";
+import { BoltService } from "../../src/integrations/bolt/BoltService";
 import { ExecutionRepository } from "../../src/database/ExecutionRepository";
 import { CommandWhitelistService } from "../../src/validation/CommandWhitelistService";
 import { StreamingExecutionManager } from "../../src/services/StreamingExecutionManager";

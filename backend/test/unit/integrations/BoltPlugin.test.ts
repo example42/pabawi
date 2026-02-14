@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { BoltPlugin } from "../../../src/integrations/bolt/BoltPlugin";
-import type { BoltService } from "../../../src/bolt/BoltService";
+import type { BoltService } from "../../../src/integrations/bolt/BoltService";
 import type { IntegrationConfig } from "../../../src/integrations/types";
 
 // Mock child_process

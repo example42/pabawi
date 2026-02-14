@@ -4,7 +4,7 @@ import path from "path";
 import { ConfigService } from "./config/ConfigService";
 import { DatabaseService } from "./database/DatabaseService";
 import { BoltValidator, BoltValidationError } from "./validation/BoltValidator";
-import { BoltService } from "./bolt/BoltService";
+import { BoltService } from "./integrations/bolt/BoltService";
 import { ExecutionRepository } from "./database/ExecutionRepository";
 import { CommandWhitelistService } from "./validation/CommandWhitelistService";
 import { createInventoryRouter } from "./routes/inventory";

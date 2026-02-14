@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import type { CommandWhitelistService } from "../validation/CommandWhitelistService";
 import { CommandNotAllowedError } from "../validation/CommandWhitelistService";
-import { BoltInventoryNotFoundError } from "../bolt/types";
+import { BoltInventoryNotFoundError } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { IntegrationManager } from "../integrations/IntegrationManager";

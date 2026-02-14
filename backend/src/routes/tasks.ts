@@ -9,7 +9,7 @@ import {
   BoltInventoryNotFoundError,
   BoltTaskNotFoundError,
   BoltTaskParameterError,
-} from "../bolt/types";
+} from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { BoltPlugin } from "../integrations/bolt/BoltPlugin";
 import { LoggerService } from "../services/LoggerService";

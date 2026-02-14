@@ -15,7 +15,7 @@ import type {
   PluginRegistration,
   Action,
 } from "./types";
-import type { Node, Facts, ExecutionResult } from "../bolt/types";
+import type { Node, Facts, ExecutionResult } from "./bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
 import { LoggerService } from "../services/LoggerService";
 

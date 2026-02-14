@@ -1,12 +1,12 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../bolt/BoltService";
+import type { BoltService } from "../integrations/bolt/BoltService";
 import {
   BoltInventoryNotFoundError,
   BoltExecutionError,
   BoltParseError,
   type Node,
-} from "../bolt/types";
+} from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { ExpertModeService } from "../services/ExpertModeService";

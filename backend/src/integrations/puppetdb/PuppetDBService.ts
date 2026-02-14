@@ -10,7 +10,7 @@
 
 import { BasePlugin } from "../BasePlugin";
 import type { InformationSourcePlugin, HealthStatus } from "../types";
-import type { Node, Facts } from "../../bolt/types";
+import type { Node, Facts } from "../bolt/types";
 import type { PuppetDBConfig } from "../../config/schema";
 import type { PuppetDBClient } from "./PuppetDBClient";
 import {

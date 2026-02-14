@@ -5,7 +5,7 @@
  * Implements the node linking strategy described in the design document.
  */
 
-import type { Node } from "../bolt/types";
+import type { Node } from "./bolt/types";
 import type { IntegrationManager } from "./IntegrationManager";
 import { LoggerService } from "../services/LoggerService";
 
