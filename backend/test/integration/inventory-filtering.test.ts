@@ -4,9 +4,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import type { Node } from "../../src/bolt/types";
+import type { Node } from "../../src/integrations/bolt/types";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
-import type { BoltService } from "../../src/bolt/BoltService";
+import type { BoltService } from "../../src/integrations/bolt/BoltService";
 import { createInventoryRouter } from "../../src/routes/inventory";
 import express, { type Express } from "express";
 import request from "supertest";

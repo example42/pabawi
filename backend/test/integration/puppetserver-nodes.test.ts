@@ -11,7 +11,7 @@ import { PuppetserverService } from "../../src/integrations/puppetserver/Puppets
 import { createIntegrationsRouter } from "../../src/routes/integrations";
 import { requestIdMiddleware } from "../../src/middleware/errorHandler";
 import type { IntegrationConfig } from "../../src/integrations/types";
-import type { Node, Facts } from "../../src/bolt/types";
+import type { Node, Facts } from "../../src/integrations/bolt/types";
 import type { NodeStatus } from "../../src/integrations/puppetserver/types";
 
 /**

@@ -6,7 +6,7 @@ import {
   BoltExecutionError,
   BoltParseError,
   BoltInventoryNotFoundError,
-} from "../bolt/types";
+} from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";

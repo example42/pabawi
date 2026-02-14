@@ -18,7 +18,7 @@ import type {
   InformationSourcePlugin,
   HealthStatus,
 } from "../types";
-import type { Node, Facts } from "../../bolt/types";
+import type { Node, Facts } from "../bolt/types";
 import type { IntegrationManager } from "../IntegrationManager";
 import { HieraService } from "./HieraService";
 import type { HieraServiceConfig } from "./HieraService";

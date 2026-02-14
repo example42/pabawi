@@ -5,7 +5,7 @@
  * backend systems (execution tools and information sources) into Pabawi.
  */
 
-import type { Node, Facts, ExecutionResult } from "../bolt/types";
+import type { Node, Facts, ExecutionResult } from "./bolt/types";
 
 /**
  * Health status for an integration

@@ -16,7 +16,7 @@ import { createTasksRouter } from '../../src/routes/tasks';
 import { expertModeMiddleware } from '../../src/middleware/expertMode';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
-import { BoltService } from '../../src/bolt/BoltService';
+import { BoltService } from '../../src/integrations/bolt/BoltService';
 import {
   PuppetDBConnectionError,
   PuppetDBAuthenticationError,
@@ -31,7 +31,7 @@ import {
   BoltExecutionError,
   BoltNodeUnreachableError,
   BoltTimeoutError,
-} from '../../src/bolt/types';
+} from '../../src/integrations/bolt/types';
 
 describe('External API Errors in Expert Mode', () => {
   let app: Express;

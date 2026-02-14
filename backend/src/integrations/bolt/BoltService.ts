@@ -17,7 +17,7 @@ import {
   BoltTaskNotFoundError,
   BoltTaskParameterError,
 } from "./types";
-import { LoggerService } from "../services/LoggerService";
+import { LoggerService } from "../../services/LoggerService";
 
 /**
  * Streaming callback for real-time output
