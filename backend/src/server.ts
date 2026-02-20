@@ -309,7 +309,7 @@ async function startServer(): Promise<Express> {
         const integrationConfig: IntegrationConfig = {
           enabled: true,
           name: "ansible",
-          type: "execution",
+          type: "both",
           config: {
             projectPath: ansibleConfig.projectPath,
             inventoryPath: ansibleConfig.inventoryPath,

@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { spawn, type ChildProcess } from "child_process";
-import type { ExecutionResult } from "../bolt/types";
+import type { ExecutionResult, Node } from "../bolt/types";
 
 export interface StreamingCallback {
   onStdout?: (chunk: string) => void;
@@ -229,7 +229,7 @@ export class AnsibleService {
   }
 
   private async executeCommand(
-    binary: "ansible" | "ansible-playbook",
+    binary: "ansible" | "ansible-playbook" | "ansible-inventory",
     args: string[],
     streamingCallback?: StreamingCallback,
   ): Promise<CommandExecutionResult> {
@@ -327,5 +327,93 @@ export class AnsibleService {
     });
 
     return `${binary} ${escapedArgs.join(" ")}`;
+  }
+
+  /**
+   * Get inventory from Ansible using ansible-inventory command
+   * Parses the inventory and returns nodes in Bolt-compatible format
+   */
+  public async getInventory(): Promise<Node[]> {
+    const args = [
+      "-i",
+      this.inventoryPath,
+      "--list",
+    ];
+
+    try {
+      const exec = await this.executeCommand("ansible-inventory", args);
+
+      if (!exec.success) {
+        throw new Error(`Failed to get Ansible inventory: ${exec.stderr || exec.stdout}`);
+      }
+
+      // Parse JSON output from ansible-inventory
+      const inventoryData = JSON.parse(exec.stdout);
+      const nodes: Node[] = [];
+
+      // Extract hosts from inventory structure
+      // ansible-inventory --list returns: { _meta: { hostvars: {...} }, groups: {...} }
+      const hostvars = inventoryData._meta?.hostvars || {};
+
+      for (const [hostname, vars] of Object.entries(hostvars)) {
+        const hostVars = vars as Record<string, unknown>;
+
+        // Determine transport based on connection type
+        let transport: "ssh" | "winrm" | "local" = "ssh";
+        const connection = hostVars.ansible_connection as string | undefined;
+
+        if (connection === "winrm") {
+          transport = "winrm";
+        } else if (connection === "local") {
+          transport = "local";
+        }
+
+        // Build URI
+        const host = (hostVars.ansible_host as string) || hostname;
+        const port = hostVars.ansible_port as number | undefined;
+        const user = hostVars.ansible_user as string | undefined;
+
+        let uri = host;
+        if (port) {
+          uri = `${host}:${port}`;
+        }
+
+        // Build config object
+        const config: Record<string, unknown> = {};
+
+        if (user) {
+          config.user = user;
+        }
+        if (port) {
+          config.port = port;
+        }
+
+        // Add other relevant ansible variables to config
+        if (hostVars.ansible_ssh_private_key_file) {
+          config["private-key"] = hostVars.ansible_ssh_private_key_file;
+        }
+        if (hostVars.ansible_become) {
+          config.sudo = hostVars.ansible_become;
+        }
+        if (hostVars.ansible_become_user) {
+          config["run-as"] = hostVars.ansible_become_user;
+        }
+
+        nodes.push({
+          id: hostname,
+          name: hostname,
+          uri,
+          transport,
+          config,
+        });
+      }
+
+      return nodes;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Failed to parse Ansible inventory: ${error.message}`);
+      }
+      throw error;
+    }
   }
 }
