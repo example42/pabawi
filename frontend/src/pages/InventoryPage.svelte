@@ -376,6 +376,8 @@
         return 'Puppetserver';
       case 'hiera':
         return 'Hiera';
+      case 'ansible':
+        return 'Ansible';
       default:
         return source.charAt(0).toUpperCase() + source.slice(1);
     }
