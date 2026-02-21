@@ -166,7 +166,7 @@ describe("Property 9: Key Search Functionality", () => {
         await scanner.scan();
 
         // Use a query that definitely won't match any key
-        const nonMatchingQuery = "ZZZZNONEXISTENT12345";
+        const nonMatchingQuery = "ZZZZNONEXISTENT12345";  // pragma: allowlist secret
 
         const results = scanner.searchKeys(nonMatchingQuery);
 

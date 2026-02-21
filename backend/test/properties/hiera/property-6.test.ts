@@ -29,7 +29,7 @@ describe("Property 6: Fact Source Priority", () => {
   let mockIntegrationManager: IntegrationManager;
   let mockPuppetDBSource: InformationSourcePlugin;
 
-  const testLocalFactsPath = "/tmp/facts";
+  const testLocalFactsPath = "/tmp/facts";  // pragma: allowlist secret
 
   // Generator for valid node names (hostname-like strings)
   const nodeNameArb = fc

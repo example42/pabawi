@@ -9,13 +9,23 @@
   import NodeDetailPage from './pages/NodeDetailPage.svelte';
   import IntegrationSetupPage from './pages/IntegrationSetupPage.svelte';
   import PuppetPage from './pages/PuppetPage.svelte';
+  import LoginPage from './pages/LoginPage.svelte';
+  import RegisterPage from './pages/RegisterPage.svelte';
+  import UserManagementPage from './pages/UserManagementPage.svelte';
+  import GroupManagementPage from './pages/GroupManagementPage.svelte';
+  import RoleManagementPage from './pages/RoleManagementPage.svelte';
   import { router } from './lib/router.svelte';
 
   const routes = {
     '/': HomePage,
+    '/login': LoginPage,
+    '/register': RegisterPage,
     '/inventory': InventoryPage,
     '/executions': ExecutionsPage,
     '/puppet': PuppetPage,
+    '/users': UserManagementPage,
+    '/groups': GroupManagementPage,
+    '/roles': RoleManagementPage,
     '/nodes/:id': NodeDetailPage,
     '/integrations/:integration/setup': IntegrationSetupPage
   };

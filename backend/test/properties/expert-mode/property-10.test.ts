@@ -89,7 +89,7 @@ describe('Property 10: External API Error Visibility', () => {
             debugInfo.errors.length > 0 &&
             debugInfo.errors[0].message.includes(apiError.integration) &&
             debugInfo.errors[0].message.includes(apiError.errorType) &&
-            debugInfo.errors[0].level === 'error'
+            debugInfo.errors[0].level === 'error'  // pragma: allowlist secret
           );
         }
       ),
@@ -486,7 +486,7 @@ describe('Property 10: External API Error Visibility', () => {
             debugInfo.errors !== undefined &&
             debugInfo.errors.length > 0 &&
             debugInfo.errors[0].message.includes('certificate') &&
-            debugInfo.errors[0].code === 'CERT_ERROR'
+            debugInfo.errors[0].code === 'CERT_ERROR'  // pragma: allowlist secret
           );
         }
       ),

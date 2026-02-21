@@ -103,8 +103,8 @@ describe("ErrorHandlingService", () => {
         stderr?: string;
         exitCode?: number;
       };
-      error.stdout = "Command output";
-      error.stderr = "Error output";
+      error.stdout = "Command output";  // pragma: allowlist secret
+      error.stderr = "Error output";  // pragma: allowlist secret
       error.exitCode = 1;
 
       const result = service.formatError(error, true);
@@ -118,7 +118,7 @@ describe("ErrorHandlingService", () => {
 
     it("should map BoltExecutionError to correct code", () => {
       const error = new Error("Bolt execution failed");
-      error.name = "BoltExecutionError";
+      error.name = "BoltExecutionError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -127,7 +127,7 @@ describe("ErrorHandlingService", () => {
 
     it("should map BoltTimeoutError to correct code", () => {
       const error = new Error("Bolt timeout");
-      error.name = "BoltTimeoutError";
+      error.name = "BoltTimeoutError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -136,7 +136,7 @@ describe("ErrorHandlingService", () => {
 
     it("should map ValidationError to correct code", () => {
       const error = new Error("Validation failed");
-      error.name = "ValidationError";
+      error.name = "ValidationError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -146,7 +146,7 @@ describe("ErrorHandlingService", () => {
 
     it("should categorize connection errors correctly", () => {
       const error = new Error("ECONNREFUSED");
-      error.name = "PuppetserverConnectionError";
+      error.name = "PuppetserverConnectionError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -156,7 +156,7 @@ describe("ErrorHandlingService", () => {
 
     it("should categorize authentication errors correctly", () => {
       const error = new Error("Authentication failed");
-      error.name = "PuppetserverAuthenticationError";
+      error.name = "PuppetserverAuthenticationError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -166,7 +166,7 @@ describe("ErrorHandlingService", () => {
 
     it("should categorize timeout errors correctly", () => {
       const error = new Error("Request timed out");
-      error.name = "BoltTimeoutError";
+      error.name = "BoltTimeoutError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -176,7 +176,7 @@ describe("ErrorHandlingService", () => {
 
     it("should provide troubleshooting steps", () => {
       const error = new Error("Connection failed");
-      error.name = "PuppetserverConnectionError";
+      error.name = "PuppetserverConnectionError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -187,7 +187,7 @@ describe("ErrorHandlingService", () => {
 
     it("should include documentation links when available", () => {
       const error = new Error("Configuration error");
-      error.name = "PuppetserverConfigurationError";
+      error.name = "PuppetserverConfigurationError";  // pragma: allowlist secret
 
       const result = service.formatError(error, false);
 
@@ -209,25 +209,25 @@ describe("ErrorHandlingService", () => {
 
   describe("sanitizeSensitiveData", () => {
     it("should redact password in strings", () => {
-      const data = "password=secret123 other=data";
+      const data = "password=secret123 other=data";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
       expect(result).toBe("password=*** other=data");
     });
 
     it("should redact token in strings", () => {
-      const data = "token:abc123xyz";
+      const data = "token:abc123xyz";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
       expect(result).toBe("token=***");
     });
 
     it("should redact api_key in strings", () => {
-      const data = "api_key=12345";
+      const data = "api_key=12345";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
       expect(result).toBe("api_key=***");
     });
 
     it("should redact secret in strings", () => {
-      const data = "secret: mysecret";
+      const data = "secret: mysecret";  // pragma: allowlist secret
       const result = service.sanitizeSensitiveData(data);
       expect(result).toBe("secret=***");
     });

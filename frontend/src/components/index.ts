@@ -1,6 +1,6 @@
 export { default as CatalogComparison } from "./CatalogComparison.svelte";
 export { default as CatalogViewer } from "./CatalogViewer.svelte";
-
+export { default as ChangePasswordDialog } from "./ChangePasswordDialog.svelte";
 export { default as CodeAnalysisTab } from "./CodeAnalysisTab.svelte";
 export { default as CommandOutput } from "./CommandOutput.svelte";
 export { default as DetailedErrorDisplay } from "./DetailedErrorDisplay.svelte";

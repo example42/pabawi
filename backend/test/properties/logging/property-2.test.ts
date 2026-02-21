@@ -56,7 +56,7 @@ describe('Property 2: Log Level Hierarchy', () => {
           const logger = new LoggerService('error');
 
           // Only error messages should be logged
-          const expectedResult = messageLevel === 'error';
+          const expectedResult = messageLevel === 'error';  // pragma: allowlist secret
 
           return logger.shouldLog(messageLevel) === expectedResult;
         }
@@ -73,7 +73,7 @@ describe('Property 2: Log Level Hierarchy', () => {
           const logger = new LoggerService('warn');
 
           // Only error and warn messages should be logged
-          const expectedResult = messageLevel === 'error' || messageLevel === 'warn';
+          const expectedResult = messageLevel === 'error' || messageLevel === 'warn';  // pragma: allowlist secret
 
           return logger.shouldLog(messageLevel) === expectedResult;
         }
@@ -90,7 +90,7 @@ describe('Property 2: Log Level Hierarchy', () => {
           const logger = new LoggerService('info');
 
           // Error, warn, and info messages should be logged
-          const expectedResult = messageLevel !== 'debug';
+          const expectedResult = messageLevel !== 'debug';  // pragma: allowlist secret
 
           return logger.shouldLog(messageLevel) === expectedResult;
         }
@@ -262,7 +262,7 @@ describe('Property 2: Log Level Hierarchy', () => {
             const logger = new LoggerService();
 
             // Should default to 'info'
-            return logger.getLevel() === 'info';
+            return logger.getLevel() === 'info';  // pragma: allowlist secret
           } finally {
             // Restore original environment variable
             if (originalLogLevel !== undefined) {

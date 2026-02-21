@@ -2,6 +2,7 @@ import sqlite3 from "sqlite3";
 import { readFileSync } from "fs";
 import { dirname, join } from "path";
 import { mkdirSync, existsSync } from "fs";
+import { MigrationRunner } from "./MigrationRunner";
 
 /**
  * Database service for SQLite initialization and connection management
@@ -38,7 +39,7 @@ export class DatabaseService {
   }
 
   /**
-   * Create SQLite database connection
+   * Create SQLite database connection with optimized settings
    */
   private createConnection(): Promise<sqlite3.Database> {
     return new Promise((resolve, reject) => {
@@ -46,7 +47,28 @@ export class DatabaseService {
         if (err) {
           reject(new Error(`Failed to connect to database: ${err.message}`));
         } else {
-          resolve(db);
+          // Enable WAL mode for better concurrency
+          db.run('PRAGMA journal_mode = WAL;', (walErr) => {
+            if (walErr) {
+              console.warn('Failed to enable WAL mode:', walErr.message);
+            }
+          });
+
+          // Set performance optimizations
+          db.run('PRAGMA synchronous = NORMAL;'); // Balance between safety and speed
+          db.run('PRAGMA cache_size = -64000;'); // 64MB cache
+          db.run('PRAGMA temp_store = MEMORY;'); // Use memory for temp tables
+          db.run('PRAGMA mmap_size = 268435456;'); // 256MB memory-mapped I/O
+          db.run('PRAGMA page_size = 4096;'); // Optimal page size
+
+          // Enable foreign keys
+          db.run('PRAGMA foreign_keys = ON;', (fkErr) => {
+            if (fkErr) {
+              reject(new Error(`Failed to enable foreign keys: ${fkErr.message}`));
+            } else {
+              resolve(db);
+            }
+          });
         }
       });
     });
@@ -61,7 +83,7 @@ export class DatabaseService {
     }
 
     try {
-      // Read schema file
+      // Read and execute main schema file
       const schemaPath = join(__dirname, "schema.sql");
       const schema = readFileSync(schemaPath, "utf-8");
 
@@ -85,6 +107,32 @@ export class DatabaseService {
         }
       }
 
+      // Read and execute RBAC schema file
+      const rbacSchemaPath = join(__dirname, "rbac-schema.sql");
+      if (existsSync(rbacSchemaPath)) {
+        const rbacSchema = readFileSync(rbacSchemaPath, "utf-8");
+
+        // Split RBAC schema into statements
+        const rbacStatements = rbacSchema
+          .split(";")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+
+        // Execute each RBAC statement
+        for (const statement of rbacStatements) {
+          try {
+            await this.exec(statement);
+          } catch (error) {
+            // Ignore "duplicate column" errors from ALTER TABLE (migration already applied)
+            const errorMessage = error instanceof Error ? error.message : "";
+            if (!errorMessage.includes("duplicate column")) {
+              throw error;
+            }
+            // Migration already applied, continue
+          }
+        }
+      }
+
       // Run migrations
       await this.runMigrations();
     } catch (error) {
@@ -95,7 +143,7 @@ export class DatabaseService {
   }
 
   /**
-   * Run database migrations
+   * Run database migrations using the migration runner
    */
   private async runMigrations(): Promise<void> {
     if (!this.db) {
@@ -103,33 +151,11 @@ export class DatabaseService {
     }
 
     try {
-      const migrationsPath = join(__dirname, "migrations.sql");
+      const migrationRunner = new MigrationRunner(this.db);
+      const appliedCount = await migrationRunner.runPendingMigrations();
 
-      // Check if migrations file exists
-      if (!existsSync(migrationsPath)) {
-        return; // No migrations to run
-      }
-
-      const migrations = readFileSync(migrationsPath, "utf-8");
-
-      // Split migrations into statements
-      const statements = migrations
-        .split(";")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-
-      // Execute each migration statement
-      for (const statement of statements) {
-        try {
-          await this.exec(statement);
-        } catch (error) {
-          // Ignore "duplicate column" errors (migration already applied)
-          const errorMessage = error instanceof Error ? error.message : "";
-          if (!errorMessage.includes("duplicate column name")) {
-            throw error;
-          }
-          // Migration already applied, continue
-        }
+      if (appliedCount > 0) {
+        console.log(`Applied ${appliedCount} database migration(s)`);
       }
     } catch (error) {
       throw new Error(
@@ -169,6 +195,55 @@ export class DatabaseService {
   }
 
   /**
+   * Prepare a SQL statement for reuse (improves performance for repeated queries)
+   * @param sql SQL statement with placeholders
+   * @returns Prepared statement
+   */
+  public prepareStatement(sql: string): sqlite3.Statement {
+    if (!this.db) {
+      throw new Error("Database not initialized. Call initialize() first.");
+    }
+    return this.db.prepare(sql);
+  }
+
+  /**
+   * Execute a prepared statement
+   * @param statement Prepared statement
+   * @param params Parameters for the statement
+   * @returns Promise that resolves when execution completes
+   */
+  public executePrepared(
+    statement: sqlite3.Statement,
+    params: any[] = []
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      statement.run(params, (err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Finalize a prepared statement to free resources
+   * @param statement Prepared statement to finalize
+   */
+  public finalizeStatement(statement: sqlite3.Statement): Promise<void> {
+    return new Promise((resolve, reject) => {
+      statement.finalize((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
    * Close database connection
    */
   public async close(): Promise<void> {
@@ -194,5 +269,20 @@ export class DatabaseService {
    */
   public isInitialized(): boolean {
     return this.db !== null;
+  }
+
+  /**
+   * Get migration status (applied and pending migrations)
+   */
+  public async getMigrationStatus(): Promise<{
+    applied: Array<{ id: string; name: string; appliedAt: string }>;
+    pending: Array<{ id: string; filename: string }>;
+  }> {
+    if (!this.db) {
+      throw new Error("Database not initialized. Call initialize() first.");
+    }
+
+    const migrationRunner = new MigrationRunner(this.db);
+    return await migrationRunner.getStatus();
   }
 }

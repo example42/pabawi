@@ -519,8 +519,8 @@ describe('Comprehensive Integration Test Suite', () => {
     });
 
     it('should merge lastCheckIn using most recent timestamp', () => {
-      const oldDate = '2024-01-01T00:00:00Z';
-      const newDate = '2024-01-02T00:00:00Z';
+      const oldDate = '2024-01-01T00:00:00Z';  // pragma: allowlist secret
+      const newDate = '2024-01-02T00:00:00Z';  // pragma: allowlist secret
 
       const nodes: Node[] = [
         {

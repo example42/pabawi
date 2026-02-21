@@ -1,4 +1,5 @@
 // Integration color management for visual identification of data sources
+import { get } from './api';
 
 /**
  * Integration color configuration
@@ -55,13 +56,7 @@ class IntegrationColorStore {
     this.error = null;
 
     try {
-      const response = await fetch('/api/integrations/colors');
-
-      if (!response.ok) {
-        throw new Error(`Failed to load integration colors: ${response.statusText}`);
-      }
-
-      const data = await response.json() as ColorsApiResponse;
+      const data = await get<ColorsApiResponse>('/api/integrations/colors');
       this.colors = data.colors;
     } catch (err: unknown) {
       this.error = err instanceof Error ? err.message : 'Unknown error loading colors';

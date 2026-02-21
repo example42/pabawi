@@ -32,9 +32,9 @@ describe('Integration Colors API', () => {
       expect(response.body).toHaveProperty('colors');
       expect(response.body).toHaveProperty('integrations');
 
-      // Verify all four integrations are present
+      // Verify all five integrations are present
       const { colors, integrations } = response.body;
-      expect(integrations).toEqual(['bolt', 'puppetdb', 'puppetserver', 'hiera']);
+      expect(integrations).toEqual(['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera']);
 
       // Verify each integration has color configuration
       for (const integration of integrations) {

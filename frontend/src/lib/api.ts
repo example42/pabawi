@@ -5,6 +5,7 @@
 import { expertMode } from './expertMode.svelte';
 import { showWarning } from './toast.svelte';
 import { logger } from './logger.svelte';
+import { authManager } from './auth.svelte';
 
 export type ErrorType = 'connection' | 'authentication' | 'timeout' | 'validation' | 'not_found' | 'permission' | 'execution' | 'configuration' | 'unknown';
 
@@ -366,6 +367,12 @@ export async function fetchWithRetry<T = unknown>(
   // Add correlation ID header
   headers.set('X-Correlation-ID', correlationId);
 
+  // Add authentication header if user is authenticated (Requirement: 5.1, 19.2)
+  const authHeader = authManager.getAuthHeader();
+  if (authHeader) {
+    headers.set('Authorization', authHeader);
+  }
+
   // Create abort controller for timeout if specified
   let timeoutId: number | undefined;
   let timeoutController: AbortController | undefined;
@@ -415,6 +422,43 @@ export async function fetchWithRetry<T = unknown>(
 
           logger.clearCorrelationId();
           return data;
+        }
+
+        // Handle 401 Unauthorized - attempt token refresh (Requirement: 19.2, 19.3)
+        if (response.status === 401 && authManager.isAuthenticated && attempt === 0) {
+          logger.info('API', 'fetch', 'Received 401, attempting token refresh');
+
+          const refreshSuccess = await authManager.refreshAccessToken();
+
+          if (refreshSuccess) {
+            // Update authorization header with new token
+            const newAuthHeader = authManager.getAuthHeader();
+            if (newAuthHeader) {
+              headers.set('Authorization', newAuthHeader);
+            }
+
+            logger.info('API', 'fetch', 'Token refreshed, retrying request');
+
+            // Retry the request with new token (don't count as a retry attempt)
+            continue;
+          } else {
+            // Token refresh failed, user needs to re-login
+            logger.warn('API', 'fetch', 'Token refresh failed, user needs to re-login');
+
+            const error = await parseErrorResponse(response);
+            const totalDuration = performance.now() - requestStartTime;
+
+            logger.error('API', 'fetch', 'Request failed', new Error(error.message), {
+              url,
+              status: response.status,
+              error: error.message,
+              duration: totalDuration,
+              attempts: attempt + 1,
+            });
+
+            logger.clearCorrelationId();
+            throw new Error(error.message);
+          }
         }
 
         // Check if status is retryable

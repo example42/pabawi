@@ -217,7 +217,7 @@ describe('Property 6: Debug Info Completeness', () => {
               typeof call.method === 'string' &&
               typeof call.duration === 'number' &&
               typeof call.status === 'number' &&
-              typeof call.cached === 'boolean'
+              typeof call.cached === 'boolean'  // pragma: allowlist secret
             )
           );
         }
@@ -332,7 +332,7 @@ describe('Property 6: Debug Info Completeness', () => {
             typeof debug.timestamp === 'string' &&
             typeof debug.requestId === 'string' &&
             typeof debug.operation === 'string' &&
-            typeof debug.duration === 'number'
+            typeof debug.duration === 'number'  // pragma: allowlist secret
           );
         }
       ),
@@ -369,7 +369,7 @@ describe('Property 6: Debug Info Completeness', () => {
             typeof debug.timestamp === 'string' &&
             typeof debug.requestId === 'string' &&
             typeof debug.operation === 'string' &&
-            typeof debug.duration === 'number'
+            typeof debug.duration === 'number'  // pragma: allowlist secret
           );
 
           // If truncated, should have truncation metadata
@@ -378,7 +378,7 @@ describe('Property 6: Debug Info Completeness', () => {
               hasRequiredFields &&
               debug.metadata._truncated === true &&
               typeof debug.metadata._originalSize === 'number' &&
-              typeof debug.metadata._maxSize === 'number'
+              typeof debug.metadata._maxSize === 'number'  // pragma: allowlist secret
             );
           }
 

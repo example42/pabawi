@@ -92,7 +92,7 @@ describe('Property 7: Frontend Log Obfuscation', () => {
    * Helper function to check if a value has been obfuscated
    */
   function isObfuscated(value: unknown): boolean {
-    return value === '***';
+    return value === '***';  // pragma: allowlist secret
   }
 
   /**
@@ -156,7 +156,7 @@ describe('Property 7: Frontend Log Obfuscation', () => {
 
         if (isSensitive) {
           // Always obfuscate sensitive fields
-          result[key] = '***';
+          result[key] = '***';  // pragma: allowlist secret
         } else if (typeof value === 'object' && value !== null) {
           result[key] = obfuscateData(value);
         } else {

@@ -207,7 +207,7 @@ describe("CodeAnalyzer", () => {
       const issues = await analyzer.getLintIssues();
 
       const trailingWhitespaceIssues = issues.filter(
-        (i) => i.rule === "trailing_whitespace"
+        (i) => i.rule === "trailing_whitespace"  // pragma: allowlist secret
       );
       expect(trailingWhitespaceIssues.length).toBeGreaterThan(0);
     });
@@ -245,7 +245,7 @@ describe("CodeAnalyzer", () => {
 
       expect(
         filtered.every(
-          (i) => i.severity === "warning" && i.rule === "trailing_whitespace"
+          (i) => i.severity === "warning" && i.rule === "trailing_whitespace"  // pragma: allowlist secret
         )
       ).toBe(true);
     });

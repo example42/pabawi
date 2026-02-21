@@ -26,6 +26,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "test/database/002_seed_rbac_data.test.ts", "test/AuthenticationService.test.ts", "test/services/PermissionService.test.ts", "test/middleware/authMiddleware.test.ts"],
   "exclude": ["node_modules", "dist", "test"]
 }

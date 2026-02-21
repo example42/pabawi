@@ -145,8 +145,8 @@ describe("Integration Status API", () => {
       expect(response.body).toHaveProperty("integrations");
       expect(response.body).toHaveProperty("timestamp");
       expect(Array.isArray(response.body.integrations)).toBe(true);
-      // Now includes unconfigured Puppetserver and Hiera
-      expect(response.body.integrations).toHaveLength(4);
+      // Now includes Ansible, unconfigured Puppetserver and Hiera
+      expect(response.body.integrations).toHaveLength(5);
 
       // Check first integration
       const puppetdb = response.body.integrations.find(
@@ -242,8 +242,8 @@ describe("Integration Status API", () => {
         .get("/api/integrations/status")
         .expect(200);
 
-      // Should have unconfigured puppetdb, puppetserver, bolt, and hiera entries
-      expect(response.body.integrations).toHaveLength(4);
+      // Should have unconfigured puppetdb, ansible, puppetserver, bolt, and hiera entries
+      expect(response.body.integrations).toHaveLength(5);
       expect(response.body.timestamp).toBeDefined();
 
       const puppetdb = response.body.integrations.find(
@@ -280,8 +280,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(true);
-      // Now includes unconfigured Puppetserver and Hiera
-      expect(response.body.integrations).toHaveLength(4);
+      // Now includes Ansible, unconfigured Puppetserver and Hiera
+      expect(response.body.integrations).toHaveLength(5);
     });
 
     it("should refresh health checks when requested", async () => {
@@ -290,8 +290,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(false);
-      // Now includes unconfigured Puppetserver and Hiera
-      expect(response.body.integrations).toHaveLength(4);
+      // Now includes Ansible, unconfigured Puppetserver and Hiera
+      expect(response.body.integrations).toHaveLength(5);
     });
   });
 });

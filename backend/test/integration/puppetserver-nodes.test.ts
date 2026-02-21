@@ -187,7 +187,7 @@ class MockPuppetserverService extends PuppetserverService {
 
   shouldHighlightNode(status: NodeStatus): boolean {
     const activity = this.categorizeNodeActivity(status);
-    return activity === "inactive" || activity === "never_checked_in";
+    return activity === "inactive" || activity === "never_checked_in";  // pragma: allowlist secret
   }
 
   getSecondsSinceLastCheckIn(status: NodeStatus): number {

@@ -114,7 +114,7 @@ describe('Property 4: Expert Mode Debug Data Inclusion', () => {
             return (
               normalizedValue === 'true' ||
               normalizedValue === '1' ||
-              normalizedValue === 'yes'
+              normalizedValue === 'yes'  // pragma: allowlist secret
             );
           } else {
             // Expert mode is disabled, so the header was not 'true', '1', or 'yes'
@@ -122,7 +122,7 @@ describe('Property 4: Expert Mode Debug Data Inclusion', () => {
             return !(
               normalizedValue === 'true' ||
               normalizedValue === '1' ||
-              normalizedValue === 'yes'
+              normalizedValue === 'yes'  // pragma: allowlist secret
             );
           }
         }
@@ -146,7 +146,7 @@ describe('Property 4: Expert Mode Debug Data Inclusion', () => {
           const expectedResult =
             normalizedValue === 'true' ||
             normalizedValue === '1' ||
-            normalizedValue === 'yes';
+            normalizedValue === 'yes';  // pragma: allowlist secret
 
           return isExpertMode === expectedResult;
         }
@@ -224,7 +224,7 @@ describe('Property 4: Expert Mode Debug Data Inclusion', () => {
       .string({ minLength: 1, maxLength: 20 })
       .filter(s => {
         const normalized = s.toLowerCase();
-        return normalized !== 'true' && normalized !== '1' && normalized !== 'yes';
+        return normalized !== 'true' && normalized !== '1' && normalized !== 'yes';  // pragma: allowlist secret
       });
 
     fc.assert(
@@ -302,7 +302,7 @@ describe('Property 4: Expert Mode Debug Data Inclusion', () => {
             typeof debug.timestamp === 'string' &&
             typeof debug.requestId === 'string' &&
             typeof debug.operation === 'string' &&
-            typeof debug.duration === 'number'
+            typeof debug.duration === 'number'  // pragma: allowlist secret
           );
         }
       ),
@@ -379,7 +379,7 @@ describe('Property 4: Expert Mode Debug Data Inclusion', () => {
             return (
               debug.metadata._truncated === true &&
               typeof debug.metadata._originalSize === 'number' &&
-              typeof debug.metadata._maxSize === 'number'
+              typeof debug.metadata._maxSize === 'number'  // pragma: allowlist secret
             );
           }
 
@@ -420,7 +420,7 @@ describe('Property 4: Expert Mode Debug Data Inclusion', () => {
             typeof debug.timestamp === 'string' &&
             typeof debug.requestId === 'string' &&
             typeof debug.operation === 'string' &&
-            typeof debug.duration === 'number'
+            typeof debug.duration === 'number'  // pragma: allowlist secret
           );
         }
       ),
