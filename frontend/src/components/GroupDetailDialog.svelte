@@ -42,12 +42,18 @@
     roles: RoleDTO[];
   }
 
+  interface UsersResponse {
+    users: UserDTO[];
+  }
+
   // State
   let group = $state<GroupDetailDTO | null>(null);
   let availableRoles = $state<RoleDTO[]>([]);
+  let availableUsers = $state<UserDTO[]>([]);
   let isLoading = $state(false);
   let isSaving = $state(false);
   let selectedRoleId = $state<string>('');
+  let selectedUserId = $state<string>('');
 
   // Derived state for roles not yet assigned
   let unassignedRoles = $derived(
@@ -56,11 +62,19 @@
     )
   );
 
+  // Derived state for users not yet in group
+  let unassignedUsers = $derived(
+    availableUsers.filter(
+      (user) => !group?.members.some((m) => m.id === user.id)
+    )
+  );
+
   // Load group details when dialog opens
   $effect(() => {
     if (isOpen && groupId) {
       loadGroupDetails();
       loadAvailableRoles();
+      loadAvailableUsers();
     }
   });
 
@@ -86,6 +100,64 @@
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load roles';
       showError('Failed to load roles', errorMessage);
+    }
+  }
+
+  async function loadAvailableUsers(): Promise<void> {
+    try {
+      const response = await get<UsersResponse>('/api/users?page=1&limit=100');
+      availableUsers = response.users;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load users';
+      showError('Failed to load users', errorMessage);
+    }
+  }
+
+  async function handleAddUser(): Promise<void> {
+    if (!groupId || !selectedUserId || !group) return;
+
+    isSaving = true;
+    try {
+      await post(`/api/users/${selectedUserId}/groups/${groupId}`);
+
+      // Add user to group's members list
+      const addedUser = availableUsers.find((u) => u.id === selectedUserId);
+      if (addedUser) {
+        group.members = [...group.members, addedUser];
+      }
+
+      selectedUserId = '';
+      showSuccess('User added', 'User has been added to the group');
+      onSaved();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add user';
+      showError('Failed to add user', errorMessage);
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  async function handleRemoveUser(userId: string, username: string): Promise<void> {
+    if (!groupId || !group) return;
+
+    if (!confirm(`Remove user "${username}" from group?`)) {
+      return;
+    }
+
+    isSaving = true;
+    try {
+      await del(`/api/users/${userId}/groups/${groupId}`);
+
+      // Remove user from group's members list
+      group.members = group.members.filter((m) => m.id !== userId);
+
+      showSuccess('User removed', 'User has been removed from the group');
+      onSaved();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to remove user';
+      showError('Failed to remove user', errorMessage);
+    } finally {
+      isSaving = false;
     }
   }
 
@@ -141,6 +213,7 @@
     if (!isSaving) {
       group = null;
       selectedRoleId = '';
+      selectedUserId = '';
       onClose();
     }
   }
@@ -225,6 +298,32 @@
                   </h4>
                 </div>
 
+                <!-- Add User -->
+                {#if unassignedUsers.length > 0}
+                  <div class="flex gap-2 mb-3">
+                    <select
+                      bind:value={selectedUserId}
+                      disabled={isSaving}
+                      class="flex-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select a user to add...</option>
+                      {#each unassignedUsers as user (user.id)}
+                        <option value={user.id}>
+                          {user.username} ({user.firstName} {user.lastName})
+                        </option>
+                      {/each}
+                    </select>
+                    <button
+                      type="button"
+                      onclick={handleAddUser}
+                      disabled={!selectedUserId || isSaving}
+                      class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Add
+                    </button>
+                  </div>
+                {/if}
+
                 <!-- Members List -->
                 {#if group.members.length === 0}
                   <p class="text-sm text-gray-500 dark:text-gray-400 italic">
@@ -242,6 +341,17 @@
                             {member.firstName} {member.lastName} • {member.email}
                           </p>
                         </div>
+                        <button
+                          type="button"
+                          onclick={() => handleRemoveUser(member.id, member.username)}
+                          disabled={isSaving}
+                          class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Remove user from group"
+                        >
+                          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
                       </div>
                     {/each}
                   </div>

@@ -49,7 +49,8 @@
 
     if (success) {
       showSuccess('Login successful', `Welcome back, ${username}!`);
-      router.navigate('/');
+      // Redirect to intended path or home
+      router.navigateToIntendedOrDefault('/');
     } else {
       showError('Login failed', authManager.error?.message || 'Invalid credentials');
     }

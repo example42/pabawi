@@ -6,6 +6,7 @@
   import { router } from '../lib/router.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import GroupDetailDialog from '../components/GroupDetailDialog.svelte';
+  import GroupCreateDialog from '../components/GroupCreateDialog.svelte';
 
   interface GroupDTO {
     id: string;
@@ -39,6 +40,7 @@
   let isLoading = $state(false);
   let searchQuery = $state('');
   let isGroupDetailDialogOpen = $state(false);
+  let isGroupCreateDialogOpen = $state(false);
   let selectedGroupId = $state<string | null>(null);
   let filteredGroups = $derived(
     searchQuery.trim() === ''
@@ -113,8 +115,12 @@
   }
 
   function handleCreateGroup(): void {
-    // TODO: Open create group dialog (will be implemented in future task)
-    showError('Not implemented', 'Group creation dialog will be implemented in a future task');
+    isGroupCreateDialogOpen = true;
+  }
+
+  function handleGroupCreated(): void {
+    // Reload groups list to show the new group
+    loadGroups();
   }
 
   function handleEditGroup(groupId: string): void {
@@ -385,4 +391,11 @@
   groupId={selectedGroupId}
   onClose={handleCloseGroupDetailDialog}
   onSaved={handleGroupDetailSaved}
+/>
+
+<!-- Group Create Dialog -->
+<GroupCreateDialog
+  bind:isOpen={isGroupCreateDialogOpen}
+  onClose={() => isGroupCreateDialogOpen = false}
+  onCreated={handleGroupCreated}
 />

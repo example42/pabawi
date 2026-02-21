@@ -16,22 +16,23 @@
   import GroupManagementPage from './pages/GroupManagementPage.svelte';
   import RoleManagementPage from './pages/RoleManagementPage.svelte';
   import { router } from './lib/router.svelte';
+  import type { RouteConfig } from './lib/router.svelte';
   import { get } from './lib/api';
   import { onMount } from 'svelte';
 
-  const routes = {
-    '/': HomePage,
+  const routes: Record<string, any> = {
+    '/': { component: HomePage, requiresAuth: true },
     '/login': LoginPage,
     '/register': RegisterPage,
     '/setup': SetupPage,
-    '/inventory': InventoryPage,
-    '/executions': ExecutionsPage,
-    '/puppet': PuppetPage,
-    '/users': UserManagementPage,
-    '/groups': GroupManagementPage,
-    '/roles': RoleManagementPage,
-    '/nodes/:id': NodeDetailPage,
-    '/integrations/:integration/setup': IntegrationSetupPage
+    '/inventory': { component: InventoryPage, requiresAuth: true },
+    '/executions': { component: ExecutionsPage, requiresAuth: true },
+    '/puppet': { component: PuppetPage, requiresAuth: true },
+    '/users': { component: UserManagementPage, requiresAuth: true, requiresAdmin: true },
+    '/groups': { component: GroupManagementPage, requiresAuth: true, requiresAdmin: true },
+    '/roles': { component: RoleManagementPage, requiresAuth: true, requiresAdmin: true },
+    '/nodes/:id': { component: NodeDetailPage, requiresAuth: true },
+    '/integrations/:integration/setup': { component: IntegrationSetupPage, requiresAuth: true }
   };
 
   let setupComplete = $state(true); // Default to true to avoid flashing

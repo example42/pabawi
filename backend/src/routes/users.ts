@@ -22,6 +22,19 @@ const PaginationSchema = z.object({
 });
 
 /**
+ * Zod schema for creating a user
+ */
+const CreateUserSchema = z.object({
+  username: z.string().min(3).max(50),
+  email: z.string().email(),
+  password: z.string().min(8),
+  firstName: z.string().min(1).max(100),
+  lastName: z.string().min(1).max(100),
+  isActive: z.boolean().default(true),
+  isAdmin: z.boolean().default(false),
+}).strict();
+
+/**
  * Create users management router
  */
 export function createUsersRouter(
@@ -34,6 +47,144 @@ export function createUsersRouter(
   const permissionService = new PermissionService(databaseService.getConnection());
   const authMiddleware = createAuthMiddleware(databaseService.getConnection(), jwtSecret);
   const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+
+  /**
+   * POST /api/users
+   * Create a new user
+   *
+   * Requirements: 2.1, 2.2
+   */
+  router.post(
+    "/",
+    authMiddleware,
+    rbacMiddleware("users", "write"),
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      logger.info("Processing create user request", {
+        component: "UsersRouter",
+        operation: "createUser",
+        metadata: { userId: req.user?.userId },
+      });
+
+      try {
+        // Validate request body
+        const validatedData = CreateUserSchema.parse(req.body);
+
+        logger.debug("Create user data validated", {
+          component: "UsersRouter",
+          operation: "createUser",
+          metadata: {
+            userId: req.user?.userId,
+            username: validatedData.username,
+          },
+        });
+
+        // Create user
+        const user = await userService.createUser({
+          username: validatedData.username,
+          email: validatedData.email,
+          password: validatedData.password,
+          firstName: validatedData.firstName,
+          lastName: validatedData.lastName,
+          isActive: validatedData.isActive,
+          isAdmin: validatedData.isAdmin,
+        });
+
+        // Convert to DTO
+        const userDTO = userService.toUserDTO(user);
+
+        logger.info("User created successfully", {
+          component: "UsersRouter",
+          operation: "createUser",
+          metadata: {
+            userId: req.user?.userId,
+            newUserId: user.id,
+            username: user.username,
+          },
+        });
+
+        // Return created user with 201 status
+        res.status(201).json(userDTO);
+      } catch (error) {
+        // Handle duplicate username
+        if (error instanceof Error && error.message === 'Username already exists') {
+          logger.warn("Duplicate username in create user", {
+            component: "UsersRouter",
+            operation: "createUser",
+            metadata: { userId: req.user?.userId },
+          });
+
+          res.status(409).json({
+            error: {
+              code: ERROR_CODES.CONFLICT,
+              message: "Username already exists",
+              field: "username",
+            },
+          });
+          return;
+        }
+
+        // Handle duplicate email
+        if (error instanceof Error && error.message === 'Email already exists') {
+          logger.warn("Duplicate email in create user", {
+            component: "UsersRouter",
+            operation: "createUser",
+            metadata: { userId: req.user?.userId },
+          });
+
+          res.status(409).json({
+            error: {
+              code: ERROR_CODES.CONFLICT,
+              message: "Email already exists",
+              field: "email",
+            },
+          });
+          return;
+        }
+
+        // Handle password validation errors
+        if (error instanceof Error && error.message.includes('Password validation failed')) {
+          logger.warn("Password validation failed in create user", {
+            component: "UsersRouter",
+            operation: "createUser",
+            metadata: { userId: req.user?.userId },
+          });
+
+          res.status(400).json({
+            error: {
+              code: ERROR_CODES.VALIDATION_ERROR,
+              message: error.message,
+            },
+          });
+          return;
+        }
+
+        // Handle Zod validation errors
+        if (error instanceof ZodError) {
+          logger.warn("Create user validation failed", {
+            component: "UsersRouter",
+            operation: "createUser",
+            metadata: { errors: error.errors },
+          });
+          sendValidationError(res, error);
+          return;
+        }
+
+        // Handle unexpected errors
+        logger.error("Create user failed with unexpected error", {
+          component: "UsersRouter",
+          operation: "createUser",
+          metadata: { userId: req.user?.userId },
+        }, error instanceof Error ? error : undefined);
+
+        res.status(500).json({
+          error: {
+            code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+            message: "Failed to create user",
+          },
+        });
+      }
+    })
+  );
 
   /**
    * GET /api/users

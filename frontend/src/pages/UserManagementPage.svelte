@@ -6,6 +6,7 @@
   import { router } from '../lib/router.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import UserDetailDialog from '../components/UserDetailDialog.svelte';
+  import UserCreateDialog from '../components/UserCreateDialog.svelte';
 
   interface UserDTO {
     id: string;
@@ -43,6 +44,7 @@
   let isLoading = $state(false);
   let searchQuery = $state('');
   let isUserDialogOpen = $state(false);
+  let isUserCreateDialogOpen = $state(false);
   let selectedUserId = $state<string | null>(null);
   let filteredUsers = $derived(
     searchQuery.trim() === ''
@@ -119,8 +121,12 @@
   }
 
   function handleCreateUser(): void {
-    // TODO: Open create user dialog (will be implemented in future task)
-    showError('Not implemented', 'User creation dialog will be implemented in a future task');
+    isUserCreateDialogOpen = true;
+  }
+
+  function handleUserCreated(): void {
+    // Reload users list to show the new user
+    loadUsers();
   }
 
   function handleEditUser(userId: string): void {
@@ -404,4 +410,11 @@
   userId={selectedUserId}
   onClose={handleUserDialogClose}
   onSaved={handleUserSaved}
+/>
+
+<!-- User Create Dialog -->
+<UserCreateDialog
+  bind:isOpen={isUserCreateDialogOpen}
+  onClose={() => isUserCreateDialogOpen = false}
+  onCreated={handleUserCreated}
 />

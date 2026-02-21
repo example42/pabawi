@@ -48,7 +48,7 @@
   let sourceFilter = $state<string>('all');
   let sortBy = $state<string>('name');
   let sortOrder = $state<'asc' | 'desc'>('asc');
-  let viewMode = $state<'grid' | 'list'>('grid');
+  let viewMode = $state<'grid' | 'list'>('list');
   let searchTimeout: number | undefined;
   let pqlQuery = $state('');
   let pqlError = $state<string | null>(null);
@@ -736,9 +736,6 @@
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   URI
                 </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  User
-                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
@@ -780,9 +777,6 @@
                   </td>
                   <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                     {node.uri}
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                    {node.config.user || '-'}
                   </td>
                 </tr>
               {/each}

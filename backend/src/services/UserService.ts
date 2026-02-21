@@ -46,6 +46,7 @@ export interface CreateUserDTO {
   password: string;
   firstName: string;
   lastName: string;
+  isActive?: boolean;
   isAdmin?: boolean;
 }
 
@@ -170,7 +171,7 @@ export class UserService {
         passwordHash,
         data.firstName,
         data.lastName,
-        1, // isActive defaults to true
+        data.isActive !== undefined ? (data.isActive ? 1 : 0) : 1, // isActive defaults to true
         data.isAdmin ? 1 : 0,
         now,
         now
