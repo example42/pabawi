@@ -1,6 +1,6 @@
 {
   "name": "pabawi",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Pabawi - Web interface for Bolt automation tool",
   "private": true,
   "workspaces": [
