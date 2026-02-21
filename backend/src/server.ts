@@ -22,6 +22,7 @@ import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
 import configRouter from "./routes/config";
 import { createAuthRouter } from "./routes/auth";
+import { createSetupRouter } from "./routes/setup";
 import { createUsersRouter } from "./routes/users";
 import { createGroupsRouter } from "./routes/groups";
 import { createRolesRouter } from "./routes/roles";
@@ -743,6 +744,9 @@ async function startServer(): Promise<Express> {
 
     // Config routes (UI settings, etc.)
     app.use("/api/config", configRouter);
+
+    // Setup routes (no authentication required - only accessible when setup is incomplete)
+    app.use("/api/setup", createSetupRouter(databaseService));
 
     // Authentication routes with stricter rate limiting
     const authRateLimitMiddleware = createAuthRateLimitMiddleware();

@@ -108,26 +108,11 @@ INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES
   ('role-admin-001', 'roles-admin-001', datetime('now'));
 
 -- ============================================================================
--- DEFAULT ADMIN USER: Create default administrator account
+-- DEFAULT CONFIGURATION: Setup default application configuration
 -- ============================================================================
--- Note: Password is 'Admin123!' (bcrypt hash with cost factor 10)
--- This should be changed immediately after first login in production
+-- Note: Initial setup wizard will guide admin through first-time configuration
+-- These are default values that can be changed during setup
 
-INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt, lastLoginAt) VALUES
-  (
-    'user-admin-001',
-    'admin',
-    'admin@pabawi.local',
-    '$2b$10$UzDhEYO54zk0.vEqM9C9qO4Ydcs8CrVfCm.6kZNMjtmQjJrIWc5sy',
-    'System',
-    'Administrator',
-    1,
-    1,
-    datetime('now'),
-    datetime('now'),
-    NULL
-  );
-
--- Assign Administrator role to default admin user
-INSERT INTO user_roles (userId, roleId, assignedAt) VALUES
-  ('user-admin-001', 'role-admin-001', datetime('now'));
+INSERT INTO config (key, value, updatedAt) VALUES
+  ('allow_self_registration', 'false', datetime('now')),
+  ('default_new_user_role', 'role-viewer-001', datetime('now'));

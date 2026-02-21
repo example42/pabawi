@@ -3,6 +3,7 @@ import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { UserService } from "../services/UserService";
 import { AuthenticationService } from "../services/AuthenticationService";
+import { SetupService } from "../services/SetupService";
 import { AuditLoggingService } from "../services/AuditLoggingService";
 import { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
@@ -76,6 +77,7 @@ export function createAuthRouter(
   const auditLogger = new AuditLoggingService(databaseService.getConnection());
   const authService = new AuthenticationService(databaseService.getConnection(), jwtSecret, auditLogger);
   const userService = new UserService(databaseService.getConnection(), authService);
+  const setupService = new SetupService(databaseService.getConnection());
   const authMiddleware = createAuthMiddleware(databaseService.getConnection(), jwtSecret);
 
   /**
@@ -93,6 +95,22 @@ export function createAuthRouter(
       });
 
       try {
+        // Check if self-registration is allowed
+        const isSelfRegistrationAllowed = await setupService.isSelfRegistrationAllowed();
+        if (!isSelfRegistrationAllowed) {
+          logger.warn("Registration attempt blocked: self-registration disabled", {
+            component: "AuthRouter",
+            operation: "register",
+          });
+          res.status(403).json({
+            error: {
+              code: "SELF_REGISTRATION_DISABLED",
+              message: "Self-registration is disabled. Please contact an administrator to create an account.",
+            },
+          });
+          return;
+        }
+
         // Validate request body
         const validatedData = RegisterSchema.parse(req.body);
 
