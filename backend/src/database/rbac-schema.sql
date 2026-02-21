@@ -133,3 +133,13 @@ CREATE INDEX IF NOT EXISTS idx_group_roles_composite ON group_roles(groupId, rol
 
 -- Composite index for role-permission lookup
 CREATE INDEX IF NOT EXISTS idx_role_permissions_composite ON role_permissions(roleId, permissionId);
+
+-- Configuration table: Application settings and setup configuration
+CREATE TABLE IF NOT EXISTS config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updatedAt TEXT NOT NULL  -- ISO 8601 timestamp
+);
+
+-- Index for config lookups
+CREATE INDEX IF NOT EXISTS idx_config_key ON config(key);

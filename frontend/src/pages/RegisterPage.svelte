@@ -12,6 +12,7 @@
   let lastName = $state('');
   let isSubmitting = $state(false);
   let validationErrors = $state<Record<string, string>>({});
+  let selfRegistrationDisabled = $state(false);
 
   // Password strength indicators
   let passwordStrength = $derived.by(() => {
@@ -124,6 +125,13 @@
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Registration failed';
 
+      // Check if self-registration is disabled
+      if (errorMessage.includes('self-registration') || errorMessage.includes('SELF_REGISTRATION_DISABLED')) {
+        selfRegistrationDisabled = true;
+        showError('Registration disabled', 'Self-registration is disabled. Please contact an administrator to create an account.');
+        return;
+      }
+
       // Handle specific error cases (Requirement: 2.1, 2.2)
       if (errorMessage.toLowerCase().includes('username')) {
         validationErrors = { ...validationErrors, username: 'Username already exists' };
@@ -161,6 +169,29 @@
     </div>
 
     <form class="mt-8 space-y-6" onsubmit={handleSubmit}>
+      {#if selfRegistrationDisabled}
+        <!-- Self-registration disabled message -->
+        <div class="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-4">
+          <div class="flex">
+            <div class="flex-shrink-0">
+              <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+            </div>
+            <div class="ml-3">
+              <h3 class="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                Self-Registration Disabled
+              </h3>
+              <div class="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                <p>
+                  User registration is currently disabled by the administrator. Please contact your system administrator to create an account for you.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      {/if}
+
       <div class="space-y-4">
         <!-- Username field -->
         <div>
@@ -334,7 +365,7 @@
       <div>
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || selfRegistrationDisabled}
           class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed dark:focus:ring-offset-gray-900"
         >
           {#if isSubmitting}

@@ -751,6 +751,26 @@ async function initializeSchema(db: Database): Promise<void> {
         action TEXT NOT NULL,
         resource TEXT,
         resourceId TEXT,
+        ipAddress TEXT,
+        userAgent TEXT,
+        success INTEGER NOT NULL,
+        errorMessage TEXT,
+        metadata TEXT
+      );
+
+      CREATE TABLE config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      -- Insert default config to allow self-registration for tests
+      INSERT INTO config (key, value, updatedAt) VALUES
+        ('allow_self_registration', 'true', datetime('now')),
+        ('default_new_user_role', 'role-viewer-001', datetime('now'));
+        action TEXT NOT NULL,
+        resource TEXT,
+        resourceId TEXT,
         details TEXT,
         ipAddress TEXT,
         userAgent TEXT,

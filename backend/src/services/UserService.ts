@@ -1,6 +1,7 @@
 import { Database } from 'sqlite3';
 import { randomUUID } from 'crypto';
 import { AuthenticationService } from './AuthenticationService';
+import { SetupService } from './SetupService';
 import { validatePassword } from '../utils/passwordValidation';
 
 /**
@@ -117,10 +118,12 @@ export interface Role {
 export class UserService {
   private db: Database;
   private authService: AuthenticationService;
+  private setupService: SetupService;
 
   constructor(db: Database, authService: AuthenticationService) {
     this.db = db;
     this.authService = authService;
+    this.setupService = new SetupService(db);
   }
 
   /**
@@ -174,17 +177,17 @@ export class UserService {
       ]
     );
 
-    // Assign default Viewer role to new users (unless they're admin)
-    // This ensures all users have read permissions by default
+    // Assign default role to new users (unless they're admin)
+    // Role is determined by setup configuration
     if (!data.isAdmin) {
-      await this.runQuery(
-        `INSERT INTO user_roles (userId, roleId, assignedAt)
-         SELECT ?, id, ?
-         FROM roles
-         WHERE name = 'Viewer' AND isBuiltIn = 1
-         LIMIT 1`,
-        [userId, now]
-      );
+      const defaultRoleId = await this.setupService.getDefaultNewUserRole();
+      if (defaultRoleId) {
+        await this.runQuery(
+          `INSERT INTO user_roles (userId, roleId, assignedAt)
+           VALUES (?, ?, ?)`,
+          [userId, defaultRoleId, now]
+        );
+      }
     }
 
     // Fetch and return created user

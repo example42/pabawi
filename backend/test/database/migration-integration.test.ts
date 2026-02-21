@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { unlinkSync, existsSync } from 'fs';
-import bcrypt from 'bcrypt';
 
 describe('Migration Integration Test', () => {
   const testDbPath = './test-migration.db';  // pragma: allowlist secret
@@ -49,51 +48,33 @@ describe('Migration Integration Test', () => {
 
     expect(roles).toHaveLength(3);
     expect(roles.map(r => r.name).sort()).toEqual(['Administrator', 'Operator', 'Viewer']);
-  });
 
-  it('should have default admin user with valid credentials', async () => {
-    const db = dbService.getConnection();
-
-    // Get admin user
-    const adminUser = await new Promise<any>((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE username = ?', ['admin'], (err, row) => {
+    // Check that config table exists and has default values
+    const config = await new Promise<any[]>((resolve, reject) => {
+      db.all('SELECT * FROM config', (err, rows) => {
         if (err) reject(err);
-        else resolve(row);
+        else resolve(rows);
       });
     });
 
-    expect(adminUser).toBeDefined();
-    expect(adminUser.username).toBe('admin');
-    expect(adminUser.email).toBe('admin@pabawi.local');
-    expect(adminUser.isAdmin).toBe(1);
-    expect(adminUser.isActive).toBe(1);
-
-    // Verify password
-    const isValid = await bcrypt.compare('Admin123!', adminUser.passwordHash);
-    expect(isValid).toBe(true);
+    expect(config.length).toBeGreaterThan(0);
+    const configMap = Object.fromEntries(config.map((c: any) => [c.key, c.value]));
+    expect(configMap).toHaveProperty('allow_self_registration');
+    expect(configMap).toHaveProperty('default_new_user_role');
   });
 
-  it('should have admin user with Administrator role', async () => {
+  it('should not have any admin users initially (setup required)', async () => {
     const db = dbService.getConnection();
 
-    // Get admin user's roles
-    const roles = await new Promise<any[]>((resolve, reject) => {
-      db.all(
-        `SELECT r.name
-         FROM roles r
-         INNER JOIN user_roles ur ON ur.roleId = r.id
-         INNER JOIN users u ON u.id = ur.userId
-         WHERE u.username = ?`,
-        ['admin'],
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        }
-      );
+    // Check that no admin users exist
+    const adminCount = await new Promise<number>((resolve, reject) => {
+      db.get('SELECT COUNT(*) as count FROM users WHERE isAdmin = 1', (err, row: any) => {
+        if (err) reject(err);
+        else resolve(row.count);
+      });
     });
 
-    expect(roles).toHaveLength(1);
-    expect(roles[0].name).toBe('Administrator');
+    expect(adminCount).toBe(0);
   });
 
   it('should not re-apply migrations on subsequent initializations', async () => {

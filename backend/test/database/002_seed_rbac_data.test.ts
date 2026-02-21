@@ -1,9 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import sqlite3 from 'sqlite3';
-import { MigrationRunner } from '../../src/database/MigrationRunner';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import bcrypt from 'bcrypt';
 
 describe('002_seed_rbac_data migration', () => {
   let db: sqlite3.Database;
@@ -182,65 +180,34 @@ describe('002_seed_rbac_data migration', () => {
     expect(permissions).toHaveLength(20);
   });
 
-  it('should create default admin user', async () => {
-    const adminUser = await new Promise<any>((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE username = ?', ['admin'], (err, row) => {
+  it('should create default configuration values', async () => {
+    const config = await new Promise<any[]>((resolve, reject) => {
+      db.all('SELECT * FROM config', (err, rows) => {
         if (err) reject(err);
-        else resolve(row);
+        else resolve(rows);
       });
     });
 
-    expect(adminUser).toBeDefined();
-    expect(adminUser.username).toBe('admin');
-    expect(adminUser.email).toBe('admin@pabawi.local');
-    expect(adminUser.firstName).toBe('System');
-    expect(adminUser.lastName).toBe('Administrator');
-    expect(adminUser.isActive).toBe(1);
-    expect(adminUser.isAdmin).toBe(1);
-    expect(adminUser.passwordHash).toBeDefined();
+    expect(config.length).toBeGreaterThan(0);
+
+    const configMap = Object.fromEntries(config.map((c: any) => [c.key, c.value]));
+    expect(configMap).toHaveProperty('allow_self_registration');
+    expect(configMap).toHaveProperty('default_new_user_role');
+
+    // Check default values
+    expect(configMap.allow_self_registration).toBe('false');
+    expect(configMap.default_new_user_role).toBe('role-viewer-001');
   });
 
-  it('should have valid bcrypt hash for admin password', async () => {
-    const adminUser = await new Promise<any>((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE username = ?', ['admin'], (err, row) => {
+  it('should not create any default admin user (setup required)', async () => {
+    const adminCount = await new Promise<number>((resolve, reject) => {
+      db.get('SELECT COUNT(*) as count FROM users WHERE isAdmin = 1', (err, row: any) => {
         if (err) reject(err);
-        else resolve(row);
+        else resolve(row.count);
       });
     });
 
-    // Verify the password hash is valid and matches 'Admin123!'
-    const isValid = await bcrypt.compare('Admin123!', adminUser.passwordHash);
-    expect(isValid).toBe(true);
-
-    // Verify wrong password doesn't match
-    const isInvalid = await bcrypt.compare('WrongPassword', adminUser.passwordHash);
-    expect(isInvalid).toBe(false);
-  });
-
-  it('should assign Administrator role to default admin user', async () => {
-    const adminUser = await new Promise<any>((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE username = ?', ['admin'], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
-
-    const roles = await new Promise<any[]>((resolve, reject) => {
-      db.all(
-        `SELECT r.name
-         FROM roles r
-         INNER JOIN user_roles ur ON ur.roleId = r.id
-         WHERE ur.userId = ?`,
-        [adminUser.id],
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        }
-      );
-    });
-
-    expect(roles).toHaveLength(1);
-    expect(roles[0].name).toBe('Administrator');
+    expect(adminCount).toBe(0);
   });
 
   it('should have unique resource-action combinations', async () => {
