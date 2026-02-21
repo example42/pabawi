@@ -74,7 +74,7 @@ export function createSetupRouter(
    */
   router.get(
     "/status",
-    asyncHandler(async (req: Request, res: Response) => {
+    asyncHandler(async (_req: Request, res: Response) => {
       logger.info("Checking setup status", {
         component: "SetupRouter",
         operation: "status",

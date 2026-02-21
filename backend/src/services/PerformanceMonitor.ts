@@ -154,8 +154,20 @@ export class PerformanceMonitor {
    * @returns Complete metrics summary
    */
   public getMetricsSummary(): {
-    authentication: ReturnType<typeof this.getAuthenticationStats>;
-    permissionChecks: ReturnType<typeof this.getPermissionCheckStats>;
+    authentication: {
+      count: number;
+      p50: number;
+      p95: number;
+      p99: number;
+      avg: number;
+    };
+    permissionChecks: {
+      count: number;
+      p50: number;
+      p95: number;
+      p99: number;
+      avg: number;
+    };
     cache: {
       hits: number;
       misses: number;
@@ -208,9 +220,9 @@ export class PerformanceMonitor {
     const sorted = [...times].sort((a, b) => a - b);
     const count = sorted.length;
 
-    const p50 = this.percentile(sorted, 50);
-    const p95 = this.percentile(sorted, 95);
-    const p99 = this.percentile(sorted, 99);
+    const p50 = PerformanceMonitor.percentile(sorted, 50);
+    const p95 = PerformanceMonitor.percentile(sorted, 95);
+    const p99 = PerformanceMonitor.percentile(sorted, 99);
     const avg = sorted.reduce((sum, val) => sum + val, 0) / count;
 
     return { count, p50, p95, p99, avg };
@@ -223,7 +235,7 @@ export class PerformanceMonitor {
    * @param percentile - Percentile to calculate (0-100)
    * @returns Percentile value
    */
-  private percentile(sortedArray: number[], percentile: number): number {
+  private static percentile(sortedArray: number[], percentile: number): number {
     if (sortedArray.length === 0) return 0;
 
     const index = (percentile / 100) * (sortedArray.length - 1);

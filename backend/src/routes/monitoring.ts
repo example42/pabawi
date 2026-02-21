@@ -15,7 +15,7 @@ const router = Router();
  *
  * Requirements: 15.3, 15.4
  */
-router.get('/metrics', (req, res) => {
+router.get('/metrics', (_req, res) => {
   try {
     const metrics = performanceMonitor.getMetricsSummary();
     res.json(metrics);
@@ -37,7 +37,7 @@ router.get('/metrics', (req, res) => {
  * This endpoint allows administrators to clear accumulated metrics.
  * Useful for testing or after resolving performance issues.
  */
-router.post('/metrics/reset', (req, res) => {
+router.post('/metrics/reset', (_req, res) => {
   try {
     performanceMonitor.reset();
     res.json({ message: 'Performance metrics reset successfully' });
