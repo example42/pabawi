@@ -255,7 +255,7 @@
         <ErrorAlert message="Playbook execution failed" details={error} />
       {/if}
 
-      {#if executionStream && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
+      {#if executionStream && currentExecutionId && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}
         <div>
           <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
           <RealtimeOutputViewer stream={executionStream} executionId={currentExecutionId} autoConnect={false} />
