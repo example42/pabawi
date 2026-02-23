@@ -299,8 +299,9 @@ export function createPackagesRouter(
             );
 
             // Execute package installation task with parameter mapping
-            const result = selectedTool === "ansible"
-              ? await integrationManager.executeAction("ansible", {
+            let result;
+            if (selectedTool === "ansible") {
+              result = await integrationManager.executeAction("ansible", {
                 type: "task",
                 target: nodeId,
                 action: "package",
@@ -313,19 +314,25 @@ export function createPackagesRouter(
                 metadata: {
                   streamingCallback,
                 },
-              })
-              : await boltService.installPackage(
+              });
+            } else {
+              // For bolt, taskName and taskConfig are guaranteed to exist due to validation above
+              if (!taskName || !taskConfig) {
+                throw new Error("Task name and configuration required for Bolt execution");
+              }
+              result = await boltService.installPackage(
                 nodeId,
-                taskName!,
+                taskName,
                 {
                   packageName,
                   ensure,
                   version,
                   settings,
                 },
-                taskConfig!.parameterMapping,
+                taskConfig.parameterMapping,
                 streamingCallback,
               );
+            }
 
             // Update execution record with results
             // Include stdout/stderr when expert mode is enabled
