@@ -117,7 +117,7 @@ export class AnsibleService {
       "-m",
       "package",
       "-a",
-      JSON.stringify(moduleArgs),
+      this.toModuleArgString(moduleArgs),
     ];
 
     const exec = await this.executeCommand("ansible", args, streamingCallback);
@@ -316,6 +316,20 @@ export class AnsibleService {
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
+  }
+
+  /**
+   * Converts a key/value object to Ansible module argument string format.
+   * e.g. { name: "curl", state: "present" } -> 'name=curl state=present'
+   * Values containing spaces are quoted; internal double quotes are escaped.
+   */
+  private toModuleArgString(args: Record<string, unknown>): string {
+    return Object.entries(args)
+      .map(([key, value]) => {
+        const strValue = String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        return strValue.includes(" ") ? `${key}="${strValue}"` : `${key}=${strValue}`;
+      })
+      .join(" ");
   }
 
   private buildCommandString(binary: string, args: string[]): string {
