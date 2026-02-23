@@ -355,7 +355,14 @@ export function createPackagesRouter(
               component: "PackagesRouter",
               integration: selectedTool,
               operation: "installPackage",
-              metadata: { executionId, nodeId, taskName: taskName ?? "", packageName },
+              metadata: {
+                executionId,
+                nodeId,
+                packageName,
+                ...(selectedTool === "ansible"
+                  ? { action: "ansible:package" }
+                  : { taskName: taskName ?? "package" }),
+              },
             }, error instanceof Error ? error : undefined);
 
             let errorMessage = "Unknown error";
