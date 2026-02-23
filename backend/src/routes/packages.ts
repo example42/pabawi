@@ -232,7 +232,7 @@ export function createPackagesRouter(
             debugInfo.duration = Date.now() - startTime;
             expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addWarning(debugInfo, {
-              message: `Package installation task '${taskName}' is not configured`,
+              message: `Package installation task '${taskName ?? ""}' is not configured`,
               context: `Available tasks: ${packageTasks.map((t) => t.name).join(", ")}`,
               level: 'warn',
             });
@@ -243,7 +243,7 @@ export function createPackagesRouter(
           const errorResponse = {
             error: {
               code: "INVALID_TASK",
-              message: `Package installation task '${taskName ?? ""}' is not configured`,
+              message: `Package installation task '${taskName ?? "unknown"}' is not configured`,
               details: `Available tasks: ${packageTasks.map((t) => t.name).join(", ")}`,
             },
           };
@@ -316,14 +316,14 @@ export function createPackagesRouter(
               })
               : await boltService.installPackage(
                 nodeId,
-                taskName ?? "package",
+                taskName,
                 {
                   packageName,
                   ensure,
                   version,
                   settings,
                 },
-                taskConfig!.parameterMapping,
+                taskConfig.parameterMapping,
                 streamingCallback,
               );
 

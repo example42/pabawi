@@ -348,15 +348,16 @@ export class AnsibleService {
       }
 
       // Parse JSON output from ansible-inventory
-      const inventoryData = JSON.parse(exec.stdout);
+      const inventoryData = JSON.parse(exec.stdout) as { _meta?: { hostvars?: Record<string, unknown> } };
       const nodes: Node[] = [];
 
       // Extract hosts from inventory structure
       // ansible-inventory --list returns: { _meta: { hostvars: {...} }, groups: {...} }
-      const hostvars = inventoryData._meta?.hostvars || {};
+      const metaData = inventoryData._meta ?? {};
+      const hostvars = metaData.hostvars ?? {};
 
       for (const [hostname, vars] of Object.entries(hostvars)) {
-        const hostVars = vars as Record<string, unknown>;
+        const hostVars = typeof vars === "object" && vars !== null ? vars as Record<string, unknown> : {};
 
         // Determine transport based on connection type
         let transport: "ssh" | "winrm" | "local" = "ssh";
@@ -369,13 +370,13 @@ export class AnsibleService {
         }
 
         // Build URI
-        const host = (hostVars.ansible_host as string) || hostname;
+        const host = (hostVars.ansible_host as string | undefined) ?? hostname;
         const port = hostVars.ansible_port as number | undefined;
         const user = hostVars.ansible_user as string | undefined;
 
         let uri = host;
         if (port) {
-          uri = `${host}:${port}`;
+          uri = `${host}:${String(port)}`;
         }
 
         // Build config object

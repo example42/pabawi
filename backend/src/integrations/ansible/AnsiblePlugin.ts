@@ -12,7 +12,7 @@ import type {
 import type { ExecutionResult, Node, Facts } from "../bolt/types";
 import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
-import { AnsibleService } from "./AnsibleService";
+import type { AnsibleService } from "./AnsibleService";
 
 export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, InformationSourcePlugin {
   readonly type = "both" as const;
@@ -108,7 +108,8 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
           );
         }
 
-        const packageName = String(action.parameters?.packageName ?? "").trim();
+        const packageNameParam = action.parameters?.packageName;
+        const packageName = typeof packageNameParam === "string" ? packageNameParam.trim() : "";
         if (!packageName) {
           throw new Error("packageName is required for ansible package action");
         }
@@ -116,7 +117,7 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
         const ensure =
           action.parameters?.ensure === "absent" ||
           action.parameters?.ensure === "latest"
-            ? (action.parameters.ensure as "absent" | "latest")
+            ? (action.parameters.ensure)
             : "present";
 
         const version =
@@ -218,17 +219,13 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
         let stdout = "";
         let stderr = "";
 
-        if (child.stdout) {
-          child.stdout.on("data", (data: Buffer) => {
-            stdout += data.toString();
-          });
-        }
+        child.stdout.on("data", (data: Buffer) => {
+          stdout += data.toString();
+        });
 
-        if (child.stderr) {
-          child.stderr.on("data", (data: Buffer) => {
-            stderr += data.toString();
-          });
-        }
+        child.stderr.on("data", (data: Buffer) => {
+          stderr += data.toString();
+        });
 
         child.on("close", (exitCode: number | null) => {
           if (exitCode === 0) {
@@ -245,44 +242,74 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
 
       // Parse ansible facts from output
       // Ansible setup module returns JSON in stdout
-      const factsMatch = result.stdout.match(/"ansible_facts":\s*({[\s\S]*?})\s*}/);
+      const factsMatch = /"ansible_facts":\s*({[\s\S]*?})\s*}/.exec(result.stdout);
       if (factsMatch) {
-        const ansibleFacts = JSON.parse(factsMatch[1]);
+        const ansibleFacts = JSON.parse(factsMatch[1]) as Record<string, unknown>;
 
         // Convert Ansible facts to Bolt-compatible format
+        const distribution = typeof ansibleFacts.ansible_distribution === "string" ? ansibleFacts.ansible_distribution : undefined;
+        const osFamily = typeof ansibleFacts.ansible_os_family === "string" ? ansibleFacts.ansible_os_family : undefined;
+        const osName = distribution ?? osFamily ?? "Unknown";
+        const osFamilyValue = osFamily ?? "Unknown";
+
+        const distVersion = typeof ansibleFacts.ansible_distribution_version === "string" ? ansibleFacts.ansible_distribution_version : undefined;
+        const distMajorVersion = typeof ansibleFacts.ansible_distribution_major_version === "string" ? ansibleFacts.ansible_distribution_major_version : undefined;
+
+        const processorCount = typeof ansibleFacts.ansible_processor_count === "number" ? ansibleFacts.ansible_processor_count : undefined;
+        const processorVcpus = typeof ansibleFacts.ansible_processor_vcpus === "number" ? ansibleFacts.ansible_processor_vcpus : undefined;
+        const cpuCount = processorCount ?? processorVcpus ?? 0;
+        const processorModels = Array.isArray(ansibleFacts.ansible_processor)
+          ? ansibleFacts.ansible_processor.filter((p): p is string => typeof p === "string")
+          : [];
+
+        const hostname = typeof ansibleFacts.ansible_hostname === "string" ? ansibleFacts.ansible_hostname : undefined;
+        const interfaces = typeof ansibleFacts.ansible_interfaces === "object" && ansibleFacts.ansible_interfaces !== null
+          ? ansibleFacts.ansible_interfaces as Record<string, unknown>
+          : {};
+        const fqdn = typeof ansibleFacts.ansible_fqdn === "string" ? ansibleFacts.ansible_fqdn : undefined;
+        const defaultIpv4 = typeof ansibleFacts.ansible_default_ipv4 === "object" && ansibleFacts.ansible_default_ipv4 !== null
+          ? ansibleFacts.ansible_default_ipv4 as Record<string, unknown>
+          : undefined;
+        const ipAddress = defaultIpv4 && typeof defaultIpv4.address === "string" ? defaultIpv4.address : undefined;
+
+        const memTotalMb = typeof ansibleFacts.ansible_memtotal_mb === "number" ? ansibleFacts.ansible_memtotal_mb : undefined;
+        const memFreeMb = typeof ansibleFacts.ansible_memfree_mb === "number" ? ansibleFacts.ansible_memfree_mb : undefined;
+
+        const uptimeSeconds = typeof ansibleFacts.ansible_uptime_seconds === "number" ? ansibleFacts.ansible_uptime_seconds : undefined;
+
         return {
           nodeId,
           gatheredAt: new Date().toISOString(),
           source: "ansible",
           facts: {
             os: {
-              name: ansibleFacts.ansible_distribution || ansibleFacts.ansible_os_family || "Unknown",
-              family: ansibleFacts.ansible_os_family || "Unknown",
+              name: osName,
+              family: osFamilyValue,
               release: {
-                full: ansibleFacts.ansible_distribution_version || "Unknown",
-                major: ansibleFacts.ansible_distribution_major_version || "Unknown",
+                full: distVersion ?? "Unknown",
+                major: distMajorVersion ?? "Unknown",
               },
             },
             processors: {
-              count: ansibleFacts.ansible_processor_count || ansibleFacts.ansible_processor_vcpus || 0,
-              models: ansibleFacts.ansible_processor ? [ansibleFacts.ansible_processor] : [],
+              count: cpuCount,
+              models: processorModels,
             },
             networking: {
-              hostname: ansibleFacts.ansible_hostname || nodeId,
+              hostname: hostname ?? nodeId,
               interfaces: {
-                ...(ansibleFacts.ansible_interfaces || {}),
-                fqdn: ansibleFacts.ansible_fqdn,
-                ip: ansibleFacts.ansible_default_ipv4?.address,
+                ...interfaces,
+                fqdn,
+                ip: ipAddress,
               },
             },
             memory: {
               system: {
-                total: ansibleFacts.ansible_memtotal_mb ? `${ansibleFacts.ansible_memtotal_mb} MB` : "Unknown",
-                available: ansibleFacts.ansible_memfree_mb ? `${ansibleFacts.ansible_memfree_mb} MB` : "Unknown",
+                total: memTotalMb !== undefined ? `${String(memTotalMb)} MB` : "Unknown",
+                available: memFreeMb !== undefined ? `${String(memFreeMb)} MB` : "Unknown",
               },
             },
             system_uptime: {
-              seconds: ansibleFacts.ansible_uptime_seconds,
+              seconds: uptimeSeconds,
             },
             // Store raw ansible facts for reference
             ansible_facts: ansibleFacts,
@@ -321,7 +348,7 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
         },
       };
     } catch (error) {
-      this.logger?.warn(`Failed to gather facts for node ${nodeId}`, {
+      this.logger.warn(`Failed to gather facts for node ${nodeId}`, {
         component: "AnsiblePlugin",
         operation: "getNodeFacts",
         metadata: { error: error instanceof Error ? error.message : String(error) },
@@ -367,7 +394,7 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
    * Note: Ansible doesn't have a centralized data store like PuppetDB
    * This is a placeholder implementation
    */
-  async getNodeData(_nodeId: string, dataType: string): Promise<unknown> {
+  getNodeData(_nodeId: string, dataType: string): Promise<unknown> {
     if (!this.initialized) {
       throw new Error("Ansible plugin not initialized");
     }

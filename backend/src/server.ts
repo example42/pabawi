@@ -291,7 +291,7 @@ async function startServer(): Promise<Express> {
     const ansibleConfig = config.integrations.ansible;
     const ansibleConfigured = ansibleConfig?.enabled === true;
 
-    if (ansibleConfigured && ansibleConfig) {
+    if (ansibleConfigured) {
       logger.info("Initializing Ansible integration...", {
         component: "Server",
         operation: "initializeAnsible",
