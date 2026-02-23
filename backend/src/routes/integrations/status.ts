@@ -192,25 +192,6 @@ export function createStatusRouter(
           });
         }
 
-        // Check if Ansible is not configured
-        if (!configuredNames.has("ansible")) {
-          logger.debug("Ansible integration is not configured", {
-            component: "StatusRouter",
-            integration: "ansible",
-            operation: "getStatus",
-          });
-          integrations.push({
-            name: "ansible",
-            type: "execution",
-            status: "not_configured",
-            lastCheck: new Date().toISOString(),
-            message: "Ansible integration is not configured",
-            details: undefined,
-            workingCapabilities: undefined,
-            failingCapabilities: undefined,
-          });
-        }
-
         // Check if Hiera is not configured
         if (!configuredNames.has("hiera")) {
           logger.debug("Hiera integration is not configured", {

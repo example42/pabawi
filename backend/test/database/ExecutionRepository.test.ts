@@ -32,7 +32,8 @@ describe("ExecutionRepository", () => {
         original_execution_id TEXT,
         re_execution_count INTEGER DEFAULT 0,
         stdout TEXT,
-        stderr TEXT
+        stderr TEXT,
+        execution_tool TEXT DEFAULT 'bolt'
       )
     `;
 
