@@ -316,14 +316,14 @@ export function createPackagesRouter(
               })
               : await boltService.installPackage(
                 nodeId,
-                taskName,
+                taskName!,
                 {
                   packageName,
                   ensure,
                   version,
                   settings,
                 },
-                taskConfig.parameterMapping,
+                taskConfig!.parameterMapping,
                 streamingCallback,
               );
 
