@@ -535,13 +535,8 @@ export class HieraService {
       // This is more reliable than using the catalog endpoint
       const resourcesByType = await (puppetdb as unknown as { getNodeResources: (nodeId: string) => Promise<Record<string, Resource[]>> }).getNodeResources(nodeId);
 
-      if (!resourcesByType) {
-        this.log(`No resources data available for node: ${nodeId}`);
-        return [];
-      }
-
       // Get Class resources specifically
-      const classResources = resourcesByType["Class"] || [];
+      const classResources = resourcesByType.Class;
 
       this.log(`Found ${String(classResources.length)} Class resources for node: ${nodeId}`);
 

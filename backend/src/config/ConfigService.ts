@@ -116,7 +116,7 @@ export class ConfigService {
     if (process.env.ANSIBLE_ENABLED === "true") {
       integrations.ansible = {
         enabled: true,
-        projectPath: process.env.ANSIBLE_PROJECT_PATH || process.cwd(),
+        projectPath: process.env.ANSIBLE_PROJECT_PATH ?? process.cwd(),
         inventoryPath: process.env.ANSIBLE_INVENTORY_PATH,
         timeout: process.env.ANSIBLE_EXECUTION_TIMEOUT
           ? parseInt(process.env.ANSIBLE_EXECUTION_TIMEOUT, 10)
