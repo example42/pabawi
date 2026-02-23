@@ -406,6 +406,7 @@ export class AnsibleService {
           uri,
           transport,
           config,
+          source: "ansible",
         });
       }
 
