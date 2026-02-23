@@ -128,7 +128,7 @@ export class PuppetRunHistoryService {
       // Set start date to beginning of that day
       startDate.setHours(0, 0, 0, 0);
 
-      this.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`);
+      this.log(`Date range: ${startDate.toISOString()} to ${endDate.toISOString()}`, "debug");
 
       // Use the efficient aggregate query to get counts by date and status
       const counts = await this.puppetDBService.getReportCountsByDateAndStatus(
@@ -141,7 +141,7 @@ export class PuppetRunHistoryService {
       // Convert counts to RunHistoryData format
       const history = this.convertCountsToHistory(counts, startDate, endDate);
 
-      this.log(`Converted to ${String(history.length)} days of history`);
+      this.log(`Converted to ${String(history.length)} days of history`, "debug");
 
       return history;
     } catch (error) {
@@ -282,7 +282,7 @@ export class PuppetRunHistoryService {
    * @param message - Message to log
    * @param level - Log level (default: info)
    */
-  private log(message: string, level: "info" | "warn" | "error" = "info"): void {
+  private log(message: string, level: "debug" | "info" | "warn" | "error" = "info"): void {
     if (this.logger) {
       switch (level) {
         case "error":
@@ -292,6 +292,11 @@ export class PuppetRunHistoryService {
           break;
         case "warn":
           this.logger.warn(message, {
+            component: "PuppetRunHistoryService",
+          });
+          break;
+        case "debug":
+          this.logger.debug(message, {
             component: "PuppetRunHistoryService",
           });
           break;
