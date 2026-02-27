@@ -32,7 +32,7 @@
     error?: string;
     command?: string;
     expertMode?: boolean;
-    executionTool?: 'bolt' | 'ansible';
+    executionTool?: 'bolt' | 'ansible' | 'ssh';
   }
 
   interface NodeResult {
@@ -422,7 +422,7 @@
       <div>
         <div class="flex items-center gap-3">
           <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
-            Executions
+            Actions
           </h1>
           <IntegrationBadge integration="bolt" variant="badge" size="sm" />
         </div>
@@ -669,7 +669,7 @@
             <div class="flex items-start justify-between">
               <div class="flex-1">
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-white" id="modal-title">
-                  Execution Details
+                  Action Details
                 </h3>
                 <div class="mt-2 flex flex-wrap items-center gap-3">
                   <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTypeColor(selectedExecution.type)}">

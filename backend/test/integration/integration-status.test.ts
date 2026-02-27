@@ -84,6 +84,10 @@ class MockInformationSource
     };
   }
 
+  async getGroups(): Promise<import("../../src/integrations/types").NodeGroup[]> {
+    return [];
+  }
+
   async getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
     return {};
   }

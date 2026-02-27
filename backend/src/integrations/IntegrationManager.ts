@@ -14,6 +14,7 @@ import type {
   HealthStatus,
   PluginRegistration,
   Action,
+  NodeGroup,
 } from "./types";
 import type { Node, Facts, ExecutionResult } from "./bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
@@ -32,10 +33,13 @@ export interface HealthCheckCacheEntry {
  */
 export interface AggregatedInventory {
   nodes: Node[];
+  /** Groups aggregated from all sources */
+  groups: NodeGroup[];
   sources: Record<
     string,
     {
       nodeCount: number;
+      groupCount: number;
       lastSync: string;
       status: "healthy" | "degraded" | "unavailable";
     }
@@ -76,13 +80,22 @@ export class IntegrationManager {
   private healthCheckIntervalMs: number;
   private healthCheckCacheTTL: number;
 
+  // Inventory caching (nodes and groups)
+  private inventoryCache: {
+    data: AggregatedInventory;
+    timestamp: number;
+  } | null = null;
+  private inventoryCacheTTL: number;
+
   constructor(options?: {
     healthCheckIntervalMs?: number;
     healthCheckCacheTTL?: number;
+    inventoryCacheTTL?: number;
     logger?: LoggerService;
   }) {
     this.healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 60000; // Default: 1 minute
     this.healthCheckCacheTTL = options?.healthCheckCacheTTL ?? 300000; // Default: 5 minutes
+    this.inventoryCacheTTL = options?.inventoryCacheTTL ?? 300000; // Default: 5 minutes (same as health check)
     this.logger = options?.logger ?? new LoggerService();
     this.nodeLinkingService = new NodeLinkingService(this);
     this.logger.info("IntegrationManager created", { component: "IntegrationManager" });
@@ -277,10 +290,33 @@ export class IntegrationManager {
    *
    * Queries all information sources in parallel and combines results.
    * Continues even if some sources fail.
+   * Results are cached with configurable TTL for performance.
    *
+   * @param useCache - If true, return cached results if available and not expired (default: true)
    * @returns Aggregated inventory with source attribution
    */
-  async getAggregatedInventory(): Promise<AggregatedInventory> {
+  async getAggregatedInventory(useCache = true): Promise<AggregatedInventory> {
+    // Check cache first if requested
+    if (useCache && this.inventoryCache) {
+      const now = Date.now();
+      const cacheAge = now - this.inventoryCache.timestamp;
+
+      if (cacheAge < this.inventoryCacheTTL) {
+        this.logger.debug(`Returning cached inventory (age: ${String(cacheAge)}ms, TTL: ${String(this.inventoryCacheTTL)}ms)`, {
+          component: "IntegrationManager",
+          operation: "getAggregatedInventory",
+          metadata: { cacheAge, cacheTTL: this.inventoryCacheTTL },
+        });
+        return this.inventoryCache.data;
+      } else {
+        this.logger.debug(`Cache expired (age: ${String(cacheAge)}ms, TTL: ${String(this.inventoryCacheTTL)}ms), fetching fresh data`, {
+          component: "IntegrationManager",
+          operation: "getAggregatedInventory",
+          metadata: { cacheAge, cacheTTL: this.inventoryCacheTTL },
+        });
+      }
+    }
+
     this.logger.debug("Starting getAggregatedInventory", {
       component: "IntegrationManager",
       operation: "getAggregatedInventory",
@@ -308,9 +344,10 @@ export class IntegrationManager {
 
     const sources: AggregatedInventory["sources"] = {};
     const allNodes: Node[] = [];
+    const allGroups: NodeGroup[] = [];
     const now = new Date().toISOString();
 
-    // Get inventory from all sources in parallel
+    // Get inventory and groups from all sources in parallel
     const inventoryPromises = Array.from(this.informationSources.entries()).map(
       async ([name, source]) => {
         this.logger.debug(`Processing source: ${name}`, {
@@ -328,22 +365,37 @@ export class IntegrationManager {
             });
             sources[name] = {
               nodeCount: 0,
+              groupCount: 0,
               lastSync: now,
               status: "unavailable",
             };
-            return [];
+            return { nodes: [], groups: [] };
           }
 
-          this.logger.debug(`Calling getInventory() on source '${name}'`, {
+          // Fetch nodes and groups in parallel
+          this.logger.debug(`Calling getInventory() and getGroups() on source '${name}'`, {
             component: "IntegrationManager",
             operation: "getAggregatedInventory",
             metadata: { sourceName: name },
           });
-          const nodes = await source.getInventory();
-          this.logger.debug(`Source '${name}' returned ${String(nodes.length)} nodes`, {
+
+          const [nodes, groups] = await Promise.all([
+            source.getInventory(),
+            source.getGroups().catch((error) => {
+              const err = error instanceof Error ? error : new Error(String(error));
+              this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
+                component: "IntegrationManager",
+                operation: "getAggregatedInventory",
+                metadata: { sourceName: name },
+              }, err);
+              return [];
+            }),
+          ]);
+
+          this.logger.debug(`Source '${name}' returned ${String(nodes.length)} nodes and ${String(groups.length)} groups`, {
             component: "IntegrationManager",
             operation: "getAggregatedInventory",
-            metadata: { sourceName: name, nodeCount: nodes.length },
+            metadata: { sourceName: name, nodeCount: nodes.length, groupCount: groups.length },
           });
 
           // Log sample of nodes for debugging
@@ -365,21 +417,34 @@ export class IntegrationManager {
             source: name,
           }));
 
+          // Create set of valid node IDs for validation
+          const validNodeIds = new Set(nodesWithSource.map(node => node.id));
+
+          // Add source attribution to each group
+          const groupsWithSource = groups.map((group) => ({
+            ...group,
+            source: name,
+          }));
+
+          // Validate and sanitize groups
+          const validatedGroups = this.validateGroups(groupsWithSource, name, validNodeIds);
+
           sources[name] = {
             nodeCount: nodes.length,
+            groupCount: validatedGroups.length,
             lastSync: now,
             status: "healthy",
           };
 
           this.logger.debug(
-            `Successfully processed ${String(nodes.length)} nodes from '${name}'`,
+            `Successfully processed ${String(nodes.length)} nodes and ${String(validatedGroups.length)} groups from '${name}'`,
             {
               component: "IntegrationManager",
               operation: "getAggregatedInventory",
-              metadata: { sourceName: name, nodeCount: nodes.length },
+              metadata: { sourceName: name, nodeCount: nodes.length, groupCount: validatedGroups.length },
             }
           );
-          return nodesWithSource;
+          return { nodes: nodesWithSource, groups: validatedGroups };
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           this.logger.error(`Failed to get inventory from '${name}'`, {
@@ -389,10 +454,11 @@ export class IntegrationManager {
           }, err);
           sources[name] = {
             nodeCount: 0,
+            groupCount: 0,
             lastSync: now,
             status: "unavailable",
           };
-          return [];
+          return { nodes: [], groups: [] };
         }
       },
     );
@@ -404,14 +470,15 @@ export class IntegrationManager {
       metadata: { resultCount: results.length },
     });
 
-    // Flatten all nodes
-    for (const nodes of results) {
-      this.logger.debug(`Adding ${String(nodes.length)} nodes to allNodes array`, {
+    // Flatten all nodes and groups
+    for (const result of results) {
+      this.logger.debug(`Adding ${String(result.nodes.length)} nodes and ${String(result.groups.length)} groups to aggregated arrays`, {
         component: "IntegrationManager",
         operation: "getAggregatedInventory",
-        metadata: { nodeCount: nodes.length },
+        metadata: { nodeCount: result.nodes.length, groupCount: result.groups.length },
       });
-      allNodes.push(...nodes);
+      allNodes.push(...result.nodes);
+      allGroups.push(...result.groups);
     }
 
     this.logger.debug(`Total nodes before deduplication: ${String(allNodes.length)}`, {
@@ -441,15 +508,44 @@ export class IntegrationManager {
       metadata: { sourceBreakdown },
     });
 
+    // Link groups with same name across sources
+    this.logger.debug(`Total groups before linking: ${String(allGroups.length)}`, {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { totalGroups: allGroups.length },
+    });
+
+    const linkedGroups = this.linkGroups(allGroups);
+
+    this.logger.info(`Total groups after linking: ${String(linkedGroups.length)}`, {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { linkedGroups: linkedGroups.length },
+    });
+
     this.logger.debug("Completed getAggregatedInventory", {
       component: "IntegrationManager",
       operation: "getAggregatedInventory",
     });
 
-    return {
+    const result: AggregatedInventory = {
       nodes: uniqueNodes,
+      groups: linkedGroups,
       sources,
     };
+
+    // Update cache
+    this.inventoryCache = {
+      data: result,
+      timestamp: Date.now(),
+    };
+    this.logger.debug(`Cached inventory (${String(uniqueNodes.length)} nodes, ${String(linkedGroups.length)} groups) for ${String(this.inventoryCacheTTL)}ms`, {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { nodeCount: uniqueNodes.length, groupCount: linkedGroups.length, cacheTTL: this.inventoryCacheTTL },
+    });
+
+    return result;
   }
 
   /**
@@ -671,6 +767,32 @@ export class IntegrationManager {
   }
 
   /**
+   * Clear the inventory cache
+   *
+   * Forces the next call to getAggregatedInventory() to fetch fresh data
+   * from all information sources.
+   */
+  clearInventoryCache(): void {
+    this.inventoryCache = null;
+    this.logger.debug("Inventory cache cleared", {
+      component: "IntegrationManager",
+      operation: "clearInventoryCache",
+    });
+  }
+
+  /**
+   * Clear all caches (health check and inventory)
+   */
+  clearAllCaches(): void {
+    this.clearHealthCheckCache();
+    this.clearInventoryCache();
+    this.logger.info("All caches cleared", {
+      component: "IntegrationManager",
+      operation: "clearAllCaches",
+    });
+  }
+
+  /**
    * Get the current health check cache
    *
    * @returns Map of plugin names to cached health check entries
@@ -757,5 +879,261 @@ export class IntegrationManager {
 
     return Array.from(nodeMap.values());
   }
+
+  /**
+   * Link groups with the same name across multiple sources
+   *
+   * Groups with identical names are merged into a single linked group entity
+   * with the linked flag set to true, sources array populated, and nodes deduplicated.
+   *
+   * @param groups - Array of groups from all sources
+   * @returns Array of linked groups
+   */
+  private linkGroups(groups: NodeGroup[]): NodeGroup[] {
+    this.logger.debug("Starting group linking", {
+      component: "IntegrationManager",
+      operation: "linkGroups",
+      metadata: { totalGroups: groups.length },
+    });
+
+    // Group all groups by name
+    const groupsByName = new Map<string, NodeGroup[]>();
+
+    for (const group of groups) {
+      if (!groupsByName.has(group.name)) {
+        groupsByName.set(group.name, []);
+      }
+      groupsByName.get(group.name)!.push(group);
+    }
+
+    this.logger.debug(`Grouped into ${String(groupsByName.size)} unique group names`, {
+      component: "IntegrationManager",
+      operation: "linkGroups",
+      metadata: { uniqueNames: groupsByName.size },
+    });
+
+    // Create linked groups
+    const linkedGroups: NodeGroup[] = [];
+
+    for (const [name, groupsWithSameName] of groupsByName) {
+      if (groupsWithSameName.length === 1) {
+        // Single source group - keep as is
+        linkedGroups.push(groupsWithSameName[0]);
+      } else {
+        // Multi-source group - merge
+        this.logger.debug(`Linking group '${name}' from ${String(groupsWithSameName.length)} sources`, {
+          component: "IntegrationManager",
+          operation: "linkGroups",
+          metadata: {
+            groupName: name,
+            sourceCount: groupsWithSameName.length,
+            sources: groupsWithSameName.map(g => g.source),
+          },
+        });
+
+        const sources = groupsWithSameName.map(g => g.source);
+
+        // Merge and deduplicate node IDs from all sources
+        const allNodeIds = groupsWithSameName.flatMap(g => g.nodes);
+        const uniqueNodeIds = [...new Set(allNodeIds)];
+
+        // Merge metadata from all sources
+        const mergedMetadata = groupsWithSameName.reduce((acc, g) => {
+          if (g.metadata) {
+            return { ...acc, ...g.metadata };
+          }
+          return acc;
+        }, {} as NodeGroup["metadata"]);
+
+        linkedGroups.push({
+          id: `linked:${name}`,
+          name,
+          source: groupsWithSameName[0].source, // Primary source
+          sources,
+          linked: true,
+          nodes: uniqueNodeIds,
+          metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
+        });
+
+        this.logger.debug(`Created linked group '${name}' with ${String(uniqueNodeIds.length)} unique nodes`, {
+          component: "IntegrationManager",
+          operation: "linkGroups",
+          metadata: {
+            groupName: name,
+            nodeCount: uniqueNodeIds.length,
+            originalNodeCount: allNodeIds.length,
+          },
+        });
+      }
+    }
+
+    this.logger.debug("Completed group linking", {
+      component: "IntegrationManager",
+      operation: "linkGroups",
+      metadata: { linkedGroupCount: linkedGroups.length },
+    });
+
+    return linkedGroups;
+  }
+  /**
+   * Validate and sanitize groups
+   *
+   * Validates required fields, checks ID uniqueness, sanitizes names,
+   * and logs warnings for invalid node references.
+   *
+   * @param groups - Groups to validate
+   * @param sourceName - Name of the source providing the groups
+   * @param validNodeIds - Set of valid node IDs from the same source
+   * @returns Validated and sanitized groups
+   */
+  private validateGroups(
+    groups: NodeGroup[],
+    sourceName: string,
+    validNodeIds: Set<string>
+  ): NodeGroup[] {
+    const validatedGroups: NodeGroup[] = [];
+    const seenIds = new Set<string>();
+
+    for (const group of groups) {
+      // Validate required fields
+      if (!group.id || typeof group.id !== 'string') {
+        this.logger.warn(`Group from '${sourceName}' missing required field 'id' - rejecting group`, {
+          component: "IntegrationManager",
+          operation: "validateGroups",
+          metadata: { sourceName, groupName: group.name || 'unknown' },
+        });
+        continue;
+      }
+
+      if (!group.name || typeof group.name !== 'string') {
+        this.logger.warn(`Group '${group.id}' from '${sourceName}' missing required field 'name' - rejecting group`, {
+          component: "IntegrationManager",
+          operation: "validateGroups",
+          metadata: { sourceName, groupId: group.id },
+        });
+        continue;
+      }
+
+      if (!group.source || typeof group.source !== 'string') {
+        this.logger.warn(`Group '${group.id}' from '${sourceName}' missing required field 'source' - rejecting group`, {
+          component: "IntegrationManager",
+          operation: "validateGroups",
+          metadata: { sourceName, groupId: group.id, groupName: group.name },
+        });
+        continue;
+      }
+
+      if (!Array.isArray(group.nodes)) {
+        this.logger.warn(`Group '${group.id}' from '${sourceName}' missing required field 'nodes' or nodes is not an array - rejecting group`, {
+          component: "IntegrationManager",
+          operation: "validateGroups",
+          metadata: { sourceName, groupId: group.id, groupName: group.name },
+        });
+        continue;
+      }
+
+      // Validate group ID uniqueness within source
+      if (seenIds.has(group.id)) {
+        this.logger.warn(`Duplicate group ID '${group.id}' in source '${sourceName}' - rejecting duplicate`, {
+          component: "IntegrationManager",
+          operation: "validateGroups",
+          metadata: { sourceName, groupId: group.id, groupName: group.name },
+        });
+        continue;
+      }
+      seenIds.add(group.id);
+
+      // Sanitize group name to prevent injection attacks
+      const sanitizedName = this.sanitizeGroupName(group.name);
+      if (sanitizedName !== group.name) {
+        this.logger.warn(`Group '${group.id}' from '${sourceName}' has potentially malicious name - sanitizing`, {
+          component: "IntegrationManager",
+          operation: "validateGroups",
+          metadata: { sourceName, groupId: group.id, originalName: group.name, sanitizedName },
+        });
+      }
+
+      // Check for invalid node references
+      const invalidNodeRefs = group.nodes.filter(nodeId => !validNodeIds.has(nodeId));
+      if (invalidNodeRefs.length > 0) {
+        this.logger.warn(`Group '${group.id}' from '${sourceName}' references ${String(invalidNodeRefs.length)} non-existent nodes`, {
+          component: "IntegrationManager",
+          operation: "validateGroups",
+          metadata: {
+            sourceName,
+            groupId: group.id,
+            groupName: group.name,
+            invalidNodeCount: invalidNodeRefs.length,
+            invalidNodeIds: invalidNodeRefs.slice(0, 5), // Log first 5 for debugging
+          },
+        });
+      }
+
+      // Add validated and sanitized group
+      validatedGroups.push({
+        ...group,
+        name: sanitizedName,
+      });
+    }
+
+    this.logger.debug(`Validated ${String(validatedGroups.length)} of ${String(groups.length)} groups from '${sourceName}'`, {
+      component: "IntegrationManager",
+      operation: "validateGroups",
+      metadata: {
+        sourceName,
+        totalGroups: groups.length,
+        validGroups: validatedGroups.length,
+        rejectedGroups: groups.length - validatedGroups.length,
+      },
+    });
+
+    return validatedGroups;
+  }
+
+  /**
+   * Sanitize group name to prevent injection attacks
+   *
+   * Removes or escapes potentially malicious characters including:
+   * - HTML tags
+   * - SQL injection patterns
+   * - Script injection attempts
+   * - Control characters
+   *
+   * @param name - Group name to sanitize
+   * @returns Sanitized group name
+   */
+  private sanitizeGroupName(name: string): string {
+      // Remove HTML tags
+      let sanitized = name.replace(/<[^>]*>/g, '');
+
+      // Remove script-related keywords (case-insensitive) - more aggressive
+      sanitized = sanitized.replace(/\b(script|javascript|onerror|onload|eval|expression|alert|prompt|confirm)\b/gi, '');
+
+      // Remove SQL injection patterns (basic patterns)
+      sanitized = sanitized.replace(/['";\\]/g, '');
+
+      // Remove SQL comment patterns
+      sanitized = sanitized.replace(/--/g, '');
+      sanitized = sanitized.replace(/\/\*/g, '');
+      sanitized = sanitized.replace(/\*\//g, '');
+
+      // Remove control characters and non-printable characters
+      sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
+
+      // Remove parentheses that might be used in injection
+      sanitized = sanitized.replace(/[()]/g, '');
+
+      // Trim whitespace
+      sanitized = sanitized.trim();
+
+      // If sanitization resulted in empty string, use a placeholder
+      if (sanitized.length === 0) {
+        sanitized = 'sanitized_group';
+      }
+
+      return sanitized;
+    }
+
+
 
 }

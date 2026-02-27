@@ -111,8 +111,17 @@ export function createStreamingRouter(
           metadata: { executionId, status: execution.status },
         });
 
-        // Subscribe to streaming events
-        streamingManager.subscribe(executionId, res);
+        // Subscribe to streaming events (may fail if per-IP connection limit exceeded)
+        const subscribed = streamingManager.subscribe(executionId, res);
+        if (!subscribed) {
+          res.status(429).json({
+            error: {
+              code: "TOO_MANY_CONNECTIONS",
+              message: "Too many concurrent SSE connections from this client",
+            },
+          });
+          return;
+        }
 
         // If execution is already completed, send completion event immediately
         if (execution.status === "success" || execution.status === "failed") {

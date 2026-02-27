@@ -26,13 +26,30 @@ export class CommandWhitelistService {
   }
 
   /**
+   * Shell metacharacters that are always blocked in commands.
+   * Prevents command chaining, piping, subshell execution, and glob expansion.
+   * Applied regardless of allowAll setting to protect remote targets.
+   */
+  private static readonly SHELL_META_PATTERN = /[;|&`$(){}\n\r\t><\\*?\[\]~]/;
+
+  /**
    * Check if a command is allowed based on whitelist configuration
    *
    * @param command - The command string to validate
    * @returns true if the command is allowed, false otherwise
    */
   public isCommandAllowed(command: string): boolean {
-    // If allowAll is enabled, permit all commands
+    // Trim the command for consistent matching
+    const trimmedCommand = command.trim();
+
+    // Always block shell metacharacters — even in allowAll mode.
+    // These characters are interpreted by remote shells on target nodes
+    // and could enable command injection regardless of local shell safety.
+    if (CommandWhitelistService.SHELL_META_PATTERN.test(trimmedCommand)) {
+      return false;
+    }
+
+    // If allowAll is enabled, permit all commands (metacharacters already blocked above)
     if (this.config.allowAll) {
       return true;
     }
@@ -42,16 +59,13 @@ export class CommandWhitelistService {
       return false;
     }
 
-    // Trim the command for consistent matching
-    const trimmedCommand = command.trim();
-
     // Check against whitelist based on match mode
     if (this.config.matchMode === "exact") {
       return this.config.whitelist.includes(trimmedCommand);
     } else {
-      // Prefix match mode
+      // Prefix match mode — require word boundary (end-of-string or space after prefix)
       return this.config.whitelist.some((allowed) =>
-        trimmedCommand.startsWith(allowed),
+        trimmedCommand === allowed || trimmedCommand.startsWith(allowed + " "),
       );
     }
   }

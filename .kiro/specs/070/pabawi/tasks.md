@@ -563,7 +563,7 @@
     - _Requirements: 10.1, 10.5_
   
   - [x] 23.2 Create configuration guide in docs/configuration.md
-    - Document all environment variables and their defaults (PORT, BOLT_PROJECT_PATH, BOLT_COMMAND_WHITELIST_*,
+    - Document all environment variables and their defaults (PORT, BOLT_PROJECT_PATH, COMMAND_WHITELIST_*,
       BOLT_EXECUTION_TIMEOUT, DATABASE_PATH, PACKAGE_INSTALL_*, STREAMING_*, CONCURRENT_EXECUTION_LIMIT)
     - Create user guide for command whitelist configuration with examples
     - Document Bolt project requirements (inventory.yaml format, bolt-project.yaml structure)

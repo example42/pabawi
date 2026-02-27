@@ -50,8 +50,8 @@ ARG BUILDPLATFORM
 
 # Add metadata labels
 LABEL org.opencontainers.image.title="Pabawi"
-LABEL org.opencontainers.image.description="Web interface for Bolt automation tool"
-LABEL org.opencontainers.image.version="0.4.0"
+LABEL org.opencontainers.image.description="Puppet Ansible Bolt Awesaome Web Interface"
+LABEL org.opencontainers.image.version="0.8.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
@@ -86,6 +86,7 @@ RUN apt-get update && \
     ruby \
     ruby-dev \
     build-essential \
+    ansible \
     && gem install openbolt -v 5.1.0 --no-document \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -137,7 +138,8 @@ ENV NODE_ENV=production \
     # Integration settings (disabled by default)
     PUPPETDB_ENABLED=false \
     PUPPETSERVER_ENABLED=false \
-    HIERA_ENABLED=false
+    HIERA_ENABLED=false \
+    ANSIBLE_ENABLED=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

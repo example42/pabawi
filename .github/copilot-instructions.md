@@ -145,8 +145,8 @@ PORT=3000                        # Server port
 LOG_LEVEL=info                   # error | warn | info | debug
 DATABASE_PATH=./data/executions.db
 BOLT_EXECUTION_TIMEOUT=300000    # 5 minutes default
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST=["ls","pwd"]  # CSV in env, JSON in code
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST=["ls","pwd"]  # CSV in env, JSON in code
 
 # Performance & Caching (v0.4+)
 CACHE_INVENTORY_TTL=30000        # 30 seconds

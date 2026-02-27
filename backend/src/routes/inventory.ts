@@ -101,27 +101,46 @@ export function createInventoryRouter(
             });
           }
 
-          // Get linked inventory from all sources (Requirement 3.3)
-          const aggregated = await integrationManager.getLinkedInventory();
+          // Get aggregated inventory from all sources (includes groups)
+          const aggregated = await integrationManager.getAggregatedInventory();
 
           // Filter by requested sources if specified
           let filteredNodes = aggregated.nodes;
+          let filteredGroups = aggregated.groups;
+
           if (!requestedSources.includes("all")) {
             filteredNodes = aggregated.nodes.filter((node) => {
               const nodeSource = (node as { source?: string }).source ?? "bolt";
               return requestedSources.includes(nodeSource);
             });
-            logger.debug("Filtered nodes by source", {
+
+            // Apply same source filtering to groups
+            filteredGroups = aggregated.groups.filter((group) => {
+              const groupSource = (group as { source?: string }).source ?? "bolt";
+              return requestedSources.includes(groupSource);
+            });
+
+            logger.debug("Filtered nodes and groups by source", {
               component: "InventoryRouter",
               operation: "getInventory",
-              metadata: { originalCount: aggregated.nodes.length, filteredCount: filteredNodes.length },
+              metadata: {
+                originalNodeCount: aggregated.nodes.length,
+                filteredNodeCount: filteredNodes.length,
+                originalGroupCount: aggregated.groups.length,
+                filteredGroupCount: filteredGroups.length
+              },
             });
 
             // Capture debug in expert mode
             if (debugInfo) {
               expertModeService.addDebug(debugInfo, {
-                message: "Filtered nodes by source",
-                context: JSON.stringify({ originalCount: aggregated.nodes.length, filteredCount: filteredNodes.length }),
+                message: "Filtered nodes and groups by source",
+                context: JSON.stringify({
+                  originalNodeCount: aggregated.nodes.length,
+                  filteredNodeCount: filteredNodes.length,
+                  originalGroupCount: aggregated.groups.length,
+                  filteredGroupCount: filteredGroups.length
+                }),
                 level: 'debug',
               });
             }
@@ -274,6 +293,35 @@ export function createInventoryRouter(
                   return 0;
               }
             });
+
+            // Apply same sorting to groups
+            filteredGroups.sort((a, b) => {
+              const groupA = a as {
+                source?: string;
+                name?: string;
+              };
+              const groupB = b as {
+                source?: string;
+                name?: string;
+              };
+
+              switch (query.sortBy) {
+                case "name": {
+                  // Sort by group name
+                  const nameA = groupA.name ?? "";
+                  const nameB = groupB.name ?? "";
+                  return nameA.localeCompare(nameB) * sortMultiplier;
+                }
+                case "source": {
+                  // Sort by source
+                  const sourceA = groupA.source ?? "";
+                  const sourceB = groupB.source ?? "";
+                  return sourceA.localeCompare(sourceB) * sortMultiplier;
+                }
+                default:
+                  return 0;
+              }
+            });
           }
 
           // Filter sources to only include requested ones
@@ -294,11 +342,17 @@ export function createInventoryRouter(
           logger.info("Inventory fetched successfully", {
             component: "InventoryRouter",
             operation: "getInventory",
-            metadata: { nodeCount: filteredNodes.length, sourceCount: Object.keys(filteredSources).length, duration },
+            metadata: {
+              nodeCount: filteredNodes.length,
+              groupCount: filteredGroups.length,
+              sourceCount: Object.keys(filteredSources).length,
+              duration
+            },
           });
 
           const responseData = {
             nodes: filteredNodes,
+            groups: filteredGroups,
             sources: filteredSources,
           };
 
@@ -306,10 +360,11 @@ export function createInventoryRouter(
           if (debugInfo) {
             debugInfo.duration = duration;
             expertModeService.addMetadata(debugInfo, 'nodeCount', filteredNodes.length);
+            expertModeService.addMetadata(debugInfo, 'groupCount', filteredGroups.length);
             expertModeService.addMetadata(debugInfo, 'requestedSources', requestedSources);
             expertModeService.addMetadata(debugInfo, 'pqlQuery', query.pql);
             expertModeService.addInfo(debugInfo, {
-              message: `Retrieved ${String(filteredNodes.length)} nodes from ${String(Object.keys(filteredSources).length)} sources`,
+              message: `Retrieved ${String(filteredNodes.length)} nodes and ${String(filteredGroups.length)} groups from ${String(Object.keys(filteredSources).length)} sources`,
               level: 'info',
             });
 
@@ -353,9 +408,11 @@ export function createInventoryRouter(
 
         const responseData = {
           nodes,
+          groups: [], // Bolt-only mode doesn't have groups yet
           sources: {
             bolt: {
               nodeCount: nodes.length,
+              groupCount: 0,
               lastSync: new Date().toISOString(),
               status: "healthy" as const,
             },

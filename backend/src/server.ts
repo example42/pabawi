@@ -48,6 +48,8 @@ import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import { BoltPlugin } from "./integrations/bolt/BoltPlugin";
 import { AnsibleService } from "./integrations/ansible/AnsibleService";
 import { AnsiblePlugin } from "./integrations/ansible/AnsiblePlugin";
+import { SSHPlugin } from "./integrations/ssh/SSHPlugin";
+import { loadSSHConfig } from "./integrations/ssh/config";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
@@ -566,6 +568,101 @@ async function startServer(): Promise<Express> {
       operation: "initializeHiera",
     });
 
+    // Initialize SSH integration only if configured
+    let sshPlugin: SSHPlugin | undefined;
+    let sshConfig;
+
+    try {
+      sshConfig = loadSSHConfig();
+    } catch (error) {
+      logger.warn(`Failed to load SSH configuration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+      sshConfig = null;
+    }
+
+    const sshConfigured = sshConfig?.enabled === true;
+
+    logger.debug("=== SSH Integration Setup ===", {
+      component: "Server",
+      operation: "initializeSSH",
+      metadata: {
+        configured: sshConfigured,
+        enabled: sshConfig?.enabled,
+        hasConfigPath: !!sshConfig?.configPath,
+      },
+    });
+
+    if (sshConfigured && sshConfig) {
+      logger.info("Initializing SSH integration...", {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+      try {
+        sshPlugin = new SSHPlugin(logger, performanceMonitor);
+        logger.debug("SSHPlugin instance created", {
+          component: "Server",
+          operation: "initializeSSH",
+        });
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: true,
+          name: "ssh",
+          type: "both",
+          config: sshConfig,
+          priority: sshConfig.priority,
+        };
+
+        logger.debug("Registering SSH plugin", {
+          component: "Server",
+          operation: "initializeSSH",
+          metadata: { config: integrationConfig },
+        });
+        integrationManager.registerPlugin(
+          sshPlugin,
+          integrationConfig,
+        );
+
+        logger.info("SSH integration registered successfully", {
+          component: "Server",
+          operation: "initializeSSH",
+          metadata: {
+            enabled: true,
+            configPath: sshConfig.configPath,
+            defaultUser: sshConfig.defaultUser,
+            defaultPort: sshConfig.defaultPort,
+            priority: sshConfig.priority,
+          },
+        });
+      } catch (error) {
+        logger.warn(`WARNING: Failed to initialize SSH integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeSSH",
+        });
+        if (error instanceof Error && error.stack) {
+          logger.error("SSH initialization error stack", {
+            component: "Server",
+            operation: "initializeSSH",
+          }, error);
+        }
+        sshPlugin = undefined;
+      }
+    } else {
+      logger.warn("SSH integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+      logger.info("Set SSH_ENABLED=true and SSH_DEFAULT_USER to enable SSH integration", {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+    }
+    logger.debug("=== End SSH Integration Setup ===", {
+      component: "Server",
+      operation: "initializeSSH",
+    });
+
     // Initialize all registered plugins
     logger.info("=== Initializing All Integration Plugins ===", {
       component: "Server",
@@ -667,11 +764,11 @@ async function startServer(): Promise<Express> {
     // Middleware
     app.use(
       cors({
-        origin: true, // Allow same-origin requests
+        origin: config.corsAllowedOrigins,
         credentials: true,
       }),
     );
-    app.use(express.json());
+    app.use(express.json({ limit: '100kb' }));
 
     // Input sanitization - after body parsing
     app.use(inputSanitizationMiddleware);
@@ -720,30 +817,8 @@ async function startServer(): Promise<Express> {
       res.json({
         status: "ok",
         message: "Backend API is running",
-        config: {
-          boltProjectPath: config.boltProjectPath,
-          commandWhitelistEnabled: !config.commandWhitelist.allowAll,
-          databaseInitialized: databaseService.isInitialized(),
-        },
       });
     });
-
-    // Configuration endpoint (excluding sensitive values)
-    app.get("/api/config", (_req: Request, res: Response) => {
-      res.json({
-        commandWhitelist: {
-          allowAll: config.commandWhitelist.allowAll,
-          whitelist: config.commandWhitelist.allowAll
-            ? []
-            : config.commandWhitelist.whitelist,
-          matchMode: config.commandWhitelist.matchMode,
-        },
-        executionTimeout: config.executionTimeout,
-      });
-    });
-
-    // Config routes (UI settings, etc.)
-    app.use("/api/config", configRouter);
 
     // Setup routes (no authentication required - only accessible when setup is incomplete)
     app.use("/api/setup", createSetupRouter(databaseService));
@@ -758,6 +833,21 @@ async function startServer(): Promise<Express> {
 
     // Create rate limiting middleware for authenticated routes
     const rateLimitMiddleware = createRateLimitMiddleware();
+
+    // Configuration endpoint (security-sensitive — requires authentication)
+    app.get("/api/config", authMiddleware, (_req: Request, res: Response) => {
+      res.json({
+        commandWhitelist: {
+          allowAll: config.commandWhitelist.allowAll,
+          matchMode: config.commandWhitelist.matchMode,
+          whitelist: config.commandWhitelist.whitelist,
+        },
+        executionTimeout: config.executionTimeout,
+      });
+    });
+
+    // Config routes (UI settings — requires authentication)
+    app.use("/api/config", authMiddleware, configRouter);
 
     // User management routes
     app.use("/api/users", authMiddleware, rateLimitMiddleware, createUsersRouter(databaseService));

@@ -6,8 +6,37 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { asyncHandler } from './asyncHandler';
 import { LoggerService } from '../services/LoggerService';
+
+/**
+ * Zod schema for frontend log entry validation
+ */
+const FrontendLogEntrySchema = z.object({
+  timestamp: z.string().max(100),
+  level: z.enum(['debug', 'info', 'warn', 'error']),
+  component: z.string().max(200),
+  operation: z.string().max(200),
+  message: z.string().max(5000),
+  metadata: z.record(z.unknown()).optional(),
+  correlationId: z.string().max(200).optional(),
+  stackTrace: z.string().max(10000).optional(),
+});
+
+/**
+ * Zod schema for frontend log batch validation
+ */
+const FrontendLogBatchSchema = z.object({
+  logs: z.array(FrontendLogEntrySchema).max(100, "Too many log entries in batch (max 100)"),
+  browserInfo: z.object({
+    userAgent: z.string().max(500),
+    language: z.string().max(50),
+    platform: z.string().max(100),
+    viewport: z.object({ width: z.number(), height: z.number() }),
+    url: z.string().max(2000),
+  }).optional(),
+});
 
 export interface FrontendLogEntry {
   timestamp: string;
@@ -110,21 +139,28 @@ export function createDebugRouter(): Router {
         operation: 'receiveFrontendLogs',
       });
 
-      const batch = req.body as FrontendLogBatch;
-
-      if (!Array.isArray(batch.logs)) {
+      // Validate request body with Zod schema
+      const parseResult = FrontendLogBatchSchema.safeParse(req.body);
+      if (!parseResult.success) {
         logger.warn('Invalid frontend log batch', {
           component: 'DebugRouter',
           operation: 'receiveFrontendLogs',
+          metadata: { errors: parseResult.error.issues.map(i => i.message) },
         });
         res.status(400).json({
           error: {
             code: 'INVALID_LOG_BATCH',
             message: 'Invalid log batch format',
+            details: parseResult.error.issues.map(i => ({
+              path: i.path.join('.'),
+              message: i.message,
+            })),
           },
         });
         return;
       }
+
+      const batch = parseResult.data;
 
       // Store logs by correlation ID
       for (const log of batch.logs) {

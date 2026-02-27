@@ -8,15 +8,15 @@
 
   const sshConfig = `# Bolt Integration - SSH Transport
 BOLT_PROJECT_PATH=./bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST=["ls","pwd","whoami","uptime","systemctl status"]
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST=["ls","pwd","whoami","uptime","systemctl status"]
 BOLT_EXECUTION_TIMEOUT=300000
 CONCURRENT_EXECUTION_LIMIT=10`;
 
   const winrmConfig = `# Bolt Integration - WinRM Transport
 BOLT_PROJECT_PATH=./bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST=["Get-Service","Get-Process","Get-ComputerInfo"]
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST=["Get-Service","Get-Process","Get-ComputerInfo"]
 BOLT_EXECUTION_TIMEOUT=300000
 CONCURRENT_EXECUTION_LIMIT=10`;
 
@@ -364,10 +364,10 @@ log:
             <p class="mb-3"><strong>Error:</strong> "Command not allowed"</p>
             <ul class="space-y-2 list-disc list-inside">
               <li>
-                Add command to whitelist: <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">BOLT_COMMAND_WHITELIST=["ls","pwd","your-command"]</code>
+                Add command to whitelist: <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">COMMAND_WHITELIST=["ls","pwd","your-command"]</code>
               </li>
               <li>
-                Or allow all: <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">BOLT_COMMAND_WHITELIST_ALLOW_ALL=true</code>
+                Or allow all: <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">COMMAND_WHITELIST_ALLOW_ALL=true</code>
               </li>
               <li>Restart backend after changes</li>
             </ul>

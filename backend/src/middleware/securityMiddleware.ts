@@ -1,5 +1,5 @@
 import helmet from "helmet";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request, Response, NextFunction } from "express";
 
 /**
@@ -65,8 +65,8 @@ export function createRateLimitMiddleware() {
         return `user:${req.user.userId}`;
       }
 
-      // For unauthenticated requests, use IP address
-      return req.ip || req.socket.remoteAddress || "unknown";
+      // For unauthenticated requests, use IP address with proper IPv6 handling
+      return ipKeyGenerator(req);
     },
 
     // Skip rate limiting for health check and public endpoints
@@ -112,10 +112,8 @@ export function createAuthRateLimitMiddleware() {
     standardHeaders: true,
     legacyHeaders: false,
 
-    // Use IP address as the key
-    keyGenerator: (req: Request): string => {
-      return req.ip || req.socket.remoteAddress || "unknown";
-    },
+    // Use IP address as the key with proper IPv6 handling
+    keyGenerator: ipKeyGenerator,
 
     // Custom handler for rate limit exceeded
     handler: (_req: Request, res: Response): void => {

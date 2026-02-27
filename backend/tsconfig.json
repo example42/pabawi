@@ -26,6 +26,6 @@
     "declarationMap": true,
     "sourceMap": true
   },
-  "include": ["src/**/*", "test/database/002_seed_rbac_data.test.ts", "test/AuthenticationService.test.ts", "test/services/PermissionService.test.ts", "test/middleware/authMiddleware.test.ts"],
+  "include": ["src/**/*", "test/database/002_seed_rbac_data.test.ts", "test/AuthenticationService.test.ts", "test/services/PermissionService.test.ts", "test/middleware/authMiddleware.test.ts", "test/integrations/ssh-PackageManagerDetector.test.ts", "test/integrations/ssh-config.unit.test.ts", "test/integrations/ssh-config.property.test.ts"],
   "exclude": ["node_modules", "dist", "test"]
 }

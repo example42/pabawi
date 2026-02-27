@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.ts', 'src/integrations/ssh/__tests__/**/*.test.ts', 'src/integrations/ansible/__tests__/**/*.test.ts'],
     exclude: ['node_modules', 'dist'],
     env: {
       NODE_ENV: 'test',

@@ -20,6 +20,12 @@ declare global {
  * Also extracts correlation ID from X-Correlation-ID header for
  * frontend log correlation.
  *
+ * Security: When a user is authenticated, expert mode is only enabled
+ * for users with the 'admin' role. This prevents unprivileged users
+ * from accessing stack traces, raw output, and debug info.
+ * When no authentication is active (req.user not set), expert mode
+ * is allowed for backward compatibility with localhost usage.
+ *
  * This middleware should be applied early in the middleware chain
  * to ensure expert mode status is available to all route handlers.
  *
@@ -38,8 +44,19 @@ export function expertModeMiddleware(
 ): void {
   const expertModeService = new ExpertModeService();
 
-  // Check if expert mode is enabled from request header
-  req.expertMode = expertModeService.isExpertModeEnabled(req);
+  // Check if expert mode is requested via header
+  const requested = expertModeService.isExpertModeEnabled(req);
+
+  if (requested && req.user) {
+    // When authenticated, only allow admin users to enable expert mode
+    const isAdmin = req.user.roles?.includes('admin') ?? false;
+    req.expertMode = isAdmin;
+  } else {
+    // No auth context yet (middleware runs before auth) — defer final check.
+    // The value will be re-evaluated if needed after auth middleware runs.
+    // For unauthenticated endpoints (health, setup), allow expert mode.
+    req.expertMode = requested;
+  }
 
   // Extract correlation ID if present
   const correlationIdHeader = req.headers['x-correlation-id'];

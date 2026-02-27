@@ -1,0 +1,263 @@
+# ===========================================================================
+# Pabawi Demo — SSH Configuration
+# Realistic multi-tier infrastructure SSH access patterns
+# ===========================================================================
+
+# ----- Global Defaults -----
+Host *
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    LogLevel ERROR
+    Compression yes
+    ControlMaster auto
+    ControlPath /tmp/ssh-%r@%h:%p
+    ControlPersist 600
+    AddKeysToAgent yes
+
+# ===========================================================================
+# PRODUCTION — Web Tier (us-east-1)
+# ===========================================================================
+Host web-prod-1
+    HostName 10.100.1.10
+    User deploy
+
+Host web-prod-2
+    HostName 10.100.1.11
+    User deploy
+
+# PRODUCTION — Web Tier (eu-west-1)
+Host web-prod-3
+    HostName 10.200.1.10
+    User deploy
+
+Host web-prod-4
+    HostName 10.200.1.11
+    User deploy
+
+# Pattern match all production web servers
+Host web-prod-*
+    User deploy
+    ForwardAgent no
+
+# ===========================================================================
+# PRODUCTION — Load Balancers
+# ===========================================================================
+Host lb-prod-1
+    HostName 10.100.1.5
+    User deploy
+
+Host lb-prod-2
+    HostName 10.200.1.5
+    User deploy
+
+# ===========================================================================
+# PRODUCTION — Application Tier
+# ===========================================================================
+Host app-rails-1
+    HostName 10.100.2.10
+    User deploy
+
+Host app-rails-2
+    HostName 10.100.2.11
+    User deploy
+
+Host app-java-1
+    HostName 10.100.2.20
+    User deploy
+
+Host app-java-2
+    HostName 10.200.2.20
+    User deploy
+
+Host app-node-1
+    HostName 10.100.2.30
+    User deploy
+
+Host app-*-prod-* app-rails-* app-java-* app-node-*
+    User deploy
+    ForwardAgent no
+
+# ===========================================================================
+# PRODUCTION — Database Tier
+# ===========================================================================
+Host db-primary-1
+    HostName 10.100.3.10
+    User dbadmin
+    LocalForward 15432 localhost:5432
+
+Host db-replica-1
+    HostName 10.100.3.11
+    User dbadmin
+    LocalForward 15433 localhost:5432
+
+Host db-replica-2
+    HostName 10.200.3.11
+    User dbadmin
+    LocalForward 15434 localhost:5432
+
+Host redis-1
+    HostName 10.100.3.20
+    User dbadmin
+    LocalForward 16379 localhost:6379
+
+Host redis-2
+    HostName 10.100.3.21
+    User dbadmin
+
+Host redis-3
+    HostName 10.200.3.20
+    User dbadmin
+
+Host db-* redis-*
+    User dbadmin
+    ForwardAgent no
+    ConnectTimeout 10
+
+# ===========================================================================
+# PRODUCTION — Monitoring
+# ===========================================================================
+Host prometheus-1
+    HostName 10.100.4.10
+    User monitor
+    LocalForward 19090 localhost:9090
+
+Host grafana-1
+    HostName 10.100.4.11
+    User monitor
+    LocalForward 13000 localhost:3000
+
+Host alertmanager-1
+    HostName 10.100.4.12
+    User monitor
+    LocalForward 19093 localhost:9093
+
+# ===========================================================================
+# PRODUCTION — Edge / CDN
+# ===========================================================================
+Host edge-nyc
+    HostName 10.50.1.10
+    User deploy
+
+Host edge-lax
+    HostName 10.50.2.10
+    User deploy
+
+Host edge-ams
+    HostName 10.50.3.10
+    User deploy
+
+Host edge-sin
+    HostName 10.50.4.10
+    User deploy
+
+Host edge-*
+    User deploy
+    ConnectTimeout 15
+
+# ===========================================================================
+# PRODUCTION — Network Devices
+# ===========================================================================
+Host fw-prod-1
+    HostName 10.100.0.1
+    User netadmin
+    KexAlgorithms +diffie-hellman-group14-sha1
+
+Host fw-prod-2
+    HostName 10.200.0.1
+    User netadmin
+    KexAlgorithms +diffie-hellman-group14-sha1
+
+Host sw-core-1
+    HostName 10.100.0.10
+    User netadmin
+
+Host sw-core-2
+    HostName 10.200.0.10
+    User netadmin
+
+Host fw-* sw-*
+    User netadmin
+    ConnectTimeout 10
+    ServerAliveInterval 30
+    ForwardAgent no
+
+# ===========================================================================
+# STAGING ENVIRONMENT
+# ===========================================================================
+Host web-stg-1
+    HostName 172.16.1.10
+
+Host web-stg-2
+    HostName 172.16.1.11
+
+Host app-rails-stg-1
+    HostName 172.16.2.10
+
+Host app-java-stg-1
+    HostName 172.16.2.20
+
+Host db-stg-1
+    HostName 172.16.3.10
+    User dbadmin
+    LocalForward 25432 localhost:5432
+
+Host redis-stg-1
+    HostName 172.16.3.20
+    User dbadmin
+
+Host mon-stg-1
+    HostName 172.16.4.10
+    User monitor
+
+Host *-stg-*
+    User deploy
+
+# ===========================================================================
+# DEVELOPMENT ENVIRONMENT
+# ===========================================================================
+Host dev-web-1
+    HostName 192.168.10.10
+
+Host dev-app-1
+    HostName 192.168.10.20
+
+Host dev-db-1
+    HostName 192.168.10.30
+    LocalForward 35432 localhost:5432
+
+Host jenkins-1
+    HostName 192.168.10.50
+    LocalForward 18080 localhost:8080
+
+Host ci-agent-1
+    HostName 192.168.10.51
+
+Host ci-agent-2
+    HostName 192.168.10.52
+
+Host dev-* jenkins-* ci-agent-*
+    User vagrant
+    IdentityFile ~/.vagrant.d/insecure_private_key
+    StrictHostKeyChecking no
+
+# ===========================================================================
+# Jump / Bastion Hosts (for environments behind NAT)
+# ===========================================================================
+Host bastion-prod
+    HostName bastion.acme.internal
+    User jump
+    ForwardAgent yes
+    IdentityFile ~/.ssh/id_ed25519
+
+Host bastion-stg
+    HostName bastion-stg.acme.internal
+    User jump
+    ForwardAgent yes
+    IdentityFile ~/.ssh/id_ed25519
+
+# Route production traffic through bastion (uncomment to activate)
+# Match Host *.acme.internal !bastion-*
+#     ProxyJump bastion-prod

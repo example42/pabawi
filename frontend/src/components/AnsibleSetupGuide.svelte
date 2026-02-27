@@ -13,8 +13,8 @@ ANSIBLE_INVENTORY_PATH=inventory/hosts
 ANSIBLE_EXECUTION_TIMEOUT=300000`;
 
   const advancedConfig = `# Optional Command Safety and Queue Settings
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST=["ls","pwd","whoami","uptime"]
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST=["ls","pwd","whoami","uptime"]
 CONCURRENT_EXECUTION_LIMIT=5
 MAX_QUEUE_SIZE=50
 LOG_LEVEL=info`;

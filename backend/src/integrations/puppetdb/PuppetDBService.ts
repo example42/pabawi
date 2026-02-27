@@ -9,7 +9,7 @@
  */
 
 import { BasePlugin } from "../BasePlugin";
-import type { InformationSourcePlugin, HealthStatus } from "../types";
+import type { InformationSourcePlugin, HealthStatus, NodeGroup } from "../types";
 import type { Node, Facts } from "../bolt/types";
 import type { PuppetDBConfig } from "../../config/schema";
 import type { PuppetDBClient } from "./PuppetDBClient";
@@ -621,6 +621,84 @@ export class PuppetDBService
       throw error;
     }
   }
+  /**
+   * Get groups from PuppetDB
+   *
+   * @returns Array of node groups
+   * @todo Implement group extraction from PuppetDB node classifiers (Task 4)
+   */
+  async getGroups(): Promise<NodeGroup[]> {
+      const complete = this.performanceMonitor.startTimer('puppetdb:getGroups');
+
+      // Return empty array if not initialized (per requirement 4.4)
+      if (!this.initialized || !this.client) {
+        complete({ cached: false, groupCount: 0 });
+        return [];
+      }
+
+      try {
+        // Check cache first
+        const cacheKey = 'groups:all';
+        const cached = this.cache.get(cacheKey);
+        if (Array.isArray(cached)) {
+          this.log(`Returning cached groups (${String(cached.length)} groups)`);
+          complete({ cached: true, groupCount: cached.length });
+          return cached as NodeGroup[];
+        }
+
+        const client = this.client;
+        if (!client) {
+          complete({ error: 'client not initialized' });
+          return [];
+        }
+
+        const groups: NodeGroup[] = [];
+
+        // Query 1: Group by environment
+        try {
+          const envResult = await this.executeWithResilience(async () => {
+            return await client.query("pdb/query/v4/nodes", undefined);
+          });
+
+          if (Array.isArray(envResult)) {
+            const envGroups = this.createEnvironmentGroups(envResult as PuppetDBNode[]);
+            groups.push(...envGroups);
+          }
+        } catch (error) {
+          this.log("Failed to query nodes for environment grouping", "warn");
+        }
+
+        // Query 2: Group by OS family (from facts)
+        try {
+          const osResult = await this.executeWithResilience(async () => {
+            return await client.query(
+              "pdb/query/v4/nodes",
+              JSON.stringify(["extract", ["certname", ["fact", "os.family"]]])
+            );
+          });
+
+          if (Array.isArray(osResult)) {
+            const osGroups = this.createOSFamilyGroups(osResult as Array<{ certname: string; "os.family": string }>);
+            groups.push(...osGroups);
+          }
+        } catch (error) {
+          this.log("Failed to query nodes for OS family grouping", "warn");
+        }
+
+        // Cache the result
+        this.cache.set(cacheKey, groups, this.cacheTTL);
+        this.log(`Cached groups (${String(groups.length)} groups) for ${String(this.cacheTTL)}ms`);
+
+        complete({ cached: false, groupCount: groups.length });
+        return groups;
+      } catch (error) {
+        this.logError("Failed to get groups from PuppetDB", error);
+        complete({ error: error instanceof Error ? error.message : String(error) });
+        // Return empty array on error as per requirements
+        return [];
+      }
+    }
+
 
   /**
    * Get arbitrary data for a node
@@ -653,6 +731,83 @@ export class PuppetDBService
         );
     }
   }
+  /**
+     * Create environment-based groups from PuppetDB nodes
+     * @private
+     */
+    private createEnvironmentGroups(nodes: PuppetDBNode[]): NodeGroup[] {
+      const envMap = new Map<string, string[]>();
+
+      // Group nodes by environment
+      for (const node of nodes) {
+        const env = (node.catalog_environment as string) || (node.report_environment as string) || 'unknown';
+        if (!envMap.has(env)) {
+          envMap.set(env, []);
+        }
+        // Use certname directly to match node IDs from getInventory
+        envMap.get(env)!.push(node.certname);
+      }
+
+      // Create NodeGroup objects
+      const groups: NodeGroup[] = [];
+      for (const [env, nodeIds] of envMap.entries()) {
+        groups.push({
+          id: `puppetdb:env-${env}`,
+          name: `Environment: ${env}`,
+          source: 'puppetdb',
+          sources: ['puppetdb'],
+          linked: false,
+          nodes: nodeIds,
+          metadata: {
+            description: `Nodes in ${env} environment`,
+            groupType: 'environment',
+            environment: env,
+          },
+        });
+      }
+
+      return groups;
+    }
+
+    /**
+     * Create OS family-based groups from PuppetDB query results
+     * @private
+     */
+    private createOSFamilyGroups(results: Array<{ certname: string; "os.family": string }>): NodeGroup[] {
+      const osMap = new Map<string, string[]>();
+
+      // Group nodes by OS family
+      for (const result of results) {
+        const osFamily = result["os.family"] || 'unknown';
+        if (!osMap.has(osFamily)) {
+          osMap.set(osFamily, []);
+        }
+        // Use certname directly to match node IDs from getInventory
+        osMap.get(osFamily)!.push(result.certname);
+      }
+
+      // Create NodeGroup objects
+      const groups: NodeGroup[] = [];
+      for (const [osFamily, nodeIds] of osMap.entries()) {
+        groups.push({
+          id: `puppetdb:os-${osFamily}`,
+          name: `OS: ${osFamily}`,
+          source: 'puppetdb',
+          sources: ['puppetdb'],
+          linked: false,
+          nodes: nodeIds,
+          metadata: {
+            description: `Nodes running ${osFamily} operating system`,
+            groupType: 'os_family',
+            osFamily,
+          },
+        });
+      }
+
+      return groups;
+    }
+
+
 
   /**
    * Query events with filters

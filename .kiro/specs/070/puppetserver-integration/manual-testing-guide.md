@@ -47,8 +47,8 @@ DATABASE_PATH=./data/executions.db
 
 # Bolt Configuration
 BOLT_PROJECT_PATH=./bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST=["ls","pwd","whoami","cat","hostname"]
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST=["ls","pwd","whoami","cat","hostname"]
 BOLT_EXECUTION_TIMEOUT=300000
 
 # PuppetDB Configuration

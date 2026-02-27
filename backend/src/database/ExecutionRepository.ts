@@ -483,7 +483,9 @@ export class ExecutionRepository {
       executionTool:
         row.execution_tool === "ansible"
           ? "ansible"
-          : "bolt",
+          : row.execution_tool === "ssh"
+            ? "ssh"
+            : "bolt",
     };
   }
 

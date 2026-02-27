@@ -312,7 +312,7 @@ Node Detail Page:
 ├── Overview Tab
 │   ├── General Info (OS, IP from facts)
 │   ├── Latest Puppet Runs (if PuppetDB active)
-│   └── Latest Executions
+│   └── Latest Actions
 ├── Facts Tab
 │   ├── Facts from all sources
 │   ├── Source attribution
