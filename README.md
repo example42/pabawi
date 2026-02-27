@@ -7,75 +7,44 @@
 </td>
 <td>
   <h3>Classic Infrastructures Command & Control Awesomeness</h3>
-  <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It currently provides integrations with Puppet, Bolt, Ansible, PuppetDB, and Hiera. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.</p>
+  <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It currently provides integrations with Puppet, Bolt, Ansible, PuppetDB, Hiera and SSH. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.</p>
 </td>
 </tr>
 </table>
 
 ## Table of Contents
 
-- [Security Notice](#security-notice)
 - [Features](#features)
-  - [Core Capabilities](#core-capabilities)
-  - [Advanced Features](#advanced-features)
 - [Project Structure](#project-structure)
 - [Screenshots](#screenshots)
 - [Prerequisites](#prerequisites)
-  - [Bolt Integration](#bolt-integration)
-  - [Ansible Integration](#ansible-integration)
-  - [PuppetDB Integration](#puppetdb-integration)
-  - [PuppetServer Integration](#puppetserver-integration)
-  - [Hiera Integration](#hiera-integration)
 - [Installation](#installation)
-  - [Via NPM](#via-npm)
+  - [Quick Start](#quick-start)
+  - [Manual Setup](#manual-setup)
   - [Using Docker Image](#using-docker-image)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
 - [Development and Contributing](#development-and-contributing)
 - [Roadmap](#roadmap)
-  - [Planned Features](#planned-features)
-  - [Version History](#version-history)
 - [License](#license)
 - [Support](#support)
-  - [Documentation](#documentation)
-  - [Getting Help](#getting-help)
 - [Acknowledgments](#acknowledgments)
-
-## Security Notice
-
-**⚠️ IMPORTANT: Currently Pabawi is designed for local use by Puppet administrators and developers on their workstations.**
-
-- **No Built-in Authentication**: Pabawi currently has no user authentication or authorization system
-- **Localhost Access Only**: The application should only be accessed via `localhost` or `127.0.0.1`
-- **Network Access Not Recommended**: Do not expose Pabawi directly to network access without external authentication
-- **Production Deployment**: If network access is required, use a reverse proxy (nginx, Apache) with proper authentication and SSL termination
-- **Privileged Operations**: Pabawi can execute commands and tasks on your infrastructure, based on your Bolt configurations - restrict access accordingly
-
-For production or multi-user environments, implement external authentication through a reverse proxy before allowing network access.
 
 ## Features
 
-### Core Capabilities
-
-- **Multi-Source Inventory**: View and manage nodes from Bolt inventory and PuppetDB
-- **Command Execution**: Run ad-hoc commands on remote nodes with whitelist security
-- **Task Execution**: Execute Bolt tasks with parameters automatic discovery
-- **Package Management**: Install and manage packages across your infrastructure
-- **Execution History**: Track all operations with detailed results and re-execution capability
-- **Node Facts**: View comprehensive system information from Puppet agents
-- **Puppet Reports**: Browse detailed Puppet run reports with metrics and resource changes
-- **Catalog Inspection**: Examine compiled Puppet catalogs and resource relationships
-- **Event Tracking**: Monitor individual resource changes and failures over time
-- **Catalogs diff**: Compare and show differences in catalogs from different environments
-- **Hiera Data Browser**: Explore hierarchical configuration data and key usage analysis
-
-### Advanced Features
-
-- **Re-execution**: Quickly repeat previous operations with preserved or modified parameters
-- **Expert Mode**: View complete command lines and full output for debugging and auditing
-- **Real-time Streaming**: Monitor command and task execution with live output
-- **Multi-Source Architecture**: Seamlessly integrate data from multiple backend systems
-- **Graceful Degradation**: Continue operating when individual integrations are unavailable
+- **Multi-Source Inventory**: Nodes from Bolt, PuppetDB, Ansible, SSH
+- **Command Execution**: Ad-hoc commands on remote nodes with whitelist security
+- **Task Execution**: Bolt tasks with automatic parameter discovery
+- **Package Management**: Install and manage packages across infrastructure
+- **Execution History**: Track operations with re-execution capability
+- **Node Facts**: System information from Puppet agents
+- **Puppet Reports**: Run reports with metrics and resource changes
+- **Catalog Inspection**: Compiled catalogs, resource relationships, cross-environment diff
+- **Event Tracking**: Resource changes and failures over time
+- **Hiera Data Browser**: Hierarchical configuration data and key usage analysis
+- **Real-time Streaming**: Live output for command and task execution
+- **Expert Mode**: Full command lines and debug output
+- **Graceful Degradation**: Continues operating when individual integrations are unavailable
 
 ## Project Structure
 
@@ -108,75 +77,61 @@ pabawi/
 
 ## Screenshots
 
-> **📸 [View Complete Screenshots Gallery](docs/screenshots.md)** - Comprehensive visual documentation of all Pabawi features and interfaces.
+> **📸 [View Complete Screenshots Gallery](docs/screenshots.md)**
 
-To have an idea of Pabawi awesomeness, here some random screenshots
-
-<img src="docs/screenshots/pabawi-screenshots.png" alt="Pababi Screenshots" width="1024">
+<img src="docs/screenshots/pabawi-screenshots.png" alt="Pabawi Screenshots" width="1024">
 
 ## Prerequisites
 
-- Node.js 20+
-- npm 9+
-- Container engine (when used via container image)
-
-### Bolt Integration
-
-- Bolt CLI installed
-- A local Bolt project directory
-- Any required SSH keys used in Bolt configuration
-- For details: [Bolt Setup](docs/integrations/bolt.md)
-
-### Ansible Integration
-
-- Ansible CLI installed (`ansible` and `ansible-playbook`)
-- A valid local Ansible inventory file
-- SSH (or configured Ansible transport) access to target nodes
-- For details: [Ansible Setup](docs/integrations/ansible.md)
-
-### PuppetDB Integration
-
-- Network access to PuppetDB port 8081
-- A local certificate signed by the Puppet CA used by PuppetDB
-- For details: [PuppetDB Setup](docs/integrations/puppetdb.md)
-
-### PuppetServer Integration
-
-- Network access to PuppetServer port 8140
-- A local certificate signed by the Puppet CA used by PuppetServer
-- For details: [PuppetServer Setup](docs/integrations/puppetserver.md)
-
-### Hiera Integration
-
-- A local copy of your control-repo, with any external modules in Puppetfile
-- If PuppetDB integration is not active, node facts files must be present on a local directory
-- For details: [Hiera Setup](docs/integrations/hiera.md)
+- **Node.js 20+** and **npm 9+** (or a container engine for Docker deployment)
+- **Bolt CLI** — for Bolt integration ([setup](docs/integrations/bolt.md))
+- **Ansible CLI** — for Ansible integration ([setup](docs/integrations/ansible.md))
+- **Puppet/OpenVox agent** — for PuppetDB ([setup](docs/integrations/puppetdb.md)) and Puppetserver ([setup](docs/integrations/puppetserver.md)) integrations; provides SSL certs
+- **Control repo** — for Hiera integration ([setup](docs/integrations/hiera.md))
 
 ## Installation
 
-### Via NPM
+### Quick Start
 
-To run pabawi locally you need NPM installed. Then:
+The fastest way to get Pabawi running after cloning:
 
 ```bash
+git clone https://github.com/example42/pabawi
+cd pabawi
+./scripts/setup.sh
+```
 
-# Clone the pabawi repo
+The interactive setup script will:
+
+1. **Check prerequisites** — Node.js, npm, and optionally Bolt, Ansible, Puppet/OpenVox CLIs
+2. **Generate `backend/.env`** — core settings and integrations (Bolt, PuppetDB, Puppetserver, Hiera, Ansible, SSH) with smart defaults based on detected tools and SSL certs
+3. **Install dependencies** — `npm run install:all` (with confirmation)
+4. **Start the application** — development mode, full-stack build, or exit
+
+### Manual Setup
+
+If you prefer to configure things yourself:
+
+```bash
 git clone https://github.com/example42/pabawi
 cd pabawi
 
-# Install all dependencies
+# Install dependencies
 npm run install:all
 
-# Create your configuration file in:
-backend/.env
+# Create your configuration (use .env.example as reference)
+cp backend/.env.example backend/.env
+# Edit backend/.env with your settings
 
-# Run Pabawi
-npm run dev:fullstack
+# Start in development mode
+npm run dev:backend    # Port 3000
+npm run dev:frontend   # Port 5173
+
+# Or build and serve everything from the backend
+npm run dev:fullstack  # Port 3000
 ```
 
-This will start the application at <http://localhost:3000>.
-
-### Using Docker image
+### Using Docker Image
 
 To start Pabawi with Docker Compose using the default configuration:
 
@@ -207,9 +162,18 @@ For comprehensive Docker deployment instructions including all integrations, see
 
 ## Configuration
 
-Pabawi uses a `.env` file for configuration. Use `backend/.env.example` as reference.
+Pabawi uses a `backend/.env` file for all configuration. The interactive setup script (`scripts/setup.sh`) generates this file for you. You can also use `backend/.env.example` as a reference template.
 
-For detailed configuration options including Bolt, Ansible, PuppetDB, PuppetServer, and Hiera integration settings, please refer to the [Configuration Guide](docs/configuration.md).
+Key configuration areas:
+
+- **Core** — port, host, log level
+- **Bolt** — project path, command whitelist, execution timeout
+- **PuppetDB / Puppetserver** — server URL, SSL certificates, token
+- **Hiera** — control repo path, environments
+- **Ansible** — project path, inventory path
+- **SSH** — config path, default user/key, sudo, connection pool limits
+
+For the complete configuration reference, see the [Configuration Guide](docs/configuration.md).
 
 For API details, see the [Integrations API Documentation](docs/integrations-api.md).
 
@@ -225,18 +189,11 @@ For details of the repository files and configurations check the [Repository Str
 
 ## Roadmap
 
-### Planned Features
-
-- **Additional Integrations**: Tiny Puppet
-- **Additional Integrations (to evaluate)**: Terraform, AWS CLI, Azure CLI, Kubernetes, Choria, Icinga
-- **Scheduled Executions**: Cron-like scheduling for recurring tasks
-- **Custom Dashboards**: User-configurable dashboard widgets
-- **RBAC**: Role-based access control and user/groups management
-- **Audit Logging**: Comprehensive audit trail
-- **CLI**: Command Line tool
+**Planned**: Tiny Puppet integration, scheduled executions, custom dashboards, audit logging, CLI tool. Under evaluation: Terraform, AWS/Azure CLI, Kubernetes, Choria, Icinga.
 
 ### Version History
 
+- **v0.8.0**: RBC authentication. SSH integrations. Inventory groups
 - **v0.7.0**: Ansible Integration. Used classed aware hiera lookups
 - **v0.6.0**: Code consolidation and fixing
 - **v0.5.0**: Report filtering, puppet run history visualization, enhanced expert mode with frontend logging
@@ -251,61 +208,13 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## Support
 
-### Documentation
+- [Technical Summary](docs/description.md) | [Architecture](docs/architecture.md) | [Configuration](docs/configuration.md) | [User Guide](docs/user-guide.md)
+- [API Reference](docs/api.md) | [Integrations API](docs/integrations-api.md) | [API Endpoints](docs/api-endpoints-reference.md) | [Error Codes](docs/error-codes.md)
+- [Bolt](docs/integrations/bolt.md) | [Ansible](docs/integrations/ansible.md) | [Hiera](docs/integrations/hiera.md) | [PuppetDB](docs/integrations/puppetdb.md) | [Puppetserver](docs/integrations/puppetserver.md)
+- [Authentication](docs/authentication.md) | [E2E Testing](docs/e2e-testing.md) | [Troubleshooting](docs/troubleshooting.md) | [Development](docs/development.md) | [Repo Structure](docs/repo_structure_and_config.md)
 
-#### Getting Started
-
-- [Technical Summary](docs/description.md) - High-level technical overview and goals
-- [Architecture Documentation](docs/architecture.md) - System architecture and plugin design
-- [Repository Structure](docs/repo_structure_and_config.md) - Guide to repository files and configuration
-- [Configuration Guide](docs/configuration.md) - Complete configuration reference
-- [User Guide](docs/user-guide.md) - Comprehensive user documentation
-- [API Documentation](docs/api.md) - REST API reference
-
-#### API Reference
-
-- [Integrations API Documentation](docs/integrations-api.md) - Complete API reference for all integrations
-- [API Endpoints Reference](docs/api-endpoints-reference.md) - Quick reference table of all endpoints
-- [Authentication Guide](docs/authentication.md) - Authentication setup and troubleshooting
-- [Error Codes Reference](docs/error-codes.md) - Complete error code reference
-
-#### Integration Setup
-
-- [Bolt Setup](docs/integrations/bolt.md) - Bolt configuration guide
-- [Ansible Setup](docs/integrations/ansible.md) - Ansible configuration guide
-- [Hiera Setup](docs/integrations/hiera.md) - Hiera configuration guide
-- [PuppetDB Integration Setup](docs/integrations/puppetdb.md) - PuppetDB configuration guide
-- [Puppetserver Setup](docs/integrations/puppetserver.md) - Puppetserver configuration guide
-- [PuppetDB API Documentation](docs/puppetdb-api.md) - PuppetDB-specific API endpoints
-
-#### Additional Resources
-
-- [E2E Testing Guide](docs/e2e-testing.md) - End-to-end testing documentation
-- [Troubleshooting Guide](docs/troubleshooting.md) - Common issues and solutions
-- [Development](docs/development.md) - Development and contributing
-
-### Getting Help
-
-1. Check the documentation
-2. Review [Troubleshooting Guide](docs/troubleshooting.md)
-3. Enable expert mode for detailed diagnostics
-4. Search existing GitHub Issues
-5. Create a new issue with:
-   - Version information
-   - Configuration (sanitized)
-   - Steps to reproduce
-   - Error messages and logs
+For help: check the docs, enable expert mode for diagnostics, or [open a GitHub issue](https://github.com/example42/pabawi/issues) with version info, config (sanitized), reproduction steps, and error messages.
 
 ## Acknowledgments
 
-Pabawi builds on excellent open-source projects:
-
-- **Puppet/OpenVox**: The king of (classic) configuration management tools
-- **Puppet Bolt**: Remote task execution engine
-- **PuppetDB**: Centralized Puppet data storage
-- **Svelte 5**: Reactive UI framework
-- **Node.js**: Backend runtime
-- **TypeScript**: Type-safe development
-- **SQLite**: Embedded database
-
-Special thanks to all contributors and the Puppet community.
+Pabawi builds on: [Puppet/OpenVox](https://puppet.com), [Bolt](https://puppet.com/docs/bolt), [PuppetDB](https://puppet.com/docs/puppetdb), [Svelte 5](https://svelte.dev), [Node.js](https://nodejs.org), [TypeScript](https://www.typescriptlang.org), [SQLite](https://sqlite.org). Thanks to all contributors and the Puppet community.

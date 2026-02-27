@@ -72,11 +72,15 @@
 
     // Add frontend logs
     frontendLogs.forEach(log => {
+      // Extract URL from metadata if it's an API call
+      const url = log.metadata?.url as string | undefined;
+
       entries.push({
         timestamp: log.timestamp,
         level: log.level,
         source: 'frontend',
         message: `[${log.component}] ${log.operation}: ${log.message}`,
+        context: url, // Use URL as context for API calls
         metadata: log.metadata,
         stackTrace: log.stackTrace,
       });
@@ -895,9 +899,21 @@
                           </span>
 
                           <!-- Timestamp -->
-                          <span class="text-xs text-gray-600 dark:text-gray-400 font-mono truncate">
+                          <span class="text-xs text-gray-600 dark:text-gray-400 font-mono shrink-0">
                             {formatTimestamp(entry.timestamp)}
                           </span>
+
+                          <!-- URL for frontend requests (inline with header) -->
+                          {#if entry.context && entry.source === 'frontend'}
+                            <span class="text-xs font-mono truncate {
+                              entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
+                              entry.level === 'warn' ? 'text-yellow-700 dark:text-yellow-300' :
+                              entry.level === 'info' ? 'text-blue-700 dark:text-blue-300' :
+                              'text-gray-700 dark:text-gray-300'
+                            }" title={entry.context}>
+                              → {entry.context}
+                            </span>
+                          {/if}
                         </div>
                       </div>
 
@@ -911,8 +927,8 @@
                         {entry.message}
                       </div>
 
-                      <!-- Entry Context -->
-                      {#if entry.context}
+                      <!-- Entry Context (for backend entries only) -->
+                      {#if entry.context && entry.source === 'backend'}
                         <div class="mt-1 text-xs {
                           entry.level === 'error' ? 'text-red-700 dark:text-red-300' :
                           entry.level === 'warn' ? 'text-yellow-700 dark:text-yellow-300' :

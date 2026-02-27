@@ -1,0 +1,35 @@
+# Host-specific overrides for db-primary-prod-1 (PostgreSQL Primary)
+ansible_user: dbadmin
+ansible_become: true
+ansible_become_method: sudo
+
+# PostgreSQL tuning for production primary
+pg_listen_addresses: "0.0.0.0"
+pg_max_connections: 500
+pg_shared_buffers: "8GB"
+pg_effective_cache_size: "24GB"
+pg_work_mem: "64MB"
+pg_maintenance_work_mem: "2GB"
+pg_wal_level: replica
+pg_max_wal_senders: 5
+pg_max_replication_slots: 5
+pg_hot_standby: "on"
+pg_archive_mode: "on"
+pg_archive_command: "cp %p /var/lib/postgresql/wal_archive/%f"
+
+# Backup configuration
+backup_enabled: true
+backup_schedule: "0 2 * * *"
+backup_retention_days: 30
+backup_destination: "s3://acme-db-backups/prod/primary"
+
+# Monitoring exporters
+postgres_exporter_enabled: true
+postgres_exporter_port: 9187
+node_exporter_enabled: true
+node_exporter_port: 9100
+
+# SSL
+pg_ssl: "on"
+pg_ssl_cert_file: /etc/postgresql/ssl/server.crt
+pg_ssl_key_file: /etc/postgresql/ssl/server.key

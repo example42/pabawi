@@ -13,6 +13,7 @@
     "lint:fix": "eslint src --ext .ts --fix"
   },
   "dependencies": {
+    "@types/ssh2": "^1.15.5",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -21,6 +22,7 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "sqlite3": "^5.1.7",
+    "ssh2": "^1.17.0",
     "yaml": "^2.8.2",
     "zod": "^3.23.8"
   },

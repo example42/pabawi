@@ -23,7 +23,7 @@ export function createFactsRouter(
 
   /**
    * POST /api/nodes/:id/facts
-   * Trigger facts gathering for a node
+   * Trigger facts gathering for a node from all available sources
    */
   router.post(
     "/:id/facts",
@@ -39,7 +39,6 @@ export function createFactsRouter(
 
       logger.info("Processing facts gathering request", {
         component: "FactsRouter",
-        integration: "bolt",
         operation: "gatherFacts",
         metadata: { nodeId: req.params.id },
       });
@@ -74,14 +73,12 @@ export function createFactsRouter(
         if (!node) {
           logger.warn("Node not found in inventory", {
             component: "FactsRouter",
-            integration: "bolt",
             operation: "gatherFacts",
             metadata: { nodeId },
           });
 
           if (debugInfo) {
             debugInfo.duration = Date.now() - startTime;
-            expertModeService.setIntegration(debugInfo, 'bolt');
             expertModeService.addWarning(debugInfo, {
               message: `Node '${nodeId}' not found in inventory`,
               level: 'warn',
@@ -103,30 +100,95 @@ export function createFactsRouter(
           return;
         }
 
-        if (debugInfo) {
-          expertModeService.addDebug(debugInfo, {
-            message: "Getting Bolt information source",
-            level: 'debug',
-          });
+        // Gather facts from all available sources
+        const factsResults: Record<string, any> = {};
+        const errors: Record<string, string> = {};
+
+        // Try Bolt
+        const boltSource = integrationManager.getInformationSource("bolt");
+        if (boltSource) {
+          try {
+            if (debugInfo) {
+              expertModeService.addDebug(debugInfo, {
+                message: "Gathering facts from Bolt",
+                level: 'debug',
+              });
+            }
+            const boltFacts = await boltSource.getNodeFacts(nodeId);
+            factsResults.bolt = boltFacts;
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            errors.bolt = errorMsg;
+            logger.warn("Failed to gather facts from Bolt", {
+              component: "FactsRouter",
+              operation: "gatherFacts",
+              metadata: { nodeId, error: errorMsg },
+            });
+          }
         }
 
-        // Gather facts from the node using IntegrationManager
-        // This will get facts from Bolt (the default execution tool)
-        const boltSource = integrationManager.getInformationSource("bolt");
-        if (!boltSource) {
-          logger.warn("Bolt integration not available", {
+        // Try SSH
+        const sshSource = integrationManager.getInformationSource("ssh");
+        if (sshSource) {
+          try {
+            if (debugInfo) {
+              expertModeService.addDebug(debugInfo, {
+                message: "Gathering facts from SSH",
+                level: 'debug',
+              });
+            }
+            const sshFacts = await sshSource.getNodeFacts(nodeId);
+            factsResults.ssh = sshFacts;
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            errors.ssh = errorMsg;
+            logger.warn("Failed to gather facts from SSH", {
+              component: "FactsRouter",
+              operation: "gatherFacts",
+              metadata: { nodeId, error: errorMsg },
+            });
+          }
+        }
+
+        // Try Ansible
+        const ansibleSource = integrationManager.getInformationSource("ansible");
+        if (ansibleSource) {
+          try {
+            if (debugInfo) {
+              expertModeService.addDebug(debugInfo, {
+                message: "Gathering facts from Ansible",
+                level: 'debug',
+              });
+            }
+            const ansibleFacts = await ansibleSource.getNodeFacts(nodeId);
+            factsResults.ansible = ansibleFacts;
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            errors.ansible = errorMsg;
+            logger.warn("Failed to gather facts from Ansible", {
+              component: "FactsRouter",
+              operation: "gatherFacts",
+              metadata: { nodeId, error: errorMsg },
+            });
+          }
+        }
+
+        const duration = Date.now() - startTime;
+
+        // If no facts were gathered from any source, return error
+        if (Object.keys(factsResults).length === 0) {
+          logger.error("No facts could be gathered from any source", {
             component: "FactsRouter",
-            integration: "bolt",
             operation: "gatherFacts",
-            metadata: { nodeId },
+            metadata: { nodeId, errors },
           });
 
           if (debugInfo) {
-            debugInfo.duration = Date.now() - startTime;
-            expertModeService.setIntegration(debugInfo, 'bolt');
-            expertModeService.addWarning(debugInfo, {
-              message: "Bolt integration is not available",
-              level: 'warn',
+            debugInfo.duration = duration;
+            expertModeService.addError(debugInfo, {
+              message: "No facts could be gathered from any source",
+              context: JSON.stringify(errors),
+              level: 'error',
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
             debugInfo.context = expertModeService.collectRequestContext(req);
@@ -134,8 +196,9 @@ export function createFactsRouter(
 
           const errorResponse = {
             error: {
-              code: "BOLT_NOT_AVAILABLE",
-              message: "Bolt integration is not available",
+              code: "NO_FACTS_AVAILABLE",
+              message: "No facts could be gathered from any source",
+              details: errors,
             },
           };
 
@@ -145,36 +208,29 @@ export function createFactsRouter(
           return;
         }
 
-        if (debugInfo) {
-          expertModeService.addDebug(debugInfo, {
-            message: "Gathering facts from node",
-            context: JSON.stringify({ nodeId }),
-            level: 'debug',
-          });
-        }
-
-        const facts = await boltSource.getNodeFacts(nodeId);
-
-        const duration = Date.now() - startTime;
-
         logger.info("Facts gathered successfully", {
           component: "FactsRouter",
-          integration: "bolt",
           operation: "gatherFacts",
-          metadata: { nodeId, factCount: Object.keys(facts).length, duration },
+          metadata: {
+            nodeId,
+            sources: Object.keys(factsResults),
+            duration
+          },
         });
 
-        const responseData = { facts };
+        const responseData = {
+          facts: factsResults,
+          errors: Object.keys(errors).length > 0 ? errors : undefined,
+        };
 
         // Attach debug info if expert mode is enabled
         if (debugInfo) {
           debugInfo.duration = duration;
-          expertModeService.setIntegration(debugInfo, 'bolt');
           expertModeService.addMetadata(debugInfo, 'nodeId', nodeId);
-          expertModeService.addMetadata(debugInfo, 'factCount', String(Object.keys(facts).length));
+          expertModeService.addMetadata(debugInfo, 'sources', Object.keys(factsResults).join(', '));
           expertModeService.addInfo(debugInfo, {
-            message: `Gathered ${String(Object.keys(facts).length)} facts from node`,
-            context: JSON.stringify({ nodeId }),
+            message: `Gathered facts from ${Object.keys(factsResults).length} source(s)`,
+            context: JSON.stringify({ nodeId, sources: Object.keys(factsResults) }),
             level: 'info',
           });
 

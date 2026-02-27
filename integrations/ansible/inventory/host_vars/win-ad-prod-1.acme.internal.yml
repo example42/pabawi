@@ -1,0 +1,47 @@
+# Host-specific overrides for win-ad-prod-1 (Active Directory Domain Controller)
+ansible_connection: winrm
+ansible_winrm_transport: ntlm
+ansible_winrm_server_cert_validation: ignore
+ansible_winrm_port: 5986
+ansible_user: Administrator
+ansible_become: false
+
+# AD Configuration
+ad_domain: acme.internal
+ad_netbios_name: ACME
+ad_forest_mode: WinThreshold
+ad_domain_mode: WinThreshold
+ad_safe_mode_password: "{{ vault_ad_safe_mode_password }}"
+
+# DNS
+ad_dns_forwarders:
+  - 8.8.8.8
+  - 8.8.4.4
+ad_reverse_lookup_zones:
+  - "100.10.in-addr.arpa"
+  - "200.10.in-addr.arpa"
+  - "16.172.in-addr.arpa"
+
+# Sites and subnets
+ad_sites:
+  - name: US-East-1
+    subnets:
+      - "10.100.0.0/16"
+  - name: EU-West-1
+    subnets:
+      - "10.200.0.0/16"
+  - name: Staging
+    subnets:
+      - "172.16.0.0/16"
+
+# Group Policy
+gpo_audit_policy: true
+gpo_password_policy:
+  min_length: 14
+  max_age_days: 90
+  complexity: true
+  history_count: 24
+
+# Monitoring
+windows_exporter_enabled: true
+windows_exporter_port: 9182

@@ -1,9 +1,7 @@
 <script lang="ts">
   import LoadingSpinner from './LoadingSpinner.svelte';
-  import ErrorAlert from './ErrorAlert.svelte';
   import FactsViewer from './FactsViewer.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
-  import { getUserFriendlyErrorMessage, isNotConfiguredError } from '../lib/multiSourceFetch';
 
   interface Props {
     boltFacts?: {
@@ -33,87 +31,10 @@
     puppetdbError = null,
   }: Props = $props();
 
-  type FactCategory = 'system' | 'network' | 'hardware' | 'custom';
-  type SourceType = 'bolt' | 'puppetdb';
-
-  interface CategorizedFacts {
-    system: Record<string, unknown>;
-    network: Record<string, unknown>;
-    hardware: Record<string, unknown>;
-    custom: Record<string, unknown>;
-  }
-
-  // Active source selection
-  let activeSource = $state<SourceType | 'all'>('all');
-
-  // Categorize facts based on common patterns
-  function categorizeFacts(facts: Record<string, unknown>): CategorizedFacts {
-    const categorized: CategorizedFacts = {
-      system: {},
-      network: {},
-      hardware: {},
-      custom: {},
-    };
-
-    const systemKeys = [
-      'os', 'osfamily', 'operatingsystem', 'operatingsystemrelease',
-      'kernel', 'kernelversion', 'kernelrelease', 'kernelmajversion',
-      'architecture', 'hardwaremodel', 'processor', 'processorcount',
-      'uptime', 'timezone', 'virtual', 'is_virtual', 'hostname',
-      'fqdn', 'domain', 'path', 'rubyversion', 'puppetversion',
-    ];
-
-    const networkKeys = [
-      'ipaddress', 'ipaddress6', 'macaddress', 'netmask', 'network',
-      'interfaces', 'networking', 'defaultgateway', 'nameservers',
-    ];
-
-    const hardwareKeys = [
-      'memorysize', 'memoryfree', 'swapsize', 'swapfree',
-      'physicalprocessorcount', 'processorcount', 'processors',
-      'blockdevices', 'disks', 'partitions', 'manufacturer',
-      'productname', 'serialnumber', 'uuid', 'bios', 'dmi',
-    ];
-
-    for (const [key, value] of Object.entries(facts)) {
-      const lowerKey = key.toLowerCase();
-
-      if (systemKeys.some(k => lowerKey.includes(k))) {
-        categorized.system[key] = value;
-      } else if (networkKeys.some(k => lowerKey.includes(k))) {
-        categorized.network[key] = value;
-      } else if (hardwareKeys.some(k => lowerKey.includes(k))) {
-        categorized.hardware[key] = value;
-      } else {
-        categorized.custom[key] = value;
-      }
-    }
-
-    return categorized;
-  }
-
-  // Get categorized facts for active source
-  const categorizedFacts = $derived(() => {
-    if (activeSource === 'bolt' && boltFacts) {
-      return categorizeFacts(boltFacts.facts);
-    } else if (activeSource === 'puppetdb' && puppetdbFacts) {
-      return categorizeFacts(puppetdbFacts.facts);
-    } else if (activeSource === 'all') {
-      // Merge all sources
-      const merged: Record<string, unknown> = {};
-      if (boltFacts) Object.assign(merged, boltFacts.facts);
-      if (puppetdbFacts) Object.assign(merged, puppetdbFacts.facts);
-      return categorizeFacts(merged);
-    }
-    return { system: {}, network: {}, hardware: {}, custom: {} };
-  });
-
   // Format timestamp
   function formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
   }
-
-
 
   // Check if any facts are available
   const hasAnyFacts = $derived(
@@ -124,79 +45,30 @@
   // Check if any source is loading
   const anyLoading = $derived(boltLoading || puppetdbLoading);
 
-  // Count available sources
-  const availableSources = $derived(() => {
-    const sources: SourceType[] = [];
-    if (boltFacts && Object.keys(boltFacts.facts).length > 0) sources.push('bolt');
-    if (puppetdbFacts && Object.keys(puppetdbFacts.facts).length > 0) sources.push('puppetdb');
-    return sources;
+  // Get merged facts for default display
+  const mergedFacts = $derived(() => {
+    const merged: Record<string, unknown> = {};
+    if (puppetdbFacts) Object.assign(merged, puppetdbFacts.facts);
+    if (boltFacts) Object.assign(merged, boltFacts.facts);
+    return merged;
   });
-
-  // Category display names
-  const categoryNames: Record<FactCategory, string> = {
-    system: 'System',
-    network: 'Network',
-    hardware: 'Hardware',
-    custom: 'Custom',
-  };
-
-  // Active category for accordion
-  let expandedCategories = $state<Set<FactCategory>>(new Set(['system']));
-
-  function toggleCategory(category: FactCategory): void {
-    if (expandedCategories.has(category)) {
-      expandedCategories.delete(category);
-    } else {
-      expandedCategories.add(category);
-    }
-    expandedCategories = new Set(expandedCategories);
-  }
 
   // View mode: 'categorized' or 'yaml'
   let viewMode = $state<'categorized' | 'yaml'>('categorized');
 
-  // Get current facts and source label
-  function getCurrentFactsAndSource(): { facts: Record<string, unknown>; sourceLabel: string; displayLabel: string } {
-    let factsToExport: Record<string, unknown> = {};
-    let sourceLabel = '';
-    let displayLabel = '';
-
-    if (activeSource === 'bolt' && boltFacts) {
-      factsToExport = boltFacts.facts;
-      sourceLabel = 'bolt';
-      displayLabel = 'Bolt';
-    } else if (activeSource === 'puppetdb' && puppetdbFacts) {
-      factsToExport = puppetdbFacts.facts;
-      sourceLabel = 'puppetdb';
-      displayLabel = 'PuppetDB';
-    } else if (activeSource === 'all') {
-      // Merge all sources
-      if (boltFacts) Object.assign(factsToExport, boltFacts.facts);
-      if (puppetdbFacts) Object.assign(factsToExport, puppetdbFacts.facts);
-      sourceLabel = 'all-sources';
-      displayLabel = 'All Sources';
-    }
-
-    return { facts: factsToExport, sourceLabel, displayLabel };
-  }
-
-  // Get YAML representation of current facts
+  // Get YAML representation of merged facts
   const yamlOutput = $derived(() => {
-    const { facts } = getCurrentFactsAndSource();
-    return convertToYAML(facts);
+    return convertToYAML(mergedFacts());
   });
 
-  // YAML export functionality (requirement 4.5)
+  // YAML export functionality
   function exportToYAML(): void {
-    const { facts, sourceLabel } = getCurrentFactsAndSource();
-    const yaml = convertToYAML(facts);
-
-    // Create a blob and download
+    const yaml = yamlOutput();
     const blob = new Blob([yaml], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `facts-${sourceLabel}-${new Date().toISOString().split('T')[0]}.yaml`;
+    a.download = `facts-${new Date().toISOString().split('T')[0]}.yaml`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -250,28 +122,6 @@
 </script>
 
 <div class="space-y-4">
-  <!-- Source Selection Tabs -->
-  {#if availableSources().length > 1}
-    <div class="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700">
-      <button
-        type="button"
-        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {activeSource === 'all' ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
-        onclick={() => activeSource = 'all'}
-      >
-        All Sources
-      </button>
-      {#each availableSources() as source}
-        <button
-          type="button"
-          class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {activeSource === source ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
-          onclick={() => activeSource = source}
-        >
-          {getSourceLabel(source)}
-        </button>
-      {/each}
-    </div>
-  {/if}
-
   <!-- Error Messages with Graceful Degradation -->
   {#if (boltError || puppetdbError) && hasAnyFacts}
     <div class="rounded-lg border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/50 dark:bg-yellow-900/20">
@@ -285,10 +135,10 @@
           </h3>
           <div class="mt-2 space-y-1 text-sm text-yellow-700 dark:text-yellow-300">
             {#if boltError}
-              <p>• Bolt: {boltError}</p>
+              <p>• SSH: {boltError}</p>
             {/if}
             {#if puppetdbError}
-              <p>• PuppetDB: {puppetdbError}</p>
+              <p>• Puppet: {puppetdbError}</p>
             {/if}
           </div>
           <p class="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
@@ -299,21 +149,9 @@
     </div>
   {/if}
 
-  <!-- View Mode Toggle and Actions (requirement 4.5) -->
+  <!-- View Mode Toggle and Actions -->
   {#if hasAnyFacts}
-    <div class="flex items-center justify-between gap-4">
-      <!-- Current Source Indicator -->
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-600 dark:text-gray-400">Viewing facts from:</span>
-        {#if activeSource === 'all'}
-          <span class="inline-flex items-center rounded-full px-3 py-1 text-sm font-medium bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400">
-            All Sources
-          </span>
-        {:else}
-          <IntegrationBadge integration={activeSource} variant="badge" size="sm" />
-        {/if}
-      </div>
-
+    <div class="flex items-center justify-end gap-4">
       <!-- View Mode and Export Actions -->
       <div class="flex items-center gap-2">
         <!-- View Mode Toggle -->
@@ -371,10 +209,13 @@
 
   <!-- Source Information Cards -->
   <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-    <!-- Bolt Facts Card -->
+    <!-- SSH Facts Card -->
     <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <div class="mb-2 flex items-center justify-between">
-        <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+        <div class="flex items-center gap-2">
+          <IntegrationBadge integration="bolt" variant="dot" size="sm" />
+          <span class="text-sm font-medium text-gray-900 dark:text-white">SSH</span>
+        </div>
         {#if onGatherBoltFacts}
           <button
             type="button"
@@ -410,10 +251,13 @@
       {/if}
     </div>
 
-    <!-- PuppetDB Facts Card -->
+    <!-- Puppet Facts Card -->
     <div class="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
       <div class="mb-2 flex items-center justify-between">
-        <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+        <div class="flex items-center gap-2">
+          <IntegrationBadge integration="puppetdb" variant="dot" size="sm" />
+          <span class="text-sm font-medium text-gray-900 dark:text-white">Puppet</span>
+        </div>
       </div>
       {#if puppetdbLoading}
         <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
@@ -470,7 +314,7 @@
             YAML Output
           </h3>
           <span class="text-xs text-gray-500 dark:text-gray-400">
-            {Object.keys(getCurrentFactsAndSource().facts).length} facts from {getCurrentFactsAndSource().displayLabel}
+            {Object.keys(mergedFacts()).length} facts
           </span>
         </div>
       </div>
@@ -479,41 +323,15 @@
       </div>
     </div>
   {:else}
-    <!-- Categorized Facts Display -->
-    <div class="space-y-2">
-      {#each Object.entries(categoryNames) as [category, name]}
-        {@const categoryFacts = categorizedFacts()[category as FactCategory]}
-        {@const factCount = Object.keys(categoryFacts).length}
-
-        {#if factCount > 0}
-          <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-            <button
-              type="button"
-              class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50"
-              onclick={() => toggleCategory(category as FactCategory)}
-            >
-              <div class="flex items-center gap-2">
-                <svg
-                  class="h-5 w-5 transition-transform {expandedCategories.has(category as FactCategory) ? 'rotate-90' : ''}"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                </svg>
-                <span class="font-medium text-gray-900 dark:text-white">{name}</span>
-                <span class="text-sm text-gray-500 dark:text-gray-400">({factCount})</span>
-              </div>
-            </button>
-
-            {#if expandedCategories.has(category as FactCategory)}
-              <div class="border-t border-gray-200 p-4 dark:border-gray-700">
-                <FactsViewer facts={categoryFacts} />
-              </div>
-            {/if}
-          </div>
-        {/if}
-      {/each}
-    </div>
+    <!-- Enhanced Facts Display with Source and Category Selectors -->
+    <FactsViewer
+      facts={mergedFacts()}
+      puppetFacts={puppetdbFacts?.facts}
+      boltFacts={boltFacts?.facts}
+      ansibleFacts={null}
+      sshFacts={null}
+      showSourceSelector={true}
+      showCategorySelector={true}
+    />
   {/if}
 </div>

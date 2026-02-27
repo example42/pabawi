@@ -41,8 +41,8 @@ data:
   PORT: "3000"
   HOST: "0.0.0.0"
   BOLT_PROJECT_PATH: "/bolt-project"
-  BOLT_COMMAND_WHITELIST_ALLOW_ALL: "false"
-  BOLT_COMMAND_WHITELIST_MATCH_MODE: "exact"
+  COMMAND_WHITELIST_ALLOW_ALL: "false"
+  COMMAND_WHITELIST_MATCH_MODE: "exact"
   LOG_LEVEL: "info"
   DATABASE_PATH: "/data/executions.db"
   BOLT_EXECUTION_TIMEOUT: "300000"
@@ -81,7 +81,7 @@ spec:
         - configMapRef:
             name: pabawi-config
         env:
-        - name: BOLT_COMMAND_WHITELIST
+        - name: COMMAND_WHITELIST
           value: '["ls","pwd","uptime"]'
         volumeMounts:
         - name: bolt-project

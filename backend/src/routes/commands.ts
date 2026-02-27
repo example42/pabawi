@@ -14,7 +14,7 @@ import { NodeIdParamSchema } from "../validation/commonSchemas";
 const CommandExecutionBodySchema = z.object({
   command: z.string().min(1, "Command is required"),
   expertMode: z.boolean().optional(),
-  tool: z.enum(["bolt", "ansible"]).optional(),
+  tool: z.enum(["bolt", "ansible", "ssh"]).optional(),
 });
 
 /**
@@ -70,8 +70,9 @@ export function createCommandsRouter(
 
         const boltTool = integrationManager.getExecutionTool("bolt");
         const ansibleTool = integrationManager.getExecutionTool("ansible");
+        const sshTool = integrationManager.getExecutionTool("ssh");
         const selectedTool = requestedTool
-          ?? (boltTool ? "bolt" : ansibleTool ? "ansible" : "bolt");
+          ?? (boltTool ? "bolt" : ansibleTool ? "ansible" : sshTool ? "ssh" : "bolt");
 
         if (!integrationManager.getExecutionTool(selectedTool)) {
           const errorResponse = {

@@ -73,25 +73,29 @@ describe("Inventory Filtering and Sorting", () => {
 
     mockIntegrationManager = {
       isInitialized: vi.fn().mockReturnValue(true),
-      getLinkedInventory: vi.fn().mockResolvedValue({
+      getAggregatedInventory: vi.fn().mockResolvedValue({
         nodes: [
           ...mockBoltNodes,
           ...mockPuppetserverNodes,
           ...mockPuppetDBNodes,
         ],
+        groups: [], // No groups in this test
         sources: {
           bolt: {
             nodeCount: mockBoltNodes.length,
+            groupCount: 0,
             lastSync: new Date().toISOString(),
             status: "healthy",
           },
           puppetserver: {
             nodeCount: mockPuppetserverNodes.length,
+            groupCount: 0,
             lastSync: new Date().toISOString(),
             status: "healthy",
           },
           puppetdb: {
             nodeCount: mockPuppetDBNodes.length,
+            groupCount: 0,
             lastSync: new Date().toISOString(),
             status: "healthy",
           },

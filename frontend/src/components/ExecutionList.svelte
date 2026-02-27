@@ -17,7 +17,7 @@
     error?: string;
     command?: string;
     expertMode?: boolean;
-    executionTool?: 'bolt' | 'ansible';
+    executionTool?: 'bolt' | 'ansible' | 'ssh';
   }
 
   interface Props {

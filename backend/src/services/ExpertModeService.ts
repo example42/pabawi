@@ -468,9 +468,24 @@ export class ExpertModeService {
    * @returns Context information object
    */
   public collectRequestContext(req: Request): ContextInfo {
-    // Extract headers as a plain object
+    // Headers that must never be exposed to clients via debug info
+    const SENSITIVE_HEADERS = new Set([
+      'authorization',
+      'cookie',
+      'set-cookie',
+      'x-api-key',
+      'proxy-authorization',
+      'x-csrf-token',
+      'x-forwarded-for',
+    ]);
+
+    // Extract headers as a plain object, filtering out sensitive ones
     const headers: Record<string, string> = {};
     Object.keys(req.headers).forEach((key) => {
+      if (SENSITIVE_HEADERS.has(key.toLowerCase())) {
+        headers[key] = '[REDACTED]';
+        return;
+      }
       const value = req.headers[key];
       if (typeof value === 'string') {
         headers[key] = value;

@@ -17,6 +17,7 @@ import { BasePlugin } from "../BasePlugin";
 import type {
   InformationSourcePlugin,
   HealthStatus,
+  NodeGroup,
 } from "../types";
 import type { Node, Facts } from "../bolt/types";
 import type { IntegrationManager } from "../IntegrationManager";
@@ -534,6 +535,19 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
       facts: factResult.facts.facts,
     } as Facts;
   }
+  /**
+   * Get groups from Hiera
+   *
+   * @returns Array of node groups
+   * @note Hiera does not natively support groups, returns empty array
+   */
+  async getGroups(): Promise<NodeGroup[]> {
+    this.ensureInitialized();
+
+    // Hiera is a data lookup tool and does not have native group support
+    return [];
+  }
+
 
   /**
    * Get arbitrary data for a node

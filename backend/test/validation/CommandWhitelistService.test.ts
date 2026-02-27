@@ -14,19 +14,34 @@ describe('CommandWhitelistService - allowAll mode', () => {
     service = new CommandWhitelistService(config);
   });
 
-  it('should allow any command when allowAll is true', () => {
+  it('should allow safe commands when allowAll is true', () => {
     expect(service.isCommandAllowed('ls -la')).toBe(true);
     expect(service.isCommandAllowed('rm -rf /')).toBe(true);
     expect(service.isCommandAllowed('echo "test"')).toBe(true);
     expect(service.isCommandAllowed('any arbitrary command')).toBe(true);
   });
 
+  it('should still block shell metacharacters even when allowAll is true', () => {
+    // Metacharacters must always be blocked to prevent remote command injection
+    expect(service.isCommandAllowed('echo $(whoami)')).toBe(false);
+    expect(service.isCommandAllowed('ls; rm -rf /')).toBe(false);
+    expect(service.isCommandAllowed('cat /etc/passwd | grep root')).toBe(false);
+    expect(service.isCommandAllowed('echo `id`')).toBe(false);
+    expect(service.isCommandAllowed('rm -rf *')).toBe(false);
+    expect(service.isCommandAllowed('ls [a-z]*')).toBe(false);
+    expect(service.isCommandAllowed('cd ~root')).toBe(false);
+  });
+
   it('should return true for isAllowAllEnabled', () => {
     expect(service.isAllowAllEnabled()).toBe(true);
   });
 
-  it('should not throw error when validating any command', () => {
+  it('should not throw error when validating safe commands', () => {
     expect(() => service.validateCommand('any command')).not.toThrow();
+  });
+
+  it('should throw error for metacharacters even in allowAll mode', () => {
+    expect(() => service.validateCommand('echo $(whoami)')).toThrow(CommandNotAllowedError);
   });
 });
 
@@ -220,16 +235,33 @@ describe('CommandWhitelistService - edge cases', () => {
     expect(service.isCommandAllowed('   ')).toBe(false);
   });
 
-  it('should handle special characters in commands', () => {
+  it('should block shell metacharacters in commands even if whitelisted', () => {
     const config: WhitelistConfig = {
       allowAll: false,
-      whitelist: ['echo "test"', 'grep -E "^[0-9]+"'],
+      whitelist: ['grep -E "^[0-9]+"', 'echo $(whoami)', 'cat /etc/passwd; rm -rf /'],
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
 
-    expect(service.isCommandAllowed('echo "test"')).toBe(true);
-    expect(service.isCommandAllowed('grep -E "^[0-9]+"')).toBe(true);
+    // These contain shell metacharacters ([, ], $, (, ), ;) and must be blocked
+    // to prevent remote command injection on target nodes
+    expect(service.isCommandAllowed('grep -E "^[0-9]+"')).toBe(false);
+    expect(service.isCommandAllowed('echo $(whoami)')).toBe(false);
+    expect(service.isCommandAllowed('cat /etc/passwd; rm -rf /')).toBe(false);
+  });
+
+  it('should allow safe commands without metacharacters', () => {
+    const config: WhitelistConfig = {
+      allowAll: false,
+      whitelist: ['echo test', 'grep -E pattern', 'echo "hello world"'],
+      matchMode: 'exact',
+    };
+    const service = new CommandWhitelistService(config);
+
+    expect(service.isCommandAllowed('echo test')).toBe(true);
+    expect(service.isCommandAllowed('grep -E pattern')).toBe(true);
+    // Double quotes are allowed (not shell metacharacters for remote injection)
+    expect(service.isCommandAllowed('echo "hello world"')).toBe(true);
   });
 
   it('should handle case-sensitive matching', () => {

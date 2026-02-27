@@ -247,4 +247,80 @@ describe('PuppetDBService', () => {
       }
     });
   });
+
+  describe('getGroups', () => {
+    it('should have getGroups method', async () => {
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: 'puppetdb',
+        type: 'information',
+        config: {
+          serverUrl: 'https://puppetdb.example.com',
+        },
+      };
+
+      await service.initialize(config);
+
+      // Verify the method exists
+      expect(service.getGroups).toBeDefined();
+      expect(typeof service.getGroups).toBe('function');
+    });
+
+    it('should return empty array when not initialized', async () => {
+      // Service not initialized, should return empty array
+      const groups = await service.getGroups();
+      expect(Array.isArray(groups)).toBe(true);
+      expect(groups.length).toBe(0);
+    });
+
+    it('should return empty array when PuppetDB is not available', async () => {
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: 'puppetdb',
+        type: 'information',
+        config: {
+          serverUrl: 'https://puppetdb.example.com',
+        },
+      };
+
+      await service.initialize(config);
+
+      // This will fail to connect, but should return empty array instead of throwing
+      const groups = await service.getGroups();
+      expect(Array.isArray(groups)).toBe(true);
+      expect(groups.length).toBe(0);
+    });
+
+    it('should return NodeGroup objects with correct structure', async () => {
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: 'puppetdb',
+        type: 'information',
+        config: {
+          serverUrl: 'https://puppetdb.example.com',
+        },
+      };
+
+      await service.initialize(config);
+
+      const groups = await service.getGroups();
+
+      // Verify structure (even if empty)
+      expect(Array.isArray(groups)).toBe(true);
+
+      // If groups exist, verify they have the correct structure
+      groups.forEach(group => {
+        expect(group).toHaveProperty('id');
+        expect(group).toHaveProperty('name');
+        expect(group).toHaveProperty('source');
+        expect(group).toHaveProperty('sources');
+        expect(group).toHaveProperty('linked');
+        expect(group).toHaveProperty('nodes');
+        expect(group.source).toBe('puppetdb');
+        expect(Array.isArray(group.sources)).toBe(true);
+        expect(Array.isArray(group.nodes)).toBe(true);
+        expect(typeof group.linked).toBe('boolean');
+      });
+    });
+  });
 });

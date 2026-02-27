@@ -23,6 +23,7 @@
     puppetdb: 'PuppetDB',
     puppetserver: 'Puppetserver',
     hiera: 'Hiera',
+    ssh: 'SSH',
   };
 
   const label = $derived(integrationLabels[integration]);

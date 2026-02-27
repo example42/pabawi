@@ -74,12 +74,16 @@ export class StreamingExecutionManager {
   private executionTracking: Map<string, ExecutionTracking>;
   private config: StreamingConfig;
   private logger: LoggerService;
+  /** Track SSE connection count per client IP to prevent resource exhaustion */
+  private connectionCountByIp: Map<string, number>;
+  private readonly maxConnectionsPerIp = 10;
 
   constructor(config: StreamingConfig) {
     this.subscribers = new Map();
     this.heartbeatInterval = null;
     this.buffers = new Map();
     this.executionTracking = new Map();
+    this.connectionCountByIp = new Map();
     this.config = config;
     this.logger = new LoggerService();
     this.startHeartbeat();
@@ -144,8 +148,22 @@ export class StreamingExecutionManager {
    *
    * @param executionId - Unique execution identifier
    * @param response - Express response object for SSE
+   * @returns true if subscribed, false if connection limit exceeded
    */
-  public subscribe(executionId: string, response: Response): void {
+  public subscribe(executionId: string, response: Response): boolean {
+    // Enforce per-IP SSE connection limit to prevent resource exhaustion
+    const clientIp = response.req?.ip ?? response.req?.socket?.remoteAddress ?? 'unknown';
+    const currentCount = this.connectionCountByIp.get(clientIp) ?? 0;
+    if (currentCount >= this.maxConnectionsPerIp) {
+      this.logger.warn(`SSE connection limit exceeded for IP ${clientIp}`, {
+        component: "StreamingExecutionManager",
+        operation: "subscribe",
+        metadata: { clientIp, currentCount, maxConnectionsPerIp: this.maxConnectionsPerIp },
+      });
+      return false;
+    }
+    this.connectionCountByIp.set(clientIp, currentCount + 1);
+
     // Set up SSE headers
     response.setHeader("Content-Type", "text/event-stream");
     response.setHeader("Cache-Control", "no-cache");
@@ -187,6 +205,8 @@ export class StreamingExecutionManager {
       timestamp: new Date().toISOString(),
       data: { message: "Connected to execution stream" },
     });
+
+    return true;
   }
 
   /**
@@ -199,6 +219,15 @@ export class StreamingExecutionManager {
     const subscribers = this.subscribers.get(executionId);
     if (!subscribers) {
       return;
+    }
+
+    // Decrement per-IP connection counter
+    const clientIp = response.req?.ip ?? response.req?.socket?.remoteAddress ?? 'unknown';
+    const currentCount = this.connectionCountByIp.get(clientIp) ?? 0;
+    if (currentCount > 1) {
+      this.connectionCountByIp.set(clientIp, currentCount - 1);
+    } else {
+      this.connectionCountByIp.delete(clientIp);
     }
 
     // Find and remove subscriber

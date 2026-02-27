@@ -28,8 +28,8 @@ docker run -d \
   -p 127.0.0.1:3000:3000 \
   -v $(pwd)/bolt-project:/bolt-project:ro \
   -v $(pwd)/data:/data \
-  -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false \
-  -e BOLT_COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]' \
+  -e COMMAND_WHITELIST_ALLOW_ALL=false \
+  -e COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]' \
   pabawi:latest
 ```
 
@@ -391,8 +391,8 @@ services:
       - LOG_LEVEL=info
       
       # Security
-      - BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-      - BOLT_COMMAND_WHITELIST=["ls","pwd","whoami","uptime"]
+      - COMMAND_WHITELIST_ALLOW_ALL=false
+      - COMMAND_WHITELIST=["ls","pwd","whoami","uptime"]
       
       # PuppetDB Integration
       - PUPPETDB_ENABLED=${PUPPETDB_ENABLED:-false}

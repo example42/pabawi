@@ -32,6 +32,7 @@ export { default as PuppetRunInterface } from "./PuppetRunInterface.svelte";
 export { default as PuppetserverSetupGuide } from "./PuppetserverSetupGuide.svelte";
 export { default as PuppetdbSetupGuide } from "./PuppetdbSetupGuide.svelte";
 export { default as BoltSetupGuide } from "./BoltSetupGuide.svelte";
+export { default as SSHSetupGuide } from "./SSHSetupGuide.svelte";
 export { default as RealtimeOutputViewer } from "./RealtimeOutputViewer.svelte";
 export { default as ReExecutionButton } from "./ReExecutionButton.svelte";
 export { default as ReportViewer } from "./ReportViewer.svelte";

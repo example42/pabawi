@@ -1,0 +1,27 @@
+# Pabawi Demo — Hiera 5 Configuration
+# https://www.puppet.com/docs/puppet/latest/hiera_config_yaml_5.html
+---
+version: 5
+
+defaults:
+  datadir: data
+  data_hash: yaml_data
+
+hierarchy:
+  - name: "Per-node data"
+    path: "nodes/%{trusted.certname}.yaml"
+
+  - name: "Per-role data"
+    path: "roles/%{facts.role}.yaml"
+
+  - name: "Per-datacenter data"
+    path: "datacenters/%{facts.datacenter}.yaml"
+
+  - name: "Per-OS family"
+    path: "os/%{facts.os.family}.yaml"
+
+  - name: "Per-environment data"
+    path: "environments/%{environment}.yaml"
+
+  - name: "Common defaults"
+    path: "common.yaml"

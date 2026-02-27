@@ -9,7 +9,7 @@
     parameters?: Record<string, unknown>;
     status: 'running' | 'success' | 'failed' | 'partial';
     command?: string;
-    executionTool?: 'bolt' | 'ansible';
+    executionTool?: 'bolt' | 'ansible' | 'ssh';
   }
 
   interface Props {

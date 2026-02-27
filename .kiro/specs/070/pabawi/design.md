@@ -966,8 +966,8 @@ CMD ["node", "dist/server.js"]
 ```bash
 PORT=3000
 BOLT_PROJECT_PATH=/bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST='["ls","pwd","whoami"]'
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST='["ls","pwd","whoami"]'
 BOLT_EXECUTION_TIMEOUT=300000
 LOG_LEVEL=info
 DATABASE_PATH=/data/executions.db
@@ -985,7 +985,7 @@ docker run -d \
   -p 3000:3000 \
   -v /path/to/bolt-project:/bolt-project:ro \
   -v bolt-data:/data \
-  -e BOLT_COMMAND_WHITELIST_ALLOW_ALL=false \
+  -e COMMAND_WHITELIST_ALLOW_ALL=false \
   bolt-web-interface:0.1.0
 ```
 

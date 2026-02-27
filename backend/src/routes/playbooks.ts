@@ -8,8 +8,22 @@ import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 
+/**
+ * Regex for safe playbook paths:
+ * - Must be relative (no leading /)
+ * - No path traversal (..)
+ * - Alphanumeric, hyphens, underscores, slashes, dots only
+ * - Must end in .yml or .yaml
+ */
+const SAFE_PLAYBOOK_PATH_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_\-/.]*\.ya?ml$/;
+
 const PlaybookExecutionBodySchema = z.object({
-  playbookPath: z.string().min(1, "Playbook path is required"),
+  playbookPath: z.string()
+    .min(1, "Playbook path is required")
+    .max(500, "Playbook path too long")
+    .regex(SAFE_PLAYBOOK_PATH_PATTERN, "Playbook path contains invalid characters or must end in .yml/.yaml")
+    .refine((p) => !p.includes(".."), { message: "Path traversal sequences (..) are not allowed" })
+    .refine((p) => !p.startsWith("/"), { message: "Absolute paths are not allowed" }),
   extraVars: z.record(z.unknown()).optional(),
   expertMode: z.boolean().optional(),
   tool: z.enum(["ansible"]).optional(),

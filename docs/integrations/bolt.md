@@ -91,9 +91,9 @@ The command whitelist is a critical security feature that controls which ad-hoc 
 Only allow specific, exact commands.
 
 ```bash
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
-BOLT_COMMAND_WHITELIST='["uptime", "df -h", "free -m"]'
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST_MATCH_MODE=exact
+COMMAND_WHITELIST='["uptime", "df -h", "free -m"]'
 ```
 
 #### 2. Flexible Mode
@@ -101,9 +101,9 @@ BOLT_COMMAND_WHITELIST='["uptime", "df -h", "free -m"]'
 Allow commands that start with a specific prefix (allows arguments).
 
 ```bash
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
-BOLT_COMMAND_WHITELIST='["systemctl status", "cat /var/log/"]'
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST_MATCH_MODE=prefix
+COMMAND_WHITELIST='["systemctl status", "cat /var/log/"]'
 # Allows: "systemctl status nginx", "cat /var/log/syslog"
 ```
 
@@ -112,7 +112,7 @@ BOLT_COMMAND_WHITELIST='["systemctl status", "cat /var/log/"]'
 Allow all commands. **Do not use in production.**
 
 ```bash
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
+COMMAND_WHITELIST_ALLOW_ALL=true
 ```
 
 ### Whitelist Examples
@@ -120,7 +120,7 @@ BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
 #### System Monitoring
 
 ```bash
-BOLT_COMMAND_WHITELIST='[
+COMMAND_WHITELIST='[
   "uptime",
   "df -h",
   "free -m",
@@ -129,38 +129,38 @@ BOLT_COMMAND_WHITELIST='[
   "netstat -tulpn",
   "ss -tulpn"
 ]'
-BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
+COMMAND_WHITELIST_MATCH_MODE=exact
 ```
 
 #### Log Viewing
 
 ```bash
-BOLT_COMMAND_WHITELIST='[
+COMMAND_WHITELIST='[
   "cat /var/log",
   "tail /var/log",
   "grep",
   "journalctl"
 ]'
-BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
+COMMAND_WHITELIST_MATCH_MODE=prefix
 ```
 
 #### Service Management
 
 ```bash
-BOLT_COMMAND_WHITELIST='[
+COMMAND_WHITELIST='[
   "systemctl status",
   "systemctl restart",
   "systemctl start",
   "systemctl stop",
   "service"
 ]'
-BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
+COMMAND_WHITELIST_MATCH_MODE=prefix
 ```
 
 #### Web Server Operations
 
 ```bash
-BOLT_COMMAND_WHITELIST='[
+COMMAND_WHITELIST='[
   "nginx -t",
   "nginx -s reload",
   "apache2ctl configtest",
@@ -168,7 +168,7 @@ BOLT_COMMAND_WHITELIST='[
   "curl -I",
   "wget --spider"
 ]'
-BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
+COMMAND_WHITELIST_MATCH_MODE=exact
 ```
 
 ### Best Practices

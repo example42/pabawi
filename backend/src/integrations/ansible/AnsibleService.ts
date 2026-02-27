@@ -344,6 +344,118 @@ export class AnsibleService {
   }
 
   /**
+   * Get groups from Ansible inventory
+   * Parses the inventory and returns groups with their member nodes
+   */
+  public async getGroups(): Promise<Array<{
+    id: string;
+    name: string;
+    source: string;
+    sources: string[];
+    linked: boolean;
+    nodes: string[];
+    metadata?: {
+      description?: string;
+      variables?: Record<string, unknown>;
+      hierarchy?: string[];
+      [key: string]: unknown;
+    };
+  }>> {
+    const args = [
+      "-i",
+      this.inventoryPath,
+      "--list",
+    ];
+
+    try {
+      const exec = await this.executeCommand("ansible-inventory", args);
+
+      if (!exec.success) {
+        throw new Error(`Failed to get Ansible inventory: ${exec.stderr || exec.stdout}`);
+      }
+
+      // Parse JSON output from ansible-inventory
+      const inventoryData = JSON.parse(exec.stdout) as Record<string, unknown>;
+      const groups: Array<{
+        id: string;
+        name: string;
+        source: string;
+        sources: string[];
+        linked: boolean;
+        nodes: string[];
+        metadata?: {
+          description?: string;
+          variables?: Record<string, unknown>;
+          hierarchy?: string[];
+          [key: string]: unknown;
+        };
+      }> = [];
+
+      // Extract groups from inventory structure
+      // ansible-inventory --list returns: { _meta: {...}, groupName: { hosts: [...], children: [...], vars: {...} } }
+      for (const [groupName, groupData] of Object.entries(inventoryData)) {
+        // Skip special _meta key and 'all' and 'ungrouped' groups
+        if (groupName === "_meta" || groupName === "all" || groupName === "ungrouped") {
+          continue;
+        }
+
+        if (typeof groupData !== "object" || groupData === null) {
+          continue;
+        }
+
+        const group = groupData as {
+          hosts?: string[];
+          children?: string[];
+          vars?: Record<string, unknown>;
+        };
+
+        // Get hosts (direct members)
+        const hosts = Array.isArray(group.hosts) ? group.hosts : [];
+
+        // Get children groups (for hierarchy)
+        const children = Array.isArray(group.children) ? group.children : [];
+
+        // Get group variables
+        const vars = typeof group.vars === "object" && group.vars !== null ? group.vars : undefined;
+
+        // Build metadata
+        const metadata: {
+          description?: string;
+          variables?: Record<string, unknown>;
+          hierarchy?: string[];
+          [key: string]: unknown;
+        } = {};
+
+        if (vars && Object.keys(vars).length > 0) {
+          metadata.variables = vars as Record<string, unknown>;
+        }
+
+        if (children.length > 0) {
+          metadata.hierarchy = children;
+        }
+
+        // Create group entry
+        groups.push({
+          id: `ansible:${groupName}`,
+          name: groupName,
+          source: "ansible",
+          sources: ["ansible"],
+          linked: false,
+          nodes: hosts, // Use hostname directly to match node IDs from getInventory
+          metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+        });
+      }
+
+      return groups;
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new Error(`Failed to parse Ansible inventory groups: ${error.message}`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Get inventory from Ansible using ansible-inventory command
    * Parses the inventory and returns nodes in Bolt-compatible format
    */

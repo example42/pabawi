@@ -79,6 +79,7 @@
   let integrations = $state<IntegrationStatusData[]>([]);
   let integrationsLoading = $state(true);
   let integrationsError = $state<string | null>(null);
+  let showIntegrations = $state(false);
 
   let executions = $state<ExecutionRecord[]>([]);
   let executionsLoading = $state(true);
@@ -494,116 +495,177 @@
 </svelte:head>
 
 <div class="container mx-auto px-4 py-8">
-  <!-- Welcome Section -->
-  <div class="mb-12 text-center">
-    <div class="flex justify-center mb-6">
-      <img
-        src="/favicon/web-app-manifest-512x512.png"
-        alt="Pabawi Logo"
-        class="h-24 w-24"
-      />
-    </div>
-    <h1 class="text-5xl font-bold text-gray-900 dark:text-white mb-4">
-      Welcome to Pabawi Zero
-    </h1>
-    <p class="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-      Puppet Ansible Bolt Awesome Web Interface
-    </p>
-  </div>
-
-  <!-- Quick Stats -->
-  <div class="grid gap-6 mb-12 md:grid-cols-4">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Nodes</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {loading ? '...' : nodes.length}
-          </p>
+  <!-- Welcome Section with Logo and Stats -->
+  <div class="mb-12">
+    <div class="flex flex-col lg:flex-row gap-8 items-start">
+      <!-- Logo and Welcome Text -->
+      <div class="flex-shrink-0">
+        <div class="flex items-start gap-6">
+          <img
+            src="/favicon/web-app-manifest-512x512.png"
+            alt="Pabawi Logo"
+            class="h-24 w-24"
+          />
+          <div>
+            <h1 class="text-5xl font-bold text-gray-900 dark:text-white mb-4">
+              Pabawi
+            </h1>
+            <p class="text-xl text-gray-600 dark:text-gray-400">
+              Your servers. Your eyes. Your actions.
+            </p>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Integrations</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {integrationsLoading ? '...' : integrations.filter(i => i.status === 'connected').length} / {integrations.length}
-          </p>
-        </div>
-      </div>
-    </div>
+      <!-- Quick Stats - Clickable -->
+      <div class="flex-1 grid gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+        <button
+          type="button"
+          onclick={() => {
+            const element = document.getElementById('inventory-section');
+            element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-blue-400 dark:hover:border-blue-600 transition-all text-left"
+        >
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Nodes</p>
+              <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                {loading ? '...' : nodes.length}
+              </p>
+            </div>
+          </div>
+        </button>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Executions</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {executionsLoading ? '...' : executionsSummary?.total ?? 0}
-          </p>
-        </div>
-      </div>
-    </div>
+        <button
+          type="button"
+          onclick={() => {
+            showIntegrations = !showIntegrations;
+          }}
+          class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-green-400 dark:hover:border-green-600 transition-all text-left {showIntegrations ? 'ring-2 ring-green-400 dark:ring-green-600' : ''}"
+        >
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Integrations</p>
+              <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                {integrationsLoading ? '...' : integrations.filter(i => i.status === 'connected').length} / {integrations.length}
+              </p>
+            </div>
+          </div>
+        </button>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Success Rate</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {#if executionsLoading}
-              ...
-            {:else if executionsSummary && executionsSummary.total > 0}
-              {Math.round((executionsSummary.success / executionsSummary.total) * 100)}%
-            {:else}
-              N/A
-            {/if}
-          </p>
-        </div>
+        <button
+          type="button"
+          onclick={() => {
+            const element = document.getElementById('executions-section');
+            element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-purple-400 dark:hover:border-purple-600 transition-all text-left"
+        >
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Actions</p>
+              <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                {executionsLoading ? '...' : executionsSummary?.total ?? 0}
+              </p>
+            </div>
+          </div>
+        </button>
+
+        {#if isPuppetDBActive}
+          <button
+            type="button"
+            onclick={() => {
+              const element = document.getElementById('puppet-reports-section');
+              element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-orange-400 dark:hover:border-orange-600 transition-all text-left"
+          >
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Puppet Reports</p>
+                <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {puppetReportsLoading ? '...' : puppetReports.total}
+                </p>
+              </div>
+            </div>
+          </button>
+        {:else}
+          <button
+            type="button"
+            onclick={() => {
+              const element = document.getElementById('executions-section');
+              element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-emerald-400 dark:hover:border-emerald-600 transition-all text-left"
+          >
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Success Rate</p>
+                <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {#if executionsLoading}
+                    ...
+                  {:else if executionsSummary && executionsSummary.total > 0}
+                    {Math.round((executionsSummary.success / executionsSummary.total) * 100)}%
+                  {:else}
+                    N/A
+                  {/if}
+                </p>
+              </div>
+            </div>
+          </button>
+        {/if}
       </div>
     </div>
   </div>
 
   <!-- Integration Status Section -->
-  <div class="mb-12">
-    <IntegrationStatus
-      {integrations}
-      loading={integrationsLoading}
-      onRefresh={handleRefreshIntegrations}
-    />
-    {#if integrationsError}
-      <div class="mt-4">
-        <ErrorAlert
-          message="Failed to load integration status"
-          details={integrationsError}
-          onRetry={() => fetchIntegrationStatus(true)}
-        />
-      </div>
-    {/if}
-  </div>
+  {#if showIntegrations}
+    <div id="integrations-section" class="mb-12 scroll-mt-8">
+      <IntegrationStatus
+        {integrations}
+        loading={integrationsLoading}
+        onRefresh={handleRefreshIntegrations}
+      />
+      {#if integrationsError}
+        <div class="mt-4">
+          <ErrorAlert
+            message="Failed to load integration status"
+            details={integrationsError}
+            onRetry={() => fetchIntegrationStatus(true)}
+          />
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Inventory List Section -->
-  <div class="mb-12">
+  <div id="inventory-section" class="mb-12 scroll-mt-8">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
@@ -668,23 +730,28 @@
 
         <!-- Filters -->
         <div class="flex items-center gap-4 flex-wrap">
-          <!-- Source Filter -->
+          <!-- Source Filter Buttons -->
           <div class="flex items-center gap-2">
-            <label for="home-source-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Source:
-            </label>
-            <select
-              id="home-source-filter"
-              bind:value={homeSourceFilter}
-              class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-            >
-              <option value="all">All ({nodes.length})</option>
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Source:</span>
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                onclick={() => homeSourceFilter = 'all'}
+                class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors {homeSourceFilter === 'all' ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+              >
+                All ({nodes.length})
+              </button>
               {#each Object.keys(homeNodeCountsBySource).sort() as source}
-                <option value={source}>
-                  {getSourceDisplayName(source)} ({homeNodeCountsBySource[source]})
-                </option>
+                <button
+                  type="button"
+                  onclick={() => homeSourceFilter = homeSourceFilter === source ? 'all' : source}
+                  class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors {homeSourceFilter === source ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-900' : 'hover:opacity-80'}"
+                >
+                  <IntegrationBadge integration={source} variant="badge" size="sm" />
+                  <span class="text-gray-600 dark:text-gray-300">({homeNodeCountsBySource[source]})</span>
+                </button>
               {/each}
-            </select>
+            </div>
           </div>
 
           <!-- Transport Filter -->
@@ -821,11 +888,11 @@
   </div>
 
   <!-- Recent Executions -->
-  <div class="mb-12">
+  <div id="executions-section" class="mb-12 scroll-mt-8">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Recent Executions
+          Recent Actions
         </h2>
         <IntegrationBadge integration="bolt" variant="badge" size="sm" />
       </div>
@@ -872,7 +939,7 @@
 
   <!-- Puppet Reports (only show if PuppetDB is active, list mode with changes only) -->
   {#if isPuppetDBActive}
-    <div class="mb-12">
+    <div id="puppet-reports-section" class="mb-12 scroll-mt-8">
       <div class="flex items-center justify-between mb-6">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
           Puppet Reports

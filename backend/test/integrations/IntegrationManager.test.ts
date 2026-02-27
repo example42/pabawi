@@ -23,13 +23,16 @@ class MockInformationSource
   implements InformationSourcePlugin
 {
   public nodes: Node[] = [];
+  public groups: import("../../src/integrations/types").NodeGroup[] = [];
   public facts = new Map<string, Facts>();
   public shouldFailInventory = false;
   public shouldFailFacts = false;
+  public shouldFailGroups = false;
 
-  constructor(name: string, nodes: Node[] = [], logger: LoggerService) {
+  constructor(name: string, nodes: Node[] = [], logger: LoggerService, groups: import("../../src/integrations/types").NodeGroup[] = []) {
     super(name, "information", logger);
     this.nodes = nodes;
+    this.groups = groups;
   }
 
   protected async performInitialization(): Promise<void> {
@@ -62,6 +65,13 @@ class MockInformationSource
       throw new Error(`Facts not found for node ${nodeId}`);
     }
     return facts;
+  }
+
+  async getGroups(): Promise<import("../../src/integrations/types").NodeGroup[]> {
+    if (this.shouldFailGroups) {
+      throw new Error("Failed to get groups");
+    }
+    return this.groups;
   }
 
   async getNodeData(nodeId: string, dataType: string): Promise<unknown> {
@@ -411,6 +421,359 @@ describe("IntegrationManager", () => {
       expect(inventory.sources.source1.status).toBe("healthy");
     });
 
+    it("should aggregate groups from multiple sources", async () => {
+      const nodes1: Node[] = [
+        {
+          id: "node1",
+          name: "node1",
+          uri: "ssh://node1",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      const groups1: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source1:web-servers",
+          name: "web-servers",
+          source: "source1",
+          sources: ["source1"],
+          linked: false,
+          nodes: ["node1"],
+        },
+      ];
+
+      const nodes2: Node[] = [
+        {
+          id: "node2",
+          name: "node2",
+          uri: "ssh://node2",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      const groups2: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source2:db-servers",
+          name: "db-servers",
+          source: "source2",
+          sources: ["source2"],
+          linked: false,
+          nodes: ["node2"],
+        },
+      ];
+
+      const source1 = new MockInformationSource("source1", nodes1, logger, groups1);
+      const source2 = new MockInformationSource("source2", nodes2, logger, groups2);
+
+      manager.registerPlugin(source1, {
+        enabled: true,
+        name: "source1",
+        type: "information",
+        config: {},
+      });
+
+      manager.registerPlugin(source2, {
+        enabled: true,
+        name: "source2",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      const inventory = await manager.getAggregatedInventory();
+
+      expect(inventory.nodes).toHaveLength(2);
+      expect(inventory.groups).toHaveLength(2);
+      expect(inventory.sources.source1.groupCount).toBe(1);
+      expect(inventory.sources.source2.groupCount).toBe(1);
+      expect(inventory.groups[0].name).toBe("web-servers");
+      expect(inventory.groups[1].name).toBe("db-servers");
+    });
+
+    it("should handle group fetching failures gracefully", async () => {
+      const nodes1: Node[] = [
+        {
+          id: "node1",
+          name: "node1",
+          uri: "ssh://node1",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      const nodes2: Node[] = [
+        {
+          id: "node2",
+          name: "node2",
+          uri: "ssh://node2",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "good:web-servers",
+          name: "web-servers",
+          source: "good",
+          sources: ["good"],
+          linked: false,
+          nodes: ["node1"],
+        },
+      ];
+
+      const goodSource = new MockInformationSource("good", nodes1, logger, groups);
+      const badSource = new MockInformationSource("bad", nodes2, logger);
+      badSource.shouldFailGroups = true;
+
+      manager.registerPlugin(goodSource, {
+        enabled: true,
+        name: "good",
+        type: "information",
+        config: {},
+      });
+
+      manager.registerPlugin(badSource, {
+        enabled: true,
+        name: "bad",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      const inventory = await manager.getAggregatedInventory();
+
+      // Should still get nodes from both sources
+      expect(inventory.nodes).toHaveLength(2);
+      // Should get groups from good source, bad source returns empty array on error
+      expect(inventory.groups).toHaveLength(1);
+      expect(inventory.groups[0].name).toBe("web-servers");
+      expect(inventory.sources.good.groupCount).toBe(1);
+      expect(inventory.sources.bad.groupCount).toBe(0);
+    });
+
+    it("should link groups with same name across multiple sources", async () => {
+      const nodes1: Node[] = [
+        {
+          id: "node1",
+          name: "node1",
+          uri: "ssh://node1",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      const nodes2: Node[] = [
+        {
+          id: "node2",
+          name: "node2",
+          uri: "ssh://node2",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      // Both sources have a group with the same name "web-servers"
+      const groups1: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source1:web-servers",
+          name: "web-servers",
+          source: "source1",
+          sources: ["source1"],
+          linked: false,
+          nodes: ["node1"],
+          metadata: {
+            description: "Web servers from source1",
+            env: "production",
+          },
+        },
+      ];
+
+      const groups2: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source2:web-servers",
+          name: "web-servers",
+          source: "source2",
+          sources: ["source2"],
+          linked: false,
+          nodes: ["node2"],
+          metadata: {
+            description: "Web servers from source2",
+            region: "us-west",
+          },
+        },
+      ];
+
+      const source1 = new MockInformationSource("source1", nodes1, logger, groups1);
+      const source2 = new MockInformationSource("source2", nodes2, logger, groups2);
+
+      manager.registerPlugin(source1, {
+        enabled: true,
+        name: "source1",
+        type: "information",
+        config: {},
+      });
+
+      manager.registerPlugin(source2, {
+        enabled: true,
+        name: "source2",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      const inventory = await manager.getAggregatedInventory();
+
+      // Should have 1 linked group instead of 2 separate groups
+      expect(inventory.groups).toHaveLength(1);
+
+      const linkedGroup = inventory.groups[0];
+      expect(linkedGroup.name).toBe("web-servers");
+      expect(linkedGroup.linked).toBe(true);
+      expect(linkedGroup.sources).toEqual(["source1", "source2"]);
+      expect(linkedGroup.id).toBe("linked:web-servers");
+
+      // Should have both nodes deduplicated
+      expect(linkedGroup.nodes).toHaveLength(2);
+      expect(linkedGroup.nodes).toContain("node1");
+      expect(linkedGroup.nodes).toContain("node2");
+
+      // Should merge metadata from both sources
+      expect(linkedGroup.metadata).toBeDefined();
+      expect(linkedGroup.metadata?.env).toBe("production");
+      expect(linkedGroup.metadata?.region).toBe("us-west");
+    });
+
+    it("should deduplicate node IDs when linking groups", async () => {
+      const nodes: Node[] = [
+        {
+          id: "node1",
+          name: "node1",
+          uri: "ssh://node1",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      // Both sources have the same group with overlapping nodes
+      const groups1: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source1:web-servers",
+          name: "web-servers",
+          source: "source1",
+          sources: ["source1"],
+          linked: false,
+          nodes: ["node1", "node2"],
+        },
+      ];
+
+      const groups2: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source2:web-servers",
+          name: "web-servers",
+          source: "source2",
+          sources: ["source2"],
+          linked: false,
+          nodes: ["node2", "node3"], // node2 is in both
+        },
+      ];
+
+      const source1 = new MockInformationSource("source1", nodes, logger, groups1);
+      const source2 = new MockInformationSource("source2", nodes, logger, groups2);
+
+      manager.registerPlugin(source1, {
+        enabled: true,
+        name: "source1",
+        type: "information",
+        config: {},
+      });
+
+      manager.registerPlugin(source2, {
+        enabled: true,
+        name: "source2",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      const inventory = await manager.getAggregatedInventory();
+
+      expect(inventory.groups).toHaveLength(1);
+
+      const linkedGroup = inventory.groups[0];
+      // Should have 3 unique nodes (node1, node2, node3)
+      expect(linkedGroup.nodes).toHaveLength(3);
+      expect(linkedGroup.nodes).toContain("node1");
+      expect(linkedGroup.nodes).toContain("node2");
+      expect(linkedGroup.nodes).toContain("node3");
+    });
+
+    it("should not link groups with different names", async () => {
+      const nodes: Node[] = [
+        {
+          id: "node1",
+          name: "node1",
+          uri: "ssh://node1",
+          transport: "ssh",
+          config: {},
+        },
+      ];
+
+      const groups1: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source1:web-servers",
+          name: "web-servers",
+          source: "source1",
+          sources: ["source1"],
+          linked: false,
+          nodes: ["node1"],
+        },
+      ];
+
+      const groups2: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "source2:db-servers",
+          name: "db-servers",
+          source: "source2",
+          sources: ["source2"],
+          linked: false,
+          nodes: ["node2"],
+        },
+      ];
+
+      const source1 = new MockInformationSource("source1", nodes, logger, groups1);
+      const source2 = new MockInformationSource("source2", nodes, logger, groups2);
+
+      manager.registerPlugin(source1, {
+        enabled: true,
+        name: "source1",
+        type: "information",
+        config: {},
+      });
+
+      manager.registerPlugin(source2, {
+        enabled: true,
+        name: "source2",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      const inventory = await manager.getAggregatedInventory();
+
+      // Should have 2 separate groups
+      expect(inventory.groups).toHaveLength(2);
+      expect(inventory.groups[0].linked).toBe(false);
+      expect(inventory.groups[1].linked).toBe(false);
+    });
+
     it("should handle source failures gracefully", async () => {
       const nodes: Node[] = [
         {
@@ -729,6 +1092,640 @@ describe("IntegrationManager", () => {
 
       // Should not throw
       expect(true).toBe(true);
+    });
+  });
+
+  describe("group validation", () => {
+    it("should reject groups missing required field 'id'", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const invalidGroup = {
+        // Missing id
+        name: "test-group",
+        source: "test-source",
+        sources: ["test-source"],
+        linked: false,
+        nodes: ["node1"],
+      } as import("../../src/integrations/types").NodeGroup;
+
+      const source = new MockInformationSource("test-source", nodes, logger, [invalidGroup]);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Group should be rejected
+      expect(inventory.groups).toHaveLength(0);
+      expect(inventory.nodes).toHaveLength(1);
+    });
+
+    it("should reject groups missing required field 'name'", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const invalidGroup = {
+        id: "test-source:group1",
+        // Missing name
+        source: "test-source",
+        sources: ["test-source"],
+        linked: false,
+        nodes: ["node1"],
+      } as import("../../src/integrations/types").NodeGroup;
+
+      const source = new MockInformationSource("test-source", nodes, logger, [invalidGroup]);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Group should be rejected
+      expect(inventory.groups).toHaveLength(0);
+    });
+
+    it("should reject groups missing required field 'nodes'", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const invalidGroup = {
+        id: "test-source:group1",
+        name: "test-group",
+        source: "test-source",
+        sources: ["test-source"],
+        linked: false,
+        // Missing nodes array
+      } as import("../../src/integrations/types").NodeGroup;
+
+      const source = new MockInformationSource("test-source", nodes, logger, [invalidGroup]);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Group should be rejected
+      expect(inventory.groups).toHaveLength(0);
+    });
+
+    it("should reject duplicate group IDs within same source", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+        { id: "node2", name: "node2", uri: "ssh://node2" },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "test-source:group1",
+          name: "group1",
+          source: "test-source",
+          sources: ["test-source"],
+          linked: false,
+          nodes: ["node1"],
+        },
+        {
+          id: "test-source:group1", // Duplicate ID
+          name: "group1-duplicate",
+          source: "test-source",
+          sources: ["test-source"],
+          linked: false,
+          nodes: ["node2"],
+        },
+      ];
+
+      const source = new MockInformationSource("test-source", nodes, logger, groups);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Only first group should be kept, duplicate rejected
+      expect(inventory.groups).toHaveLength(1);
+      expect(inventory.groups[0].id).toBe("test-source:group1");
+      expect(inventory.groups[0].name).toBe("group1");
+    });
+
+    it("should sanitize group names with HTML tags", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "test-source:group1",
+          name: "<script>alert('xss')</script>malicious-group",
+          source: "test-source",
+          sources: ["test-source"],
+          linked: false,
+          nodes: ["node1"],
+        },
+      ];
+
+      const source = new MockInformationSource("test-source", nodes, logger, groups);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Group should be included but name sanitized
+      expect(inventory.groups).toHaveLength(1);
+      expect(inventory.groups[0].name).not.toContain("<script>");
+      expect(inventory.groups[0].name).not.toContain("alert");
+      expect(inventory.groups[0].name).not.toContain("(");
+      expect(inventory.groups[0].name).not.toContain(")");
+      // After sanitization: removes <script>, alert, (), and 'xss' quotes
+      expect(inventory.groups[0].name).toBe("xssmalicious-group");
+    });
+
+    it("should sanitize group names with SQL injection patterns", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "test-source:group1",
+          name: "group'; DROP TABLE users; --",
+          source: "test-source",
+          sources: ["test-source"],
+          linked: false,
+          nodes: ["node1"],
+        },
+      ];
+
+      const source = new MockInformationSource("test-source", nodes, logger, groups);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Group should be included but name sanitized
+      expect(inventory.groups).toHaveLength(1);
+      expect(inventory.groups[0].name).not.toContain("'");
+      expect(inventory.groups[0].name).not.toContain(";");
+      expect(inventory.groups[0].name).not.toContain("--");
+    });
+
+    it("should include groups with invalid node references but log warning", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "test-source:group1",
+          name: "test-group",
+          source: "test-source",
+          sources: ["test-source"],
+          linked: false,
+          nodes: ["node1", "non-existent-node", "another-missing-node"],
+        },
+      ];
+
+      const source = new MockInformationSource("test-source", nodes, logger, groups);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Group should still be included despite invalid references
+      expect(inventory.groups).toHaveLength(1);
+      expect(inventory.groups[0].nodes).toEqual(["node1", "non-existent-node", "another-missing-node"]);
+    });
+
+    it("should accept valid groups with all required fields", async () => {
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+        { id: "node2", name: "node2", uri: "ssh://node2" },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "test-source:group1",
+          name: "valid-group",
+          source: "test-source",
+          sources: ["test-source"],
+          linked: false,
+          nodes: ["node1", "node2"],
+          metadata: {
+            description: "A valid test group",
+          },
+        },
+      ];
+
+      const source = new MockInformationSource("test-source", nodes, logger, groups);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test-source",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Valid group should be included
+      expect(inventory.groups).toHaveLength(1);
+      expect(inventory.groups[0].id).toBe("test-source:group1");
+      expect(inventory.groups[0].name).toBe("valid-group");
+      expect(inventory.groups[0].nodes).toEqual(["node1", "node2"]);
+      expect(inventory.groups[0].metadata?.description).toBe("A valid test group");
+    });
+
+    it("should validate groups from multiple sources independently", async () => {
+      const nodes1: Node[] = [
+        { id: "source1:node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const nodes2: Node[] = [
+        { id: "source2:node2", name: "node2", uri: "ssh://node2" },
+      ];
+
+      const validGroup: import("../../src/integrations/types").NodeGroup = {
+        id: "source1:group1",
+        name: "valid-group",
+        source: "source1",
+        sources: ["source1"],
+        linked: false,
+        nodes: ["source1:node1"],
+      };
+
+      const invalidGroup = {
+        // Missing id
+        name: "invalid-group",
+        source: "source2",
+        sources: ["source2"],
+        linked: false,
+        nodes: ["source2:node2"],
+      } as import("../../src/integrations/types").NodeGroup;
+
+      const source1 = new MockInformationSource("source1", nodes1, logger, [validGroup]);
+      const source2 = new MockInformationSource("source2", nodes2, logger, [invalidGroup]);
+
+      manager.registerPlugin(source1, {
+        enabled: true,
+        name: "source1",
+        type: "information",
+        config: {},
+      });
+
+      manager.registerPlugin(source2, {
+        enabled: true,
+        name: "source2",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+      const inventory = await manager.getAggregatedInventory();
+
+      // Only valid group from source1 should be included
+      expect(inventory.groups).toHaveLength(1);
+      expect(inventory.groups[0].source).toBe("source1");
+      expect(inventory.nodes).toHaveLength(2); // Both nodes should be present
+    });
+  });
+
+  describe("Inventory Caching", () => {
+    it("should cache inventory results and return cached data on subsequent calls", async () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({
+        inventoryCacheTTL: 5000, // 5 seconds
+        logger,
+      });
+
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "group1",
+          name: "group1",
+          source: "test",
+          sources: ["test"],
+          linked: false,
+          nodes: ["node1"],
+        },
+      ];
+
+      let callCount = 0;
+      const source = new MockInformationSource("test", nodes, logger, groups);
+
+      // Override getInventory to track calls
+      const originalGetInventory = source.getInventory.bind(source);
+      source.getInventory = async () => {
+        callCount++;
+        return originalGetInventory();
+      };
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // First call - should fetch from source
+      const inventory1 = await manager.getAggregatedInventory();
+      expect(callCount).toBe(1);
+      expect(inventory1.nodes).toHaveLength(1);
+      expect(inventory1.groups).toHaveLength(1);
+
+      // Second call - should return cached data
+      const inventory2 = await manager.getAggregatedInventory();
+      expect(callCount).toBe(1); // Should not increment
+      expect(inventory2.nodes).toHaveLength(1);
+      expect(inventory2.groups).toHaveLength(1);
+
+      // Verify same data returned
+      expect(inventory2).toEqual(inventory1);
+    });
+
+    it("should bypass cache when useCache=false", async () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({
+        inventoryCacheTTL: 5000,
+        logger,
+      });
+
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      let callCount = 0;
+      const source = new MockInformationSource("test", nodes, logger, []);
+
+      const originalGetInventory = source.getInventory.bind(source);
+      source.getInventory = async () => {
+        callCount++;
+        return originalGetInventory();
+      };
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // First call with cache
+      await manager.getAggregatedInventory(true);
+      expect(callCount).toBe(1);
+
+      // Second call bypassing cache
+      await manager.getAggregatedInventory(false);
+      expect(callCount).toBe(2); // Should increment
+
+      // Third call with cache - should use newly cached data
+      await manager.getAggregatedInventory(true);
+      expect(callCount).toBe(2); // Should not increment
+    });
+
+    it("should invalidate cache when clearInventoryCache is called", async () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({
+        inventoryCacheTTL: 5000,
+        logger,
+      });
+
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      let callCount = 0;
+      const source = new MockInformationSource("test", nodes, logger, []);
+
+      const originalGetInventory = source.getInventory.bind(source);
+      source.getInventory = async () => {
+        callCount++;
+        return originalGetInventory();
+      };
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // First call - should fetch from source
+      await manager.getAggregatedInventory();
+      expect(callCount).toBe(1);
+
+      // Second call - should use cache
+      await manager.getAggregatedInventory();
+      expect(callCount).toBe(1);
+
+      // Clear cache
+      manager.clearInventoryCache();
+
+      // Third call - should fetch fresh data
+      await manager.getAggregatedInventory();
+      expect(callCount).toBe(2);
+    });
+
+    it("should expire cache after TTL", async () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({
+        inventoryCacheTTL: 100, // 100ms for fast test
+        logger,
+      });
+
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      let callCount = 0;
+      const source = new MockInformationSource("test", nodes, logger, []);
+
+      const originalGetInventory = source.getInventory.bind(source);
+      source.getInventory = async () => {
+        callCount++;
+        return originalGetInventory();
+      };
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // First call
+      await manager.getAggregatedInventory();
+      expect(callCount).toBe(1);
+
+      // Second call immediately - should use cache
+      await manager.getAggregatedInventory();
+      expect(callCount).toBe(1);
+
+      // Wait for cache to expire
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      // Third call after expiry - should fetch fresh data
+      await manager.getAggregatedInventory();
+      expect(callCount).toBe(2);
+    });
+
+    it("should cache both nodes and groups together", async () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({
+        inventoryCacheTTL: 5000,
+        logger,
+      });
+
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+        { id: "node2", name: "node2", uri: "ssh://node2" },
+      ];
+
+      const groups: import("../../src/integrations/types").NodeGroup[] = [
+        {
+          id: "group1",
+          name: "group1",
+          source: "test",
+          sources: ["test"],
+          linked: false,
+          nodes: ["node1", "node2"],
+        },
+      ];
+
+      let inventoryCallCount = 0;
+      let groupsCallCount = 0;
+
+      const source = new MockInformationSource("test", nodes, logger, groups);
+
+      const originalGetInventory = source.getInventory.bind(source);
+      const originalGetGroups = source.getGroups.bind(source);
+
+      source.getInventory = async () => {
+        inventoryCallCount++;
+        return originalGetInventory();
+      };
+
+      source.getGroups = async () => {
+        groupsCallCount++;
+        return originalGetGroups();
+      };
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // First call - should fetch both nodes and groups
+      const inventory1 = await manager.getAggregatedInventory();
+      expect(inventoryCallCount).toBe(1);
+      expect(groupsCallCount).toBe(1);
+      expect(inventory1.nodes).toHaveLength(2);
+      expect(inventory1.groups).toHaveLength(1);
+
+      // Second call - should use cache for both
+      const inventory2 = await manager.getAggregatedInventory();
+      expect(inventoryCallCount).toBe(1); // Should not increment
+      expect(groupsCallCount).toBe(1); // Should not increment
+      expect(inventory2.nodes).toHaveLength(2);
+      expect(inventory2.groups).toHaveLength(1);
+    });
+
+    it("should clear all caches with clearAllCaches", async () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({
+        inventoryCacheTTL: 5000,
+        healthCheckCacheTTL: 5000,
+        logger,
+      });
+
+      const nodes: Node[] = [
+        { id: "node1", name: "node1", uri: "ssh://node1" },
+      ];
+
+      const source = new MockInformationSource("test", nodes, logger, []);
+
+      manager.registerPlugin(source, {
+        enabled: true,
+        name: "test",
+        type: "information",
+        config: {},
+      });
+
+      await manager.initializePlugins();
+
+      // Populate caches
+      await manager.getAggregatedInventory();
+      await manager.healthCheckAll(false);
+
+      // Verify caches are populated
+      const healthCache1 = manager.getHealthCheckCache();
+      expect(healthCache1.size).toBeGreaterThan(0);
+
+      // Clear all caches
+      manager.clearAllCaches();
+
+      // Verify both caches are cleared
+      const healthCache2 = manager.getHealthCheckCache();
+      expect(healthCache2.size).toBe(0);
+
+      // Inventory cache should be cleared (will fetch fresh on next call)
+      // We can't directly inspect inventoryCache, but we can verify behavior
+      // by checking that the next call fetches fresh data
     });
   });
 });

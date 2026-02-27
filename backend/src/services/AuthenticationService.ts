@@ -4,6 +4,7 @@ import { Database } from 'sqlite3';
 import crypto from 'crypto';
 import { AuditLoggingService } from './AuditLoggingService';
 import { performanceMonitor } from './PerformanceMonitor';
+import { LoggerService } from './LoggerService';
 
 /**
  * Authentication result returned after successful authentication
@@ -81,11 +82,26 @@ export class AuthenticationService {
 
   constructor(db: Database, jwtSecret?: string, auditLogger?: AuditLoggingService) {
     this.db = db;
-    this.jwtSecret = jwtSecret || process.env.JWT_SECRET || this.generateDefaultSecret();
     this.auditLogger = auditLogger;
 
-    if (!jwtSecret && !process.env.JWT_SECRET) {
-      console.warn('WARNING: No JWT_SECRET provided. Using generated secret. This is insecure for production!');
+    const resolvedSecret = jwtSecret || process.env.JWT_SECRET;
+
+    if (!resolvedSecret) {
+      const logger = new LoggerService();
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('FATAL: JWT_SECRET is not set. Refusing to start in production without a stable JWT secret.', {
+          component: 'AuthenticationService',
+          operation: 'constructor',
+        });
+        throw new Error('JWT_SECRET environment variable is required in production. Set it to a random string of at least 32 characters.');
+      }
+      logger.warn('WARNING: No JWT_SECRET provided. Using generated ephemeral secret. All sessions will be invalidated on restart. Set JWT_SECRET for production use.', {
+        component: 'AuthenticationService',
+        operation: 'constructor',
+      });
+      this.jwtSecret = this.generateDefaultSecret();
+    } else {
+      this.jwtSecret = resolvedSecret;
     }
   }
 

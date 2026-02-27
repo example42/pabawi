@@ -8,6 +8,7 @@ import type {
   ExecutionToolPlugin,
   InformationSourcePlugin,
   HealthStatus,
+  NodeGroup,
 } from "../types";
 import type { ExecutionResult, Node, Facts } from "../bolt/types";
 import type { LoggerService } from "../../services/LoggerService";
@@ -40,6 +41,19 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
 
     const inventoryPath = resolve(this.ansibleService.getAnsibleProjectPath(), this.ansibleService.getInventoryPath());
     const inventoryExists = existsSync(inventoryPath);
+    const ansibleCfgPath = resolve(this.ansibleService.getAnsibleProjectPath(), 'ansible.cfg');
+    const hasAnsibleCfg = existsSync(ansibleCfgPath);
+
+    // Get node count if inventory exists
+    let nodeCount = 0;
+    if (inventoryExists) {
+      try {
+        const inventory = await this.getInventory();
+        nodeCount = inventory.length;
+      } catch {
+        // Ignore errors when getting inventory count
+      }
+    }
 
     if (!ansibleOk || !ansiblePlaybookOk || !ansibleInventoryOk) {
       return {
@@ -49,6 +63,10 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
           ansibleAvailable: ansibleOk,
           ansiblePlaybookAvailable: ansiblePlaybookOk,
           ansibleInventoryAvailable: ansibleInventoryOk,
+          inventoryPath,
+          hasInventory: inventoryExists,
+          hasAnsibleCfg,
+          nodeCount,
         },
       };
     }
@@ -60,6 +78,9 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
         message: "Ansible inventory file was not found",
         details: {
           inventoryPath,
+          hasInventory: false,
+          hasAnsibleCfg,
+          nodeCount: 0,
         },
       };
     }
@@ -69,6 +90,9 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
       message: "Ansible is configured and available",
       details: {
         inventoryPath,
+        hasInventory: true,
+        hasAnsibleCfg,
+        nodeCount,
       },
     };
   }
@@ -386,6 +410,19 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
       };
     }
   }
+  /**
+   * Get groups from Ansible inventory
+   *
+   * @returns Array of node groups
+   */
+  async getGroups(): Promise<NodeGroup[]> {
+    if (!this.initialized) {
+      throw new Error("Ansible plugin not initialized");
+    }
+
+    return await this.ansibleService.getGroups();
+  }
+
 
   /**
    * Get arbitrary data for a node

@@ -1,0 +1,459 @@
+/**
+ * Unit tests for InventoryWatcher
+ *
+ * Tests file watching, debouncing, error recovery, and logging behavior.
+ */
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { writeFile, unlink, mkdir } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
+import { InventoryWatcher } from '../inventoryWatcher';
+import { LoggerService } from '../../../services/LoggerService';
+import { Node } from '../../bolt/types';
+
+describe('InventoryWatcher', () => {
+  let testDir: string;
+  let testFilePath: string;
+  let logger: LoggerService;
+
+  beforeEach(async () => {
+    // Create temporary directory for test files
+    testDir = join(tmpdir(), `inventory-watcher-test-${Date.now()}`);
+    await mkdir(testDir, { recursive: true });
+    testFilePath = join(testDir, 'inventory.yaml');
+
+    // Create logger
+    logger = new LoggerService('debug');
+  });
+
+  afterEach(async () => {
+    // Clean up test files
+    try {
+      if (existsSync(testFilePath)) {
+        await unlink(testFilePath);
+      }
+    } catch (error) {
+      // Ignore cleanup errors
+    }
+  });
+
+  describe('start and stop', () => {
+    it('should start watching a file', async () => {
+      // Create initial inventory file
+      const initialContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, initialContent);
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        logger
+      });
+
+      watcher.start();
+
+      expect(watcher.isActive()).toBe(true);
+
+      watcher.stop();
+    });
+
+    it('should not start watching twice', async () => {
+      const initialContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, initialContent);
+
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        logger
+      });
+
+      watcher.start();
+      watcher.start(); // Second start should log warning
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        'Inventory watcher already started',
+        expect.objectContaining({
+          component: 'InventoryWatcher',
+          operation: 'start'
+        })
+      );
+
+      watcher.stop();
+    });
+
+    it('should stop watching a file', async () => {
+      const initialContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, initialContent);
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        logger
+      });
+
+      watcher.start();
+      expect(watcher.isActive()).toBe(true);
+
+      watcher.stop();
+      expect(watcher.isActive()).toBe(false);
+    });
+
+    it('should accept initial inventory', async () => {
+      const initialContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, initialContent);
+
+      const initialInventory: Node[] = [
+        {
+          id: 'initial-host',
+          name: 'initial-host',
+          uri: 'ssh://192.168.1.100',
+          transport: 'ssh',
+          config: {},
+          source: 'ssh'
+        }
+      ];
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        logger
+      });
+
+      watcher.start(initialInventory);
+
+      expect(watcher.getLastValidInventory()).toEqual(initialInventory);
+
+      watcher.stop();
+    });
+  });
+
+  describe('file change detection', () => {
+    it('should detect file modifications with debouncing', async () => {
+      // Create initial inventory file
+      const initialContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, initialContent);
+
+      const reloadCallback = vi.fn();
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        debounceDelay: 100, // Short delay for testing
+        logger,
+        onReload: reloadCallback
+      });
+
+      watcher.start();
+
+      // Modify file
+      const updatedContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+  - name: test-host-2
+    uri: ssh://192.168.1.20
+`;
+      await writeFile(testFilePath, updatedContent);
+
+      // Wait for debounce delay + processing time
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Callback should be called once with updated inventory
+      expect(reloadCallback).toHaveBeenCalledTimes(1);
+      expect(reloadCallback).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'test-host' }),
+          expect.objectContaining({ name: 'test-host-2' })
+        ])
+      );
+
+      watcher.stop();
+    });
+
+    it('should debounce multiple rapid changes', async () => {
+      // Create initial inventory file
+      const initialContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, initialContent);
+
+      const reloadCallback = vi.fn();
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        debounceDelay: 200, // Longer delay for testing debouncing
+        logger,
+        onReload: reloadCallback
+      });
+
+      watcher.start();
+
+      // Make multiple rapid changes
+      await writeFile(testFilePath, `hosts:\n  - name: host-1\n    uri: ssh://192.168.1.1`);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      await writeFile(testFilePath, `hosts:\n  - name: host-2\n    uri: ssh://192.168.1.2`);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      await writeFile(testFilePath, `hosts:\n  - name: host-3\n    uri: ssh://192.168.1.3`);
+
+      // Wait for debounce delay + processing time
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Callback should be called only once with the final state
+      expect(reloadCallback).toHaveBeenCalledTimes(1);
+      expect(reloadCallback).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'host-3' })
+        ])
+      );
+
+      watcher.stop();
+    });
+  });
+
+  describe('error recovery', () => {
+    it('should maintain last valid inventory on parse errors', async () => {
+      // Create initial valid inventory file
+      const validContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, validContent);
+
+      const reloadCallback = vi.fn();
+      const errorCallback = vi.fn();
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        debounceDelay: 100,
+        logger,
+        onReload: reloadCallback,
+        onError: errorCallback
+      });
+
+      watcher.start();
+
+      // Wait for initial load
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Get initial valid inventory
+      const validInventory = watcher.getLastValidInventory();
+      expect(validInventory).toHaveLength(0); // No initial inventory provided
+
+      // Modify file with valid content
+      await writeFile(testFilePath, validContent);
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const afterValidLoad = watcher.getLastValidInventory();
+      expect(afterValidLoad).toHaveLength(1);
+      expect(afterValidLoad[0].name).toBe('test-host');
+
+      // Modify file with invalid YAML
+      const invalidContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+  invalid yaml syntax here [[[
+`;
+      await writeFile(testFilePath, invalidContent);
+
+      // Wait for debounce delay + processing time
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Last valid inventory should be maintained
+      expect(watcher.getLastValidInventory()).toEqual(afterValidLoad);
+
+      // Error callback should be called
+      expect(errorCallback).toHaveBeenCalled();
+
+      watcher.stop();
+    });
+
+    it('should log parse errors', async () => {
+      // Create initial valid inventory file
+      const validContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, validContent);
+
+      const errorSpy = vi.spyOn(logger, 'error');
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        debounceDelay: 100,
+        logger
+      });
+
+      watcher.start();
+
+      // Modify file with invalid content
+      const invalidContent = `invalid yaml [[[`;
+      await writeFile(testFilePath, invalidContent);
+
+      // Wait for debounce delay + processing time
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Error should be logged
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse inventory file'),
+        expect.objectContaining({
+          component: 'InventoryWatcher',
+          operation: 'reloadInventory'
+        }),
+        expect.any(Error)
+      );
+
+      watcher.stop();
+    });
+  });
+
+  describe('logging', () => {
+    it('should log reload events', async () => {
+      // Create initial inventory file
+      const initialContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+`;
+      await writeFile(testFilePath, initialContent);
+
+      const infoSpy = vi.spyOn(logger, 'info');
+
+      const watcher = new InventoryWatcher({
+        filePath: testFilePath,
+        format: 'yaml',
+        debounceDelay: 100,
+        logger
+      });
+
+      watcher.start();
+
+      // Modify file
+      const updatedContent = `
+hosts:
+  - name: test-host
+    uri: ssh://192.168.1.10
+  - name: test-host-2
+    uri: ssh://192.168.1.20
+`;
+      await writeFile(testFilePath, updatedContent);
+
+      // Wait for debounce delay + processing time
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Should log reload events
+      expect(infoSpy).toHaveBeenCalledWith(
+        'Reloading inventory file',
+        expect.objectContaining({
+          component: 'InventoryWatcher',
+          operation: 'reloadInventory'
+        })
+      );
+
+      expect(infoSpy).toHaveBeenCalledWith(
+        'Inventory file reloaded successfully',
+        expect.objectContaining({
+          component: 'InventoryWatcher',
+          operation: 'reloadInventory',
+          metadata: expect.objectContaining({
+            nodeCount: 2
+          })
+        })
+      );
+
+      watcher.stop();
+    });
+  });
+
+  describe('JSON format support', () => {
+    it('should watch and reload JSON inventory files', async () => {
+      const jsonFilePath = join(testDir, 'inventory.json');
+
+      // Create initial JSON inventory file
+      const initialContent = JSON.stringify({
+        hosts: [
+          {
+            name: 'test-host',
+            uri: 'ssh://192.168.1.10'
+          }
+        ]
+      });
+      await writeFile(jsonFilePath, initialContent);
+
+      const reloadCallback = vi.fn();
+
+      const watcher = new InventoryWatcher({
+        filePath: jsonFilePath,
+        format: 'json',
+        debounceDelay: 100,
+        logger,
+        onReload: reloadCallback
+      });
+
+      watcher.start();
+
+      // Modify file
+      const updatedContent = JSON.stringify({
+        hosts: [
+          {
+            name: 'test-host',
+            uri: 'ssh://192.168.1.10'
+          },
+          {
+            name: 'test-host-2',
+            uri: 'ssh://192.168.1.20'
+          }
+        ]
+      });
+      await writeFile(jsonFilePath, updatedContent);
+
+      // Wait for debounce delay + processing time
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // Callback should be called with updated inventory
+      expect(reloadCallback).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'test-host' }),
+          expect.objectContaining({ name: 'test-host-2' })
+        ])
+      );
+
+      watcher.stop();
+
+      // Clean up
+      await unlink(jsonFilePath);
+    });
+  });
+});
