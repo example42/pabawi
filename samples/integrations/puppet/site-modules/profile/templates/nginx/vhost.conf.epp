@@ -1,0 +1,20 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for nginx vhost
+# Do not edit manually; changes will be overwritten.
+
+server {
+    listen <%= $options['port'] %><% if $options['ssl'] { %> ssl<% } %>;
+    server_name <%= $options['servername'] %>;
+
+    root <%= $options['docroot'] %>;
+    index index.html index.htm;
+
+<% if $options['ssl'] { -%>
+    ssl_certificate     /etc/nginx/ssl/<%= $options['servername'] %>.crt;
+    ssl_certificate_key /etc/nginx/ssl/<%= $options['servername'] %>.key;
+<% } -%>
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}

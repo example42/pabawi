@@ -142,8 +142,10 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
   /**
    * Perform plugin-specific health check
    *
-   * Verifies SSH config file accessibility and tests connections to a subset
-   * of hosts to determine overall health status.
+   * Verifies SSH config file accessibility and service initialization state.
+   * Does NOT test actual SSH connections to hosts, since inventory nodes may be
+   * unreachable (e.g. powered off, different network) and connection attempts
+   * would block startup and periodic health checks with long timeouts.
    *
    * Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5, 9.6
    */
@@ -155,18 +157,14 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       };
     }
 
-    const startTime = Date.now();
-    const healthCheckTimeout = 30000; // 30 seconds
-
     try {
       // Check if SSH config file is accessible (if configured)
-      if (this.sshConfig.configPath) {
-        if (!existsSync(this.sshConfig.configPath)) {
-          return {
-            healthy: false,
-            message: `SSH config file not found: ${this.sshConfig.configPath}`,
-          };
-        }
+      const hasConfig = this.sshConfig.configPath ? existsSync(this.sshConfig.configPath) : false;
+      if (this.sshConfig.configPath && !hasConfig) {
+        return {
+          healthy: false,
+          message: `SSH config file not found: ${this.sshConfig.configPath}`,
+        };
       }
 
       // If no inventory, return healthy but with warning
@@ -177,67 +175,22 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
           details: {
             configPath: this.sshConfig.configPath,
             nodeCount: 0,
-            hasConfig: this.sshConfig.configPath ? existsSync(this.sshConfig.configPath) : false,
+            hasConfig,
           },
         };
       }
 
-      // Test connections to a subset of hosts (max 5)
-      const hostsToTest = this.inventory.slice(0, 5);
-      const testResults = await Promise.race([
-        this.testConnections(hostsToTest),
-        new Promise<{ successful: number; failed: number }>((_, reject) =>
-          setTimeout(() => reject(new Error('Health check timeout')), healthCheckTimeout)
-        ),
-      ]);
-
-      const duration = Date.now() - startTime;
-
-      // Determine health status based on test results
-      if (testResults.successful === hostsToTest.length) {
-        return {
-          healthy: true,
-          message: `All ${testResults.successful} tested hosts are reachable`,
-          details: {
-            configPath: this.sshConfig.configPath,
-            nodeCount: this.inventory.length,
-            hasConfig: this.sshConfig.configPath ? existsSync(this.sshConfig.configPath) : false,
-            testedHosts: hostsToTest.length,
-            successfulConnections: testResults.successful,
-            failedConnections: testResults.failed,
-            duration,
-          },
-        };
-      } else if (testResults.successful > 0) {
-        return {
-          healthy: true,
-          degraded: true,
-          message: `${testResults.successful} of ${hostsToTest.length} tested hosts are reachable`,
-          details: {
-            configPath: this.sshConfig.configPath,
-            nodeCount: this.inventory.length,
-            hasConfig: this.sshConfig.configPath ? existsSync(this.sshConfig.configPath) : false,
-            testedHosts: hostsToTest.length,
-            successfulConnections: testResults.successful,
-            failedConnections: testResults.failed,
-            duration,
-          },
-        };
-      } else {
-        return {
-          healthy: false,
-          message: `None of ${hostsToTest.length} tested hosts are reachable`,
-          details: {
-            configPath: this.sshConfig.configPath,
-            nodeCount: this.inventory.length,
-            hasConfig: this.sshConfig.configPath ? existsSync(this.sshConfig.configPath) : false,
-            testedHosts: hostsToTest.length,
-            successfulConnections: testResults.successful,
-            failedConnections: testResults.failed,
-            duration,
-          },
-        };
-      }
+      // Service is initialized and config is accessible — report healthy
+      // without probing individual hosts (they may be unreachable)
+      return {
+        healthy: true,
+        message: `SSH plugin is healthy with ${this.inventory.length} configured host(s)`,
+        details: {
+          configPath: this.sshConfig.configPath,
+          nodeCount: this.inventory.length,
+          hasConfig,
+        },
+      };
 
     } catch (error) {
       return {
@@ -1023,31 +976,4 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
     return hosts;
   }
 
-  /**
-   * Test connections to multiple hosts
-   */
-  private async testConnections(nodes: Node[]): Promise<{ successful: number; failed: number }> {
-    if (!this.sshService) {
-      return { successful: 0, failed: nodes.length };
-    }
-
-    const hosts = this.convertNodesToHosts(nodes);
-    let successful = 0;
-    let failed = 0;
-
-    // Test connections in parallel
-    const results = await Promise.allSettled(
-      hosts.map(host => this.sshService!.testConnection(host))
-    );
-
-    for (const result of results) {
-      if (result.status === 'fulfilled' && result.value) {
-        successful++;
-      } else {
-        failed++;
-      }
-    }
-
-    return { successful, failed };
-  }
 }

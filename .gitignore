@@ -52,3 +52,7 @@ bolt-project/.task_cache.json
 bolt-project/.resource_types/
 bolt-project/bolt-debug.log
 bolt-project/data/
+
+# Stress test generated files (large inventory files)
+samples/stresstest/ansible/inventory/
+samples/stresstest/bolt/inventory.yaml

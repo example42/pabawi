@@ -12,6 +12,7 @@ import type { ExecutionQueue } from "../services/ExecutionQueue";
 import { asyncHandler } from "./asyncHandler";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
+import type { BatchExecutionService } from "../services/BatchExecutionService";
 
 /**
  * Request validation schemas
@@ -39,12 +40,24 @@ const ReExecutionModificationsSchema = z.object({
   expertMode: z.boolean().optional(),
 });
 
+const BatchExecutionRequestSchema = z.object({
+  targetNodeIds: z.array(z.string()).optional(),
+  targetGroupIds: z.array(z.string()).optional(),
+  type: z.enum(["command", "task", "plan"]),
+  action: z.string().min(1, "Action is required"),
+  parameters: z.record(z.unknown()).optional(),
+}).refine(
+  (data) => (data.targetNodeIds && data.targetNodeIds.length > 0) || (data.targetGroupIds && data.targetGroupIds.length > 0),
+  { message: "At least one target node or group must be specified" }
+);
+
 /**
  * Create executions router
  */
 export function createExecutionsRouter(
   executionRepository: ExecutionRepository,
   executionQueue?: ExecutionQueue,
+  batchExecutionService?: BatchExecutionService,
 ): Router {
   const router = Router();
   const logger = new LoggerService();
@@ -1538,6 +1551,584 @@ export function createExecutionsRouter(
             error: {
               code: "INTERNAL_SERVER_ERROR",
               message: "Failed to cancel execution",
+            },
+          });
+        }
+      }
+    }),
+  );
+
+  /**
+   * POST /api/executions/batch
+   * Create a batch execution for multiple nodes or groups
+   *
+   * **Validates: Requirements 5.1, 5.2, 5.8, 5.9, 5.10, 12.1**
+   */
+  router.post(
+    "/batch",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Creating batch execution", {
+        component: "ExecutionsRouter",
+        operation: "createBatch",
+      });
+
+      // Check if BatchExecutionService is available
+      if (!batchExecutionService) {
+        logger.error("BatchExecutionService not available", {
+          component: "ExecutionsRouter",
+          operation: "createBatch",
+        });
+
+        const duration = Date.now() - startTime;
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "POST /api/executions/batch",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(500).json(expertModeService.attachDebugInfo({
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Batch execution service is not available",
+            },
+          }, debugInfo));
+        } else {
+          res.status(500).json({
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Batch execution service is not available",
+            },
+          });
+        }
+        return;
+      }
+
+      try {
+        // Validate request body
+        const validationResult = BatchExecutionRequestSchema.safeParse(req.body);
+
+        if (!validationResult.success) {
+          logger.warn("Invalid batch execution request", {
+            component: "ExecutionsRouter",
+            operation: "createBatch",
+            metadata: { errors: validationResult.error.errors },
+          });
+
+          const duration = Date.now() - startTime;
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              "POST /api/executions/batch",
+              requestId,
+              duration,
+            );
+            debugInfo.context = expertModeService.collectRequestContext(req);
+
+            res.status(400).json(expertModeService.attachDebugInfo({
+              error: {
+                code: "VALIDATION_ERROR",
+                message: "Invalid request body",
+                details: validationResult.error.errors,
+              },
+            }, debugInfo));
+          } else {
+            res.status(400).json({
+              error: {
+                code: "VALIDATION_ERROR",
+                message: "Invalid request body",
+                details: validationResult.error.errors,
+              },
+            });
+          }
+          return;
+        }
+
+        const batchRequest = validationResult.data;
+
+        // Get user ID from request (set by auth middleware)
+        const userId = (req as any).user?.id || "unknown";
+
+        logger.debug("Processing batch execution request", {
+          component: "ExecutionsRouter",
+          operation: "createBatch",
+          metadata: {
+            targetNodeIds: batchRequest.targetNodeIds?.length || 0,
+            targetGroupIds: batchRequest.targetGroupIds?.length || 0,
+            type: batchRequest.type,
+            action: batchRequest.action,
+            userId,
+          },
+        });
+
+        // Create batch execution
+        const response = await batchExecutionService.createBatch(
+          batchRequest,
+          userId,
+        );
+
+        logger.info(
+          `Batch execution created: ${response.batchId} with ${response.targetCount} targets`,
+          {
+            component: "ExecutionsRouter",
+            operation: "createBatch",
+            metadata: {
+              batchId: response.batchId,
+              targetCount: response.targetCount,
+              executionCount: response.executionIds.length,
+              userId,
+              type: batchRequest.type,
+              action: batchRequest.action,
+            },
+          },
+        );
+
+        const duration = Date.now() - startTime;
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "POST /api/executions/batch",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(201).json(expertModeService.attachDebugInfo(response, debugInfo));
+        } else {
+          res.status(201).json(response);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+
+        // Check for queue full error
+        if (errorMessage.includes("queue") && errorMessage.includes("full")) {
+        logger.warn("Execution queue is full", {
+          component: "ExecutionsRouter",
+          operation: "createBatch",
+        });
+
+          const duration = Date.now() - startTime;
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              "POST /api/executions/batch",
+              requestId,
+              duration,
+            );
+            debugInfo.context = expertModeService.collectRequestContext(req);
+
+            res.status(429).json(expertModeService.attachDebugInfo({
+              error: {
+                code: "QUEUE_FULL",
+                message: "Execution queue is full. Please try again later.",
+                details: errorMessage,
+              },
+            }, debugInfo));
+          } else {
+            res.status(429).json({
+              error: {
+                code: "QUEUE_FULL",
+                message: "Execution queue is full. Please try again later.",
+              },
+            });
+          }
+          return;
+        }
+
+        // Check for validation errors (invalid node IDs)
+        if (errorMessage.includes("Invalid node IDs")) {
+        logger.warn("Invalid node IDs in batch request", {
+          component: "ExecutionsRouter",
+          operation: "createBatch",
+        });
+
+          const duration = Date.now() - startTime;
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              "POST /api/executions/batch",
+              requestId,
+              duration,
+            );
+            debugInfo.context = expertModeService.collectRequestContext(req);
+
+            res.status(400).json(expertModeService.attachDebugInfo({
+              error: {
+                code: "INVALID_NODES",
+                message: "One or more target nodes are invalid",
+                details: errorMessage,
+              },
+            }, debugInfo));
+          } else {
+            res.status(400).json({
+              error: {
+                code: "INVALID_NODES",
+                message: "One or more target nodes are invalid",
+                details: errorMessage,
+              },
+            });
+          }
+          return;
+        }
+
+        // Generic error handling
+        logger.error("Failed to create batch execution", {
+          component: "ExecutionsRouter",
+          operation: "createBatch",
+        }, error instanceof Error ? error : new Error(errorMessage));
+
+        const duration = Date.now() - startTime;
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "POST /api/executions/batch",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(500).json(expertModeService.attachDebugInfo({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to create batch execution",
+              details: errorMessage,
+            },
+          }, debugInfo));
+        } else {
+          res.status(500).json({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to create batch execution",
+            },
+          });
+        }
+      }
+    }),
+  );
+
+  /**
+   * GET /api/executions/batch/:batchId
+   * Get batch execution status with aggregated statistics
+   *
+   * **Validates: Requirements 6.1, 6.2, 6.6, 6.7**
+   */
+  router.get(
+    "/batch/:batchId",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Fetching batch execution status", {
+        component: "ExecutionsRouter",
+        operation: "getBatchStatus",
+        metadata: { batchId: req.params.batchId },
+      });
+
+      // Check if BatchExecutionService is available
+      if (!batchExecutionService) {
+        logger.error("BatchExecutionService not available", {
+          component: "ExecutionsRouter",
+          operation: "getBatchStatus",
+        });
+
+        const duration = Date.now() - startTime;
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "GET /api/executions/batch/:batchId",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(500).json(expertModeService.attachDebugInfo({
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Batch execution service is not available",
+            },
+          }, debugInfo));
+        } else {
+          res.status(500).json({
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Batch execution service is not available",
+            },
+          });
+        }
+        return;
+      }
+
+      try {
+        const batchId = req.params.batchId;
+        const statusFilter = req.query.status as string | undefined;
+
+        logger.debug("Processing batch status request", {
+          component: "ExecutionsRouter",
+          operation: "getBatchStatus",
+          metadata: { batchId, statusFilter },
+        });
+
+        // Get batch status from service
+        const batchStatus = await batchExecutionService.getBatchStatus(
+          batchId,
+          statusFilter,
+        );
+
+        const duration = Date.now() - startTime;
+
+        logger.info("Batch status fetched successfully", {
+          component: "ExecutionsRouter",
+          operation: "getBatchStatus",
+          metadata: {
+            batchId,
+            status: batchStatus.batch.status,
+            progress: batchStatus.progress,
+            totalExecutions: batchStatus.batch.stats.total,
+            duration,
+          },
+        });
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "GET /api/executions/batch/:batchId",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(batchStatus, debugInfo));
+        } else {
+          res.json(batchStatus);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const duration = Date.now() - startTime;
+
+        // Check if batch not found
+        if (errorMessage.includes("not found")) {
+          logger.warn("Batch execution not found", {
+            component: "ExecutionsRouter",
+            operation: "getBatchStatus",
+            metadata: { batchId: req.params.batchId },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              "GET /api/executions/batch/:batchId",
+              requestId,
+              duration,
+            );
+            debugInfo.context = expertModeService.collectRequestContext(req);
+
+            res.status(404).json(expertModeService.attachDebugInfo({
+              error: {
+                code: "BATCH_NOT_FOUND",
+                message: `Batch execution '${req.params.batchId}' not found`,
+              },
+            }, debugInfo));
+          } else {
+            res.status(404).json({
+              error: {
+                code: "BATCH_NOT_FOUND",
+                message: `Batch execution '${req.params.batchId}' not found`,
+              },
+            });
+          }
+          return;
+        }
+
+        // Generic error handling
+        logger.error("Failed to fetch batch status", {
+          component: "ExecutionsRouter",
+          operation: "getBatchStatus",
+          metadata: { batchId: req.params.batchId, duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "GET /api/executions/batch/:batchId",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(500).json(expertModeService.attachDebugInfo({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to fetch batch status",
+              details: errorMessage,
+            },
+          }, debugInfo));
+        } else {
+          res.status(500).json({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to fetch batch status",
+            },
+          });
+        }
+      }
+    }),
+  );
+
+  /**
+   * POST /api/executions/batch/:batchId/cancel
+   * Cancel a batch execution
+   *
+   * **Validates: Requirements 8.2, 8.9**
+   */
+  router.post(
+    "/batch/:batchId/cancel",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Cancelling batch execution", {
+        component: "ExecutionsRouter",
+        operation: "cancelBatch",
+        metadata: { batchId: req.params.batchId },
+      });
+
+      // Check if BatchExecutionService is available
+      if (!batchExecutionService) {
+        logger.error("BatchExecutionService not available", {
+          component: "ExecutionsRouter",
+          operation: "cancelBatch",
+        });
+
+        const duration = Date.now() - startTime;
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "POST /api/executions/batch/:batchId/cancel",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(500).json(expertModeService.attachDebugInfo({
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Batch execution service is not available",
+            },
+          }, debugInfo));
+        } else {
+          res.status(500).json({
+            error: {
+              code: "SERVICE_UNAVAILABLE",
+              message: "Batch execution service is not available",
+            },
+          });
+        }
+        return;
+      }
+
+      try {
+        const batchId = req.params.batchId;
+
+        logger.debug("Processing batch cancellation request", {
+          component: "ExecutionsRouter",
+          operation: "cancelBatch",
+          metadata: { batchId },
+        });
+
+        // Cancel the batch execution
+        const result = await batchExecutionService.cancelBatch(batchId);
+
+        const duration = Date.now() - startTime;
+
+        logger.info("Batch execution cancelled successfully", {
+          component: "ExecutionsRouter",
+          operation: "cancelBatch",
+          metadata: {
+            batchId,
+            cancelledCount: result.cancelledCount,
+            duration,
+          },
+        });
+
+        const responseData = {
+          batchId,
+          cancelledCount: result.cancelledCount,
+          message: `Cancelled ${result.cancelledCount} execution${result.cancelledCount !== 1 ? 's' : ''}`,
+        };
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "POST /api/executions/batch/:batchId/cancel",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const duration = Date.now() - startTime;
+
+        // Check if batch not found
+        if (errorMessage.includes("not found")) {
+          logger.warn("Batch execution not found for cancellation", {
+            component: "ExecutionsRouter",
+            operation: "cancelBatch",
+            metadata: { batchId: req.params.batchId },
+          });
+
+          if (req.expertMode) {
+            const debugInfo = expertModeService.createDebugInfo(
+              "POST /api/executions/batch/:batchId/cancel",
+              requestId,
+              duration,
+            );
+            debugInfo.context = expertModeService.collectRequestContext(req);
+
+            res.status(404).json(expertModeService.attachDebugInfo({
+              error: {
+                code: "BATCH_NOT_FOUND",
+                message: `Batch execution '${req.params.batchId}' not found`,
+              },
+            }, debugInfo));
+          } else {
+            res.status(404).json({
+              error: {
+                code: "BATCH_NOT_FOUND",
+                message: `Batch execution '${req.params.batchId}' not found`,
+              },
+            });
+          }
+          return;
+        }
+
+        // Generic error handling
+        logger.error("Failed to cancel batch execution", {
+          component: "ExecutionsRouter",
+          operation: "cancelBatch",
+          metadata: { batchId: req.params.batchId, duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "POST /api/executions/batch/:batchId/cancel",
+            requestId,
+            duration,
+          );
+          debugInfo.context = expertModeService.collectRequestContext(req);
+
+          res.status(500).json(expertModeService.attachDebugInfo({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to cancel batch execution",
+              details: errorMessage,
+            },
+          }, debugInfo));
+        } else {
+          res.status(500).json({
+            error: {
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Failed to cancel batch execution",
             },
           });
         }

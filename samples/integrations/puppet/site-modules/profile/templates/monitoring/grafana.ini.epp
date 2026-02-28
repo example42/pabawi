@@ -1,0 +1,12 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for grafana
+# Do not edit manually; changes will be overwritten.
+<%- $options.each |$section, $values| { -%>
+[<%= $section %>]
+<%- if $values =~ Hash { -%>
+<%- $values.each |$key, $value| { -%>
+<%= $key %> = <%= $value %>
+<%- } -%>
+<%- } -%>
+
+<%- } -%>

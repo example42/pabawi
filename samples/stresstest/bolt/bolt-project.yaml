@@ -1,0 +1,4 @@
+# Bolt project for stress testing
+---
+name: pabawi-stresstest
+inventoryfile: inventory.yaml

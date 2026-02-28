@@ -30,6 +30,7 @@ import { createPermissionsRouter } from "./routes/permissions";
 import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
+import { BatchExecutionService } from "./services/BatchExecutionService";
 import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
 import { expertModeMiddleware } from "./middleware/expertMode";
 import { createAuthMiddleware } from "./middleware/authMiddleware";
@@ -233,6 +234,19 @@ async function startServer(): Promise<Express> {
     });
 
     const integrationManager = new IntegrationManager({ logger });
+
+    // Initialize batch execution service
+    // Note: This will be fully functional once all integrations are registered
+    const batchExecutionService = new BatchExecutionService(
+      databaseService.getConnection(),
+      executionQueue,
+      executionRepository,
+      integrationManager,
+    );
+    logger.info("Batch execution service initialized successfully", {
+      component: "Server",
+      operation: "startServer",
+    });
 
     // Initialize Bolt integration only if configured
     let boltPlugin: BoltPlugin | undefined;
@@ -610,7 +624,7 @@ async function startServer(): Promise<Express> {
           enabled: true,
           name: "ssh",
           type: "both",
-          config: sshConfig,
+          config: sshConfig as Record<string, unknown>,
           priority: sshConfig.priority,
         };
 
@@ -977,7 +991,7 @@ async function startServer(): Promise<Express> {
       "/api/executions",
       authMiddleware,
       rateLimitMiddleware,
-      createExecutionsRouter(executionRepository, executionQueue),
+      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService),
     );
     app.use(
       "/api/executions",

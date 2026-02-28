@@ -1,0 +1,6 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for jenkins
+# Do not edit manually; changes will be overwritten.
+<%- $options.each |$key, $value| { -%>
+<%= $key %>: <%= $value %>
+<%- } -%>

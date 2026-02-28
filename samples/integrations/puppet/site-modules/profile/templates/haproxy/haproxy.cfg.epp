@@ -1,0 +1,44 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for haproxy
+# Do not edit manually; changes will be overwritten.
+
+global
+    log     127.0.0.1 local0
+    maxconn 4096
+    daemon
+
+defaults
+    log     global
+    mode    http
+    option  httplog
+    option  dontlognull
+    retries 3
+    timeout connect 5000ms
+    timeout client  50000ms
+    timeout server  50000ms
+<%- if $options['options'] { -%>
+<%- $options['options'].each |$key, $value| { -%>
+    <%= $key %> <%= $value %>
+<%- } -%>
+<%- } -%>
+
+<%- if $options['frontends'] { -%>
+<%- $options['frontends'].each |$name, $config| { -%>
+frontend <%= $name %>
+    bind *:<%= $config['port'] %>
+    default_backend <%= $config['backend'] %>
+
+<%- } -%>
+<%- } -%>
+<%- if $options['backends'] { -%>
+<%- $options['backends'].each |$name, $config| { -%>
+backend <%= $name %>
+    balance <%= pick($config['balance'], 'roundrobin') %>
+<%- if $config['servers'] { -%>
+<%- $config['servers'].each |$server| { -%>
+    server <%= $server['name'] %> <%= $server['address'] %>:<%= $server['port'] %> check
+<%- } -%>
+<%- } -%>
+
+<%- } -%>
+<%- } -%>

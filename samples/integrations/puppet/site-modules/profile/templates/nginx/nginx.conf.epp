@@ -1,0 +1,27 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for nginx
+# Do not edit manually; changes will be overwritten.
+
+user nginx;
+worker_processes <%= $options['worker_processes'] %>;
+error_log /var/log/nginx/error.log warn;
+pid /run/nginx.pid;
+
+events {
+    worker_connections <%= $options['worker_connections'] %>;
+}
+
+http {
+    include       /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    sendfile        on;
+    keepalive_timeout <%= $options['keepalive_timeout'] %>;
+
+    ssl_protocols <%= $options['ssl_protocols'] %>;
+    ssl_prefer_server_ciphers on;
+
+    access_log /var/log/nginx/access.log;
+
+    include /etc/nginx/conf.d/*.conf;
+}

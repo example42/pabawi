@@ -1,0 +1,21 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for postgresql pg_hba.conf
+# Do not edit manually; changes will be overwritten.
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# "local" is for Unix domain socket connections only
+local   all             all                                     peer
+
+# IPv4 local connections
+host    all             all             127.0.0.1/32            scram-sha-256
+
+# IPv6 local connections
+host    all             all             ::1/128                 scram-sha-256
+
+<%- if $options['databases'] { -%>
+# Application database access
+<%- $options['databases'].each |$dbname, $config| { -%>
+host    <%= $dbname %>    <%= $config['owner'] %>    0.0.0.0/0    scram-sha-256
+<%- } -%>
+<%- } -%>

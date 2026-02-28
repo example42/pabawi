@@ -1,0 +1,31 @@
+# Pabawi Demo — Puppetfile
+# Managed by r10k / Code Manager
+# https://www.puppet.com/docs/pe/latest/puppetfile.html
+#
+# This control-repo uses tp (Tiny Puppet) instead of
+# individual component modules. All application packages, services,
+# and configuration files are managed via tp defines, driven by Hiera data.
+# Reference: https://github.com/example42/psick
+
+forge 'https://forge.puppet.com'
+
+# --- Core / Stdlib (required by tp) ---
+mod 'puppetlabs/stdlib',    '9.7.0'
+mod 'puppetlabs/concat',    '9.0.2'
+
+# --- Tiny Puppet + Tinydata ---
+# tp manages any application's packages, services, configs, and repos.
+# tinydata provides OS-aware data (package names, paths, service names)
+# for hundreds of applications out of the box.
+mod 'example42/tp',         '4.4.0'
+mod 'example42/tinydata',   '0.6.5'
+
+# --- PSICK - Puppet Systems Infrastructure Construction Kit ---
+# Hiera-driven classification and ready-to-use base profiles.
+# https://github.com/example42/puppet-psick
+mod 'example42/psick',
+  :git => 'https://github.com/example42/puppet-psick',
+  :tag => 'v0.7.2'
+
+# --- Optional: VCS repo support for tp::dir ---
+mod 'puppetlabs/vcsrepo',    '6.1.0'
