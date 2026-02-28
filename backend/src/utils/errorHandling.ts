@@ -44,11 +44,34 @@ export const ERROR_CODES = {
   HIERA_RESOLUTION_ERROR: "HIERA_RESOLUTION_ERROR",
   HIERA_ANALYSIS_ERROR: "HIERA_ANALYSIS_ERROR",
 
+  // Authentication errors (Requirement 16.1)
+  AUTHENTICATION_FAILED: "AUTHENTICATION_FAILED",
+  INVALID_CREDENTIALS: "INVALID_CREDENTIALS",
+  TOKEN_EXPIRED: "TOKEN_EXPIRED",
+  TOKEN_REVOKED: "TOKEN_REVOKED",
+  INVALID_TOKEN: "INVALID_TOKEN",
+
+  // Authorization errors (Requirement 16.2)
+  INSUFFICIENT_PERMISSIONS: "INSUFFICIENT_PERMISSIONS",
+
+  // Validation errors (Requirement 16.3)
+  INVALID_INPUT: "INVALID_INPUT",
+  PASSWORD_COMPLEXITY_ERROR: "PASSWORD_COMPLEXITY_ERROR",  // pragma: allowlist secret
+
+  // Conflict errors (Requirement 16.4)
+  DUPLICATE_USERNAME: "DUPLICATE_USERNAME",
+  DUPLICATE_EMAIL: "DUPLICATE_EMAIL",
+
+  // Database errors (Requirement 16.5)
+  DATABASE_ERROR: "DATABASE_ERROR",
+  DATABASE_CONNECTION_ERROR: "DATABASE_CONNECTION_ERROR",
+
   // Generic errors
   INTERNAL_SERVER_ERROR: "INTERNAL_SERVER_ERROR",
   NOT_FOUND: "NOT_FOUND",
   UNAUTHORIZED: "UNAUTHORIZED",
   FORBIDDEN: "FORBIDDEN",
+  CONFLICT: "CONFLICT",
 } as const;
 
 /**
@@ -165,4 +188,151 @@ export function createErrorResponse(
     error.details = details;
   }
   return { error };
+}
+
+/**
+ * Send authentication error response (Requirement 16.1)
+ * Returns generic error message to prevent username enumeration
+ */
+export function sendAuthenticationError(
+  res: Response,
+  message: string = "Invalid credentials"
+): void {
+  res.status(401).json({
+    error: {
+      code: ERROR_CODES.AUTHENTICATION_FAILED,
+      message,
+    },
+  });
+}
+
+/**
+ * Send authorization error response (Requirement 16.2)
+ * Returns 403 with required permission information
+ */
+export function sendAuthorizationError(
+  res: Response,
+  resource: string,
+  action: string,
+  message: string = "Insufficient permissions to perform this action"
+): void {
+  res.status(403).json({
+    error: {
+      code: ERROR_CODES.INSUFFICIENT_PERMISSIONS,
+      message,
+      required: {
+        resource,
+        action,
+      },
+    },
+  });
+}
+
+/**
+ * Send input validation error response (Requirement 16.3)
+ * Returns 400 with detailed validation errors
+ */
+export function sendInputValidationError(
+  res: Response,
+  message: string,
+  details?: unknown
+): void {
+  res.status(400).json({
+    error: {
+      code: ERROR_CODES.INVALID_INPUT,
+      message,
+      details,
+    },
+  });
+}
+
+/**
+ * Send duplicate resource error response (Requirement 16.4)
+ * Returns 409 for duplicate username/email
+ */
+export function sendDuplicateError(
+  res: Response,
+  field: "username" | "email",
+  value?: string
+): void {
+  const code = field === "username" ? ERROR_CODES.DUPLICATE_USERNAME : ERROR_CODES.DUPLICATE_EMAIL;
+  const message = value
+    ? `${field.charAt(0).toUpperCase() + field.slice(1)} '${value}' already exists`
+    : `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`;
+
+  res.status(409).json({
+    error: {
+      code,
+      message,
+      field,
+    },
+  });
+}
+
+/**
+ * Send database error response (Requirement 16.5, 16.6)
+ * Returns 503 for database connection failures
+ */
+export function sendDatabaseError(
+  res: Response,
+  error: unknown,
+  message: string = "Database service temporarily unavailable"
+): void {
+  const logger = new LoggerService();
+  logger.error("Database error", {
+    component: "ErrorHandling",
+    operation: "sendDatabaseError",
+  }, error instanceof Error ? error : undefined);
+
+  res.status(503).json({
+    error: {
+      code: ERROR_CODES.DATABASE_CONNECTION_ERROR,
+      message,
+    },
+  });
+}
+
+/**
+ * Check if error is a database connection error
+ */
+export function isDatabaseConnectionError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+
+  // Only treat as connection error if it's a genuine connection/file access issue
+  return (
+    message.includes("unable to open database") ||
+    message.includes("database is locked") ||
+    message.includes("disk i/o error") ||
+    message.includes("database disk image is malformed") ||
+    (message.includes("enoent") && message.includes("database")) ||
+    message.includes("sqlite_cantopen")
+  );
+}
+
+/**
+ * Check if error is a duplicate constraint violation
+ */
+export function isDuplicateError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("unique constraint") ||
+    message.includes("duplicate") ||
+    message.includes("already exists")
+  );
+}
+
+/**
+ * Extract field name from duplicate error message
+ */
+export function extractDuplicateField(error: Error): "username" | "email" | null {
+  const message = error.message.toLowerCase();
+
+  if (message.includes("username")) return "username";
+  if (message.includes("email")) return "email";
+
+  return null;
 }

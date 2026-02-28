@@ -384,7 +384,7 @@ Only enable expert mode for trusted users in production environments.
 PORT=3000
 HOST=localhost
 BOLT_PROJECT_PATH=./bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
+COMMAND_WHITELIST_ALLOW_ALL=true
 LOG_LEVEL=debug
 DATABASE_PATH=./data/executions.db
 BOLT_EXECUTION_TIMEOUT=600000
@@ -424,9 +424,9 @@ npm run dev
 PORT=3000
 HOST=0.0.0.0
 BOLT_PROJECT_PATH=/opt/bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST='["ls","pwd","uptime","systemctl status","journalctl"]'
-BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST='["ls","pwd","uptime","systemctl status","journalctl"]'
+COMMAND_WHITELIST_MATCH_MODE=prefix
 LOG_LEVEL=info
 DATABASE_PATH=/var/lib/pabawi/executions.db
 BOLT_EXECUTION_TIMEOUT=300000
@@ -465,9 +465,9 @@ pm2 start dist/server.js --name pabawi
 PORT=3000
 HOST=0.0.0.0
 BOLT_PROJECT_PATH=/opt/bolt-project
-BOLT_COMMAND_WHITELIST_ALLOW_ALL=false
-BOLT_COMMAND_WHITELIST='["uptime","df -h","free -m","systemctl status"]'
-BOLT_COMMAND_WHITELIST_MATCH_MODE=exact
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST='["uptime","df -h","free -m","systemctl status"]'
+COMMAND_WHITELIST_MATCH_MODE=exact
 LOG_LEVEL=warn
 DATABASE_PATH=/var/lib/pabawi/executions.db
 BOLT_EXECUTION_TIMEOUT=300000

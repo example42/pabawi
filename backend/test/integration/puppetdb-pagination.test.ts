@@ -128,7 +128,7 @@ describe('PuppetDB Pagination', () => {
 
   describe('getNodeReports with offset', () => {
     it('should return paginated reports for specific node', async () => {
-      const nodeId = 'node-0';
+      const nodeId = 'node-0';  // pragma: allowlist secret
       const limit = 10;
       const offset = 0;
       const nodeReports = mockReports.filter(r => r.certname === nodeId);
@@ -144,7 +144,7 @@ describe('PuppetDB Pagination', () => {
     });
 
     it('should return second page for node reports', async () => {
-      const nodeId = 'node-0';
+      const nodeId = 'node-0';  // pragma: allowlist secret
       const limit = 10;
       const offset = 10;
       const nodeReports = mockReports.filter(r => r.certname === nodeId);
@@ -275,7 +275,7 @@ describe('PuppetDB Pagination', () => {
     });
 
     it('should handle node with no reports', async () => {
-      const nodeId = 'nonexistent-node';
+      const nodeId = 'nonexistent-node';  // pragma: allowlist secret
 
       vi.mocked(mockPuppetDBService.getNodeReports).mockResolvedValue([]);
 

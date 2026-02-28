@@ -298,8 +298,8 @@ describe("Property 10: Hiera Resolution Correctness", () => {
       fc.asyncProperty(factsArb, async (facts) => {
         const { tempDir, resolver } = createTestEnvironment();
         try {
-          const key = "test_hash";
-          const knockoutPrefix = "--";
+          const key = "test_hash";  // pragma: allowlist secret
+          const knockoutPrefix = "--";  // pragma: allowlist secret
 
           // Create hieradata with knockout_options
           createHieradataFile(tempDir, "data/level0/data.yaml", {

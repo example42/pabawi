@@ -12,6 +12,7 @@ import type {
   InformationSourcePlugin,
   Action,
   Capability,
+  NodeGroup,
 } from "../types";
 import type { BoltService } from "./BoltService";
 import type { ExecutionResult, Node, Facts } from "./types";
@@ -37,16 +38,28 @@ export class BoltPlugin
 
   /**
    * Perform plugin-specific initialization
+   *
+   * Uses a lightweight check (bolt --version) instead of loading inventory
+   * to avoid blocking server startup with expensive operations.
    */
   protected async performInitialization(): Promise<void> {
     const complete = this.performanceMonitor.startTimer('bolt:initialization');
 
     try {
-      // Verify Bolt is accessible by checking inventory
-      await this.boltService.getInventory();
-      this.log("Bolt is accessible and inventory loaded");
+      // Lightweight check: just verify Bolt command is available
+      const childProcess = await import("child_process");
+      const { promisify } = await import("util");
+      const exec = promisify(childProcess.exec);
 
-      complete({ success: true });
+      try {
+        await exec("bolt --version", { timeout: 5000 });
+        this.log("Bolt command is accessible");
+        complete({ success: true });
+      } catch (cmdError) {
+        // Bolt command not available
+        this.log("Bolt command not found - plugin will report as unhealthy");
+        complete({ success: false, error: "bolt command not available" });
+      }
     } catch (error) {
       this.logError("Failed to verify Bolt accessibility during initialization", error);
       // Don't throw error during initialization - let health checks handle this
@@ -353,6 +366,171 @@ export class BoltPlugin
       throw error;
     }
   }
+  /**
+   * Get groups from Bolt inventory
+   *
+   * @returns Array of node groups
+   * @todo Implement group extraction from Bolt inventory.yaml (Task 2)
+   */
+  /**
+     * Get groups from Bolt inventory
+     *
+     * Parses inventory.yaml to extract group definitions including:
+     * - Group names and targets
+     * - Nested groups (stored in metadata.hierarchy)
+     * - Variables and config (stored in metadata)
+     *
+     * @returns Array of node groups
+     */
+    async getGroups(): Promise<NodeGroup[]> {
+      const complete = this.performanceMonitor.startTimer('bolt:getGroups');
+
+      if (!this.initialized) {
+        complete({ error: 'not initialized' });
+        throw new Error("Bolt plugin not initialized");
+      }
+
+      try {
+        const groups = await this.extractGroupsFromInventory();
+        complete({ groupCount: groups.length });
+        return groups;
+      } catch (error) {
+        complete({ error: error instanceof Error ? error.message : String(error) });
+        throw error;
+      }
+    }
+
+    /**
+     * Extract groups from Bolt inventory.yaml file
+     *
+     * @returns Array of NodeGroup objects
+     */
+    private async extractGroupsFromInventory(): Promise<NodeGroup[]> {
+      const fs = await import("fs");
+      const path = await import("path");
+      const { parse: parseYaml } = await import("yaml");
+
+      const projectPath = this.boltService.getBoltProjectPath();
+
+      // Try both inventory.yaml and inventory.yml
+      const inventoryYaml = path.join(projectPath, "inventory.yaml");
+      const inventoryYml = path.join(projectPath, "inventory.yml");
+
+      let inventoryPath: string | null = null;
+      if (fs.existsSync(inventoryYaml)) {
+        inventoryPath = inventoryYaml;
+      } else if (fs.existsSync(inventoryYml)) {
+        inventoryPath = inventoryYml;
+      }
+
+      if (!inventoryPath) {
+        // No inventory file found - return empty array
+        this.log("No inventory file found, returning empty groups array");
+        return [];
+      }
+
+      try {
+        const inventoryContent = fs.readFileSync(inventoryPath, "utf-8");
+        const inventory = parseYaml(inventoryContent) as Record<string, unknown>;
+
+        if (!inventory.groups || !Array.isArray(inventory.groups)) {
+          // No groups section in inventory
+          return [];
+        }
+
+        const groups: NodeGroup[] = [];
+
+        for (const groupData of inventory.groups) {
+          if (typeof groupData !== "object" || groupData === null) {
+            continue;
+          }
+
+          const group = this.parseInventoryGroup(groupData as Record<string, unknown>);
+          if (group) {
+            groups.push(group);
+          }
+        }
+
+        return groups;
+      } catch (error) {
+        this.logError("Failed to parse inventory file for groups", error);
+        return [];
+      }
+    }
+
+    /**
+     * Parse a single group from Bolt inventory
+     *
+     * @param groupData - Raw group data from inventory.yaml
+     * @returns NodeGroup object or null if parsing fails
+     */
+    private parseInventoryGroup(groupData: Record<string, unknown>): NodeGroup | null {
+      // Extract group name
+      const name = typeof groupData.name === "string" ? groupData.name : null;
+      if (!name) {
+        this.log("Skipping group without name");
+        return null;
+      }
+
+      // Extract targets and map to node IDs
+      const nodes: string[] = [];
+      if (Array.isArray(groupData.targets)) {
+        for (const target of groupData.targets) {
+          if (typeof target === "string") {
+            // Map target to node ID using same format as parseInventoryTarget (just the name)
+            nodes.push(target);
+          } else if (typeof target === "object" && target !== null) {
+            // Handle target objects with name property
+            const targetObj = target as Record<string, unknown>;
+            const targetName = typeof targetObj.name === "string" ? targetObj.name : null;
+            if (targetName) {
+              nodes.push(targetName);
+            }
+          }
+        }
+      }
+
+      // Extract nested groups and store in hierarchy
+      const hierarchy: string[] = [];
+      if (Array.isArray(groupData.groups)) {
+        for (const nestedGroup of groupData.groups) {
+          if (typeof nestedGroup === "string") {
+            hierarchy.push(nestedGroup);
+          }
+        }
+      }
+
+      // Extract vars and config as metadata
+      const metadata: NodeGroup["metadata"] = {};
+
+      if (typeof groupData.vars === "object" && groupData.vars !== null) {
+        metadata.variables = groupData.vars as Record<string, unknown>;
+      }
+
+      if (typeof groupData.config === "object" && groupData.config !== null) {
+        metadata.config = groupData.config as Record<string, unknown>;
+      }
+
+      if (typeof groupData.description === "string") {
+        metadata.description = groupData.description;
+      }
+
+      if (hierarchy.length > 0) {
+        metadata.hierarchy = hierarchy;
+      }
+
+      // Create NodeGroup object
+      return {
+        id: `bolt:${name}`,
+        name,
+        source: "bolt",
+        sources: ["bolt"],
+        linked: false,
+        nodes,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+      };
+    }
+
 
   /**
    * Get arbitrary data for a node

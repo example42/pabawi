@@ -1,0 +1,17 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for prometheus
+# Do not edit manually; changes will be overwritten.
+global:
+  scrape_interval: <%= $options['scrape_interval'] %>
+  evaluation_interval: <%= $options['scrape_interval'] %>
+
+<%- if $options['scrape_configs'] { -%>
+scrape_configs:
+<%- $options['scrape_configs'].each |$config| { -%>
+  - job_name: '<%= $config['job_name'] %>'
+    static_configs:
+<%- $config['static_configs'].each |$sc| { -%>
+      - targets: [<%= $sc['targets'].map |$t| { "'${t}'" }.join(', ') %>]
+<%- } -%>
+<%- } -%>
+<%- } -%>

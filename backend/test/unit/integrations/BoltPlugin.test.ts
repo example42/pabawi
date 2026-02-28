@@ -252,6 +252,37 @@ describe("BoltPlugin", () => {
     });
   });
 
+  describe("getGroups", () => {
+    it("should return empty array when inventory file does not exist", async () => {
+      mockExistsSync.mockReturnValue(false);
+
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: "bolt",
+        type: "both",
+        config: {},
+        priority: 5,
+      };
+
+      const mockInventory = [
+        { id: "node1", name: "node1", uri: "ssh://node1", transport: "ssh" as const },
+      ];
+      vi.mocked(mockBoltService.getInventory).mockResolvedValue(mockInventory);
+      await boltPlugin.initialize(config);
+
+      const groups = await boltPlugin.getGroups();
+      expect(groups).toEqual([]);
+    });
+
+    it("should throw error when not initialized", async () => {
+      const uninitializedPlugin = new BoltPlugin(mockBoltService);
+
+      await expect(uninitializedPlugin.getGroups()).rejects.toThrow(
+        "Bolt plugin not initialized",
+      );
+    });
+  });
+
   describe("getBoltService", () => {
     it("should return the wrapped BoltService instance", () => {
       const service = boltPlugin.getBoltService();

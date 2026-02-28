@@ -1208,7 +1208,8 @@ describe('ExpertModeService', () => {
 
       expect(context.headers['user-agent']).toBe('Test Agent');
       expect(context.headers['content-type']).toBe('application/json');
-      expect(context.headers['authorization']).toBe('Bearer token123');
+      // Authorization header should be redacted for security
+      expect(context.headers['authorization']).toBe('[REDACTED]');
       expect(context.headers['x-custom-header']).toBe('custom-value');
     });
 

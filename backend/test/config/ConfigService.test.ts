@@ -29,13 +29,13 @@ describe("ConfigService - Integration Configuration", () => {
 
   describe("PuppetDB Configuration", () => {
     it("should load PuppetDB configuration when enabled", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";
-      process.env.PUPPETDB_PORT = "8081";
-      process.env.PUPPETDB_TOKEN = "test-token";
-      process.env.PUPPETDB_TIMEOUT = "30000";
-      process.env.PUPPETDB_RETRY_ATTEMPTS = "3";
-      process.env.PUPPETDB_RETRY_DELAY = "1000";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";  // pragma: allowlist secret
+      process.env.PUPPETDB_PORT = "8081";  // pragma: allowlist secret
+      process.env.PUPPETDB_TOKEN = "test-token";  // pragma: allowlist secret
+      process.env.PUPPETDB_TIMEOUT = "30000";  // pragma: allowlist secret
+      process.env.PUPPETDB_RETRY_ATTEMPTS = "3";  // pragma: allowlist secret
+      process.env.PUPPETDB_RETRY_DELAY = "1000";  // pragma: allowlist secret
 
       const configService = new ConfigService();
       const puppetdbConfig = configService.getPuppetDBConfig();
@@ -58,13 +58,13 @@ describe("ConfigService - Integration Configuration", () => {
     });
 
     it("should load PuppetDB SSL configuration", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";
-      process.env.PUPPETDB_SSL_ENABLED = "true";
-      process.env.PUPPETDB_SSL_CA = "/path/to/ca.pem";
-      process.env.PUPPETDB_SSL_CERT = "/path/to/cert.pem";
-      process.env.PUPPETDB_SSL_KEY = "/path/to/key.pem";
-      process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED = "true";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";  // pragma: allowlist secret
+      process.env.PUPPETDB_SSL_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SSL_CA = "/path/to/ca.pem";  // pragma: allowlist secret
+      process.env.PUPPETDB_SSL_CERT = "/path/to/cert.pem";  // pragma: allowlist secret
+      process.env.PUPPETDB_SSL_KEY = "/path/to/key.pem";  // pragma: allowlist secret
+      process.env.PUPPETDB_SSL_REJECT_UNAUTHORIZED = "true";  // pragma: allowlist secret
 
       const configService = new ConfigService();
       const puppetdbConfig = configService.getPuppetDBConfig();
@@ -79,9 +79,9 @@ describe("ConfigService - Integration Configuration", () => {
     });
 
     it("should disable SSL when PUPPETDB_SSL_ENABLED is false", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";
-      process.env.PUPPETDB_SSL_ENABLED = "false";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";  // pragma: allowlist secret
+      process.env.PUPPETDB_SSL_ENABLED = "false";  // pragma: allowlist secret
 
       const configService = new ConfigService();
       const puppetdbConfig = configService.getPuppetDBConfig();
@@ -92,7 +92,7 @@ describe("ConfigService - Integration Configuration", () => {
     });
 
     it("should throw error when PUPPETDB_ENABLED is true but SERVER_URL is missing", () => {
-      process.env.PUPPETDB_ENABLED = "true";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
 
       expect(() => new ConfigService()).toThrow(
         "PUPPETDB_SERVER_URL is required when PUPPETDB_ENABLED is true",
@@ -100,8 +100,8 @@ describe("ConfigService - Integration Configuration", () => {
     });
 
     it("should apply default values for optional PuppetDB settings", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";  // pragma: allowlist secret
 
       const configService = new ConfigService();
       const config = configService.getConfig();
@@ -113,24 +113,24 @@ describe("ConfigService - Integration Configuration", () => {
     });
 
     it("should validate PuppetDB server URL format", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "not-a-valid-url";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "not-a-valid-url";  // pragma: allowlist secret
 
       expect(() => new ConfigService()).toThrow();
     });
 
     it("should validate PuppetDB port is a positive integer", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";
-      process.env.PUPPETDB_PORT = "-1";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";  // pragma: allowlist secret
+      process.env.PUPPETDB_PORT = "-1";  // pragma: allowlist secret
 
       expect(() => new ConfigService()).toThrow();
     });
 
     it("should validate retry attempts is non-negative", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";
-      process.env.PUPPETDB_RETRY_ATTEMPTS = "-1";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";  // pragma: allowlist secret
+      process.env.PUPPETDB_RETRY_ATTEMPTS = "-1";  // pragma: allowlist secret
 
       expect(() => new ConfigService()).toThrow();
     });
@@ -146,8 +146,8 @@ describe("ConfigService - Integration Configuration", () => {
     });
 
     it("should include PuppetDB in integrations when enabled", () => {
-      process.env.PUPPETDB_ENABLED = "true";
-      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";
+      process.env.PUPPETDB_ENABLED = "true";  // pragma: allowlist secret
+      process.env.PUPPETDB_SERVER_URL = "https://puppetdb.example.com";  // pragma: allowlist secret
 
       const configService = new ConfigService();
       const integrations = configService.getIntegrationsConfig();

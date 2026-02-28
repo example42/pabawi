@@ -3,10 +3,17 @@
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ComponentType = any;
 
+export interface RouteConfig {
+  component: ComponentType;
+  requiresAuth?: boolean;
+  requiresAdmin?: boolean;
+}
+
 class Router {
   currentPath = $state("/");
   currentParams = $state<Record<string, string>>({});
   currentQuery = $state<URLSearchParams>(new URLSearchParams());
+  private _intendedPath = $state<string | null>(null);
 
   constructor() {
     // Initialize with current path and query
@@ -29,6 +36,20 @@ class Router {
       this.currentPath = pathname;
       this.currentQuery = new URLSearchParams(search || "");
     }
+  }
+
+  get intendedPath(): string | null {
+    return this._intendedPath;
+  }
+
+  setIntendedPath(path: string | null): void {
+    this._intendedPath = path;
+  }
+
+  navigateToIntendedOrDefault(defaultPath: string = '/'): void {
+    const path = this._intendedPath || defaultPath;
+    this._intendedPath = null;
+    this.navigate(path);
   }
 
   matchRoute(
@@ -62,13 +83,20 @@ class Router {
   }
 
   findRoute(
-    routes: Record<string, ComponentType>,
-  ): { component: ComponentType; params: Record<string, string> } | null {
-    for (const [pattern, component] of Object.entries(routes)) {
+    routes: Record<string, ComponentType | RouteConfig>,
+  ): { component: ComponentType; params: Record<string, string>; config?: RouteConfig } | null {
+    for (const [pattern, routeOrConfig] of Object.entries(routes)) {
       const { match, params } = this.matchRoute(pattern, this.currentPath);
       if (match) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        return { component, params };
+        // Check if it's a RouteConfig or just a component
+        if (routeOrConfig && typeof routeOrConfig === 'object' && 'component' in routeOrConfig) {
+          const config = routeOrConfig as RouteConfig;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          return { component: config.component, params, config };
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          return { component: routeOrConfig, params };
+        }
       }
     }
     return null;

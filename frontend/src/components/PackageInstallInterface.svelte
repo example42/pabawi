@@ -12,7 +12,7 @@
 
   interface Props {
     nodeId: string;
-    availableExecutionTools?: Array<'bolt' | 'ansible'>;
+    availableExecutionTools?: Array<'bolt' | 'ansible' | 'ssh'>;
     onExecutionComplete?: () => void;
   }
 
@@ -39,7 +39,7 @@
     results: NodeResult[];
     error?: string;
     command?: string;
-    executionTool?: 'bolt' | 'ansible';
+    executionTool?: 'bolt' | 'ansible' | 'ssh';
   }
 
   interface NodeResult {
@@ -61,7 +61,7 @@
   let expanded = $state(false);
   let availableTasks = $state<PackageTask[]>([]);
   let selectedTask = $state<string>('');
-  let selectedTool = $state<'bolt' | 'ansible'>('bolt');
+  let selectedTool = $state<'bolt' | 'ansible' | 'ssh'>('bolt');
   let packageName = $state('');
   let packageVersion = $state('');
   let ensure = $state<'present' | 'absent' | 'latest'>('present');
@@ -314,19 +314,29 @@
       <form onsubmit={installPackage} class="space-y-4">
         {#if shouldShowToolSelector}
           <div>
-            <label for="package-tool-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Tool
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Execution Tool
             </label>
-            <select
-              id="package-tool-select"
-              bind:value={selectedTool}
-              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-              disabled={executing}
-            >
+            <div class="flex gap-2">
               {#each availableExecutionTools as tool}
-                <option value={tool}>{tool === 'bolt' ? 'Bolt' : 'Ansible'}</option>
+                <button
+                  type="button"
+                  onclick={() => selectedTool = tool}
+                  class="flex items-center gap-2 rounded-lg border-2 px-4 py-2 text-sm font-medium transition-all {selectedTool === tool
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-400 dark:hover:bg-gray-700'}"
+                  disabled={executing}
+                >
+                  <IntegrationBadge integration={tool} variant="dot" size="md" />
+                  <span class="capitalize">{tool}</span>
+                  {#if selectedTool === tool}
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                  {/if}
+                </button>
               {/each}
-            </select>
+            </div>
           </div>
         {/if}
 

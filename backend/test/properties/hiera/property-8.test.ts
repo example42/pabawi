@@ -131,7 +131,7 @@ describe("Property 8: Key Scanning Completeness", () => {
     await fc.assert(
       fc.asyncProperty(hieradataArb, async (data) => {
         // Use common.yaml to get predictable hierarchy level
-        const relativePath = "data/common.yaml";
+        const relativePath = "data/common.yaml";  // pragma: allowlist secret
         createTestFile(relativePath, data);
 
         const index = await scanner.scan();

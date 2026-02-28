@@ -93,7 +93,7 @@ describe('Graceful Degradation', () => {
 
       // Find Puppetserver in integrations
       const puppetserver = response.body.integrations.find(
-        (i: { name: string }) => i.name === 'puppetserver'
+        (i: { name: string }) => i.name === 'puppetserver'  // pragma: allowlist secret
       );
 
       expect(puppetserver).toBeDefined();
@@ -109,7 +109,7 @@ describe('Graceful Degradation', () => {
       // If PuppetDB is configured, it should show its status
       if (puppetDBService) {
         const puppetdb = response.body.integrations.find(
-          (i: { name: string }) => i.name === 'puppetdb'
+          (i: { name: string }) => i.name === 'puppetdb'  // pragma: allowlist secret
         );
 
         expect(puppetdb).toBeDefined();

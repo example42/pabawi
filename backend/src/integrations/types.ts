@@ -8,6 +8,37 @@
 import type { Node, Facts, ExecutionResult } from "./bolt/types";
 
 /**
+ * Node group from an integration source
+ */
+export interface NodeGroup {
+  /** Unique identifier for the group (format: source:groupName) */
+  id: string;
+
+  /** Group name as defined in the source */
+  name: string;
+
+  /** Primary source of the group */
+  source: string;
+
+  /** All sources where this group exists (for linked groups) */
+  sources: string[];
+
+  /** True if group exists in multiple sources */
+  linked: boolean;
+
+  /** Array of node IDs that are members of this group */
+  nodes: string[];
+
+  /** Optional metadata specific to the source */
+  metadata?: {
+    description?: string;
+    variables?: Record<string, unknown>;
+    hierarchy?: string[]; // Parent group names
+    [key: string]: unknown;
+  };
+}
+
+/**
  * Health status for an integration
  */
 export interface HealthStatus {
@@ -139,6 +170,12 @@ export interface InformationSourcePlugin extends IntegrationPlugin {
    * @returns Array of nodes
    */
   getInventory(): Promise<Node[]>;
+
+  /**
+   * Get groups from this source
+   * @returns Array of node groups
+   */
+  getGroups(): Promise<NodeGroup[]>;
 
   /**
    * Get facts for a specific node

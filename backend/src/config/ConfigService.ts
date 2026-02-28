@@ -407,16 +407,16 @@ export class ConfigService {
       // Parse command whitelist from JSON string
       let commandWhitelist: WhitelistConfig;
       try {
-        const whitelistJson = process.env.BOLT_COMMAND_WHITELIST ?? "[]";
+        const whitelistJson = process.env.COMMAND_WHITELIST ?? "[]";
         const parsedWhitelist = JSON.parse(whitelistJson) as unknown;
         const whitelistArray: string[] = Array.isArray(parsedWhitelist)
           ? parsedWhitelist.filter(
               (item): item is string => typeof item === "string",
             )
           : [];
-        const matchMode = process.env.BOLT_COMMAND_WHITELIST_MATCH_MODE;
+        const matchMode = process.env.COMMAND_WHITELIST_MATCH_MODE;
         commandWhitelist = {
-          allowAll: process.env.BOLT_COMMAND_WHITELIST_ALLOW_ALL === "true",
+          allowAll: process.env.COMMAND_WHITELIST_ALLOW_ALL === "true",
           whitelist: whitelistArray,
           matchMode:
             matchMode === "exact" || matchMode === "prefix"
@@ -425,7 +425,7 @@ export class ConfigService {
         };
       } catch (error) {
         throw new Error(
-          `Failed to parse BOLT_COMMAND_WHITELIST: ${error instanceof Error ? error.message : "Unknown error"}`,
+          `Failed to parse COMMAND_WHITELIST: ${error instanceof Error ? error.message : "Unknown error"}`,
         );
       }
 
@@ -494,6 +494,9 @@ export class ConfigService {
           : undefined,
         logLevel: process.env.LOG_LEVEL,
         databasePath: process.env.DATABASE_PATH,
+        corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS
+          ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean)
+          : undefined,
         packageTasks,
         streaming,
         cache,

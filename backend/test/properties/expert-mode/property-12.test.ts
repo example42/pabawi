@@ -178,7 +178,7 @@ describe('Property 12: Backend Logging Completeness', () => {
           return (
             debugInfo.errors !== undefined &&
             debugInfo.errors.length > 0 &&
-            debugInfo.errors[0].level === 'error'
+            debugInfo.errors[0].level === 'error'  // pragma: allowlist secret
           );
         }
       ),
@@ -207,7 +207,7 @@ describe('Property 12: Backend Logging Completeness', () => {
           return (
             debugInfo.warnings !== undefined &&
             debugInfo.warnings.length > 0 &&
-            debugInfo.warnings[0].level === 'warn'
+            debugInfo.warnings[0].level === 'warn'  // pragma: allowlist secret
           );
         }
       ),
@@ -236,7 +236,7 @@ describe('Property 12: Backend Logging Completeness', () => {
           return (
             debugInfo.info !== undefined &&
             debugInfo.info.length > 0 &&
-            debugInfo.info[0].level === 'info'
+            debugInfo.info[0].level === 'info'  // pragma: allowlist secret
           );
         }
       ),
@@ -265,7 +265,7 @@ describe('Property 12: Backend Logging Completeness', () => {
           return (
             debugInfo.debug !== undefined &&
             debugInfo.debug.length > 0 &&
-            debugInfo.debug[0].level === 'debug'
+            debugInfo.debug[0].level === 'debug'  // pragma: allowlist secret
           );
         }
       ),

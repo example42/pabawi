@@ -38,7 +38,7 @@ function fixFile(filePath) {
 
   let content = fs.readFileSync(fullPath, 'utf8');
   const lines = content.split('\n');
-  
+
   const fileFixes = fixes[filePath];
   if (!fileFixes) return;
 

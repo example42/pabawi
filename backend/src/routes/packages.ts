@@ -7,18 +7,19 @@ import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
+import { PackageNameSchema } from "../validation/commonSchemas";
 
 /**
  * Request body schema for package installation
  */
 const InstallPackageRequestSchema = z.object({
   taskName: z.string().min(1, "Task name is required").optional(),
-  packageName: z.string().min(1, "Package name is required"),
+  packageName: PackageNameSchema,
   ensure: z.enum(["present", "absent", "latest"]).optional().default("present"),
   version: z.string().optional(),
   settings: z.record(z.unknown()).optional(),
   expertMode: z.boolean().optional().default(false),
-  tool: z.enum(["bolt", "ansible"]).optional(),
+  tool: z.enum(["bolt", "ansible", "ssh"]).optional(),
 });
 
 /**

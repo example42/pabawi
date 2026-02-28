@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS executions (
   re_execution_count INTEGER DEFAULT 0,  -- Number of times this execution has been re-executed
   stdout TEXT,  -- Complete stdout output (stored when expert mode enabled)
   stderr TEXT,  -- Complete stderr output (stored when expert mode enabled)
-  execution_tool TEXT DEFAULT 'bolt' CHECK(execution_tool IN ('bolt', 'ansible'))
+  execution_tool TEXT DEFAULT 'bolt' CHECK(execution_tool IN ('bolt', 'ansible', 'ssh'))
+  -- Note: batch_id and batch_position columns are added via migration 006_add_batch_executions.sql
 );
 
 -- Index Strategy:
@@ -55,3 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_executions_status_started ON executions(status, s
 
 -- Type + time: Filter by execution type with time ordering
 CREATE INDEX IF NOT EXISTS idx_executions_type_started ON executions(type, started_at DESC);
+
+-- Note: batch_executions table, batch-related indexes, and batch_id/batch_position columns
+-- are added via migration 006_add_batch_executions.sql for existing databases.
+-- For new databases, the migration will be applied automatically during initialization.

@@ -79,6 +79,7 @@
   let integrations = $state<IntegrationStatusData[]>([]);
   let integrationsLoading = $state(true);
   let integrationsError = $state<string | null>(null);
+  let showIntegrations = $state(false);
 
   let executions = $state<ExecutionRecord[]>([]);
   let executionsLoading = $state(true);
@@ -96,6 +97,39 @@
   let puppetReportsError = $state<string | null>(null);
   let puppetReportsTimeRange = $state(1); // Default to 1 hour
   let isPuppetDBActive = $state(false);
+
+  // Puppet reports list for home page (only reports with changes)
+  interface PuppetReport {
+    certname: string;
+    hash: string;
+    environment: string;
+    status: 'unchanged' | 'changed' | 'failed';
+    noop: boolean;
+    start_time: string;
+    end_time: string;
+    metrics: {
+      resources: {
+        total: number;
+        skipped: number;
+        failed: number;
+        failed_to_restart: number;
+        changed: number;
+        corrective_change: number;
+        out_of_sync: number;
+      };
+      time: Record<string, number>;
+      events?: {
+        success: number;
+        failure: number;
+        noop?: number;
+        total: number;
+      };
+    };
+  }
+
+  let puppetReportsList = $state<PuppetReport[]>([]);
+  let puppetReportsListLoading = $state(false);
+  let puppetReportsListError = $state<string | null>(null);
 
   // UI configuration state
   let showHomePageRunChart = $state(true); // Default to true
@@ -117,6 +151,13 @@
   // Debug info state for expert mode - support multiple debug blocks
   let debugInfoBlocks = $state<LabeledDebugInfo[]>([]);
 
+  // Home page inventory list state
+  let homeSearchQuery = $state('');
+  let homeTransportFilter = $state<string>('all');
+  let homeSourceFilter = $state<string>('all');
+  let homeSortBy = $state<string>('name');
+  let homeSortOrder = $state<'asc' | 'desc'>('asc');
+
   // Sorted debug blocks in chronological order (newest first)
   const sortedDebugInfoBlocks = $derived.by(() => {
     return [...debugInfoBlocks].sort((a, b) => {
@@ -124,6 +165,63 @@
       const timeB = new Date(b.debugInfo.timestamp).getTime();
       return timeB - timeA; // Newest first
     });
+  });
+
+  // Computed filtered nodes for home page inventory list
+  const homeFilteredNodes = $derived.by(() => {
+    let result = nodes;
+
+    // Filter by search query
+    if (homeSearchQuery.trim()) {
+      const query = homeSearchQuery.toLowerCase();
+      result = result.filter(node =>
+        node.name.toLowerCase().includes(query) ||
+        node.uri.toLowerCase().includes(query)
+      );
+    }
+
+    // Filter by transport type
+    if (homeTransportFilter !== 'all') {
+      result = result.filter(node => node.transport === homeTransportFilter);
+    }
+
+    // Filter by source
+    if (homeSourceFilter !== 'all') {
+      result = result.filter(node => (node.source || 'bolt') === homeSourceFilter);
+    }
+
+    // Sort nodes
+    result = [...result].sort((a, b) => {
+      let comparison = 0;
+
+      switch (homeSortBy) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'transport':
+          comparison = a.transport.localeCompare(b.transport);
+          break;
+        case 'source':
+          comparison = (a.source || 'bolt').localeCompare(b.source || 'bolt');
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return homeSortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  });
+
+  // Computed node counts by source for home page
+  const homeNodeCountsBySource = $derived.by(() => {
+    const counts: Record<string, number> = {};
+    for (const node of nodes) {
+      const source = node.source || 'bolt';
+      counts[source] = (counts[source] || 0) + 1;
+    }
+    return counts;
   });
 
   // Callback to receive debug info from API calls
@@ -223,6 +321,9 @@
       if (data._debug) {
         handleDebugInfo('Puppet Reports Summary', data._debug);
       }
+
+      // Also fetch the list of reports with changes for the home page
+      void fetchPuppetReportsList();
     } catch (err) {
       puppetReportsError = err instanceof Error ? err.message : 'Failed to load Puppet reports';
       console.error('[HomePage] Error fetching Puppet reports:', err);
@@ -236,6 +337,28 @@
       };
     } finally {
       puppetReportsLoading = false;
+    }
+  }
+
+  async function fetchPuppetReportsList(): Promise<void> {
+    puppetReportsListLoading = true;
+    puppetReportsListError = null;
+
+    try {
+      // Fetch only reports with changes (changed or failed status), limit to 20
+      const data = await get<{ reports: PuppetReport[]; _debug?: DebugInfo }>('/api/integrations/puppetdb/reports?status=changed,failed&limit=20&offset=0');
+      puppetReportsList = data.reports || [];
+
+      // Store debug info if present
+      if (data._debug) {
+        handleDebugInfo('Puppet Reports List (Home)', data._debug);
+      }
+    } catch (err) {
+      puppetReportsListError = err instanceof Error ? err.message : 'Failed to load Puppet reports list';
+      console.error('[HomePage] Error fetching Puppet reports list:', err);
+      puppetReportsList = [];
+    } finally {
+      puppetReportsListLoading = false;
     }
   }
 
@@ -300,6 +423,40 @@
     void fetchIntegrationStatus(true);
   }
 
+  // Get transport badge color
+  function getTransportColor(transport: string): string {
+    switch (transport) {
+      case 'ssh':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+      case 'winrm':
+        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+      case 'docker':
+        return 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200';
+      case 'local':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+    }
+  }
+
+  // Get source display name
+  function getSourceDisplayName(source: string): string {
+    switch (source) {
+      case 'bolt':
+        return 'Bolt';
+      case 'puppetdb':
+        return 'PuppetDB';
+      case 'puppetserver':
+        return 'Puppetserver';
+      case 'hiera':
+        return 'Hiera';
+      case 'ansible':
+        return 'Ansible';
+      default:
+        return source.charAt(0).toUpperCase() + source.slice(1);
+    }
+  }
+
   onMount(() => {
     debugInfoBlocks = []; // Clear debug info blocks on mount
     // Fetch UI configuration first
@@ -338,176 +495,177 @@
 </svelte:head>
 
 <div class="container mx-auto px-4 py-8">
-  <!-- Welcome Section -->
-  <div class="mb-12 text-center">
-    <div class="flex justify-center mb-6">
-      <img
-        src="/favicon/web-app-manifest-512x512.png"
-        alt="Pabawi Logo"
-        class="h-24 w-24"
-      />
-    </div>
-    <h1 class="text-5xl font-bold text-gray-900 dark:text-white mb-4">
-      Welcome to Pabawi Zero
-    </h1>
-    <p class="text-xl text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-      Puppet Ansible Bolt Awesome Web Interface
-    </p>
-  </div>
-
-  <!-- Quick Stats -->
-  <div class="grid gap-6 mb-12 md:grid-cols-4">
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Nodes</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {loading ? '...' : nodes.length}
-          </p>
+  <!-- Welcome Section with Logo and Stats -->
+  <div class="mb-12">
+    <div class="flex flex-col lg:flex-row gap-8 items-start">
+      <!-- Logo and Welcome Text -->
+      <div class="flex-shrink-0">
+        <div class="flex items-start gap-6">
+          <img
+            src="/favicon/web-app-manifest-512x512.png"
+            alt="Pabawi Logo"
+            class="h-24 w-24"
+          />
+          <div>
+            <h1 class="text-5xl font-bold text-gray-900 dark:text-white mb-4">
+              Pabawi
+            </h1>
+            <p class="text-xl text-gray-600 dark:text-gray-400">
+              Your servers. Your eyes. Your actions.
+            </p>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Integrations</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {integrationsLoading ? '...' : integrations.filter(i => i.status === 'connected').length} / {integrations.length}
-          </p>
-        </div>
-      </div>
-    </div>
+      <!-- Quick Stats - Clickable -->
+      <div class="flex-1 grid gap-4 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4">
+        <button
+          type="button"
+          onclick={() => {
+            const element = document.getElementById('inventory-section');
+            element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-blue-400 dark:hover:border-blue-600 transition-all text-left"
+        >
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Nodes</p>
+              <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                {loading ? '...' : nodes.length}
+              </p>
+            </div>
+          </div>
+        </button>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Total Executions</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {executionsLoading ? '...' : executionsSummary?.total ?? 0}
-          </p>
-        </div>
-      </div>
-    </div>
+        <button
+          type="button"
+          onclick={() => {
+            showIntegrations = !showIntegrations;
+          }}
+          class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-green-400 dark:hover:border-green-600 transition-all text-left {showIntegrations ? 'ring-2 ring-green-400 dark:ring-green-600' : ''}"
+        >
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Integrations</p>
+              <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                {integrationsLoading ? '...' : integrations.filter(i => i.status === 'connected').length} / {integrations.length}
+              </p>
+            </div>
+          </div>
+        </button>
 
-    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700">
-      <div class="flex items-center">
-        <div class="flex-shrink-0">
-          <svg class="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <div class="ml-4">
-          <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Success Rate</p>
-          <p class="text-2xl font-semibold text-gray-900 dark:text-white">
-            {#if executionsLoading}
-              ...
-            {:else if executionsSummary && executionsSummary.total > 0}
-              {Math.round((executionsSummary.success / executionsSummary.total) * 100)}%
-            {:else}
-              N/A
-            {/if}
-          </p>
-        </div>
+        <button
+          type="button"
+          onclick={() => {
+            const element = document.getElementById('executions-section');
+            element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-purple-400 dark:hover:border-purple-600 transition-all text-left"
+        >
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-8 w-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+            </div>
+            <div class="ml-4">
+              <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Actions</p>
+              <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                {executionsLoading ? '...' : executionsSummary?.total ?? 0}
+              </p>
+            </div>
+          </div>
+        </button>
+
+        {#if isPuppetDBActive}
+          <button
+            type="button"
+            onclick={() => {
+              const element = document.getElementById('puppet-reports-section');
+              element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-orange-400 dark:hover:border-orange-600 transition-all text-left"
+          >
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Puppet Reports</p>
+                <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {puppetReportsLoading ? '...' : puppetReports.total}
+                </p>
+              </div>
+            </div>
+          </button>
+        {:else}
+          <button
+            type="button"
+            onclick={() => {
+              const element = document.getElementById('executions-section');
+              element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }}
+            class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border border-gray-200 dark:border-gray-700 hover:shadow-lg hover:border-emerald-400 dark:hover:border-emerald-600 transition-all text-left"
+          >
+            <div class="flex items-center">
+              <div class="flex-shrink-0">
+                <svg class="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div class="ml-4">
+                <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Success Rate</p>
+                <p class="text-2xl font-semibold text-gray-900 dark:text-white">
+                  {#if executionsLoading}
+                    ...
+                  {:else if executionsSummary && executionsSummary.total > 0}
+                    {Math.round((executionsSummary.success / executionsSummary.total) * 100)}%
+                  {:else}
+                    N/A
+                  {/if}
+                </p>
+              </div>
+            </div>
+          </button>
+        {/if}
       </div>
     </div>
   </div>
 
   <!-- Integration Status Section -->
-  <div class="mb-12">
-    <IntegrationStatus
-      {integrations}
-      loading={integrationsLoading}
-      onRefresh={handleRefreshIntegrations}
-    />
-    {#if integrationsError}
-      <div class="mt-4">
-        <ErrorAlert
-          message="Failed to load integration status"
-          details={integrationsError}
-          onRetry={() => fetchIntegrationStatus(true)}
-        />
-      </div>
-    {/if}
-  </div>
-
-  <!-- Puppet Reports Summary (only show if PuppetDB is active) -->
-  {#if isPuppetDBActive}
-    <div class="mb-12">
-      <PuppetReportsSummary
-        reports={puppetReports}
-        loading={puppetReportsLoading}
-        error={puppetReportsError}
-        timeRange={puppetReportsTimeRange}
-        onRetry={() => fetchPuppetReports(puppetReportsTimeRange)}
-        onTimeRangeChange={handleTimeRangeChange}
+  {#if showIntegrations}
+    <div id="integrations-section" class="mb-12 scroll-mt-8">
+      <IntegrationStatus
+        {integrations}
+        loading={integrationsLoading}
+        onRefresh={handleRefreshIntegrations}
       />
-    </div>
-
-    <!-- Aggregated Puppet Run History Chart (only show if PuppetDB is active and enabled in config) -->
-    {#if isPuppetDBActive && showHomePageRunChart}
-      <div class="mb-12">
-        <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          {#if runHistoryLoading}
-            <div class="flex items-center justify-center py-12">
-              <LoadingSpinner />
-            </div>
-          {:else if runHistoryError}
-            <ErrorAlert
-              message="Failed to load run history"
-              details={runHistoryError}
-              onRetry={() => fetchAggregatedRunHistory()}
-            />
-          {:else if aggregatedRunHistory.length > 0}
-            <div class="mb-4 flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Aggregated Puppet Run History (All Nodes - Last 7 Days)</h3>
-                {#if runHistoryLastUpdate}
-                  <span class="text-sm text-gray-500 dark:text-gray-400">
-                    Last updated: {runHistoryLastUpdate.toLocaleTimeString()}
-                  </span>
-                {/if}
-              </div>
-              <button
-                type="button"
-                onclick={() => fetchAggregatedRunHistory()}
-                class="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-white dark:ring-gray-600 dark:hover:bg-gray-600"
-                disabled={runHistoryLoading}
-              >
-                {runHistoryLoading ? 'Refreshing...' : 'Refresh'}
-              </button>
-            </div>
-            <PuppetRunChart
-              data={aggregatedRunHistory}
-              title=""
-            />
-          {:else}
-            <div class="flex items-center justify-center py-12 text-gray-500 dark:text-gray-400">
-              No run history available
-            </div>
-          {/if}
+      {#if integrationsError}
+        <div class="mt-4">
+          <ErrorAlert
+            message="Failed to load integration status"
+            details={integrationsError}
+            onRetry={() => fetchIntegrationStatus(true)}
+          />
         </div>
-      </div>
-    {/if}
+      {/if}
+    </div>
   {/if}
 
-  <!-- Inventory Preview -->
-  <div class="mb-8">
+  <!-- Inventory List Section -->
+  <div id="inventory-section" class="mb-12 scroll-mt-8">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
@@ -549,32 +707,180 @@
         </p>
       </div>
     {:else}
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {#each nodes.slice(0, 8) as node (node.id)}
-          <button
-            type="button"
-            class="group relative rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-500 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-400"
-            onclick={() => router.navigate(`/nodes/${node.id}`)}
-          >
-            <div class="mb-2">
-              <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400">
-                {node.name}
-              </h3>
+      <!-- Filters and Search -->
+      <div class="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <!-- Search -->
+        <div class="flex-1 max-w-md">
+          <label for="home-search" class="sr-only">Search nodes</label>
+          <div class="relative">
+            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
-            <p class="text-sm text-gray-600 dark:text-gray-400 truncate">
-              {node.uri}
-            </p>
-            <span class="mt-2 inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-              {node.transport}
-            </span>
-          </button>
-        {/each}
+            <input
+              id="home-search"
+              type="text"
+              bind:value={homeSearchQuery}
+              placeholder="Search by name or URI..."
+              class="block w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-3 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+            />
+          </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex items-center gap-4 flex-wrap">
+          <!-- Source Filter Buttons -->
+          <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Source:</span>
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                onclick={() => homeSourceFilter = 'all'}
+                class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors {homeSourceFilter === 'all' ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+              >
+                All ({nodes.length})
+              </button>
+              {#each Object.keys(homeNodeCountsBySource).sort() as source}
+                <button
+                  type="button"
+                  onclick={() => homeSourceFilter = homeSourceFilter === source ? 'all' : source}
+                  class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors {homeSourceFilter === source ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-900' : 'hover:opacity-80'}"
+                >
+                  <IntegrationBadge integration={source} variant="badge" size="sm" />
+                  <span class="text-gray-600 dark:text-gray-300">({homeNodeCountsBySource[source]})</span>
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          <!-- Transport Filter -->
+          <div class="flex items-center gap-2">
+            <label for="home-transport-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Transport:
+            </label>
+            <select
+              id="home-transport-filter"
+              bind:value={homeTransportFilter}
+              class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="all">All</option>
+              <option value="ssh">SSH</option>
+              <option value="winrm">WinRM</option>
+              <option value="docker">Docker</option>
+              <option value="local">Local</option>
+            </select>
+          </div>
+
+          <!-- Sort By -->
+          <div class="flex items-center gap-2">
+            <label for="home-sort-by" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Sort:
+            </label>
+            <select
+              id="home-sort-by"
+              bind:value={homeSortBy}
+              class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="name">Name</option>
+              <option value="source">Source</option>
+              <option value="transport">Transport</option>
+            </select>
+            <button
+              type="button"
+              onclick={() => homeSortOrder = homeSortOrder === 'asc' ? 'desc' : 'asc'}
+              class="rounded-lg border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              aria-label="Toggle sort order"
+            >
+              {#if homeSortOrder === 'asc'}
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+              {:else}
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+                </svg>
+              {/if}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {#if nodes.length > 8}
-        <div class="mt-6 text-center">
+      <!-- Results Count -->
+      <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
+        Showing {homeFilteredNodes.length > 30 ? 30 : homeFilteredNodes.length} of {homeFilteredNodes.length} nodes
+      </div>
+
+      <!-- Compact Node List (30 lines max) -->
+      <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-900">
+            <tr>
+              <th scope="col" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Name
+              </th>
+              <th scope="col" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Source
+              </th>
+              <th scope="col" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                Transport
+              </th>
+              <th scope="col" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                URI
+              </th>
+              <th scope="col" class="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                User
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+            {#each homeFilteredNodes.slice(0, 30) as node (node.id)}
+              <tr
+                class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                onclick={() => router.navigate(`/nodes/${node.id}`)}
+              >
+                <td class="whitespace-nowrap px-4 py-2 text-sm font-medium text-gray-900 dark:text-white">
+                  {node.name}
+                </td>
+                <td class="whitespace-nowrap px-4 py-2 text-sm">
+                  {#if node.sources && node.sources.length > 0}
+                    <div class="flex flex-wrap gap-1">
+                      {#each node.sources as source}
+                        <IntegrationBadge integration={source} variant="badge" size="sm" />
+                      {/each}
+                    </div>
+                  {:else}
+                    <IntegrationBadge integration={node.source || 'bolt'} variant="badge" size="sm" />
+                  {/if}
+                </td>
+                <td class="whitespace-nowrap px-4 py-2 text-sm">
+                  <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">
+                    {node.transport}
+                  </span>
+                </td>
+                <td class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 truncate max-w-xs">
+                  {node.uri}
+                </td>
+                <td class="whitespace-nowrap px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+                  {node.config.user || '-'}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      {#if homeFilteredNodes.length > 30}
+        <div class="mt-4 text-center">
           <p class="text-sm text-gray-600 dark:text-gray-400">
-            Showing 8 of {nodes.length} nodes
+            Showing 30 of {homeFilteredNodes.length} nodes.
+            <button
+              type="button"
+              onclick={() => router.navigate('/inventory')}
+              class="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+            >
+              View all nodes
+            </button>
           </p>
         </div>
       {/if}
@@ -582,11 +888,11 @@
   </div>
 
   <!-- Recent Executions -->
-  <div class="mb-12">
+  <div id="executions-section" class="mb-12 scroll-mt-8">
     <div class="flex items-center justify-between mb-6">
       <div class="flex items-center gap-3">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
-          Recent Executions
+          Recent Actions
         </h2>
         <IntegrationBadge integration="bolt" variant="badge" size="sm" />
       </div>
@@ -630,6 +936,116 @@
       />
     {/if}
   </div>
+
+  <!-- Puppet Reports (only show if PuppetDB is active, list mode with changes only) -->
+  {#if isPuppetDBActive}
+    <div id="puppet-reports-section" class="mb-12 scroll-mt-8">
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+          Puppet Reports
+        </h2>
+        <button
+          type="button"
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          onclick={() => router.navigate('/puppet')}
+        >
+          View All
+          <svg class="ml-2 -mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+
+      {#if puppetReportsListLoading}
+        <div class="flex justify-center py-12">
+          <LoadingSpinner size="lg" message="Loading Puppet reports..." />
+        </div>
+      {:else if puppetReportsListError}
+        <ErrorAlert
+          message="Failed to load Puppet reports"
+          details={puppetReportsListError}
+          onRetry={fetchPuppetReportsList}
+        />
+      {:else if puppetReportsList.length === 0}
+        <div class="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
+          <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No reports with changes</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            All recent Puppet runs completed without changes
+          </p>
+        </div>
+      {:else}
+        <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
+          <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-medium text-gray-900 dark:text-white">Recent Reports with Changes</h3>
+                <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+              </div>
+              <div class="text-sm text-gray-600 dark:text-gray-400">
+                Showing {puppetReportsList.length} report{puppetReportsList.length !== 1 ? 's' : ''}
+              </div>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead class="bg-gray-50 dark:bg-gray-900">
+                <tr>
+                  <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Start Time
+                  </th>
+                  <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Hostname
+                  </th>
+                  <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Environment
+                  </th>
+                  <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Changed
+                  </th>
+                  <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Failed
+                  </th>
+                  <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                {#each puppetReportsList as report}
+                  <tr
+                    class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                    onclick={() => router.navigate(`/nodes/${report.certname}?tab=puppet-reports`)}
+                  >
+                    <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
+                      {new Date(report.start_time).toLocaleString()}
+                    </td>
+                    <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
+                      {report.certname}
+                    </td>
+                    <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
+                      {report.environment}
+                    </td>
+                    <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-blue-700 dark:text-blue-400">
+                      {report.metrics.resources.changed}
+                    </td>
+                    <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-red-700 dark:text-red-400">
+                      {report.metrics.resources.failed}
+                    </td>
+                    <td class="whitespace-nowrap px-2 py-2 text-sm">
+                      <StatusBadge status={report.status === 'failed' ? 'failed' : 'changed'} size="sm" />
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Expert Mode Debug Panel -->
   {#if expertMode.enabled && sortedDebugInfoBlocks.length > 0}

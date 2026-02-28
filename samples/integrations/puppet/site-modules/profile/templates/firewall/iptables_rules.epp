@@ -1,0 +1,34 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for iptables
+# Do not edit manually; changes will be overwritten.
+*filter
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+# Allow loopback
+-A INPUT -i lo -j ACCEPT
+
+# Allow established/related connections
+-A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+# Allow ICMP
+-A INPUT -p icmp -j ACCEPT
+
+# Allow SSH from permitted sources
+<%- $options['allowed_ssh_sources'].each |$source| { -%>
+-A INPUT -p tcp --dport 22 -s <%= $source %> -j ACCEPT
+<%- } -%>
+
+<%- if $options['extra_rules'] { -%>
+# Extra rules from Hiera
+<%- $options['extra_rules'].each |$name, $rule| { -%>
+# <%= $name %>
+-A INPUT -p <%= $rule['proto'] %> --dport <%= $rule['dport'] %> -j ACCEPT
+<%- } -%>
+<%- } -%>
+
+# Default policy
+-A INPUT -j <%= $options['default_policy'].upcase %>
+
+COMMIT

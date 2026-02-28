@@ -23,6 +23,19 @@
 
   let { integrations, loading = false, onRefresh }: Props = $props();
 
+  // Track which integration cards are expanded
+  let expandedIntegrations = $state<Set<string>>(new Set());
+
+  function toggleExpanded(name: string): void {
+    const next = new Set(expandedIntegrations);
+    if (next.has(name)) {
+      next.delete(name);
+    } else {
+      next.add(name);
+    }
+    expandedIntegrations = next;
+  }
+
   // Map integration status to badge status
   function getStatusBadgeType(status: string): 'success' | 'failed' | 'running' | 'pending' {
     switch (status) {
@@ -39,13 +52,6 @@
         return 'running';
     }
   }
-
-  // Get setup URL for integration
-  function getSetupUrl(name: string): string {
-    return `/integrations/${name}/setup`;
-  }
-
-
 
   // Format last check time
   function formatLastCheck(timestamp: string): string {
@@ -206,6 +212,46 @@
     };
   }
 
+  // Get SSH-specific details for display
+  function getSSHDetails(integration: IntegrationStatus): {
+    configPath?: string;
+    nodeCount?: number;
+    hasConfig?: boolean;
+    error?: string;
+  } | null {
+    if (integration.name !== 'ssh' || !integration.details) {
+      return null;
+    }
+    const details = integration.details as Record<string, unknown>;
+    return {
+      configPath: typeof details.configPath === 'string' ? details.configPath : undefined,
+      nodeCount: typeof details.nodeCount === 'number' ? details.nodeCount : undefined,
+      hasConfig: typeof details.hasConfig === 'boolean' ? details.hasConfig : undefined,
+      error: typeof details.error === 'string' ? details.error : undefined,
+    };
+  }
+
+  // Get Ansible-specific details for display
+  function getAnsibleDetails(integration: IntegrationStatus): {
+    inventoryPath?: string;
+    nodeCount?: number;
+    hasInventory?: boolean;
+    hasAnsibleCfg?: boolean;
+    error?: string;
+  } | null {
+    if (integration.name !== 'ansible' || !integration.details) {
+      return null;
+    }
+    const details = integration.details as Record<string, unknown>;
+    return {
+      inventoryPath: typeof details.inventoryPath === 'string' ? details.inventoryPath : undefined,
+      nodeCount: typeof details.nodeCount === 'number' ? details.nodeCount : undefined,
+      hasInventory: typeof details.hasInventory === 'boolean' ? details.hasInventory : undefined,
+      hasAnsibleCfg: typeof details.hasAnsibleCfg === 'boolean' ? details.hasAnsibleCfg : undefined,
+      error: typeof details.error === 'string' ? details.error : undefined,
+    };
+  }
+
   // Get integration-specific troubleshooting steps
   function getTroubleshootingSteps(integration: IntegrationStatus): string[] {
     if (integration.name === 'hiera') {
@@ -356,9 +402,9 @@
 <div class="space-y-4">
   <!-- Header with refresh button -->
   <div class="flex items-center justify-between">
-    <h3 class="text-lg font-medium text-gray-900 dark:text-white">
+    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
       Integration Status
-    </h3>
+    </h2>
     {#if onRefresh}
       <button
         type="button"
@@ -416,8 +462,10 @@
     <!-- Integration cards -->
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {#each integrations as integration (integration.name)}
-        <div
-          class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        <button
+          type="button"
+          onclick={() => toggleExpanded(integration.name)}
+          class="rounded-lg border bg-white p-4 shadow-sm dark:bg-gray-800 text-left transition-all cursor-pointer hover:shadow-md {expandedIntegrations.has(integration.name) ? 'border-blue-400 dark:border-blue-600 ring-1 ring-blue-200 dark:ring-blue-800' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'}"
         >
           <!-- Header with icon and name -->
           <div class="flex items-start justify-between">
@@ -450,7 +498,15 @@
                 </p>
               </div>
             </div>
-            <StatusBadge status={getStatusBadgeType(integration.status)} size="sm" />
+            <div class="flex items-center gap-2">
+              <StatusBadge status={getStatusBadgeType(integration.status)} size="sm" />
+              <svg
+                class="h-4 w-4 text-gray-400 transition-transform {expandedIntegrations.has(integration.name) ? 'rotate-180' : ''}"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
 
           <!-- Status details -->
@@ -507,20 +563,15 @@
               </div>
             {/if}
 
-            <!-- Integration-specific connected status details -->
-            {#if integration.status === 'connected'}
-              <!-- Hiera integration -->
+            <!-- Expanded detail sections -->
+            {#if expandedIntegrations.has(integration.name)}
+            <!-- Integration-specific connected status details (only in expert mode) -->
+            {#if integration.status === 'connected' && !expertMode.enabled}
+              <!-- Hiera integration - show summary stats only -->
               {#if integration.name === 'hiera'}
                 {@const hieraDetails = getHieraDetails(integration)}
                 {#if hieraDetails}
-                  <div class="mt-3 space-y-2">
-                    {#if hieraDetails.controlRepoPath}
-                      <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
-                        <p class="text-xs text-green-600 dark:text-green-400">
-                          <span class="font-semibold">Control Repo:</span> {hieraDetails.controlRepoPath}
-                        </p>
-                      </div>
-                    {/if}
+                  <div class="mt-3">
                     <div class="grid grid-cols-2 gap-2">
                       {#if hieraDetails.keyCount !== undefined}
                         <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
@@ -539,68 +590,10 @@
                     </div>
                   </div>
                 {/if}
-              <!-- PuppetDB integration -->
-              {:else if integration.name === 'puppetdb'}
-                {@const puppetdbDetails = getPuppetDBDetails(integration)}
-                {#if puppetdbDetails?.baseUrl}
-                  <div class="mt-3">
-                    <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
-                      <p class="text-xs text-green-600 dark:text-green-400">
-                        <span class="font-semibold">Endpoint:</span> {puppetdbDetails.baseUrl}
-                      </p>
-                    </div>
-                  </div>
-                {/if}
-              <!-- Puppetserver integration -->
-              {:else if integration.name === 'puppetserver'}
-                {@const puppetserverDetails = getPuppetserverDetails(integration)}
-                {#if puppetserverDetails?.baseUrl}
-                  <div class="mt-3">
-                    <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
-                      <p class="text-xs text-green-600 dark:text-green-400">
-                        <span class="font-semibold">Endpoint:</span> {puppetserverDetails.baseUrl}
-                      </p>
-                    </div>
-                  </div>
-                {/if}
-              <!-- Bolt integration -->
-              {:else if integration.name === 'bolt'}
-                {@const boltDetails = getBoltDetails(integration)}
-                {#if boltDetails?.projectPath}
-                  <div class="mt-3">
-                    <div class="rounded-md bg-green-50 px-2 py-1 dark:bg-green-900/20">
-                      <p class="text-xs text-green-600 dark:text-green-400">
-                        <span class="font-semibold">Project:</span> {boltDetails.projectPath}
-                      </p>
-                    </div>
-                  </div>
-                {/if}
               {/if}
             {/if}
 
-            <!-- Setup Instructions link - always visible -->
-            <div class="mt-3">
-              <a
-                href={getSetupUrl(integration.name)}
-                class="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-              >
-                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-                Setup Instructions
-              </a>
-            </div>
+
 
 
 
@@ -1097,11 +1090,144 @@
                       </div>
                     {/if}
                   {/if}
+
+                <!-- SSH integration -->
+                {:else if integration.name === 'ssh'}
+                  {@const sshDetails = getSSHDetails(integration)}
+
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Set SSH_CONFIG_PATH environment variable</li>
+                        <li>Point to your SSH config file (e.g., ~/.ssh/config)</li>
+                        <li>Ensure SSH keys are properly configured</li>
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- Always show config path if available -->
+                    {#if sshDetails?.configPath}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Config Path:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{sshDetails.configPath}</code>
+                      </div>
+                    {/if}
+
+                    {#if sshDetails?.nodeCount !== undefined}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Hosts in Config:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{sshDetails.nodeCount}</span>
+                      </div>
+                    {/if}
+
+                    <!-- Configuration status -->
+                    {#if sshDetails?.hasConfig !== undefined}
+                      <div class="mt-2">
+                        <div class="flex items-center gap-1 text-xs">
+                          {#if sshDetails.hasConfig}
+                            <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span class="text-blue-700 dark:text-blue-300">Config file found</span>
+                          {:else}
+                            <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                            <span class="text-red-600 dark:text-red-400">No config file</span>
+                          {/if}
+                        </div>
+                      </div>
+                    {/if}
+
+                    <!-- Error details -->
+                    {#if sshDetails?.error}
+                      <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
+                        <p class="text-xs font-medium text-red-800 dark:text-red-200">Error:</p>
+                        <p class="mt-1 text-xs text-red-700 dark:text-red-300">{sshDetails.error}</p>
+                      </div>
+                    {/if}
+                  {/if}
+
+                <!-- Ansible integration -->
+                {:else if integration.name === 'ansible'}
+                  {@const ansibleDetails = getAnsibleDetails(integration)}
+
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Install Ansible CLI</li>
+                        <li>Set ANSIBLE_INVENTORY_PATH environment variable</li>
+                        <li>Create ansible.cfg if needed</li>
+                        <li>Configure inventory file with target hosts</li>
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- Always show inventory path if available -->
+                    {#if ansibleDetails?.inventoryPath}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Inventory Path:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{ansibleDetails.inventoryPath}</code>
+                      </div>
+                    {/if}
+
+                    {#if ansibleDetails?.nodeCount !== undefined}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Hosts in Inventory:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{ansibleDetails.nodeCount}</span>
+                      </div>
+                    {/if}
+
+                    <!-- Configuration status -->
+                    {#if ansibleDetails?.hasInventory !== undefined || ansibleDetails?.hasAnsibleCfg !== undefined}
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        {#if ansibleDetails?.hasInventory !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if ansibleDetails.hasInventory}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Has inventory</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                              <span class="text-red-600 dark:text-red-400">No inventory</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if ansibleDetails?.hasAnsibleCfg !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if ansibleDetails.hasAnsibleCfg}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Has ansible.cfg</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No ansible.cfg</span>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Error details -->
+                    {#if ansibleDetails?.error}
+                      <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
+                        <p class="text-xs font-medium text-red-800 dark:text-red-200">Error:</p>
+                        <p class="mt-1 text-xs text-red-700 dark:text-red-300">{ansibleDetails.error}</p>
+                      </div>
+                    {/if}
+                  {/if}
                 {/if}
               </div>
             {/if}
+            {/if}
           </div>
-        </div>
+        </button>
       {/each}
     </div>
   {/if}

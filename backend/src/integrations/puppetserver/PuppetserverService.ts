@@ -11,7 +11,7 @@
  */
 
 import { BasePlugin } from "../BasePlugin";
-import type { InformationSourcePlugin, HealthStatus } from "../types";
+import type { InformationSourcePlugin, HealthStatus, NodeGroup } from "../types";
 import type { Node, Facts } from "../bolt/types";
 import type { PuppetserverConfig } from "../../config/schema";
 import { PuppetserverClient } from "./PuppetserverClient";
@@ -456,6 +456,20 @@ export class PuppetserverService
       throw error;
     }
   }
+  /**
+   * Get groups from Puppetserver
+   *
+   * @returns Array of node groups
+   * @note Puppetserver does not natively support groups, returns empty array
+   */
+  async getGroups(): Promise<NodeGroup[]> {
+    this.ensureInitialized();
+
+    // Puppetserver does not have native group support
+    // Groups would typically come from PuppetDB node classifiers or external sources
+    return [];
+  }
+
 
   /**
    * Get arbitrary data for a node

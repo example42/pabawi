@@ -167,7 +167,7 @@ describe("API Integration Tests", () => {
       // Create a route that throws a validation error
       testApp.get("/test-validation-error", () => {
         const error = new Error("Invalid input provided");
-        error.name = "ValidationError";
+        error.name = "ValidationError";  // pragma: allowlist secret
         throw error;
       });
 
@@ -194,7 +194,7 @@ describe("API Integration Tests", () => {
 
       testApp.get("/test-connection-error", () => {
         const error = new Error("ECONNREFUSED");
-        error.name = "PuppetserverConnectionError";
+        error.name = "PuppetserverConnectionError";  // pragma: allowlist secret
         throw error;
       });
 

@@ -33,7 +33,7 @@ describe('LoggerService', () => {
     });
 
     it('should read LOG_LEVEL from environment variable', () => {
-      process.env.LOG_LEVEL = 'debug';
+      process.env.LOG_LEVEL = 'debug';  // pragma: allowlist secret
       const logger = new LoggerService();
       expect(logger.getLevel()).toBe('debug');
     });
@@ -44,19 +44,19 @@ describe('LoggerService', () => {
     });
 
     it('should prioritize constructor parameter over environment variable', () => {
-      process.env.LOG_LEVEL = 'debug';
+      process.env.LOG_LEVEL = 'debug';  // pragma: allowlist secret
       const logger = new LoggerService('error');
       expect(logger.getLevel()).toBe('error');
     });
 
     it('should handle case-insensitive LOG_LEVEL environment variable', () => {
-      process.env.LOG_LEVEL = 'ERROR';
+      process.env.LOG_LEVEL = 'ERROR';  // pragma: allowlist secret
       const logger = new LoggerService();
       expect(logger.getLevel()).toBe('error');
     });
 
     it('should default to info for invalid LOG_LEVEL', () => {
-      process.env.LOG_LEVEL = 'invalid';
+      process.env.LOG_LEVEL = 'invalid';  // pragma: allowlist secret
       const logger = new LoggerService();
       expect(logger.getLevel()).toBe('info');
       expect(console.warn).toHaveBeenCalledWith(

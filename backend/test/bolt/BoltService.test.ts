@@ -9,7 +9,7 @@ describe("BoltService - gatherFacts", () => {
   });
 
   it("should parse facts output correctly", () => {
-    const nodeId = "test-node";
+    const nodeId = "test-node";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -101,7 +101,7 @@ describe("BoltService - gatherFacts", () => {
   });
 
   it("should handle missing facts gracefully", () => {
-    const nodeId = "test-node";
+    const nodeId = "test-node";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -125,7 +125,7 @@ describe("BoltService - gatherFacts", () => {
   });
 
   it("should handle partial facts data", () => {
-    const nodeId = "test-node";
+    const nodeId = "test-node";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -164,8 +164,8 @@ describe("BoltService - runCommand", () => {
   });
 
   it("should parse successful command execution output", () => {
-    const nodeId = "test-node";
-    const command = "ls -la";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const command = "ls -la";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -207,8 +207,8 @@ describe("BoltService - runCommand", () => {
   });
 
   it("should parse failed command execution output", () => {
-    const nodeId = "test-node";
-    const command = "invalid-command";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const command = "invalid-command";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -247,8 +247,8 @@ describe("BoltService - runCommand", () => {
   });
 
   it("should handle command with non-zero exit code", () => {
-    const nodeId = "test-node";
-    const command = "grep nonexistent file.txt";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const command = "grep nonexistent file.txt";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -280,7 +280,7 @@ describe("BoltService - runCommand", () => {
   });
 
   it("should handle command with both stdout and stderr", () => {
-    const nodeId = "test-node";
+    const nodeId = "test-node";  // pragma: allowlist secret
     const command = 'echo "output" && echo "error" >&2';
     const mockOutput = {
       items: [
@@ -325,8 +325,8 @@ describe("BoltService - runCommand", () => {
   });
 
   it("should handle empty items array", () => {
-    const nodeId = "test-node";
-    const command = "echo test";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const command = "echo test";  // pragma: allowlist secret
     const mockOutput = {
       items: [],
     };
@@ -356,8 +356,8 @@ describe("BoltService - runTask", () => {
   });
 
   it("should parse successful task execution output", () => {
-    const nodeId = "test-node";
-    const taskName = "package::install";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "package::install";  // pragma: allowlist secret
     const parameters = { name: "nginx", ensure: "present" };
     const mockOutput = {
       items: [
@@ -402,8 +402,8 @@ describe("BoltService - runTask", () => {
   });
 
   it("should parse failed task execution output", () => {
-    const nodeId = "test-node";
-    const taskName = "service::restart";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "service::restart";  // pragma: allowlist secret
     const parameters = { name: "nonexistent" };
     const mockOutput = {
       items: [
@@ -437,8 +437,8 @@ describe("BoltService - runTask", () => {
   });
 
   it("should handle task execution without parameters", () => {
-    const nodeId = "test-node";
-    const taskName = "facts";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "facts";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -472,8 +472,8 @@ describe("BoltService - runTask", () => {
   });
 
   it("should handle task with complex return value", () => {
-    const nodeId = "test-node";
-    const taskName = "custom::complex_task";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "custom::complex_task";  // pragma: allowlist secret
     const parameters = { action: "analyze" };
     const mockOutput = {
       items: [
@@ -522,8 +522,8 @@ describe("BoltService - runTask", () => {
   });
 
   it("should handle task with error object containing message field", () => {
-    const nodeId = "test-node";
-    const taskName = "test::task";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "test::task";  // pragma: allowlist secret
     const mockOutput = {
       items: [
         {
@@ -553,8 +553,8 @@ describe("BoltService - runTask", () => {
   });
 
   it("should handle empty items array for task", () => {
-    const nodeId = "test-node";
-    const taskName = "test::task";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "test::task";  // pragma: allowlist secret
     const mockOutput = {
       items: [],
     };
@@ -591,7 +591,7 @@ Invalid parameter 'unknown_param'`;
   });
 
   it("should return full stderr when no specific parameter errors found", () => {
-    const stderr = "Some generic error message";
+    const stderr = "Some generic error message";  // pragma: allowlist secret
 
     const errors = (boltService as any).extractParameterErrors(stderr);
 
@@ -601,8 +601,8 @@ Invalid parameter 'unknown_param'`;
   });
 
   it("should handle task execution with empty parameters object", () => {
-    const nodeId = "test-node";
-    const taskName = "test::task";
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "test::task";  // pragma: allowlist secret
     const parameters = {};
     const mockOutput = {
       items: [
@@ -1034,9 +1034,9 @@ describe("BoltService - Task Error Output Extraction", () => {
   });
 
   it("should extract _output and _error from failed task execution", () => {
-    const executionId = "test-exec-123";
-    const nodeId = "test-node";
-    const taskName = "tp::info";
+    const executionId = "test-exec-123";  // pragma: allowlist secret
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "tp::info";  // pragma: allowlist secret
     const parameters = undefined;
     const startTime = Date.now();
     const endTime = startTime + 1000;
@@ -1103,9 +1103,9 @@ describe("BoltService - Task Error Output Extraction", () => {
   });
 
   it("should handle failed task with only _output (no _error object)", () => {
-    const executionId = "test-exec-456";
-    const nodeId = "test-node";
-    const taskName = "test::task";
+    const executionId = "test-exec-456";  // pragma: allowlist secret
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "test::task";  // pragma: allowlist secret
     const parameters = undefined;
     const startTime = Date.now();
     const endTime = startTime + 1000;
@@ -1142,9 +1142,9 @@ describe("BoltService - Task Error Output Extraction", () => {
   });
 
   it("should handle failed task with only _error (no _output field)", () => {
-    const executionId = "test-exec-connection";
-    const nodeId = "test-node";
-    const taskName = "tp::info";
+    const executionId = "test-exec-connection";  // pragma: allowlist secret
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "tp::info";  // pragma: allowlist secret
     const parameters = undefined;
     const startTime = Date.now();
     const endTime = startTime + 1000;
@@ -1196,9 +1196,9 @@ describe("BoltService - Task Error Output Extraction", () => {
   });
 
   it("should handle successful task execution without _output or _error", () => {
-    const executionId = "test-exec-789";
-    const nodeId = "test-node";
-    const taskName = "test::task";
+    const executionId = "test-exec-789";  // pragma: allowlist secret
+    const nodeId = "test-node";  // pragma: allowlist secret
+    const taskName = "test::task";  // pragma: allowlist secret
     const parameters = undefined;
     const startTime = Date.now();
     const endTime = startTime + 1000;

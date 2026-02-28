@@ -93,7 +93,7 @@ describe('IntegrationColorService', () => {
   describe('getValidIntegrations', () => {
     it('should return array of valid integration names', () => {
       const integrations = service.getValidIntegrations();
-      expect(integrations).toEqual(['bolt', 'puppetdb', 'puppetserver', 'hiera']);
+      expect(integrations).toEqual(['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera']);
     });
   });
 

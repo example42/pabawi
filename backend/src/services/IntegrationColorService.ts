@@ -12,9 +12,11 @@ export interface IntegrationColorConfig {
  */
 export interface IntegrationColors {
   bolt: IntegrationColorConfig;
+  ansible: IntegrationColorConfig;
   puppetdb: IntegrationColorConfig;
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
+  ssh: IntegrationColorConfig;
 }
 
 /**
@@ -43,6 +45,11 @@ export class IntegrationColorService {
         light: '#FFF4E0',
         dark: '#CC8B15',
       },
+      ansible: {
+        primary: '#1A4D8F',  // Blue for Ansible
+        light: '#E8F1FF',
+        dark: '#133A6D',
+      },
       puppetdb: {
         primary: '#9063CD',  // Violet/purple from Puppet logo
         light: '#F0E6FF',
@@ -57,6 +64,11 @@ export class IntegrationColorService {
         primary: '#C1272D',  // Dark red
         light: '#FFE8E9',
         dark: '#9A1F24',
+      },
+      ssh: {
+        primary: '#10B981',  // Green for SSH connectivity
+        light: '#D1FAE5',
+        dark: '#059669',
       },
     };
 

@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING**: Renamed `BOLT_COMMAND_WHITELIST*` environment variables to `COMMAND_WHITELIST*` to reflect that the whitelist applies to all remote command execution plugins (Bolt, Ansible, SSH), not just Bolt
+  - `BOLT_COMMAND_WHITELIST` → `COMMAND_WHITELIST`
+  - `BOLT_COMMAND_WHITELIST_ALLOW_ALL` → `COMMAND_WHITELIST_ALLOW_ALL`
+  - `BOLT_COMMAND_WHITELIST_MATCH_MODE` → `COMMAND_WHITELIST_MATCH_MODE`
+
 ## [0.5.0] - 2026
 
 ### Added

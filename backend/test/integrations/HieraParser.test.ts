@@ -246,43 +246,43 @@ hierarchy:
     };
 
     it("should interpolate facts.xxx syntax", () => {
-      const template = "nodes/%{facts.networking.fqdn}.yaml";
+      const template = "nodes/%{facts.networking.fqdn}.yaml";  // pragma: allowlist secret
       const result = parser.interpolatePath(template, facts);
       expect(result).toBe("nodes/node1.example.com.yaml");
     });
 
     it("should interpolate nested facts", () => {
-      const template = "os/%{facts.os.family}/%{facts.os.name}.yaml";
+      const template = "os/%{facts.os.family}/%{facts.os.name}.yaml";  // pragma: allowlist secret
       const result = parser.interpolatePath(template, facts);
       expect(result).toBe("os/RedHat/CentOS.yaml");
     });
 
     it("should interpolate legacy ::xxx syntax", () => {
-      const template = "nodes/%{::hostname}.yaml";
+      const template = "nodes/%{::hostname}.yaml";  // pragma: allowlist secret
       const result = parser.interpolatePath(template, facts);
       expect(result).toBe("nodes/node1.yaml");
     });
 
     it("should interpolate trusted.xxx syntax", () => {
-      const template = "nodes/%{trusted.certname}.yaml";
+      const template = "nodes/%{trusted.certname}.yaml";  // pragma: allowlist secret
       const result = parser.interpolatePath(template, facts);
       expect(result).toBe("nodes/node1.example.com.yaml");
     });
 
     it("should interpolate simple variable syntax", () => {
-      const template = "environments/%{environment}.yaml";
+      const template = "environments/%{environment}.yaml";  // pragma: allowlist secret
       const result = parser.interpolatePath(template, facts);
       expect(result).toBe("environments/production.yaml");
     });
 
     it("should preserve unresolved variables", () => {
-      const template = "nodes/%{facts.nonexistent}.yaml";
+      const template = "nodes/%{facts.nonexistent}.yaml";  // pragma: allowlist secret
       const result = parser.interpolatePath(template, facts);
       expect(result).toBe("nodes/%{facts.nonexistent}.yaml");
     });
 
     it("should handle multiple variables in one path", () => {
-      const template = "%{facts.os.family}/%{facts.networking.hostname}/%{environment}.yaml";
+      const template = "%{facts.os.family}/%{facts.networking.hostname}/%{environment}.yaml";  // pragma: allowlist secret
       const result = parser.interpolatePath(template, facts);
       expect(result).toBe("RedHat/node1/production.yaml");
     });

@@ -27,19 +27,37 @@
     lastCheckIn?: string;
   }
 
+  interface NodeGroup {
+    id: string;
+    name: string;
+    source: string;
+    sources: string[];
+    linked: boolean;
+    nodes: string[];
+    metadata?: {
+      description?: string;
+      variables?: Record<string, unknown>;
+      hierarchy?: string[];
+      [key: string]: unknown;
+    };
+  }
+
   interface SourceInfo {
     nodeCount: number;
+    groupCount: number;
     lastSync: string;
     status: 'healthy' | 'degraded' | 'unavailable';
   }
 
   interface InventoryResponse {
     nodes: Node[];
+    groups: NodeGroup[];
     sources?: Record<string, SourceInfo>;
   }
 
   // State
   let nodes = $state<Node[]>([]);
+  let groups = $state<NodeGroup[]>([]);
   let sources = $state<Record<string, SourceInfo>>({});
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -48,7 +66,7 @@
   let sourceFilter = $state<string>('all');
   let sortBy = $state<string>('name');
   let sortOrder = $state<'asc' | 'desc'>('asc');
-  let viewMode = $state<'grid' | 'list'>('grid');
+  let viewMode = $state<'grid' | 'list'>('list');
   let searchTimeout: number | undefined;
   let pqlQuery = $state('');
   let pqlError = $state<string | null>(null);
@@ -231,6 +249,72 @@
     return counts;
   });
 
+  // Computed group counts by source
+  let groupCountsBySource = $derived.by(() => {
+    const counts: Record<string, number> = {};
+    for (const group of groups) {
+      const source = group.source || 'bolt';
+      counts[source] = (counts[source] || 0) + 1;
+    }
+    return counts;
+  });
+
+  // Computed filtered groups (Requirement 9.1, 9.2)
+  let filteredGroups = $derived.by(() => {
+    let result = groups;
+
+    // Filter by search query (case-insensitive substring match)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter(group =>
+        group.name.toLowerCase().includes(query)
+      );
+    }
+
+    // Filter by source
+    if (sourceFilter !== 'all') {
+      result = result.filter(group => (group.source || 'bolt') === sourceFilter);
+    }
+
+    // Sort groups (same logic as nodes)
+    result = [...result].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortBy) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'source':
+          comparison = (a.source || 'bolt').localeCompare(b.source || 'bolt');
+          break;
+        default:
+          comparison = 0;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  });
+
+  // Combined results with groups first, then nodes (Requirement 11.1, 11.3)
+  let combinedResults = $derived.by(() => {
+    // Create a unified array with groups appearing before nodes
+    // Each item is tagged with a type for visual differentiation
+    const groupItems = filteredGroups.map(group => ({
+      type: 'group' as const,
+      entity: group
+    }));
+
+    const nodeItems = filteredNodes.map(node => ({
+      type: 'node' as const,
+      entity: node
+    }));
+
+    // Groups first, then nodes
+    return [...groupItems, ...nodeItems];
+  });
+
   // Fetch inventory from API
   async function fetchInventory(pql?: string): Promise<void> {
     loading = true;
@@ -257,6 +341,7 @@
       });
 
       nodes = data.nodes || [];
+      groups = data.groups || [];
       sources = data.sources || {};
 
       // Store debug info if present
@@ -413,8 +498,9 @@
           <h1 class="text-3xl font-bold text-gray-900 dark:text-white">
             Inventory
           </h1>
-          <IntegrationBadge integration="bolt" variant="badge" size="sm" />
-          <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
+          {#each Object.keys(nodeCountsBySource).sort() as source}
+            <IntegrationBadge integration={source as import('../lib/integrationColors.svelte').IntegrationType} variant="badge" size="sm" />
+          {/each}
         </div>
         <p class="mt-2 text-gray-600 dark:text-gray-400">
           Manage and monitor your infrastructure nodes
@@ -557,23 +643,28 @@
 
       <!-- Filters -->
       <div class="flex items-center gap-4 flex-wrap">
-        <!-- Source Filter -->
+        <!-- Source Filter Buttons -->
         <div class="flex items-center gap-2">
-          <label for="source-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Source:
-          </label>
-          <select
-            id="source-filter"
-            bind:value={sourceFilter}
-            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-          >
-            <option value="all">All ({nodes.length})</option>
+          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Source:</span>
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              onclick={() => sourceFilter = 'all'}
+              class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors {sourceFilter === 'all' ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+            >
+              All ({nodes.length})
+            </button>
             {#each Object.keys(nodeCountsBySource).sort() as source}
-              <option value={source}>
-                {getSourceDisplayName(source)} ({nodeCountsBySource[source]})
-              </option>
+              <button
+                type="button"
+                onclick={() => sourceFilter = sourceFilter === source ? 'all' : source}
+                class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors {sourceFilter === source ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-900' : 'hover:opacity-80'}"
+              >
+                <IntegrationBadge integration={source as import('../lib/integrationColors.svelte').IntegrationType} variant="badge" size="sm" />
+                <span class="text-gray-600 dark:text-gray-300">({nodeCountsBySource[source]})</span>
+              </button>
             {/each}
-          </select>
+          </div>
         </div>
 
         <!-- Transport Filter -->
@@ -656,67 +747,152 @@
 
     <!-- Results Count -->
     <div class="mb-4 text-sm text-gray-600 dark:text-gray-400">
-      Showing {filteredNodes.length} of {nodes.length} nodes
+      Showing {filteredNodes.length + filteredGroups.length} results ({filteredGroups.length} groups, {filteredNodes.length} nodes)
     </div>
 
-    <!-- Empty State -->
-    {#if filteredNodes.length === 0}
+    <!-- Empty State (Requirement 12.1, 12.2, 12.3, 12.4) -->
+    {#if combinedResults.length === 0}
       <div class="rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700">
         <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
         </svg>
-        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No nodes found</h3>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {searchQuery || transportFilter !== 'all' ? 'Try adjusting your filters' : 'No nodes in inventory'}
-        </p>
+        {#if nodes.length === 0 && groups.length === 0}
+          <!-- No data at all - check integrations -->
+          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No groups or nodes in inventory</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            No inventory data available. Check your integration configurations.
+          </p>
+        {:else if filteredGroups.length === 0 && filteredNodes.length === 0}
+          <!-- Filters exclude everything -->
+          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No groups or nodes found</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Try adjusting your filters or search query to see results.
+          </p>
+          {#if searchQuery}
+            <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+              Current search: "{searchQuery}"
+            </p>
+          {/if}
+        {:else if filteredGroups.length === 0 && filteredNodes.length > 0}
+          <!-- No groups match filters, but nodes exist -->
+          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No groups found</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {#if searchQuery || sourceFilter !== 'all'}
+              Try adjusting your filters to see groups, or this source may not support groups.
+            {:else}
+              The selected integration source does not provide group information.
+            {/if}
+          </p>
+        {:else}
+          <!-- Fallback -->
+          <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No results found</h3>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Try adjusting your filters or search query.
+          </p>
+        {/if}
       </div>
     {:else}
       <!-- Node List/Grid -->
       {#if viewMode === 'grid'}
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {#each filteredNodes as node (node.id)}
-            <button
-              type="button"
-              class="group relative rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-500 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-400"
-              onclick={() => navigateToNode(node.id)}
-            >
-
-              <div class="mb-3 flex items-start justify-between gap-2">
-                <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400 flex-1 min-w-0">
-                  {node.name}
-                  <!-- Multi-source indicator (Requirement 3.4) -->
-                  {#if node.linked && node.sources && node.sources.length > 1}
-                    <span class="ml-2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {node.sources.length} sources: {node.sources.join(', ')}">
-                      <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                      </svg>
-                      {node.sources.length}
+          {#each combinedResults as item (item.type === 'group' ? item.entity.id : item.entity.id)}
+            {#if item.type === 'group'}
+              <!-- Group Card (Requirement 8.1, 11.2) -->
+              <button
+                type="button"
+                class="group relative rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-500 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-400"
+                onclick={() => router.navigate(`/groups/${item.entity.id}`)}
+              >
+                <div class="mb-3 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2 flex-1 min-w-0">
+                    <!-- Folder icon to distinguish from nodes (Requirement 11.2) -->
+                    <svg class="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M3 6a3 3 0 013-3h2.25a3 3 0 012.12.879l1.06 1.06A1.5 1.5 0 0012.5 5.5H18a3 3 0 013 3v10a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
+                    </svg>
+                    <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400 flex-1 min-w-0">
+                      {item.entity.name}
+                      <!-- Multi-source indicator for linked groups -->
+                      {#if item.entity.linked && item.entity.sources.length > 1}
+                        <span class="ml-2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {item.entity.sources.length} sources: {item.entity.sources.join(', ')}">
+                          <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                          {item.entity.sources.length}
+                        </span>
+                      {/if}
+                    </h3>
+                  </div>
+                  <div class="flex flex-col gap-1 items-end">
+                    <!-- Member count badge (Requirement 8.4) -->
+                    <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                      {item.entity.nodes.length} {item.entity.nodes.length === 1 ? 'node' : 'nodes'}
                     </span>
-                  {/if}
-                </h3>
-                <div class="flex flex-col gap-1 items-end">
-                  <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">
-                    {node.transport}
-                  </span>
-                  <!-- Display all sources for linked nodes (Requirement 3.3) -->
-                  {#if node.sources && node.sources.length > 0}
-                    {#each node.sources as source}
-                      <IntegrationBadge integration={source} variant="badge" size="sm" />
-                    {/each}
-                  {:else}
-                    <IntegrationBadge integration={node.source || 'bolt'} variant="badge" size="sm" />
-                  {/if}
+                    <!-- Display all sources for linked groups (Requirement 8.2, 8.3) -->
+                    {#if item.entity.sources && item.entity.sources.length > 0}
+                      {#each item.entity.sources as source}
+                        <IntegrationBadge integration={source} variant="badge" size="sm" />
+                      {/each}
+                    {:else}
+                      <IntegrationBadge integration={item.entity.source || 'bolt'} variant="badge" size="sm" />
+                    {/if}
+                  </div>
                 </div>
-              </div>
-              <p class="text-sm text-gray-600 dark:text-gray-400 truncate">
-                {node.uri}
-              </p>
-              {#if node.config.user}
-                <p class="mt-2 text-xs text-gray-500 dark:text-gray-500">
-                  User: {node.config.user}
+                {#if item.entity.metadata?.description}
+                  <p class="text-sm text-gray-600 dark:text-gray-400 truncate">
+                    {item.entity.metadata.description}
+                  </p>
+                {/if}
+              </button>
+            {:else}
+              <!-- Node Card -->
+              <button
+                type="button"
+                class="group relative rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition-all hover:border-blue-500 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-400"
+                onclick={() => navigateToNode(item.entity.id)}
+              >
+                <div class="mb-3 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2 flex-1 min-w-0">
+                    <!-- Server icon for nodes (Requirement 11.2) -->
+                    <svg class="h-5 w-5 text-gray-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                    </svg>
+                    <h3 class="font-medium text-gray-900 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400 flex-1 min-w-0">
+                      {item.entity.name}
+                      <!-- Multi-source indicator (Requirement 3.4) -->
+                      {#if item.entity.linked && item.entity.sources && item.entity.sources.length > 1}
+                        <span class="ml-2 inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {item.entity.sources.length} sources: {item.entity.sources.join(', ')}">
+                          <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                          {item.entity.sources.length}
+                        </span>
+                      {/if}
+                    </h3>
+                  </div>
+                  <div class="flex flex-col gap-1 items-end">
+                    <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(item.entity.transport)}">
+                      {item.entity.transport}
+                    </span>
+                    <!-- Display all sources for linked nodes (Requirement 3.3) -->
+                    {#if item.entity.sources && item.entity.sources.length > 0}
+                      {#each item.entity.sources as source}
+                        <IntegrationBadge integration={source} variant="badge" size="sm" />
+                      {/each}
+                    {:else}
+                      <IntegrationBadge integration={item.entity.source || 'bolt'} variant="badge" size="sm" />
+                    {/if}
+                  </div>
+                </div>
+                <p class="text-sm text-gray-600 dark:text-gray-400 truncate">
+                  {item.entity.uri}
                 </p>
-              {/if}
-            </button>
+                {#if item.entity.config.user}
+                  <p class="mt-2 text-xs text-gray-500 dark:text-gray-500">
+                    User: {item.entity.config.user}
+                  </p>
+                {/if}
+              </button>
+            {/if}
           {/each}
         </div>
       {:else}
@@ -725,66 +901,119 @@
             <thead class="bg-gray-50 dark:bg-gray-900">
               <tr>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  Type
+                </th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Name
                 </th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Source
                 </th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  Transport
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  URI
-                </th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                  User
+                  Details
                 </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-              {#each filteredNodes as node (node.id)}
-                <tr
-                  class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
-                  onclick={() => navigateToNode(node.id)}
-                >
-                  <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
-                    <div class="flex items-center gap-2">
-                      <span>{node.name}</span>
-                      <!-- Multi-source indicator (Requirement 3.4) -->
-                      {#if node.linked && node.sources && node.sources.length > 1}
-                        <span class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {node.sources.length} sources: {node.sources.join(', ')}">
-                          <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                          </svg>
-                          {node.sources.length}
+              {#each combinedResults as item (item.type === 'group' ? item.entity.id : item.entity.id)}
+                {#if item.type === 'group'}
+                  <!-- Group Row (Requirement 8.1, 8.2, 8.3, 8.4, 10.1, 10.3, 11.2) -->
+                  <tr
+                    class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                    onclick={() => router.navigate(`/groups/${item.entity.id}`)}
+                  >
+                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                      <!-- Folder icon to distinguish from nodes (Requirement 11.2) -->
+                      <svg class="h-5 w-5 text-yellow-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M3 6a3 3 0 013-3h2.25a3 3 0 012.12.879l1.06 1.06A1.5 1.5 0 0012.5 5.5H18a3 3 0 013 3v10a3 3 0 01-3 3H6a3 3 0 01-3-3V6z" />
+                      </svg>
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                      <div class="flex items-center gap-2">
+                        <span>{item.entity.name}</span>
+                        <!-- Multi-source indicator for linked groups -->
+                        {#if item.entity.linked && item.entity.sources.length > 1}
+                          <span class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {item.entity.sources.length} sources: {item.entity.sources.join(', ')}">
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            {item.entity.sources.length}
+                          </span>
+                        {/if}
+                      </div>
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                      <!-- Display all sources for linked groups (Requirement 8.2, 8.3) -->
+                      {#if item.entity.sources && item.entity.sources.length > 0}
+                        <div class="flex flex-wrap gap-1">
+                          {#each item.entity.sources as source}
+                            <IntegrationBadge integration={source} variant="badge" size="sm" />
+                          {/each}
+                        </div>
+                      {:else}
+                        <IntegrationBadge integration={item.entity.source || 'bolt'} variant="badge" size="sm" />
+                      {/if}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <!-- Member count badge (Requirement 8.4) -->
+                      <span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                        {item.entity.nodes.length} {item.entity.nodes.length === 1 ? 'node' : 'nodes'}
+                      </span>
+                      {#if item.entity.metadata?.description}
+                        <span class="ml-2 text-gray-500 dark:text-gray-400">
+                          {item.entity.metadata.description}
                         </span>
                       {/if}
-                    </div>
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm">
-                    <!-- Display all sources for linked nodes (Requirement 3.3) -->
-                    {#if node.sources && node.sources.length > 0}
-                      <div class="flex flex-wrap gap-1">
-                        {#each node.sources as source}
-                          <IntegrationBadge integration={source} variant="badge" size="sm" />
-                        {/each}
+                    </td>
+                  </tr>
+                {:else}
+                  <!-- Node Row -->
+                  <tr
+                    class="cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+                    onclick={() => navigateToNode(item.entity.id)}
+                  >
+                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                      <!-- Server icon for nodes (Requirement 11.2) -->
+                      <svg class="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                      </svg>
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
+                      <div class="flex items-center gap-2">
+                        <span>{item.entity.name}</span>
+                        <!-- Multi-source indicator (Requirement 3.4) -->
+                        {#if item.entity.linked && item.entity.sources && item.entity.sources.length > 1}
+                          <span class="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 px-2 py-0.5 text-xs font-medium text-white" title="Available in {item.entity.sources.length} sources: {item.entity.sources.join(', ')}">
+                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            {item.entity.sources.length}
+                          </span>
+                        {/if}
                       </div>
-                    {:else}
-                      <IntegrationBadge integration={node.source || 'bolt'} variant="badge" size="sm" />
-                    {/if}
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm">
-                    <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(node.transport)}">
-                      {node.transport}
-                    </span>
-                  </td>
-                  <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                    {node.uri}
-                  </td>
-                  <td class="whitespace-nowrap px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
-                    {node.config.user || '-'}
-                  </td>
-                </tr>
+                    </td>
+                    <td class="whitespace-nowrap px-6 py-4 text-sm">
+                      <!-- Display all sources for linked nodes (Requirement 3.3) -->
+                      {#if item.entity.sources && item.entity.sources.length > 0}
+                        <div class="flex flex-wrap gap-1">
+                          {#each item.entity.sources as source}
+                            <IntegrationBadge integration={source} variant="badge" size="sm" />
+                          {/each}
+                        </div>
+                      {:else}
+                        <IntegrationBadge integration={item.entity.source || 'bolt'} variant="badge" size="sm" />
+                      {/if}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                      <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {getTransportColor(item.entity.transport)}">
+                          {item.entity.transport}
+                        </span>
+                        <span>{item.entity.uri}</span>
+                      </div>
+                    </td>
+                  </tr>
+                {/if}
               {/each}
             </tbody>
           </table>

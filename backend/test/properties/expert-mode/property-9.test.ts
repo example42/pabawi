@@ -174,7 +174,7 @@ describe('Property 9: Expert Mode Debug Info Attachment', () => {
             result._debug.errors.every(err =>
               typeof err.message === 'string' &&
               err.message.length > 0 &&
-              err.level === 'error'
+              err.level === 'error'  // pragma: allowlist secret
             )
           );
         }
@@ -361,7 +361,7 @@ describe('Property 9: Expert Mode Debug Info Attachment', () => {
             result._debug !== undefined &&
             result._debug.performance !== undefined &&
             typeof result._debug.performance.memoryUsage === 'number' &&
-            typeof result._debug.performance.cpuUsage === 'number'
+            typeof result._debug.performance.cpuUsage === 'number'  // pragma: allowlist secret
           );
         }
       ),
@@ -408,7 +408,7 @@ describe('Property 9: Expert Mode Debug Info Attachment', () => {
               typeof call.method === 'string' &&
               typeof call.duration === 'number' &&
               typeof call.status === 'number' &&
-              typeof call.cached === 'boolean'
+              typeof call.cached === 'boolean'  // pragma: allowlist secret
             )
           );
         }

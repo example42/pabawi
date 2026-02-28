@@ -1,0 +1,15 @@
+<%- | Hash $options = {} | -%>
+# Managed by Puppet — tp::conf for postgresql
+# Do not edit manually; changes will be overwritten.
+
+listen_addresses = '<%= $options['listen_addresses'] %>'
+max_connections = <%= $options['max_connections'] %>
+shared_buffers = <%= $options['shared_buffers'] %>
+
+# Logging
+log_destination = 'stderr'
+logging_collector = on
+log_directory = 'log'
+
+# Write-Ahead Log
+wal_level = replica

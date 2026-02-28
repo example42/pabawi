@@ -27,5 +27,5 @@
     "sourceMap": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test"]
+  "exclude": ["node_modules", "dist", "test", "src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.spec.ts"]
 }

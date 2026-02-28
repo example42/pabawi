@@ -93,7 +93,7 @@ describe('Property 11: Debug Info Color Consistency', () => {
           return (
             color.text === 'text-red-700' &&
             color.bg === 'bg-red-50' &&
-            color.border === 'border-red-200'
+            color.border === 'border-red-200'  // pragma: allowlist secret
           );
         }
       ),
@@ -110,7 +110,7 @@ describe('Property 11: Debug Info Color Consistency', () => {
           return (
             color.text === 'text-yellow-700' &&
             color.bg === 'bg-yellow-50' &&
-            color.border === 'border-yellow-200'
+            color.border === 'border-yellow-200'  // pragma: allowlist secret
           );
         }
       ),
@@ -127,7 +127,7 @@ describe('Property 11: Debug Info Color Consistency', () => {
           return (
             color.text === 'text-blue-700' &&
             color.bg === 'bg-blue-50' &&
-            color.border === 'border-blue-200'
+            color.border === 'border-blue-200'  // pragma: allowlist secret
           );
         }
       ),
@@ -144,7 +144,7 @@ describe('Property 11: Debug Info Color Consistency', () => {
           return (
             color.text === 'text-gray-700' &&
             color.bg === 'bg-gray-50' &&
-            color.border === 'border-gray-200'
+            color.border === 'border-gray-200'  // pragma: allowlist secret
           );
         }
       ),
@@ -289,7 +289,7 @@ describe('Property 11: Debug Info Color Consistency', () => {
             'border' in color &&
             typeof color.text === 'string' &&
             typeof color.bg === 'string' &&
-            typeof color.border === 'string'
+            typeof color.border === 'string'  // pragma: allowlist secret
           );
         }
       ),
@@ -353,7 +353,7 @@ describe('Property 11: Debug Info Color Consistency', () => {
             return colors.every(color =>
               typeof color.text === 'string' &&
               typeof color.bg === 'string' &&
-              typeof color.border === 'string'
+              typeof color.border === 'string'  // pragma: allowlist secret
             );
           } catch {
             return false;

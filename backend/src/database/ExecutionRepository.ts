@@ -22,6 +22,8 @@ interface DbRow {
   stdout: string | null;
   stderr: string | null;
   execution_tool: string | null;
+  batch_id: string | null;
+  batch_position: number | null;
   total?: number;
   running?: number;
   success?: number;
@@ -32,9 +34,9 @@ interface DbRow {
 /**
  * Execution types
  */
-export type ExecutionType = "command" | "task" | "facts" | "puppet" | "package";
+export type ExecutionType = "command" | "task" | "facts" | "puppet" | "package" | "plan";
 
-export type ExecutionTool = "bolt" | "ansible";
+export type ExecutionTool = "bolt" | "ansible" | "ssh";
 
 /**
  * Execution status
@@ -78,6 +80,8 @@ export interface ExecutionRecord {
   stdout?: string;
   stderr?: string;
   executionTool?: ExecutionTool;
+  batchId?: string;
+  batchPosition?: number;
 }
 
 /**
@@ -134,8 +138,9 @@ export class ExecutionRepository {
       INSERT INTO executions (
         id, type, target_nodes, action, parameters, status,
         started_at, completed_at, results, error, command, expert_mode,
-        original_execution_id, re_execution_count, stdout, stderr, execution_tool
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        original_execution_id, re_execution_count, stdout, stderr, execution_tool,
+        batch_id, batch_position
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -156,6 +161,8 @@ export class ExecutionRepository {
       record.stdout ?? null,
       record.stderr ?? null,
       record.executionTool ?? "bolt",
+      record.batchId ?? null,
+      record.batchPosition ?? null,
     ];
 
     try {
@@ -483,7 +490,11 @@ export class ExecutionRepository {
       executionTool:
         row.execution_tool === "ansible"
           ? "ansible"
-          : "bolt",
+          : row.execution_tool === "ssh"
+            ? "ssh"
+            : "bolt",
+      batchId: row.batch_id ?? undefined,
+      batchPosition: row.batch_position ?? undefined,
     };
   }
 

@@ -18,8 +18,8 @@ describe("FactService", () => {
   let mockIntegrationManager: IntegrationManager;
   let mockPuppetDBSource: InformationSourcePlugin;
 
-  const testNodeId = "node1.example.com";
-  const testLocalFactsPath = "/tmp/facts";
+  const testNodeId = "node1.example.com";  // pragma: allowlist secret
+  const testLocalFactsPath = "/tmp/facts";  // pragma: allowlist secret
 
   beforeEach(() => {
     vi.clearAllMocks();

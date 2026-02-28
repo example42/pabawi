@@ -112,17 +112,17 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
         const facts = createFacts(rawFacts);
 
         // Test with os.family
-        const template1 = 'nodes/%{facts.os.family}.yaml';
+        const template1 = 'nodes/%{facts.os.family}.yaml';  // pragma: allowlist secret
         const result1 = parser.interpolatePath(template1, facts);
         expect(result1).toBe(`nodes/${rawFacts.os.family}.yaml`);
 
         // Test with hostname
-        const template2 = 'nodes/%{facts.hostname}.yaml';
+        const template2 = 'nodes/%{facts.hostname}.yaml';  // pragma: allowlist secret
         const result2 = parser.interpolatePath(template2, facts);
         expect(result2).toBe(`nodes/${rawFacts.hostname}.yaml`);
 
         // Test with nested os.release.major
-        const template3 = 'os/%{facts.os.name}/%{facts.os.release.major}.yaml';
+        const template3 = 'os/%{facts.os.name}/%{facts.os.release.major}.yaml';  // pragma: allowlist secret
         const result3 = parser.interpolatePath(template3, facts);
         expect(result3).toBe(`os/${rawFacts.os.name}/${rawFacts.os.release.major}.yaml`);
       }),
@@ -138,17 +138,17 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
         const facts = createFacts(rawFacts);
 
         // Test with ::hostname (legacy syntax)
-        const template1 = 'nodes/%{::hostname}.yaml';
+        const template1 = 'nodes/%{::hostname}.yaml';  // pragma: allowlist secret
         const result1 = parser.interpolatePath(template1, facts);
         expect(result1).toBe(`nodes/${rawFacts.hostname}.yaml`);
 
         // Test with ::environment
-        const template2 = 'environments/%{::environment}.yaml';
+        const template2 = 'environments/%{::environment}.yaml';  // pragma: allowlist secret
         const result2 = parser.interpolatePath(template2, facts);
         expect(result2).toBe(`environments/${rawFacts.environment}.yaml`);
 
         // Test with nested ::os.family
-        const template3 = 'os/%{::os.family}.yaml';
+        const template3 = 'os/%{::os.family}.yaml';  // pragma: allowlist secret
         const result3 = parser.interpolatePath(template3, facts);
         expect(result3).toBe(`os/${rawFacts.os.family}.yaml`);
       }),
@@ -164,12 +164,12 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
         const facts = createFacts({ trusted: trustedFacts });
 
         // Test with trusted.certname
-        const template1 = 'nodes/%{trusted.certname}.yaml';
+        const template1 = 'nodes/%{trusted.certname}.yaml';  // pragma: allowlist secret
         const result1 = parser.interpolatePath(template1, facts);
         expect(result1).toBe(`nodes/${trustedFacts.certname}.yaml`);
 
         // Test with trusted.domain
-        const template2 = 'domains/%{trusted.domain}.yaml';
+        const template2 = 'domains/%{trusted.domain}.yaml';  // pragma: allowlist secret
         const result2 = parser.interpolatePath(template2, facts);
         expect(result2).toBe(`domains/${trustedFacts.domain}.yaml`);
       }),
@@ -185,12 +185,12 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
         const facts = createFacts({ server_facts: serverFacts });
 
         // Test with server_facts.serverversion
-        const template1 = 'puppet/%{server_facts.serverversion}.yaml';
+        const template1 = 'puppet/%{server_facts.serverversion}.yaml';  // pragma: allowlist secret
         const result1 = parser.interpolatePath(template1, facts);
         expect(result1).toBe(`puppet/${serverFacts.serverversion}.yaml`);
 
         // Test with server_facts.servername
-        const template2 = 'servers/%{server_facts.servername}.yaml';
+        const template2 = 'servers/%{server_facts.servername}.yaml';  // pragma: allowlist secret
         const result2 = parser.interpolatePath(template2, facts);
         expect(result2).toBe(`servers/${serverFacts.servername}.yaml`);
       }),
@@ -206,7 +206,7 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
         const facts = createFacts(rawFacts);
 
         // Template with multiple variables
-        const template = '%{facts.os.family}/%{facts.os.name}/%{facts.hostname}.yaml';
+        const template = '%{facts.os.family}/%{facts.os.name}/%{facts.hostname}.yaml';  // pragma: allowlist secret
         const result = parser.interpolatePath(template, facts);
         expect(result).toBe(`${rawFacts.os.family}/${rawFacts.os.name}/${rawFacts.hostname}.yaml`);
       }),
@@ -222,7 +222,7 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
         const facts = createFacts(rawFacts);
 
         // Template with non-existent fact
-        const template = 'nodes/%{facts.nonexistent_fact}.yaml';
+        const template = 'nodes/%{facts.nonexistent_fact}.yaml';  // pragma: allowlist secret
         const result = parser.interpolatePath(template, facts);
 
         // Should preserve the original variable syntax when fact doesn't exist
@@ -240,7 +240,7 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
         const facts = createFacts(rawFacts);
 
         // Template without variables
-        const template = 'common/defaults.yaml';
+        const template = 'common/defaults.yaml';  // pragma: allowlist secret
         const result = parser.interpolatePath(template, facts);
 
         // Should return unchanged
@@ -263,7 +263,7 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
           });
 
           // Template mixing facts and trusted syntaxes
-          const template = '%{facts.os.family}/%{trusted.certname}.yaml';
+          const template = '%{facts.os.family}/%{trusted.certname}.yaml';  // pragma: allowlist secret
           const result = parser.interpolatePath(template, facts);
           expect(result).toBe(`${rawFacts.os.family}/${trustedFacts.certname}.yaml`);
         }
@@ -326,12 +326,12 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
           const facts = createFacts(rawFacts);
 
           // Test deeply nested path
-          const template1 = 'data/%{facts.deep.nested.value}.yaml';
+          const template1 = 'data/%{facts.deep.nested.value}.yaml';  // pragma: allowlist secret
           const result1 = parser.interpolatePath(template1, facts);
           expect(result1).toBe(`data/${level1}.yaml`);
 
           // Test even deeper nesting
-          const template2 = 'data/%{facts.deep.nested.another.level}.yaml';
+          const template2 = 'data/%{facts.deep.nested.another.level}.yaml';  // pragma: allowlist secret
           const result2 = parser.interpolatePath(template2, facts);
           expect(result2).toBe(`data/${level2}.yaml`);
         }
@@ -373,12 +373,12 @@ describe('Property 5: Hierarchy Path Interpolation', () => {
           const facts = createFacts(rawFacts);
 
           // Test with integer value
-          const template1 = 'ports/%{facts.port}.yaml';
+          const template1 = 'ports/%{facts.port}.yaml';  // pragma: allowlist secret
           const result1 = parser.interpolatePath(template1, facts);
           expect(result1).toBe(`ports/${numValue}.yaml`);
 
           // Test with boolean value
-          const template2 = 'flags/%{facts.enabled}.yaml';
+          const template2 = 'flags/%{facts.enabled}.yaml';  // pragma: allowlist secret
           const result2 = parser.interpolatePath(template2, facts);
           expect(result2).toBe(`flags/${boolValue}.yaml`);
         }

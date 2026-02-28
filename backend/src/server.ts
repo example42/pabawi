@@ -21,10 +21,27 @@ import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
 import configRouter from "./routes/config";
+import { createAuthRouter } from "./routes/auth";
+import { createSetupRouter } from "./routes/setup";
+import { createUsersRouter } from "./routes/users";
+import { createGroupsRouter } from "./routes/groups";
+import { createRolesRouter } from "./routes/roles";
+import { createPermissionsRouter } from "./routes/permissions";
+import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
+import { BatchExecutionService } from "./services/BatchExecutionService";
 import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
 import { expertModeMiddleware } from "./middleware/expertMode";
+import { createAuthMiddleware } from "./middleware/authMiddleware";
+import { createRbacMiddleware } from "./middleware/rbacMiddleware";
+import {
+  helmetMiddleware,
+  createRateLimitMiddleware,
+  createAuthRateLimitMiddleware,
+  inputSanitizationMiddleware,
+  additionalSecurityHeaders,
+} from "./middleware/securityMiddleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
 import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
@@ -32,6 +49,8 @@ import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import { BoltPlugin } from "./integrations/bolt/BoltPlugin";
 import { AnsibleService } from "./integrations/ansible/AnsibleService";
 import { AnsiblePlugin } from "./integrations/ansible/AnsiblePlugin";
+import { SSHPlugin } from "./integrations/ssh/SSHPlugin";
+import { loadSSHConfig } from "./integrations/ssh/config";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
@@ -215,6 +234,19 @@ async function startServer(): Promise<Express> {
     });
 
     const integrationManager = new IntegrationManager({ logger });
+
+    // Initialize batch execution service
+    // Note: This will be fully functional once all integrations are registered
+    const batchExecutionService = new BatchExecutionService(
+      databaseService.getConnection(),
+      executionQueue,
+      executionRepository,
+      integrationManager,
+    );
+    logger.info("Batch execution service initialized successfully", {
+      component: "Server",
+      operation: "startServer",
+    });
 
     // Initialize Bolt integration only if configured
     let boltPlugin: BoltPlugin | undefined;
@@ -550,6 +582,101 @@ async function startServer(): Promise<Express> {
       operation: "initializeHiera",
     });
 
+    // Initialize SSH integration only if configured
+    let sshPlugin: SSHPlugin | undefined;
+    let sshConfig;
+
+    try {
+      sshConfig = loadSSHConfig();
+    } catch (error) {
+      logger.warn(`Failed to load SSH configuration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+      sshConfig = null;
+    }
+
+    const sshConfigured = sshConfig?.enabled === true;
+
+    logger.debug("=== SSH Integration Setup ===", {
+      component: "Server",
+      operation: "initializeSSH",
+      metadata: {
+        configured: sshConfigured,
+        enabled: sshConfig?.enabled,
+        hasConfigPath: !!sshConfig?.configPath,
+      },
+    });
+
+    if (sshConfigured && sshConfig) {
+      logger.info("Initializing SSH integration...", {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+      try {
+        sshPlugin = new SSHPlugin(logger, performanceMonitor);
+        logger.debug("SSHPlugin instance created", {
+          component: "Server",
+          operation: "initializeSSH",
+        });
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: true,
+          name: "ssh",
+          type: "both",
+          config: sshConfig as Record<string, unknown>,
+          priority: sshConfig.priority,
+        };
+
+        logger.debug("Registering SSH plugin", {
+          component: "Server",
+          operation: "initializeSSH",
+          metadata: { config: integrationConfig },
+        });
+        integrationManager.registerPlugin(
+          sshPlugin,
+          integrationConfig,
+        );
+
+        logger.info("SSH integration registered successfully", {
+          component: "Server",
+          operation: "initializeSSH",
+          metadata: {
+            enabled: true,
+            configPath: sshConfig.configPath,
+            defaultUser: sshConfig.defaultUser,
+            defaultPort: sshConfig.defaultPort,
+            priority: sshConfig.priority,
+          },
+        });
+      } catch (error) {
+        logger.warn(`WARNING: Failed to initialize SSH integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeSSH",
+        });
+        if (error instanceof Error && error.stack) {
+          logger.error("SSH initialization error stack", {
+            component: "Server",
+            operation: "initializeSSH",
+          }, error);
+        }
+        sshPlugin = undefined;
+      }
+    } else {
+      logger.warn("SSH integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+      logger.info("Set SSH_ENABLED=true and SSH_DEFAULT_USER to enable SSH integration", {
+        component: "Server",
+        operation: "initializeSSH",
+      });
+    }
+    logger.debug("=== End SSH Integration Setup ===", {
+      component: "Server",
+      operation: "initializeSSH",
+    });
+
     // Initialize all registered plugins
     logger.info("=== Initializing All Integration Plugins ===", {
       component: "Server",
@@ -644,14 +771,21 @@ async function startServer(): Promise<Express> {
     // Create Express app
     const app: Express = express();
 
+    // Security middleware - must be first
+    app.use(helmetMiddleware);
+    app.use(additionalSecurityHeaders);
+
     // Middleware
     app.use(
       cors({
-        origin: true, // Allow same-origin requests
+        origin: config.corsAllowedOrigins,
         credentials: true,
       }),
     );
-    app.use(express.json());
+    app.use(express.json({ limit: '100kb' }));
+
+    // Input sanitization - after body parsing
+    app.use(inputSanitizationMiddleware);
 
     // Request ID middleware - adds unique ID to each request
     app.use(requestIdMiddleware);
@@ -697,43 +831,80 @@ async function startServer(): Promise<Express> {
       res.json({
         status: "ok",
         message: "Backend API is running",
-        config: {
-          boltProjectPath: config.boltProjectPath,
-          commandWhitelistEnabled: !config.commandWhitelist.allowAll,
-          databaseInitialized: databaseService.isInitialized(),
-        },
       });
     });
 
-    // Configuration endpoint (excluding sensitive values)
-    app.get("/api/config", (_req: Request, res: Response) => {
+    // Setup routes (no authentication required - only accessible when setup is incomplete)
+    app.use("/api/setup", createSetupRouter(databaseService));
+
+    // Authentication routes with stricter rate limiting
+    const authRateLimitMiddleware = createAuthRateLimitMiddleware();
+    app.use("/api/auth", authRateLimitMiddleware, createAuthRouter(databaseService));
+
+    // Create authentication and RBAC middleware instances
+    const authMiddleware = createAuthMiddleware(databaseService.getConnection());
+    const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+
+    // Create rate limiting middleware for authenticated routes
+    const rateLimitMiddleware = createRateLimitMiddleware();
+
+    // Configuration endpoint (security-sensitive — requires authentication)
+    app.get("/api/config", authMiddleware, (_req: Request, res: Response) => {
       res.json({
         commandWhitelist: {
           allowAll: config.commandWhitelist.allowAll,
-          whitelist: config.commandWhitelist.allowAll
-            ? []
-            : config.commandWhitelist.whitelist,
           matchMode: config.commandWhitelist.matchMode,
+          whitelist: config.commandWhitelist.whitelist,
         },
         executionTimeout: config.executionTimeout,
       });
     });
 
-    // Config routes (UI settings, etc.)
-    app.use("/api/config", configRouter);
+    // Config routes (UI settings — requires authentication)
+    app.use("/api/config", authMiddleware, configRouter);
 
-    // API Routes
+    // User management routes
+    app.use("/api/users", authMiddleware, rateLimitMiddleware, createUsersRouter(databaseService));
+
+    // Group management routes
+    app.use("/api/groups", authMiddleware, rateLimitMiddleware, createGroupsRouter(databaseService));
+
+    // Role management routes
+    app.use("/api/roles", authMiddleware, rateLimitMiddleware, createRolesRouter(databaseService));
+
+    // Permission management routes
+    app.use("/api/permissions", authMiddleware, rateLimitMiddleware, createPermissionsRouter(databaseService));
+
+    // Monitoring routes (performance metrics)
+    app.use("/api/monitoring", authMiddleware, rateLimitMiddleware, monitoringRouter);
+
+    // API Routes - Ansible inventory routes (protected with RBAC)
     app.use(
       "/api/inventory",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('ansible', 'read'),
       createInventoryRouter(boltService, integrationManager),
     );
     app.use(
       "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('ansible', 'read'),
       createInventoryRouter(boltService, integrationManager),
     );
-    app.use("/api/nodes", createFactsRouter(integrationManager));
     app.use(
       "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'read'),
+      createFactsRouter(integrationManager),
+    );
+    app.use(
+      "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'execute'),
       createCommandsRouter(
         integrationManager,
         executionRepository,
@@ -743,6 +914,9 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'execute'),
       createTasksRouter(
         integrationManager,
         executionRepository,
@@ -751,6 +925,9 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('ansible', 'execute'),
       createPlaybooksRouter(
         integrationManager,
         executionRepository,
@@ -759,17 +936,25 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'execute'),
       createPuppetRouter(boltService, executionRepository, streamingManager),
     );
     // Add puppet history routes if PuppetDB is available
     if (puppetRunHistoryService) {
       app.use(
         "/api/puppet",
+        authMiddleware,
+        rateLimitMiddleware,
         createPuppetHistoryRouter(puppetRunHistoryService),
       );
     }
     app.use(
       "/api",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'read'),
       createPackagesRouter(
         integrationManager,
         boltService,
@@ -780,6 +965,9 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'execute'),
       createPackagesRouter(
         integrationManager,
         boltService,
@@ -790,6 +978,9 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/tasks",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'read'),
       createTasksRouter(
         integrationManager,
         executionRepository,
@@ -798,30 +989,44 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/executions",
-      createExecutionsRouter(executionRepository, executionQueue),
+      authMiddleware,
+      rateLimitMiddleware,
+      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService),
     );
     app.use(
       "/api/executions",
+      authMiddleware,
+      rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository),
     );
     app.use(
       "/api/streaming",
+      authMiddleware,
+      rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository),
     );
     app.use(
       "/api/integrations",
+      authMiddleware,
+      rateLimitMiddleware,
       createIntegrationsRouter(
         integrationManager,
         puppetDBService,
         puppetserverService,
+        databaseService.getConnection(),
+        undefined, // JWT secret is read from environment by AuthenticationService
       ),
     );
     app.use(
       "/api/integrations/hiera",
+      authMiddleware,
+      rateLimitMiddleware,
       createHieraRouter(integrationManager),
     );
     app.use(
       "/api/debug",
+      authMiddleware,
+      rateLimitMiddleware,
       createDebugRouter(),
     );
 

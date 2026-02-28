@@ -292,6 +292,7 @@ export const AppConfigSchema = z.object({
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes
   logLevel: z.enum(["error", "warn", "info", "debug"]).default("info"),
   databasePath: z.string().default("./data/executions.db"),
+  corsAllowedOrigins: z.array(z.string()).default(["http://localhost:5173", "http://localhost:3000"]),
   packageTasks: z.array(PackageTaskConfigSchema).default([
     {
       name: "package",

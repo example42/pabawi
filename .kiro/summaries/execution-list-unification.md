@@ -41,7 +41,7 @@ Created a reusable execution list component at `frontend/src/components/Executio
 
 Updated two locations:
 
-**a) Overview Tab - "Latest Executions":**
+**a) Overview Tab - "Latest Actions":**
 
 - Replaced the simple card-based list with `ExecutionList`
 - Shows first 5 executions

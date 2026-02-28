@@ -1,0 +1,18 @@
+# Pabawi Demo — Bolt Project Configuration
+name: pabawi-demo
+apply-settings:
+  evaltrace: true
+  log_level: info
+  show_diff: true
+  trace: false
+concurrency: 20
+compile-concurrency: 5
+color: false
+
+modules:
+  - name: puppetlabs/stdlib
+  - name: puppetlabs/apt
+  - name: puppetlabs/concat
+  - name: puppetlabs/firewall
+  - name: puppetlabs/ntp
+  - name: example42/tp

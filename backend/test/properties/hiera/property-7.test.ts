@@ -28,7 +28,7 @@ describe("Property 7: Local Fact File Parsing", () => {
   let mockIntegrationManager: IntegrationManager;
   let mockPuppetDBSource: InformationSourcePlugin;
 
-  const testLocalFactsPath = "/tmp/facts";
+  const testLocalFactsPath = "/tmp/facts";  // pragma: allowlist secret
 
   beforeEach(() => {
     vi.clearAllMocks();

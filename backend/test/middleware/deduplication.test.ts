@@ -98,7 +98,7 @@ describe('RequestDeduplicationMiddleware', () => {
     });
 
     it('should store and retrieve cached responses', () => {
-      const key = 'test-key';
+      const key = 'test-key';  // pragma: allowlist secret
       const response = { data: 'test' };
 
       middleware.setCached(key, response);
@@ -109,7 +109,7 @@ describe('RequestDeduplicationMiddleware', () => {
     });
 
     it('should return null for expired cache entries', async () => {
-      const key = 'test-key';
+      const key = 'test-key';  // pragma: allowlist secret
       const response = { data: 'test' };
 
       middleware.setCached(key, response, 100); // 100ms TTL
@@ -122,7 +122,7 @@ describe('RequestDeduplicationMiddleware', () => {
     });
 
     it('should update access count on cache hit', () => {
-      const key = 'test-key';
+      const key = 'test-key';  // pragma: allowlist secret
       const response = { data: 'test' };
 
       middleware.setCached(key, response);
@@ -135,7 +135,7 @@ describe('RequestDeduplicationMiddleware', () => {
     });
 
     it('should update lastAccessed timestamp on cache hit', () => {
-      const key = 'test-key';
+      const key = 'test-key';  // pragma: allowlist secret
       const response = { data: 'test' };
 
       middleware.setCached(key, response);

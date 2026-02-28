@@ -1121,7 +1121,7 @@ For detailed configuration instructions, please refer to the **[Configuration Gu
 
 **Causes:**
 
-- `BOLT_COMMAND_WHITELIST_ALLOW_ALL=false` with empty whitelist
+- `COMMAND_WHITELIST_ALLOW_ALL=false` with empty whitelist
 - Command not in whitelist
 - Wrong match mode
 
@@ -1131,22 +1131,22 @@ For detailed configuration instructions, please refer to the **[Configuration Gu
 
    ```bash
    # In .env file
-   BOLT_COMMAND_WHITELIST_ALLOW_ALL=true
+   COMMAND_WHITELIST_ALLOW_ALL=true
    ```
 
 2. **Add commands to whitelist:**
 
    ```bash
    # In .env file
-   BOLT_COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]'
+   COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]'
    ```
 
 3. **Use prefix match mode:**
 
    ```bash
    # Allow commands with arguments
-   BOLT_COMMAND_WHITELIST='["ls","systemctl"]'
-   BOLT_COMMAND_WHITELIST_MATCH_MODE=prefix
+   COMMAND_WHITELIST='["ls","systemctl"]'
+   COMMAND_WHITELIST_MATCH_MODE=prefix
    # Now allows: "ls -la", "systemctl status nginx"
    ```
 
@@ -1221,7 +1221,7 @@ SyntaxError: Unexpected token in JSON
 
 **Causes:**
 
-- Invalid JSON in `BOLT_COMMAND_WHITELIST` or `BOLT_PACKAGE_TASKS`
+- Invalid JSON in `COMMAND_WHITELIST` or `BOLT_PACKAGE_TASKS`
 - Missing quotes or brackets
 - Unescaped special characters
 
@@ -1230,8 +1230,8 @@ SyntaxError: Unexpected token in JSON
 1. **Validate JSON syntax:**
 
    ```bash
-   # Test BOLT_COMMAND_WHITELIST
-   echo $BOLT_COMMAND_WHITELIST | jq .
+   # Test COMMAND_WHITELIST
+   echo $COMMAND_WHITELIST | jq .
    
    # Should output:
    # ["ls","pwd","whoami"]
@@ -1241,10 +1241,10 @@ SyntaxError: Unexpected token in JSON
 
    ```bash
    # Correct (single quotes around value)
-   BOLT_COMMAND_WHITELIST='["ls","pwd"]'
+   COMMAND_WHITELIST='["ls","pwd"]'
    
    # Incorrect (double quotes)
-   BOLT_COMMAND_WHITELIST=["ls","pwd"]
+   COMMAND_WHITELIST=["ls","pwd"]
    ```
 
 3. **Escape special characters:**
@@ -2253,8 +2253,8 @@ Error: Authentication failed for user@host
 
 **Solutions:**
 
-1. Add command to whitelist: `BOLT_COMMAND_WHITELIST='["ls","pwd","uptime"]'`
-2. Or enable allow-all: `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true`
+1. Add command to whitelist: `COMMAND_WHITELIST='["ls","pwd","uptime"]'`
+2. Or enable allow-all: `COMMAND_WHITELIST_ALLOW_ALL=true`
 3. Check current config: `curl http://localhost:3000/api/config`
 
 ### "Task 'xyz' not found"
@@ -2476,7 +2476,7 @@ Error: Authentication failed for user@host
 
 #### Q: How do I allow all commands?
 
-**A:** Set `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true` in your .env file. **Warning:** Only use this in trusted environments, as it allows execution of any command on target nodes.
+**A:** Set `COMMAND_WHITELIST_ALLOW_ALL=true` in your .env file. **Warning:** Only use this in trusted environments, as it allows execution of any command on target nodes.
 
 #### Q: Can I use multiple Bolt projects?
 
@@ -2499,7 +2499,7 @@ Error: Authentication failed for user@host
 
 #### Q: How does the command whitelist work?
 
-**A:** The whitelist controls which commands can be executed. In `exact` mode, commands must match exactly. In `prefix` mode, commands must start with a whitelist entry. If `BOLT_COMMAND_WHITELIST_ALLOW_ALL=true`, all commands are allowed.
+**A:** The whitelist controls which commands can be executed. In `exact` mode, commands must match exactly. In `prefix` mode, commands must start with a whitelist entry. If `COMMAND_WHITELIST_ALLOW_ALL=true`, all commands are allowed.
 
 #### Q: Can I restrict access to specific users?
 

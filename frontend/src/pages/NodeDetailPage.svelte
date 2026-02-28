@@ -71,7 +71,7 @@
     error?: string;
     command?: string;
     expertMode?: boolean;
-    executionTool?: 'bolt' | 'ansible';
+    executionTool?: 'bolt' | 'ansible' | 'ssh';
   }
 
   interface IntegrationStatus {
@@ -129,13 +129,13 @@
 
   // Command execution state
   let commandInput = $state('');
-  let commandTool = $state<'bolt' | 'ansible'>('bolt');
+  let commandTool = $state<'bolt' | 'ansible' | 'ssh'>('bolt');
   let commandExecuting = $state(false);
   let commandError = $state<string | null>(null);
   let commandResult = $state<ExecutionResult | null>(null);
   let commandExecutionId = $state<string | null>(null);
   let commandStream = $state<ExecutionStream | null>(null);
-  let availableExecutionTools = $state<Array<'bolt' | 'ansible'>>(['bolt']);
+  let availableExecutionTools = $state<Array<'bolt' | 'ansible' | 'ssh'>>(['bolt']);
 
   // Re-execution state
   let initialTaskName = $state<string | undefined>(undefined);
@@ -431,8 +431,8 @@
       const executionIntegrations = data.integrations.filter(
         (integration) => (integration.type === 'execution' || integration.type === 'both')
           && (integration.status === 'connected' || integration.status === 'degraded')
-          && (integration.name === 'bolt' || integration.name === 'ansible'),
-      ) as Array<IntegrationStatus & { name: 'bolt' | 'ansible' }>;
+          && (integration.name === 'bolt' || integration.name === 'ansible' || integration.name === 'ssh'),
+      ) as Array<IntegrationStatus & { name: 'bolt' | 'ansible' | 'ssh' }>;
 
       if (executionIntegrations.length > 0) {
         availableExecutionTools = executionIntegrations.map((integration) => integration.name);
@@ -1027,7 +1027,7 @@
       commandInput = reExecuteCommand;
       sessionStorage.removeItem('reExecuteCommand');
       sessionStorage.removeItem('reExecuteCommandTool');
-      if (reExecuteCommandTool === 'ansible' || reExecuteCommandTool === 'bolt') {
+      if (reExecuteCommandTool === 'ansible' || reExecuteCommandTool === 'bolt' || reExecuteCommandTool === 'ssh') {
         commandTool = reExecuteCommandTool;
       }
       showInfo('Command pre-filled from previous execution');
@@ -1538,10 +1538,10 @@
             {/if}
           </div>
 
-          <!-- Latest Executions -->
+          <!-- Latest Actions -->
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Latest Executions</h2>
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Latest Actions</h2>
               <IntegrationBadge integration="bolt" variant="badge" size="sm" />
             </div>
             {#if executionsLoading}
@@ -1633,7 +1633,7 @@
             <p class="text-sm text-gray-600 dark:text-gray-400">
               All commands are allowed
             </p>
-          {:else if commandWhitelist.whitelist.length === 0}
+          {:else if !commandWhitelist.whitelist || commandWhitelist.whitelist.length === 0}
             <p class="text-sm text-red-600 dark:text-red-400">
               No commands are allowed (whitelist is empty)
             </p>
@@ -1662,29 +1662,38 @@
       {/if}
 
       <form onsubmit={executeCommand} class="space-y-4">
+        {#if availableExecutionTools.length > 1}
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Execution Tool
+            </label>
+            <div class="flex gap-2">
+              {#each availableExecutionTools as tool}
+                <button
+                  type="button"
+                  onclick={() => commandTool = tool}
+                  class="flex items-center gap-2 rounded-lg border-2 px-4 py-2 text-sm font-medium transition-all {commandTool === tool
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-400 dark:hover:bg-gray-700'}"
+                  disabled={commandExecuting}
+                >
+                  <IntegrationBadge integration={tool} variant="dot" size="md" />
+                  <span class="capitalize">{tool}</span>
+                  {#if commandTool === tool}
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <div>
           <label for="command-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
             Command
           </label>
-
-          {#if availableExecutionTools.length > 1}
-            <div class="mt-2">
-              <label for="command-tool" class="block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                Tool
-              </label>
-              <select
-                id="command-tool"
-                bind:value={commandTool}
-                class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
-                disabled={commandExecuting}
-              >
-                {#each availableExecutionTools as tool}
-                  <option value={tool}>{tool === 'bolt' ? 'Bolt' : 'Ansible'}</option>
-                {/each}
-              </select>
-            </div>
-          {/if}
-
           <input
             id="command-input"
             type="text"

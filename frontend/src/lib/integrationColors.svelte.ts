@@ -1,4 +1,5 @@
 // Integration color management for visual identification of data sources
+import { get } from './api';
 
 /**
  * Integration color configuration
@@ -18,6 +19,7 @@ export interface IntegrationColors {
   puppetdb: IntegrationColorConfig;
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
+  ssh: IntegrationColorConfig;
 }
 
 /**
@@ -55,13 +57,7 @@ class IntegrationColorStore {
     this.error = null;
 
     try {
-      const response = await fetch('/api/integrations/colors');
-
-      if (!response.ok) {
-        throw new Error(`Failed to load integration colors: ${response.statusText}`);
-      }
-
-      const data = await response.json() as ColorsApiResponse;
+      const data = await get<ColorsApiResponse>('/api/integrations/colors');
       this.colors = data.colors;
     } catch (err: unknown) {
       this.error = err instanceof Error ? err.message : 'Unknown error loading colors';
@@ -111,7 +107,7 @@ class IntegrationColorStore {
    * @returns Array of valid integration names
    */
   getValidIntegrations(): IntegrationType[] {
-    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera'];
+    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh'];
   }
 
   /**
@@ -154,6 +150,11 @@ class IntegrationColorStore {
         primary: '#C1272D',
         light: '#FFE8E9',
         dark: '#9A1F24',
+      },
+      ssh: {
+        primary: '#10B981',
+        light: '#D1FAE5',
+        dark: '#059669',
       },
     };
   }
