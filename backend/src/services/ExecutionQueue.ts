@@ -7,7 +7,7 @@
 
 export interface QueuedExecution {
   id: string;
-  type: "command" | "task" | "facts" | "puppet" | "package";
+  type: "command" | "task" | "facts" | "puppet" | "package" | "plan";
   nodeId: string;
   action: string;
   enqueuedAt: Date;

@@ -162,7 +162,7 @@ export interface Facts {
  */
 export interface ExecutionResult {
   id: string;
-  type: "command" | "task" | "facts" | "puppet" | "package";
+  type: "command" | "task" | "facts" | "puppet" | "package" | "plan";
   targetNodes: string[];
   action: string;
   parameters?: Record<string, unknown>;

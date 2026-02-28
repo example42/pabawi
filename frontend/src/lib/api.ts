@@ -711,3 +711,56 @@ export function getErrorGuidance(error: unknown): { message: string; guidance: s
     guidance: 'Please try again. If the problem persists, contact support.',
   };
 }
+
+/**
+ * Batch execution interfaces
+ */
+export interface ExecutionDetail {
+  id: string;
+  nodeId: string;
+  nodeName: string;
+  status: 'queued' | 'running' | 'success' | 'failed';
+  startedAt?: Date;
+  completedAt?: Date;
+  duration?: number;
+  result?: {
+    exitCode?: number;
+    stdout?: string;
+    stderr?: string;
+  };
+}
+
+export interface BatchExecution {
+  id: string;
+  type: 'command' | 'task' | 'plan';
+  action: string;
+  parameters?: Record<string, unknown>;
+  targetNodes: string[];
+  targetGroups: string[];
+  status: 'running' | 'success' | 'failed' | 'partial' | 'cancelled';
+  createdAt: Date;
+  startedAt?: Date;
+  completedAt?: Date;
+  userId: string;
+  executionIds: string[];
+  stats: {
+    total: number;
+    queued: number;
+    running: number;
+    success: number;
+    failed: number;
+  };
+}
+
+export interface BatchStatusResponse {
+  batch: BatchExecution;
+  executions: ExecutionDetail[];
+  progress: number;
+}
+
+/**
+ * Get batch execution status
+ */
+export async function getBatchStatus(batchId: string): Promise<BatchStatusResponse> {
+  return get<BatchStatusResponse>(`/api/executions/batch/${batchId}`);
+}

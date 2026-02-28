@@ -140,6 +140,71 @@ else
   SKIP_ENV=false
 fi
 
+# ── Sample Data Mode Selection ──────────────────────────────────────────────
+SAMPLE_MODE=""
+BOLT_SAMPLE_PATH=""
+ANSIBLE_SAMPLE_PATH=""
+ANSIBLE_SAMPLE_INVENTORY=""
+SSH_SAMPLE_PATH=""
+HIERA_SAMPLE_PATH=""
+
+if [[ "$SKIP_ENV" != "true" ]]; then
+  header "Sample Data"
+  info "Pabawi ships with sample inventories for demo and development."
+  echo ""
+  echo "  1) ${BOLD}Default samples${RESET}      – Realistic multi-tier infrastructure (~80 nodes)"
+  echo "  2) ${BOLD}Stress test samples${RESET}   – Large-scale inventories for UI stress testing (2,000+ nodes)"
+  echo "  3) ${BOLD}Custom directories${RESET}    – Provide your own paths to Bolt/Ansible/SSH/Hiera"
+  echo ""
+  printf "${BOLD}Choose sample mode [1/2/3]${RESET} [${GREEN}1${RESET}]: "
+  read -r SAMPLE_MODE
+  SAMPLE_MODE="${SAMPLE_MODE:-1}"
+
+  case "$SAMPLE_MODE" in
+    1)
+      success "Using default sample integrations (samples/integrations/)"
+      BOLT_SAMPLE_PATH="./samples/integrations/bolt"
+      ANSIBLE_SAMPLE_PATH="./samples/integrations/ansible"
+      ANSIBLE_SAMPLE_INVENTORY="./samples/integrations/ansible/inventory/hosts.yml"
+      SSH_SAMPLE_PATH="./samples/integrations/ssh/config"
+      HIERA_SAMPLE_PATH="./samples/integrations/puppet"
+      ;;
+    2)
+      success "Using stress test samples (samples/stresstest/)"
+      BOLT_SAMPLE_PATH="./samples/stresstest/bolt"
+      ANSIBLE_SAMPLE_PATH="./samples/stresstest/ansible"
+      ANSIBLE_SAMPLE_INVENTORY="./samples/stresstest/ansible/inventory/hosts.yml"
+      SSH_SAMPLE_PATH="./samples/stresstest/ssh/config"
+      HIERA_SAMPLE_PATH="./samples/integrations/puppet"
+      info "Stress test samples do not include Puppet/Hiera data. Configure Hiera manually if needed."
+      # Offer to regenerate with a custom count
+      ask_yn REGEN_STRESS "Regenerate stress test inventories with a custom node count?" "n"
+      if [[ "$REGEN_STRESS" == "true" ]]; then
+        ask STRESS_NODE_COUNT "Number of nodes to generate" "2000"
+        info "Generating ${STRESS_NODE_COUNT} nodes…"
+        if command -v node &>/dev/null; then
+          node "$PROJECT_ROOT/samples/stresstest/generate.js" "$STRESS_NODE_COUNT"
+          success "Stress test inventories regenerated with ${STRESS_NODE_COUNT} nodes"
+        else
+          error "Node.js required to regenerate. Using pre-generated files."
+        fi
+      fi
+      ;;
+    3)
+      success "Custom directories — you'll configure paths in the integration prompts below."
+      ;;
+    *)
+      warn "Invalid choice, using default samples."
+      SAMPLE_MODE="1"
+      BOLT_SAMPLE_PATH="./samples/integrations/bolt"
+      ANSIBLE_SAMPLE_PATH="./samples/integrations/ansible"
+      ANSIBLE_SAMPLE_INVENTORY="./samples/integrations/ansible/inventory/hosts.yml"
+      SSH_SAMPLE_PATH="./samples/integrations/ssh/config"
+      HIERA_SAMPLE_PATH="./samples/integrations/puppet"
+      ;;
+  esac
+fi
+
 # ── Generate backend/.env ───────────────────────────────────────────────────
 if [[ "$SKIP_ENV" != "true" ]]; then
   header "Core Configuration"
@@ -162,7 +227,13 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   COMMAND_WHITELIST_ALLOW_ALL="false"
   COMMAND_WHITELIST='["ls","pwd","whoami","uptime","cat","df","free"]'
   if [[ "$BOLT_ENABLED" == "true" ]]; then
-    ask BOLT_PROJECT_PATH "Bolt project directory" "./integrations/bolt"
+    bolt_default="${BOLT_SAMPLE_PATH:-./samples/integrations/bolt}"
+    if [[ "$SAMPLE_MODE" == "3" ]]; then
+      ask BOLT_PROJECT_PATH "Bolt project directory" "$bolt_default"
+    else
+      BOLT_PROJECT_PATH="$bolt_default"
+      info "Bolt project path: $BOLT_PROJECT_PATH"
+    fi
     ask_yn COMMAND_WHITELIST_ALLOW_ALL "Allow ALL commands? (not recommended for shared/production use)" "n"
     if [[ "$COMMAND_WHITELIST_ALLOW_ALL" != "true" ]]; then
       ask COMMAND_WHITELIST "Allowed commands (JSON array)" "$COMMAND_WHITELIST"
@@ -229,7 +300,17 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   ask_yn HIERA_ENABLED "Enable Hiera integration?" "n"
   HIERA_CONTROL_REPO_PATH=""
   if [[ "$HIERA_ENABLED" == "true" ]]; then
-    ask HIERA_CONTROL_REPO_PATH "Hiera control repo path" "/etc/puppetlabs/code/environments/production"
+    hiera_default="${HIERA_SAMPLE_PATH:-/etc/puppetlabs/code/environments/production}"
+    if [[ "$SAMPLE_MODE" == "3" ]]; then
+      ask HIERA_CONTROL_REPO_PATH "Hiera control repo path" "$hiera_default"
+    else
+      if [[ -n "$hiera_default" ]]; then
+        HIERA_CONTROL_REPO_PATH="$hiera_default"
+        info "Hiera control repo path: $HIERA_CONTROL_REPO_PATH"
+      else
+        ask HIERA_CONTROL_REPO_PATH "Hiera control repo path" "/etc/puppetlabs/code/environments/production"
+      fi
+    fi
   fi
 
   # ── Ansible integration ─────────────────────────────────────────────────
@@ -242,8 +323,17 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   ANSIBLE_PROJECT_PATH=""
   ANSIBLE_INVENTORY_PATH=""
   if [[ "$ANSIBLE_ENABLED" == "true" ]]; then
-    ask ANSIBLE_PROJECT_PATH "Ansible project path" "./integrations/ansible"
-    ask ANSIBLE_INVENTORY_PATH "Ansible inventory path" "./integrations/ansible/inventory/hosts.yml"
+    ansible_default="${ANSIBLE_SAMPLE_PATH:-./samples/integrations/ansible}"
+    ansible_inv_default="${ANSIBLE_SAMPLE_INVENTORY:-./samples/integrations/ansible/inventory/hosts.yml}"
+    if [[ "$SAMPLE_MODE" == "3" ]]; then
+      ask ANSIBLE_PROJECT_PATH "Ansible project path" "$ansible_default"
+      ask ANSIBLE_INVENTORY_PATH "Ansible inventory path" "$ansible_inv_default"
+    else
+      ANSIBLE_PROJECT_PATH="$ansible_default"
+      ANSIBLE_INVENTORY_PATH="$ansible_inv_default"
+      info "Ansible project path: $ANSIBLE_PROJECT_PATH"
+      info "Ansible inventory path: $ANSIBLE_INVENTORY_PATH"
+    fi
   fi
 
   # ── SSH integration ──────────────────────────────────────────────────────
@@ -253,7 +343,13 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   SSH_DEFAULT_KEY=""
   SSH_SUDO_ENABLED="false"
   if [[ "$SSH_ENABLED" == "true" ]]; then
-    ask SSH_CONFIG_PATH "SSH config path" "$HOME/.ssh/config"
+    ssh_default="${SSH_SAMPLE_PATH:-$HOME/.ssh/config}"
+    if [[ "$SAMPLE_MODE" == "3" ]]; then
+      ask SSH_CONFIG_PATH "SSH config path" "$ssh_default"
+    else
+      SSH_CONFIG_PATH="$ssh_default"
+      info "SSH config path: $SSH_CONFIG_PATH"
+    fi
     ask SSH_DEFAULT_USER "Default SSH user (leave empty for current user)" ""
     ask SSH_DEFAULT_KEY "Default SSH private key path (leave empty for agent)" ""
     ask_yn SSH_SUDO_ENABLED "Enable sudo for SSH commands?" "n"

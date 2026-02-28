@@ -38,16 +38,28 @@ export class BoltPlugin
 
   /**
    * Perform plugin-specific initialization
+   *
+   * Uses a lightweight check (bolt --version) instead of loading inventory
+   * to avoid blocking server startup with expensive operations.
    */
   protected async performInitialization(): Promise<void> {
     const complete = this.performanceMonitor.startTimer('bolt:initialization');
 
     try {
-      // Verify Bolt is accessible by checking inventory
-      await this.boltService.getInventory();
-      this.log("Bolt is accessible and inventory loaded");
+      // Lightweight check: just verify Bolt command is available
+      const childProcess = await import("child_process");
+      const { promisify } = await import("util");
+      const exec = promisify(childProcess.exec);
 
-      complete({ success: true });
+      try {
+        await exec("bolt --version", { timeout: 5000 });
+        this.log("Bolt command is accessible");
+        complete({ success: true });
+      } catch (cmdError) {
+        // Bolt command not available
+        this.log("Bolt command not found - plugin will report as unhealthy");
+        complete({ success: false, error: "bolt command not available" });
+      }
     } catch (error) {
       this.logError("Failed to verify Bolt accessibility during initialization", error);
       // Don't throw error during initialization - let health checks handle this

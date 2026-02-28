@@ -79,7 +79,7 @@ export class BoltValidator {
     const modulesDir = join(this.boltProjectPath, "modules");
     const hiddenModulesDir = join(this.boltProjectPath, ".modules");
     if (!existsSync(modulesDir) && !existsSync(hiddenModulesDir)) {
-      this.logger.warn("modules or .modules directory not found. Task execution may be limited.", {
+      this.logger.debug("modules or .modules directory not found. Task execution may be limited.", {
         component: "BoltValidator",
         operation: "validate",
       });
