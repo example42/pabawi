@@ -30,7 +30,7 @@ export class CommandWhitelistService {
    * Prevents command chaining, piping, subshell execution, and glob expansion.
    * Applied regardless of allowAll setting to protect remote targets.
    */
-  private static readonly SHELL_META_PATTERN = /[;|&`$(){}\n\r\t><\\*?\[\]~]/;
+  private static readonly SHELL_META_PATTERN = /[;|&`$(){}\n\r\t><\\*?[\]~]/;
 
   /**
    * Check if a command is allowed based on whitelist configuration

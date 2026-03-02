@@ -9,6 +9,7 @@ import { createPuppetDBRouter } from "./integrations/puppetdb";
 import { createPuppetserverRouter } from "./integrations/puppetserver";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
+import { asyncHandler } from "./asyncHandler";
 
 /**
  * Create integrations router
@@ -40,8 +41,8 @@ export function createIntegrationsRouter(
 
     router.use(
       "/puppetdb",
-      authMiddleware,
-      rbacMiddleware('puppetdb', 'read'),
+      asyncHandler(authMiddleware),
+      asyncHandler(rbacMiddleware('puppetdb', 'read')),
       createPuppetDBRouter(puppetDBService)
     );
   } else {

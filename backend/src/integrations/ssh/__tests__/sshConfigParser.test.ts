@@ -4,8 +4,9 @@
  * Tests parsing of OpenSSH config files and extraction of host definitions.
  */
 
+import { describe, it, expect } from 'vitest';
 import { parseSSHConfig, serializeSSHConfig } from '../sshConfigParser';
-import { SSHHost } from '../types';
+import type { SSHHost } from '../types';
 
 describe('SSH Config Parser', () => {
   describe('parseSSHConfig', () => {

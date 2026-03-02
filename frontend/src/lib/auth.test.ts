@@ -6,7 +6,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authManager, type AuthResponse, type UserDTO } from './auth.svelte';
 
 // Mock fetch
-global.fetch = vi.fn();
+const fetchMock = vi.fn();
+global.fetch = fetchMock;
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -59,7 +60,7 @@ describe('AuthManager', () => {
 
     // Clear any existing auth data
     if (authManager.isAuthenticated) {
-      authManager.logout();
+      void authManager.logout();
     }
   });
 
@@ -69,9 +70,9 @@ describe('AuthManager', () => {
 
   describe('login', () => {
     it('should successfully login with valid credentials', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockAuthResponse,
+        json: () => Promise.resolve(mockAuthResponse),
       });
 
       const result = await authManager.login({
@@ -87,9 +88,9 @@ describe('AuthManager', () => {
     });
 
     it('should store tokens in localStorage on successful login', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockAuthResponse,
+        json: () => Promise.resolve(mockAuthResponse),
       });
 
       await authManager.login({
@@ -103,10 +104,10 @@ describe('AuthManager', () => {
     });
 
     it('should handle login failure with invalid credentials', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: async () => ({ error: 'Invalid credentials' }),
+        json: () => Promise.resolve({ error: 'Invalid credentials' }),
       });
 
       const result = await authManager.login({
@@ -123,7 +124,7 @@ describe('AuthManager', () => {
     });
 
     it('should handle network errors during login', async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+      fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
       const result = await authManager.login({
         username: 'testuser',
@@ -139,12 +140,12 @@ describe('AuthManager', () => {
     });
 
     it('should set loading state during login', async () => {
-      let resolveLogin: (value: any) => void;
+      let resolveLogin: ((value: unknown) => void) | undefined;
       const loginPromise = new Promise((resolve) => {
         resolveLogin = resolve;
       });
 
-      (global.fetch as any).mockReturnValueOnce(loginPromise);
+      fetchMock.mockReturnValueOnce(loginPromise);
 
       const loginCall = authManager.login({
         username: 'testuser',
@@ -155,10 +156,12 @@ describe('AuthManager', () => {
       expect(authManager.isLoading).toBe(true);
 
       // Resolve the login
-      resolveLogin!({
-        ok: true,
-        json: async () => mockAuthResponse,
-      });
+      if (resolveLogin) {
+        resolveLogin({
+          ok: true,
+          json: () => Promise.resolve(mockAuthResponse),
+        });
+      }
 
       await loginCall;
 
@@ -170,9 +173,9 @@ describe('AuthManager', () => {
   describe('logout', () => {
     beforeEach(async () => {
       // Login first
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockAuthResponse,
+        json: () => Promise.resolve(mockAuthResponse),
       });
 
       await authManager.login({
@@ -182,7 +185,7 @@ describe('AuthManager', () => {
     });
 
     it('should clear auth data on logout', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
       });
 
@@ -195,7 +198,7 @@ describe('AuthManager', () => {
     });
 
     it('should clear localStorage on logout', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
       });
 
@@ -207,7 +210,7 @@ describe('AuthManager', () => {
     });
 
     it('should call logout API endpoint', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
       });
 
@@ -225,7 +228,7 @@ describe('AuthManager', () => {
     });
 
     it('should clear auth data even if logout API fails', async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error('Network error'));
+      fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
       await authManager.logout();
 
@@ -237,9 +240,9 @@ describe('AuthManager', () => {
   describe('refreshAccessToken', () => {
     beforeEach(async () => {
       // Login first
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockAuthResponse,
+        json: () => Promise.resolve(mockAuthResponse),
       });
 
       await authManager.login({
@@ -254,9 +257,9 @@ describe('AuthManager', () => {
         token: 'new-access-token',
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => newAuthResponse,
+        json: () => Promise.resolve(newAuthResponse),
       });
 
       const result = await authManager.refreshAccessToken();
@@ -272,9 +275,9 @@ describe('AuthManager', () => {
         token: 'new-access-token',
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => newAuthResponse,
+        json: () => Promise.resolve(newAuthResponse),
       });
 
       await authManager.refreshAccessToken();
@@ -283,7 +286,7 @@ describe('AuthManager', () => {
     });
 
     it('should clear auth data if refresh fails', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 401,
       });
@@ -307,9 +310,9 @@ describe('AuthManager', () => {
 
   describe('getAuthHeader', () => {
     it('should return Bearer token when authenticated', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockAuthResponse,
+        json: () => Promise.resolve(mockAuthResponse),
       });
 
       await authManager.login({
@@ -332,9 +335,9 @@ describe('AuthManager', () => {
         user: { ...mockUser, isAdmin: true },
       };
 
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => adminResponse,
+        json: () => Promise.resolve(adminResponse),
       });
 
       await authManager.login({
@@ -346,9 +349,9 @@ describe('AuthManager', () => {
     });
 
     it('should return false for non-admin users', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: true,
-        json: async () => mockAuthResponse,
+        json: () => Promise.resolve(mockAuthResponse),
       });
 
       await authManager.login({
@@ -366,10 +369,10 @@ describe('AuthManager', () => {
 
   describe('clearError', () => {
     it('should clear error state', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
+      fetchMock.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: async () => ({ error: 'Invalid credentials' }),
+        json: () => Promise.resolve({ error: 'Invalid credentials' }),
       });
 
       await authManager.login({

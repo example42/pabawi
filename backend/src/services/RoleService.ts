@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import type { Database } from 'sqlite3';
 import { randomUUID } from 'crypto';
 
 /**
@@ -197,7 +197,7 @@ export class RoleService {
 
     // Build update query dynamically
     const updates: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (data.name !== undefined) {
       updates.push('name = ?');
@@ -263,12 +263,12 @@ export class RoleService {
    * @returns Paginated list of roles
    */
   public async listRoles(filters?: RoleFilters): Promise<PaginatedResult<Role>> {
-    const limit = filters?.limit || 50;
-    const offset = filters?.offset || 0;
+    const limit = filters?.limit ?? 50;
+    const offset = filters?.offset ?? 0;
 
     // Build WHERE clause
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters?.search) {
       conditions.push('(name LIKE ? OR description LIKE ?)');
@@ -283,7 +283,7 @@ export class RoleService {
       `SELECT COUNT(*) as count FROM roles ${whereClause}`,
       params
     );
-    const total = countResult?.count || 0;
+    const total = countResult?.count ?? 0;
 
     // Get paginated results
     const roles = await this.allQuery<Role>(
@@ -404,7 +404,7 @@ export class RoleService {
   /**
    * Helper: Run a query that doesn't return rows
    */
-  private runQuery(sql: string, params: any[] = []): Promise<void> {
+  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, (err) => {
         if (err) reject(err);
@@ -416,11 +416,11 @@ export class RoleService {
   /**
    * Helper: Get a single row
    */
-  private getQuery<T>(sql: string, params: any[] = []): Promise<T | null> {
+  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
     return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
+      this.db.get(sql, params, (err: Error | null, row: unknown) => {
         if (err) reject(err);
-        else resolve(row as T || null);
+        else resolve((row as T) ?? null);
       });
     });
   }
@@ -428,11 +428,11 @@ export class RoleService {
   /**
    * Helper: Get all rows
    */
-  private allQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
+  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
+      this.db.all(sql, params, (err: Error | null, rows: unknown[]) => {
         if (err) reject(err);
-        else resolve(rows as T[] || []);
+        else resolve(rows as T[]);
       });
     });
   }

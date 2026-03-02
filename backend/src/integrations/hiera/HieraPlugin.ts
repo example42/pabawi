@@ -541,11 +541,11 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
    * @returns Array of node groups
    * @note Hiera does not natively support groups, returns empty array
    */
-  async getGroups(): Promise<NodeGroup[]> {
+  getGroups(): Promise<NodeGroup[]> {
     this.ensureInitialized();
 
     // Hiera is a data lookup tool and does not have native group support
-    return [];
+    return Promise.resolve([]);
   }
 
 

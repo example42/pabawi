@@ -409,7 +409,7 @@ describe('IntegrationBadge Component', () => {
         },
       });
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(integrationColors.loadColors).toHaveBeenCalled();
     });
 
@@ -420,7 +420,7 @@ describe('IntegrationBadge Component', () => {
         },
       });
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(integrationColors.getColor).toHaveBeenCalledWith('puppetdb');
     });
   });

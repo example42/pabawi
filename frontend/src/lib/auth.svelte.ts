@@ -119,8 +119,8 @@ class AuthManager {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error || 'Login failed';
+        const errorData = (await response.json().catch(() => ({}))) as { error?: string };
+        const errorMessage: string = errorData.error ?? 'Login failed';
 
         logger.warn('Auth', 'login', 'Login failed', {
           status: response.status,
@@ -129,12 +129,12 @@ class AuthManager {
 
         this._error = {
           message: errorMessage,
-          code: `HTTP_${response.status}`,
+          code: `HTTP_${String(response.status)}`,
         };
         return false;
       }
 
-      const data: AuthResponse = await response.json();
+      const data = (await response.json()) as AuthResponse;
 
       this.setAuthData(data);
 
@@ -224,7 +224,7 @@ class AuthManager {
         return false;
       }
 
-      const data: AuthResponse = await response.json();
+      const data = (await response.json()) as AuthResponse;
 
       this.setAuthData(data);
 
@@ -317,18 +317,18 @@ class AuthManager {
       if (token && refreshToken && userJson) {
         this._token = token;
         this._refreshToken = refreshToken;
-        this._user = JSON.parse(userJson);
+        this._user = JSON.parse(userJson) as UserDTO;
         this._isAuthenticated = true;
         this._tokenExpiresAt = Date.now() + ACCESS_TOKEN_LIFETIME_MS;
 
         logger.info('Auth', 'loadFromStorage', 'Loaded auth data from storage', {
-          userId: this._user?.id,
+          userId: this._user.id,
         });
 
         // Check if token needs refresh immediately
         if (this.isTokenExpired()) {
           logger.info('Auth', 'loadFromStorage', 'Token expired, refreshing');
-          this.refreshAccessToken();
+          void this.refreshAccessToken();
         }
       }
     } catch (error) {
@@ -358,7 +358,7 @@ class AuthManager {
 
     this._tokenRefreshTimer = window.setTimeout(() => {
       logger.info('Auth', 'scheduleTokenRefresh', 'Auto-refreshing token');
-      this.refreshAccessToken();
+      void this.refreshAccessToken();
     }, delay);
   }
 }

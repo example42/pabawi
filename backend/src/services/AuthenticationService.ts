@@ -1,8 +1,8 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { Database } from 'sqlite3';
+import type { Database } from 'sqlite3';
 import crypto from 'crypto';
-import { AuditLoggingService } from './AuditLoggingService';
+import type { AuditLoggingService } from './AuditLoggingService';
 import { performanceMonitor } from './PerformanceMonitor';
 import { LoggerService } from './LoggerService';
 
@@ -63,6 +63,27 @@ interface User {
 }
 
 /**
+ * Refresh token payload structure
+ */
+interface RefreshTokenPayload {
+  userId: string;
+  username: string;
+  type: string;
+  iat: number;
+  exp: number;
+  jti?: string;
+}
+
+/**
+ * Decoded token payload (minimal fields for token operations)
+ */
+interface DecodedTokenPayload {
+  userId: string;
+  iat: number;
+  exp: number;
+}
+
+/**
  * Authentication service for user authentication, JWT token management, and password handling
  *
  * Responsibilities:
@@ -75,16 +96,16 @@ interface User {
 export class AuthenticationService {
   private db: Database;
   private jwtSecret: string;
-  private accessTokenLifetime: number = 3600; // 1 hour in seconds
-  private refreshTokenLifetime: number = 604800; // 7 days in seconds
-  private bcryptCostFactor: number = 10;
+  private accessTokenLifetime = 3600; // 1 hour in seconds
+  private refreshTokenLifetime = 604800; // 7 days in seconds
+  private bcryptCostFactor = 10;
   private auditLogger?: AuditLoggingService;
 
   constructor(db: Database, jwtSecret?: string, auditLogger?: AuditLoggingService) {
     this.db = db;
     this.auditLogger = auditLogger;
 
-    const resolvedSecret = jwtSecret || process.env.JWT_SECRET;
+    const resolvedSecret = jwtSecret ?? process.env.JWT_SECRET;
 
     if (!resolvedSecret) {
       const logger = new LoggerService();
@@ -140,8 +161,8 @@ export class AuthenticationService {
             const lockoutStatus = await this.checkAccountLockout(username);
             if (lockoutStatus.isLocked) {
               // Still record the attempt even when locked (for permanent lockout tracking)
-              await this.recordFailedLoginAttempt(username, lockoutStatus.reason || 'Account locked');
-              await this.logFailedAuthentication(username, lockoutStatus.reason || 'Account locked');
+              await this.recordFailedLoginAttempt(username, lockoutStatus.reason ?? 'Account locked');
+              await this.logFailedAuthentication(username, lockoutStatus.reason ?? 'Account locked');
 
               // Audit log: authentication failure (account locked)
               if (this.auditLogger) {
@@ -151,11 +172,11 @@ export class AuthenticationService {
                   null,
                   ipAddress,
                   userAgent,
-                  lockoutStatus.reason || 'Account locked'
+                  lockoutStatus.reason ?? 'Account locked'
                 );
               }
 
-              return { success: false, error: lockoutStatus.reason || 'Account is locked' };
+              return { success: false, error: lockoutStatus.reason ?? 'Account is locked' };
             }
 
             // Fetch user from database (including inactive users for proper error handling)
@@ -314,7 +335,7 @@ export class AuthenticationService {
    * @param user - User object
    * @returns JWT refresh token string
    */
-  public async generateRefreshToken(user: User): Promise<string> {
+  public generateRefreshToken(user: User): Promise<string> {
     const payload = {
       userId: user.id,
       username: user.username,
@@ -324,9 +345,9 @@ export class AuthenticationService {
       jti: crypto.randomBytes(16).toString('hex')
     };
 
-    return jwt.sign(payload, this.jwtSecret, {
+    return Promise.resolve(jwt.sign(payload, this.jwtSecret, {
       algorithm: 'HS256'
-    });
+    }));
   }
 
   /**
@@ -371,7 +392,7 @@ export class AuthenticationService {
       // Verify refresh token
       const payload = jwt.verify(refreshToken, this.jwtSecret, {
         algorithms: ['HS256']
-      }) as any;
+      }) as RefreshTokenPayload;
 
       // Check if it's a refresh token
       if (payload.type !== 'refresh') {
@@ -386,7 +407,7 @@ export class AuthenticationService {
 
       // Fetch user
       const user = await this.getUserById(payload.userId);
-      if (!user || !user.isActive) {
+      if (!user?.isActive) {
         return { success: false, error: 'User not found or inactive' };
       }
 
@@ -448,7 +469,7 @@ export class AuthenticationService {
   public async revokeToken(token: string): Promise<void> {
     try {
       // Decode token to get expiration (don't verify, as it might be expired)
-      const decoded = jwt.decode(token) as any;
+      const decoded = jwt.decode(token) as DecodedTokenPayload | null;
       if (!decoded) {
         throw new Error('Invalid token format');
       }
@@ -513,7 +534,7 @@ export class AuthenticationService {
    */
   private async isTokenRevoked(token: string): Promise<boolean> {
     try {
-      const decoded = jwt.decode(token) as any;
+      const decoded = jwt.decode(token) as DecodedTokenPayload | null;
       if (!decoded) {
         return true;
       }
@@ -608,7 +629,7 @@ export class AuthenticationService {
    * @param reason - Reason for authentication failure
    * @private
    */
-  private async logFailedAuthentication(username: string, reason: string): Promise<void> {
+  private logFailedAuthentication(username: string, reason: string): Promise<void> {
     const timestamp = new Date().toISOString();
 
     // Log to console for now (can be extended to database or external logging service)
@@ -622,6 +643,7 @@ export class AuthenticationService {
     //
     // Note: IP address logging should be done at the API layer where
     // request context is available, then passed to this method
+    return Promise.resolve();
   }
   /**
    * Check if account is locked due to failed login attempts
@@ -659,7 +681,7 @@ export class AuthenticationService {
             const minutesRemaining = Math.ceil((lockedUntil.getTime() - now.getTime()) / 60000);
             return {
               isLocked: true,
-              reason: `Account is temporarily locked. Try again in ${minutesRemaining} minute${minutesRemaining !== 1 ? 's' : ''}.`
+              reason: `Account is temporarily locked. Try again in ${String(minutesRemaining)} minute${minutesRemaining !== 1 ? 's' : ''}.`
             };
           } else {
             // Temporary lockout expired - remove it
@@ -703,7 +725,7 @@ export class AuthenticationService {
         await this.runQuery(
           `INSERT INTO failed_login_attempts (username, attemptedAt, ipAddress, reason)
            VALUES (?, ?, ?, ?)`,
-          [username, timestamp, ipAddress || null, reason]
+          [username, timestamp, ipAddress ?? null, reason]
         );
 
         // Count total failed attempts (not just within window, for permanent lockout)
@@ -713,7 +735,7 @@ export class AuthenticationService {
           [username]
         );
 
-        const totalCount = totalAttempts?.count || 0;
+        const totalCount = totalAttempts?.count ?? 0;
 
         // Check for permanent lockout first (10 attempts total)
         if (totalCount >= this.PERMANENT_LOCKOUT_ATTEMPTS) {
@@ -729,7 +751,7 @@ export class AuthenticationService {
           [username, windowStart.toISOString()]
         );
 
-        const recentCount = recentAttempts?.count || 0;
+        const recentCount = recentAttempts?.count ?? 0;
 
         // Check for temporary lockout (5 attempts in 15 minutes)
         if (recentCount >= this.TEMP_LOCKOUT_ATTEMPTS) {
@@ -776,7 +798,7 @@ export class AuthenticationService {
         );
       }
 
-      console.warn(`[SECURITY] Temporary lockout applied to username: ${username} (${failedAttempts} failed attempts)`);
+      console.warn(`[SECURITY] Temporary lockout applied to username: ${username} (${String(failedAttempts)} failed attempts)`);
     } catch (error) {
       console.error('Error applying temporary lockout:', error);
     }
@@ -816,7 +838,7 @@ export class AuthenticationService {
         );
       }
 
-      console.error(`[SECURITY ALERT] Permanent lockout applied to username: ${username} (${failedAttempts} failed attempts)`);
+      console.error(`[SECURITY ALERT] Permanent lockout applied to username: ${username} (${String(failedAttempts)} failed attempts)`);
     } catch (error) {
       console.error('Error applying permanent lockout:', error);
     }
@@ -859,7 +881,7 @@ export class AuthenticationService {
       // Clear failed attempts
       await this.runQuery('DELETE FROM failed_login_attempts WHERE username = ?', [username]);
 
-      console.info(`[ADMIN] Account unlocked: ${username}`);
+      console.warn(`[ADMIN] Account unlocked: ${username}`);
     } catch (error) {
       console.error('Error unlocking account:', error);
       throw new Error('Failed to unlock account');
@@ -872,11 +894,11 @@ export class AuthenticationService {
    * @param username - Username to check
    * @returns Array of failed login attempts
    */
-  public async getFailedLoginAttempts(username: string): Promise<Array<{
+  public async getFailedLoginAttempts(username: string): Promise<{
     attemptedAt: string;
     ipAddress: string | null;
     reason: string;
-  }>> {
+  }[]> {
     try {
       return await this.allQuery<{
         attemptedAt: string;
@@ -945,7 +967,7 @@ export class AuthenticationService {
   /**
    * Helper: Run a query that doesn't return rows
    */
-  private runQuery(sql: string, params: any[] = []): Promise<void> {
+  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, (err) => {
         if (err) reject(err);
@@ -957,7 +979,7 @@ export class AuthenticationService {
   /**
    * Helper: Get a single row
    */
-  private getQuery<T>(sql: string, params: any[] = []): Promise<T | null> {
+  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
     return new Promise((resolve, reject) => {
       this.db.get(sql, params, (err, row) => {
         if (err) reject(err);
@@ -969,11 +991,11 @@ export class AuthenticationService {
   /**
    * Helper: Get all rows
    */
-  private allQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
+  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {
         if (err) reject(err);
-        else resolve(rows as T[] || []);
+        else resolve(rows as T[]);
       });
     });
   }

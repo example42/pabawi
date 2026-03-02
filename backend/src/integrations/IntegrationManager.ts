@@ -381,7 +381,7 @@ export class IntegrationManager {
 
           const [nodes, groups] = await Promise.all([
             source.getInventory(),
-            source.getGroups().catch((error) => {
+            source.getGroups().catch((error: unknown) => {
               const err = error instanceof Error ? error : new Error(String(error));
               this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
                 component: "IntegrationManager",
@@ -900,10 +900,12 @@ export class IntegrationManager {
     const groupsByName = new Map<string, NodeGroup[]>();
 
     for (const group of groups) {
-      if (!groupsByName.has(group.name)) {
-        groupsByName.set(group.name, []);
+      const existingGroup = groupsByName.get(group.name);
+      if (existingGroup) {
+        existingGroup.push(group);
+      } else {
+        groupsByName.set(group.name, [group]);
       }
-      groupsByName.get(group.name)!.push(group);
     }
 
     this.logger.debug(`Grouped into ${String(groupsByName.size)} unique group names`, {
@@ -938,12 +940,12 @@ export class IntegrationManager {
         const uniqueNodeIds = [...new Set(allNodeIds)];
 
         // Merge metadata from all sources
-        const mergedMetadata = groupsWithSameName.reduce((acc, g) => {
+        const mergedMetadata: Record<string, unknown> = {};
+        for (const g of groupsWithSameName) {
           if (g.metadata) {
-            return { ...acc, ...g.metadata };
+            Object.assign(mergedMetadata, g.metadata);
           }
-          return acc;
-        }, {} as NodeGroup["metadata"]);
+        }
 
         linkedGroups.push({
           id: `linked:${name}`,
@@ -1118,6 +1120,7 @@ export class IntegrationManager {
       sanitized = sanitized.replace(/\*\//g, '');
 
       // Remove control characters and non-printable characters
+      // eslint-disable-next-line no-control-regex -- intentionally removing control characters
       sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
 
       // Remove parentheses that might be used in injection

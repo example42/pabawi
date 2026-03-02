@@ -5,9 +5,9 @@
  * Implements LRU eviction and idle connection cleanup.
  */
 
-import { Client } from 'ssh2';
-import { SSHHost, PooledConnection, PoolConfig, SSHErrorType } from './types';
-import { LoggerService } from '../../services/LoggerService';
+import type { Client } from 'ssh2';
+import type { SSHHost, PooledConnection, PoolConfig} from './types';
+import type { LoggerService } from '../../services/LoggerService';
 
 /**
  * Connection pool for managing SSH connections
@@ -115,7 +115,7 @@ export class ConnectionPool {
           },
         });
 
-        await this.remove(hostKey);
+        this.remove(hostKey);
       }
     }
 
@@ -123,7 +123,7 @@ export class ConnectionPool {
     const hostConnections = this.getHostConnectionCount(hostKey);
     if (hostConnections >= this.config.maxConnectionsPerHost) {
       const error = new Error(
-        `Maximum connections per host (${this.config.maxConnectionsPerHost}) reached for ${hostKey}`
+        `Maximum connections per host (${String(this.config.maxConnectionsPerHost)}) reached for ${hostKey}`
       );
 
       this.logger?.error('Per-host connection limit reached', {
@@ -152,7 +152,7 @@ export class ConnectionPool {
         },
       });
 
-      await this.evictLRU();
+      this.evictLRU();
     }
 
     // Create new connection
@@ -198,7 +198,7 @@ export class ConnectionPool {
    *
    * @param hostKey - Host key identifying the connection
    */
-  async release(hostKey: string): Promise<void> {
+  release(hostKey: string): void {
     const connection = this.connections.get(hostKey);
 
     if (connection) {
@@ -221,7 +221,7 @@ export class ConnectionPool {
    *
    * @param hostKey - Host key identifying the connection
    */
-  async remove(hostKey: string): Promise<void> {
+  remove(hostKey: string): void {
     const connection = this.connections.get(hostKey);
 
     if (connection) {
@@ -259,7 +259,7 @@ export class ConnectionPool {
   /**
    * Close all connections and clear the pool
    */
-  async closeAll(): Promise<void> {
+  closeAll(): void {
     this.logger?.info('Closing all connections in pool', {
       component: 'ConnectionPool',
       integration: 'ssh',
@@ -269,13 +269,10 @@ export class ConnectionPool {
       },
     });
 
-    const promises: Promise<void>[] = [];
-
     for (const [hostKey] of this.connections) {
-      promises.push(this.remove(hostKey));
+      this.remove(hostKey);
     }
 
-    await Promise.all(promises);
     this.stopCleanup();
 
     this.logger?.info('All connections closed', {
@@ -305,8 +302,8 @@ export class ConnectionPool {
    * Format: user@host:port
    */
   private getHostKey(host: SSHHost): string {
-    const user = host.user || 'root';
-    const port = host.port || 22;
+    const user = host.user ?? 'root';
+    const port = host.port ?? 22;
 
     // Extract hostname from URI if present
     let hostname = host.uri;
@@ -320,7 +317,7 @@ export class ConnectionPool {
       hostname = hostname.substring(0, colonIndex);
     }
 
-    return `${user}@${hostname}:${port}`;
+    return `${user}@${hostname}:${String(port)}`;
   }
 
   /**
@@ -350,14 +347,14 @@ export class ConnectionPool {
       });
 
       // Timeout after 5 seconds
-      setTimeout(() => resolve(false), 5000);
+      setTimeout(() => { resolve(false); }, 5000);
     });
   }
 
   /**
    * Evict the least recently used connection
    */
-  private async evictLRU(): Promise<void> {
+  private evictLRU(): void {
     let oldestKey: string | null = null;
     let oldestTime = Infinity;
 
@@ -390,7 +387,7 @@ export class ConnectionPool {
         },
       });
 
-      await this.remove(oldestKey);
+      this.remove(oldestKey);
     }
   }
 
@@ -399,7 +396,7 @@ export class ConnectionPool {
    */
   private startCleanup(): void {
     this.cleanupInterval = setInterval(
-      () => this.cleanupIdleConnections(),
+      () => { this.cleanupIdleConnections(); },
       this.config.cleanupInterval
     );
   }
@@ -417,7 +414,7 @@ export class ConnectionPool {
   /**
    * Clean up idle connections that have exceeded the idle timeout
    */
-  private async cleanupIdleConnections(): Promise<void> {
+  private cleanupIdleConnections(): void {
     const now = Date.now();
     const keysToRemove: string[] = [];
 
@@ -445,7 +442,7 @@ export class ConnectionPool {
 
       // Remove idle connections
       for (const key of keysToRemove) {
-        await this.remove(key);
+        this.remove(key);
       }
     }
   }

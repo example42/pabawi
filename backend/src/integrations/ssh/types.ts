@@ -5,7 +5,7 @@
  * the SSH integration plugin for Pabawi.
  */
 
-import { Client } from 'ssh2';
+import type { Client } from 'ssh2';
 
 /**
  * SSH plugin configuration loaded from environment variables

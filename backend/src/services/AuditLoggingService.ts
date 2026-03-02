@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import type { Database } from 'sqlite3';
 import { randomUUID } from 'crypto';
 
 /**
@@ -79,7 +79,7 @@ export interface AuditLogEntry {
   targetResourceId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
-  details?: Record<string, any>;
+  details?: Record<string, unknown>;
   result: AuditResult;
 }
 
@@ -96,6 +96,35 @@ export interface AuditLogFilters {
   ipAddress?: string;
   limit?: number;
   offset?: number;
+}
+
+/**
+ * Row shape returned by audit_logs SELECT queries
+ */
+interface AuditLogRow {
+  id: string;
+  timestamp: string;
+  eventType: string;
+  action: string;
+  userId: string | null;
+  targetUserId: string | null;
+  targetResourceType: string | null;
+  targetResourceId: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  details: string | null;
+  result: string;
+}
+
+/**
+ * Row shape returned by audit statistics aggregation query
+ */
+interface AuditStatisticsRow {
+  totalLogs: number;
+  authenticationAttempts: number;
+  authenticationFailures: number;
+  authorizationFailures: number;
+  adminActions: number;
 }
 
 /**
@@ -128,7 +157,7 @@ export class AuditLoggingService {
     const action = success ? AuditAction.LOGIN_SUCCESS : AuditAction.LOGIN_FAILURE;
     const result = success ? AuditResult.SUCCESS : AuditResult.FAILURE;
 
-    const details: Record<string, any> = { username };
+    const details: Record<string, unknown> = { username };
     if (reason) {
       details.reason = reason;
     }
@@ -202,7 +231,7 @@ export class AuditLoggingService {
     action: AuditAction,
     adminUserId: string,
     targetUserId: string,
-    details?: Record<string, any>,
+    details?: Record<string, unknown>,
     ipAddress?: string,
     userAgent?: string
   ): Promise<void> {
@@ -228,7 +257,7 @@ export class AuditLoggingService {
     action: AuditAction,
     adminUserId: string,
     roleId: string,
-    details?: Record<string, any>,
+    details?: Record<string, unknown>,
     ipAddress?: string,
     userAgent?: string
   ): Promise<void> {
@@ -253,7 +282,7 @@ export class AuditLoggingService {
     action: AuditAction,
     adminUserId: string,
     permissionId: string,
-    details?: Record<string, any>,
+    details?: Record<string, unknown>,
     ipAddress?: string,
     userAgent?: string
   ): Promise<void> {
@@ -278,7 +307,7 @@ export class AuditLoggingService {
     action: AuditAction,
     adminUserId: string,
     groupId: string,
-    details?: Record<string, any>,
+    details?: Record<string, unknown>,
     ipAddress?: string,
     userAgent?: string
   ): Promise<void> {
@@ -302,7 +331,7 @@ export class AuditLoggingService {
   public async logAdminAction(
     action: string,
     adminUserId: string,
-    details?: Record<string, any>,
+    details?: Record<string, unknown>,
     ipAddress?: string,
     userAgent?: string
   ): Promise<void> {
@@ -340,12 +369,12 @@ export class AuditLoggingService {
       timestamp,
       entry.eventType,
       entry.action,
-      entry.userId || null,
-      entry.targetUserId || null,
-      entry.targetResourceType || null,
-      entry.targetResourceId || null,
-      entry.ipAddress || null,
-      entry.userAgent || null,
+      entry.userId ?? null,
+      entry.targetUserId ?? null,
+      entry.targetResourceType ?? null,
+      entry.targetResourceId ?? null,
+      entry.ipAddress ?? null,
+      entry.userAgent ?? null,
       detailsJson,
       entry.result
     ];
@@ -359,7 +388,7 @@ export class AuditLoggingService {
    */
   public async queryLogs(filters: AuditLogFilters = {}): Promise<AuditLogEntry[]> {
     let sql = 'SELECT * FROM audit_logs WHERE 1=1';
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters.userId) {
       sql += ' AND userId = ?';
@@ -408,12 +437,12 @@ export class AuditLoggingService {
       params.push(filters.offset);
     }
 
-    const rows = await this.allQuery<any>(sql, params);
+    const rows = await this.allQuery<AuditLogRow>(sql, params);
 
     return rows.map(row => ({
       id: row.id,
       timestamp: row.timestamp,
-      eventType: row.eventType,
+      eventType: row.eventType as AuditEventType,
       action: row.action,
       userId: row.userId,
       targetUserId: row.targetUserId,
@@ -421,8 +450,8 @@ export class AuditLoggingService {
       targetResourceId: row.targetResourceId,
       ipAddress: row.ipAddress,
       userAgent: row.userAgent,
-      details: row.details ? JSON.parse(row.details) : undefined,
-      result: row.result
+      details: row.details ? (JSON.parse(row.details) as Record<string, unknown>) : undefined,
+      result: row.result as AuditResult
     }));
   }
 
@@ -431,8 +460,8 @@ export class AuditLoggingService {
    */
   public async getUserAuditLogs(
     userId: string,
-    limit: number = 100,
-    offset: number = 0
+    limit = 100,
+    offset = 0
   ): Promise<AuditLogEntry[]> {
     return this.queryLogs({ userId, limit, offset });
   }
@@ -441,7 +470,7 @@ export class AuditLoggingService {
    * Get recent failed authentication attempts
    */
   public async getRecentFailedLogins(
-    limit: number = 50
+    limit = 50
   ): Promise<AuditLogEntry[]> {
     return this.queryLogs({
       eventType: AuditEventType.AUTH,
@@ -455,7 +484,7 @@ export class AuditLoggingService {
    */
   public async getAuthorizationFailures(
     startDate?: string,
-    limit: number = 100
+    limit = 100
   ): Promise<AuditLogEntry[]> {
     return this.queryLogs({
       eventType: AuditEventType.AUTHZ,
@@ -471,7 +500,7 @@ export class AuditLoggingService {
   public async getAdminActions(
     startDate?: string,
     endDate?: string,
-    limit: number = 100
+    limit = 100
   ): Promise<AuditLogEntry[]> {
     return this.queryLogs({
       eventType: AuditEventType.ADMIN,
@@ -485,7 +514,7 @@ export class AuditLoggingService {
    * Clean up old audit logs (for maintenance)
    * Requirement 13.5: Retain audit logs for at least 1 year
    */
-  public async cleanupOldLogs(retentionDays: number = 365): Promise<number> {
+  public async cleanupOldLogs(retentionDays = 365): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
     const cutoffTimestamp = cutoffDate.toISOString();
@@ -514,7 +543,7 @@ export class AuditLoggingService {
     adminActions: number;
   }> {
     let whereClause = '1=1';
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (startDate) {
       whereClause += ' AND timestamp >= ?';
@@ -537,19 +566,19 @@ export class AuditLoggingService {
       WHERE ${whereClause}
     `;
 
-    const result = await this.getQuery<any>(sql, params);
+    const result = await this.getQuery<AuditStatisticsRow>(sql, params);
 
     return {
-      totalLogs: result?.totalLogs || 0,
-      authenticationAttempts: result?.authenticationAttempts || 0,
-      authenticationFailures: result?.authenticationFailures || 0,
-      authorizationFailures: result?.authorizationFailures || 0,
-      adminActions: result?.adminActions || 0
+      totalLogs: result?.totalLogs ?? 0,
+      authenticationAttempts: result?.authenticationAttempts ?? 0,
+      authenticationFailures: result?.authenticationFailures ?? 0,
+      authorizationFailures: result?.authorizationFailures ?? 0,
+      adminActions: result?.adminActions ?? 0
     };
   }
 
   // Database helper methods
-  private runQuery(sql: string, params: any[] = []): Promise<void> {
+  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, (err) => {
         if (err) reject(err);
@@ -558,7 +587,7 @@ export class AuditLoggingService {
     });
   }
 
-  private getQuery<T>(sql: string, params: any[] = []): Promise<T | null> {
+  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
     return new Promise((resolve, reject) => {
       this.db.get(sql, params, (err, row) => {
         if (err) reject(err);
@@ -567,7 +596,7 @@ export class AuditLoggingService {
     });
   }
 
-  private allQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
+  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {
         if (err) reject(err);

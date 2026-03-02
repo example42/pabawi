@@ -7,7 +7,7 @@ describe('ExecutePlaybookForm', () => {
     it('should render playbook path input field', () => {
       render(ExecutePlaybookForm);
 
-      const input = screen.getByLabelText(/Playbook Path/i) as HTMLInputElement;
+      const input = screen.getByLabelText(/Playbook Path/i);
       expect(input).toBeTruthy();
       expect(input.placeholder).toBe('e.g., playbooks/site.yml');
     });
@@ -311,7 +311,7 @@ describe('ExecutePlaybookForm', () => {
         }
       });
 
-      const input = screen.getByLabelText(/Playbook Path/i) as HTMLInputElement;
+      const input = screen.getByLabelText(/Playbook Path/i);
       expect(input.value).toBe('playbooks/deploy.yml');
     });
 
@@ -323,7 +323,7 @@ describe('ExecutePlaybookForm', () => {
         }
       });
 
-      const textarea = screen.getByLabelText(/Extra Vars/i) as HTMLTextAreaElement;
+      const textarea = screen.getByLabelText(/Extra Vars/i);
       expect(textarea.value).toBe(JSON.stringify(initialVars, null, 2));
     });
 

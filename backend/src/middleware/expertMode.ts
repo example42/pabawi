@@ -49,7 +49,7 @@ export function expertModeMiddleware(
 
   if (requested && req.user) {
     // When authenticated, only allow admin users to enable expert mode
-    const isAdmin = req.user.roles?.includes('admin') ?? false;
+    const isAdmin = req.user.roles.includes('admin');
     req.expertMode = isAdmin;
   } else {
     // No auth context yet (middleware runs before auth) — defer final check.

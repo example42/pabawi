@@ -572,7 +572,7 @@ describe('PuppetRunChart Component', () => {
         },
       });
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(integrationColors.loadColors).toHaveBeenCalled();
     });
   });

@@ -7,7 +7,13 @@ vi.mock('../lib/api', () => ({
   getBatchStatus: vi.fn(),
 }));
 
-import { getBatchStatus } from '../lib/api';
+import { getBatchStatus, type BatchStatusResponse } from '../lib/api';
+
+function getNodeRow(nodeName: string): Element {
+  const row = screen.getByText(nodeName).closest('div[role="button"]');
+  if (!row) throw new Error(`Expected row for ${nodeName} to exist`);
+  return row;
+}
 
 describe('AggregatedResultsView Component', () => {
   const mockBatchId = 'batch-123';
@@ -356,10 +362,9 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
-      expect(nodeRow).toBeTruthy();
+      const nodeRow = getNodeRow('server-01');
 
-      await fireEvent.click(nodeRow!);
+      await fireEvent.click(nodeRow);
 
       await waitFor(() => {
         expect(screen.getByText('uptime output 1')).toBeTruthy();
@@ -379,16 +384,16 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
+      const nodeRow = getNodeRow('server-01');
 
       // Expand
-      await fireEvent.click(nodeRow!);
+      await fireEvent.click(nodeRow);
       await waitFor(() => {
         expect(screen.getByText('uptime output 1')).toBeTruthy();
       });
 
       // Collapse
-      await fireEvent.click(nodeRow!);
+      await fireEvent.click(nodeRow);
       await waitFor(() => {
         expect(screen.queryByText('uptime output 1')).toBeNull();
       });
@@ -407,8 +412,8 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-01');
+      await fireEvent.click(nodeRow);
 
       await waitFor(() => {
         expect(screen.getByText(/stdout/i)).toBeTruthy();
@@ -429,8 +434,8 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-02')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-02').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-02');
+      await fireEvent.click(nodeRow);
 
       await waitFor(() => {
         expect(screen.getByText(/stderr/i)).toBeTruthy();
@@ -451,8 +456,8 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-02')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-02').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-02');
+      await fireEvent.click(nodeRow);
 
       await waitFor(() => {
         expect(screen.getByText(/exit code/i)).toBeTruthy();
@@ -506,7 +511,7 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText(/sort by/i)).toBeTruthy();
       });
 
-      const sortSelect = screen.getByLabelText(/sort by/i) as HTMLSelectElement;
+      const sortSelect = screen.getByLabelText(/sort by/i);
       await fireEvent.change(sortSelect, { target: { value: 'status' } });
 
       await waitFor(() => {
@@ -529,7 +534,7 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText(/sort by/i)).toBeTruthy();
       });
 
-      const sortSelect = screen.getByLabelText(/sort by/i) as HTMLSelectElement;
+      const sortSelect = screen.getByLabelText(/sort by/i);
       await fireEvent.change(sortSelect, { target: { value: 'duration' } });
 
       await waitFor(() => {
@@ -605,7 +610,7 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const filterSelect = screen.getByLabelText(/filter/i) as HTMLSelectElement;
+      const filterSelect = screen.getByLabelText(/filter/i);
       await fireEvent.change(filterSelect, { target: { value: 'success' } });
 
       await waitFor(() => {
@@ -629,7 +634,7 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const filterSelect = screen.getByLabelText(/filter/i) as HTMLSelectElement;
+      const filterSelect = screen.getByLabelText(/filter/i);
       await fireEvent.change(filterSelect, { target: { value: 'failed' } });
 
       await waitFor(() => {
@@ -653,7 +658,7 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText(/showing/i)).toBeTruthy();
       });
 
-      const filterSelect = screen.getByLabelText(/filter/i) as HTMLSelectElement;
+      const filterSelect = screen.getByLabelText(/filter/i);
       await fireEvent.change(filterSelect, { target: { value: 'failed' } });
 
       await waitFor(() => {
@@ -715,7 +720,7 @@ describe('AggregatedResultsView Component', () => {
         href: '',
         download: '',
         style: {},
-      } as any);
+      } as unknown as HTMLAnchorElement);
 
       render(AggregatedResultsView, {
         props: {
@@ -760,7 +765,7 @@ describe('AggregatedResultsView Component', () => {
         href: '',
         download: '',
         style: {},
-      } as any);
+      } as unknown as HTMLAnchorElement);
 
       render(AggregatedResultsView, {
         props: {
@@ -793,11 +798,8 @@ describe('AggregatedResultsView Component', () => {
     it('should include all execution data in JSON export', async () => {
       vi.mocked(getBatchStatus).mockResolvedValue(mockBatchStatusSuccess);
 
-      let blobContent = '';
       const createObjectURLMock = vi.fn((blob: Blob) => {
-        blob.text().then((text) => {
-          blobContent = text;
-        });
+        void blob.text();
         return 'blob:mock-url';
       });
       global.URL.createObjectURL = createObjectURLMock;
@@ -809,7 +811,7 @@ describe('AggregatedResultsView Component', () => {
         href: '',
         download: '',
         style: {},
-      } as any);
+      } as unknown as HTMLAnchorElement);
 
       render(AggregatedResultsView, {
         props: {
@@ -924,11 +926,10 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
-      expect(nodeRow).toBeTruthy();
+      const nodeRow = getNodeRow('server-01');
 
       // Simulate keyboard interaction (Enter key)
-      await fireEvent.keyDown(nodeRow!, { key: 'Enter', code: 'Enter' });
+      await fireEvent.keyDown(nodeRow, { key: 'Enter', code: 'Enter' });
 
       await waitFor(() => {
         expect(screen.getByText('uptime output 1')).toBeTruthy();
@@ -1057,7 +1058,7 @@ describe('AggregatedResultsView Component', () => {
         progress: 100,
       };
 
-      vi.mocked(getBatchStatus).mockResolvedValue(batchWithMissingData as any);
+      vi.mocked(getBatchStatus).mockResolvedValue(batchWithMissingData as unknown as BatchStatusResponse);
 
       render(AggregatedResultsView, {
         props: {
@@ -1069,8 +1070,8 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-01');
+      await fireEvent.click(nodeRow);
 
       // Should handle missing data gracefully
       await waitFor(() => {
@@ -1113,8 +1114,8 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-01');
+      await fireEvent.click(nodeRow);
 
       // Should render without crashing
       await waitFor(() => {
@@ -1157,8 +1158,8 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-01');
+      await fireEvent.click(nodeRow);
 
       // Should escape special characters properly
       await waitFor(() => {
@@ -1215,7 +1216,7 @@ describe('AggregatedResultsView Component', () => {
         href: '',
         download: '',
         style: {},
-      } as any);
+      } as unknown as HTMLAnchorElement);
 
       render(AggregatedResultsView, {
         props: {
@@ -1229,11 +1230,11 @@ describe('AggregatedResultsView Component', () => {
       });
 
       // Sort by status
-      const sortSelect = screen.getByLabelText(/sort by/i) as HTMLSelectElement;
+      const sortSelect = screen.getByLabelText(/sort by/i);
       await fireEvent.change(sortSelect, { target: { value: 'status' } });
 
       // Filter to failed only
-      const filterSelect = screen.getByLabelText(/filter/i) as HTMLSelectElement;
+      const filterSelect = screen.getByLabelText(/filter/i);
       await fireEvent.change(filterSelect, { target: { value: 'failed' } });
 
       await waitFor(() => {
@@ -1242,8 +1243,8 @@ describe('AggregatedResultsView Component', () => {
       });
 
       // Expand a result
-      const nodeRow = screen.getByText('server-02').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-02');
+      await fireEvent.click(nodeRow);
 
       await waitFor(() => {
         expect(screen.getByText('Error: command failed')).toBeTruthy();
@@ -1277,15 +1278,15 @@ describe('AggregatedResultsView Component', () => {
       });
 
       // Expand a result
-      const nodeRow = screen.getByText('server-01').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-01');
+      await fireEvent.click(nodeRow);
 
       await waitFor(() => {
         expect(screen.getByText('uptime output 1')).toBeTruthy();
       });
 
       // Change sort
-      const sortSelect = screen.getByLabelText(/sort by/i) as HTMLSelectElement;
+      const sortSelect = screen.getByLabelText(/sort by/i);
       await fireEvent.change(sortSelect, { target: { value: 'duration' } });
 
       // Expanded state should be maintained
@@ -1308,15 +1309,15 @@ describe('AggregatedResultsView Component', () => {
       });
 
       // Expand a failed result
-      const nodeRow = screen.getByText('server-02').closest('div[role="button"]');
-      await fireEvent.click(nodeRow!);
+      const nodeRow = getNodeRow('server-02');
+      await fireEvent.click(nodeRow);
 
       await waitFor(() => {
         expect(screen.getByText('Error: command failed')).toBeTruthy();
       });
 
       // Filter to show only failed
-      const filterSelect = screen.getByLabelText(/filter/i) as HTMLSelectElement;
+      const filterSelect = screen.getByLabelText(/filter/i);
       await fireEvent.change(filterSelect, { target: { value: 'failed' } });
 
       // Expanded state should be maintained
@@ -1338,8 +1339,8 @@ describe('AggregatedResultsView Component', () => {
         expect(screen.getByText('server-01')).toBeTruthy();
       });
 
-      const sortSelect = screen.getByLabelText(/sort by/i) as HTMLSelectElement;
-      const filterSelect = screen.getByLabelText(/filter/i) as HTMLSelectElement;
+      const sortSelect = screen.getByLabelText(/sort by/i);
+      const filterSelect = screen.getByLabelText(/filter/i);
 
       // Rapid changes
       await fireEvent.change(sortSelect, { target: { value: 'status' } });
@@ -1386,7 +1387,7 @@ describe('AggregatedResultsView Component', () => {
         progress: 100,
       };
 
-      vi.mocked(getBatchStatus).mockResolvedValue(largeBatchStatus as any);
+      vi.mocked(getBatchStatus).mockResolvedValue(largeBatchStatus as unknown as BatchStatusResponse);
 
       render(AggregatedResultsView, {
         props: {

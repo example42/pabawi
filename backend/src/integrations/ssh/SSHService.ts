@@ -6,20 +6,22 @@
  * connection reuse and efficiency.
  */
 
-import { Client, ConnectConfig } from 'ssh2';
+import type { ConnectConfig } from 'ssh2';
+import { Client } from 'ssh2';
 import { readFileSync, statSync } from 'fs';
 import { ConnectionPool } from './ConnectionPool';
 import { PackageManagerDetector } from './PackageManagerDetector';
-import {
+import type {
   SSHConfig,
   SSHHost,
   ExecutionOptions,
   CommandResult,
   SudoOptions,
-  SSHErrorType,
-  PoolConfig,
+  PoolConfig} from './types';
+import {
+  SSHErrorType
 } from './types';
-import { LoggerService } from '../../services/LoggerService';
+import type { LoggerService } from '../../services/LoggerService';
 
 /**
  * SSH Service for managing SSH connections and command execution
@@ -88,7 +90,7 @@ export class SSHService {
       metadata: {
         host: host.name,
         uri: host.uri,
-        user: host.user || this.config.defaultUser,
+        user: host.user ?? this.config.defaultUser,
       },
     });
 
@@ -136,7 +138,7 @@ export class SSHService {
    *
    * @param host - SSH host configuration
    */
-  async disconnect(host: SSHHost): Promise<void> {
+  disconnect(host: SSHHost): void {
     const hostKey = this.getHostKey(host);
 
     this.logger.debug('Disconnecting from SSH host', {
@@ -148,7 +150,7 @@ export class SSHService {
       },
     });
 
-    await this.connectionPool.release(hostKey);
+    this.connectionPool.release(hostKey);
   }
 
   /**
@@ -171,7 +173,7 @@ export class SSHService {
         { timeout: 5 }
       );
 
-      await this.disconnect(host);
+      this.disconnect(host);
 
       return result.exitCode === 0 && result.stdout.trim() === 'test';
     } catch (error) {
@@ -213,7 +215,7 @@ export class SSHService {
         finalCommand = this.wrapWithSudo(command, {
           enabled: true,
           command: this.config.sudo.command,
-          runAsUser: options?.sudoUser || this.config.sudo.runAsUser,
+          runAsUser: options?.sudoUser ?? this.config.sudo.runAsUser,
           password: this.config.sudo.password,
         });
       }
@@ -224,7 +226,7 @@ export class SSHService {
         options
       );
 
-      await this.disconnect(host);
+      this.disconnect(host);
 
       const duration = Date.now() - startTime;
 
@@ -328,7 +330,7 @@ export class SSHService {
     const packageManager = await this.packageDetector.detect(client, hostKey);
 
     if (packageManager === 'unknown') {
-      await this.disconnect(host);
+      this.disconnect(host);
 
       return {
         stdout: '',
@@ -347,7 +349,7 @@ export class SSHService {
     }
 
     const command = this.packageDetector.getInstallCommand(packageManager, packageName);
-    await this.disconnect(host);
+    this.disconnect(host);
 
     return this.executeCommand(host, command, { sudo: true });
   }
@@ -365,7 +367,7 @@ export class SSHService {
     const packageManager = await this.packageDetector.detect(client, hostKey);
 
     if (packageManager === 'unknown') {
-      await this.disconnect(host);
+      this.disconnect(host);
 
       return {
         stdout: '',
@@ -384,7 +386,7 @@ export class SSHService {
     }
 
     const command = this.packageDetector.getRemoveCommand(packageManager, packageName);
-    await this.disconnect(host);
+    this.disconnect(host);
 
     return this.executeCommand(host, command, { sudo: true });
   }
@@ -402,7 +404,7 @@ export class SSHService {
     const packageManager = await this.packageDetector.detect(client, hostKey);
 
     if (packageManager === 'unknown') {
-      await this.disconnect(host);
+      this.disconnect(host);
 
       return {
         stdout: '',
@@ -421,7 +423,7 @@ export class SSHService {
     }
 
     const command = this.packageDetector.getUpdateCommand(packageManager, packageName);
-    await this.disconnect(host);
+    this.disconnect(host);
 
     return this.executeCommand(host, command, { sudo: true });
   }
@@ -429,14 +431,14 @@ export class SSHService {
   /**
    * Cleanup and close all connections
    */
-  async cleanup(): Promise<void> {
+  cleanup(): void {
     this.logger.info('Cleaning up SSH service', {
       component: 'SSHService',
       integration: 'ssh',
       operation: 'cleanup',
     });
 
-    await this.connectionPool.closeAll();
+    this.connectionPool.closeAll();
   }
 
   /**
@@ -451,8 +453,8 @@ export class SSHService {
 
       // Parse host URI
       const hostname = this.parseHostname(host.uri);
-      const user = host.user || this.config.defaultUser;
-      const port = host.port || this.config.defaultPort;
+      const user = host.user ?? this.config.defaultUser;
+      const port = host.port ?? this.config.defaultPort;
 
       // Build connection config
       const connectConfig: ConnectConfig = {
@@ -466,7 +468,7 @@ export class SSHService {
       if (host.password) {
         connectConfig.password = host.password;
       } else {
-        const keyPath = host.privateKeyPath || this.config.defaultKeyPath;
+        const keyPath = host.privateKeyPath ?? this.config.defaultKeyPath;
 
         if (keyPath) {
           try {
@@ -486,13 +488,13 @@ export class SSHService {
 
       // Configure host key verification
       if (!this.config.hostKeyCheck) {
-        connectConfig.hostVerifier = () => true;
+        connectConfig.hostVerifier = (): boolean => true;
       }
 
       // Set up event handlers
       const timeout = setTimeout(() => {
         client.end();
-        reject(new Error(`Connection timeout after ${this.config.connectionTimeout} seconds`));
+        reject(new Error(`Connection timeout after ${String(this.config.connectionTimeout)} seconds`));
       }, this.config.connectionTimeout * 1000);
 
       client.on('ready', () => {
@@ -524,12 +526,12 @@ export class SSHService {
     options?: ExecutionOptions
   ): Promise<Omit<CommandResult, 'host' | 'timestamp' | 'duration'>> {
     return new Promise((resolve, reject) => {
-      const timeout = options?.timeout || this.config.commandTimeout;
+      const timeout = options?.timeout ?? this.config.commandTimeout;
       let stdout = '';
       let stderr = '';
 
       const timer = setTimeout(() => {
-        reject(new Error(`Command timeout after ${timeout} seconds`));
+        reject(new Error(`Command timeout after ${String(timeout)} seconds`));
       }, timeout * 1000);
 
       client.exec(command, { env: options?.env }, (err, stream) => {
@@ -624,11 +626,11 @@ export class SSHService {
    * @returns Host key
    */
   private getHostKey(host: SSHHost): string {
-    const user = host.user || this.config.defaultUser;
-    const port = host.port || this.config.defaultPort;
+    const user = host.user ?? this.config.defaultUser;
+    const port = host.port ?? this.config.defaultPort;
     const hostname = this.parseHostname(host.uri);
 
-    return `${user}@${hostname}:${port}`;
+    return `${user}@${hostname}:${String(port)}`;
   }
 
   /**

@@ -34,7 +34,7 @@ export function createRbacMiddleware(db: Database) {
     return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         // Ensure user is authenticated (authMiddleware should run first)
-        if (!req.user || !req.user.userId) {
+        if (!req.user?.userId) {
           res.status(401).json({
             error: {
               code: ERROR_CODES.UNAUTHORIZED,
@@ -57,7 +57,7 @@ export function createRbacMiddleware(db: Database) {
             `[RBAC] Authorization denied - User: ${req.user.username} (${req.user.userId}), ` +
             `Resource: ${resource}, Action: ${action}, ` +
             `Path: ${req.method} ${req.path}, ` +
-            `IP: ${req.ip || req.socket.remoteAddress}, ` +
+            `IP: ${req.ip ?? req.socket.remoteAddress ?? 'unknown'}, ` +
             `Timestamp: ${new Date().toISOString()}`
           );
 
@@ -66,7 +66,7 @@ export function createRbacMiddleware(db: Database) {
             req.user.userId,
             resource,
             action,
-            req.ip || req.socket.remoteAddress,
+            req.ip ?? req.socket.remoteAddress,
             req.headers['user-agent']
           );
 
@@ -86,7 +86,7 @@ export function createRbacMiddleware(db: Database) {
 
         // Log unexpected errors
         console.error(
-          `[RBAC] Error checking permissions - User: ${req.user?.userId}, ` +
+          `[RBAC] Error checking permissions - User: ${req.user?.userId ?? 'unknown'}, ` +
           `Resource: ${resource}, Action: ${action}, ` +
           `Error: ${error instanceof Error ? error.message : String(error)}`
         );

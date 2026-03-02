@@ -13,10 +13,10 @@
  * - pacman (Arch Linux)
  */
 
-import { Client } from 'ssh2';
-import { PackageManager } from './types';
+import type { Client } from 'ssh2';
+import type { PackageManager } from './types';
 import { sanitizePackageName } from '../../validation/commonSchemas';
-import { LoggerService } from '../../services/LoggerService';
+import type { LoggerService } from '../../services/LoggerService';
 
 /**
  * Package manager detector with caching
@@ -184,7 +184,7 @@ export class PackageManagerDetector {
       case 'unknown':
         throw new Error('Cannot generate install command: package manager unknown');
       default:
-        throw new Error(`Unsupported package manager: ${pm}`);
+        throw new Error(`Unsupported package manager: ${String(pm)}`);
     }
   }
 
@@ -212,7 +212,7 @@ export class PackageManagerDetector {
       case 'unknown':
         throw new Error('Cannot generate remove command: package manager unknown');
       default:
-        throw new Error(`Unsupported package manager: ${pm}`);
+        throw new Error(`Unsupported package manager: ${String(pm)}`);
     }
   }
 
@@ -240,7 +240,7 @@ export class PackageManagerDetector {
       case 'unknown':
         throw new Error('Cannot generate update command: package manager unknown');
       default:
-        throw new Error(`Unsupported package manager: ${pm}`);
+        throw new Error(`Unsupported package manager: ${String(pm)}`);
     }
   }
 
@@ -340,8 +340,8 @@ export class PackageManagerDetector {
         });
 
         // Drain stdout and stderr to prevent hanging
-        stream.on('data', () => {});
-        stream.stderr.on('data', () => {});
+        stream.on('data', () => { /* drain */ });
+        stream.stderr.on('data', () => { /* drain */ });
       });
     });
   }

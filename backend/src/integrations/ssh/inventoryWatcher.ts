@@ -6,11 +6,12 @@
  * the last valid inventory when parse errors occur.
  */
 
-import { watch, FSWatcher } from 'fs';
+import type { FSWatcher } from 'fs';
+import { watch } from 'fs';
 import { readFile } from 'fs/promises';
-import { LoggerService } from '../../services/LoggerService';
+import type { LoggerService } from '../../services/LoggerService';
 import { parseInventoryFile, InventoryParseError } from './inventoryParser';
-import { Node } from '../bolt/types';
+import type { Node } from '../bolt/types';
 
 /**
  * Callback function type for inventory reload events
@@ -205,7 +206,7 @@ export class InventoryWatcher {
 
     // Set new debounce timer
     this.debounceTimer = setTimeout(() => {
-      this.reloadInventory();
+      void this.reloadInventory();
     }, this.debounceDelay);
   }
 

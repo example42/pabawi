@@ -6,7 +6,7 @@
  * configuration according to the SSH integration requirements.
  */
 
-import { SSHConfig, SSHErrorType } from './types';
+import type { SSHConfig} from './types';
 import { homedir } from 'os';
 
 /**
@@ -58,7 +58,7 @@ function parseIntWithBounds(
 
   if (parsed < min || parsed > max) {
     throw new ConfigurationError(
-      `${name} must be between ${min} and ${max}, got: ${parsed}`
+      `${name} must be between ${String(min)} and ${String(max)}, got: ${String(parsed)}`
     );
   }
 
@@ -214,10 +214,10 @@ export function parseSSHConfig(env: NodeJS.ProcessEnv = process.env): SSHConfig 
 
   // Parse sudo configuration
   const sudoEnabled = parseBoolean(env.SSH_SUDO_ENABLED, false);
-  const sudoCommand = env.SSH_SUDO_COMMAND || 'sudo';
+  const sudoCommand = env.SSH_SUDO_COMMAND ?? 'sudo';
   const sudoPasswordless = parseBoolean(env.SSH_SUDO_PASSWORDLESS, true);
   const sudoPassword = env.SSH_SUDO_PASSWORD;
-  const sudoUser = env.SSH_SUDO_USER || 'root';
+  const sudoUser = env.SSH_SUDO_USER ?? 'root';
 
   // Parse priority
   const priority = parseIntWithBounds(
@@ -269,7 +269,7 @@ export function validateSSHConfig(config: SSHConfig): void {
   // Validate that maxConnectionsPerHost doesn't exceed maxConnections
   if (config.maxConnectionsPerHost > config.maxConnections) {
     throw new ConfigurationError(
-      `SSH_MAX_CONNECTIONS_PER_HOST (${config.maxConnectionsPerHost}) cannot exceed SSH_MAX_CONNECTIONS (${config.maxConnections})`
+      `SSH_MAX_CONNECTIONS_PER_HOST (${String(config.maxConnectionsPerHost)}) cannot exceed SSH_MAX_CONNECTIONS (${String(config.maxConnections)})`
     );
   }
 

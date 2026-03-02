@@ -4,7 +4,7 @@ import { asyncHandler } from "./asyncHandler";
 import { UserService } from "../services/UserService";
 import { AuthenticationService } from "../services/AuthenticationService";
 import { PermissionService } from "../services/PermissionService";
-import { DatabaseService } from "../database/DatabaseService";
+import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
@@ -56,8 +56,8 @@ export function createUsersRouter(
    */
   router.post(
     "/",
-    authMiddleware,
-    rbacMiddleware("users", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing create user request", {
         component: "UsersRouter",
@@ -194,8 +194,8 @@ export function createUsersRouter(
    */
   router.get(
     "/",
-    authMiddleware,
-    rbacMiddleware("users", "read"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "read")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing list users request", {
         component: "UsersRouter",
@@ -286,8 +286,8 @@ export function createUsersRouter(
    */
   router.get(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("users", "read"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "read")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing get user by ID request", {
         component: "UsersRouter",
@@ -379,8 +379,8 @@ export function createUsersRouter(
    */
   router.put(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("users", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing update user request", {
         component: "UsersRouter",
@@ -510,8 +510,8 @@ export function createUsersRouter(
    */
   router.delete(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("users", "admin"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing delete user request", {
         component: "UsersRouter",
@@ -579,8 +579,8 @@ export function createUsersRouter(
    */
   router.post(
     "/:id/groups/:groupId",
-    authMiddleware,
-    rbacMiddleware("users", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing add user to group request", {
         component: "UsersRouter",
@@ -707,8 +707,8 @@ export function createUsersRouter(
    */
   router.delete(
     "/:id/groups/:groupId",
-    authMiddleware,
-    rbacMiddleware("users", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing remove user from group request", {
         component: "UsersRouter",
@@ -793,8 +793,8 @@ export function createUsersRouter(
    */
   router.post(
     "/:id/roles/:roleId",
-    authMiddleware,
-    rbacMiddleware("users", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing assign role to user request", {
         component: "UsersRouter",
@@ -921,8 +921,8 @@ export function createUsersRouter(
    */
   router.delete(
     "/:id/roles/:roleId",
-    authMiddleware,
-    rbacMiddleware("users", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing remove role from user request", {
         component: "UsersRouter",

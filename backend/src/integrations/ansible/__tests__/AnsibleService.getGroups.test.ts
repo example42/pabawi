@@ -196,8 +196,8 @@ describe('AnsibleService.getGroups()', () => {
   // Helper function to mock successful spawn
   function mockSpawnSuccess(stdout: string) {
     const mockProcess = new EventEmitter() as ChildProcess;
-    mockProcess.stdout = new EventEmitter() as any;
-    mockProcess.stderr = new EventEmitter() as any;
+    mockProcess.stdout = new EventEmitter() as unknown as ChildProcess['stdout'];
+    mockProcess.stderr = new EventEmitter() as unknown as ChildProcess['stderr'];
 
     vi.mocked(spawn).mockReturnValue(mockProcess);
 
@@ -211,8 +211,8 @@ describe('AnsibleService.getGroups()', () => {
   // Helper function to mock failed spawn
   function mockSpawnFailure(stderr: string) {
     const mockProcess = new EventEmitter() as ChildProcess;
-    mockProcess.stdout = new EventEmitter() as any;
-    mockProcess.stderr = new EventEmitter() as any;
+    mockProcess.stdout = new EventEmitter() as unknown as ChildProcess['stdout'];
+    mockProcess.stderr = new EventEmitter() as unknown as ChildProcess['stderr'];
 
     vi.mocked(spawn).mockReturnValue(mockProcess);
 

@@ -251,7 +251,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(checkboxes[0]);
 
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('1');
       });
     });
@@ -277,7 +277,7 @@ describe('ParallelExecutionModal Component', () => {
 
       await waitFor(() => {
         // webservers group has 2 nodes
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('2');
       });
     });
@@ -315,7 +315,7 @@ describe('ParallelExecutionModal Component', () => {
 
       await waitFor(() => {
         // Both groups contain node1, but it should only be counted once
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('1');
       });
     });
@@ -379,7 +379,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(selectAllButton);
 
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('3');
       });
     });
@@ -402,7 +402,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(selectAllButton);
 
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('3');
       });
 
@@ -411,7 +411,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(clearAllButton);
 
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('0');
       });
     });
@@ -454,7 +454,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const select = screen.getByLabelText('Action Type') as HTMLSelectElement;
+      const select = screen.getByLabelText('Action Type');
       expect(select.value).toBe('command');
     });
 
@@ -467,7 +467,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const select = screen.getByLabelText('Action Type') as HTMLSelectElement;
+      const select = screen.getByLabelText('Action Type');
       await fireEvent.change(select, { target: { value: 'task' } });
 
       expect(select.value).toBe('task');
@@ -513,16 +513,16 @@ describe('ParallelExecutionModal Component', () => {
       });
 
       const select = screen.getByLabelText('Action Type');
-      const input = screen.getByLabelText('Command') as HTMLInputElement;
+      const input = screen.getByLabelText('Command');
 
       expect(input.placeholder).toBe('uptime');
 
       await fireEvent.change(select, { target: { value: 'task' } });
-      const taskInput = screen.getByLabelText('Task Name') as HTMLInputElement;
+      const taskInput = screen.getByLabelText('Task Name');
       expect(taskInput.placeholder).toBe('package::install');
 
       await fireEvent.change(select, { target: { value: 'plan' } });
-      const planInput = screen.getByLabelText('Plan Name') as HTMLInputElement;
+      const planInput = screen.getByLabelText('Plan Name');
       expect(planInput.placeholder).toBe('deploy::app');
     });
 
@@ -535,7 +535,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const input = screen.getByLabelText('Command') as HTMLInputElement;
+      const input = screen.getByLabelText('Command');
       await fireEvent.input(input, { target: { value: 'ls -la' } });
 
       expect(input.value).toBe('ls -la');
@@ -597,7 +597,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(checkboxes[0]);
 
       // Enter action
-      const actionInput = screen.getByLabelText('Command') as HTMLInputElement;
+      const actionInput = screen.getByLabelText('Command');
       await fireEvent.input(actionInput, { target: { value: 'uptime' } });
 
       await waitFor(() => {
@@ -705,7 +705,9 @@ describe('ParallelExecutionModal Component', () => {
       const backdrop = container.querySelector('.fixed.inset-0.bg-gray-500');
       expect(backdrop).toBeTruthy();
 
-      await fireEvent.click(backdrop!);
+      if (backdrop) {
+        await fireEvent.click(backdrop);
+      }
       expect(mockOnClose).toHaveBeenCalledOnce();
     });
 
@@ -721,11 +723,13 @@ describe('ParallelExecutionModal Component', () => {
       const modalContent = container.querySelector('.bg-white.dark\\:bg-gray-800.text-left');
       expect(modalContent).toBeTruthy();
 
-      await fireEvent.click(modalContent!);
+      if (modalContent) {
+        await fireEvent.click(modalContent);
+      }
       expect(mockOnClose).not.toHaveBeenCalled();
     });
 
-    it('should not call onClose when loading', async () => {
+    it('should not call onClose when loading', () => {
       render(ParallelExecutionModal, {
         props: {
           open: true,
@@ -742,7 +746,7 @@ describe('ParallelExecutionModal Component', () => {
   });
 
   describe('Form Validation', () => {
-    it('should show error when submitting with no targets', async () => {
+    it('should show error when submitting with no targets', () => {
       render(ParallelExecutionModal, {
         props: {
           open: true,
@@ -757,7 +761,7 @@ describe('ParallelExecutionModal Component', () => {
       expect((executeButton as HTMLButtonElement).disabled).toBe(true);
     });
 
-    it('should show error when submitting with empty action', async () => {
+    it('should show error when submitting with empty action', () => {
       render(ParallelExecutionModal, {
         props: {
           open: true,
@@ -798,10 +802,10 @@ describe('ParallelExecutionModal Component', () => {
 
       // Note: This test verifies the structure exists
       // Loading state will be tested more thoroughly when execution is implemented
-      const actionTypeSelect = screen.getByLabelText('Action Type') as HTMLSelectElement;
-      const actionInput = screen.getByLabelText('Command') as HTMLInputElement;
-      const cancelButton = screen.getByRole('button', { name: /cancel/i }) as HTMLButtonElement;
-      const executeButton = screen.getByRole('button', { name: /execute on/i }) as HTMLButtonElement;
+      const actionTypeSelect = screen.getByLabelText('Action Type');
+      const actionInput = screen.getByLabelText('Command');
+      const cancelButton = screen.getByRole('button', { name: /cancel/i });
+      const executeButton = screen.getByRole('button', { name: /execute on/i });
 
       expect(actionTypeSelect.disabled).toBe(false);
       expect(actionInput.disabled).toBe(false);
@@ -821,8 +825,8 @@ describe('ParallelExecutionModal Component', () => {
       });
 
       // Change some values
-      const actionTypeSelect = screen.getByLabelText('Action Type') as HTMLSelectElement;
-      const actionInput = screen.getByLabelText('Command') as HTMLInputElement;
+      const actionTypeSelect = screen.getByLabelText('Action Type');
+      const actionInput = screen.getByLabelText('Command');
 
       await fireEvent.change(actionTypeSelect, { target: { value: 'task' } });
       await fireEvent.input(actionInput, { target: { value: 'test::task' } });
@@ -922,7 +926,7 @@ describe('ParallelExecutionModal Component', () => {
   });
 
   describe('Form Submission', () => {
-    it('should prevent default form submission', async () => {
+    it('should prevent default form submission', () => {
       render(ParallelExecutionModal, {
         props: {
           open: true,
@@ -937,7 +941,9 @@ describe('ParallelExecutionModal Component', () => {
       const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
       const preventDefaultSpy = vi.spyOn(submitEvent, 'preventDefault');
 
-      form!.dispatchEvent(submitEvent);
+      if (form) {
+        form.dispatchEvent(submitEvent);
+      }
 
       expect(preventDefaultSpy).toHaveBeenCalled();
     });
@@ -980,12 +986,12 @@ describe('ParallelExecutionModal Component', () => {
       });
 
       // Set action type
-      const actionTypeSelect = screen.getByLabelText('Action Type') as HTMLSelectElement;
+      const actionTypeSelect = screen.getByLabelText('Action Type');
       await fireEvent.change(actionTypeSelect, { target: { value: 'task' } });
       expect(actionTypeSelect.value).toBe('task');
 
       // Set action value
-      const actionInput = screen.getByLabelText('Task Name') as HTMLInputElement;
+      const actionInput = screen.getByLabelText('Task Name');
       await fireEvent.input(actionInput, { target: { value: 'package::install' } });
       expect(actionInput.value).toBe('package::install');
 
@@ -1019,7 +1025,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
       const validJson = '{"timeout": 30, "retries": 3}';
 
       await fireEvent.input(parametersTextarea, { target: { value: validJson } });
@@ -1037,7 +1043,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
       const invalidJson = '{invalid json}';
 
       await fireEvent.input(parametersTextarea, { target: { value: invalidJson } });
@@ -1057,7 +1063,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
 
       // Test with array
       await fireEvent.input(parametersTextarea, { target: { value: '["array", "values"]' } });
@@ -1090,7 +1096,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
 
       await fireEvent.input(parametersTextarea, { target: { value: '' } });
 
@@ -1116,15 +1122,15 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(checkboxes[0]);
 
       // Enter action
-      const actionInput = screen.getByLabelText('Command') as HTMLInputElement;
+      const actionInput = screen.getByLabelText('Command');
       await fireEvent.input(actionInput, { target: { value: 'uptime' } });
 
       // Enter invalid parameters
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
       await fireEvent.input(parametersTextarea, { target: { value: '{invalid}' } });
 
       await waitFor(() => {
-        const executeButton = screen.getByRole('button', { name: /execute on 1 target/i }) as HTMLButtonElement;
+        const executeButton = screen.getByRole('button', { name: /execute on 1 target/i });
         expect(executeButton.disabled).toBe(true);
       });
     });
@@ -1147,15 +1153,15 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(checkboxes[0]);
 
       // Enter action
-      const actionInput = screen.getByLabelText('Command') as HTMLInputElement;
+      const actionInput = screen.getByLabelText('Command');
       await fireEvent.input(actionInput, { target: { value: 'uptime' } });
 
       // Enter valid parameters
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
       await fireEvent.input(parametersTextarea, { target: { value: '{"timeout": 30}' } });
 
       await waitFor(() => {
-        const executeButton = screen.getByRole('button', { name: /execute on 1 target/i }) as HTMLButtonElement;
+        const executeButton = screen.getByRole('button', { name: /execute on 1 target/i });
         expect(executeButton.disabled).toBe(false);
       });
     });
@@ -1169,7 +1175,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
 
       // Enter invalid JSON
       await fireEvent.input(parametersTextarea, { target: { value: '{invalid}' } });
@@ -1196,7 +1202,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
 
       // Enter parameters
       await fireEvent.input(parametersTextarea, { target: { value: '{"key": "value"}' } });
@@ -1243,7 +1249,7 @@ describe('ParallelExecutionModal Component', () => {
         },
       });
 
-      const parametersTextarea = screen.getByLabelText('Parameters (Optional)') as HTMLTextAreaElement;
+      const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
 
       // Enter invalid JSON
       await fireEvent.input(parametersTextarea, { target: { value: '{invalid}' } });
@@ -1606,7 +1612,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(nodeCheckboxes[0]); // node1
 
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('1');
       });
 
@@ -1623,7 +1629,7 @@ describe('ParallelExecutionModal Component', () => {
 
       await waitFor(() => {
         // Should have 2 targets (node1 deduplicated, node2 from group)
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('2');
       });
     });
@@ -1707,7 +1713,7 @@ describe('ParallelExecutionModal Component', () => {
 
       await waitFor(() => {
         // Should have 3 unique targets despite overlaps
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('3');
       });
     });
@@ -1788,7 +1794,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(nodeCheckboxes[1]); // node2
 
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('2');
       });
 
@@ -1806,7 +1812,7 @@ describe('ParallelExecutionModal Component', () => {
 
       await waitFor(() => {
         // Should have 3 targets (node1, node2, node3)
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('3');
       });
 
@@ -2406,7 +2412,7 @@ describe('ParallelExecutionModal Component', () => {
 
       // Should have 3 unique targets despite node1 being in individual selection and both groups
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('3');
       });
     });
@@ -2464,7 +2470,7 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(nodeCheckboxes[0]); // node1
 
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('1');
       });
 
@@ -2481,7 +2487,7 @@ describe('ParallelExecutionModal Component', () => {
 
       // Should have 2 targets (node1 deduplicated, node2 from group)
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('2');
       });
 
@@ -2490,7 +2496,7 @@ describe('ParallelExecutionModal Component', () => {
 
       // Should go back to 1 target (just node1 from individual selection)
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('1');
       });
     });
@@ -2534,7 +2540,7 @@ describe('ParallelExecutionModal Component', () => {
 
       // Should have 0 targets
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('0');
       });
 
@@ -2543,7 +2549,7 @@ describe('ParallelExecutionModal Component', () => {
 
       // Should have 1 target
       await waitFor(() => {
-        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent || '';
+        const selectedText = screen.getByText(/selected:/i).parentElement?.textContent ?? '';
         expect(selectedText).toContain('1');
       });
     });
@@ -3348,7 +3354,7 @@ describe('ParallelExecutionModal Component', () => {
       });
 
       // Check that action is cleared
-      const actionInputAfter = screen.getByLabelText('Command') as HTMLInputElement;
+      const actionInputAfter = screen.getByLabelText('Command');
       expect(actionInputAfter.value).toBe('');
     });
   });

@@ -204,6 +204,7 @@ describe('GroupActionModal Component', () => {
       });
 
       // Resolve the promise to complete the test
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       resolvePost!();
     });
 
@@ -299,7 +300,7 @@ describe('GroupActionModal Component', () => {
     it('should have aria-live region for errors', async () => {
       vi.mocked(api.post).mockRejectedValue(new Error('Test error'));
 
-      const { container } = render(GroupActionModal, {
+      render(GroupActionModal, {
         props: {
           open: true,
           groupName: 'webservers',
@@ -400,7 +401,7 @@ describe('GroupActionModal Component', () => {
       expect(mockOnClose).not.toHaveBeenCalled();
     });
 
-    it('should trap focus within modal with Tab key', async () => {
+    it('should trap focus within modal with Tab key', () => {
       const { container } = render(GroupActionModal, {
         props: {
           open: true,
@@ -412,7 +413,7 @@ describe('GroupActionModal Component', () => {
         },
       });
 
-      const modalRef = container.querySelector('[tabindex="-1"]') as HTMLElement;
+      const modalRef = container.querySelector('[tabindex="-1"]');
       expect(modalRef).toBeTruthy();
 
       // Get all focusable elements
@@ -420,11 +421,11 @@ describe('GroupActionModal Component', () => {
         'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
       );
 
-      expect(focusableElements.length).toBeGreaterThan(0);
+      expect(focusableElements?.length).toBeGreaterThan(0);
     });
 
     it('should have minimum touch target size for buttons', () => {
-      const { container } = render(GroupActionModal, {
+      render(GroupActionModal, {
         props: {
           open: true,
           groupName: 'webservers',
@@ -465,7 +466,7 @@ describe('GroupActionModal Component', () => {
 
       // Wait for focus to be set (uses setTimeout in component)
       await waitFor(() => {
-        const modalRef = container.querySelector('[tabindex="-1"]') as HTMLElement;
+        const modalRef = container.querySelector('[tabindex="-1"]');
         expect(document.activeElement).toBe(modalRef);
       }, { timeout: 200 });
     });
@@ -613,7 +614,9 @@ describe('GroupActionModal Component', () => {
       const backdrop = container.querySelector('.fixed.inset-0.bg-gray-500');
       expect(backdrop).toBeTruthy();
 
-      await fireEvent.click(backdrop!);
+      if (backdrop) {
+        await fireEvent.click(backdrop);
+      }
 
       expect(mockOnClose).toHaveBeenCalled();
     });
@@ -701,7 +704,7 @@ describe('GroupActionModal Component', () => {
       expect(executeButton).toHaveProperty('disabled', true);
     });
 
-    it('should show error message when no target nodes available', async () => {
+    it('should show error message when no target nodes available', () => {
       render(GroupActionModal, {
         props: {
           open: true,
@@ -1277,6 +1280,7 @@ describe('GroupActionModal Component', () => {
       });
 
       // Resolve the promise
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       resolvePost!();
 
       // Wait for completion

@@ -40,7 +40,7 @@ export const helmetMiddleware = helmet({
  *
  * @returns Express middleware function
  */
-export function createRateLimitMiddleware() {
+export function createRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => void {
   // Skip rate limiting in test environment
   if (process.env.NODE_ENV === 'test') {
     return (_req: Request, _res: Response, next: NextFunction): void => {
@@ -94,7 +94,7 @@ export function createRateLimitMiddleware() {
  *
  * @returns Express middleware function
  */
-export function createAuthRateLimitMiddleware() {
+export function createAuthRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => void {
   // Skip rate limiting in test environment
   if (process.env.NODE_ENV === 'test') {
     return (_req: Request, _res: Response, next: NextFunction): void => {
@@ -143,18 +143,14 @@ export function inputSanitizationMiddleware(
   try {
     // Sanitize request body
     if (req.body && typeof req.body === "object") {
-      req.body = sanitizeObject(req.body) as typeof req.body;
+      req.body = sanitizeObject(req.body);
     }
 
     // Sanitize query parameters
-    if (req.query && typeof req.query === "object") {
-      req.query = sanitizeObject(req.query) as typeof req.query;
-    }
+    req.query = sanitizeObject(req.query) as typeof req.query;
 
     // Sanitize URL parameters
-    if (req.params && typeof req.params === "object") {
-      req.params = sanitizeObject(req.params) as typeof req.params;
-    }
+    req.params = sanitizeObject(req.params) as typeof req.params;
 
     next();
   } catch (error) {

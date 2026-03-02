@@ -196,7 +196,7 @@ export function createErrorResponse(
  */
 export function sendAuthenticationError(
   res: Response,
-  message: string = "Invalid credentials"
+  message = "Invalid credentials"
 ): void {
   res.status(401).json({
     error: {
@@ -214,7 +214,7 @@ export function sendAuthorizationError(
   res: Response,
   resource: string,
   action: string,
-  message: string = "Insufficient permissions to perform this action"
+  message = "Insufficient permissions to perform this action"
 ): void {
   res.status(403).json({
     error: {
@@ -276,7 +276,7 @@ export function sendDuplicateError(
 export function sendDatabaseError(
   res: Response,
   error: unknown,
-  message: string = "Database service temporarily unavailable"
+  message = "Database service temporarily unavailable"
 ): void {
   const logger = new LoggerService();
   logger.error("Database error", {

@@ -5,7 +5,7 @@ import { UserService } from "../services/UserService";
 import { AuthenticationService } from "../services/AuthenticationService";
 import { SetupService } from "../services/SetupService";
 import { AuditLoggingService } from "../services/AuditLoggingService";
-import { DatabaseService } from "../database/DatabaseService";
+import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import {
   sendValidationError,
@@ -42,7 +42,7 @@ const RegisterSchema = z.object({
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, "Password must contain at least one special character"),
+    .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "Password must contain at least one special character"),
   firstName: z
     .string()
     .min(1, "First name is required")
@@ -262,7 +262,7 @@ export function createAuthRouter(
         const authResult = await authService.authenticate(
           loginData.username,
           loginData.password,
-          req.ip || req.socket.remoteAddress,
+          req.ip ?? req.socket.remoteAddress,
           req.headers['user-agent']
         );
 
@@ -274,7 +274,7 @@ export function createAuthRouter(
           });
 
           // Return 401 Unauthorized for invalid credentials (Requirement 16.1)
-          sendAuthenticationError(res, authResult.error || "Invalid credentials");
+          sendAuthenticationError(res, authResult.error ?? "Invalid credentials");
           return;
         }
 
@@ -336,7 +336,7 @@ export function createAuthRouter(
    */
   router.post(
     "/logout",
-    authMiddleware,
+    asyncHandler(authMiddleware),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing user logout request", {
         component: "AuthRouter",
@@ -458,7 +458,7 @@ export function createAuthRouter(
           res.status(statusCode).json({
             error: {
               code: statusCode === 400 ? "INVALID_REFRESH_TOKEN" : "REFRESH_TOKEN_EXPIRED",
-              message: authResult.error || "Token refresh failed",
+              message: authResult.error ?? "Token refresh failed",
             },
           });
           return;
@@ -527,7 +527,7 @@ export function createAuthRouter(
       .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
       .regex(/[a-z]/, "Password must contain at least one lowercase letter")
       .regex(/[0-9]/, "Password must contain at least one number")
-      .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/, "Password must contain at least one special character"),
+      .regex(/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/, "Password must contain at least one special character"),
   });
 
   /**
@@ -538,7 +538,7 @@ export function createAuthRouter(
    */
   router.post(
     "/change-password",
-    authMiddleware,
+    asyncHandler(authMiddleware),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing password change request", {
         component: "AuthRouter",
@@ -557,12 +557,21 @@ export function createAuthRouter(
         });
 
         // Get user from database
-        const user = await userService.getUserById(req.user!.userId);
+        if (!req.user) {
+          res.status(401).json({
+            error: {
+              code: ERROR_CODES.UNAUTHORIZED,
+              message: "Authentication required",
+            },
+          });
+          return;
+        }
+        const user = await userService.getUserById(req.user.userId);
         if (!user) {
           logger.warn("Password change failed: user not found", {
             component: "AuthRouter",
             operation: "change-password",
-            metadata: { userId: req.user?.userId },
+            metadata: { userId: req.user.userId },
           });
           res.status(404).json({
             error: {
@@ -583,7 +592,7 @@ export function createAuthRouter(
           logger.warn("Password change failed: incorrect current password", {
             component: "AuthRouter",
             operation: "change-password",
-            metadata: { userId: req.user?.userId },
+            metadata: { userId: req.user.userId },
           });
           res.status(401).json({
             error: {
@@ -605,7 +614,7 @@ export function createAuthRouter(
         logger.info("Password changed successfully", {
           component: "AuthRouter",
           operation: "change-password",
-          metadata: { userId: req.user?.userId },
+          metadata: { userId: req.user.userId },
         });
 
         // Return 200 OK with success message

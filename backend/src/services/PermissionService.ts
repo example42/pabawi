@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import type { Database } from 'sqlite3';
 import { randomUUID } from 'crypto';
 import { performanceMonitor } from './PerformanceMonitor';
 
@@ -165,12 +165,12 @@ export class PermissionService {
    * @returns Paginated list of permissions
    */
   public async listPermissions(filters?: PermissionFilters): Promise<PaginatedResult<Permission>> {
-    const limit = filters?.limit || 50;
-    const offset = filters?.offset || 0;
+    const limit = filters?.limit ?? 50;
+    const offset = filters?.offset ?? 0;
 
     // Build WHERE clause
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: string[] = [];
 
     if (filters?.resource) {
       conditions.push('resource = ?');
@@ -195,12 +195,12 @@ export class PermissionService {
       `SELECT COUNT(*) as count FROM permissions ${whereClause}`,
       params
     );
-    const total = countResult?.count || 0;
+    const total = countResult?.count ?? 0;
 
     // Get paginated results
     const permissions = await this.allQuery<Permission>(
       `SELECT * FROM permissions ${whereClause} ORDER BY resource ASC, action ASC LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
+      [...params, String(limit), String(offset)]
     );
 
     return {
@@ -317,7 +317,7 @@ export class PermissionService {
     ]);
 
     // Determine if user has permission
-    const hasAccess = (result?.count || 0) > 0;
+    const hasAccess = (result?.count ?? 0) > 0;
 
     // Step 4: Cache the result (Requirement 15.1)
     this.cache.set(cacheKey, {
@@ -436,13 +436,13 @@ export class PermissionService {
    */
   public async checkMultiplePermissions(
     userId: string,
-    checks: Array<{ resource: string; action: string }>
-  ): Promise<Array<{ resource: string; action: string; allowed: boolean }>> {
+    checks: { resource: string; action: string }[]
+  ): Promise<{ resource: string; action: string; allowed: boolean }[]> {
     const startTime = Date.now();
 
     // Step 1: Check cache for all permissions
-    const results: Array<{ resource: string; action: string; allowed: boolean }> = [];
-    const uncachedChecks: Array<{ resource: string; action: string; index: number }> = [];
+    const results: { resource: string; action: string; allowed: boolean }[] = [];
+    const uncachedChecks: { resource: string; action: string; index: number }[] = [];
 
     for (let i = 0; i < checks.length; i++) {
       const check = checks[i];
@@ -553,7 +553,7 @@ export class PermissionService {
   /**
    * Helper: Run a query that doesn't return rows
    */
-  private runQuery(sql: string, params: any[] = []): Promise<void> {
+  private runQuery(sql: string, params: (string | number | boolean | null)[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, (err) => {
         if (err) reject(err);
@@ -565,11 +565,11 @@ export class PermissionService {
   /**
    * Helper: Get a single row
    */
-  private getQuery<T>(sql: string, params: any[] = []): Promise<T | null> {
+  private getQuery<T>(sql: string, params: (string | number | boolean | null)[] = []): Promise<T | null> {
     return new Promise((resolve, reject) => {
       this.db.get(sql, params, (err, row) => {
         if (err) reject(err);
-        else resolve(row as T || null);
+        else resolve((row as T) ?? null);
       });
     });
   }
@@ -577,11 +577,11 @@ export class PermissionService {
   /**
    * Helper: Get all rows
    */
-  private allQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
+  private allQuery<T>(sql: string, params: (string | number | boolean | null)[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {
         if (err) reject(err);
-        else resolve(rows as T[] || []);
+        else resolve(rows as T[]);
       });
     });
   }

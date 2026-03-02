@@ -11,7 +11,7 @@
  * - Graceful error handling for syntax errors
  */
 
-import { SSHHost } from './types';
+import type { SSHHost } from './types';
 
 /**
  * Parsed SSH config host entry
@@ -82,7 +82,7 @@ export function parseSSHConfig(content: string): SSHConfigParseResult {
 
       // Check for group metadata comment
       if (line.startsWith('#')) {
-        const groupMatch = line.match(/^#\s*Groups:\s*(.+)$/i);
+        const groupMatch = /^#\s*Groups:\s*(.+)$/i.exec(line);
         if (groupMatch && currentHost) {
           // Parse comma-separated groups
           const groups = groupMatch[1]
@@ -95,7 +95,7 @@ export function parseSSHConfig(content: string): SSHConfigParseResult {
       }
 
       // Parse Host directive
-      const hostMatch = line.match(/^Host(\s+(.+))?$/i);
+      const hostMatch = /^Host(\s+(.+))?$/i.exec(line);
       if (hostMatch) {
         // Save previous host if exists
         if (currentHost) {
@@ -110,7 +110,7 @@ export function parseSSHConfig(content: string): SSHConfigParseResult {
         const patterns = hostLine.split(/\s+/).filter(p => p.length > 0);
 
         if (patterns.length === 0) {
-          result.errors.push(`Line ${lineNumber}: Host directive without pattern`);
+          result.errors.push(`Line ${String(lineNumber)}: Host directive without pattern`);
           currentHost = null;
           continue;
         }
@@ -131,7 +131,7 @@ export function parseSSHConfig(content: string): SSHConfigParseResult {
 
       // Parse configuration keywords (only if we have a current host)
       if (currentHost) {
-        const keywordMatch = line.match(/^(\w+)\s+(.+)$/);
+        const keywordMatch = /^(\w+)\s+(.+)$/.exec(line);
         if (keywordMatch) {
           const keyword = keywordMatch[1].toLowerCase();
           const value = keywordMatch[2].trim();
@@ -145,14 +145,15 @@ export function parseSSHConfig(content: string): SSHConfigParseResult {
               currentHost.user = value;
               break;
 
-            case 'port':
+            case 'port': {
               const port = parseInt(value, 10);
               if (isNaN(port) || port < 1 || port > 65535) {
-                result.errors.push(`Line ${lineNumber}: Invalid port number "${value}"`);
+                result.errors.push(`Line ${String(lineNumber)}: Invalid port number "${value}"`);
               } else {
                 currentHost.port = port;
               }
               break;
+            }
 
             case 'identityfile':
               // Remove quotes if present
@@ -245,7 +246,7 @@ export function serializeSSHConfig(hosts: SSHHost[]): string {
     }
 
     if (host.port) {
-      lines.push(`    Port ${host.port}`);
+      lines.push(`    Port ${String(host.port)}`);
     }
 
     if (host.privateKeyPath) {

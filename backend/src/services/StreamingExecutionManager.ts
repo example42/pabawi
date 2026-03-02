@@ -152,7 +152,7 @@ export class StreamingExecutionManager {
    */
   public subscribe(executionId: string, response: Response): boolean {
     // Enforce per-IP SSE connection limit to prevent resource exhaustion
-    const clientIp = response.req?.ip ?? response.req?.socket?.remoteAddress ?? 'unknown';
+    const clientIp = response.req.ip ?? response.req.socket.remoteAddress ?? 'unknown';
     const currentCount = this.connectionCountByIp.get(clientIp) ?? 0;
     if (currentCount >= this.maxConnectionsPerIp) {
       this.logger.warn(`SSE connection limit exceeded for IP ${clientIp}`, {
@@ -222,7 +222,7 @@ export class StreamingExecutionManager {
     }
 
     // Decrement per-IP connection counter
-    const clientIp = response.req?.ip ?? response.req?.socket?.remoteAddress ?? 'unknown';
+    const clientIp = response.req.ip ?? response.req.socket.remoteAddress ?? 'unknown';
     const currentCount = this.connectionCountByIp.get(clientIp) ?? 0;
     if (currentCount > 1) {
       this.connectionCountByIp.set(clientIp, currentCount - 1);

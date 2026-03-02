@@ -26,7 +26,7 @@ describe('InstallSoftwareForm', () => {
     it('should render package name input field', () => {
       render(InstallSoftwareForm);
 
-      const input = screen.getByLabelText(/Package Name/i) as HTMLInputElement;
+      const input = screen.getByLabelText(/Package Name/i);
       expect(input).toBeTruthy();
       expect(input.placeholder).toContain('nginx');
     });
@@ -161,7 +161,7 @@ describe('InstallSoftwareForm', () => {
         expect(screen.getByLabelText(/Package Task/i)).toBeTruthy();
       });
 
-      const select = screen.getByLabelText(/Package Task/i) as HTMLSelectElement;
+      const select = screen.getByLabelText(/Package Task/i);
       expect(select.options.length).toBe(2);
       expect(select.options[0].text).toBe('Install Package');
       expect(select.options[1].text).toBe('APT Install');
@@ -585,11 +585,11 @@ describe('InstallSoftwareForm', () => {
         }
       });
 
-      const input = screen.getByLabelText(/Package Name/i) as HTMLInputElement;
+      const input = screen.getByLabelText(/Package Name/i);
       expect(input.value).toBe('nginx');
     });
 
-    it('should select initial tool', async () => {
+    it('should select initial tool', () => {
       vi.mocked(api.get).mockResolvedValue({
         tasks: []
       });

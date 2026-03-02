@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import ExecuteCommandForm from './ExecuteCommandForm.svelte';
 
@@ -7,7 +7,7 @@ describe('ExecuteCommandForm', () => {
     it('should render command input field', () => {
       render(ExecuteCommandForm);
 
-      const input = screen.getByLabelText('Command') as HTMLInputElement;
+      const input = screen.getByLabelText('Command');
       expect(input).toBeTruthy();
       expect(input.placeholder).toBe('Enter command to execute...');
     });
@@ -125,7 +125,7 @@ describe('ExecuteCommandForm', () => {
       const lsButton = screen.getByRole('button', { name: /ls -la/i });
       await fireEvent.click(lsButton);
 
-      const input = screen.getByLabelText('Command') as HTMLInputElement;
+      const input = screen.getByLabelText('Command');
       expect(input.value).toBe('ls -la');
     });
 
@@ -419,7 +419,7 @@ describe('ExecuteCommandForm', () => {
         }
       });
 
-      const input = screen.getByLabelText('Command') as HTMLInputElement;
+      const input = screen.getByLabelText('Command');
       expect(input.value).toBe('ls -la');
     });
 
@@ -446,10 +446,10 @@ describe('ExecuteCommandForm', () => {
       });
 
       const commandInput = screen.getByLabelText('Command');
-      fireEvent.input(commandInput, { target: { value: 'test' } });
+      void fireEvent.input(commandInput, { target: { value: 'test' } });
 
       const button = screen.getByRole('button', { name: /^execute$/i });
-      fireEvent.click(button);
+      void fireEvent.click(button);
 
       expect(onSubmit).toHaveBeenCalledWith({
         command: 'test',

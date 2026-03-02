@@ -1,15 +1,64 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+## [0.8.0]
 
-## [Unreleased]
+### Added
+
+- SSH integration with direct command execution capabilities
+- Parallel execution UI with batch processing for multiple nodes
+- Initial setup wizard for first-time configuration
+- User and group creation dialogs with RBAC support
+- Self-registration controls for user management
+- JWT support for performance metrics monitoring
+- Security hardening across integrations
 
 ### Changed
 
-- **BREAKING**: Renamed `BOLT_COMMAND_WHITELIST*` environment variables to `COMMAND_WHITELIST*` to reflect that the whitelist applies to all remote command execution plugins (Bolt, Ansible, SSH), not just Bolt
-  - `BOLT_COMMAND_WHITELIST` → `COMMAND_WHITELIST`
-  - `BOLT_COMMAND_WHITELIST_ALLOW_ALL` → `COMMAND_WHITELIST_ALLOW_ALL`
-  - `BOLT_COMMAND_WHITELIST_MATCH_MODE` → `COMMAND_WHITELIST_MATCH_MODE`
+- Improved inventory management with SSH integration
+- Enhanced type safety in performance metrics
+- Updated secrets baseline with comprehensive test coverage
+
+## [0.7.0]
+
+### Added
+
+- Ansible integration with playbook execution
+- Ansible inventory and facts gathering capabilities
+- Ansible setup guide and documentation
+- Hiera class resource tracking
+- Integration architecture reorganization
+
+### Changed
+
+- Moved Bolt files to integrations directory for better organization
+- Improved type safety in Ansible facts parsing
+- Converted Ansible module args from JSON to key=value format
+
+### Fixed
+
+- Puppet run history date range calculation to include today
+- RealtimeOutputViewer rendering with invalid execution IDs
+- Unit tests and linting issues
+- Package lock file updates
+
+## [0.6.0] - 2026
+
+### Added
+
+- Documentation reorganization and improvements
+- Version 1.0 planning documentation
+
+### Changed
+
+- Code refactoring and consolidation
+- Updated screenshots and README documentation
+- Removed sample Bolt project, enhanced Docker documentation
+- Updated .env.docker configuration
+
+### Fixed
+
+- Removed unnecessary type arguments
+- Documentation consistency and table of contents
 
 ## [0.5.0] - 2026
 

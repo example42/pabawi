@@ -7,8 +7,9 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
-import { SSHConfigWatcher, SSHConfigWatcherOptions } from '../sshConfigWatcher';
-import { SSHHost } from '../types';
+import { SSHConfigWatcher } from '../sshConfigWatcher';
+import type { SSHConfigWatcherOptions } from '../sshConfigWatcher';
+import type { SSHHost } from '../types';
 import { writeFile, unlink, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
@@ -31,7 +32,7 @@ describe('SSHConfigWatcher', () => {
       if (existsSync(testFilePath)) {
         await unlink(testFilePath);
       }
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   });
@@ -95,7 +96,7 @@ Host web-server-01
       await writeFile(testFilePath, initialConfig, 'utf-8');
 
       const reloadCallback = vi.fn();
-      const watcher = new SSHConfigWatcher({
+      new SSHConfigWatcher({
         filePath: testFilePath,
         onReload: reloadCallback,
       });
@@ -328,7 +329,7 @@ Host web-server-02
       const watcher = new SSHConfigWatcher({
         filePath: testFilePath,
         debounceDelay: 100,
-        logger: mockLogger as any,
+        logger: mockLogger as unknown as SSHConfigWatcherOptions['logger'],
       });
 
       watcher.start();

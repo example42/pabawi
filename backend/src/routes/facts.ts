@@ -101,7 +101,7 @@ export function createFactsRouter(
         }
 
         // Gather facts from all available sources
-        const factsResults: Record<string, any> = {};
+        const factsResults: Record<string, unknown> = {};
         const errors: Record<string, string> = {};
 
         // Try Bolt
@@ -229,7 +229,7 @@ export function createFactsRouter(
           expertModeService.addMetadata(debugInfo, 'nodeId', nodeId);
           expertModeService.addMetadata(debugInfo, 'sources', Object.keys(factsResults).join(', '));
           expertModeService.addInfo(debugInfo, {
-            message: `Gathered facts from ${Object.keys(factsResults).length} source(s)`,
+            message: `Gathered facts from ${String(Object.keys(factsResults).length)} source(s)`,
             context: JSON.stringify({ nodeId, sources: Object.keys(factsResults) }),
             level: 'info',
           });

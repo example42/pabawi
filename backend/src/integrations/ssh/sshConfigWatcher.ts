@@ -8,11 +8,13 @@
  * Validates: Requirements 2.4, 2.7
  */
 
-import { watch, FSWatcher } from 'fs';
+import type { FSWatcher } from 'fs';
+import { watch } from 'fs';
 import { readFile } from 'fs/promises';
-import { LoggerService } from '../../services/LoggerService';
-import { parseSSHConfig, SSHConfigParseResult } from './sshConfigParser';
-import { SSHHost } from './types';
+import type { LoggerService } from '../../services/LoggerService';
+import type { SSHConfigParseResult } from './sshConfigParser';
+import { parseSSHConfig } from './sshConfigParser';
+import type { SSHHost } from './types';
 
 /**
  * Callback function type for SSH config reload events
@@ -203,7 +205,7 @@ export class SSHConfigWatcher {
 
     // Set new debounce timer
     this.debounceTimer = setTimeout(() => {
-      this.reloadConfig();
+      void this.reloadConfig();
     }, this.debounceDelay);
   }
 

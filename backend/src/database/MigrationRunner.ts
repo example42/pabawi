@@ -1,4 +1,4 @@
-import sqlite3 from "sqlite3";
+import type sqlite3 from "sqlite3";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
@@ -30,7 +30,7 @@ export class MigrationRunner {
 
   constructor(db: sqlite3.Database, migrationsDir?: string) {
     this.db = db;
-    this.migrationsDir = migrationsDir || join(__dirname, "migrations");
+    this.migrationsDir = migrationsDir ?? join(__dirname, "migrations");
   }
 
   /**
@@ -67,7 +67,7 @@ export class MigrationRunner {
           if (err) {
             reject(new Error(`Failed to fetch applied migrations: ${err.message}`));
           } else {
-            resolve(rows || []);
+            resolve(rows);
           }
         }
       );
@@ -85,7 +85,7 @@ export class MigrationRunner {
         .filter(file => file.endsWith(".sql"))
         .map(filename => {
           // Extract migration ID from filename (e.g., "001_initial_rbac.sql" -> "001")
-          const match = filename.match(/^(\d+)_(.+)\.sql$/);
+          const match = /^(\d+)_(.+)\.sql$/.exec(filename);
           if (!match) {
             throw new Error(`Invalid migration filename format: ${filename}. Expected format: NNN_name.sql`);
           }
@@ -210,9 +210,9 @@ export class MigrationRunner {
 
       // Execute each pending migration in order
       for (const migration of pendingMigrations) {
-        console.log(`Applying migration: ${migration.filename}`);
+        console.warn(`Applying migration: ${migration.filename}`);
         await this.executeMigration(migration);
-        console.log(`✓ Migration ${migration.filename} applied successfully`);
+        console.warn(`✓ Migration ${migration.filename} applied successfully`);
       }
 
       return pendingMigrations.length;

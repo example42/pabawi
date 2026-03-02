@@ -18,7 +18,6 @@ import { BasePlugin } from '../BasePlugin';
 import type {
   ExecutionToolPlugin,
   InformationSourcePlugin,
-  IntegrationConfig,
   HealthStatus,
   Action,
   Capability,
@@ -30,10 +29,9 @@ import { loadSSHConfig } from './config';
 import { parseSSHConfig } from './sshConfigParser';
 import { SSHConfigWatcher } from './sshConfigWatcher';
 import type { SSHConfig, SSHHost, CommandResult } from './types';
-import { LoggerService } from '../../services/LoggerService';
-import { PerformanceMonitorService } from '../../services/PerformanceMonitorService';
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
+import type { LoggerService } from '../../services/LoggerService';
+import type { PerformanceMonitorService } from '../../services/PerformanceMonitorService';
+import { readFile, access } from 'fs/promises';
 
 /**
  * SSH Integration Plugin
@@ -159,7 +157,9 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
 
     try {
       // Check if SSH config file is accessible (if configured)
-      const hasConfig = this.sshConfig.configPath ? existsSync(this.sshConfig.configPath) : false;
+      const hasConfig = this.sshConfig.configPath
+        ? await access(this.sshConfig.configPath).then(() => true, () => false)
+        : false;
       if (this.sshConfig.configPath && !hasConfig) {
         return {
           healthy: false,
@@ -184,7 +184,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       // without probing individual hosts (they may be unreachable)
       return {
         healthy: true,
-        message: `SSH plugin is healthy with ${this.inventory.length} configured host(s)`,
+        message: `SSH plugin is healthy with ${String(this.inventory.length)} configured host(s)`,
         details: {
           configPath: this.sshConfig.configPath,
           nodeCount: this.inventory.length,
@@ -214,7 +214,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
     }
 
     const startTime = new Date().toISOString();
-    const executionId = `ssh-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const executionId = `ssh-${String(Date.now())}-${Math.random().toString(36).substring(2, 11)}`;
 
     try {
       // Parse target nodes
@@ -360,11 +360,11 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
    *
    * Validates: Requirements 8.1, 8.2, 8.3, 8.5
    */
-  async getInventory(): Promise<Node[]> {
-    return this.inventory.map(node => ({
+  getInventory(): Promise<Node[]> {
+    return Promise.resolve(this.inventory.map(node => ({
       ...node,
       source: 'ssh',
-    }));
+    })));
   }
 
   /**
@@ -405,8 +405,8 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       );
 
       const result = results.get(host.name);
-      if (!result || !result.success) {
-        throw new Error(result?.error?.message || 'Failed to gather facts');
+      if (!result?.success) {
+        throw new Error(result?.error?.message ?? 'Failed to gather facts');
       }
 
       // Parse the output
@@ -421,18 +421,18 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
 
       // Parse OS info
       const osRelease = sections.os_release || '';
-      const osId = osRelease.match(/^ID=(.+)$/m)?.[1]?.replace(/"/g, '') || 'unknown';
-      const osName = osRelease.match(/^NAME=(.+)$/m)?.[1]?.replace(/"/g, '') || osId;
-      const osVersion = osRelease.match(/^VERSION_ID=(.+)$/m)?.[1]?.replace(/"/g, '') || 'unknown';
+      const osId = (/^ID=(.+)$/m.exec(osRelease))?.[1]?.replace(/"/g, '') ?? 'unknown';
+      const osName = (/^NAME=(.+)$/m.exec(osRelease))?.[1]?.replace(/"/g, '') ?? osId;
+      const osVersion = (/^VERSION_ID=(.+)$/m.exec(osRelease))?.[1]?.replace(/"/g, '') ?? 'unknown';
       const osVersionMajor = osVersion.split('.')[0] || 'unknown';
 
       // Parse CPU info
-      const cpuLines = sections.cpu_info?.split('\n') || [];
+      const cpuLines = sections.cpu_info.split('\n');
       const cpuCount = parseInt(cpuLines[0]) || 0;
       const cpuModel = cpuLines[1]?.trim() || 'unknown';
 
       // Parse memory info
-      const memParts = sections.memory?.split(' ') || [];
+      const memParts = sections.memory.split(' ');
       const memTotal = memParts[0] ? `${memParts[0]} MB` : 'unknown';
       const memAvailable = memParts[1] ? `${memParts[1]} MB` : 'unknown';
 
@@ -440,15 +440,22 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       const uptimeSeconds = parseInt(sections.uptime || '0');
 
       // Parse network interfaces
-      const interfacesData: Record<string, any> = {};
+      /** Shape of a network interface entry from `ip -j addr show` */
+      interface IpAddrEntry {
+        ifname?: string;
+        address?: string;
+        addr_info?: { local?: string }[];
+      }
+
+      const interfacesData: Record<string, { addresses: string[]; mac?: string }> = {};
       try {
         // Try to parse JSON output first
-        const ifacesJson = JSON.parse(sections.interfaces || '[]');
+        const ifacesJson: unknown = JSON.parse(sections.interfaces || '[]');
         if (Array.isArray(ifacesJson)) {
-          for (const iface of ifacesJson) {
+          for (const iface of ifacesJson as IpAddrEntry[]) {
             if (iface.ifname) {
               interfacesData[iface.ifname] = {
-                addresses: iface.addr_info?.map((a: any) => a.local) || [],
+                addresses: iface.addr_info?.map(a => a.local).filter((v): v is string => v != null) ?? [],
                 mac: iface.address,
               };
             }
@@ -456,15 +463,15 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
         }
       } catch {
         // Fallback to text parsing if JSON fails
-        const ifaceLines = sections.interfaces?.split('\n') || [];
+        const ifaceLines = sections.interfaces.split('\n');
         let currentIface = '';
         for (const line of ifaceLines) {
-          const ifaceMatch = line.match(/^\d+:\s+(\S+):/);
+          const ifaceMatch = /^\d+:\s+(\S+):/.exec(line);
           if (ifaceMatch) {
             currentIface = ifaceMatch[1];
             interfacesData[currentIface] = { addresses: [] };
           } else if (currentIface) {
-            const inetMatch = line.match(/inet6?\s+([^\s/]+)/);
+            const inetMatch = /inet6?\s+([^\s/]+)/.exec(line);
             if (inetMatch) {
               interfacesData[currentIface].addresses.push(inetMatch[1]);
             }
@@ -577,15 +584,15 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
    *
    * Validates: Requirements 8.4
    */
-  async getNodeData(nodeId: string, dataType: string): Promise<unknown> {
+  getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
     // Placeholder implementation - node data retrieval not yet implemented
-    return null;
+    return Promise.resolve(null);
   }
 
   /**
    * Cleanup resources when plugin is destroyed
    */
-  async cleanup(): Promise<void> {
+  cleanup(): void {
     this.logger.info('Cleaning up SSH plugin', {
       component: 'SSHPlugin',
       integration: 'ssh',
@@ -600,7 +607,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
 
     // Cleanup SSH service
     if (this.sshService) {
-      await this.sshService.cleanup();
+      this.sshService.cleanup();
       this.sshService = undefined;
     }
   }
@@ -623,7 +630,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       }
 
       // Parse Host directive
-      const hostMatch = line.match(/^Host(\s+(.+))?$/i);
+      const hostMatch = /^Host(\s+(.+))?$/i.exec(line);
       if (hostMatch) {
         const hostLine = hostMatch[2] || '';
         const hostPatterns = hostLine.split(/\s+/).filter(p => p.length > 0);
@@ -638,7 +645,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       }
 
       // Parse Match directive with Host patterns
-      const matchMatch = line.match(/^Match\s+.*Host\s+([^\s]+)/i);
+      const matchMatch = /^Match\s+.*Host\s+([^\s]+)/i.exec(line);
       if (matchMatch) {
         const pattern = matchMatch[1];
         if (pattern.includes('*') || pattern.includes('?')) {
@@ -675,23 +682,27 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       );
 
       // Add nodes to group
-      if (!groupMap.has(groupName)) {
-        groupMap.set(groupName, new Set());
+      let group = groupMap.get(groupName);
+      if (!group) {
+        group = new Set<string>();
+        groupMap.set(groupName, group);
       }
 
       for (const node of matchingNodes) {
-        groupMap.get(groupName)!.add(node.id);
+        group.add(node.id);
       }
     }
 
     // Also detect environment-based patterns
     const envGroups = this.detectEnvironmentGroups();
     for (const [groupName, nodeIds] of envGroups) {
-      if (!groupMap.has(groupName)) {
-        groupMap.set(groupName, new Set());
+      let envGroup = groupMap.get(groupName);
+      if (!envGroup) {
+        envGroup = new Set<string>();
+        groupMap.set(groupName, envGroup);
       }
       for (const nodeId of nodeIds) {
-        groupMap.get(groupName)!.add(nodeId);
+        envGroup.add(nodeId);
       }
     }
 
@@ -736,19 +747,19 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
 
       // Pattern like "web-prod-*" or "app-*"
       // Match everything before the wildcard, removing trailing dash if present
-      const prefixMatch = pattern.match(/^([a-zA-Z0-9_-]+?)-?\*+/);
+      const prefixMatch = /^([a-zA-Z0-9_-]+?)-?\*+/.exec(pattern);
       if (prefixMatch) {
         return prefixMatch[1];
       }
 
       // Pattern like "*.example.com"
-      const suffixMatch = pattern.match(/^\*+\.?([a-zA-Z0-9_.-]+)$/);
+      const suffixMatch = /^\*+\.?([a-zA-Z0-9_.-]+)$/.exec(pattern);
       if (suffixMatch) {
         return suffixMatch[1];
       }
 
       // Pattern like "*-prod" or "*-staging"
-      const endMatch = pattern.match(/^\*+-?([a-zA-Z0-9_-]+)$/);
+      const endMatch = /^\*+-?([a-zA-Z0-9_-]+)$/.exec(pattern);
       if (endMatch) {
         return endMatch[1];
       }
@@ -790,10 +801,12 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
     for (const node of this.inventory) {
       for (const { pattern, name } of envPatterns) {
         if (pattern.test(node.name)) {
-          if (!envGroups.has(name)) {
-            envGroups.set(name, []);
+          let envGroup = envGroups.get(name);
+          if (!envGroup) {
+            envGroup = [];
+            envGroups.set(name, envGroup);
           }
-          envGroups.get(name)!.push(node.id);
+          envGroup.push(node.id);
         }
       }
     }
@@ -883,7 +896,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       filePath: this.sshConfig.configPath,
       debounceDelay: 1000,
       logger: this.logger,
-      onReload: (hosts) => {
+      onReload: (hosts): void => {
         this.logger.info('SSH config reloaded from file watcher', {
           component: 'SSHPlugin',
           integration: 'ssh',
@@ -896,7 +909,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
         // Update inventory with new hosts
         this.inventory = this.convertHostsToNodes(hosts);
       },
-      onError: (error) => {
+      onError: (error): void => {
         this.logger.error('SSH config reload failed', {
           component: 'SSHPlugin',
           integration: 'ssh',
@@ -917,9 +930,6 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
    */
   private convertHostsToNodes(hosts: SSHHost[]): Node[] {
     return hosts.map(host => {
-      // Parse hostname from URI
-      const hostname = host.uri.replace(/^ssh:\/\//, '');
-
       return {
         id: host.name,
         name: host.name,
@@ -945,8 +955,8 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       name: node.name,
       uri: node.uri,
       alias: node.config.alias as string | undefined,
-      user: node.config.user as string | undefined,
-      port: node.config.port as number | undefined,
+      user: node.config.user,
+      port: node.config.port,
       privateKeyPath: node.config.privateKeyPath as string | undefined,
       groups: node.config.groups as string[] | undefined,
     }));
@@ -965,8 +975,8 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
           name: node.name,
           uri: node.uri,
           alias: node.config.alias as string | undefined,
-          user: node.config.user as string | undefined,
-          port: node.config.port as number | undefined,
+          user: node.config.user,
+          port: node.config.port,
           privateKeyPath: node.config.privateKeyPath as string | undefined,
           groups: node.config.groups as string[] | undefined,
         });

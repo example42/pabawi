@@ -3,7 +3,7 @@ import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { GroupService } from "../services/GroupService";
 import { PermissionService } from "../services/PermissionService";
-import { DatabaseService } from "../database/DatabaseService";
+import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
@@ -57,8 +57,8 @@ export function createGroupsRouter(
    */
   router.post(
     "/",
-    authMiddleware,
-    rbacMiddleware("groups", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("groups", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing create group request", {
         component: "GroupsRouter",
@@ -152,8 +152,8 @@ export function createGroupsRouter(
    */
   router.get(
     "/",
-    authMiddleware,
-    rbacMiddleware("groups", "read"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("groups", "read")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing list groups request", {
         component: "GroupsRouter",
@@ -241,8 +241,8 @@ export function createGroupsRouter(
    */
   router.get(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("groups", "read"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("groups", "read")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing get group by ID request", {
         component: "GroupsRouter",
@@ -319,8 +319,8 @@ export function createGroupsRouter(
    */
   router.put(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("groups", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("groups", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing update group request", {
         component: "GroupsRouter",
@@ -430,8 +430,8 @@ export function createGroupsRouter(
    */
   router.delete(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("groups", "admin"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("groups", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing delete group request", {
         component: "GroupsRouter",
@@ -499,8 +499,8 @@ export function createGroupsRouter(
    */
   router.post(
     "/:id/roles/:roleId",
-    authMiddleware,
-    rbacMiddleware("groups", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("groups", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing assign role to group request", {
         component: "GroupsRouter",
@@ -631,8 +631,8 @@ export function createGroupsRouter(
    */
   router.delete(
     "/:id/roles/:roleId",
-    authMiddleware,
-    rbacMiddleware("groups", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("groups", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing remove role from group request", {
         component: "GroupsRouter",

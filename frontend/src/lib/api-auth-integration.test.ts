@@ -7,7 +7,8 @@ import { fetchWithRetry } from './api';
 import { authManager } from './auth.svelte';
 
 // Mock fetch
-global.fetch = vi.fn();
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -38,15 +39,15 @@ describe('API Authentication Integration', () => {
 
     // Logout to clear any existing auth
     if (authManager.isAuthenticated) {
-      authManager.logout();
+      void authManager.logout();
     }
   });
 
   it('should add Authorization header when user is authenticated', async () => {
     // Login first
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
+      json: () => Promise.resolve({
         token: 'test-token',
         refreshToken: 'test-refresh-token',
         user: {
@@ -70,15 +71,15 @@ describe('API Authentication Integration', () => {
     });
 
     // Make API request
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: 'test' }),
+      json: () => Promise.resolve({ data: 'test' }),
     });
 
     await fetchWithRetry('/api/test');
 
     // Check that Authorization header was added
-    const lastCall = (global.fetch as any).mock.calls[(global.fetch as any).mock.calls.length - 1];
+    const lastCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
     const headers = lastCall[1].headers;
 
     expect(headers.get('Authorization')).toBe('Bearer test-token');
@@ -89,9 +90,9 @@ describe('API Authentication Integration', () => {
     vi.clearAllMocks();
 
     // Make API request without authentication
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: 'test' }),
+      json: () => Promise.resolve({ data: 'test' }),
     });
 
     const result = await fetchWithRetry('/api/test');
@@ -100,14 +101,14 @@ describe('API Authentication Integration', () => {
     expect(result).toEqual({ data: 'test' });
 
     // Verify fetch was called exactly once
-    expect((global.fetch as any).mock.calls.length).toBe(1);
+    expect(mockFetch.mock.calls.length).toBe(1);
   });
 
   it('should attempt token refresh on 401 response', async () => {
     // Login first
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
+      json: () => Promise.resolve({
         token: 'old-token',
         refreshToken: 'test-refresh-token',
         user: {
@@ -131,16 +132,16 @@ describe('API Authentication Integration', () => {
     });
 
     // First request returns 401
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
-      json: async () => ({ error: 'Token expired' }),
+      json: () => Promise.resolve({ error: 'Token expired' }),
     });
 
     // Token refresh succeeds
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
+      json: () => Promise.resolve({
         token: 'new-token',
         refreshToken: 'test-refresh-token',
         user: {
@@ -159,9 +160,9 @@ describe('API Authentication Integration', () => {
     });
 
     // Retry with new token succeeds
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ data: 'test' }),
+      json: () => Promise.resolve({ data: 'test' }),
     });
 
     const result = await fetchWithRetry('/api/test');
@@ -170,14 +171,14 @@ describe('API Authentication Integration', () => {
     expect(authManager.token).toBe('new-token');
 
     // Should have made 4 calls: login, original request, refresh, retry
-    expect((global.fetch as any).mock.calls.length).toBe(4);
+    expect(mockFetch.mock.calls.length).toBe(4);
   });
 
   it('should throw error if token refresh fails', async () => {
     // Login first
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
+      json: () => Promise.resolve({
         token: 'old-token',
         refreshToken: 'test-refresh-token',
         user: {
@@ -201,17 +202,17 @@ describe('API Authentication Integration', () => {
     });
 
     // First request returns 401
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
-      json: async () => ({ error: 'Token expired' }),
+      json: () => Promise.resolve({ error: 'Token expired' }),
     });
 
     // Token refresh fails
-    (global.fetch as any).mockResolvedValueOnce({
+    mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
-      json: async () => ({ error: 'Invalid refresh token' }),
+      json: () => Promise.resolve({ error: 'Invalid refresh token' }),
     });
 
     await expect(fetchWithRetry('/api/test')).rejects.toThrow();

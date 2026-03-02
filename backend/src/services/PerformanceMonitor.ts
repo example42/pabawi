@@ -15,7 +15,7 @@ export class PerformanceMonitor {
     permissionCheckTimes: number[];
     cacheHits: number;
     cacheMisses: number;
-    slowQueries: Array<{ query: string; duration: number; timestamp: string }>;
+    slowQueries: { query: string; duration: number; timestamp: string }[];
   };
 
   private readonly SLOW_QUERY_THRESHOLD_MS = 200;
@@ -144,7 +144,7 @@ export class PerformanceMonitor {
    *
    * @returns Array of slow queries
    */
-  public getSlowQueries(): Array<{ query: string; duration: number; timestamp: string }> {
+  public getSlowQueries(): { query: string; duration: number; timestamp: string }[] {
     return [...this.metrics.slowQueries];
   }
 
@@ -173,7 +173,7 @@ export class PerformanceMonitor {
       misses: number;
       hitRate: number;
     };
-    slowQueries: Array<{ query: string; duration: number; timestamp: string }>;
+    slowQueries: { query: string; duration: number; timestamp: string }[];
   } {
     return {
       authentication: this.getAuthenticationStats(),

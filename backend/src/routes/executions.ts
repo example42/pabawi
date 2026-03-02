@@ -48,7 +48,7 @@ const BatchExecutionRequestSchema = z.object({
   parameters: z.record(z.unknown()).optional(),
   tool: z.enum(["bolt", "ansible", "ssh"]).optional(),
 }).refine(
-  (data) => (data.targetNodeIds && data.targetNodeIds.length > 0) || (data.targetGroupIds && data.targetGroupIds.length > 0),
+  (data) => (data.targetNodeIds && data.targetNodeIds.length > 0) ?? (data.targetGroupIds && data.targetGroupIds.length > 0),
   { message: "At least one target node or group must be specified" }
 );
 
@@ -1652,14 +1652,14 @@ export function createExecutionsRouter(
         const batchRequest = validationResult.data;
 
         // Get user ID from request (set by auth middleware)
-        const userId = (req as any).user?.id || "unknown";
+        const userId: string = (req as unknown as { user?: { id?: string } }).user?.id ?? "unknown";
 
         logger.debug("Processing batch execution request", {
           component: "ExecutionsRouter",
           operation: "createBatch",
           metadata: {
-            targetNodeIds: batchRequest.targetNodeIds?.length || 0,
-            targetGroupIds: batchRequest.targetGroupIds?.length || 0,
+            targetNodeIds: batchRequest.targetNodeIds?.length ?? 0,
+            targetGroupIds: batchRequest.targetGroupIds?.length ?? 0,
             type: batchRequest.type,
             action: batchRequest.action,
             userId,
@@ -1673,7 +1673,7 @@ export function createExecutionsRouter(
         );
 
         logger.info(
-          `Batch execution created: ${response.batchId} with ${response.targetCount} targets`,
+          `Batch execution created: ${response.batchId} with ${String(response.targetCount)} targets`,
           {
             component: "ExecutionsRouter",
             operation: "createBatch",
@@ -2051,7 +2051,7 @@ export function createExecutionsRouter(
         const responseData = {
           batchId,
           cancelledCount: result.cancelledCount,
-          message: `Cancelled ${result.cancelledCount} execution${result.cancelledCount !== 1 ? 's' : ''}`,
+          message: `Cancelled ${String(result.cancelledCount)} execution${result.cancelledCount !== 1 ? 's' : ''}`,
         };
 
         if (req.expertMode) {

@@ -1,8 +1,57 @@
 import type sqlite3 from "sqlite3";
 import type { ExecutionQueue } from "./ExecutionQueue";
-import type { ExecutionRepository } from "../database/ExecutionRepository";
+import type { ExecutionRepository, NodeResult } from "../database/ExecutionRepository";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { LoggerService } from "./LoggerService";
+
+/**
+ * Database row type for batch_executions table
+ */
+interface BatchExecutionRow {
+  id: string;
+  type: string;
+  action: string;
+  parameters: string | null;
+  target_nodes: string;
+  target_groups: string;
+  status: string;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  user_id: string;
+  execution_ids: string;
+  stats_total: number;
+  stats_queued: number;
+  stats_running: number;
+  stats_success: number;
+  stats_failed: number;
+}
+
+/**
+ * Database row type for executions table (batch query)
+ */
+interface ExecutionRow {
+  id: string;
+  type: string;
+  target_nodes: string;
+  action: string;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  results: string | null;
+  stdout: string | null;
+  stderr: string | null;
+  batch_id: string | null;
+  batch_position: number | null;
+}
+
+/**
+ * Database row type for execution status queries
+ */
+interface ExecutionStatusRow {
+  status: string;
+  started_at: string | null;
+}
 
 /**
  * Request body for batch execution creation
@@ -102,7 +151,7 @@ export interface BatchStatusResponse {
   batch: BatchExecution;
 
   /** Individual execution details */
-  executions: Array<{
+  executions: {
     id: string;
     nodeId: string;
     nodeName: string;
@@ -115,7 +164,7 @@ export interface BatchStatusResponse {
       stdout?: string;
       stderr?: string;
     };
-  }>;
+  }[];
 
   /** Progress percentage (0-100) */
   progress: number;
@@ -161,14 +210,14 @@ export class BatchExecutionService {
     const { randomUUID } = await import("crypto");
 
     // Step 1: Expand groups and deduplicate nodes
-    const groupNodeIds = await this.expandGroups(request.targetGroupIds || []);
+    const groupNodeIds = await this.expandGroups(request.targetGroupIds ?? []);
     const allNodeIds = this.deduplicateNodes([
-      ...(request.targetNodeIds || []),
+      ...(request.targetNodeIds ?? []),
       ...groupNodeIds,
     ]);
 
     logger.info(
-      `Creating batch execution for ${allNodeIds.length} targets (${request.targetNodeIds?.length || 0} direct nodes + ${groupNodeIds.length} from groups)`,
+      `Creating batch execution for ${String(allNodeIds.length)} targets (${String(request.targetNodeIds?.length ?? 0)} direct nodes + ${String(groupNodeIds.length)} from groups)`,
     );
 
     // Step 2: Validate all nodes exist
@@ -192,7 +241,7 @@ export class BatchExecutionService {
         status: "running",
         startedAt: createdAt,
         results: [],
-        executionTool: request.tool || "bolt",
+        executionTool: request.tool ?? "bolt",
         batchId,
         batchPosition: i,
       });
@@ -242,7 +291,7 @@ export class BatchExecutionService {
       request.action,
       request.parameters ? JSON.stringify(request.parameters) : null,
       JSON.stringify(allNodeIds),
-      JSON.stringify(request.targetGroupIds || []),
+      JSON.stringify(request.targetGroupIds ?? []),
       "running",
       createdAt,
       createdAt,
@@ -267,7 +316,7 @@ export class BatchExecutionService {
     });
 
     logger.info(
-      `Created batch execution ${batchId} with ${executionIds.length} executions`,
+      `Created batch execution ${batchId} with ${String(executionIds.length)} executions`,
     );
 
     // Step 8: Return batch execution response
@@ -308,13 +357,13 @@ export class BatchExecutionService {
 
       // Step 1: Fetch batch execution record
       const batchSql = "SELECT * FROM batch_executions WHERE id = ?";
-      const batchRow = await new Promise<any>((resolve, reject) => {
+      const batchRow = await new Promise<BatchExecutionRow | undefined>((resolve, reject) => {
         this.db.get(batchSql, [batchId], (err, row) => {
           if (err) {
             logger.error(`Failed to fetch batch execution: ${err.message}`);
             reject(new Error(`Failed to fetch batch execution: ${err.message}`));
           } else {
-            resolve(row);
+            resolve(row as BatchExecutionRow | undefined);
           }
         });
       });
@@ -325,7 +374,7 @@ export class BatchExecutionService {
 
       // Step 2: Fetch all executions for this batch
       let executionsSql = "SELECT * FROM executions WHERE batch_id = ? ORDER BY batch_position ASC";
-      const executionsParams: any[] = [batchId];
+      const executionsParams: (string | number)[] = [batchId];
 
       // Apply status filter if provided
       if (statusFilter) {
@@ -333,13 +382,13 @@ export class BatchExecutionService {
         executionsParams.push(statusFilter);
       }
 
-      const executionRows = await new Promise<any[]>((resolve, reject) => {
+      const executionRows = await new Promise<ExecutionRow[]>((resolve, reject) => {
         this.db.all(executionsSql, executionsParams, (err, rows) => {
           if (err) {
             logger.error(`Failed to fetch executions for batch: ${err.message}`);
             reject(new Error(`Failed to fetch executions: ${err.message}`));
           } else {
-            resolve(rows || []);
+            resolve(rows as ExecutionRow[]);
           }
         });
       });
@@ -350,23 +399,23 @@ export class BatchExecutionService {
 
       // Step 4: Map execution rows to response format
       const executions = executionRows.map(row => {
-        const nodeId = JSON.parse(row.target_nodes)[0]; // Get first node ID
-        const nodeName = nodeMap.get(nodeId) || nodeId;
+        const nodeId = (JSON.parse(row.target_nodes) as string[])[0]; // Get first node ID
+        const nodeName = nodeMap.get(nodeId) ?? nodeId;
 
         // Parse results if available
-        let result: any = undefined;
+        let result: { exitCode?: number; stdout?: string; stderr?: string } | undefined = undefined;
         if (row.results) {
           try {
-            const results = JSON.parse(row.results);
+            const results = JSON.parse(row.results) as NodeResult[];
             if (results.length > 0) {
               const nodeResult = results[0];
               result = {
                 exitCode: nodeResult.output?.exitCode,
-                stdout: nodeResult.output?.stdout || row.stdout,
-                stderr: nodeResult.output?.stderr || row.stderr,
+                stdout: nodeResult.output?.stdout ?? row.stdout ?? undefined,
+                stderr: nodeResult.output?.stderr ?? row.stderr ?? undefined,
               };
             }
-          } catch (error) {
+          } catch {
             logger.warn(`Failed to parse results for execution ${row.id}`);
           }
         }
@@ -392,14 +441,14 @@ export class BatchExecutionService {
       });
 
       // Step 5: Aggregate statistics from all executions (not filtered)
-      const allExecutionsSql = "SELECT status FROM executions WHERE batch_id = ?";
-      const allExecutionRows = await new Promise<any[]>((resolve, reject) => {
+      const allExecutionsSql = "SELECT status, started_at FROM executions WHERE batch_id = ?";
+      const allExecutionRows = await new Promise<ExecutionStatusRow[]>((resolve, reject) => {
         this.db.all(allExecutionsSql, [batchId], (err, rows) => {
           if (err) {
             logger.error(`Failed to fetch all executions for stats: ${err.message}`);
             reject(new Error(`Failed to fetch executions: ${err.message}`));
           } else {
-            resolve(rows || []);
+            resolve(rows as ExecutionStatusRow[]);
           }
         });
       });
@@ -429,24 +478,24 @@ export class BatchExecutionService {
       }
 
       // Step 8: Build batch execution object
-      const batch = {
+      const batch: BatchExecution = {
         id: batchRow.id,
         type: batchRow.type as "command" | "task" | "plan",
         action: batchRow.action,
-        parameters: batchRow.parameters ? JSON.parse(batchRow.parameters) : undefined,
-        targetNodes: JSON.parse(batchRow.target_nodes),
-        targetGroups: JSON.parse(batchRow.target_groups),
+        parameters: batchRow.parameters ? JSON.parse(batchRow.parameters) as Record<string, unknown> : undefined,
+        targetNodes: JSON.parse(batchRow.target_nodes) as string[],
+        targetGroups: JSON.parse(batchRow.target_groups) as string[],
         status: batchStatus,
         createdAt: new Date(batchRow.created_at),
         startedAt: batchRow.started_at ? new Date(batchRow.started_at) : undefined,
         completedAt: batchRow.completed_at ? new Date(batchRow.completed_at) : undefined,
         userId: batchRow.user_id,
-        executionIds: JSON.parse(batchRow.execution_ids),
+        executionIds: JSON.parse(batchRow.execution_ids) as string[],
         stats,
       };
 
       logger.info(
-        `Fetched batch status for ${batchId}: ${stats.success}/${stats.total} success, ${stats.failed}/${stats.total} failed, ${progress}% complete`
+        `Fetched batch status for ${batchId}: ${String(stats.success)}/${String(stats.total)} success, ${String(stats.failed)}/${String(stats.total)} failed, ${String(progress)}% complete`
       );
 
       return {
@@ -469,13 +518,13 @@ export class BatchExecutionService {
 
     // Step 1: Verify batch exists
     const batchSql = "SELECT * FROM batch_executions WHERE id = ?";
-    const batchRow = await new Promise<any>((resolve, reject) => {
+    const batchRow = await new Promise<BatchExecutionRow | undefined>((resolve, reject) => {
       this.db.get(batchSql, [batchId], (err, row) => {
         if (err) {
           logger.error(`Failed to fetch batch execution: ${err.message}`);
           reject(new Error(`Failed to fetch batch execution: ${err.message}`));
         } else {
-          resolve(row);
+          resolve(row as BatchExecutionRow | undefined);
         }
       });
     });
@@ -520,7 +569,7 @@ export class BatchExecutionService {
       });
     });
 
-    logger.info(`Cancelled batch ${batchId}: ${cancelledCount} executions cancelled`);
+    logger.info(`Cancelled batch ${batchId}: ${String(cancelledCount)} executions cancelled`);
 
     return { cancelledCount };
   }
@@ -561,7 +610,7 @@ export class BatchExecutionService {
         nodeIds.push(...group.nodes);
 
         logger.info(
-          `Expanded group ${groupId} (${group.name}) to ${group.nodes.length} nodes`,
+          `Expanded group ${groupId} (${group.name}) to ${String(group.nodes.length)} nodes`,
         );
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -618,7 +667,7 @@ export class BatchExecutionService {
       throw new Error(errorMessage);
     }
 
-    logger.info(`Validated ${nodeIds.length} node IDs successfully`);
+    logger.info(`Validated ${String(nodeIds.length)} node IDs successfully`);
   }
 
   /**
@@ -646,7 +695,7 @@ export class BatchExecutionService {
 
       // Determine which integration tool to use
       // Use the tool from request if specified, otherwise default to bolt
-      const integrationTool = request.tool || "bolt";
+      const integrationTool = request.tool ?? "bolt";
 
       // Execute action through IntegrationManager
       const result = await this.integrationManager.executeAction(integrationTool, {

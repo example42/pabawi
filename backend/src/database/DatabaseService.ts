@@ -155,7 +155,7 @@ export class DatabaseService {
       const appliedCount = await migrationRunner.runPendingMigrations();
 
       if (appliedCount > 0) {
-        console.log(`Applied ${appliedCount} database migration(s)`);
+        console.warn(`Applied ${String(appliedCount)} database migration(s)`);
       }
     } catch (error) {
       throw new Error(
@@ -214,7 +214,7 @@ export class DatabaseService {
    */
   public executePrepared(
     statement: sqlite3.Statement,
-    params: any[] = []
+    params: unknown[] = []
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       statement.run(params, (err) => {
@@ -233,7 +233,7 @@ export class DatabaseService {
    */
   public finalizeStatement(statement: sqlite3.Statement): Promise<void> {
     return new Promise((resolve, reject) => {
-      statement.finalize((err) => {
+      statement.finalize((err: Error | null) => {
         if (err) {
           reject(err);
         } else {
@@ -275,8 +275,8 @@ export class DatabaseService {
    * Get migration status (applied and pending migrations)
    */
   public async getMigrationStatus(): Promise<{
-    applied: Array<{ id: string; name: string; appliedAt: string }>;
-    pending: Array<{ id: string; filename: string }>;
+    applied: { id: string; name: string; appliedAt: string }[];
+    pending: { id: string; filename: string }[];
   }> {
     if (!this.db) {
       throw new Error("Database not initialized. Call initialize() first.");

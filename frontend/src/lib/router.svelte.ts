@@ -46,8 +46,8 @@ class Router {
     this._intendedPath = path;
   }
 
-  navigateToIntendedOrDefault(defaultPath: string = '/'): void {
-    const path = this._intendedPath || defaultPath;
+  navigateToIntendedOrDefault(defaultPath = '/'): void {
+    const path = this._intendedPath ?? defaultPath;
     this._intendedPath = null;
     this.navigate(path);
   }
@@ -83,7 +83,7 @@ class Router {
   }
 
   findRoute(
-    routes: Record<string, ComponentType | RouteConfig>,
+    routes: Record<string, ComponentType>,
   ): { component: ComponentType; params: Record<string, string>; config?: RouteConfig } | null {
     for (const [pattern, routeOrConfig] of Object.entries(routes)) {
       const { match, params } = this.matchRoute(pattern, this.currentPath);

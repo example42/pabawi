@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { PermissionService } from "../services/PermissionService";
-import { DatabaseService } from "../database/DatabaseService";
+import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
@@ -48,8 +48,9 @@ export function createPermissionsRouter(
    */
   router.post(
     "/",
-    authMiddleware,
-    rbacMiddleware("permissions", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("permissions", "write")),
+
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing create permission request", {
         component: "PermissionsRouter",
@@ -146,8 +147,9 @@ export function createPermissionsRouter(
    */
   router.get(
     "/",
-    authMiddleware,
-    rbacMiddleware("permissions", "read"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("permissions", "read")),
+
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing list permissions request", {
         component: "PermissionsRouter",

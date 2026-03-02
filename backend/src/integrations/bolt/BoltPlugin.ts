@@ -55,7 +55,7 @@ export class BoltPlugin
         await exec("bolt --version", { timeout: 5000 });
         this.log("Bolt command is accessible");
         complete({ success: true });
-      } catch (cmdError) {
+      } catch {
         // Bolt command not available
         this.log("Bolt command not found - plugin will report as unhealthy");
         complete({ success: false, error: "bolt command not available" });

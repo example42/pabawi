@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { RoleService } from "../services/RoleService";
-import { DatabaseService } from "../database/DatabaseService";
+import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
@@ -55,8 +55,8 @@ export function createRolesRouter(
    */
   router.post(
     "/",
-    authMiddleware,
-    rbacMiddleware("roles", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("roles", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing create role request", {
         component: "RolesRouter",
@@ -150,8 +150,8 @@ export function createRolesRouter(
    */
   router.get(
     "/",
-    authMiddleware,
-    rbacMiddleware("roles", "read"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("roles", "read")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing list roles request", {
         component: "RolesRouter",
@@ -239,8 +239,8 @@ export function createRolesRouter(
    */
   router.get(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("roles", "read"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("roles", "read")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing get role by ID request", {
         component: "RolesRouter",
@@ -314,8 +314,8 @@ export function createRolesRouter(
    */
   router.put(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("roles", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("roles", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing update role request", {
         component: "RolesRouter",
@@ -442,8 +442,8 @@ export function createRolesRouter(
    */
   router.delete(
     "/:id",
-    authMiddleware,
-    rbacMiddleware("roles", "admin"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("roles", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing delete role request", {
         component: "RolesRouter",
@@ -528,8 +528,8 @@ export function createRolesRouter(
    */
   router.post(
     "/:id/permissions/:permissionId",
-    authMiddleware,
-    rbacMiddleware("roles", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("roles", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing assign permission to role request", {
         component: "RolesRouter",
@@ -648,8 +648,8 @@ export function createRolesRouter(
    */
   router.delete(
     "/:id/permissions/:permissionId",
-    authMiddleware,
-    rbacMiddleware("roles", "write"),
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("roles", "write")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing remove permission from role request", {
         component: "RolesRouter",

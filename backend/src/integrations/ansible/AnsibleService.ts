@@ -347,7 +347,7 @@ export class AnsibleService {
    * Get groups from Ansible inventory
    * Parses the inventory and returns groups with their member nodes
    */
-  public async getGroups(): Promise<Array<{
+  public async getGroups(): Promise<{
     id: string;
     name: string;
     source: string;
@@ -360,7 +360,7 @@ export class AnsibleService {
       hierarchy?: string[];
       [key: string]: unknown;
     };
-  }>> {
+  }[]> {
     const args = [
       "-i",
       this.inventoryPath,
@@ -376,7 +376,7 @@ export class AnsibleService {
 
       // Parse JSON output from ansible-inventory
       const inventoryData = JSON.parse(exec.stdout) as Record<string, unknown>;
-      const groups: Array<{
+      const groups: {
         id: string;
         name: string;
         source: string;
@@ -389,7 +389,7 @@ export class AnsibleService {
           hierarchy?: string[];
           [key: string]: unknown;
         };
-      }> = [];
+      }[] = [];
 
       // Extract groups from inventory structure
       // ansible-inventory --list returns: { _meta: {...}, groupName: { hosts: [...], children: [...], vars: {...} } }
@@ -416,7 +416,7 @@ export class AnsibleService {
         const children = Array.isArray(group.children) ? group.children : [];
 
         // Get group variables
-        const vars = typeof group.vars === "object" && group.vars !== null ? group.vars : undefined;
+        const vars = typeof group.vars === "object" ? group.vars : undefined;
 
         // Build metadata
         const metadata: {
@@ -427,7 +427,7 @@ export class AnsibleService {
         } = {};
 
         if (vars && Object.keys(vars).length > 0) {
-          metadata.variables = vars as Record<string, unknown>;
+          metadata.variables = vars;
         }
 
         if (children.length > 0) {

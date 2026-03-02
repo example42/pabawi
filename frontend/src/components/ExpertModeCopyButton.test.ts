@@ -142,7 +142,7 @@ describe('ExpertModeCopyButton Component', () => {
       const button = screen.getByRole('button');
       await fireEvent.click(button);
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(navigator.clipboard.writeText).toHaveBeenCalledOnce();
       expect(toast.showSuccess).toHaveBeenCalledWith(
         'Debug information copied to clipboard',
@@ -574,7 +574,7 @@ describe('ExpertModeCopyButton Component', () => {
       const button = screen.getByRole('button');
       await fireEvent.click(button);
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method, @typescript-eslint/no-deprecated
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
       expect(document.execCommand).toHaveBeenCalledWith('copy');
       expect(toast.showSuccess).toHaveBeenCalled();
     });
@@ -950,7 +950,7 @@ describe('ExpertModeCopyButton Component', () => {
       const button = screen.getByRole('button');
       await fireEvent.click(button);
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(navigator.clipboard.writeText).toHaveBeenCalledOnce();
       expect(toast.showSuccess).toHaveBeenCalled();
     });
@@ -989,7 +989,7 @@ describe('ExpertModeCopyButton Component', () => {
       const copyButton = screen.getByRole('button', { name: /Copy to Clipboard/i });
       await fireEvent.click(copyButton);
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(navigator.clipboard.writeText).toHaveBeenCalled();
       expect(toast.showSuccess).toHaveBeenCalled();
     });

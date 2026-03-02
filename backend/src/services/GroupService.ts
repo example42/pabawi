@@ -1,4 +1,4 @@
-import { Database } from 'sqlite3';
+import type { Database } from 'sqlite3';
 import { randomUUID } from 'crypto';
 
 /**
@@ -188,7 +188,7 @@ export class GroupService {
 
     // Build update query dynamically
     const updates: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (data.name !== undefined) {
       updates.push('name = ?');
@@ -249,12 +249,12 @@ export class GroupService {
    * @returns Paginated list of groups
    */
   public async listGroups(filters?: GroupFilters): Promise<PaginatedResult<Group>> {
-    const limit = filters?.limit || 50;
-    const offset = filters?.offset || 0;
+    const limit = filters?.limit ?? 50;
+    const offset = filters?.offset ?? 0;
 
     // Build WHERE clause
     const conditions: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (filters?.search) {
       conditions.push('(name LIKE ? OR description LIKE ?)');
@@ -269,7 +269,7 @@ export class GroupService {
       `SELECT COUNT(*) as count FROM groups ${whereClause}`,
       params
     );
-    const total = countResult?.count || 0;
+    const total = countResult?.count ?? 0;
 
     // Get paginated results
     const groups = await this.allQuery<Group>(
@@ -312,7 +312,7 @@ export class GroupService {
       `SELECT COUNT(*) as count FROM user_groups WHERE groupId = ?`,
       [groupId]
     );
-    return result?.count || 0;
+    return result?.count ?? 0;
   }
   /**
      * Assign role to group
@@ -396,7 +396,7 @@ export class GroupService {
   /**
    * Helper: Run a query that doesn't return rows
    */
-  private runQuery(sql: string, params: any[] = []): Promise<void> {
+  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, (err) => {
         if (err) reject(err);
@@ -408,11 +408,11 @@ export class GroupService {
   /**
    * Helper: Get a single row
    */
-  private getQuery<T>(sql: string, params: any[] = []): Promise<T | null> {
+  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
     return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
+      this.db.get(sql, params, (err: Error | null, row: unknown) => {
         if (err) reject(err);
-        else resolve(row as T || null);
+        else resolve((row as T) ?? null);
       });
     });
   }
@@ -420,11 +420,11 @@ export class GroupService {
   /**
    * Helper: Get all rows
    */
-  private allQuery<T>(sql: string, params: any[] = []): Promise<T[]> {
+  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
     return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
+      this.db.all(sql, params, (err: Error | null, rows: unknown[]) => {
         if (err) reject(err);
-        else resolve(rows as T[] || []);
+        else resolve(rows as T[]);
       });
     });
   }

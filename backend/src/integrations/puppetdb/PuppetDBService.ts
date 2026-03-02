@@ -647,10 +647,6 @@ export class PuppetDBService
         }
 
         const client = this.client;
-        if (!client) {
-          complete({ error: 'client not initialized' });
-          return [];
-        }
 
         const groups: NodeGroup[] = [];
 
@@ -664,7 +660,7 @@ export class PuppetDBService
             const envGroups = this.createEnvironmentGroups(envResult as PuppetDBNode[]);
             groups.push(...envGroups);
           }
-        } catch (error) {
+        } catch {
           this.log("Failed to query nodes for environment grouping", "warn");
         }
 
@@ -678,10 +674,10 @@ export class PuppetDBService
           });
 
           if (Array.isArray(osResult)) {
-            const osGroups = this.createOSFamilyGroups(osResult as Array<{ certname: string; "os.family": string }>);
+            const osGroups = this.createOSFamilyGroups(osResult as { certname: string; "os.family": string }[]);
             groups.push(...osGroups);
           }
-        } catch (error) {
+        } catch {
           this.log("Failed to query nodes for OS family grouping", "warn");
         }
 
@@ -741,11 +737,12 @@ export class PuppetDBService
       // Group nodes by environment
       for (const node of nodes) {
         const env = (node.catalog_environment as string) || (node.report_environment as string) || 'unknown';
-        if (!envMap.has(env)) {
-          envMap.set(env, []);
+        const existing = envMap.get(env);
+        if (existing) {
+          existing.push(node.certname);
+        } else {
+          envMap.set(env, [node.certname]);
         }
-        // Use certname directly to match node IDs from getInventory
-        envMap.get(env)!.push(node.certname);
       }
 
       // Create NodeGroup objects
@@ -773,17 +770,18 @@ export class PuppetDBService
      * Create OS family-based groups from PuppetDB query results
      * @private
      */
-    private createOSFamilyGroups(results: Array<{ certname: string; "os.family": string }>): NodeGroup[] {
+    private createOSFamilyGroups(results: { certname: string; "os.family": string }[]): NodeGroup[] {
       const osMap = new Map<string, string[]>();
 
       // Group nodes by OS family
       for (const result of results) {
         const osFamily = result["os.family"] || 'unknown';
-        if (!osMap.has(osFamily)) {
-          osMap.set(osFamily, []);
+        const existingOs = osMap.get(osFamily);
+        if (existingOs) {
+          existingOs.push(result.certname);
+        } else {
+          osMap.set(osFamily, [result.certname]);
         }
-        // Use certname directly to match node IDs from getInventory
-        osMap.get(osFamily)!.push(result.certname);
       }
 
       // Create NodeGroup objects

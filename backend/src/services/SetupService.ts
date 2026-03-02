@@ -1,4 +1,4 @@
-import { Database } from "sqlite3";
+import type { Database } from "sqlite3";
 import { LoggerService } from "./LoggerService";
 
 const logger = new LoggerService();
@@ -38,7 +38,7 @@ export class SetupService {
     return new Promise((resolve, reject) => {
       this.db.get(
         "SELECT COUNT(*) as count FROM users WHERE isAdmin = 1",
-        (err, row: any) => {
+        (err, row: { count: number } | undefined) => {
           if (err) {
             logger.error("Failed to check setup status", {
               component: "SetupService",
@@ -46,7 +46,7 @@ export class SetupService {
             }, err);
             reject(err);
           } else {
-            resolve(row.count > 0);
+            resolve((row?.count ?? 0) > 0);
           }
         }
       );
@@ -85,7 +85,7 @@ export class SetupService {
    */
   public async saveConfig(config: SetupConfig): Promise<void> {
     await this.setConfigValue("allow_self_registration", config.allowSelfRegistration ? "true" : "false");
-    await this.setConfigValue("default_new_user_role", config.defaultNewUserRole || "");
+    await this.setConfigValue("default_new_user_role", config.defaultNewUserRole ?? "");
 
     logger.info("Setup configuration saved", {
       component: "SetupService",
@@ -102,7 +102,7 @@ export class SetupService {
       this.db.get(
         "SELECT value FROM config WHERE key = ?",
         [key],
-        (err, row: any) => {
+        (err, row: { value: string } | undefined) => {
           if (err) {
             logger.error("Failed to get config value", {
               component: "SetupService",
@@ -111,7 +111,7 @@ export class SetupService {
             }, err);
             reject(err);
           } else {
-            resolve(row?.value || defaultValue);
+            resolve(row?.value ?? defaultValue);
           }
         }
       );

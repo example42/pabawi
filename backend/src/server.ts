@@ -21,6 +21,7 @@ import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
 import configRouter from "./routes/config";
+import { asyncHandler } from "./routes/asyncHandler";
 import { createAuthRouter } from "./routes/auth";
 import { createSetupRouter } from "./routes/setup";
 import { createUsersRouter } from "./routes/users";
@@ -842,8 +843,11 @@ async function startServer(): Promise<Express> {
     app.use("/api/auth", authRateLimitMiddleware, createAuthRouter(databaseService));
 
     // Create authentication and RBAC middleware instances
-    const authMiddleware = createAuthMiddleware(databaseService.getConnection());
-    const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+    // Wrap async middleware with asyncHandler to satisfy Express's void return expectation
+    const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getConnection()));
+    const rawRbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+    const rbacMiddleware = (resource: string, action: string): express.RequestHandler =>
+      asyncHandler(rawRbacMiddleware(resource, action));
 
     // Create rate limiting middleware for authenticated routes
     const rateLimitMiddleware = createRateLimitMiddleware();

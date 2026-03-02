@@ -196,7 +196,7 @@ describe('ActionSelector', () => {
 
   describe('Visual Feedback', () => {
     it('shows checkmark icon for selected action in single mode', () => {
-      const { container } = render(ActionSelector, {
+      render(ActionSelector, {
         props: {
           mode: 'single',
           selectedAction: 'execute-command',
@@ -210,7 +210,7 @@ describe('ActionSelector', () => {
     });
 
     it('shows checkmark icon for selected actions in multiple mode', () => {
-      const { container } = render(ActionSelector, {
+      render(ActionSelector, {
         props: {
           mode: 'multiple',
           selectedActions: ['execute-command', 'execute-task'],
