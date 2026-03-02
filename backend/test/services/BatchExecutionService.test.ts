@@ -754,6 +754,7 @@ describe("BatchExecutionService - createBatch", () => {
     // Mock dependencies
     mockExecutionQueue = {
       acquire: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
     } as unknown as ExecutionQueue;
 
     mockExecutionRepository = {
@@ -761,6 +762,7 @@ describe("BatchExecutionService - createBatch", () => {
         const { randomUUID } = await import("crypto");
         return randomUUID();
       }),
+      update: vi.fn().mockResolvedValue(undefined),
     } as unknown as ExecutionRepository;
 
     mockIntegrationManager = {
@@ -776,6 +778,17 @@ describe("BatchExecutionService - createBatch", () => {
             name: "web-servers",
             source: "bolt",
             nodes: ["node1", "node2"],
+          },
+        ],
+      }),
+      executeAction: vi.fn().mockResolvedValue({
+        status: "success",
+        completedAt: new Date().toISOString(),
+        results: [
+          {
+            nodeId: "node1",
+            status: "success",
+            duration: 100,
           },
         ],
       }),

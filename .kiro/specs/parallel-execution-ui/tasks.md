@@ -89,14 +89,54 @@ This implementation plan covers the development of multi-node and group-based pa
 - [x] 4. Checkpoint - Ensure backend tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Implement ParallelExecutionModal component
-  - [x] 5.1 Create ParallelExecutionModal.svelte with basic structure
+- [x] 5. Extract and create reusable action components
+  - [x] 5.1 Create ActionSelector component
+    - Extract action type selection UI (Install Software, Execute Playbook, Execute Command, Execute Task)
+    - Support single and multiple action type display modes
+    - Emit action type selection events
+    - _Requirements: 2.1_
+  
+  - [x] 5.2 Create ExecuteCommandForm component
+    - Extract command execution form from NodeDetailPage
+    - Include execution tool selector (bolt/ansible/ssh)
+    - Include command input field with whitelist display
+    - Include parameters input (optional)
+    - Support both single-node and multi-node contexts
+    - Emit form data on submission
+    - _Requirements: 2.1, 2.2_
+  
+  - [x] 5.3 Create InstallSoftwareForm component
+    - Extract software installation form from NodeDetailPage
+    - Include package name input
+    - Include package manager selector if applicable
+    - Support both single-node and multi-node contexts
+    - Emit form data on submission
+    - _Requirements: 2.1, 2.2_
+  
+  - [x] 5.4 Create ExecutePlaybookForm component
+    - Extract Ansible playbook execution form from NodeDetailPage
+    - Include playbook selector/input
+    - Include extra vars input (optional)
+    - Support both single-node and multi-node contexts
+    - Emit form data on submission
+    - _Requirements: 2.1, 2.2_
+  
+  - [x] 5.5 Create ExecuteTaskForm component
+    - Extract task execution form from NodeDetailPage
+    - Include task selector/input
+    - Include task parameters input (optional)
+    - Support both single-node and multi-node contexts
+    - Emit form data on submission
+    - _Requirements: 2.1, 2.2_
+
+- [x] 6. Implement ParallelExecutionModal component
+  - [x] 6.1 Create ParallelExecutionModal.svelte with basic structure
     - Set up modal dialog with open/close props
     - Create state for selected nodes, groups, action type, and parameters
     - Add loading and error state management
     - _Requirements: 1.1, 9.2_
   
-  - [x] 5.2 Implement target selection UI
+  - [x] 6.2 Implement target selection UI
     - Fetch nodes and groups from inventory API
     - Display nodes and groups with checkboxes for multi-select
     - Implement search and filtering by name and source
@@ -104,116 +144,156 @@ This implementation plan covers the development of multi-node and group-based pa
     - Display total selected target count (deduplicated)
     - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.9_
   
-  - [x] 5.3 Implement action configuration UI
-    - Add action type selector (command/task/plan)
-    - Add action input field
-    - Add parameters input (JSON or form fields)
-    - Enable execution button only when targets and action are selected
+  - [x] 6.3 Integrate reusable action components
+    - Use ActionSelector for action type selection
+    - Conditionally render ExecuteCommandForm, InstallSoftwareForm, ExecutePlaybookForm, or ExecuteTaskForm
+    - Handle form data from child components
+    - Enable execution button only when targets and action are configured
     - _Requirements: 2.1, 2.2_
   
-  - [x] 5.4 Implement execution initiation
+  - [x] 6.4 Implement execution initiation
     - Validate selections and action
     - Send POST request to /api/executions/batch
     - Handle success response (display batch ID, call onSuccess)
     - Handle error responses (display error messages)
     - _Requirements: 2.3, 2.9, 2.10, 10.1, 10.2_
   
-  - [x] 5.5 Add accessibility and responsiveness
+  - [x] 6.5 Add accessibility and responsiveness
     - Implement keyboard navigation for all controls
     - Add ARIA labels for screen readers
     - Make layout responsive for mobile/tablet/desktop
     - Add focus management
     - _Requirements: 14.1, 14.2, 14.3, 14.6_
 
-- [x] 5.6 Write component tests for ParallelExecutionModal
+- [x] 6.6 Write component tests for ParallelExecutionModal
   - Test target selection and deduplication
-  - Test action configuration
+  - Test action configuration with different action types
   - Test execution initiation flow
   - _Requirements: 15.4_
 
-- [ ] 6. Implement BatchProgressPanel component
-  - [x] 6.1 Create BatchProgressPanel.svelte with polling logic
+- [x] 7. Add action execution to NodeGroupDetailPage
+  - [x] 7.1 Add "Execute Action" button to NodeGroupDetailPage
+    - Add button to group detail page header/actions area
+    - Position near other group management controls
+    - _Requirements: 9.1_
+  
+  - [x] 7.2 Create GroupActionModal component
+    - Create modal similar to ParallelExecutionModal
+    - Pre-populate with group's node IDs
+    - Display group name and member count
+    - Show list of target nodes (read-only, from group membership)
+    - _Requirements: 1.1, 9.2_
+  
+  - [x] 7.3 Integrate reusable action components in GroupActionModal
+    - Use ActionSelector for action type selection
+    - Conditionally render ExecuteCommandForm, InstallSoftwareForm, ExecutePlaybookForm, or ExecuteTaskForm
+    - Handle form data from child components
+    - Enable execution button only when action is configured
+    - _Requirements: 2.1, 2.2_
+  
+  - [x] 7.4 Implement execution initiation from group page
+    - Validate action configuration
+    - Send POST request to /api/executions/batch with group's node IDs
+    - Handle success response (navigate to batch execution view or show progress)
+    - Handle error responses (display error messages)
+    - _Requirements: 2.3, 2.9, 2.10, 10.1, 10.2_
+  
+  - [x] 7.5 Add accessibility and responsiveness to GroupActionModal
+    - Implement keyboard navigation
+    - Add ARIA labels for screen readers
+    - Make layout responsive
+    - Add focus management
+    - _Requirements: 14.1, 14.2, 14.3, 14.6_
+
+- [x] 7.6 Write component tests for GroupActionModal
+  - Test modal opening with pre-populated group nodes
+  - Test action configuration with different action types
+  - Test execution initiation flow
+  - _Requirements: 15.4_
+
+- [x] 8. Implement BatchProgressPanel component
+  - [x] 8.1 Create BatchProgressPanel.svelte with polling logic
     - Set up component with batchId prop
     - Implement polling with exponential backoff (2s → 4s → 8s)
     - Fetch batch status from GET /api/executions/batch/:batchId
     - Stop polling when all executions complete
     - _Requirements: 3.1, 3.6, 11.5_
   
-  - [x] 6.2 Implement progress display
+  - [x] 8.2 Implement progress display
     - Show total targets and current status counts (queued/running/completed/failed)
     - Display progress bar with percentage
     - List all target nodes with individual status indicators
     - Show execution duration for completed targets
     - _Requirements: 3.2, 3.3, 3.4, 3.7_
   
-  - [x] 6.3 Implement status filtering and cancellation
+  - [x] 8.3 Implement status filtering and cancellation
     - Add filter dropdown for status (all/running/success/failed)
     - Add cancel button to stop remaining executions
     - Send POST request to /api/executions/batch/:batchId/cancel
     - Display completion summary when all executions finish
     - _Requirements: 3.8, 3.9, 3.10, 8.1, 8.7_
   
-  - [x] 6.4 Add accessibility features
+  - [x] 8.4 Add accessibility features
     - Use semantic HTML for status indicators
     - Add ARIA labels and live regions for status updates
     - Support keyboard navigation
     - Use color and icons together for status
     - _Requirements: 14.4, 14.5, 14.8, 14.10_
 
-- [x] 6.5 Write component tests for BatchProgressPanel
+- [x] 8.5 Write component tests for BatchProgressPanel
   - Test polling behavior and backoff
   - Test status updates and filtering
   - Test cancellation flow
   - _Requirements: 15.5, 15.9_
 
-- [ ] 7. Implement AggregatedResultsView component
-  - [x] 7.1 Create AggregatedResultsView.svelte with data fetching
+- [x] 9. Implement AggregatedResultsView component
+  - [x] 9.1 Create AggregatedResultsView.svelte with data fetching
     - Set up component with batchId prop
     - Fetch batch status from API
     - Display summary statistics (total/success/failed counts)
     - _Requirements: 4.1, 4.2_
   
-  - [x] 7.2 Implement results list with expand/collapse
+  - [x] 9.2 Implement results list with expand/collapse
     - Display list of all target executions
     - Show node name, status, and duration for each
     - Implement expand/collapse for detailed output (stdout/stderr/exit code)
     - Highlight failed executions with visual indicators
     - _Requirements: 4.3, 4.4, 4.7_
   
-  - [x] 7.3 Implement sorting and filtering
+  - [x] 9.3 Implement sorting and filtering
     - Add sort controls for node name, status, and duration
     - Add filter dropdown for status (all/success/failed)
     - Implement sorting and filtering logic
     - _Requirements: 4.5, 4.6_
   
-  - [x] 7.4 Implement export functionality
+  - [x] 9.4 Implement export functionality
     - Add export button with format selection (JSON/CSV)
     - Generate JSON export with full execution details
     - Generate CSV export with summary data
     - Trigger download in browser
     - _Requirements: 4.8_
   
-  - [x] 7.5 Add success/failure messaging
+  - [x] 9.5 Add success/failure messaging
     - Display success message when all executions succeed
     - Display warning message with failure count when any fail
     - _Requirements: 4.9, 4.10_
   
-  - [x] 7.6 Add accessibility features
+  - [x] 9.6 Add accessibility features
     - Support keyboard navigation for expand/collapse
     - Use semantic HTML and ARIA labels
     - Support high contrast mode
     - _Requirements: 14.5, 14.9_
 
-- [x] 7.7 Write component tests for AggregatedResultsView
+- [x] 9.7 Write component tests for AggregatedResultsView
   - Test results display and expansion
   - Test sorting and filtering
   - Test export functionality
   - _Requirements: 15.5_
 
-- [x] 8. Checkpoint - Ensure frontend component tests pass
+- [x] 10. Checkpoint - Ensure frontend component tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Integrate components into ExecutionsPage
+- [x] 11. Integrate components into ExecutionsPage
   - [x] 9.1 Add "New Parallel Execution" button to ExecutionsPage
     - Add button to page header
     - Open ParallelExecutionModal on click
@@ -236,7 +316,7 @@ This implementation plan covers the development of multi-node and group-based pa
     - Reuse StatusBadge and ExecutionList components
     - _Requirements: 9.7, 9.8_
 
-- [ ] 10. Implement performance optimizations
+- [x] 10. Implement performance optimizations
   - [x] 10.1 Add virtual scrolling to target selector
     - Implement virtual scrolling for lists with >100 items
     - _Requirements: 11.1_
@@ -259,7 +339,7 @@ This implementation plan covers the development of multi-node and group-based pa
     - Cache inventory data with appropriate TTL
     - _Requirements: 11.10_
 
-- [ ] 11. Implement error handling and validation
+- [x] 11. Implement error handling and validation
   - [x] 11.1 Add frontend validation
     - Disable execution button when no targets selected
     - Display inline validation errors
@@ -279,7 +359,7 @@ This implementation plan covers the development of multi-node and group-based pa
     - Include error stack traces in debug mode
     - _Requirements: 10.8, 10.9, 10.10_
 
-- [ ] 12. Implement logging and audit trail
+- [x] 12. Implement logging and audit trail
   - [x] 12.1 Add batch execution logging
     - Log batch creation with user ID, batch ID, target count, action type
     - Log individual execution start and completion
@@ -299,7 +379,7 @@ This implementation plan covers the development of multi-node and group-based pa
     - Support filtering logs by batch ID
     - _Requirements: 12.10_
 
-- [ ] 13. Integrate with SSH service for execution
+- [x] 13. Integrate with SSH service for execution
   - [x] 13.1 Use SSHService.executeOnMultipleHosts for SSH targets
     - Call executeOnMultipleHosts for SSH transport targets
     - Respect SSH service concurrency limits
@@ -319,7 +399,7 @@ This implementation plan covers the development of multi-node and group-based pa
     - Log SSH execution details for debugging
     - _Requirements: 13.9_
 
-- [ ] 14. Final integration and testing
+- [x] 14. Final integration and testing
   - [x] 14.1 Create end-to-end test scenarios
     - Test complete flow from target selection to results display
     - Test batch execution with mixed nodes and groups

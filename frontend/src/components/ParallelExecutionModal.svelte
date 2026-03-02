@@ -1,5 +1,11 @@
 <script lang="ts">
   import LoadingSpinner from './LoadingSpinner.svelte';
+  import IntegrationBadge from './IntegrationBadge.svelte';
+  import ActionSelector from './ActionSelector.svelte';
+  import ExecuteCommandForm from './ExecuteCommandForm.svelte';
+  import InstallSoftwareForm from './InstallSoftwareForm.svelte';
+  import ExecutePlaybookForm from './ExecutePlaybookForm.svelte';
+  import ExecuteTaskForm from './ExecuteTaskForm.svelte';
   import { get, post } from '../lib/api';
 
   interface Node {
@@ -24,6 +30,18 @@
     groups: NodeGroup[];
   }
 
+  interface CommandWhitelistConfig {
+    allowAll: boolean;
+    whitelist: string[];
+    matchMode: 'exact' | 'prefix';
+  }
+
+  interface IntegrationStatus {
+    name: string;
+    status: 'connected' | 'degraded' | 'not_configured' | 'error' | 'disconnected';
+    type: 'execution' | 'information' | 'both';
+  }
+
   interface Props {
     open: boolean;
     onClose: () => void;
@@ -37,6 +55,11 @@
   let groups = $state<NodeGroup[]>([]);
   let inventoryLoading = $state<boolean>(false);
   let inventoryError = $state<string | null>(null);
+
+  // State for command whitelist and execution tools
+  let commandWhitelist = $state<CommandWhitelistConfig | null>(null);
+  let availableExecutionTools = $state<Array<'bolt' | 'ansible' | 'ssh'>>(['bolt']);
+  let executionTool = $state<'bolt' | 'ansible' | 'ssh'>('bolt');
 
   // Focus management
   let modalRef = $state<HTMLDivElement | null>(null);
@@ -52,11 +75,9 @@
   let viewMode = $state<"nodes" | "groups">("nodes");
 
   // State for action configuration
-  let actionType = $state<"command" | "task" | "plan">("command");
-  let actionValue = $state<string>("");
-  let parameters = $state<Record<string, unknown>>({});
-  let parametersInput = $state<string>("");
-  let parametersError = $state<string | null>(null);
+  type ActionType = 'install-software' | 'execute-playbook' | 'execute-command' | 'execute-task';
+  let selectedAction = $state<ActionType>('execute-command');
+  let actionFormData = $state<Record<string, unknown> | null>(null);
 
   // State for loading and errors
   let loading = $state<boolean>(false);
@@ -175,20 +196,29 @@
         firstElement?.focus();
       }
     }
+
+    // Keyboard shortcuts for view mode switching (Alt+N for nodes, Alt+G for groups)
+    if (event.altKey && !loading) {
+      if (event.key === 'n' || event.key === 'N') {
+        event.preventDefault();
+        viewMode = 'nodes';
+      } else if (event.key === 'g' || event.key === 'G') {
+        event.preventDefault();
+        viewMode = 'groups';
+      }
+    }
   }
 
   function resetForm(): void {
     selectedNodeIds = [];
     selectedGroupIds = [];
-    actionType = "command";
-    actionValue = "";
-    parameters = {};
-    parametersInput = "";
-    parametersError = null;
+    selectedAction = 'execute-command';
+    actionFormData = null;
     error = null;
     searchQuery = "";
     sourceFilter = "all";
     viewMode = "nodes";
+    executionTool = availableExecutionTools[0] ?? 'bolt';
   }
 
   // Fetch inventory data
@@ -207,6 +237,46 @@
       groups = [];
     } finally {
       inventoryLoading = false;
+    }
+  }
+
+  // Fetch command whitelist configuration
+  async function fetchCommandWhitelist(): Promise<void> {
+    try {
+      const data = await get<{ commandWhitelist: CommandWhitelistConfig }>(
+        '/api/config',
+        { maxRetries: 2 }
+      );
+
+      commandWhitelist = data.commandWhitelist;
+    } catch (err) {
+      console.error('[ParallelExecutionModal] Error fetching command whitelist:', err);
+    }
+  }
+
+  // Fetch available execution tools
+  async function fetchExecutionTools(): Promise<void> {
+    try {
+      const data = await get<{ integrations: IntegrationStatus[] }>('/api/integrations/status', {
+        maxRetries: 1,
+      });
+
+      const executionIntegrations = data.integrations.filter(
+        (integration) => (integration.type === 'execution' || integration.type === 'both')
+          && (integration.status === 'connected' || integration.status === 'degraded')
+          && (integration.name === 'bolt' || integration.name === 'ansible' || integration.name === 'ssh'),
+      ) as Array<IntegrationStatus & { name: 'bolt' | 'ansible' | 'ssh' }>;
+
+      if (executionIntegrations.length > 0) {
+        availableExecutionTools = executionIntegrations.map((integration) => integration.name);
+      }
+
+      if (!availableExecutionTools.includes(executionTool)) {
+        executionTool = availableExecutionTools[0] ?? 'bolt';
+      }
+    } catch {
+      availableExecutionTools = ['bolt'];
+      executionTool = 'bolt';
     }
   }
 
@@ -259,9 +329,37 @@
     });
   }
 
-  // Watch for modal open to fetch inventory
+  // Handle action selection change
+  function handleActionSelect(action: ActionType): void {
+    selectedAction = action;
+    actionFormData = null;
+  }
+
+  // Handle form submission from action components
+  function handleActionFormSubmit(data: Record<string, unknown>): void {
+    actionFormData = data;
+  }
+
+  // Map action types to batch execution types
+  function mapActionTypeToBatchType(action: ActionType): 'command' | 'task' | 'plan' {
+    switch (action) {
+      case 'execute-command':
+        return 'command';
+      case 'execute-task':
+        return 'task';
+      case 'execute-playbook':
+        return 'plan';
+      case 'install-software':
+        return 'task'; // Software installation uses tasks
+      default:
+        return 'command';
+    }
+  }
+
+  // Watch for modal open to fetch inventory and configuration
   // Use untrack to prevent infinite loops
   let hasLoadedInventory = $state<boolean>(false);
+  let hasLoadedConfig = $state<boolean>(false);
 
   $effect(() => {
     if (open && !hasLoadedInventory && nodes.length === 0 && !inventoryLoading) {
@@ -269,9 +367,16 @@
       fetchInventory();
     }
 
-    // Reset flag when modal closes
+    if (open && !hasLoadedConfig) {
+      hasLoadedConfig = true;
+      fetchCommandWhitelist();
+      fetchExecutionTools();
+    }
+
+    // Reset flags when modal closes
     if (!open) {
       hasLoadedInventory = false;
+      hasLoadedConfig = false;
     }
   });
 
@@ -299,78 +404,42 @@
     };
   });
 
-  // Validate and parse parameters JSON
-  function validateParameters(): boolean {
-    parametersError = null;
-
-    // If parameters input is empty, that's valid (no parameters)
-    if (!parametersInput.trim()) {
-      parameters = {};
-      return true;
+  async function handleSubmit(event?: Event): Promise<void> {
+    if (event) {
+      event.preventDefault();
     }
 
-    try {
-      const parsed = JSON.parse(parametersInput);
-
-      // Ensure it's an object
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        parametersError = "Parameters must be a JSON object";
-        return false;
-      }
-
-      parameters = parsed;
-      return true;
-    } catch (err) {
-      parametersError = err instanceof Error ? err.message : "Invalid JSON format";
-      return false;
-    }
-  }
-
-  // Watch parameters input and validate on change
-  $effect(() => {
-    // Read parametersInput to track it
-    const input = parametersInput;
-
-    if (input.trim()) {
-      validateParameters();
-    } else {
-      parametersError = null;
-      parameters = {};
-    }
-  });
-
-  async function handleSubmit(): Promise<void> {
     // Validation
     if (totalTargetCount() === 0) {
       error = "Please select at least one target node or group";
       return;
     }
 
-    if (!actionValue.trim()) {
-      error = "Please enter an action";
+    // Get form data from the action form component
+    if (!actionFormData) {
+      error = "Please configure the action";
       return;
     }
 
-    // Validate parameters if provided
-    if (parametersInput.trim() && !validateParameters()) {
-      error = "Invalid parameters: " + parametersError;
-      return;
-    }
+    const formData = actionFormData;
 
     loading = true;
     error = null;
 
     try {
-      // Build request body
+      const batchType = mapActionTypeToBatchType(selectedAction);
+
+      // Build request body based on action type
       const requestBody: {
         targetNodeIds?: string[];
         targetGroupIds?: string[];
         type: "command" | "task" | "plan";
         action: string;
         parameters?: Record<string, unknown>;
+        tool?: 'bolt' | 'ansible' | 'ssh';
       } = {
-        type: actionType,
-        action: actionValue,
+        type: batchType,
+        action: '', // Will be set based on action type
       };
 
       // Add target node IDs if any selected
@@ -383,9 +452,59 @@
         requestBody.targetGroupIds = selectedGroupIds;
       }
 
-      // Add parameters if provided
-      if (Object.keys(parameters).length > 0) {
-        requestBody.parameters = parameters;
+      // Configure action based on type
+      if (selectedAction === 'execute-command') {
+        const commandData = formData as { command: string; tool: 'bolt' | 'ansible' | 'ssh'; parameters?: Record<string, unknown> };
+        requestBody.action = commandData.command;
+        requestBody.tool = commandData.tool;
+        if (commandData.parameters) {
+          requestBody.parameters = commandData.parameters;
+        }
+      } else if (selectedAction === 'execute-task') {
+        const taskData = formData as { taskName: string; parameters: Record<string, unknown> };
+        requestBody.action = taskData.taskName;
+        // Tasks are Bolt-specific, so always use bolt
+        requestBody.tool = 'bolt';
+        if (Object.keys(taskData.parameters).length > 0) {
+          requestBody.parameters = taskData.parameters;
+        }
+      } else if (selectedAction === 'execute-playbook') {
+        const playbookData = formData as { playbookPath: string; extraVars?: Record<string, unknown> };
+        requestBody.action = playbookData.playbookPath;
+        // Playbooks are Ansible-specific, so always use ansible
+        requestBody.tool = 'ansible';
+        if (playbookData.extraVars) {
+          requestBody.parameters = playbookData.extraVars;
+        }
+      } else if (selectedAction === 'install-software') {
+        const softwareData = formData as {
+          packageName: string;
+          tool: 'bolt' | 'ansible' | 'ssh';
+          taskName?: string;
+          version?: string;
+          ensure: 'present' | 'absent' | 'latest';
+          settings?: Record<string, unknown>;
+        };
+
+        // For software installation, use the task name if available (Bolt), otherwise use a generic action
+        requestBody.action = softwareData.taskName || `package::${softwareData.ensure}`;
+        requestBody.tool = softwareData.tool;
+
+        // Build parameters for package installation
+        const params: Record<string, unknown> = {
+          packageName: softwareData.packageName,
+          ensure: softwareData.ensure,
+        };
+
+        if (softwareData.version) {
+          params.version = softwareData.version;
+        }
+
+        if (softwareData.settings) {
+          params.settings = softwareData.settings;
+        }
+
+        requestBody.parameters = params;
       }
 
       // Send POST request to batch execution endpoint
@@ -472,7 +591,7 @@
           </div>
 
           <p id="modal-description" class="sr-only">
-            Select target nodes or groups and configure an action to execute in parallel across multiple systems.
+            Select target nodes or groups and configure an action to execute in parallel across multiple systems. Press Escape to close. Use Alt+N for nodes view, Alt+G for groups view.
           </p>
 
           <!-- Error Display -->
@@ -557,45 +676,63 @@
                   <button
                     type="button"
                     role="tab"
+                    id="nodes-tab"
                     aria-selected={viewMode === "nodes"}
                     aria-controls="nodes-panel"
+                    tabindex={viewMode === "nodes" ? 0 : -1}
                     onclick={() => viewMode = "nodes"}
-                    class="flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 {viewMode === 'nodes' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+                    onkeydown={(e) => {
+                      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        viewMode = 'groups';
+                      }
+                    }}
+                    class="flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 {viewMode === 'nodes' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
                   >
                     Nodes ({nodes.length})
+                    <span class="sr-only">{viewMode === 'nodes' ? '(selected)' : ''}</span>
                   </button>
                   <button
                     type="button"
                     role="tab"
+                    id="groups-tab"
                     aria-selected={viewMode === "groups"}
                     aria-controls="groups-panel"
+                    tabindex={viewMode === "groups" ? 0 : -1}
                     onclick={() => viewMode = "groups"}
-                    class="flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 {viewMode === 'groups' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+                    onkeydown={(e) => {
+                      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        viewMode = 'nodes';
+                      }
+                    }}
+                    class="flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 {viewMode === 'groups' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
                   >
                     Groups ({groups.length})
+                    <span class="sr-only">{viewMode === 'groups' ? '(selected)' : ''}</span>
                   </button>
                 </div>
 
                 <!-- Search and Filter Controls -->
                 <div class="flex flex-col sm:flex-row gap-2 mb-4">
                   <div class="flex-1">
-                    <label for="search-input" class="sr-only">Search by name</label>
+                    <label for="search-input" class="sr-only">Search {viewMode === 'nodes' ? 'nodes' : 'groups'} by name</label>
                     <input
                       id="search-input"
                       type="text"
                       bind:value={searchQuery}
                       placeholder="Search by name..."
-                      aria-label="Search targets by name"
-                      class="block w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      aria-label="Search {viewMode === 'nodes' ? 'nodes' : 'groups'} by name"
+                      class="block w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:border-primary-500"
                     />
                   </div>
                   <div class="w-full sm:w-auto">
-                    <label for="source-filter" class="sr-only">Filter by source</label>
+                    <label for="source-filter" class="sr-only">Filter {viewMode === 'nodes' ? 'nodes' : 'groups'} by source</label>
                     <select
                       id="source-filter"
                       bind:value={sourceFilter}
-                      aria-label="Filter targets by source"
-                      class="block w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      aria-label="Filter {viewMode === 'nodes' ? 'nodes' : 'groups'} by source"
+                      class="block w-full sm:w-auto px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:border-primary-500"
                     >
                       <option value="all">All Sources</option>
                       {#each availableSources() as source}
@@ -610,16 +747,16 @@
                   <button
                     type="button"
                     onclick={selectAll}
-                    aria-label="Select all visible targets"
-                    class="px-3 py-1.5 text-xs font-medium text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/20 rounded hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    aria-label="Select all visible {viewMode === 'nodes' ? 'nodes' : 'groups'}"
+                    class="px-3 py-1.5 text-xs font-medium text-primary-700 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/20 rounded hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   >
                     Select All
                   </button>
                   <button
                     type="button"
                     onclick={clearAll}
-                    aria-label="Clear all selections"
-                    class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    aria-label="Clear all {viewMode === 'nodes' ? 'node' : 'group'} selections"
+                    class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   >
                     Clear All
                   </button>
@@ -631,24 +768,26 @@
                     id="nodes-panel"
                     role="tabpanel"
                     aria-labelledby="nodes-tab"
-                    class="max-h-48 sm:max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md"
+                    tabindex="0"
+                    class="max-h-48 sm:max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     {#if filteredNodes().length === 0}
-                      <div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400" role="status">
                         No nodes found
                       </div>
                     {:else}
-                      <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                      <div class="divide-y divide-gray-200 dark:divide-gray-700" role="group" aria-label="Node selection list">
                         {#each filteredNodes() as node}
-                          <label class="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
+                          <label class="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-inset">
                             <input
                               type="checkbox"
                               checked={selectedNodeIds.includes(node.id)}
                               onchange={() => toggleNodeSelection(node.id)}
-                              aria-label="Select {node.name}"
-                              class="h-4 w-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500"
+                              aria-label="Select node {node.name}"
+                              aria-describedby="node-{node.id}-details"
+                              class="h-4 w-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:ring-offset-0"
                             />
-                            <div class="flex-1 min-w-0">
+                            <div class="flex-1 min-w-0" id="node-{node.id}-details">
                               <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
                                 {node.name}
                               </div>
@@ -662,7 +801,7 @@
                               </div>
                             </div>
                             {#if isNodeSelected(node.id) && !selectedNodeIds.includes(node.id)}
-                              <span class="text-xs text-gray-500 dark:text-gray-400 italic whitespace-nowrap">
+                              <span class="text-xs text-gray-500 dark:text-gray-400 italic whitespace-nowrap" aria-label="Selected via group">
                                 (via group)
                               </span>
                             {/if}
@@ -679,35 +818,37 @@
                     id="groups-panel"
                     role="tabpanel"
                     aria-labelledby="groups-tab"
-                    class="max-h-48 sm:max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md"
+                    tabindex="0"
+                    class="max-h-48 sm:max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     {#if filteredGroups().length === 0}
-                      <div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400" role="status">
                         No groups found
                       </div>
                     {:else}
-                      <div class="divide-y divide-gray-200 dark:divide-gray-700">
+                      <div class="divide-y divide-gray-200 dark:divide-gray-700" role="group" aria-label="Group selection list">
                         {#each filteredGroups() as group}
-                          <label class="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
+                          <label class="flex items-center gap-2 sm:gap-3 p-2 sm:p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-primary-500 focus-within:ring-inset">
                             <input
                               type="checkbox"
                               checked={selectedGroupIds.includes(group.id)}
                               onchange={() => toggleGroupSelection(group.id)}
                               aria-label="Select group {group.name} with {group.nodes.length} nodes"
-                              class="h-4 w-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500"
+                              aria-describedby="group-{group.id}-details"
+                              class="h-4 w-4 text-primary-600 border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-primary-500 focus:ring-offset-0"
                             />
-                            <div class="flex-1 min-w-0">
+                            <div class="flex-1 min-w-0" id="group-{group.id}-details">
                               <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
                                 {group.name}
                               </div>
                               <div class="text-xs text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-1 sm:gap-2">
                                 <span>{group.nodes.length} {group.nodes.length === 1 ? 'node' : 'nodes'}</span>
                                 {#if group.linked}
-                                  <span class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs whitespace-nowrap">
+                                  <span class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs whitespace-nowrap" aria-label="Linked group">
                                     linked
                                   </span>
                                 {/if}
-                                <span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs whitespace-nowrap">
+                                <span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs whitespace-nowrap" aria-label="Sources: {group.sources.join(', ')}">
                                   {group.sources.join(', ')}
                                 </span>
                               </div>
@@ -727,74 +868,46 @@
                 Configure Action
               </h4>
 
-              <!-- Action Type -->
+              <!-- Action Selector -->
               <div class="mb-4">
-                <label for="actionType" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Action Type
-                </label>
-                <select
-                  id="actionType"
-                  bind:value={actionType}
+                <ActionSelector
+                  mode="single"
+                  bind:selectedAction={selectedAction}
+                  onActionSelect={handleActionSelect}
                   disabled={loading}
-                  aria-describedby="actionType-description"
-                  class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="command">Command</option>
-                  <option value="task">Task</option>
-                  <option value="plan">Plan</option>
-                </select>
-                <p id="actionType-description" class="sr-only">
-                  Select the type of action to execute on target nodes
-                </p>
-              </div>
-
-              <!-- Action Value -->
-              <div class="mb-4">
-                <label for="actionValue" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {actionType === 'command' ? 'Command' : actionType === 'task' ? 'Task Name' : 'Plan Name'}
-                </label>
-                <input
-                  id="actionValue"
-                  type="text"
-                  bind:value={actionValue}
-                  disabled={loading}
-                  required
-                  aria-required="true"
-                  aria-invalid={!actionValue.trim() && error ? "true" : "false"}
-                  class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  placeholder={actionType === 'command' ? 'uptime' : actionType === 'task' ? 'package::install' : 'deploy::app'}
                 />
               </div>
 
-              <!-- Parameters -->
-              <div>
-                <label for="parameters" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Parameters (Optional)
-                </label>
-                <textarea
-                  id="parameters"
-                  bind:value={parametersInput}
-                  disabled={loading}
-                  rows="4"
-                  aria-describedby="parameters-help parameters-error"
-                  aria-invalid={parametersError ? "true" : "false"}
-                  class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed {parametersError ? 'border-red-300 dark:border-red-600 focus:ring-red-500 focus:border-red-500' : ''}"
-                  placeholder='&#123;"key": "value", "timeout": 30&#125;'
-                ></textarea>
-                <div class="mt-1 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1">
-                  <p id="parameters-help" class="text-xs text-gray-500 dark:text-gray-400">
-                    Enter parameters as a JSON object
-                  </p>
-                  {#if parametersError}
-                    <p
-                      id="parameters-error"
-                      class="text-xs text-red-600 dark:text-red-400"
-                      role="alert"
-                    >
-                      {parametersError}
-                    </p>
-                  {/if}
-                </div>
+              <!-- Conditional Action Forms -->
+              <div class="mt-4">
+                {#if selectedAction === 'execute-command'}
+                  <ExecuteCommandForm
+                    availableTools={availableExecutionTools}
+                    commandWhitelist={commandWhitelist}
+                    multiNode={true}
+                    executing={loading}
+                    onSubmit={handleActionFormSubmit}
+                  />
+                {:else if selectedAction === 'install-software'}
+                  <InstallSoftwareForm
+                    availableTools={availableExecutionTools}
+                    multiNode={true}
+                    executing={loading}
+                    onSubmit={handleActionFormSubmit}
+                  />
+                {:else if selectedAction === 'execute-playbook'}
+                  <ExecutePlaybookForm
+                    multiNode={true}
+                    executing={loading}
+                    onSubmit={handleActionFormSubmit}
+                  />
+                {:else if selectedAction === 'execute-task'}
+                  <ExecuteTaskForm
+                    multiNode={true}
+                    executing={loading}
+                    onSubmit={handleActionFormSubmit}
+                  />
+                {/if}
               </div>
             </div>
 
@@ -811,8 +924,8 @@
               </button>
               <button
                 type="submit"
-                disabled={loading || totalTargetCount() === 0 || !actionValue.trim() || !!parametersError}
-                aria-disabled={loading || totalTargetCount() === 0 || !actionValue.trim() || !!parametersError}
+                disabled={loading || totalTargetCount() === 0 || !actionFormData}
+                aria-disabled={loading || totalTargetCount() === 0 || !actionFormData}
                 class="w-full sm:flex-1 inline-flex justify-center items-center gap-2 rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {#if loading}

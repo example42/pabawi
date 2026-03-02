@@ -22,6 +22,9 @@ export interface BatchExecutionRequest {
 
   /** Action parameters */
   parameters?: Record<string, unknown>;
+
+  /** Execution tool (bolt, ansible, ssh) - defaults to bolt if not specified */
+  tool?: "bolt" | "ansible" | "ssh";
 }
 
 /**
@@ -189,6 +192,7 @@ export class BatchExecutionService {
         status: "running",
         startedAt: createdAt,
         results: [],
+        executionTool: request.tool || "bolt",
         batchId,
         batchPosition: i,
       });
@@ -204,6 +208,9 @@ export class BatchExecutionService {
           action: request.action,
           enqueuedAt: new Date(),
         });
+
+        // Step 6: Execute action asynchronously after acquiring queue slot
+        void this.executeAction(executionId, nodeId, request);
       } catch (error) {
         // Handle queue capacity errors
         if (error instanceof Error && error.name === "ExecutionQueueFullError") {
@@ -220,7 +227,7 @@ export class BatchExecutionService {
       }
     }
 
-    // Step 6: Create batch execution record in database
+    // Step 7: Create batch execution record in database
     const sql = `
       INSERT INTO batch_executions (
         id, type, action, parameters, target_nodes, target_groups,
@@ -263,7 +270,7 @@ export class BatchExecutionService {
       `Created batch execution ${batchId} with ${executionIds.length} executions`,
     );
 
-    // Step 7: Return batch execution response
+    // Step 8: Return batch execution response
     return {
       batchId,
       executionIds,
@@ -612,5 +619,87 @@ export class BatchExecutionService {
     }
 
     logger.info(`Validated ${nodeIds.length} node IDs successfully`);
+  }
+
+  /**
+   * Execute action for a single node in a batch
+   *
+   * This method executes the action asynchronously after acquiring a queue slot.
+   * It updates the execution record with results and releases the queue slot when complete.
+   *
+   * @param executionId - Execution record ID
+   * @param nodeId - Target node ID
+   * @param request - Batch execution request containing action details
+   */
+  private async executeAction(
+    executionId: string,
+    nodeId: string,
+    request: BatchExecutionRequest,
+  ): Promise<void> {
+    const logger = new LoggerService();
+
+    try {
+      logger.info(
+        `Executing ${request.type} action for node ${nodeId} (execution ${executionId})`,
+        { component: "BatchExecutionService" },
+      );
+
+      // Determine which integration tool to use
+      // Use the tool from request if specified, otherwise default to bolt
+      const integrationTool = request.tool || "bolt";
+
+      // Execute action through IntegrationManager
+      const result = await this.integrationManager.executeAction(integrationTool, {
+        type: request.type,
+        target: nodeId,
+        action: request.action,
+        parameters: request.parameters,
+      });
+
+      // Update execution record with results
+      await this.executionRepository.update(executionId, {
+        status: result.status,
+        completedAt: result.completedAt,
+        results: result.results,
+        error: result.error,
+        command: result.command,
+      });
+
+      logger.info(
+        `Completed ${request.type} action for node ${nodeId} with status ${result.status}`,
+        { component: "BatchExecutionService" },
+      );
+    } catch (error) {
+      logger.error(
+        `Error executing ${request.type} action for node ${nodeId}`,
+        { component: "BatchExecutionService" },
+        error instanceof Error ? error : undefined,
+      );
+
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+      // Update execution record with error
+      await this.executionRepository.update(executionId, {
+        status: "failed",
+        completedAt: new Date().toISOString(),
+        results: [
+          {
+            nodeId,
+            status: "failed",
+            error: errorMessage,
+            duration: 0,
+          },
+        ],
+        error: errorMessage,
+      });
+    } finally {
+      // Always release the queue slot when execution completes
+      this.executionQueue.release(executionId);
+
+      logger.info(
+        `Released queue slot for execution ${executionId}`,
+        { component: "BatchExecutionService" },
+      );
+    }
   }
 }
