@@ -46,6 +46,7 @@ const BatchExecutionRequestSchema = z.object({
   type: z.enum(["command", "task", "plan"]),
   action: z.string().min(1, "Action is required"),
   parameters: z.record(z.unknown()).optional(),
+  tool: z.enum(["bolt", "ansible", "ssh"]).optional(),
 }).refine(
   (data) => (data.targetNodeIds && data.targetNodeIds.length > 0) || (data.targetGroupIds && data.targetGroupIds.length > 0),
   { message: "At least one target node or group must be specified" }

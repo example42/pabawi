@@ -4,8 +4,9 @@
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
+  import GroupActionModal from '../components/GroupActionModal.svelte';
   import { get } from '../lib/api';
-  import { showError } from '../lib/toast.svelte';
+  import { showError, showSuccess } from '../lib/toast.svelte';
 
   interface Props {
     params?: { id: string };
@@ -40,6 +41,7 @@
   let groupNodes = $state<Node[]>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let showActionModal = $state(false);
 
   const groupId = $derived(params?.id || '');
 
@@ -96,6 +98,18 @@
   function navigateBack(): void {
     router.navigate('/inventory');
   }
+
+  function openExecuteActionModal(): void {
+    showActionModal = true;
+  }
+
+  function handleBatchExecutionSuccess(batchId: string): void {
+    showActionModal = false;
+    showSuccess(`Batch execution started with ID: ${batchId}`);
+
+    // Navigate to executions page with batch ID in query
+    router.navigate(`/executions?batchId=${batchId}`);
+  }
 </script>
 
 <svelte:head>
@@ -144,6 +158,22 @@
               </p>
             {/if}
           </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex gap-2">
+          <button
+            type="button"
+            onclick={openExecuteActionModal}
+            disabled={groupNodes.length === 0}
+            class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-offset-gray-800"
+            aria-label="Execute action on all nodes in this group"
+          >
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Execute Action
+          </button>
         </div>
       </div>
 
@@ -262,3 +292,15 @@
     </div>
   {/if}
 </div>
+
+<!-- Group Action Modal -->
+{#if group}
+  <GroupActionModal
+    open={showActionModal}
+    groupName={group.name}
+    groupId={group.id}
+    targetNodes={groupNodes}
+    onClose={() => showActionModal = false}
+    onSuccess={handleBatchExecutionSuccess}
+  />
+{/if}

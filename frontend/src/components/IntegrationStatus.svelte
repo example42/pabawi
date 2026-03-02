@@ -518,6 +518,20 @@
               </span>
             </div>
 
+            <!-- Setup Instructions Link -->
+            <div class="pt-2 border-t border-gray-200 dark:border-gray-700">
+              <a
+                href="/integrations/{integration.name}/setup"
+                onclick={(e) => e.stopPropagation()}
+                class="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+              >
+                <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Setup Instructions
+              </a>
+            </div>
+
             {#if integration.status === 'degraded' && (integration.workingCapabilities || integration.failingCapabilities)}
               <div class="mt-3 space-y-2">
                 {#if integration.workingCapabilities && integration.workingCapabilities.length > 0}

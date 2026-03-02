@@ -1,3 +1,4 @@
+export { default as ActionSelector } from "./ActionSelector.svelte";
 export { default as CatalogComparison } from "./CatalogComparison.svelte";
 export { default as CatalogViewer } from "./CatalogViewer.svelte";
 export { default as ChangePasswordDialog } from "./ChangePasswordDialog.svelte";
