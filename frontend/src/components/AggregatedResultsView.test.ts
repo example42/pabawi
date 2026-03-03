@@ -226,7 +226,7 @@ describe('AggregatedResultsView Component', () => {
 
       await waitFor(() => {
         expect(screen.getByText(/total/i)).toBeTruthy();
-        expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(2); // total=3 and success=3
       });
     });
 
@@ -241,7 +241,7 @@ describe('AggregatedResultsView Component', () => {
 
       await waitFor(() => {
         expect(screen.getAllByText(/success/i).length).toBeGreaterThanOrEqual(1);
-        expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
+        expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(2); // total=3 and success=3
       });
     });
 
