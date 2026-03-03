@@ -9,7 +9,7 @@ describe('ExecutePlaybookForm', () => {
 
       const input = screen.getByLabelText(/Playbook Path/i);
       expect(input).toBeTruthy();
-      expect(input.placeholder).toBe('e.g., playbooks/site.yml');
+      expect((input as HTMLInputElement).placeholder).toBe('e.g., playbooks/site.yml');
     });
 
     it('should render execute button', () => {
@@ -92,7 +92,7 @@ describe('ExecutePlaybookForm', () => {
       render(ExecutePlaybookForm);
 
       const button = screen.getByRole('button', { name: /execute playbook/i });
-      expect(button.disabled).toBe(true);
+      expect((button as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('should enable submit button when playbook path is entered', async () => {
@@ -102,7 +102,7 @@ describe('ExecutePlaybookForm', () => {
       await fireEvent.input(input, { target: { value: 'playbooks/site.yml' } });
 
       const button = screen.getByRole('button', { name: /execute playbook/i });
-      expect(button.disabled).toBe(false);
+      expect((button as HTMLButtonElement).disabled).toBe(false);
     });
   });
 
@@ -243,9 +243,9 @@ describe('ExecutePlaybookForm', () => {
       const varsInput = screen.getByLabelText(/Extra Vars/i);
       const button = screen.getByRole('button', { name: /executing/i });
 
-      expect(playbookInput.disabled).toBe(true);
-      expect(varsInput.disabled).toBe(true);
-      expect(button.disabled).toBe(true);
+      expect((playbookInput as HTMLInputElement).disabled).toBe(true);
+      expect((varsInput as HTMLTextAreaElement).disabled).toBe(true);
+      expect((button as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('should show executing text on button', () => {
@@ -312,7 +312,7 @@ describe('ExecutePlaybookForm', () => {
       });
 
       const input = screen.getByLabelText(/Playbook Path/i);
-      expect(input.value).toBe('playbooks/deploy.yml');
+      expect((input as HTMLInputElement).value).toBe('playbooks/deploy.yml');
     });
 
     it('should populate initial extra vars', () => {
@@ -324,7 +324,7 @@ describe('ExecutePlaybookForm', () => {
       });
 
       const textarea = screen.getByLabelText(/Extra Vars/i);
-      expect(textarea.value).toBe(JSON.stringify(initialVars, null, 2));
+      expect((textarea as HTMLTextAreaElement).value).toBe(JSON.stringify(initialVars, null, 2));
     });
 
     // Note: Svelte 5 removed $set API, so we test initial values only

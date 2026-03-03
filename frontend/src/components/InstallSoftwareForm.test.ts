@@ -28,7 +28,7 @@ describe('InstallSoftwareForm', () => {
 
       const input = screen.getByLabelText(/Package Name/i);
       expect(input).toBeTruthy();
-      expect(input.placeholder).toContain('nginx');
+      expect((input as HTMLInputElement).placeholder).toContain('nginx');
     });
 
     it('should render install button', () => {
@@ -162,9 +162,9 @@ describe('InstallSoftwareForm', () => {
       });
 
       const select = screen.getByLabelText(/Package Task/i);
-      expect(select.options.length).toBe(2);
-      expect(select.options[0].text).toBe('Install Package');
-      expect(select.options[1].text).toBe('APT Install');
+      expect((select as HTMLSelectElement).options.length).toBe(2);
+      expect((select as HTMLSelectElement).options[0].text).toBe('Install Package');
+      expect((select as HTMLSelectElement).options[1].text).toBe('APT Install');
     });
 
     it('should show loading state while fetching tasks', async () => {
@@ -516,10 +516,10 @@ describe('InstallSoftwareForm', () => {
       const ensureSelect = screen.getByLabelText(/Ensure/i);
       const button = screen.getByRole('button', { name: /Installing/i });
 
-      expect(packageInput.disabled).toBe(true);
-      expect(versionInput.disabled).toBe(true);
-      expect(ensureSelect.disabled).toBe(true);
-      expect(button.disabled).toBe(true);
+      expect((packageInput as HTMLInputElement).disabled).toBe(true);
+      expect((versionInput as HTMLInputElement).disabled).toBe(true);
+      expect((ensureSelect as HTMLSelectElement).disabled).toBe(true);
+      expect((button as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('should show installing text on button', () => {
@@ -586,7 +586,7 @@ describe('InstallSoftwareForm', () => {
       });
 
       const input = screen.getByLabelText(/Package Name/i);
-      expect(input.value).toBe('nginx');
+      expect((input as HTMLInputElement).value).toBe('nginx');
     });
 
     it('should select initial tool', () => {
