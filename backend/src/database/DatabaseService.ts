@@ -59,7 +59,6 @@ export class DatabaseService {
           db.run('PRAGMA cache_size = -64000;'); // 64MB cache
           db.run('PRAGMA temp_store = MEMORY;'); // Use memory for temp tables
           db.run('PRAGMA mmap_size = 268435456;'); // 256MB memory-mapped I/O
-          db.run('PRAGMA page_size = 4096;'); // Optimal page size
 
           // Enable foreign keys
           db.run('PRAGMA foreign_keys = ON;', (fkErr) => {

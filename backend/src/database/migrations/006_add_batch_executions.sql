@@ -33,7 +33,7 @@ CREATE INDEX IF NOT EXISTS idx_batch_executions_user ON batch_executions(user_id
 
 CREATE TABLE executions_new (
   id TEXT PRIMARY KEY,
-  type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts', 'puppet', 'package')),
+  type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts', 'puppet', 'package', 'plan')),
   target_nodes TEXT NOT NULL,
   action TEXT NOT NULL,
   parameters TEXT,

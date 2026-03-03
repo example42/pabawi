@@ -1,6 +1,9 @@
 import helmet from "helmet";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request, Response, NextFunction } from "express";
+import { LoggerService } from "../services/LoggerService";
+
+const logger = new LoggerService();
 
 /**
  * Configure helmet middleware for security headers
@@ -168,7 +171,11 @@ export function inputSanitizationMiddleware(
 function sanitizeObject(obj: unknown, depth = 0): unknown {
   // Prevent deep nesting attacks
   if (depth > 10) {
-    return obj;
+    logger.warn("sanitizeObject: maximum depth exceeded, truncating nested input", {
+      component: "securityMiddleware",
+      operation: "sanitizeObject",
+    });
+    return null;
   }
 
   // Handle null and undefined

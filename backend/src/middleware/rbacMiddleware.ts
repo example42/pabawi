@@ -3,6 +3,7 @@ import { PermissionService } from "../services/PermissionService";
 import { AuditLoggingService } from "../services/AuditLoggingService";
 import type { Database } from "sqlite3";
 import { ERROR_CODES, sendAuthorizationError, sendDatabaseError, isDatabaseConnectionError } from "../utils/errorHandling";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * RBAC middleware factory that creates middleware to check user permissions
@@ -22,6 +23,7 @@ import { ERROR_CODES, sendAuthorizationError, sendDatabaseError, isDatabaseConne
 export function createRbacMiddleware(db: Database) {
   const permissionService = new PermissionService(db);
   const auditLogger = new AuditLoggingService(db);
+  const logger = new LoggerService();
 
   /**
    * Create middleware that checks for a specific permission
@@ -53,12 +55,16 @@ export function createRbacMiddleware(db: Database) {
 
         if (!hasPermission) {
           // Log authorization failure for security monitoring (Requirement 7.4)
-          console.warn(
-            `[RBAC] Authorization denied - User: ${req.user.username} (${req.user.userId}), ` +
-            `Resource: ${resource}, Action: ${action}, ` +
-            `Path: ${req.method} ${req.path}, ` +
-            `IP: ${req.ip ?? req.socket.remoteAddress ?? 'unknown'}, ` +
-            `Timestamp: ${new Date().toISOString()}`
+          logger.warn(
+            `Authorization denied - User: ${req.user.username} (${req.user.userId}), Resource: ${resource}, Action: ${action}`,
+            {
+              component: "rbacMiddleware",
+              operation: "checkPermission",
+              metadata: {
+                path: `${req.method} ${req.path}`,
+                ip: req.ip ?? req.socket.remoteAddress ?? 'unknown',
+              }
+            }
           );
 
           // Audit log: authorization failure
@@ -85,10 +91,14 @@ export function createRbacMiddleware(db: Database) {
         }
 
         // Log unexpected errors
-        console.error(
-          `[RBAC] Error checking permissions - User: ${req.user?.userId ?? 'unknown'}, ` +
-          `Resource: ${resource}, Action: ${action}, ` +
-          `Error: ${error instanceof Error ? error.message : String(error)}`
+        logger.error(
+          `Error checking permissions - User: ${req.user?.userId ?? 'unknown'}, Resource: ${resource}, Action: ${action}`,
+          {
+            component: "rbacMiddleware",
+            operation: "checkPermission",
+            metadata: { error: error instanceof Error ? error.message : String(error) }
+          },
+          error instanceof Error ? error : undefined
         );
 
         // Return 500 Internal Server Error for unexpected errors
