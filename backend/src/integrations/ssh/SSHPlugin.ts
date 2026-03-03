@@ -226,7 +226,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       if (hosts.length === 0) {
         return {
           id: executionId,
-          type: action.type,
+          type: 'command',
           targetNodes: targets,
           action: action.action,
           parameters: action.parameters,
@@ -275,7 +275,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
 
       return {
         id: executionId,
-        type: action.type,
+        type: 'command',
         targetNodes: targets,
         action: action.action,
         parameters: action.parameters,
@@ -289,7 +289,7 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
     } catch (error) {
       return {
         id: executionId,
-        type: action.type,
+        type: 'command',
         targetNodes: Array.isArray(action.target) ? action.target : [action.target],
         action: action.action,
         parameters: action.parameters,
@@ -1028,16 +1028,16 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
       }
 
       // Use configured default user if no user specified
-      const defaultUser = this.sshConfig?.defaultUser || 'root';
-      const finalUser = user || defaultUser;
+      const defaultUser = this.sshConfig?.defaultUser ?? 'root';
+      const finalUser = user ?? defaultUser;
 
       return {
         name: hostname,
-        uri: `ssh://${finalUser}@${hostname}${port ? `:${port}` : ''}`,
+        uri: `ssh://${finalUser}@${hostname}${port ? `:${String(port)}` : ''}`,
         user: finalUser,
-        port: port || 22,
+        port: port ?? 22,
       };
-    } catch (error) {
+    } catch {
       // Invalid host string format
       return null;
     }

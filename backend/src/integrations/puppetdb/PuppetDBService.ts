@@ -635,6 +635,7 @@ export class PuppetDBService
       complete({ cached: false, groupCount: 0 });
       return [];
     }
+    const client = this.client;
 
     try {
       // Check cache first
@@ -651,7 +652,7 @@ export class PuppetDBService
       // Query 1: Group by environment
       try {
         const envResult = await this.executeWithResilience(async () => {
-          return await this.client!.query("pdb/query/v4/nodes", undefined);
+          return await client.query("pdb/query/v4/nodes", undefined);
         });
 
         if (Array.isArray(envResult)) {
@@ -665,7 +666,7 @@ export class PuppetDBService
       // Query 2: Group by OS family (from facts)
       try {
         const osResult = await this.executeWithResilience(async () => {
-          return await this.client!.query(
+          return await client.query(
             "pdb/query/v4/nodes",
             JSON.stringify(["extract", ["certname", ["fact", "os.family"]]])
           );

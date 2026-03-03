@@ -585,7 +585,7 @@ export class AnsibleService {
     const tempDir = mkdtempSync(join(tmpdir(), 'ansible-'));
     const inventoryPath = join(tempDir, 'inventory');
 
-    const user = process.env.ANSIBLE_REMOTE_USER || process.env.SSH_DEFAULT_USER || "root";
+    const user = process.env.ANSIBLE_REMOTE_USER ?? process.env.SSH_DEFAULT_USER ?? "root";
 
     // Create a simple INI-style inventory file
     const inventoryContent = `[adhoc]
@@ -606,7 +606,7 @@ ${hostname} ansible_connection=ssh ansible_user=${user}
       // Also try to remove the temp directory
       const tempDir = join(inventoryPath, '..');
       unlinkSync(tempDir);
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   }

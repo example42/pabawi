@@ -69,7 +69,7 @@ export function createRateLimitMiddleware(): (req: Request, res: Response, next:
       }
 
       // For unauthenticated requests, use IP address with proper IPv6 handling
-      return ipKeyGenerator(req);
+      return ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? "");
     },
 
     // Skip rate limiting for health check and public endpoints
@@ -116,7 +116,7 @@ export function createAuthRateLimitMiddleware(): (req: Request, res: Response, n
     legacyHeaders: false,
 
     // Use IP address as the key with proper IPv6 handling
-    keyGenerator: ipKeyGenerator,
+    keyGenerator: (req: Request): string => ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? ""),
 
     // Custom handler for rate limit exceeded
     handler: (_req: Request, res: Response): void => {

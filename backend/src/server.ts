@@ -625,7 +625,7 @@ async function startServer(): Promise<Express> {
           enabled: true,
           name: "ssh",
           type: "both",
-          config: sshConfig as Record<string, unknown>,
+          config: sshConfig as unknown as Record<string, unknown>,
           priority: sshConfig.priority,
         };
 
