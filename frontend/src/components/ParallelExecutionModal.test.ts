@@ -1078,7 +1078,9 @@ describe('ParallelExecutionModal Component', () => {
 
       await fireEvent.input(parametersTextarea, { target: { value: invalidJson } });
 
-      // In multiNode mode, parameter errors are handled silently (no error text shown)
+      // In multiNode mode, parameter errors are silently ignored on input.
+      // ExecuteCommandForm only shows errors on explicit submit (button hidden in multiNode mode).
+      // Invalid params prevent actionFormData from updating, but show no error text.
       // Verify the textarea accepts the value without crashing
       expect((parametersTextarea as HTMLTextAreaElement).value).toBe(invalidJson);
       expect(screen.queryByText(/enter command/i)).toBeNull(); // modal still functional
@@ -1142,11 +1144,12 @@ describe('ParallelExecutionModal Component', () => {
       const checkboxes = screen.getAllByRole('checkbox');
       await fireEvent.click(checkboxes[0]);
 
-      // Enter invalid parameters without a command (so actionFormData is never set)
+      // Enter invalid parameters without a command (so actionFormData is never set
+      // since ExecuteCommandForm's $effect only calls onSubmit with valid data)
       const parametersTextarea = screen.getByLabelText('Parameters (Optional)');
       await fireEvent.input(parametersTextarea, { target: { value: '{invalid}' } });
 
-      // Button is disabled because no valid form data has been submitted
+      // Button is disabled because no valid form data has been submitted yet
       await waitFor(() => {
         const executeButton = screen.getByRole('button', { name: /execute on 1 target/i });
         expect((executeButton as HTMLButtonElement).disabled).toBe(true);
@@ -2680,9 +2683,8 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.input(playbookInput, { target: { value: '/path/to/playbook.yml' } });
       expect((playbookInput as HTMLInputElement).value).toBe('/path/to/playbook.yml');
 
-      // Note: ExecutePlaybookForm is rendered inside the modal's form (nested).
-      // In multiNode mode, actionFormData is set when the inner form is submitted.
-      // The form renders correctly with the expected input.
+      // Note: ExecutePlaybookForm does not use a $effect for multiNode reactive updates.
+      // The form renders correctly with the expected input field.
     });
 
     it('should build correct request for install-software action', async () => {
