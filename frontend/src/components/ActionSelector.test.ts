@@ -31,7 +31,7 @@ describe('ActionSelector', () => {
       render(ActionSelector, { props: { mode: 'single' } });
 
       const commandRadio = screen.getByRole('radio', { name: /execute command/i });
-      expect(commandRadio.checked).toBe(true);
+      expect((commandRadio as HTMLInputElement).checked).toBe(true);
     });
 
     it('allows selecting a different action', async () => {
@@ -72,7 +72,7 @@ describe('ActionSelector', () => {
 
       const radios = screen.getAllByRole('radio');
       radios.forEach((radio) => {
-        expect(radio.disabled).toBe(true);
+        expect((radio as HTMLInputElement).disabled).toBe(true);
       });
     });
 
@@ -149,9 +149,9 @@ describe('ActionSelector', () => {
       const softwareCheckbox = screen.getByRole('checkbox', { name: /install software/i });
       const taskCheckbox = screen.getByRole('checkbox', { name: /execute task/i });
 
-      expect(commandCheckbox.checked).toBe(true);
-      expect(softwareCheckbox.checked).toBe(true);
-      expect(taskCheckbox.checked).toBe(false);
+      expect((commandCheckbox as HTMLInputElement).checked).toBe(true);
+      expect((softwareCheckbox as HTMLInputElement).checked).toBe(true);
+      expect((taskCheckbox as HTMLInputElement).checked).toBe(false);
     });
 
     it('disables all checkboxes when disabled prop is true', () => {
@@ -164,7 +164,7 @@ describe('ActionSelector', () => {
 
       const checkboxes = screen.getAllByRole('checkbox');
       checkboxes.forEach((checkbox) => {
-        expect(checkbox.disabled).toBe(true);
+        expect((checkbox as HTMLInputElement).disabled).toBe(true);
       });
     });
   });

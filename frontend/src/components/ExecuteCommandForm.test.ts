@@ -9,7 +9,7 @@ describe('ExecuteCommandForm', () => {
 
       const input = screen.getByLabelText('Command');
       expect(input).toBeTruthy();
-      expect(input.placeholder).toBe('Enter command to execute...');
+      expect((input as HTMLInputElement).placeholder).toBe('Enter command to execute...');
     });
 
     it('should render execute button', () => {
@@ -126,7 +126,7 @@ describe('ExecuteCommandForm', () => {
       await fireEvent.click(lsButton);
 
       const input = screen.getByLabelText('Command');
-      expect(input.value).toBe('ls -la');
+      expect((input as HTMLInputElement).value).toBe('ls -la');
     });
 
     it('should show prefix indicator for prefix match mode', () => {
@@ -219,7 +219,7 @@ describe('ExecuteCommandForm', () => {
       render(ExecuteCommandForm);
 
       const button = screen.getByRole('button', { name: /^execute$/i });
-      expect(button.disabled).toBe(true);
+      expect((button as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('should enable submit button when command is entered', async () => {
@@ -229,7 +229,7 @@ describe('ExecuteCommandForm', () => {
       await fireEvent.input(input, { target: { value: 'ls' } });
 
       const button = screen.getByRole('button', { name: /^execute$/i });
-      expect(button.disabled).toBe(false);
+      expect((button as HTMLButtonElement).disabled).toBe(false);
     });
   });
 
@@ -334,9 +334,9 @@ describe('ExecuteCommandForm', () => {
       const paramsInput = screen.getByLabelText('Parameters (Optional)');
       const button = screen.getByRole('button', { name: /executing/i });
 
-      expect(commandInput.disabled).toBe(true);
-      expect(paramsInput.disabled).toBe(true);
-      expect(button.disabled).toBe(true);
+      expect((commandInput as HTMLInputElement).disabled).toBe(true);
+      expect((paramsInput as HTMLInputElement).disabled).toBe(true);
+      expect((button as HTMLButtonElement).disabled).toBe(true);
     });
 
     it('should show executing text on button', () => {
@@ -370,8 +370,8 @@ describe('ExecuteCommandForm', () => {
       const boltButton = screen.getByRole('button', { name: /bolt/i });
       const ansibleButton = screen.getByRole('button', { name: /ansible/i });
 
-      expect(boltButton.disabled).toBe(true);
-      expect(ansibleButton.disabled).toBe(true);
+      expect((boltButton as HTMLButtonElement).disabled).toBe(true);
+      expect((ansibleButton as HTMLButtonElement).disabled).toBe(true);
     });
   });
 
@@ -420,7 +420,7 @@ describe('ExecuteCommandForm', () => {
       });
 
       const input = screen.getByLabelText('Command');
-      expect(input.value).toBe('ls -la');
+      expect((input as HTMLInputElement).value).toBe('ls -la');
     });
 
     it('should select initial tool', () => {
