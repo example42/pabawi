@@ -193,7 +193,7 @@ For details of the repository files and configurations check the [Repository Str
 
 ### Version History
 
-- **v0.8.0**: RBC authentication. SSH integrations. Inventory groups
+- **v0.8.0**: RBAC authentication. SSH integrations. Inventory groups
 - **v0.7.0**: Ansible Integration. Used classed aware hiera lookups
 - **v0.6.0**: Code consolidation and fixing
 - **v0.5.0**: Report filtering, puppet run history visualization, enhanced expert mode with frontend logging

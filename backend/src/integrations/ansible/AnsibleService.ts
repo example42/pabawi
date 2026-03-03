@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { spawn, type ChildProcess } from "child_process";
 import type { ExecutionResult, Node } from "../bolt/types";
+import type { NodeGroup } from "../types";
 
 export interface StreamingCallback {
   onStdout?: (chunk: string) => void;
@@ -347,20 +348,7 @@ export class AnsibleService {
    * Get groups from Ansible inventory
    * Parses the inventory and returns groups with their member nodes
    */
-  public async getGroups(): Promise<{
-    id: string;
-    name: string;
-    source: string;
-    sources: string[];
-    linked: boolean;
-    nodes: string[];
-    metadata?: {
-      description?: string;
-      variables?: Record<string, unknown>;
-      hierarchy?: string[];
-      [key: string]: unknown;
-    };
-  }[]> {
+  public async getGroups(): Promise<NodeGroup[]> {
     const args = [
       "-i",
       this.inventoryPath,
@@ -376,20 +364,7 @@ export class AnsibleService {
 
       // Parse JSON output from ansible-inventory
       const inventoryData = JSON.parse(exec.stdout) as Record<string, unknown>;
-      const groups: {
-        id: string;
-        name: string;
-        source: string;
-        sources: string[];
-        linked: boolean;
-        nodes: string[];
-        metadata?: {
-          description?: string;
-          variables?: Record<string, unknown>;
-          hierarchy?: string[];
-          [key: string]: unknown;
-        };
-      }[] = [];
+      const groups: NodeGroup[] = [];
 
       // Extract groups from inventory structure
       // ansible-inventory --list returns: { _meta: {...}, groupName: { hosts: [...], children: [...], vars: {...} } }
@@ -419,12 +394,7 @@ export class AnsibleService {
         const vars = typeof group.vars === "object" ? group.vars : undefined;
 
         // Build metadata
-        const metadata: {
-          description?: string;
-          variables?: Record<string, unknown>;
-          hierarchy?: string[];
-          [key: string]: unknown;
-        } = {};
+        const metadata: NonNullable<NodeGroup['metadata']> = {};
 
         if (vars && Object.keys(vars).length > 0) {
           metadata.variables = vars;

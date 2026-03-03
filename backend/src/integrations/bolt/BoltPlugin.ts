@@ -367,12 +367,6 @@ export class BoltPlugin
     }
   }
   /**
-   * Get groups from Bolt inventory
-   *
-   * @returns Array of node groups
-   * @todo Implement group extraction from Bolt inventory.yaml (Task 2)
-   */
-  /**
      * Get groups from Bolt inventory
      *
      * Parses inventory.yaml to extract group definitions including:

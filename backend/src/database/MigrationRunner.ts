@@ -210,9 +210,9 @@ export class MigrationRunner {
 
       // Execute each pending migration in order
       for (const migration of pendingMigrations) {
-        console.warn(`Applying migration: ${migration.filename}`);
+        console.log(`Applying migration: ${migration.filename}`);
         await this.executeMigration(migration);
-        console.warn(`✓ Migration ${migration.filename} applied successfully`);
+        console.log(`✓ Migration ${migration.filename} applied successfully`);
       }
 
       return pendingMigrations.length;
