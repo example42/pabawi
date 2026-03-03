@@ -610,6 +610,12 @@ export class SSHService {
       hostname = hostname.substring(6);
     }
 
+    // Remove user if present (user@hostname format)
+    const atIndex = hostname.indexOf('@');
+    if (atIndex !== -1) {
+      hostname = hostname.substring(atIndex + 1);
+    }
+
     // Remove port if present
     const colonIndex = hostname.indexOf(':');
     if (colonIndex !== -1) {

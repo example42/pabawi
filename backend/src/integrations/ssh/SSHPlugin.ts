@@ -980,10 +980,67 @@ export class SSHPlugin extends BasePlugin implements ExecutionToolPlugin, Inform
           privateKeyPath: node.config.privateKeyPath as string | undefined,
           groups: node.config.groups as string[] | undefined,
         });
+      } else {
+        // Host not in inventory - attempt direct connection
+        // Support formats: hostname, user@hostname, hostname:port, user@hostname:port
+        const host = this.parseHostString(name);
+        if (host) {
+          hosts.push(host);
+        }
       }
     }
 
     return hosts;
+  }
+
+  private parseHostString(hostString: string): SSHHost | null {
+    try {
+      // Parse user@hostname:port format
+      let user: string | undefined;
+      let hostname: string;
+      let port: number | undefined;
+
+      // Extract user if present
+      const atIndex = hostString.lastIndexOf('@');
+      if (atIndex > 0) {
+        user = hostString.substring(0, atIndex);
+        hostString = hostString.substring(atIndex + 1);
+      }
+
+      // Extract port if present
+      const colonIndex = hostString.lastIndexOf(':');
+      if (colonIndex > 0) {
+        const portStr = hostString.substring(colonIndex + 1);
+        const parsedPort = parseInt(portStr, 10);
+        if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535) {
+          port = parsedPort;
+          hostname = hostString.substring(0, colonIndex);
+        } else {
+          hostname = hostString;
+        }
+      } else {
+        hostname = hostString;
+      }
+
+      // Validate hostname is not empty
+      if (!hostname || hostname.trim().length === 0) {
+        return null;
+      }
+
+      // Use configured default user if no user specified
+      const defaultUser = this.sshConfig?.defaultUser || 'root';
+      const finalUser = user || defaultUser;
+
+      return {
+        name: hostname,
+        uri: `ssh://${finalUser}@${hostname}${port ? `:${port}` : ''}`,
+        user: finalUser,
+        port: port || 22,
+      };
+    } catch (error) {
+      // Invalid host string format
+      return null;
+    }
   }
 
 }

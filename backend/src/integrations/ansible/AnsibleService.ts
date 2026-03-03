@@ -1,5 +1,8 @@
 import { randomUUID } from "crypto";
 import { spawn, type ChildProcess } from "child_process";
+import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import type { ExecutionResult, Node } from "../bolt/types";
 import type { NodeGroup } from "../types";
 
@@ -48,17 +51,46 @@ export class AnsibleService {
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
 
-    const args = [
-      nodeId,
-      "-i",
-      this.inventoryPath,
-      "-m",
-      "shell",
-      "-a",
-      command,
-    ];
+    // Check if nodeId exists in inventory
+    const inventory = await this.getInventory();
+    const nodeInInventory = inventory.some(
+      (node) => node.name === nodeId || node.id === nodeId
+    );
+
+    let tempInventoryPath: string | null = null;
+    let args: string[];
+
+    if (nodeInInventory) {
+      args = [
+        nodeId,
+        "-i",
+        this.inventoryPath,
+        "-m",
+        "shell",
+        "-a",
+        command,
+      ];
+    } else {
+      // Create temporary inventory for ad-hoc host
+      tempInventoryPath = this.createTempInventory(nodeId);
+      args = [
+        "adhoc",
+        "-i",
+        tempInventoryPath,
+        "-m",
+        "shell",
+        "-a",
+        command,
+      ];
+    }
 
     const exec = await this.executeCommand("ansible", args, streamingCallback);
+
+    // Clean up temporary inventory if created
+    if (tempInventoryPath) {
+      this.cleanupTempInventory(tempInventoryPath);
+    }
+
     const completedAt = new Date().toISOString();
     const status = exec.success ? "success" : "failed";
     const duration = Math.max(Date.now() - startMs, 0);
@@ -111,17 +143,46 @@ export class AnsibleService {
       ...(settings ?? {}),
     };
 
-    const args = [
-      nodeId,
-      "-i",
-      this.inventoryPath,
-      "-m",
-      "package",
-      "-a",
-      this.toModuleArgString(moduleArgs),
-    ];
+    // Check if nodeId exists in inventory
+    const inventory = await this.getInventory();
+    const nodeInInventory = inventory.some(
+      (node) => node.name === nodeId || node.id === nodeId
+    );
+
+    let tempInventoryPath: string | null = null;
+    let args: string[];
+
+    if (nodeInInventory) {
+      args = [
+        nodeId,
+        "-i",
+        this.inventoryPath,
+        "-m",
+        "package",
+        "-a",
+        this.toModuleArgString(moduleArgs),
+      ];
+    } else {
+      // Create temporary inventory for ad-hoc host
+      tempInventoryPath = this.createTempInventory(nodeId);
+      args = [
+        "adhoc",
+        "-i",
+        tempInventoryPath,
+        "-m",
+        "package",
+        "-a",
+        this.toModuleArgString(moduleArgs),
+      ];
+    }
 
     const exec = await this.executeCommand("ansible", args, streamingCallback);
+
+    // Clean up temporary inventory if created
+    if (tempInventoryPath) {
+      this.cleanupTempInventory(tempInventoryPath);
+    }
+
     const completedAt = new Date().toISOString();
     const status = exec.success ? "success" : "failed";
     const duration = Math.max(Date.now() - startMs, 0);
@@ -512,6 +573,41 @@ export class AnsibleService {
         throw new Error(`Failed to parse Ansible inventory: ${error.message}`);
       }
       throw error;
+    }
+  }
+
+  /**
+   * Create a temporary inventory file for an ad-hoc host
+   * @param hostname - The hostname to create inventory for
+   * @returns Path to the temporary inventory file
+   */
+  private createTempInventory(hostname: string): string {
+    const tempDir = mkdtempSync(join(tmpdir(), 'ansible-'));
+    const inventoryPath = join(tempDir, 'inventory');
+
+    const user = process.env.ANSIBLE_REMOTE_USER || process.env.SSH_DEFAULT_USER || "root";
+
+    // Create a simple INI-style inventory file
+    const inventoryContent = `[adhoc]
+${hostname} ansible_connection=ssh ansible_user=${user}
+`;
+
+    writeFileSync(inventoryPath, inventoryContent, 'utf8');
+    return inventoryPath;
+  }
+
+  /**
+   * Clean up a temporary inventory file
+   * @param inventoryPath - Path to the temporary inventory file
+   */
+  private cleanupTempInventory(inventoryPath: string): void {
+    try {
+      unlinkSync(inventoryPath);
+      // Also try to remove the temp directory
+      const tempDir = join(inventoryPath, '..');
+      unlinkSync(tempDir);
+    } catch (error) {
+      // Ignore cleanup errors
     }
   }
 }

@@ -401,11 +401,11 @@ The debug export collects **all** `localStorage` and `sessionStorage` contents, 
 
 | Package | Severity | Vulnerability | Advisory |
 |---------|----------|---------------|----------|
-| `tar` ≤7.5.7 | **HIGH** | Hardlink path traversal (GHSA-34x7-hfp2-rc4v) | [Link](https://github.com/advisories/GHSA-34x7-hfp2-rc4v) |
-| `tar` ≤7.5.7 | **HIGH** | Race condition on macOS APFS (GHSA-r6q2-hw4h-h46w) | [Link](https://github.com/advisories/GHSA-r6q2-hw4h-h46w) |
-| `tar` ≤7.5.7 | **HIGH** | Symlink poisoning (GHSA-8qq5-rm4j-mr97) | [Link](https://github.com/advisories/GHSA-8qq5-rm4j-mr97) |
-| `tar` ≤7.5.7 | **HIGH** | Arbitrary file read/write via symlink chain (GHSA-83g3-92jg-28cx) | [Link](https://github.com/advisories/GHSA-83g3-92jg-28cx) |
-| `rollup` 4.0.0–4.58.0 | **HIGH** | Arbitrary file write via path traversal (GHSA-mw96-cpmx-2vgc) | [Link](https://github.com/advisories/GHSA-mw96-cpmx-2vgc) |
+| `tar` ≤7.5.7 | **HIGH** | Hardlink path traversal (GHSA-34x7-hfp2-rc4v) | [Advisory GHSA-34x7-hfp2-rc4v](https://github.com/advisories/GHSA-34x7-hfp2-rc4v) |
+| `tar` ≤7.5.7 | **HIGH** | Race condition on macOS APFS (GHSA-r6q2-hw4h-h46w) | [Advisory GHSA-r6q2-hw4h-h46w](https://github.com/advisories/GHSA-r6q2-hw4h-h46w) |
+| `tar` ≤7.5.7 | **HIGH** | Symlink poisoning (GHSA-8qq5-rm4j-mr97) | [Advisory GHSA-8qq5-rm4j-mr97](https://github.com/advisories/GHSA-8qq5-rm4j-mr97) |
+| `tar` ≤7.5.7 | **HIGH** | Arbitrary file read/write via symlink chain (GHSA-83g3-92jg-28cx) | [Advisory GHSA-83g3-92jg-28cx](https://github.com/advisories/GHSA-83g3-92jg-28cx) |
+| `rollup` 4.0.0–4.58.0 | **HIGH** | Arbitrary file write via path traversal (GHSA-mw96-cpmx-2vgc) | [Advisory GHSA-mw96-cpmx-2vgc](https://github.com/advisories/GHSA-mw96-cpmx-2vgc) |
 | `minimatch` ≤3.1.3 | **HIGH** | Multiple ReDoS (GHSA-3ppc-4f35-3m26, GHSA-7r86-cg39-jmmj, GHSA-23c5-xmqv-rm74) | |
 | `qs` 6.7.0–6.14.1 | Moderate | arrayLimit bypass DoS (GHSA-w7fw-mjwx-w883) | |
 | `svelte` ≤5.53.4 | Moderate | Multiple SSR XSS (5 advisories) — low risk for SPA | |
