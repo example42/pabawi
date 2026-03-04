@@ -132,6 +132,7 @@
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Setup failed';
       showError('Setup failed', errorMessage);
+    } finally {
       isSubmitting = false;
     }
   }
