@@ -324,14 +324,24 @@ if [[ "$SKIP_ENV" != "true" ]]; then
     ask PUPPETSERVER_TOKEN "Puppetserver token (leave empty if using SSL certs)" ""
 
     if [[ "$USE_SHARED_PUPPET_SSL" == "true" ]]; then
-      # Ask if they want to reuse the same SSL settings
-      ask_yn USE_SAME_SSL "Use the same SSL certificates as PuppetDB?" "y"
-      if [[ "$USE_SAME_SSL" == "true" ]]; then
-        PUPPETSERVER_SSL_ENABLED="$PUPPETDB_SSL_ENABLED"
-        PUPPETSERVER_SSL_CA_VAL="$PUPPETDB_SSL_CA_VAL"
-        PUPPETSERVER_SSL_CERT_VAL="$PUPPETDB_SSL_CERT_VAL"
-        PUPPETSERVER_SSL_KEY_VAL="$PUPPETDB_SSL_KEY_VAL"
+      if [[ "$PUPPETDB_ENABLED" == "true" && "$PUPPETDB_SSL_ENABLED" == "true" ]]; then
+        # PuppetDB is enabled with SSL - offer to reuse those settings
+        ask_yn USE_SAME_SSL "Use the same SSL certificates as PuppetDB?" "y"
+        if [[ "$USE_SAME_SSL" == "true" ]]; then
+          PUPPETSERVER_SSL_ENABLED="$PUPPETDB_SSL_ENABLED"
+          PUPPETSERVER_SSL_CA_VAL="$PUPPETDB_SSL_CA_VAL"
+          PUPPETSERVER_SSL_CERT_VAL="$PUPPETDB_SSL_CERT_VAL"
+          PUPPETSERVER_SSL_KEY_VAL="$PUPPETDB_SSL_KEY_VAL"
+        else
+          ask_yn PUPPETSERVER_SSL_ENABLED "Use SSL certificates for Puppetserver?" "y"
+          if [[ "$PUPPETSERVER_SSL_ENABLED" == "true" ]]; then
+            ask PUPPETSERVER_SSL_CA_VAL "SSL CA path" "$SHARED_PUPPET_SSL_CA"
+            ask PUPPETSERVER_SSL_CERT_VAL "SSL cert path" "$SHARED_PUPPET_SSL_CERT"
+            ask PUPPETSERVER_SSL_KEY_VAL "SSL key path" "$SHARED_PUPPET_SSL_KEY"
+          fi
+        fi
       else
+        # PuppetDB is not enabled (or not using SSL) - prompt using shared SSL values as defaults
         ask_yn PUPPETSERVER_SSL_ENABLED "Use SSL certificates for Puppetserver?" "y"
         if [[ "$PUPPETSERVER_SSL_ENABLED" == "true" ]]; then
           ask PUPPETSERVER_SSL_CA_VAL "SSL CA path" "$SHARED_PUPPET_SSL_CA"
@@ -384,14 +394,25 @@ if [[ "$SKIP_ENV" != "true" ]]; then
 
   # ── SSH integration ──────────────────────────────────────────────────────
   ask_yn SSH_ENABLED "Enable SSH integration?" "n"
+  SSH_CONFIG_PATH=""
   SSH_DEFAULT_USER=""
   SSH_DEFAULT_KEY=""
   SSH_SUDO_ENABLED="false"
-  # SSH_CONFIG_PATH is always written to .env as a shared default for all integrations
-  ssh_default="${SSH_SAMPLE_PATH:-$HOME/.ssh/config}"
-  ask SSH_CONFIG_PATH "SSH config file path" "$ssh_default"
+  # SSH settings (including SSH_CONFIG_PATH) are only used when SSH integration is enabled
   if [[ "$SSH_ENABLED" == "true" ]]; then
-    ask SSH_DEFAULT_USER "Default SSH user (leave empty for current user)" ""
+    ssh_default="${SSH_SAMPLE_PATH:-$HOME/.ssh/config}"
+    ask SSH_CONFIG_PATH "SSH config file path" "$ssh_default"
+    ssh_user_default="$(id -un 2>/dev/null || true)"
+    if [[ -z "$ssh_user_default" && -n "${USER:-}" ]]; then
+      ssh_user_default="$USER"
+    fi
+    if [[ -z "$ssh_user_default" ]]; then
+      ssh_user_default="root"
+    fi
+    ask SSH_DEFAULT_USER "Default SSH user" "$ssh_user_default"
+    if [[ -z "$SSH_DEFAULT_USER" ]]; then
+      SSH_DEFAULT_USER="$ssh_user_default"
+    fi
     ask SSH_DEFAULT_KEY "Default SSH private key path (leave empty for agent)" ""
     ask_yn SSH_SUDO_ENABLED "Enable sudo for SSH commands?" "n"
   fi
@@ -529,10 +550,13 @@ EOF
   if [[ "$PUPPET_NODE_CERTS_WRITE" == "true" ]]; then
     cat >> "$ENV_FILE" <<EOF
 
-# ── Puppet Node SSL Certificates ────────────────────
-PUPPET_SSL_CA=${PUPPET_NODE_SSL_CA}
-PUPPET_SSL_CERT=${PUPPET_NODE_SSL_CERT}
-PUPPET_SSL_KEY=${PUPPET_NODE_SSL_KEY}
+# ── Puppet SSL Certificates ─────────────────────────
+PUPPETSERVER_SSL_CA=${PUPPET_NODE_SSL_CA}
+PUPPETSERVER_SSL_CERT=${PUPPET_NODE_SSL_CERT}
+PUPPETSERVER_SSL_KEY=${PUPPET_NODE_SSL_KEY}
+PUPPETDB_SSL_CA=${PUPPET_NODE_SSL_CA}
+PUPPETDB_SSL_CERT=${PUPPET_NODE_SSL_CERT}
+PUPPETDB_SSL_KEY=${PUPPET_NODE_SSL_KEY}
 EOF
   fi
 
