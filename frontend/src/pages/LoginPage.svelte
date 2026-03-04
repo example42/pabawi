@@ -3,16 +3,33 @@
   import { router } from '../lib/router.svelte';
   import { showError, showSuccess } from '../lib/toast.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
+  import { get } from '../lib/api';
+  import { onMount } from 'svelte';
 
   let username = $state('');
   let password = $state(''); // pragma: allowlist secret
   let isSubmitting = $state(false);
   let validationErrors = $state<{ username?: string; password?: string }>({});
+  let selfRegistrationAllowed = $state(false);
+  let checkingConfig = $state(true);
 
   // Redirect if already authenticated
   $effect(() => {
     if (authManager.isAuthenticated) {
       router.navigate('/');
+    }
+  });
+
+  // Check if self-registration is allowed
+  onMount(async () => {
+    try {
+      const status = await get<{ config: { allowSelfRegistration: boolean } | null }>('/api/setup/status');
+      selfRegistrationAllowed = status.config?.allowSelfRegistration ?? false;
+    } catch (error) {
+      console.error('Failed to check self-registration status:', error);
+      selfRegistrationAllowed = false;
+    } finally {
+      checkingConfig = false;
     }
   });
 
@@ -166,19 +183,21 @@
         </button>
       </div>
 
-      <!-- Register link -->
-      <div class="text-center">
-        <p class="text-sm text-gray-600 dark:text-gray-400">
-          Don't have an account?
-          <button
-            type="button"
-            onclick={handleRegisterClick}
-            class="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
-          >
-            Register here
-          </button>
-        </p>
-      </div>
+      <!-- Register link (only show if self-registration is allowed) -->
+      {#if !checkingConfig && selfRegistrationAllowed}
+        <div class="text-center">
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            Don't have an account?
+            <button
+              type="button"
+              onclick={handleRegisterClick}
+              class="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300"
+            >
+              Register here
+            </button>
+          </p>
+        </div>
+      {/if}
     </form>
   </div>
 </div>

@@ -43,7 +43,7 @@ Create or update `backend/.env`:
 PORT=3000
 HOST=localhost
 LOG_LEVEL=debug
-DATABASE_PATH=./data/executions.db
+DATABASE_PATH=./data/pabawi.db
 
 # Bolt Configuration
 BOLT_PROJECT_PATH=./bolt-project

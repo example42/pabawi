@@ -240,6 +240,33 @@ if [[ "$SKIP_ENV" != "true" ]]; then
     fi
   fi
 
+  # ── Puppet Server SSL Configuration (shared) ────────────────────────────
+  SHARED_PUPPET_SSL_CA=""
+  SHARED_PUPPET_SSL_CERT=""
+  SHARED_PUPPET_SSL_KEY=""
+  SHARED_PUPPET_SERVER=""
+  USE_SHARED_PUPPET_SSL="false"
+
+  # If Puppet is available but no local certs found, ask for custom cert paths
+  if [[ "$PUPPET_AVAILABLE" == "true" && -z "$PUPPET_SSL_CERT" ]]; then
+    warn "Puppet is installed but local SSL certificates were not found in ${PUPPET_SSL_DIR}"
+    ask_yn USE_CUSTOM_PUPPET_SSL "Configure custom Puppet SSL certificates for PuppetDB/Puppetserver?" "y"
+    if [[ "$USE_CUSTOM_PUPPET_SSL" == "true" ]]; then
+      ask SHARED_PUPPET_SERVER "Puppet server hostname" "puppet.$(hostname -d 2>/dev/null || echo 'example.com')"
+      ask SHARED_PUPPET_SSL_CA "SSL CA certificate path" "/path/to/ca.pem"
+      ask SHARED_PUPPET_SSL_CERT "SSL client certificate path" "/path/to/client-cert.pem"
+      ask SHARED_PUPPET_SSL_KEY "SSL client key path" "/path/to/client-key.pem"
+      USE_SHARED_PUPPET_SSL="true"
+    fi
+  elif [[ -n "$PUPPET_SSL_CERT" ]]; then
+    # Local certs found, use them as shared defaults
+    SHARED_PUPPET_SSL_CA="$PUPPET_SSL_CA"
+    SHARED_PUPPET_SSL_CERT="$PUPPET_SSL_CERT"
+    SHARED_PUPPET_SSL_KEY="$PUPPET_SSL_KEY"
+    SHARED_PUPPET_SERVER="$(hostname -f 2>/dev/null || hostname)"
+    USE_SHARED_PUPPET_SSL="true"
+  fi
+
   # ── PuppetDB integration ─────────────────────────────────────────────────
   if [[ "$PUPPET_AVAILABLE" == "true" ]]; then
     PUPPETDB_DEFAULT="y"
@@ -255,15 +282,20 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   PUPPETDB_SSL_KEY_VAL=""
   PUPPETDB_PORT="8081"
   if [[ "$PUPPETDB_ENABLED" == "true" ]]; then
-    ask PUPPETDB_SERVER_URL "PuppetDB server URL" "https://$(hostname -f 2>/dev/null || hostname)"
+    if [[ -n "$SHARED_PUPPET_SERVER" ]]; then
+      ask PUPPETDB_SERVER_URL "PuppetDB server URL" "https://${SHARED_PUPPET_SERVER}"
+    else
+      ask PUPPETDB_SERVER_URL "PuppetDB server URL" "https://$(hostname -f 2>/dev/null || hostname)"
+    fi
     ask PUPPETDB_PORT "PuppetDB port" "8081"
     ask PUPPETDB_TOKEN "PuppetDB token (leave empty if using SSL certs)" ""
-    if [[ -n "$PUPPET_SSL_CERT" ]]; then
-      ask_yn PUPPETDB_SSL_ENABLED "Use Puppet SSL certs for PuppetDB?" "y"
+
+    if [[ "$USE_SHARED_PUPPET_SSL" == "true" ]]; then
+      ask_yn PUPPETDB_SSL_ENABLED "Use SSL certificates for PuppetDB?" "y"
       if [[ "$PUPPETDB_SSL_ENABLED" == "true" ]]; then
-        ask PUPPETDB_SSL_CA_VAL "SSL CA path" "$PUPPET_SSL_CA"
-        ask PUPPETDB_SSL_CERT_VAL "SSL cert path" "$PUPPET_SSL_CERT"
-        ask PUPPETDB_SSL_KEY_VAL "SSL key path" "$PUPPET_SSL_KEY"
+        ask PUPPETDB_SSL_CA_VAL "SSL CA path" "$SHARED_PUPPET_SSL_CA"
+        ask PUPPETDB_SSL_CERT_VAL "SSL cert path" "$SHARED_PUPPET_SSL_CERT"
+        ask PUPPETDB_SSL_KEY_VAL "SSL key path" "$SHARED_PUPPET_SSL_KEY"
       fi
     fi
   fi
@@ -283,15 +315,29 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   PUPPETSERVER_SSL_KEY_VAL=""
   PUPPETSERVER_PORT="8140"
   if [[ "$PUPPETSERVER_ENABLED" == "true" ]]; then
-    ask PUPPETSERVER_SERVER_URL "Puppetserver URL" "https://$(hostname -f 2>/dev/null || hostname)"
+    if [[ -n "$SHARED_PUPPET_SERVER" ]]; then
+      ask PUPPETSERVER_SERVER_URL "Puppetserver URL" "https://${SHARED_PUPPET_SERVER}"
+    else
+      ask PUPPETSERVER_SERVER_URL "Puppetserver URL" "https://$(hostname -f 2>/dev/null || hostname)"
+    fi
     ask PUPPETSERVER_PORT "Puppetserver port" "8140"
     ask PUPPETSERVER_TOKEN "Puppetserver token (leave empty if using SSL certs)" ""
-    if [[ -n "$PUPPET_SSL_CERT" ]]; then
-      ask_yn PUPPETSERVER_SSL_ENABLED "Use Puppet SSL certs for Puppetserver?" "y"
-      if [[ "$PUPPETSERVER_SSL_ENABLED" == "true" ]]; then
-        ask PUPPETSERVER_SSL_CA_VAL "SSL CA path" "$PUPPET_SSL_CA"
-        ask PUPPETSERVER_SSL_CERT_VAL "SSL cert path" "$PUPPET_SSL_CERT"
-        ask PUPPETSERVER_SSL_KEY_VAL "SSL key path" "$PUPPET_SSL_KEY"
+
+    if [[ "$USE_SHARED_PUPPET_SSL" == "true" ]]; then
+      # Ask if they want to reuse the same SSL settings
+      ask_yn USE_SAME_SSL "Use the same SSL certificates as PuppetDB?" "y"
+      if [[ "$USE_SAME_SSL" == "true" ]]; then
+        PUPPETSERVER_SSL_ENABLED="$PUPPETDB_SSL_ENABLED"
+        PUPPETSERVER_SSL_CA_VAL="$PUPPETDB_SSL_CA_VAL"
+        PUPPETSERVER_SSL_CERT_VAL="$PUPPETDB_SSL_CERT_VAL"
+        PUPPETSERVER_SSL_KEY_VAL="$PUPPETDB_SSL_KEY_VAL"
+      else
+        ask_yn PUPPETSERVER_SSL_ENABLED "Use SSL certificates for Puppetserver?" "y"
+        if [[ "$PUPPETSERVER_SSL_ENABLED" == "true" ]]; then
+          ask PUPPETSERVER_SSL_CA_VAL "SSL CA path" "$SHARED_PUPPET_SSL_CA"
+          ask PUPPETSERVER_SSL_CERT_VAL "SSL cert path" "$SHARED_PUPPET_SSL_CERT"
+          ask PUPPETSERVER_SSL_KEY_VAL "SSL key path" "$SHARED_PUPPET_SSL_KEY"
+        fi
       fi
     fi
   fi
@@ -338,21 +384,32 @@ if [[ "$SKIP_ENV" != "true" ]]; then
 
   # ── SSH integration ──────────────────────────────────────────────────────
   ask_yn SSH_ENABLED "Enable SSH integration?" "n"
-  SSH_CONFIG_PATH=""
   SSH_DEFAULT_USER=""
   SSH_DEFAULT_KEY=""
   SSH_SUDO_ENABLED="false"
+  # SSH_CONFIG_PATH is always written to .env as a shared default for all integrations
+  ssh_default="${SSH_SAMPLE_PATH:-$HOME/.ssh/config}"
+  ask SSH_CONFIG_PATH "SSH config file path" "$ssh_default"
   if [[ "$SSH_ENABLED" == "true" ]]; then
-    ssh_default="${SSH_SAMPLE_PATH:-$HOME/.ssh/config}"
-    if [[ "$SAMPLE_MODE" == "3" ]]; then
-      ask SSH_CONFIG_PATH "SSH config path" "$ssh_default"
-    else
-      SSH_CONFIG_PATH="$ssh_default"
-      info "SSH config path: $SSH_CONFIG_PATH"
-    fi
     ask SSH_DEFAULT_USER "Default SSH user (leave empty for current user)" ""
     ask SSH_DEFAULT_KEY "Default SSH private key path (leave empty for agent)" ""
     ask_yn SSH_SUDO_ENABLED "Enable sudo for SSH commands?" "n"
+  fi
+
+  # ── Puppet Node SSL Certificates ────────────────────────────────────────
+  PUPPET_NODE_CERTS_WRITE="false"
+  PUPPET_NODE_SSL_CA=""
+  PUPPET_NODE_SSL_CERT=""
+  PUPPET_NODE_SSL_KEY=""
+  if [[ "$PUPPET_AVAILABLE" == "true" && -n "$PUPPET_SSL_CERT" ]]; then
+    header "Puppet Node SSL Certificates"
+    info "SSL certificates for this node were found in ${PUPPET_SSL_DIR}."
+    ask_yn PUPPET_NODE_CERTS_WRITE "Include node SSL certificate paths in .env?" "y"
+    if [[ "$PUPPET_NODE_CERTS_WRITE" == "true" ]]; then
+      ask PUPPET_NODE_SSL_CA   "SSL CA path"   "$PUPPET_SSL_CA"
+      ask PUPPET_NODE_SSL_CERT "SSL cert path" "$PUPPET_SSL_CERT"
+      ask PUPPET_NODE_SSL_KEY  "SSL key path"  "$PUPPET_SSL_KEY"
+    fi
   fi
 
   # ── Write .env file ─────────────────────────────────────────────────────
@@ -367,7 +424,7 @@ if [[ "$SKIP_ENV" != "true" ]]; then
 PORT=${PORT}
 HOST=${HOST}
 LOG_LEVEL=${LOG_LEVEL}
-DATABASE_PATH=./data/executions.db
+DATABASE_PATH=./data/pabawi.db
 BOLT_EXECUTION_TIMEOUT=300000
 
 # ── Caching & Performance ───────────────────────────
@@ -375,6 +432,7 @@ CACHE_INVENTORY_TTL=30000
 CACHE_FACTS_TTL=300000
 CONCURRENT_EXECUTION_LIMIT=5
 MAX_QUEUE_SIZE=50
+
 EOF
 
   # Append Bolt integration when enabled
@@ -455,12 +513,6 @@ SSH_ENABLED=true
 SSH_CONFIG_PATH=${SSH_CONFIG_PATH}
 SSH_DEFAULT_PORT=22
 SSH_HOST_KEY_CHECK=true
-SSH_CONNECTION_TIMEOUT=30
-SSH_COMMAND_TIMEOUT=300
-SSH_MAX_CONNECTIONS=50
-SSH_MAX_CONNECTIONS_PER_HOST=5
-SSH_IDLE_TIMEOUT=300
-SSH_CONCURRENCY_LIMIT=10
 EOF
     [[ -n "$SSH_DEFAULT_USER" ]] && echo "SSH_DEFAULT_USER=${SSH_DEFAULT_USER}" >> "$ENV_FILE"
     [[ -n "$SSH_DEFAULT_KEY" ]]  && echo "SSH_DEFAULT_KEY=${SSH_DEFAULT_KEY}" >> "$ENV_FILE"
@@ -472,6 +524,16 @@ SSH_SUDO_PASSWORDLESS=true
 SSH_SUDO_USER=root
 EOF
     fi
+  fi
+
+  if [[ "$PUPPET_NODE_CERTS_WRITE" == "true" ]]; then
+    cat >> "$ENV_FILE" <<EOF
+
+# ── Puppet Node SSL Certificates ────────────────────
+PUPPET_SSL_CA=${PUPPET_NODE_SSL_CA}
+PUPPET_SSL_CERT=${PUPPET_NODE_SSL_CERT}
+PUPPET_SSL_KEY=${PUPPET_NODE_SSL_KEY}
+EOF
   fi
 
   success "backend/.env written successfully"

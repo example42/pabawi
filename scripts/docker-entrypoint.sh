@@ -10,8 +10,8 @@ if [ ! -w /data ]; then
 fi
 
 # Create database file if it doesn't exist
-if [ ! -f /data/executions.db ]; then
-    touch /data/executions.db
+if [ ! -f /data/pabawi.db ]; then
+    touch /data/pabawi.db
 fi
 
 # Execute the main command

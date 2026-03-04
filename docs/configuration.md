@@ -90,9 +90,9 @@ All configuration is managed through environment variables. You can set these in
 #### DATABASE_PATH
 
 - **Type:** String (path)
-- **Default:** `./data/executions.db`
+- **Default:** `./data/pabawi.db`
 - **Description:** Path to SQLite database file for execution history
-- **Example:** `DATABASE_PATH=/var/lib/pabawi/executions.db`
+- **Example:** `DATABASE_PATH=/var/lib/pabawi/pabawi.db`
 - **Notes:**
   - Directory must exist and be writable
   - Database file will be created automatically if it doesn't exist
@@ -386,7 +386,7 @@ HOST=localhost
 BOLT_PROJECT_PATH=./bolt-project
 COMMAND_WHITELIST_ALLOW_ALL=true
 LOG_LEVEL=debug
-DATABASE_PATH=./data/executions.db
+DATABASE_PATH=./data/pabawi.db
 BOLT_EXECUTION_TIMEOUT=600000
 
 # Disable caching for immediate updates
@@ -428,7 +428,7 @@ COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST='["ls","pwd","uptime","systemctl status","journalctl"]'
 COMMAND_WHITELIST_MATCH_MODE=prefix
 LOG_LEVEL=info
-DATABASE_PATH=/var/lib/pabawi/executions.db
+DATABASE_PATH=/var/lib/pabawi/pabawi.db
 BOLT_EXECUTION_TIMEOUT=300000
 
 # Short cache for testing
@@ -469,7 +469,7 @@ COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST='["uptime","df -h","free -m","systemctl status"]'
 COMMAND_WHITELIST_MATCH_MODE=exact
 LOG_LEVEL=warn
-DATABASE_PATH=/var/lib/pabawi/executions.db
+DATABASE_PATH=/var/lib/pabawi/pabawi.db
 BOLT_EXECUTION_TIMEOUT=300000
 
 # Optimize caching

@@ -143,7 +143,7 @@ SQLite schema defined in `backend/src/database/schema.sql`, migrations in `migra
 BOLT_PROJECT_PATH=.              # Path to Bolt project (inventory.yaml, modules/)
 PORT=3000                        # Server port
 LOG_LEVEL=info                   # error | warn | info | debug
-DATABASE_PATH=./data/executions.db
+DATABASE_PATH=./data/pabawi.db
 BOLT_EXECUTION_TIMEOUT=300000    # 5 minutes default
 COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST=["ls","pwd"]  # CSV in env, JSON in code
@@ -223,7 +223,7 @@ PuppetDB, Puppetserver, Hiera enabled via `INTEGRATION_PUPPETDB_ENABLED`, `INTEG
 - Use correlation IDs to trace frontend actions → backend processing → responses
 - Inspect `backend/src/errors/ErrorHandlingService.ts` for error context details
 - Check `ExpertModeDebugPanel` component for timeline view of frontend + backend logs
-- Verify execution results in SQLite database (`data/executions.db`)—check composite indexes for query performance
+- Verify execution results in SQLite database (`data/pabawi.db`)—check composite indexes for query performance
 - Test Bolt commands manually: `bolt command run 'whoami' --targets inventory.yaml`
 - Check `ExecutionQueue` status via `GET /api/executions/queue/status`—verify queue isn't full
 - For task failures, check both `_output` (command output) and `_error.msg` (error details)

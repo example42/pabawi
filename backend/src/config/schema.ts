@@ -291,7 +291,7 @@ export const AppConfigSchema = z.object({
   commandWhitelist: WhitelistConfigSchema,
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes
   logLevel: z.enum(["error", "warn", "info", "debug"]).default("info"),
-  databasePath: z.string().default("./data/executions.db"),
+  databasePath: z.string().default("./data/pabawi.db"),
   corsAllowedOrigins: z.array(z.string()).default(["http://localhost:5173", "http://localhost:3000"]),
   packageTasks: z.array(PackageTaskConfigSchema).default([
     {

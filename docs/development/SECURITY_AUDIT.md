@@ -292,7 +292,7 @@ Configuration paths (`BOLT_PROJECT_PATH`, `DATABASE_PATH`, Hiera `controlRepoPat
 ```dotenv
 # .env
 BOLT_PROJECT_PATH=~/bolt-project
-DATABASE_PATH=/data/executions.db
+DATABASE_PATH=/data/pabawi.db
 HIERA_CONTROL_REPO_PATH=/path/to/control-repo
 ```
 

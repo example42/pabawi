@@ -2188,7 +2188,7 @@ Error: SQLITE_BUSY: database is locked
 **Solutions:**
 
 1. Stop all instances: `pkill -f "node.*server.js"`
-2. Remove lock files: `rm -f ./data/executions.db-*`
+2. Remove lock files: `rm -f ./data/pabawi.db-*`
 3. Restart server: `npm run dev:backend`
 
 ### "Connection timeout"
