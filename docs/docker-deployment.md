@@ -386,7 +386,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
-      - DATABASE_PATH=/data/executions.db
+      - DATABASE_PATH=/data/pabawi.db
       - BOLT_PROJECT_PATH=/bolt-project
       - LOG_LEVEL=info
       
@@ -621,10 +621,10 @@ docker exec pabawi find /control-repo/data -name "*.yaml" | head -10
 docker stop pabawi
 
 # Check database file
-ls -la ./data/executions.db
+ls -la ./data/pabawi.db
 
 # Remove lock files
-rm -f ./data/executions.db-*
+rm -f ./data/pabawi.db-*
 
 # Restart container
 docker start pabawi

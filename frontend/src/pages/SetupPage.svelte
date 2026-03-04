@@ -124,11 +124,14 @@
       });
 
       showSuccess('Setup complete', 'Your administrator account has been created. You can now log in.');
-      router.navigate('/login');
+
+      // Use setTimeout to ensure the success message is shown before navigation
+      setTimeout(() => {
+        router.navigate('/');
+      }, 100);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Setup failed';
       showError('Setup failed', errorMessage);
-    } finally {
       isSubmitting = false;
     }
   }

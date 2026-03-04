@@ -6,6 +6,8 @@
   import { router } from '../lib/router.svelte';
   import { showSuccess } from '../lib/toast.svelte';
   import ChangePasswordDialog from './ChangePasswordDialog.svelte';
+  import { get } from '../lib/api';
+  import { onMount } from 'svelte';
 
   interface Props {
     currentPath?: string;
@@ -16,6 +18,21 @@
   let showUserMenu = $state(false);
   let showAdminMenu = $state(false);
   let showChangePasswordDialog = $state(false);
+  let selfRegistrationAllowed = $state(false);
+  let checkingConfig = $state(true);
+
+  // Check if self-registration is allowed
+  onMount(async () => {
+    try {
+      const status = await get<{ config: { allowSelfRegistration: boolean } | null }>('/api/setup/status');
+      selfRegistrationAllowed = status.config?.allowSelfRegistration ?? false;
+    } catch (error) {
+      console.error('Failed to check self-registration status:', error);
+      selfRegistrationAllowed = false;
+    } finally {
+      checkingConfig = false;
+    }
+  });
 
   const baseNavItems = [
     { path: '/', label: 'Home', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -302,13 +319,15 @@
             >
               Login
             </button>
-            <button
-              type="button"
-              onclick={handleRegisterClick}
-              class="rounded-md px-3 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
-            >
-              Register
-            </button>
+            {#if !checkingConfig && selfRegistrationAllowed}
+              <button
+                type="button"
+                onclick={handleRegisterClick}
+                class="rounded-md px-3 py-2 text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+              >
+                Register
+              </button>
+            {/if}
           </div>
         {/if}
       </div>

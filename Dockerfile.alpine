@@ -115,8 +115,8 @@ if [ ! -w /data ]; then
 fi
 
 # Create database file if it doesn't exist
-if [ ! -f /data/executions.db ]; then
-    touch /data/executions.db
+if [ ! -f /data/pabawi.db ]; then
+    touch /data/pabawi.db
 fi
 
 # Set Puppet/Bolt environment variables to work around Alpine detection issues
@@ -145,7 +145,7 @@ EXPOSE 3000
 ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0 \
-    DATABASE_PATH=/data/executions.db \
+    DATABASE_PATH=/data/pabawi.db \
     BOLT_PROJECT_PATH=/bolt-project \
     FACTER_operatingsystem=Alpine \
     FACTER_osfamily=Linux \

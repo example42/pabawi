@@ -22,7 +22,7 @@ CONCURRENT_EXECUTION_LIMIT=10`;
 
   const advancedConfig = `# Advanced Configuration
 LOG_LEVEL=info
-DATABASE_PATH=./data/executions.db
+DATABASE_PATH=./data/pabawi.db
 STREAMING_ENABLED=true
 STREAMING_BUFFER_SIZE=1024
 BOLT_PRIORITY=5`;

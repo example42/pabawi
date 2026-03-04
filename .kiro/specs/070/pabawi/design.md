@@ -455,7 +455,7 @@ interface AppConfig {
   commandWhitelist: WhitelistConfig
   executionTimeout: number        // Default: 300000 (5 min)
   logLevel: string               // Default: 'info'
-  databasePath: string           // Default: './data/executions.db'
+  databasePath: string           // Default: './data/pabawi.db'
   expertModeEnabled: boolean     // Default: false (new)
 }
 ```
@@ -970,7 +970,7 @@ COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST='["ls","pwd","whoami"]'
 BOLT_EXECUTION_TIMEOUT=300000
 LOG_LEVEL=info
-DATABASE_PATH=/data/executions.db
+DATABASE_PATH=/data/pabawi.db
 ```
 
 ### Volume Mounts

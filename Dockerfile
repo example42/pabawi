@@ -133,7 +133,7 @@ EXPOSE 3000
 ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0 \
-    DATABASE_PATH=/data/executions.db \
+    DATABASE_PATH=/data/pabawi.db \
     BOLT_PROJECT_PATH=/bolt-project \
     # Integration settings (disabled by default)
     PUPPETDB_ENABLED=false \
