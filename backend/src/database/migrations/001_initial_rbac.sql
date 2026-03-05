@@ -40,10 +40,10 @@ CREATE TABLE IF NOT EXISTS roles (
 CREATE TABLE IF NOT EXISTS permissions (
   id TEXT PRIMARY KEY,  -- UUID
   resource TEXT NOT NULL,  -- Resource identifier (e.g., 'ansible', 'bolt', 'puppetdb')
-  action TEXT NOT NULL,  -- Action identifier (e.g., 'read', 'write', 'execute', 'admin')
+  "action" TEXT NOT NULL,  -- Action identifier (e.g., 'read', 'write', 'execute', 'admin')
   description TEXT NOT NULL,
   createdAt TEXT NOT NULL,  -- ISO 8601 timestamp
-  UNIQUE(resource, action)  -- Each resource-action combination must be unique
+  UNIQUE(resource, "action")  -- Each resource-action combination must be unique
 );
 
 -- User-Group junction table: Many-to-many relationship between users and groups
@@ -116,9 +116,16 @@ CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(roleId)
 CREATE INDEX IF NOT EXISTS idx_role_permissions_perm ON role_permissions(permissionId);
 
 -- Permission lookups by resource and action
-CREATE INDEX IF NOT EXISTS idx_permissions_resource_action ON permissions(resource, action);
+CREATE INDEX IF NOT EXISTS idx_permissions_resource_action ON permissions(resource, "action");
 
 -- Token revocation checks
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_token ON revoked_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires ON revoked_tokens(expiresAt);
 CREATE INDEX IF NOT EXISTS idx_revoked_tokens_user ON revoked_tokens(userId);
+
+-- Configuration table: Application settings and setup configuration
+CREATE TABLE IF NOT EXISTS config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updatedAt TEXT NOT NULL  -- ISO 8601 timestamp
+);

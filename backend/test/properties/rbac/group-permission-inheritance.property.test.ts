@@ -705,7 +705,7 @@ async function createTestPermission(
   action: string
 ): Promise<void> {
   const sql = `
-    INSERT INTO permissions (id, resource, action, description, createdAt)
+    INSERT INTO permissions (id, resource, "action", description, createdAt)
     VALUES (?, ?, ?, ?, ?)
   `;
 

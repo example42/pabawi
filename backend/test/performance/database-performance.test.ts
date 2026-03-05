@@ -50,11 +50,17 @@ async function setupDatabase(): Promise<sqlite3.Database> {
   const schemaPath = join(__dirname, '../../src/database/schema.sql');
   const schema = readFileSync(schemaPath, 'utf-8');
 
-  // Split by semicolon and execute each statement
-  const statements = schema.split(';').filter(s => s.trim().length > 0);
-  for (const statement of statements) {
-    await runAsync(db, statement);
-  }
+  // Execute full schema using db.exec (handles comments and multiple statements)
+  await new Promise<void>((resolve, reject) => {
+    db.exec(schema, (err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+
+  // Add columns from migration 006 (batch execution support)
+  await runAsync(db, 'ALTER TABLE executions ADD COLUMN batch_id TEXT');
+  await runAsync(db, 'ALTER TABLE executions ADD COLUMN batch_position INTEGER');
 
   return db;
 }

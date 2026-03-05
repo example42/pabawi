@@ -45,7 +45,7 @@ describe('002_seed_rbac_data migration', () => {
 
   it('should create all required permissions', async () => {
     const permissions = await new Promise<any[]>((resolve, reject) => {
-      db.all('SELECT * FROM permissions ORDER BY resource, action', (err, rows) => {
+      db.all('SELECT * FROM permissions ORDER BY resource, "action"', (err, rows) => {
         if (err) reject(err);
         else resolve(rows);
       });
@@ -97,11 +97,11 @@ describe('002_seed_rbac_data migration', () => {
 
     const permissions = await new Promise<any[]>((resolve, reject) => {
       db.all(
-        `SELECT p.resource, p.action
+        `SELECT p.resource, p."action"
          FROM permissions p
          INNER JOIN role_permissions rp ON rp.permissionId = p.id
          WHERE rp.roleId = ?
-         ORDER BY p.resource, p.action`,
+         ORDER BY p.resource, p."action"`,
         [viewerRole.id],
         (err, rows) => {
           if (err) reject(err);
@@ -129,11 +129,11 @@ describe('002_seed_rbac_data migration', () => {
 
     const permissions = await new Promise<any[]>((resolve, reject) => {
       db.all(
-        `SELECT p.resource, p.action
+        `SELECT p.resource, p."action"
          FROM permissions p
          INNER JOIN role_permissions rp ON rp.permissionId = p.id
          WHERE rp.roleId = ?
-         ORDER BY p.resource, p.action`,
+         ORDER BY p.resource, p."action"`,
         [operatorRole.id],
         (err, rows) => {
           if (err) reject(err);
@@ -163,11 +163,11 @@ describe('002_seed_rbac_data migration', () => {
 
     const permissions = await new Promise<any[]>((resolve, reject) => {
       db.all(
-        `SELECT p.resource, p.action
+        `SELECT p.resource, p."action"
          FROM permissions p
          INNER JOIN role_permissions rp ON rp.permissionId = p.id
          WHERE rp.roleId = ?
-         ORDER BY p.resource, p.action`,
+         ORDER BY p.resource, p."action"`,
         [adminRole.id],
         (err, rows) => {
           if (err) reject(err);
@@ -213,9 +213,9 @@ describe('002_seed_rbac_data migration', () => {
   it('should have unique resource-action combinations', async () => {
     const duplicates = await new Promise<any[]>((resolve, reject) => {
       db.all(
-        `SELECT resource, action, COUNT(*) as count
+        `SELECT resource, "action", COUNT(*) as count
          FROM permissions
-         GROUP BY resource, action
+         GROUP BY resource, "action"
          HAVING count > 1`,
         (err, rows) => {
           if (err) reject(err);

@@ -98,8 +98,8 @@ describe('RBAC Database Schema', () => {
     expect(result).toBeDefined();
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
     expect(result.sql).toContain('resource TEXT NOT NULL');
-    expect(result.sql).toContain('action TEXT NOT NULL');
-    expect(result.sql).toContain('UNIQUE(resource, action)');
+    expect(result.sql).toContain('"action" TEXT NOT NULL');
+    expect(result.sql).toContain('UNIQUE(resource, "action")');
   });
 
   it('should create junction tables with composite primary keys', async () => {
@@ -214,11 +214,11 @@ describe('RBAC Database Schema', () => {
   it('should enforce unique constraint on permissions resource-action combination', async () => {
     const db = dbService.getConnection();
 
-    // Insert first permission
+    // Insert first permission (use unique test values to avoid conflicts with seed data)
     await new Promise<void>((resolve, reject) => {
       db.run(
-        `INSERT INTO permissions (id, resource, action, description, createdAt)
-         VALUES ('perm1', 'ansible', 'read', 'Read Ansible resources', '2024-01-01T00:00:00Z')`,
+        `INSERT INTO permissions (id, resource, "action", description, createdAt)
+         VALUES ('perm-test-1', 'test-resource', 'test-read', 'Test permission', '2024-01-01T00:00:00Z')`,
         (err) => {
           if (err) reject(err);
           else resolve();
@@ -230,8 +230,8 @@ describe('RBAC Database Schema', () => {
     await expect(
       new Promise<void>((resolve, reject) => {
         db.run(
-          `INSERT INTO permissions (id, resource, action, description, createdAt)
-           VALUES ('perm2', 'ansible', 'read', 'Another read permission', '2024-01-01T00:00:00Z')`,
+          `INSERT INTO permissions (id, resource, "action", description, createdAt)
+           VALUES ('perm-test-2', 'test-resource', 'test-read', 'Another test permission', '2024-01-01T00:00:00Z')`,
           (err) => {
             if (err) reject(err);
             else resolve();

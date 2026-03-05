@@ -1,10 +1,51 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
 import express, { Express } from 'express';
 import request from 'supertest';
 import { createAuthRouter } from '../../src/routes/auth';
 import { createUsersRouter } from '../../src/routes/users';
 import { DatabaseService } from '../../src/database/DatabaseService';
+import { SetupService } from '../../src/services/SetupService';
+import { PermissionService } from '../../src/services/PermissionService';
+import { RoleService } from '../../src/services/RoleService';
+import { UserService } from '../../src/services/UserService';
+import { AuthenticationService } from '../../src/services/AuthenticationService';
+
+// Helper function to grant users:read permission to a user
+async function grantUsersReadPermission(
+  databaseService: DatabaseService,
+  userId: string
+): Promise<void> {
+  const permissionService = new PermissionService(databaseService.getConnection());
+  const roleService = new RoleService(databaseService.getConnection());
+  const authService = new AuthenticationService(databaseService.getConnection());
+  const userService = new UserService(databaseService.getConnection(), authService);
+
+  // Create users:read permission (or get existing)
+  let permission;
+  try {
+    permission = await permissionService.createPermission({
+      resource: 'users',
+      action: 'read',
+      description: 'Read users',
+    });
+  } catch (error) {
+    // Permission might already exist, fetch it
+    const allPermissions = await permissionService.listPermissions();
+    permission = allPermissions.items.find(
+      p => p.resource === 'users' && p.action === 'read'
+    );
+    if (!permission) throw error;
+  }
+
+  // Create a role with the permission
+  const role = await roleService.createRole({
+    name: `User Reader ${Date.now()}`,
+    description: 'Can read user data',
+  });
+
+  await roleService.assignPermissionToRole(role.id, permission.id);
+  await userService.assignRoleToUser(userId, role.id);
+}
 
 /**
  * Integration Tests for Authentication Flow
@@ -18,27 +59,23 @@ import { DatabaseService } from '../../src/database/DatabaseService';
  */
 describe('Authentication Flow Integration Tests', () => {
   let app: Express;
-  let db: Database;
   let databaseService: DatabaseService;
+  let setupService: SetupService;
 
   beforeEach(async () => {
     // Set JWT_SECRET for testing
     process.env.JWT_SECRET = 'test-secret-key-for-integration-tests';  // pragma: allowlist secret
 
-    // Create in-memory database
-    db = new Database(':memory:');
+    // Create in-memory database with proper initialization
+    databaseService = new DatabaseService(':memory:');
+    await databaseService.initialize();
 
-    // Initialize schema
-    await initializeSchema(db);
-
-    // Seed built-in roles and permissions
-    await seedBuiltInData(db);
-
-    // Create mock DatabaseService
-    databaseService = {
-      getConnection: () => db,
-      isInitialized: () => true,
-    } as DatabaseService;
+    // Enable self-registration for tests
+    setupService = new SetupService(databaseService.getConnection());
+    await setupService.saveConfig({
+      allowSelfRegistration: true,
+      defaultNewUserRole: null, // Don't auto-assign roles in these tests
+    });
 
     // Create Express app with routes
     app = express();
@@ -48,7 +85,7 @@ describe('Authentication Flow Integration Tests', () => {
   });
 
   afterEach(async () => {
-    await closeDatabase(db);
+    await databaseService.close();
   });
 
   describe('Complete Registration → Login → Access Protected Endpoint Flow', () => {
@@ -67,6 +104,8 @@ describe('Authentication Flow Integration Tests', () => {
         .send(userData)
         .expect(201);
 
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
       expect(registerResponse.body).toHaveProperty('user');
       expect(registerResponse.body.user.username).toBe('integrationuser');
       expect(registerResponse.body.user.email).toBe('integration@example.com');
@@ -78,8 +117,8 @@ describe('Authentication Flow Integration Tests', () => {
 
       const userId = registerResponse.body.user.id;
 
-      // Make user admin so they can access protected endpoints
-      await makeUserAdmin(db, userId);
+      // Grant user the users:read permission so they can access their own data
+      await grantUsersReadPermission(databaseService, userId);
 
       // Step 2: Login with the registered credentials
       const loginData = {
@@ -184,11 +223,12 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       const registerResponse = await request(app)
-        .post('/api/auth/register')
+.post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      await makeUserAdmin(db, registerResponse.body.user.id);
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
 
       const loginResponse = await request(app)
         .post('/api/auth/login')
@@ -222,11 +262,12 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       const registerResponse = await request(app)
-        .post('/api/auth/register')
+.post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      await makeUserAdmin(db, registerResponse.body.user.id);
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
 
       const loginResponse = await request(app)
         .post('/api/auth/login')
@@ -339,11 +380,12 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       const registerResponse = await request(app)
-        .post('/api/auth/register')
+.post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      await makeUserAdmin(db, registerResponse.body.user.id);
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
 
       const loginResponse = await request(app)
         .post('/api/auth/login')
@@ -402,11 +444,12 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       const registerResponse = await request(app)
-        .post('/api/auth/register')
+.post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      await makeUserAdmin(db, registerResponse.body.user.id);
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
 
       const loginResponse1 = await request(app)
         .post('/api/auth/login')
@@ -459,13 +502,14 @@ describe('Authentication Flow Integration Tests', () => {
 
       // 1. Register
       const registerResponse = await request(app)
-        .post('/api/auth/register')
+.post('/api/auth/register')
         .send(userData)
         .expect(201);
 
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
       expect(registerResponse.body.user.username).toBe('lifecycleuser');
 
-      await makeUserAdmin(db, registerResponse.body.user.id);
 
       // 2. Login
       const loginResponse1 = await request(app)
@@ -520,11 +564,12 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Register
       const registerResponse = await request(app)
-        .post('/api/auth/register')
+.post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      await makeUserAdmin(db, registerResponse.body.user.id);
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
 
       // Login from "device 1"
       const login1 = await request(app)
@@ -584,13 +629,16 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Register
       const registerResponse = await request(app)
-        .post('/api/auth/register')
+.post('/api/auth/register')
         .send(userData)
         .expect(201);
 
+      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
+
       const userId = registerResponse.body.user.id;
 
-      await makeUserAdmin(db, userId);
+      // Grant user the users:read permission
+      await grantUsersReadPermission(databaseService, userId);
 
       // Login successfully
       const loginResponse = await request(app)
@@ -608,7 +656,7 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Deactivate user
       await new Promise<void>((resolve, reject) => {
-        db.run(
+        databaseService.getConnection().run(
           'UPDATE users SET isActive = 0 WHERE id = ?',
           [userId],
           (err) => {
@@ -665,181 +713,3 @@ describe('Authentication Flow Integration Tests', () => {
     });
   });
 });
-
-// Helper functions
-async function makeUserAdmin(db: Database, userId: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    db.run(
-      'UPDATE users SET isAdmin = 1 WHERE id = ?',
-      [userId],
-      (err) => {
-        if (err) reject(err);
-        else resolve();
-      }
-    );
-  });
-}
-
-async function initializeSchema(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.exec(`
-      CREATE TABLE users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        passwordHash TEXT NOT NULL,
-        firstName TEXT NOT NULL,
-        lastName TEXT NOT NULL,
-        isActive INTEGER DEFAULT 1,
-        isAdmin INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL,
-        lastLoginAt TEXT
-      );
-
-      CREATE TABLE groups (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      CREATE TABLE roles (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        isBuiltIn INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      CREATE TABLE permissions (
-        id TEXT PRIMARY KEY,
-        resource TEXT NOT NULL,
-        action TEXT NOT NULL,
-        description TEXT,
-        createdAt TEXT NOT NULL,
-        UNIQUE(resource, action)
-      );
-
-      CREATE TABLE user_groups (
-        userId TEXT NOT NULL,
-        groupId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, groupId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (groupId) REFERENCES groups(id)
-      );
-
-      CREATE TABLE user_roles (
-        userId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, roleId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (roleId) REFERENCES roles(id)
-      );
-
-      CREATE TABLE group_roles (
-        groupId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (groupId, roleId),
-        FOREIGN KEY (groupId) REFERENCES groups(id),
-        FOREIGN KEY (roleId) REFERENCES roles(id)
-      );
-
-      CREATE TABLE role_permissions (
-        roleId TEXT NOT NULL,
-        permissionId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (roleId, permissionId),
-        FOREIGN KEY (roleId) REFERENCES roles(id),
-        FOREIGN KEY (permissionId) REFERENCES permissions(id)
-      );
-
-      CREATE TABLE revoked_tokens (
-        token TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
-        revokedAt TEXT NOT NULL,
-        expiresAt TEXT NOT NULL
-      );
-
-      CREATE TABLE failed_login_attempts (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL,
-        ipAddress TEXT,
-        userAgent TEXT,
-        attemptedAt TEXT NOT NULL
-      );
-
-      CREATE TABLE account_lockouts (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL,
-        lockoutType TEXT NOT NULL,
-        lockedAt TEXT NOT NULL,
-        expiresAt TEXT,
-        reason TEXT
-      );
-
-      CREATE TABLE audit_logs (
-        id TEXT PRIMARY KEY,
-        timestamp TEXT NOT NULL,
-        eventType TEXT NOT NULL,
-        action TEXT NOT NULL,
-        userId TEXT,
-        targetUserId TEXT,
-        targetResourceType TEXT,
-        targetResourceId TEXT,
-        ipAddress TEXT,
-        userAgent TEXT,
-        details TEXT,
-        result TEXT NOT NULL
-      );
-    `, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-async function seedBuiltInData(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const now = new Date().toISOString();
-
-    db.exec(`
-      -- Insert built-in permissions
-      INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
-        ('perm-users-read', 'users', 'read', 'View user information', '${now}'),
-        ('perm-users-write', 'users', 'write', 'Create and update users', '${now}'),
-        ('perm-users-admin', 'users', 'admin', 'Full user management', '${now}');
-
-      -- Insert built-in roles
-      INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
-        ('role-viewer', 'Viewer', 'Read-only access', 1, '${now}', '${now}'),
-        ('role-operator', 'Operator', 'Read and execute access', 1, '${now}', '${now}'),
-        ('role-admin', 'Administrator', 'Full system access', 1, '${now}', '${now}');
-
-      -- Assign permissions to roles
-      INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES
-        ('role-viewer', 'perm-users-read', '${now}'),
-        ('role-operator', 'perm-users-read', '${now}'),
-        ('role-admin', 'perm-users-read', '${now}'),
-        ('role-admin', 'perm-users-write', '${now}'),
-        ('role-admin', 'perm-users-admin', '${now}');
-    `, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-async function closeDatabase(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.close((err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}

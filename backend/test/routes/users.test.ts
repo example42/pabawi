@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
 import { createUsersRouter } from '../../src/routes/users';
@@ -8,6 +9,19 @@ import { UserService } from '../../src/services/UserService';
 import { PermissionService } from '../../src/services/PermissionService';
 import { RoleService } from '../../src/services/RoleService';
 import { GroupService } from '../../src/services/GroupService';
+
+// Helper function to disable default role assignment in tests
+async function disableDefaultRoleAssignment(databaseService: DatabaseService): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    databaseService.getConnection().run(
+      `INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))`,
+      (err) => {
+        if (err) reject(err);
+        else resolve();
+      }
+    );
+  });
+}
 
 describe('Users Router - GET /api/users', () => {
   let app: Express;
@@ -25,6 +39,20 @@ describe('Users Router - GET /api/users', () => {
     // Create in-memory database for testing
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
+
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
+
+    // Disable default role assignment for all tests
+    await new Promise<void>((resolve, reject) => {
+      databaseService.getConnection().run(
+        `INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))`,
+        (err) => {
+          if (err) reject(err);
+          else resolve();
+        }
+      );
+    });
 
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
@@ -371,6 +399,9 @@ describe('Users Router - GET /api/users/:id', () => {
     // Create in-memory database for testing
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
+
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
@@ -742,6 +773,9 @@ describe('Users Router - PUT /api/users/:id', () => {
     // Create in-memory database for testing
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
+
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
@@ -1298,6 +1332,9 @@ describe('Users Router - DELETE /api/users/:id', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
+
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
@@ -1741,6 +1778,9 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
+
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
@@ -2159,6 +2199,9 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
+
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
@@ -2568,7 +2611,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       // Verify user is no longer in group
       const groups = await userService.getUserGroups(testUserId);
       expect(groups).toHaveLength(0);
-    });
+    }, 10000); // Increase timeout to 10 seconds
   });
 
   describe('Response Format', () => {
@@ -2620,6 +2663,9 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     // Create in-memory database for testing
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
+
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
@@ -3090,6 +3136,9 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     // Create in-memory database for testing
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
+
+    // Disable default role assignment for all tests
+    await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret

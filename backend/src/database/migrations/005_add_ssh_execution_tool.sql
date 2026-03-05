@@ -6,7 +6,7 @@ CREATE TABLE executions_new (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts', 'puppet', 'package')),
   target_nodes TEXT NOT NULL,
-  action TEXT NOT NULL,
+  "action" TEXT NOT NULL,
   parameters TEXT,
   status TEXT NOT NULL CHECK(status IN ('running', 'success', 'failed', 'partial')),
   started_at TEXT NOT NULL,

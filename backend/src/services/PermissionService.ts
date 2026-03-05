@@ -117,7 +117,7 @@ export class PermissionService {
 
     // Insert permission
     await this.runQuery(
-      `INSERT INTO permissions (id, resource, action, description, createdAt)
+      `INSERT INTO permissions (id, resource, "action", description, createdAt)
        VALUES (?, ?, ?, ?, ?)`,
       [permissionId, data.resource, data.action, data.description || '', now]
     );
@@ -153,7 +153,7 @@ export class PermissionService {
    */
   private async getPermissionByResourceAction(resource: string, action: string): Promise<Permission | null> {
     return this.getQuery<Permission>(
-      'SELECT * FROM permissions WHERE resource = ? AND action = ?',
+      'SELECT * FROM permissions WHERE resource = ? AND "action" = ?',
       [resource, action]
     );
   }
@@ -199,7 +199,7 @@ export class PermissionService {
 
     // Get paginated results
     const permissions = await this.allQuery<Permission>(
-      `SELECT * FROM permissions ${whereClause} ORDER BY resource ASC, action ASC LIMIT ? OFFSET ?`,
+      `SELECT * FROM permissions ${whereClause} ORDER BY resource ASC, "action" ASC LIMIT ? OFFSET ?`,
       [...params, String(limit), String(offset)]
     );
 
@@ -396,7 +396,7 @@ export class PermissionService {
     // Admin users get all permissions (Requirement 8.3)
     if (user.isAdmin === 1) {
       return this.allQuery<Permission>(
-        'SELECT * FROM permissions ORDER BY resource ASC, action ASC'
+        'SELECT * FROM permissions ORDER BY resource ASC, "action" ASC'
       );
     }
 
@@ -504,7 +504,7 @@ export class PermissionService {
     });
 
     const batchQuery = `
-      SELECT DISTINCT p.resource, p.action FROM permissions p
+      SELECT DISTINCT p.resource, p."action" FROM permissions p
       WHERE (${conditions})
       AND p.id IN (
         -- Path 1: Direct role assignment

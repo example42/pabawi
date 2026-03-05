@@ -358,7 +358,7 @@ export class AuditLoggingService {
 
     const sql = `
       INSERT INTO audit_logs (
-        id, timestamp, eventType, action, userId, targetUserId,
+        id, timestamp, eventType, "action", userId, targetUserId,
         targetResourceType, targetResourceId, ipAddress, userAgent,
         details, result
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -401,7 +401,7 @@ export class AuditLoggingService {
     }
 
     if (filters.action) {
-      sql += ' AND action = ?';
+      sql += ' AND "action" = ?';
       params.push(filters.action);
     }
 

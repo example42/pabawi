@@ -65,10 +65,9 @@ describe('API Performance Tests', () => {
 
     // Create router
     const router = createIntegrationsRouter(
-      undefined, // bolt plugin
+      integrationManager,
       puppetDBService,
       puppetserverService,
-      integrationManager
     );
 
     app.use('/api/integrations', router);

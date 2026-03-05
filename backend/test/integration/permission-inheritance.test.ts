@@ -859,6 +859,16 @@ async function initializeSchema(db: Database): Promise<void> {
       CREATE INDEX idx_role_permissions_role ON role_permissions(roleId);
       CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId);
       CREATE INDEX idx_permissions_resource_action ON permissions(resource, action);
+
+      CREATE TABLE config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      );
+
+      INSERT INTO config (key, value, updatedAt) VALUES
+        ('allow_self_registration', 'false', datetime('now')),
+        ('default_new_user_role', 'role-viewer-001', datetime('now'));
     `, (err) => {
       if (err) reject(err);
       else resolve();

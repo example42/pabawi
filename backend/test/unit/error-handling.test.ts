@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { Database } from "sqlite3";
 import express, { Express } from "express";
 import request from "supertest";
 import { createAuthRouter } from "../../src/routes/auth";
 import { createUsersRouter } from "../../src/routes/users";
 import { DatabaseService } from "../../src/database/DatabaseService";
+import { SetupService } from "../../src/services/SetupService";
 import { AuthenticationService } from "../../src/services/AuthenticationService";
 import { UserService } from "../../src/services/UserService";
+import { Database } from "sqlite3";
 import { randomUUID } from "crypto";
 
 /**
@@ -23,41 +24,41 @@ import { randomUUID } from "crypto";
  */
 describe("Error Handling - Unit Tests", () => {
   let app: Express;
-  let db: Database;
   let databaseService: DatabaseService;
+  let setupService: SetupService;
   let authService: AuthenticationService;
   let userService: UserService;
   const jwtSecret = "test-secret-key-for-error-handling"; // pragma: allowlist secret
 
   beforeEach(async () => {
-    // Create in-memory database
-    db = new Database(":memory:");
+    // Set JWT secret
+    process.env.JWT_SECRET = jwtSecret;
 
-    // Initialize schema
-    await initializeSchema(db);
+    // Create in-memory database with proper initialization
+    databaseService = new DatabaseService(':memory:');
+    await databaseService.initialize();
 
-    // Create mock DatabaseService
-    databaseService = {
-      getConnection: () => db,
-      isInitialized: () => true,
-    } as DatabaseService;
+    // Enable self-registration for tests
+    setupService = new SetupService(databaseService.getConnection());
+    await setupService.saveConfig({
+      allowSelfRegistration: true,
+      defaultNewUserRole: null, // Don't auto-assign roles in these tests
+    });
 
     // Initialize services
-    authService = new AuthenticationService(db, jwtSecret);
-    userService = new UserService(db);
+    authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
+    userService = new UserService(databaseService.getConnection(), authService);
 
     // Create Express app with routes
     app = express();
     app.use(express.json());
     app.use("/api/auth", createAuthRouter(databaseService));
     app.use("/api/users", createUsersRouter(databaseService));
-
-    // Create test user for authentication tests
-    await createTestUser(db);
   });
 
   afterEach(async () => {
-    await closeDatabase(db);
+    await databaseService.close();
+    delete process.env.JWT_SECRET;
   });
 
   describe("Requirement 16.1: Authentication Failures (401)", () => {
@@ -97,7 +98,7 @@ describe("Error Handling - Unit Tests", () => {
     it("should return 401 for inactive user account", async () => {
       // Create inactive user
       await new Promise<void>((resolve, reject) => {
-        db.run(
+        databaseService.getConnection().run(
           `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
@@ -218,7 +219,7 @@ describe("Error Handling - Unit Tests", () => {
   describe("Requirement 16.3: Database Connection Failures (503)", () => {
     it("should handle database errors gracefully", async () => {
       // Close the database to simulate connection failure
-      await closeDatabase(db);
+      await databaseService.close();
 
       const response = await request(app)
         .post("/api/auth/login")
@@ -312,6 +313,17 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return 401 for revoked token", async () => {
+      // First register a user
+      await request(app)
+        .post("/api/auth/register")
+        .send({
+          username: "testuser",
+          email: "test@example.com",
+          password: "Password123!",
+          firstName: "Test",
+          lastName: "User",
+        });
+
       // Login to get valid token
       const loginResponse = await request(app)
         .post("/api/auth/login")
@@ -581,7 +593,7 @@ describe("Error Handling - Unit Tests", () => {
 
     it("should include sufficient error details for debugging", async () => {
       // Close database to trigger error
-      await closeDatabase(db);
+      await databaseService.close();
 
       const response = await request(app)
         .post("/api/auth/login")
@@ -761,6 +773,33 @@ async function initializeSchema(db: Database): Promise<void> {
     CREATE INDEX idx_group_roles_group ON group_roles(groupId);
     CREATE INDEX idx_role_permissions_role ON role_permissions(roleId);
     CREATE INDEX idx_permissions_resource_action ON permissions(resource, action);
+
+    CREATE TABLE account_lockouts (
+      username TEXT PRIMARY KEY,
+      lockoutType TEXT NOT NULL,
+      lockedAt TEXT NOT NULL,
+      lockedUntil TEXT,
+      failedAttempts INTEGER NOT NULL DEFAULT 0,
+      lastAttemptAt TEXT
+    );
+
+    CREATE TABLE failed_login_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL,
+      attemptedAt TEXT NOT NULL,
+      ipAddress TEXT,
+      reason TEXT
+    );
+
+    CREATE TABLE config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
+    INSERT INTO config (key, value, updatedAt) VALUES
+      ('allow_self_registration', 'false', datetime('now')),
+      ('default_new_user_role', 'role-viewer-001', datetime('now'));
   `;
 
   return new Promise((resolve, reject) => {
@@ -776,7 +815,7 @@ async function createTestUser(db: Database): Promise<void> {
   const passwordHash = await bcrypt.hash("Password123!", 10);
 
   return new Promise((resolve, reject) => {
-    db.run(
+    databaseService.getConnection().run(
       `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [

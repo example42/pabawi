@@ -49,7 +49,10 @@ describe('Property 7: Frontend Log Obfuscation', () => {
     .string({ minLength: 3, maxLength: 20 })
     .filter(s => {
       const lower = s.toLowerCase();
-      return !SENSITIVE_PATTERNS.some(pattern => lower.includes(pattern.toLowerCase()));
+      // Exclude sensitive patterns and special JavaScript properties
+      const isSpecialProperty = ['__proto__', 'constructor', 'prototype'].includes(s);
+      const hasSensitivePattern = SENSITIVE_PATTERNS.some(pattern => lower.includes(pattern.toLowerCase()));
+      return !isSpecialProperty && !hasSensitivePattern;
     });
 
   // Generator for field values
@@ -150,6 +153,11 @@ describe('Property 7: Frontend Log Obfuscation', () => {
       const result: Record<string, unknown> = {};
 
       for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        // Skip special properties like __proto__, constructor, prototype
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+          continue;
+        }
+
         const isSensitive = SENSITIVE_PATTERNS.some(pattern =>
           key.toLowerCase().includes(pattern.toLowerCase())
         );

@@ -7,39 +7,39 @@
 -- ============================================================================
 
 -- Ansible permissions
-INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
+INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
   ('ansible-read-001', 'ansible', 'read', 'View Ansible inventory and playbooks', datetime('now')),
   ('ansible-exec-001', 'ansible', 'execute', 'Execute Ansible playbooks', datetime('now')),
   ('ansible-write-001', 'ansible', 'write', 'Modify Ansible configuration', datetime('now')),
   ('ansible-admin-001', 'ansible', 'admin', 'Manage Ansible resources', datetime('now'));
 
 -- Bolt permissions
-INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
+INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
   ('bolt-read-001', 'bolt', 'read', 'View Bolt tasks and plans', datetime('now')),
   ('bolt-exec-001', 'bolt', 'execute', 'Execute Bolt tasks and plans', datetime('now')),
   ('bolt-write-001', 'bolt', 'write', 'Modify Bolt configuration', datetime('now')),
   ('bolt-admin-001', 'bolt', 'admin', 'Manage Bolt resources', datetime('now'));
 
 -- PuppetDB permissions
-INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
+INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
   ('puppetdb-read-001', 'puppetdb', 'read', 'Query PuppetDB data', datetime('now')),
   ('puppetdb-write-001', 'puppetdb', 'write', 'Modify PuppetDB data', datetime('now')),
   ('puppetdb-admin-001', 'puppetdb', 'admin', 'Manage PuppetDB configuration', datetime('now'));
 
 -- User management permissions (for admin interface)
-INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
+INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
   ('users-read-001', 'users', 'read', 'View user accounts', datetime('now')),
   ('users-write-001', 'users', 'write', 'Create and modify user accounts', datetime('now')),
   ('users-admin-001', 'users', 'admin', 'Full user management including deletion', datetime('now'));
 
 -- Group management permissions
-INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
+INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
   ('groups-read-001', 'groups', 'read', 'View groups', datetime('now')),
   ('groups-write-001', 'groups', 'write', 'Create and modify groups', datetime('now')),
   ('groups-admin-001', 'groups', 'admin', 'Full group management including deletion', datetime('now'));
 
 -- Role management permissions
-INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
+INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
   ('roles-read-001', 'roles', 'read', 'View roles and permissions', datetime('now')),
   ('roles-write-001', 'roles', 'write', 'Create and modify roles', datetime('now')),
   ('roles-admin-001', 'roles', 'admin', 'Full role management including deletion', datetime('now'));

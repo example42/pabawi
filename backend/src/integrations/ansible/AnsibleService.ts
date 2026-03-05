@@ -472,7 +472,7 @@ export class AnsibleService {
           source: "ansible",
           sources: ["ansible"],
           linked: false,
-          nodes: hosts, // Use hostname directly to match node IDs from getInventory
+          nodes: hosts.map(host => `ansible:${host}`), // Prefix hosts with ansible:
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
       }

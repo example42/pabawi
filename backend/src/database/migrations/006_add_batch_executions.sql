@@ -5,7 +5,7 @@
 CREATE TABLE IF NOT EXISTS batch_executions (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK(type IN ('command', 'task', 'plan')),
-  action TEXT NOT NULL,
+  "action" TEXT NOT NULL,
   parameters TEXT,  -- JSON object
   target_nodes TEXT NOT NULL,  -- JSON array of node IDs
   target_groups TEXT NOT NULL,  -- JSON array of group IDs
@@ -35,7 +35,7 @@ CREATE TABLE executions_new (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts', 'puppet', 'package', 'plan')),
   target_nodes TEXT NOT NULL,
-  action TEXT NOT NULL,
+  "action" TEXT NOT NULL,
   parameters TEXT,
   status TEXT NOT NULL CHECK(status IN ('running', 'success', 'failed', 'partial')),
   started_at TEXT NOT NULL,
@@ -59,7 +59,7 @@ SELECT
   id,
   type,
   target_nodes,
-  action,
+  "action",
   parameters,
   status,
   started_at,

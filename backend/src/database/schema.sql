@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS executions (
   id TEXT PRIMARY KEY,
   type TEXT NOT NULL CHECK(type IN ('command', 'task', 'facts', 'puppet', 'package')),
   target_nodes TEXT NOT NULL,  -- JSON array of target node IDs
-  action TEXT NOT NULL,
+  "action" TEXT NOT NULL,
   parameters TEXT,  -- JSON object of parameters
   status TEXT NOT NULL CHECK(status IN ('running', 'success', 'failed', 'partial')),
   started_at TEXT NOT NULL,  -- ISO 8601 timestamp
@@ -60,3 +60,14 @@ CREATE INDEX IF NOT EXISTS idx_executions_type_started ON executions(type, start
 -- Note: batch_executions table, batch-related indexes, and batch_id/batch_position columns
 -- are added via migration 006_add_batch_executions.sql for existing databases.
 -- For new databases, the migration will be applied automatically during initialization.
+
+-- Revoked tokens table for JWT token revocation
+CREATE TABLE IF NOT EXISTS revoked_tokens (
+  token TEXT PRIMARY KEY,
+  userId TEXT NOT NULL,
+  revokedAt TEXT NOT NULL,
+  expiresAt TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_revoked_tokens_user ON revoked_tokens(userId);
+CREATE INDEX IF NOT EXISTS idx_revoked_tokens_expires ON revoked_tokens(expiresAt);

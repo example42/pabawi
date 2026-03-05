@@ -140,70 +140,6 @@ else
   SKIP_ENV=false
 fi
 
-# ── Sample Data Mode Selection ──────────────────────────────────────────────
-SAMPLE_MODE=""
-BOLT_SAMPLE_PATH=""
-ANSIBLE_SAMPLE_PATH=""
-ANSIBLE_SAMPLE_INVENTORY=""
-SSH_SAMPLE_PATH=""
-HIERA_SAMPLE_PATH=""
-
-if [[ "$SKIP_ENV" != "true" ]]; then
-  header "Sample Data"
-  info "Pabawi ships with sample inventories for demo and development."
-  echo ""
-  echo "  1) ${BOLD}Default samples${RESET}      – Realistic multi-tier infrastructure (~80 nodes)"
-  echo "  2) ${BOLD}Stress test samples${RESET}   – Large-scale inventories for UI stress testing (2,000+ nodes)"
-  echo "  3) ${BOLD}Custom directories${RESET}    – Provide your own paths to Bolt/Ansible/SSH/Hiera"
-  echo ""
-  printf "${BOLD}Choose sample mode [1/2/3]${RESET} [${GREEN}1${RESET}]: "
-  read -r SAMPLE_MODE
-  SAMPLE_MODE="${SAMPLE_MODE:-1}"
-
-  case "$SAMPLE_MODE" in
-    1)
-      success "Using default sample integrations (samples/integrations/)"
-      BOLT_SAMPLE_PATH="./samples/integrations/bolt"
-      ANSIBLE_SAMPLE_PATH="./samples/integrations/ansible"
-      ANSIBLE_SAMPLE_INVENTORY="./samples/integrations/ansible/inventory/hosts.yml"
-      SSH_SAMPLE_PATH="./samples/integrations/ssh/config"
-      HIERA_SAMPLE_PATH="./samples/integrations/puppet"
-      ;;
-    2)
-      success "Using stress test samples (samples/stresstest/)"
-      BOLT_SAMPLE_PATH="./samples/stresstest/bolt"
-      ANSIBLE_SAMPLE_PATH="./samples/stresstest/ansible"
-      ANSIBLE_SAMPLE_INVENTORY="./samples/stresstest/ansible/inventory/hosts.yml"
-      SSH_SAMPLE_PATH="./samples/stresstest/ssh/config"
-      HIERA_SAMPLE_PATH="./samples/integrations/puppet"
-      info "Stress test samples do not include Puppet/Hiera data. Configure Hiera manually if needed."
-      # Offer to regenerate with a custom count
-      ask_yn REGEN_STRESS "Regenerate stress test inventories with a custom node count?" "n"
-      if [[ "$REGEN_STRESS" == "true" ]]; then
-        ask STRESS_NODE_COUNT "Number of nodes to generate" "2000"
-        info "Generating ${STRESS_NODE_COUNT} nodes…"
-        if command -v node &>/dev/null; then
-          node "$PROJECT_ROOT/samples/stresstest/generate.js" "$STRESS_NODE_COUNT"
-          success "Stress test inventories regenerated with ${STRESS_NODE_COUNT} nodes"
-        else
-          error "Node.js required to regenerate. Using pre-generated files."
-        fi
-      fi
-      ;;
-    3)
-      success "Custom directories — you'll configure paths in the integration prompts below."
-      ;;
-    *)
-      warn "Invalid choice, using default samples."
-      SAMPLE_MODE="1"
-      BOLT_SAMPLE_PATH="./samples/integrations/bolt"
-      ANSIBLE_SAMPLE_PATH="./samples/integrations/ansible"
-      ANSIBLE_SAMPLE_INVENTORY="./samples/integrations/ansible/inventory/hosts.yml"
-      SSH_SAMPLE_PATH="./samples/integrations/ssh/config"
-      HIERA_SAMPLE_PATH="./samples/integrations/puppet"
-      ;;
-  esac
-fi
 
 # ── Generate backend/.env ───────────────────────────────────────────────────
 if [[ "$SKIP_ENV" != "true" ]]; then
@@ -227,13 +163,7 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   COMMAND_WHITELIST_ALLOW_ALL="false"
   COMMAND_WHITELIST='["ls","pwd","whoami","uptime","cat","df","free"]'
   if [[ "$BOLT_ENABLED" == "true" ]]; then
-    bolt_default="${BOLT_SAMPLE_PATH:-./samples/integrations/bolt}"
-    if [[ "$SAMPLE_MODE" == "3" ]]; then
-      ask BOLT_PROJECT_PATH "Bolt project directory" "$bolt_default"
-    else
-      BOLT_PROJECT_PATH="$bolt_default"
-      info "Bolt project path: $BOLT_PROJECT_PATH"
-    fi
+    ask BOLT_PROJECT_PATH "Bolt project directory" "./samples/integrations/bolt"
     ask_yn COMMAND_WHITELIST_ALLOW_ALL "Allow ALL commands? (not recommended for shared/production use)" "n"
     if [[ "$COMMAND_WHITELIST_ALLOW_ALL" != "true" ]]; then
       ask COMMAND_WHITELIST "Allowed commands (JSON array)" "$COMMAND_WHITELIST"
@@ -246,12 +176,14 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   SHARED_PUPPET_SSL_KEY=""
   SHARED_PUPPET_SERVER=""
   USE_SHARED_PUPPET_SSL="false"
+  PUPPET_SAME_SSL_FOR_ALL="false"
 
   # If Puppet is available but no local certs found, ask for custom cert paths
   if [[ "$PUPPET_AVAILABLE" == "true" && -z "$PUPPET_SSL_CERT" ]]; then
     warn "Puppet is installed but local SSL certificates were not found in ${PUPPET_SSL_DIR}"
     ask_yn USE_CUSTOM_PUPPET_SSL "Configure custom Puppet SSL certificates for PuppetDB/Puppetserver?" "y"
     if [[ "$USE_CUSTOM_PUPPET_SSL" == "true" ]]; then
+      ask_yn PUPPET_SAME_SSL_FOR_ALL "Use the same SSL settings for both PuppetDB and Puppetserver?" "y"
       ask SHARED_PUPPET_SERVER "Puppet server hostname" "puppet.$(hostname -d 2>/dev/null || echo 'example.com')"
       ask SHARED_PUPPET_SSL_CA "SSL CA certificate path" "/path/to/ca.pem"
       ask SHARED_PUPPET_SSL_CERT "SSL client certificate path" "/path/to/client-cert.pem"
@@ -291,11 +223,19 @@ if [[ "$SKIP_ENV" != "true" ]]; then
     ask PUPPETDB_TOKEN "PuppetDB token (leave empty if using SSL certs)" ""
 
     if [[ "$USE_SHARED_PUPPET_SSL" == "true" ]]; then
-      ask_yn PUPPETDB_SSL_ENABLED "Use SSL certificates for PuppetDB?" "y"
-      if [[ "$PUPPETDB_SSL_ENABLED" == "true" ]]; then
-        ask PUPPETDB_SSL_CA_VAL "SSL CA path" "$SHARED_PUPPET_SSL_CA"
-        ask PUPPETDB_SSL_CERT_VAL "SSL cert path" "$SHARED_PUPPET_SSL_CERT"
-        ask PUPPETDB_SSL_KEY_VAL "SSL key path" "$SHARED_PUPPET_SSL_KEY"
+      if [[ "$PUPPET_SAME_SSL_FOR_ALL" == "true" ]]; then
+        PUPPETDB_SSL_ENABLED="true"
+        PUPPETDB_SSL_CA_VAL="$SHARED_PUPPET_SSL_CA"
+        PUPPETDB_SSL_CERT_VAL="$SHARED_PUPPET_SSL_CERT"
+        PUPPETDB_SSL_KEY_VAL="$SHARED_PUPPET_SSL_KEY"
+        info "Using shared Puppet SSL certificates for PuppetDB"
+      else
+        ask_yn PUPPETDB_SSL_ENABLED "Use SSL certificates for PuppetDB?" "y"
+        if [[ "$PUPPETDB_SSL_ENABLED" == "true" ]]; then
+          ask PUPPETDB_SSL_CA_VAL "SSL CA path" "$SHARED_PUPPET_SSL_CA"
+          ask PUPPETDB_SSL_CERT_VAL "SSL cert path" "$SHARED_PUPPET_SSL_CERT"
+          ask PUPPETDB_SSL_KEY_VAL "SSL key path" "$SHARED_PUPPET_SSL_KEY"
+        fi
       fi
     fi
   fi
@@ -324,7 +264,13 @@ if [[ "$SKIP_ENV" != "true" ]]; then
     ask PUPPETSERVER_TOKEN "Puppetserver token (leave empty if using SSL certs)" ""
 
     if [[ "$USE_SHARED_PUPPET_SSL" == "true" ]]; then
-      if [[ "$PUPPETDB_ENABLED" == "true" && "$PUPPETDB_SSL_ENABLED" == "true" ]]; then
+      if [[ "$PUPPET_SAME_SSL_FOR_ALL" == "true" ]]; then
+        PUPPETSERVER_SSL_ENABLED="true"
+        PUPPETSERVER_SSL_CA_VAL="$SHARED_PUPPET_SSL_CA"
+        PUPPETSERVER_SSL_CERT_VAL="$SHARED_PUPPET_SSL_CERT"
+        PUPPETSERVER_SSL_KEY_VAL="$SHARED_PUPPET_SSL_KEY"
+        info "Using shared Puppet SSL certificates for Puppetserver"
+      elif [[ "$PUPPETDB_ENABLED" == "true" && "$PUPPETDB_SSL_ENABLED" == "true" ]]; then
         # PuppetDB is enabled with SSL - offer to reuse those settings
         ask_yn USE_SAME_SSL "Use the same SSL certificates as PuppetDB?" "y"
         if [[ "$USE_SAME_SSL" == "true" ]]; then
@@ -356,17 +302,7 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   ask_yn HIERA_ENABLED "Enable Hiera integration?" "n"
   HIERA_CONTROL_REPO_PATH=""
   if [[ "$HIERA_ENABLED" == "true" ]]; then
-    hiera_default="${HIERA_SAMPLE_PATH:-/etc/puppetlabs/code/environments/production}"
-    if [[ "$SAMPLE_MODE" == "3" ]]; then
-      ask HIERA_CONTROL_REPO_PATH "Hiera control repo path" "$hiera_default"
-    else
-      if [[ -n "$hiera_default" ]]; then
-        HIERA_CONTROL_REPO_PATH="$hiera_default"
-        info "Hiera control repo path: $HIERA_CONTROL_REPO_PATH"
-      else
-        ask HIERA_CONTROL_REPO_PATH "Hiera control repo path" "/etc/puppetlabs/code/environments/production"
-      fi
-    fi
+    ask HIERA_CONTROL_REPO_PATH "Hiera control repo path" "./samples/integrations/puppet"
   fi
 
   # ── Ansible integration ─────────────────────────────────────────────────
@@ -379,28 +315,23 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   ANSIBLE_PROJECT_PATH=""
   ANSIBLE_INVENTORY_PATH=""
   if [[ "$ANSIBLE_ENABLED" == "true" ]]; then
-    ansible_default="${ANSIBLE_SAMPLE_PATH:-./samples/integrations/ansible}"
-    ansible_inv_default="${ANSIBLE_SAMPLE_INVENTORY:-./samples/integrations/ansible/inventory/hosts.yml}"
-    if [[ "$SAMPLE_MODE" == "3" ]]; then
-      ask ANSIBLE_PROJECT_PATH "Ansible project path" "$ansible_default"
-      ask ANSIBLE_INVENTORY_PATH "Ansible inventory path" "$ansible_inv_default"
-    else
-      ANSIBLE_PROJECT_PATH="$ansible_default"
-      ANSIBLE_INVENTORY_PATH="$ansible_inv_default"
-      info "Ansible project path: $ANSIBLE_PROJECT_PATH"
-      info "Ansible inventory path: $ANSIBLE_INVENTORY_PATH"
-    fi
+    ask ANSIBLE_PROJECT_PATH "Ansible project path" "./samples/integrations/ansible"
+    ask ANSIBLE_INVENTORY_PATH "Ansible inventory path" "./samples/integrations/ansible/inventory/hosts.yml"
   fi
 
   # ── SSH integration ──────────────────────────────────────────────────────
-  ask_yn SSH_ENABLED "Enable SSH integration?" "n"
+  ask_yn SSH_ENABLED "Enable SSH integration?" "y"
   SSH_CONFIG_PATH=""
   SSH_DEFAULT_USER=""
   SSH_DEFAULT_KEY=""
   SSH_SUDO_ENABLED="false"
   # SSH settings (including SSH_CONFIG_PATH) are only used when SSH integration is enabled
   if [[ "$SSH_ENABLED" == "true" ]]; then
-    ssh_default="${SSH_SAMPLE_PATH:-$HOME/.ssh/config}"
+    if [[ -f "$HOME/.ssh/config" ]]; then
+      ssh_default="$HOME/.ssh/config"
+    else
+      ssh_default="./samples/integrations/ssh/config"
+    fi
     ask SSH_CONFIG_PATH "SSH config file path" "$ssh_default"
     ssh_user_default="$(id -un 2>/dev/null || true)"
     if [[ -z "$ssh_user_default" && -n "${USER:-}" ]]; then
@@ -436,6 +367,8 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   # ── Write .env file ─────────────────────────────────────────────────────
   header "Writing backend/.env"
 
+  JWT_SECRET=$(openssl rand -hex 32)
+
   cat > "$ENV_FILE" <<EOF
 # Pabawi Configuration
 # Generated by scripts/setup.sh on $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -445,8 +378,8 @@ if [[ "$SKIP_ENV" != "true" ]]; then
 PORT=${PORT}
 HOST=${HOST}
 LOG_LEVEL=${LOG_LEVEL}
+JWT_SECRET=${JWT_SECRET}
 DATABASE_PATH=./data/pabawi.db
-BOLT_EXECUTION_TIMEOUT=300000
 
 # ── Caching & Performance ───────────────────────────
 CACHE_INVENTORY_TTL=30000

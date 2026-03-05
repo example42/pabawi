@@ -100,6 +100,20 @@ describe('AuthenticationService - Brute Force Protection', () => {
       )
     `);
 
+    await runQuery(db, `
+      CREATE TABLE config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    `);
+
+    await runQuery(db, `
+      INSERT INTO config (key, value, updatedAt) VALUES
+        ('allow_self_registration', 'false', datetime('now')),
+        ('default_new_user_role', 'role-viewer-001', datetime('now'))
+    `);
+
     // Create test user
     authService = new AuthenticationService(db, 'test-secret-key');
     const passwordHash = await authService.hashPassword(testPassword);
@@ -270,7 +284,7 @@ describe('AuthenticationService - Brute Force Protection', () => {
     await runQuery(db, `
       UPDATE account_lockouts
       SET lockedUntil = ?
-      WHERE username = ? AND lockoutType = 'temporary'  // pragma: allowlist secret
+      WHERE username = ? AND lockoutType = 'temporary'
     `, [pastTime, testUsername]);
 
     // Now authentication should succeed (lockout expired)

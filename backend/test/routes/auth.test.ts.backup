@@ -4,8 +4,6 @@ import request from 'supertest';
 import { createAuthRouter } from '../../src/routes/auth';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { SetupService } from '../../src/services/SetupService';
-import { Database } from 'sqlite3';
-import { initializeSchema } from '../../src/database/schema';
 
 describe('Auth Routes - POST /api/auth/register', () => {
   let app: Express;
@@ -789,23 +787,21 @@ async function closeDatabase(db: Database): Promise<void> {
 
 describe('Auth Routes - POST /api/auth/login', () => {
   let app: Express;
+  let db: Database;
   let databaseService: DatabaseService;
-  let setupService: SetupService;
 
   beforeEach(async () => {
-    // Set JWT_SECRET for testing
-    process.env.JWT_SECRET = 'test-secret-key';  // pragma: allowlist secret
+    // Create in-memory database
+    db = new Database(':memory:');
 
-    // Create in-memory database with proper initialization
-    databaseService = new DatabaseService(':memory:');
-    await databaseService.initialize();
+    // Initialize schema
+    await initializeSchema(db);
 
-    // Enable self-registration for tests
-    setupService = new SetupService(databaseService.getConnection());
-    await setupService.saveConfig({
-      allowSelfRegistration: true,
-      defaultNewUserRole: null, // Don't auto-assign roles in these tests
-    });
+    // Create mock DatabaseService
+    databaseService = {
+      getConnection: () => db,
+      isInitialized: () => true,
+    } as DatabaseService;
 
     // Create Express app with auth routes
     app = express();
@@ -814,7 +810,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
   });
 
   afterEach(async () => {
-    await databaseService.close();
+    await closeDatabase(db);
   });
 
   describe('Successful login (Requirements 1.1, 1.2, 1.3, 6.1, 6.2)', () => {
@@ -1010,7 +1006,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
 
       // Deactivate the user directly in database
       await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
+        db.run(
           'UPDATE users SET isActive = 0 WHERE username = ?',
           ['testuser'],
           (err) => {
@@ -1296,11 +1292,12 @@ describe('Auth Routes - POST /api/auth/login', () => {
 
       const response = await request(tempApp)
         .post('/api/auth/login')
-        .send(loginData);
+        .send(loginData)
+        .expect(401);
 
-      // Database errors may return either 401 (masked) or 500 (unhandled)
-      expect([401, 500]).toContain(response.status);
-      expect(response.body.error).toBeDefined();
+      // Database errors are masked as authentication failures for security
+      expect(response.body.error.code).toBe('AUTHENTICATION_FAILED');
+      expect(response.body.error.message).toBe('Authentication failed');
     });
 
     it('should handle multiple concurrent login requests', async () => {
@@ -1350,24 +1347,25 @@ describe('Auth Routes - POST /api/auth/login', () => {
 
 describe('Auth Routes - POST /api/auth/logout', () => {
   let app: Express;
+  let db: Database;
   let databaseService: DatabaseService;
-  let setupService: SetupService;
   const testJwtSecret = 'test-jwt-secret-for-logout-tests'; // pragma: allowlist secret
 
   beforeEach(async () => {
+    // Create in-memory database
+    db = new Database(':memory:');
+
+    // Initialize schema
+    await initializeSchema(db);
+
     // Set JWT secret for tests
     process.env.JWT_SECRET = testJwtSecret;
 
-    // Create in-memory database with proper initialization
-    databaseService = new DatabaseService(':memory:');
-    await databaseService.initialize();
-
-    // Enable self-registration for tests
-    setupService = new SetupService(databaseService.getConnection());
-    await setupService.saveConfig({
-      allowSelfRegistration: true,
-      defaultNewUserRole: null, // Don't auto-assign roles in these tests
-    });
+    // Create mock DatabaseService
+    databaseService = {
+      getConnection: () => db,
+      isInitialized: () => true,
+    } as DatabaseService;
 
     // Create Express app with auth routes
     app = express();
@@ -1377,7 +1375,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
   afterEach(async () => {
     delete process.env.JWT_SECRET;
-    await databaseService.close();
+    await closeDatabase(db);
   });
 
   describe('Successful logout (Requirements 1.6, 6.4)', () => {
@@ -1447,8 +1445,8 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(401);
 
-      expect(secondLogoutResponse.body.error.code).toBe('TOKEN_REVOKED');
-      expect(secondLogoutResponse.body.error.message).toBe('Token has been revoked. Please login again.');
+      expect(secondLogoutResponse.body.error).toBe('Unauthorized');
+      expect(secondLogoutResponse.body.message).toBe('Token has been revoked. Please login again.');
     });
 
     it('should allow user to login again after logout', async () => {
@@ -1701,7 +1699,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
       // Close the database to simulate error
       await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().close((err) => {
+        db.close((err) => {
           if (err) reject(err);
           else resolve();
         });
@@ -1718,7 +1716,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       // Database error during token verification results in authentication failure
 
       // Create a new database for cleanup to avoid double-close error
-      databaseService = new DatabaseService(':memory:');
+      db = new Database(':memory:');
     });
 
     it('should handle logout for inactive user', async () => {
@@ -1745,7 +1743,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
       // Deactivate the user
       await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
+        db.run(
           'UPDATE users SET isActive = 0 WHERE username = ?',
           ['testuser'],
           (err) => {
@@ -1773,9 +1771,8 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         .expect(401);
 
       // Error message should be generic and not expose sensitive info
-      const errorMessage = response.body.error?.message || '';
-      expect(errorMessage).not.toContain('user');
-      expect(errorMessage).not.toContain('userId');
+      expect(response.body.message).not.toContain('user');
+      expect(response.body.message).not.toContain('userId');
       expect(response.body).not.toHaveProperty('userId');
     });
 
@@ -1818,24 +1815,25 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
 describe('Auth Routes - POST /api/auth/refresh', () => {
   let app: Express;
+  let db: Database;
   let databaseService: DatabaseService;
-  let setupService: SetupService;
   const testJwtSecret = 'test-jwt-secret-for-refresh-tests'; // pragma: allowlist secret
 
   beforeEach(async () => {
+    // Create in-memory database
+    db = new Database(':memory:');
+
+    // Initialize schema
+    await initializeSchema(db);
+
     // Set JWT secret for tests
     process.env.JWT_SECRET = testJwtSecret;
 
-    // Create in-memory database with proper initialization
-    databaseService = new DatabaseService(':memory:');
-    await databaseService.initialize();
-
-    // Enable self-registration for tests
-    setupService = new SetupService(databaseService.getConnection());
-    await setupService.saveConfig({
-      allowSelfRegistration: true,
-      defaultNewUserRole: null, // Don't auto-assign roles in these tests
-    });
+    // Create mock DatabaseService
+    databaseService = {
+      getConnection: () => db,
+      isInitialized: () => true,
+    } as DatabaseService;
 
     // Create Express app with auth routes
     app = express();
@@ -1845,7 +1843,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
   afterEach(async () => {
     delete process.env.JWT_SECRET;
-    await databaseService.close();
+    await closeDatabase(db);
   });
 
   describe('Successful token refresh (Requirements 6.3, 19.2)', () => {
@@ -2158,7 +2156,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
       // Deactivate the user
       await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
+        db.run(
           'UPDATE users SET isActive = 0 WHERE username = ?',
           ['testuser'],
           (err) => {
@@ -2291,7 +2289,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
       // Close the database to simulate error
       await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().close((err) => {
+        db.close((err) => {
           if (err) reject(err);
           else resolve();
         });
@@ -2306,7 +2304,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       expect(response.body.error).toBeDefined();
 
       // Create a new database for cleanup
-      databaseService = new DatabaseService(':memory:');
+      db = new Database(':memory:');
     });
 
     it('should not expose sensitive information in error messages', async () => {
@@ -2487,23 +2485,24 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
 describe('Auth Routes - POST /api/auth/change-password', () => {
   let app: Express;
+  let db: Database;
   let databaseService: DatabaseService;
-  let setupService: SetupService;
 
   beforeEach(async () => {
     // Set JWT secret for consistent token generation/verification
     process.env.JWT_SECRET = 'test-secret-key-for-change-password-tests';  // pragma: allowlist secret
 
-    // Create in-memory database with proper initialization
-    databaseService = new DatabaseService(':memory:');
-    await databaseService.initialize();
+    // Create in-memory database
+    db = new Database(':memory:');
 
-    // Enable self-registration for tests
-    setupService = new SetupService(databaseService.getConnection());
-    await setupService.saveConfig({
-      allowSelfRegistration: true,
-      defaultNewUserRole: null, // Don't auto-assign roles in these tests
-    });
+    // Initialize schema
+    await initializeSchema(db);
+
+    // Create mock DatabaseService
+    databaseService = {
+      getConnection: () => db,
+      isInitialized: () => true,
+    } as DatabaseService;
 
     // Create Express app with auth routes
     app = express();
@@ -2512,7 +2511,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
   });
 
   afterEach(async () => {
-    await databaseService.close();
+    await closeDatabase(db);
     delete process.env.JWT_SECRET;
   });
 
@@ -2683,17 +2682,17 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         .expect(200);
 
       // Try to use first token (should fail - revoked)
-      await request(app)
+      const logoutResponse1 = await request(app)
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token1}`)
         .expect(401);
 
       // Try to use second token (should also fail - all tokens revoked)
-      await request(app)
+      const logoutResponse2 = await request(app)
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token2}`)
         .expect(401);
-    }, 10000);
+    });
   });
 
   describe('Authentication required', () => {

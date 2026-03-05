@@ -59,7 +59,7 @@ describe("BoltPlugin", () => {
       await boltPlugin.initialize(config);
 
       expect(boltPlugin.isInitialized()).toBe(true);
-      expect(mockBoltService.getInventory).toHaveBeenCalledOnce();
+      // Note: getInventory is no longer called during initialization
     });
 
     it("should initialize gracefully when inventory is not accessible", async () => {

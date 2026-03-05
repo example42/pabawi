@@ -48,7 +48,7 @@ describe('RoleService', () => {
           ('role-admin-001', 'Administrator', 'Full access', 1, datetime('now'), datetime('now'));
 
         -- Seed permissions
-        INSERT INTO permissions (id, resource, action, description, createdAt) VALUES
+        INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
           ('perm-ansible-read', 'ansible', 'read', 'View Ansible resources', datetime('now')),
           ('perm-ansible-write', 'ansible', 'write', 'Modify Ansible resources', datetime('now')),
           ('perm-bolt-read', 'bolt', 'read', 'View Bolt resources', datetime('now'));

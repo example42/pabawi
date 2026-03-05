@@ -275,16 +275,28 @@ describe('CommandWhitelistService - shell metacharacter blocking', () => {
   });
 });
 
-describe('CommandWhitelistService - allowAll mode still permits shell chars', () => {
-  it('should not block shell chars when allowAll is enabled', () => {
+describe('CommandWhitelistService - allowAll mode still blocks shell chars', () => {
+  it('should block shell chars even when allowAll is enabled', () => {
     const config: WhitelistConfig = {
       allowAll: true,
       whitelist: [],
       matchMode: 'exact',
     };
     const service = new CommandWhitelistService(config);
-    // When allowAll is explicitly enabled, no filtering is applied
-    expect(service.isCommandAllowed('ls; echo ok')).toBe(true);
+    // Shell metacharacters are always blocked for security, even with allowAll
+    expect(service.isCommandAllowed('ls; echo ok')).toBe(false);
+  });
+
+  it('should allow safe commands when allowAll is enabled', () => {
+    const config: WhitelistConfig = {
+      allowAll: true,
+      whitelist: [],
+      matchMode: 'exact',
+    };
+    const service = new CommandWhitelistService(config);
+    // Safe commands without shell metacharacters are allowed
+    expect(service.isCommandAllowed('ls -la')).toBe(true);
+    expect(service.isCommandAllowed('echo hello')).toBe(true);
   });
 });
 

@@ -270,6 +270,16 @@ async function initializeSchema(db: Database): Promise<void> {
       expiresAt TEXT NOT NULL,
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
+    INSERT INTO config (key, value, updatedAt) VALUES
+      ('allow_self_registration', 'false', datetime('now')),
+      ('default_new_user_role', 'role-viewer-001', datetime('now'));
   `;
 
   return new Promise((resolve, reject) => {

@@ -445,6 +445,16 @@ async function initializeSchema(db: Database): Promise<void> {
       failedAttempts INTEGER NOT NULL,
       lastAttemptAt TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
+    INSERT INTO config (key, value, updatedAt) VALUES
+      ('allow_self_registration', 'false', datetime('now')),
+      ('default_new_user_role', 'role-viewer-001', datetime('now'));
   `;
 
   const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
