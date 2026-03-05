@@ -116,8 +116,10 @@ describe('PuppetReportsListView - Node Detail Page Pagination', () => {
     await waitFor(() => {
       const reportsCall = mockGet.mock.calls.find(call => call[0].includes('/reports'));
       expect(reportsCall).toBeTruthy();
-      expect(reportsCall![0]).toMatch(/limit=100/);
-      expect(reportsCall![0]).toMatch(/offset=0/);
+      if (reportsCall) {
+        expect(reportsCall[0]).toMatch(/limit=100/);
+        expect(reportsCall[0]).toMatch(/offset=0/);
+      }
     });
   });
 
@@ -204,7 +206,9 @@ describe('PuppetReportsListView - Node Detail Page Pagination', () => {
     await waitFor(() => {
       const reportsCall = mockGet.mock.calls.find(call => call[0].includes('/reports'));
       expect(reportsCall).toBeTruthy();
-      expect(reportsCall![0]).toMatch(/limit=200/);
+      if (reportsCall) {
+        expect(reportsCall[0]).toMatch(/limit=200/);
+      }
     });
   });
 
@@ -228,8 +232,10 @@ describe('PuppetReportsListView - Node Detail Page Pagination', () => {
     await waitFor(() => {
       const reportsCall = mockGet.mock.calls.find(call => call[0].includes('/reports'));
       expect(reportsCall).toBeTruthy();
-      expect(reportsCall![0]).toMatch(/limit=\d+/);
-      expect(reportsCall![0]).toMatch(/offset=\d+/);
+      if (reportsCall) {
+        expect(reportsCall[0]).toMatch(/limit=\d+/);
+        expect(reportsCall[0]).toMatch(/offset=\d+/);
+      }
     });
   });
 
