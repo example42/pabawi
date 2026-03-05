@@ -29,7 +29,7 @@ describe("CodeAnalyzer", () => {
     config = {
       enabled: true,
       lintEnabled: true,
-      moduleUpdateCheck: true,
+      moduleUpdateCheck: false, // Disabled to avoid HTTP timeouts in tests
       analysisInterval: 300,
       exclusionPatterns: [],
     };
