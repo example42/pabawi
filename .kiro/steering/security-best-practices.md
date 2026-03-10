@@ -10,6 +10,7 @@ inclusion: always
 - Validate all user inputs
 - Use parameterized queries to prevent SQL injection
 - Implement proper authentication and authorization
+- Use pragma: allowlist secret comment to lint secrets catched by precommit
 
 ## Dependency Management
 

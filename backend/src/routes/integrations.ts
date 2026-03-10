@@ -7,6 +7,7 @@ import { createColorsRouter } from "./integrations/colors";
 import { createStatusRouter } from "./integrations/status";
 import { createPuppetDBRouter } from "./integrations/puppetdb";
 import { createPuppetserverRouter } from "./integrations/puppetserver";
+import { createProxmoxRouter } from "./integrations/proxmox";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
 import { asyncHandler } from "./asyncHandler";
@@ -52,6 +53,9 @@ export function createIntegrationsRouter(
 
   // Mount Puppetserver router (handles not configured case internally)
   router.use("/puppetserver", createPuppetserverRouter(puppetserverService, puppetDBService));
+
+  // Mount Proxmox router
+  router.use("/proxmox", createProxmoxRouter(integrationManager));
 
   return router;
 }

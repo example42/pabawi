@@ -82,6 +82,13 @@ export interface Capability {
 }
 
 /**
+ * Provisioning capability for infrastructure creation/destruction
+ */
+export interface ProvisioningCapability extends Capability {
+  operation: "create" | "destroy";
+}
+
+/**
  * Parameter definition for a capability
  */
 export interface CapabilityParameter {

@@ -1728,4 +1728,220 @@ describe("IntegrationManager", () => {
       // by checking that the next call fetches fresh data
     });
   });
+
+  describe("Provisioning Capabilities", () => {
+    it("should return empty array when no plugins have provisioning capabilities", () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({ logger });
+
+      const tool = new MockExecutionTool("tool", logger);
+
+      manager.registerPlugin(tool, {
+        enabled: true,
+        name: "tool",
+        type: "execution",
+        config: {},
+      });
+
+      const capabilities = manager.getAllProvisioningCapabilities();
+      expect(capabilities).toEqual([]);
+    });
+
+    it("should return provisioning capabilities from plugins that support them", () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({ logger });
+
+      // Create a mock plugin with provisioning capabilities
+      class MockProvisioningTool extends BasePlugin implements ExecutionToolPlugin {
+        constructor(name: string, logger: LoggerService) {
+          super(name, "execution", logger);
+        }
+
+        protected async performInitialization(): Promise<void> {
+          // Mock initialization
+        }
+
+        protected async performHealthCheck(): Promise<Omit<HealthStatus, "lastCheck">> {
+          return {
+            healthy: true,
+            message: "Mock provisioning tool is healthy",
+          };
+        }
+
+        async executeAction(_action: Action): Promise<ExecutionResult> {
+          return {
+            success: true,
+            output: "Mock execution",
+          };
+        }
+
+        listCapabilities() {
+          return [];
+        }
+
+        listProvisioningCapabilities() {
+          return [
+            {
+              name: "create_vm",
+              description: "Create a new virtual machine",
+              operation: "create" as const,
+              parameters: [
+                { name: "name", type: "string", required: true },
+                { name: "memory", type: "number", required: false, default: 512 },
+              ],
+            },
+            {
+              name: "destroy_vm",
+              description: "Destroy a virtual machine",
+              operation: "destroy" as const,
+              parameters: [
+                { name: "vmid", type: "number", required: true },
+              ],
+            },
+          ];
+        }
+      }
+
+      const tool = new MockProvisioningTool("proxmox", logger);
+
+      manager.registerPlugin(tool, {
+        enabled: true,
+        name: "proxmox",
+        type: "execution",
+        config: {},
+      });
+
+      const capabilities = manager.getAllProvisioningCapabilities();
+
+      expect(capabilities).toHaveLength(1);
+      expect(capabilities[0].source).toBe("proxmox");
+      expect(capabilities[0].capabilities).toHaveLength(2);
+      expect(capabilities[0].capabilities[0].name).toBe("create_vm");
+      expect(capabilities[0].capabilities[0].operation).toBe("create");
+      expect(capabilities[0].capabilities[1].name).toBe("destroy_vm");
+      expect(capabilities[0].capabilities[1].operation).toBe("destroy");
+    });
+
+    it("should aggregate provisioning capabilities from multiple plugins", () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({ logger });
+
+      // Create two mock plugins with provisioning capabilities
+      class MockProvisioningTool1 extends BasePlugin implements ExecutionToolPlugin {
+        constructor(name: string, logger: LoggerService) {
+          super(name, "execution", logger);
+        }
+
+        protected async performInitialization(): Promise<void> {}
+        protected async performHealthCheck(): Promise<Omit<HealthStatus, "lastCheck">> {
+          return { healthy: true, message: "Healthy" };
+        }
+        async executeAction(_action: Action): Promise<ExecutionResult> {
+          return { success: true, output: "Mock" };
+        }
+        listCapabilities() {
+          return [];
+        }
+        listProvisioningCapabilities() {
+          return [
+            {
+              name: "create_vm",
+              description: "Create VM",
+              operation: "create" as const,
+              parameters: [],
+            },
+          ];
+        }
+      }
+
+      class MockProvisioningTool2 extends BasePlugin implements ExecutionToolPlugin {
+        constructor(name: string, logger: LoggerService) {
+          super(name, "execution", logger);
+        }
+
+        protected async performInitialization(): Promise<void> {}
+        protected async performHealthCheck(): Promise<Omit<HealthStatus, "lastCheck">> {
+          return { healthy: true, message: "Healthy" };
+        }
+        async executeAction(_action: Action): Promise<ExecutionResult> {
+          return { success: true, output: "Mock" };
+        }
+        listCapabilities() {
+          return [];
+        }
+        listProvisioningCapabilities() {
+          return [
+            {
+              name: "create_container",
+              description: "Create container",
+              operation: "create" as const,
+              parameters: [],
+            },
+          ];
+        }
+      }
+
+      const tool1 = new MockProvisioningTool1("proxmox", logger);
+      const tool2 = new MockProvisioningTool2("docker", logger);
+
+      manager.registerPlugin(tool1, {
+        enabled: true,
+        name: "proxmox",
+        type: "execution",
+        config: {},
+      });
+
+      manager.registerPlugin(tool2, {
+        enabled: true,
+        name: "docker",
+        type: "execution",
+        config: {},
+      });
+
+      const capabilities = manager.getAllProvisioningCapabilities();
+
+      expect(capabilities).toHaveLength(2);
+      expect(capabilities.find(c => c.source === "proxmox")).toBeDefined();
+      expect(capabilities.find(c => c.source === "docker")).toBeDefined();
+    });
+
+    it("should handle errors when getting provisioning capabilities", () => {
+      const logger = new LoggerService();
+      const manager = new IntegrationManager({ logger });
+
+      // Create a mock plugin that throws an error
+      class MockFailingTool extends BasePlugin implements ExecutionToolPlugin {
+        constructor(name: string, logger: LoggerService) {
+          super(name, "execution", logger);
+        }
+
+        protected async performInitialization(): Promise<void> {}
+        protected async performHealthCheck(): Promise<Omit<HealthStatus, "lastCheck">> {
+          return { healthy: true, message: "Healthy" };
+        }
+        async executeAction(_action: Action): Promise<ExecutionResult> {
+          return { success: true, output: "Mock" };
+        }
+        listCapabilities() {
+          return [];
+        }
+        listProvisioningCapabilities() {
+          throw new Error("Failed to get provisioning capabilities");
+        }
+      }
+
+      const tool = new MockFailingTool("failing", logger);
+
+      manager.registerPlugin(tool, {
+        enabled: true,
+        name: "failing",
+        type: "execution",
+        config: {},
+      });
+
+      // Should not throw, should return empty array
+      const capabilities = manager.getAllProvisioningCapabilities();
+      expect(capabilities).toEqual([]);
+    });
+  });
 });
