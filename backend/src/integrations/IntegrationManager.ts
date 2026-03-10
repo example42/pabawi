@@ -237,6 +237,75 @@ export class IntegrationManager {
   }
 
   /**
+   * Get provisioning capabilities from all execution tools
+   *
+   * Queries all execution tool plugins that support provisioning capabilities
+   * and aggregates them into a single list with source attribution.
+   *
+   * @returns Array of provisioning capabilities from all plugins
+   */
+  getAllProvisioningCapabilities(): Array<{
+    source: string;
+    capabilities: Array<{
+      name: string;
+      description: string;
+      operation: "create" | "destroy";
+      parameters: Array<{
+        name: string;
+        type: string;
+        required: boolean;
+        default?: unknown;
+      }>;
+    }>;
+  }> {
+    const result: Array<{
+      source: string;
+      capabilities: Array<{
+        name: string;
+        description: string;
+        operation: "create" | "destroy";
+        parameters: Array<{
+          name: string;
+          type: string;
+          required: boolean;
+          default?: unknown;
+        }>;
+      }>;
+    }> = [];
+
+    for (const [name, tool] of this.executionTools) {
+      // Check if the plugin has listProvisioningCapabilities method
+      if (
+        "listProvisioningCapabilities" in tool &&
+        typeof tool.listProvisioningCapabilities === "function"
+      ) {
+        try {
+          const capabilities = tool.listProvisioningCapabilities();
+          if (capabilities && capabilities.length > 0) {
+            result.push({
+              source: name,
+              capabilities,
+            });
+          }
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.logger.error(
+            `Failed to get provisioning capabilities from '${name}'`,
+            {
+              component: "IntegrationManager",
+              operation: "getAllProvisioningCapabilities",
+              metadata: { sourceName: name },
+            },
+            err
+          );
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Execute an action using the specified execution tool
    *
    * @param toolName - Name of the execution tool to use

@@ -270,6 +270,36 @@ export const HieraConfigSchema = z.object({
 export type HieraConfig = z.infer<typeof HieraConfigSchema>;
 
 /**
+ * Proxmox SSL configuration schema
+ */
+export const ProxmoxSSLConfigSchema = z.object({
+  rejectUnauthorized: z.boolean().default(true),
+  ca: z.string().optional(),
+  cert: z.string().optional(),
+  key: z.string().optional(),
+});
+
+export type ProxmoxSSLConfig = z.infer<typeof ProxmoxSSLConfigSchema>;
+
+/**
+ * Proxmox integration configuration schema
+ */
+export const ProxmoxConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  host: z.string(),
+  port: z.number().int().positive().max(65535).default(8006),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  realm: z.string().optional(),
+  token: z.string().optional(),
+  ssl: ProxmoxSSLConfigSchema.optional(),
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  priority: z.number().int().nonnegative().default(7),
+});
+
+export type ProxmoxConfig = z.infer<typeof ProxmoxConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
@@ -277,6 +307,7 @@ export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
   puppetserver: PuppetserverConfigSchema.optional(),
   hiera: HieraConfigSchema.optional(),
+  proxmox: ProxmoxConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;

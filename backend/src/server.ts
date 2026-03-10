@@ -52,6 +52,7 @@ import { AnsibleService } from "./integrations/ansible/AnsibleService";
 import { AnsiblePlugin } from "./integrations/ansible/AnsiblePlugin";
 import { SSHPlugin } from "./integrations/ssh/SSHPlugin";
 import { loadSSHConfig } from "./integrations/ssh/config";
+import { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
@@ -676,6 +677,91 @@ async function startServer(): Promise<Express> {
     logger.debug("=== End SSH Integration Setup ===", {
       component: "Server",
       operation: "initializeSSH",
+    });
+
+    // Initialize Proxmox integration only if configured
+    let proxmoxPlugin: ProxmoxIntegration | undefined;
+    const proxmoxConfig = config.integrations.proxmox;
+    const proxmoxConfigured = proxmoxConfig?.enabled === true;
+
+    logger.debug("=== Proxmox Integration Setup ===", {
+      component: "Server",
+      operation: "initializeProxmox",
+      metadata: {
+        configured: proxmoxConfigured,
+        enabled: proxmoxConfig?.enabled,
+        hasHost: !!proxmoxConfig?.host,
+      },
+    });
+
+    if (proxmoxConfigured && proxmoxConfig) {
+      logger.info("Initializing Proxmox integration...", {
+        component: "Server",
+        operation: "initializeProxmox",
+      });
+      try {
+        proxmoxPlugin = new ProxmoxIntegration(logger, performanceMonitor);
+        logger.debug("ProxmoxIntegration instance created", {
+          component: "Server",
+          operation: "initializeProxmox",
+        });
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: true,
+          name: "proxmox",
+          type: "both",
+          config: proxmoxConfig as unknown as Record<string, unknown>,
+          priority: proxmoxConfig.priority ?? 7, // Between Puppetserver (8) and Hiera (6)
+        };
+
+        logger.debug("Registering Proxmox plugin", {
+          component: "Server",
+          operation: "initializeProxmox",
+          metadata: { config: integrationConfig },
+        });
+        integrationManager.registerPlugin(
+          proxmoxPlugin,
+          integrationConfig,
+        );
+
+        logger.info("Proxmox integration registered successfully", {
+          component: "Server",
+          operation: "initializeProxmox",
+          metadata: {
+            enabled: true,
+            host: proxmoxConfig.host,
+            port: proxmoxConfig.port ?? 8006,
+            hasToken: !!proxmoxConfig.token,
+            hasPassword: !!proxmoxConfig.password,
+            priority: proxmoxConfig.priority ?? 7,
+          },
+        });
+      } catch (error) {
+        logger.warn(`WARNING: Failed to initialize Proxmox integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeProxmox",
+        });
+        if (error instanceof Error && error.stack) {
+          logger.error("Proxmox initialization error stack", {
+            component: "Server",
+            operation: "initializeProxmox",
+          }, error);
+        }
+        proxmoxPlugin = undefined;
+      }
+    } else {
+      logger.warn("Proxmox integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeProxmox",
+      });
+      logger.info("Set PROXMOX_ENABLED=true and PROXMOX_HOST to enable Proxmox integration", {
+        component: "Server",
+        operation: "initializeProxmox",
+      });
+    }
+    logger.debug("=== End Proxmox Integration Setup ===", {
+      component: "Server",
+      operation: "initializeProxmox",
     });
 
     // Initialize all registered plugins
