@@ -291,6 +291,9 @@
     onclick={() => expanded = !expanded}
   >
     <h2 class="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
+      <svg class="h-6 w-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+      </svg>
       Install Software
       <IntegrationBadge integration={selectedTool} variant="badge" size="sm" />
     </h2>
@@ -314,10 +317,10 @@
       <form onsubmit={installPackage} class="space-y-4">
         {#if shouldShowToolSelector}
           <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <div class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Execution Tool
-            </label>
-            <div class="flex gap-2">
+            </div>
+            <div class="flex gap-2" role="group" aria-label="Execution Tool">
               {#each availableExecutionTools as tool}
                 <button
                   type="button"

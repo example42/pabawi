@@ -5,12 +5,9 @@
  * Handles authentication, request/response transformation, and error handling.
  */
 
-import * as https from "https";
-import * as fs from "fs";
 import type { LoggerService } from "../../services/LoggerService";
 import type {
   ProxmoxConfig,
-  ProxmoxSSLConfig,
   ProxmoxTaskStatus,
   RetryConfig,
 } from "./types";
@@ -35,7 +32,6 @@ export class ProxmoxClient {
   private logger: LoggerService;
   private ticket?: string;
   private csrfToken?: string;
-  private httpsAgent?: https.Agent;
   private retryConfig: RetryConfig;
 
   /**
@@ -49,9 +45,14 @@ export class ProxmoxClient {
     this.logger = logger;
     this.baseUrl = `https://${config.host}:${String(config.port ?? 8006)}`;
 
-    // Configure HTTPS agent
-    if (config.ssl) {
-      this.httpsAgent = this.createHttpsAgent(config.ssl);
+    // Configure SSL for fetch - set environment variable if needed
+    // This affects all HTTPS requests in the process, but is necessary for Node.js fetch
+    if (config.ssl && config.ssl.rejectUnauthorized === false) {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+      this.logger.debug("Disabled TLS certificate verification for Proxmox", {
+        component: "ProxmoxClient",
+        operation: "constructor",
+      });
     }
 
     // Configure retry logic
@@ -343,7 +344,6 @@ export class ProxmoxClient {
         method,
         headers,
         body: data ? JSON.stringify(data) : undefined,
-        agent: this.httpsAgent,
       });
 
       return await this.handleResponse(response);
@@ -405,53 +405,16 @@ export class ProxmoxClient {
   }
 
   /**
-   * Create HTTPS agent with SSL configuration
-   *
-   * @param sslConfig - SSL configuration
-   * @returns HTTPS agent
-   */
-  private createHttpsAgent(sslConfig: ProxmoxSSLConfig): https.Agent {
-    const agentOptions: https.AgentOptions = {
-      rejectUnauthorized: sslConfig.rejectUnauthorized ?? true,
-    };
-
-    if (sslConfig.ca) {
-      agentOptions.ca = fs.readFileSync(sslConfig.ca);
-    }
-
-    if (sslConfig.cert) {
-      agentOptions.cert = fs.readFileSync(sslConfig.cert);
-    }
-
-    if (sslConfig.key) {
-      agentOptions.key = fs.readFileSync(sslConfig.key);
-    }
-
-    this.logger.debug("Created HTTPS agent", {
-      component: "ProxmoxClient",
-      operation: "createHttpsAgent",
-      metadata: {
-        rejectUnauthorized: agentOptions.rejectUnauthorized,
-        hasCa: !!sslConfig.ca,
-        hasCert: !!sslConfig.cert,
-        hasKey: !!sslConfig.key,
-      },
-    });
-
-    return new https.Agent(agentOptions);
-  }
-
-  /**
    * Fetch with timeout
    *
    * @param url - Request URL
-   * @param options - Fetch options with agent
+   * @param options - Fetch options
    * @param timeout - Timeout in milliseconds (default: 30000)
    * @returns Fetch response
    */
   private async fetchWithTimeout(
     url: string,
-    options: RequestInit & { agent?: https.Agent },
+    options: RequestInit,
     timeout = 30000
   ): Promise<Response> {
     const controller = new AbortController();

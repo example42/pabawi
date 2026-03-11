@@ -108,7 +108,6 @@ COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
 # This ensures schema files, migrations, and any future database-related files are included
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/ ./dist/database/
 
-
 # Copy built frontend to public directory
 COPY --from=frontend-builder --chown=pabawi:pabawi /app/frontend/dist ./public
 

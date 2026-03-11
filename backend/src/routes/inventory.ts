@@ -1115,5 +1115,289 @@ export function createInventoryRouter(
     }),
   );
 
+  /**
+   * POST /api/nodes/:id/action
+   * Execute a lifecycle action on a node (start, stop, shutdown, reboot, suspend, resume, snapshot)
+   *
+   * Note: RBAC middleware should be applied at the route mounting level in server.ts
+   * Required permission: lifecycle:* or lifecycle:{action}
+   */
+  router.post(
+    "/:id/action",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Executing node action", {
+        component: "InventoryRouter",
+        operation: "executeNodeAction",
+      });
+
+      try {
+        // Validate request parameters
+        const params = NodeIdParamSchema.parse(req.params);
+        const nodeId = params.id;
+
+        // Validate request body
+        const ActionSchema = z.object({
+          action: z.enum(["start", "stop", "shutdown", "reboot", "suspend", "resume", "snapshot"]),
+        });
+        const body = ActionSchema.parse(req.body);
+
+        logger.debug("Executing action on node", {
+          component: "InventoryRouter",
+          operation: "executeNodeAction",
+          metadata: { nodeId, action: body.action },
+        });
+
+        // Check if node is from Proxmox (nodeId format: proxmox:{node}:{vmid})
+        if (!nodeId.startsWith("proxmox:")) {
+          const errorResponse = {
+            error: {
+              code: "UNSUPPORTED_NODE_TYPE",
+              message: "Lifecycle actions are only supported for Proxmox nodes",
+            },
+          };
+
+          res.status(400).json(errorResponse);
+          return;
+        }
+
+        // Get Proxmox service from integration manager
+        if (!integrationManager?.isInitialized()) {
+          const errorResponse = {
+            error: {
+              code: "INTEGRATION_NOT_AVAILABLE",
+              message: "Proxmox integration is not available",
+            },
+          };
+
+          res.status(503).json(errorResponse);
+          return;
+        }
+
+        const proxmoxSource = integrationManager.getInformationSource("proxmox");
+        if (!proxmoxSource) {
+          const errorResponse = {
+            error: {
+              code: "PROXMOX_NOT_CONFIGURED",
+              message: "Proxmox integration is not configured",
+            },
+          };
+
+          res.status(503).json(errorResponse);
+          return;
+        }
+
+        // Execute the action
+        const proxmoxService = proxmoxSource as unknown as {
+          executeAction: (action: { action: string; target: string }) => Promise<unknown>;
+        };
+
+        const result = await proxmoxService.executeAction({
+          action: body.action,
+          target: nodeId,
+        });
+
+        const duration = Date.now() - startTime;
+
+        logger.info("Node action executed successfully", {
+          component: "InventoryRouter",
+          integration: "proxmox",
+          operation: "executeNodeAction",
+          metadata: { nodeId, action: body.action, duration },
+        });
+
+        const responseData = {
+          success: true,
+          message: `Action ${body.action} executed successfully`,
+          result,
+        };
+
+        res.json(responseData);
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        if (error instanceof z.ZodError) {
+          logger.warn("Invalid request parameters", {
+            component: "InventoryRouter",
+            operation: "executeNodeAction",
+            metadata: { errors: error.errors },
+          });
+
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid request parameters",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        logger.error("Error executing node action", {
+          component: "InventoryRouter",
+          integration: "proxmox",
+          operation: "executeNodeAction",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        res.status(500).json({
+          error: {
+            code: "ACTION_EXECUTION_FAILED",
+            message: error instanceof Error ? error.message : "Failed to execute action",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * DELETE /api/nodes/:id
+   * Destroy a node (permanently delete VM or container)
+   *
+   * Note: RBAC middleware should be applied at the route mounting level in server.ts
+   * Required permission: lifecycle:destroy
+   */
+  router.delete(
+    "/:id",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const expertModeService = new ExpertModeService();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Destroying node", {
+        component: "InventoryRouter",
+        operation: "destroyNode",
+      });
+
+      try {
+        // Validate request parameters
+        const params = NodeIdParamSchema.parse(req.params);
+        const nodeId = params.id;
+
+        logger.debug("Destroying node", {
+          component: "InventoryRouter",
+          operation: "destroyNode",
+          metadata: { nodeId },
+        });
+
+        // Check if node is from Proxmox (nodeId format: proxmox:{node}:{vmid})
+        if (!nodeId.startsWith("proxmox:")) {
+          const errorResponse = {
+            error: {
+              code: "UNSUPPORTED_NODE_TYPE",
+              message: "Destroy action is only supported for Proxmox nodes",
+            },
+          };
+
+          res.status(400).json(errorResponse);
+          return;
+        }
+
+        // Get Proxmox service from integration manager
+        if (!integrationManager?.isInitialized()) {
+          const errorResponse = {
+            error: {
+              code: "INTEGRATION_NOT_AVAILABLE",
+              message: "Proxmox integration is not available",
+            },
+          };
+
+          res.status(503).json(errorResponse);
+          return;
+        }
+
+        const proxmoxSource = integrationManager.getInformationSource("proxmox");
+        if (!proxmoxSource) {
+          const errorResponse = {
+            error: {
+              code: "PROXMOX_NOT_CONFIGURED",
+              message: "Proxmox integration is not configured",
+            },
+          };
+
+          res.status(503).json(errorResponse);
+          return;
+        }
+
+        // Parse node and vmid from nodeId
+        const parts = nodeId.split(":");
+        if (parts.length !== 3) {
+          const errorResponse = {
+            error: {
+              code: "INVALID_NODE_ID",
+              message: "Invalid Proxmox node ID format",
+            },
+          };
+
+          res.status(400).json(errorResponse);
+          return;
+        }
+
+        const node = parts[1];
+        const vmid = parseInt(parts[2], 10);
+
+        // Execute the destroy action
+        const proxmoxService = proxmoxSource as unknown as {
+          destroyGuest: (node: string, vmid: number) => Promise<unknown>;
+        };
+
+        const result = await proxmoxService.destroyGuest(node, vmid);
+
+        const duration = Date.now() - startTime;
+
+        logger.info("Node destroyed successfully", {
+          component: "InventoryRouter",
+          integration: "proxmox",
+          operation: "destroyNode",
+          metadata: { nodeId, duration },
+        });
+
+        const responseData = {
+          success: true,
+          message: "Node destroyed successfully",
+          result,
+        };
+
+        res.json(responseData);
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        if (error instanceof z.ZodError) {
+          logger.warn("Invalid request parameters", {
+            component: "InventoryRouter",
+            operation: "destroyNode",
+            metadata: { errors: error.errors },
+          });
+
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid request parameters",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        logger.error("Error destroying node", {
+          component: "InventoryRouter",
+          integration: "proxmox",
+          operation: "destroyNode",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        res.status(500).json({
+          error: {
+            code: "DESTROY_FAILED",
+            message: error instanceof Error ? error.message : "Failed to destroy node",
+          },
+        });
+      }
+    }),
+  );
+
   return router;
 }

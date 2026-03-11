@@ -197,10 +197,24 @@ export class ProxmoxService {
         throw new Error("Unexpected response format from Proxmox API");
       }
 
-      // Transform each guest to a Node object
-      const nodes = resources.map((guest) =>
-        this.transformGuestToNode(guest as ProxmoxGuest)
-      );
+      // Transform each guest to a Node object, filtering out templates
+      const nodes = resources
+        .filter((guest) => {
+          const proxmoxGuest = guest as ProxmoxGuest;
+          // Filter out templates (template === 1)
+          if (proxmoxGuest.template === 1) {
+            this.logger.debug("Skipping template", {
+              component: "ProxmoxService",
+              operation: "getInventory",
+              metadata: { vmid: proxmoxGuest.vmid, name: proxmoxGuest.name },
+            });
+            return false;
+          }
+          return true;
+        })
+        .map((guest) =>
+          this.transformGuestToNode(guest as ProxmoxGuest)
+        );
 
       // Cache for 60 seconds
       this.cache.set(cacheKey, nodes, 60000);
@@ -983,6 +997,53 @@ export class ProxmoxService {
           }
           endpoint = `/api2/json/nodes/${node}/qemu/${vmid}/status/resume`;
           break;
+        case "snapshot":
+          // Snapshot requires special handling with a name parameter
+          const snapshotName = `snapshot-${Date.now()}`;
+          endpoint = guestType === "lxc"
+            ? `/api2/json/nodes/${node}/lxc/${vmid}/snapshot`
+            : `/api2/json/nodes/${node}/qemu/${vmid}/snapshot`;
+
+          // For snapshot, we need to POST with a snapname parameter
+          const taskId = await this.client!.post(endpoint, { snapname: snapshotName });
+
+          this.logger.debug("Snapshot task started", {
+            component: "ProxmoxService",
+            operation: "executeLifecycleAction",
+            metadata: { node, vmid, action, taskId, snapshotName },
+          });
+
+          // Wait for task completion
+          await this.client!.waitForTask(node, taskId);
+
+          const completedAt = new Date().toISOString();
+
+          this.logger.info("Snapshot created successfully", {
+            component: "ProxmoxService",
+            operation: "executeLifecycleAction",
+            metadata: { node, vmid, snapshotName },
+          });
+
+          // Return ExecutionResult
+          return {
+            id: taskId,
+            type: "task",
+            targetNodes: [target],
+            action,
+            status: "success",
+            startedAt,
+            completedAt,
+            results: [
+              {
+                nodeId: target,
+                status: "success",
+                output: {
+                  stdout: `Snapshot ${snapshotName} created successfully`,
+                },
+                duration: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
+              },
+            ],
+          };
         default:
           throw new Error(`Unsupported action: ${action}`);
       }
@@ -1100,6 +1161,11 @@ export class ProxmoxService {
       {
         name: "resume",
         description: "Resume a suspended VM (not supported for LXC containers)",
+        parameters: [],
+      },
+      {
+        name: "snapshot",
+        description: "Create a snapshot of the VM or container",
         parameters: [],
       },
     ];

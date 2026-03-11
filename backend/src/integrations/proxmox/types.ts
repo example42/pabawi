@@ -39,6 +39,7 @@ export interface ProxmoxGuest {
   node: string;
   type: "qemu" | "lxc";
   status: "running" | "stopped" | "paused";
+  template?: number; // 1 if this is a template, 0 or undefined otherwise
   maxmem?: number;
   maxdisk?: number;
   cpus?: number;
