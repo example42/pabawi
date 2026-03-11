@@ -3,17 +3,23 @@
  * Validates Requirements: 23.1, 23.3, 24.1
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import JournalTimeline from './JournalTimeline.svelte';
 import JournalNoteForm from './JournalNoteForm.svelte';
 import type { JournalEntry } from '../lib/api';
 
-// Mock the API module
+// Mock the API module (for JournalNoteForm)
 vi.mock('../lib/api', () => ({
-  getJournalTimeline: vi.fn(),
   addJournalNote: vi.fn(),
   getErrorGuidance: vi.fn().mockReturnValue({ message: 'Error', guidance: 'Try again' }),
+}));
+
+// Mock the auth module
+vi.mock('../lib/auth.svelte', () => ({
+  authManager: {
+    getAuthHeader: vi.fn().mockReturnValue('Bearer test-token'),
+  },
 }));
 
 // Mock the toast module
@@ -69,20 +75,67 @@ const mockEntries: JournalEntry[] = [
   },
 ];
 
+/**
+ * Helper to create a mock SSE stream response.
+ * Encodes SSE events as a ReadableStream for fetch mock.
+ */
+function createSSEStream(events: Array<{ event: string; data: unknown }>): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  const chunks: string[] = [];
+
+  for (const evt of events) {
+    chunks.push(`event: ${evt.event}\ndata: ${JSON.stringify(evt.data)}\n\n`);
+  }
+
+  let index = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (index < chunks.length) {
+        controller.enqueue(encoder.encode(chunks[index]));
+        index++;
+      } else {
+        controller.close();
+      }
+    },
+  });
+}
+
+function mockFetchSSE(events: Array<{ event: string; data: unknown }>): void {
+  const stream = createSSEStream(events);
+  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+    ok: true,
+    body: stream,
+  } as unknown as Response);
+}
+
 describe('JournalTimeline Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('renders loading state initially', () => {
-    vi.mocked(api.getJournalTimeline).mockReturnValue(new Promise(() => {}));
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
-    expect(screen.getByText('Loading journal timeline...')).toBeTruthy();
+    // Mock fetch that never resolves to keep loading state
+    vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
+    // Before SSE init event, the component shows "Starting journal load…"
+    expect(screen.getByText('Starting journal load…')).toBeTruthy();
   });
 
   it('renders timeline entries after loading', async () => {
-    vi.mocked(api.getJournalTimeline).mockResolvedValue(mockEntries);
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
+    mockFetchSSE([
+      { event: 'init', data: { sources: ['proxmox', 'puppetdb', 'user'] } },
+      { event: 'batch', data: { source: 'proxmox', entries: [mockEntries[0]] } },
+      { event: 'batch', data: { source: 'puppetdb', entries: [mockEntries[1]] } },
+      { event: 'batch', data: { source: 'user', entries: [mockEntries[2]] } },
+      { event: 'complete', data: {} },
+    ]);
+
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('VM provisioned successfully')).toBeTruthy();
@@ -92,8 +145,13 @@ describe('JournalTimeline Component', () => {
   });
 
   it('displays isLive badge for live entries', async () => {
-    vi.mocked(api.getJournalTimeline).mockResolvedValue(mockEntries);
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
+    mockFetchSSE([
+      { event: 'init', data: { sources: ['puppetdb'] } },
+      { event: 'batch', data: { source: 'puppetdb', entries: [mockEntries[1]] } },
+      { event: 'complete', data: {} },
+    ]);
+
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('Live')).toBeTruthy();
@@ -101,8 +159,15 @@ describe('JournalTimeline Component', () => {
   });
 
   it('displays source badges', async () => {
-    vi.mocked(api.getJournalTimeline).mockResolvedValue(mockEntries);
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
+    mockFetchSSE([
+      { event: 'init', data: { sources: ['proxmox', 'puppetdb', 'user'] } },
+      { event: 'batch', data: { source: 'proxmox', entries: [mockEntries[0]] } },
+      { event: 'batch', data: { source: 'puppetdb', entries: [mockEntries[1]] } },
+      { event: 'batch', data: { source: 'user', entries: [mockEntries[2]] } },
+      { event: 'complete', data: {} },
+    ]);
+
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('Proxmox')).toBeTruthy();
@@ -112,8 +177,15 @@ describe('JournalTimeline Component', () => {
   });
 
   it('displays event type labels', async () => {
-    vi.mocked(api.getJournalTimeline).mockResolvedValue(mockEntries);
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
+    mockFetchSSE([
+      { event: 'init', data: { sources: ['proxmox', 'puppetdb', 'user'] } },
+      { event: 'batch', data: { source: 'proxmox', entries: [mockEntries[0]] } },
+      { event: 'batch', data: { source: 'puppetdb', entries: [mockEntries[1]] } },
+      { event: 'batch', data: { source: 'user', entries: [mockEntries[2]] } },
+      { event: 'complete', data: {} },
+    ]);
+
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('Provisioned')).toBeTruthy();
@@ -123,57 +195,73 @@ describe('JournalTimeline Component', () => {
   });
 
   it('renders empty state when no entries', async () => {
-    vi.mocked(api.getJournalTimeline).mockResolvedValue([]);
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
+    mockFetchSSE([
+      { event: 'init', data: { sources: ['proxmox'] } },
+      { event: 'batch', data: { source: 'proxmox', entries: [] } },
+      { event: 'complete', data: {} },
+    ]);
+
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
-      expect(screen.getByText('No journal entries yet for this node.')).toBeTruthy();
+      expect(screen.getByText('No journal entries found for this node.')).toBeTruthy();
     });
   });
 
-  it('renders error state on API failure', async () => {
-    vi.mocked(api.getJournalTimeline).mockRejectedValue(new Error('Network error'));
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
+  it('renders error state on stream failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    } as unknown as Response);
+
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load journal')).toBeTruthy();
+      expect(screen.getByText(/Failed to load journal/)).toBeTruthy();
     });
   });
 
-  it('shows Load More button when page is full', async () => {
-    // Return exactly PAGE_SIZE (20) entries to indicate more are available
-    const fullPage = Array.from({ length: 20 }, (_, i) => ({
-      ...mockEntries[0],
-      id: `entry-${i}`,
-      summary: `Entry ${i}`,
-    }));
-    vi.mocked(api.getJournalTimeline).mockResolvedValue(fullPage);
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
+  it('shows entry count after stream completes', async () => {
+    mockFetchSSE([
+      { event: 'init', data: { sources: ['proxmox'] } },
+      { event: 'batch', data: { source: 'proxmox', entries: mockEntries } },
+      { event: 'complete', data: {} },
+    ]);
+
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
-      expect(screen.getByText('Load More')).toBeTruthy();
+      expect(screen.getByText('3 events')).toBeTruthy();
     });
   });
 
-  it('hides Load More when fewer than PAGE_SIZE entries returned', async () => {
-    vi.mocked(api.getJournalTimeline).mockResolvedValue(mockEntries);
-    render(JournalTimeline, { props: { nodeId: 'node-1' } });
-
-    await waitFor(() => {
-      expect(screen.getByText('VM provisioned successfully')).toBeTruthy();
-    });
-    expect(screen.queryByText('Load More')).toBeNull();
+  it('does not start stream when active is false', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    render(JournalTimeline, { props: { nodeId: 'node-1', active: false } });
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('calls API with correct nodeId', async () => {
-    vi.mocked(api.getJournalTimeline).mockResolvedValue([]);
-    render(JournalTimeline, { props: { nodeId: 'test-node-42' } });
+  it('calls fetch with correct nodeId in URL', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      body: createSSEStream([
+        { event: 'init', data: { sources: [] } },
+        { event: 'complete', data: {} },
+      ]),
+    } as unknown as Response);
+
+    render(JournalTimeline, { props: { nodeId: 'test-node-42', active: true } });
 
     await waitFor(() => {
-      expect(api.getJournalTimeline).toHaveBeenCalledWith('test-node-42', {
-        limit: 20,
-        offset: 0,
-      });
+      expect(fetchSpy).toHaveBeenCalledWith(
+        '/api/journal/test-node-42/stream',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Accept': 'text/event-stream',
+            'Authorization': 'Bearer test-token',
+          }),
+        })
+      );
     });
   });
 });

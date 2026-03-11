@@ -208,12 +208,12 @@ describe('Provisioning API Methods', () => {
 
       const result = await executeNodeAction(nodeId, action);
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({ success: true, message: 'Action executed successfully', nodeId });
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/integrations/proxmox/nodes/${nodeId}/action`,
+        `/api/integrations/proxmox/action`,
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ action, parameters: undefined }),
+          body: JSON.stringify({ nodeId, action, parameters: undefined }),
         })
       );
     });
@@ -231,10 +231,10 @@ describe('Provisioning API Methods', () => {
       await executeNodeAction(nodeId, action, parameters);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/integrations/proxmox/nodes/${nodeId}/action`,
+        `/api/integrations/proxmox/action`,
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ action, parameters }),
+          body: JSON.stringify({ nodeId, action, parameters }),
         })
       );
     });
@@ -255,7 +255,7 @@ describe('Provisioning API Methods', () => {
 
   describe('destroyNode', () => {
     it('should destroy a node', async () => {
-      const nodeId = 'node-123';
+      const nodeId = 'proxmox:pve1:123';
 
       const mockResult: ProvisioningResult = {
         success: true,
@@ -270,9 +270,9 @@ describe('Provisioning API Methods', () => {
 
       const result = await destroyNode(nodeId);
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({ success: true, message: 'Node destroyed successfully', nodeId });
       expect(mockFetch).toHaveBeenCalledWith(
-        `/api/integrations/proxmox/nodes/${nodeId}`,
+        `/api/integrations/proxmox/provision/123?node=pve1`,
         expect.objectContaining({
           method: 'DELETE',
         })
@@ -286,7 +286,7 @@ describe('Provisioning API Methods', () => {
         json: () => Promise.resolve({ error: { message: 'Node not found' } }),
       });
 
-      await expect(destroyNode('node-123')).rejects.toThrow();
+      await expect(destroyNode('proxmox:pve1:123')).rejects.toThrow();
 
       // Should only make 1 call (no retries)
       expect(mockFetch).toHaveBeenCalledTimes(1);
@@ -305,8 +305,7 @@ describe('Provisioning API Methods', () => {
       };
 
       const mockResponse = {
-        success: true,
-        message: 'Configuration saved successfully',
+        message: 'Config saved successfully',
       };
 
       mockFetch.mockResolvedValueOnce({
@@ -316,12 +315,21 @@ describe('Provisioning API Methods', () => {
 
       const result = await saveProxmoxConfig(config);
 
-      expect(result).toEqual(mockResponse);
+      expect(result).toEqual({ success: true, message: 'Config saved successfully' });
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/integrations/proxmox/config',
+        '/api/config/integrations/proxmox',
         expect.objectContaining({
           method: 'PUT',
-          body: JSON.stringify(config),
+          body: JSON.stringify({
+            config: {
+              host: 'proxmox.example.com',
+              port: 8006,
+              ssl_rejectUnauthorized: true,
+              username: 'admin',
+              password: 'secret',
+              realm: 'pam',
+            },
+          }),
         })
       );
     });
@@ -455,11 +463,12 @@ describe('Provisioning API Methods', () => {
 
             // Verify: API was called with correct endpoint and parameters
             expect(mockFetch).toHaveBeenCalledWith(
-              `/api/integrations/proxmox/nodes/${nodeId}/action`,
+              `/api/integrations/proxmox/action`,
               expect.objectContaining({
                 method: 'POST',
                 headers: expect.any(Headers),
                 body: JSON.stringify({
+                  nodeId,
                   action: action.name,
                   parameters: parameters ?? undefined,
                 }),
