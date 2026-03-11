@@ -968,8 +968,8 @@ export async function executeNodeAction(
   parameters?: Record<string, unknown>
 ): Promise<ProvisioningResult> {
   const response = await post<{ success: boolean; message: string; result?: unknown }>(
-    `/api/nodes/${nodeId}/action`,
-    { action, parameters },
+    `/api/integrations/proxmox/action`,
+    { nodeId, action, parameters },
     {
       maxRetries: 0,
       showRetryNotifications: false,
@@ -992,10 +992,18 @@ export async function executeNodeAction(
  * @param nodeId - The ID of the node to destroy
  */
 export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
-  const response = await del<{ success: boolean; message: string; result?: unknown }>(`/api/nodes/${nodeId}`, {
-    maxRetries: 0,
-    showRetryNotifications: false,
-  });
+  // Parse proxmox node ID format: proxmox:{node}:{vmid}
+  const parts = nodeId.split(':');
+  const proxmoxNode = parts.length >= 3 ? parts[1] : '';
+  const vmid = parts.length >= 3 ? parts[2] : nodeId;
+
+  const response = await del<{ success: boolean; message: string; result?: unknown }>(
+    `/api/integrations/proxmox/provision/${vmid}?node=${encodeURIComponent(proxmoxNode)}`,
+    {
+      maxRetries: 0,
+      showRetryNotifications: false,
+    }
+  );
 
   return {
     success: response.success,

@@ -151,13 +151,13 @@ export function validateForm(data: Record<string, unknown>, rules: ValidationRul
     const value = data[field];
 
     // Required validation
-    if (rule.required && !value) {
+    if (rule.required && (value === null || value === undefined || value === '')) {
       errors[field] = `${rule.label} is required`;
       continue;
     }
 
-    // Type-specific validation
-    if (value) {
+    // Type-specific validation (skip if value is null/undefined/empty)
+    if (value !== null && value !== undefined && value !== '') {
       if (rule.type === 'number') {
         const num = Number(value);
         if (isNaN(num)) {

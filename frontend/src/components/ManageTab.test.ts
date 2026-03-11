@@ -12,10 +12,14 @@ import ManageTab from './ManageTab.svelte';
 import * as api from '../lib/api';
 import * as toast from '../lib/toast.svelte';
 
+import type { LifecycleAction } from '../lib/types/provisioning';
+
 // Mock the API functions
 vi.mock('../lib/api', () => ({
   executeNodeAction: vi.fn(),
   destroyNode: vi.fn(),
+  fetchLifecycleActions: vi.fn(),
+  get: vi.fn(),
 }));
 
 // Mock the toast functions
@@ -26,8 +30,28 @@ vi.mock('../lib/toast.svelte', () => ({
 }));
 
 describe('ManageTab Component', () => {
+  const defaultActions: LifecycleAction[] = [
+    { name: 'start', displayName: 'Start', description: 'Start the VM', destructive: false, requiresConfirmation: false, availableWhen: ['stopped'] },
+    { name: 'stop', displayName: 'Stop', description: 'Stop the VM', destructive: false, requiresConfirmation: false, availableWhen: ['running'] },
+    { name: 'shutdown', displayName: 'Shutdown', description: 'Graceful shutdown', destructive: false, requiresConfirmation: false, availableWhen: ['running'] },
+    { name: 'reboot', displayName: 'Reboot', description: 'Reboot the VM', destructive: false, requiresConfirmation: false, availableWhen: ['running'] },
+    { name: 'suspend', displayName: 'Suspend', description: 'Suspend the VM', destructive: false, requiresConfirmation: false, availableWhen: ['running'] },
+    { name: 'resume', displayName: 'Resume', description: 'Resume the VM', destructive: false, requiresConfirmation: false, availableWhen: ['suspended'] },
+    { name: 'snapshot', displayName: 'Snapshot', description: 'Take a snapshot', destructive: false, requiresConfirmation: false, availableWhen: ['running', 'stopped'] },
+    { name: 'destroy', displayName: 'Destroy', description: 'Destroy the VM', destructive: true, requiresConfirmation: true, availableWhen: ['stopped', 'running', 'suspended'] },
+  ];
+
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default mock: fetchLifecycleActions returns actions for proxmox
+    vi.mocked(api.fetchLifecycleActions).mockResolvedValue({
+      provider: 'proxmox',
+      actions: defaultActions,
+    });
+    // Default mock: get for provisioning config
+    vi.mocked(api.get).mockResolvedValue({
+      provisioning: { allowDestructiveActions: true },
+    });
   });
 
   afterEach(() => {
@@ -171,7 +195,7 @@ describe('ManageTab Component', () => {
     });
 
     it('displays Destroy button for all states', async () => {
-      const statuses = ['stopped', 'running', 'suspended', 'unknown'];
+      const statuses = ['stopped', 'running', 'suspended'];
 
       for (const status of statuses) {
         const { unmount } = render(ManageTab, {
@@ -298,20 +322,22 @@ describe('ManageTab Component', () => {
     });
 
     it('shows no actions message when no actions are available', async () => {
-      // Note: In the current implementation, Destroy is always available
-      // This test verifies the "no actions" message structure exists
-      // To truly have no actions, we'd need a state where even destroy is unavailable
+      // Mock fetchLifecycleActions to return empty actions
+      vi.mocked(api.fetchLifecycleActions).mockResolvedValue({
+        provider: 'proxmox',
+        actions: [],
+      });
+
       render(ManageTab, {
         props: {
           nodeId: 'vm-100',
           nodeType: 'vm',
-          currentStatus: undefined,
+          currentStatus: 'running',
         },
       });
 
       await waitFor(() => {
-        // Destroy button should still be visible as it's available for all states
-        expect(screen.getByText('Destroy')).toBeTruthy();
+        expect(screen.getByText(/No actions are available/i)).toBeTruthy();
       });
     });
   });

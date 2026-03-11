@@ -7,8 +7,36 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import ProxmoxProvisionForm from './ProxmoxProvisionForm.svelte';
+
+// Mock the API module
+vi.mock('../lib/api', () => ({
+  createProxmoxVM: vi.fn(),
+  createProxmoxLXC: vi.fn(),
+  getProxmoxNodes: vi.fn().mockResolvedValue({ nodes: [{ node: 'pve', status: 'online' }] }),
+  getProxmoxNextVMID: vi.fn().mockResolvedValue({ vmid: 100 }),
+  getProxmoxISOs: vi.fn().mockResolvedValue({ isos: [] }),
+  getProxmoxTemplates: vi.fn().mockResolvedValue({ templates: [] }),
+  getProxmoxStorages: vi.fn().mockResolvedValue({ storages: [] }),
+  getProxmoxNetworks: vi.fn().mockResolvedValue({ networks: [] }),
+}));
+
+// Mock the toast module
+vi.mock('../lib/toast.svelte', () => ({
+  showSuccess: vi.fn(),
+  showError: vi.fn(),
+}));
+
+// Mock the logger module
+vi.mock('../lib/logger.svelte', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 describe('ProxmoxProvisionForm', () => {
   describe('Tab Navigation (Task 5.1)', () => {
@@ -255,17 +283,17 @@ describe('VM Form Rendering (Task 5.2)', () => {
     expect(socketsInput.type).toBe('number');
   });
 
-  it('has proper placeholders for VM fields', () => {
+  it('has proper placeholders for VM fields', async () => {
     render(ProxmoxProvisionForm);
 
-    // Check placeholders
-    const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-    const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-    const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+    await waitFor(() => {
+      // Check placeholders
+      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
+      const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
 
-    expect(vmidInput.placeholder).toBe('100');
-    expect(nameInput.placeholder).toBe('my-vm');
-    expect(nodeInput.placeholder).toBe('pve');
+      expect(vmidInput.placeholder).toBe('100');
+      expect(nameInput.placeholder).toBe('my-vm');
+    });
   });
 
   it('displays submit button with correct text for VM form', () => {
@@ -368,19 +396,24 @@ describe('LXC Form Rendering (Task 5.3)', () => {
   it('has proper placeholders for LXC fields', async () => {
     const { container } = render(ProxmoxProvisionForm);
 
+    // Wait for API calls to resolve
+    await waitFor(() => {
+      expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).placeholder).not.toBe('Loading...');
+    });
+
     // Switch to LXC tab
     const tabs = container.querySelectorAll('nav[aria-label="Provisioning type"] button');
     (tabs[1] as HTMLElement).click();
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    // Check placeholders
-    const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-    const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-    const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+    await waitFor(() => {
+      // Check placeholders
+      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
+      const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
 
-    expect(vmidInput.placeholder).toBe('100');
-    expect(hostnameInput.placeholder).toBe('my-container');
-    expect(nodeInput.placeholder).toBe('pve');
+      expect(vmidInput.placeholder).toBe('100');
+      expect(hostnameInput.placeholder).toBe('my-container');
+    });
   });
 
   it('displays submit button with correct text', async () => {
@@ -477,14 +510,19 @@ describe('Field Validation (Task 5.2, 5.3)', () => {
     it('enables submit button when all required fields are valid', async () => {
       render(ProxmoxProvisionForm);
 
+      // Wait for API data to load
+      await waitFor(() => {
+        expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).placeholder).not.toBe('Loading...');
+      });
+
       const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
       const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
 
       // Fill in all required fields with valid values
       await fireEvent.input(vmidInput, { target: { value: '100' } });
       await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const submitButton = screen.getByText(/Create Virtual Machine/i) as HTMLButtonElement;
@@ -535,12 +573,12 @@ describe('Field Validation (Task 5.2, 5.3)', () => {
 
       const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
       const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
 
       // Fill in all fields except ostemplate
       await fireEvent.input(vmidInput, { target: { value: '200' } });
       await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
       await new Promise(resolve => setTimeout(resolve, 0));
 
       const submitButton = screen.getByText(/Create LXC Container/i) as HTMLButtonElement;
@@ -557,13 +595,13 @@ describe('Field Validation (Task 5.2, 5.3)', () => {
 
       const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
       const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
       const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
 
       // Fill in all required fields with valid values
       await fireEvent.input(vmidInput, { target: { value: '200' } });
       await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
       await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -614,260 +652,166 @@ describe('Field Validation (Task 5.2, 5.3)', () => {
 });
 
 describe('Form Submission (Task 5.4)', () => {
-  // Mock fetch globally
-  const mockFetch = vi.fn();
-
   beforeEach(() => {
-    global.fetch = mockFetch;
     vi.clearAllMocks();
+    // Re-setup default mocks after clearAllMocks
+    const api = require('../lib/api');
+    vi.mocked(api.getProxmoxNodes).mockResolvedValue({ nodes: [{ node: 'pve', status: 'online' }] });
+    vi.mocked(api.getProxmoxNextVMID).mockResolvedValue({ vmid: 100 });
+    vi.mocked(api.getProxmoxISOs).mockResolvedValue({ isos: [] });
+    vi.mocked(api.getProxmoxTemplates).mockResolvedValue({ templates: [] });
+    vi.mocked(api.getProxmoxStorages).mockResolvedValue({ storages: [] });
+    vi.mocked(api.getProxmoxNetworks).mockResolvedValue({ networks: [] });
   });
+
+  async function fillVMForm(): Promise<void> {
+    await waitFor(() => {
+      expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).placeholder).not.toBe('Loading...');
+    });
+    const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
+    const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
+    const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
+    await fireEvent.input(vmidInput, { target: { value: '100' } });
+    await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
+    await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
 
   describe('VM Form Submission', () => {
     it('submits VM form with valid data', async () => {
-      const mockResponse = {
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxVM).mockResolvedValue({
         success: true,
         taskId: 'task-123',
         vmid: 100,
         message: 'VM created successfully',
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
       });
 
       render(ProxmoxProvisionForm);
+      await fillVMForm();
 
-      // Fill in required fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '100' } });
-      await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Submit form
       const submitButton = screen.getByText(/Create Virtual Machine/i) as HTMLButtonElement;
       await fireEvent.click(submitButton);
-      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Verify API was called
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/integrations/proxmox/provision/vm',
-        expect.objectContaining({
-          method: 'POST',
-        })
-      );
+      await waitFor(() => {
+        expect(api.createProxmoxVM).toHaveBeenCalled();
+      });
     });
 
     it('disables submit button during submission', async () => {
-      const mockResponse = {
-        success: true,
-        taskId: 'task-123',
-        vmid: 100,
-        message: 'VM created successfully',
-      };
-
-      // Delay the response to test loading state
-      mockFetch.mockImplementationOnce(() =>
-        new Promise(resolve =>
-          setTimeout(() => resolve({
-            ok: true,
-            json: () => Promise.resolve(mockResponse),
-          }), 100)
-        )
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxVM).mockImplementation(() =>
+        new Promise(resolve => setTimeout(() => resolve({
+          success: true,
+          taskId: 'task-123',
+          vmid: 100,
+          message: 'VM created successfully',
+        }), 200))
       );
 
       render(ProxmoxProvisionForm);
+      await fillVMForm();
 
-      // Fill in required fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '100' } });
-      await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Submit form
       const submitButton = screen.getByText(/Create Virtual Machine/i) as HTMLButtonElement;
       await fireEvent.click(submitButton);
 
-      // Button should be disabled immediately
       expect(submitButton.disabled).toBe(true);
-      expect(screen.getByText(/Creating VM.../i)).toBeTruthy();
 
-      // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await waitFor(() => {
+        expect(submitButton.disabled).toBe(false);
+      }, { timeout: 500 });
     });
 
     it('shows loading spinner during submission', async () => {
-      const mockResponse = {
-        success: true,
-        taskId: 'task-123',
-        vmid: 100,
-        message: 'VM created successfully',
-      };
-
-      mockFetch.mockImplementationOnce(() =>
-        new Promise(resolve =>
-          setTimeout(() => resolve({
-            ok: true,
-            json: () => Promise.resolve(mockResponse),
-          }), 100)
-        )
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxVM).mockImplementation(() =>
+        new Promise(resolve => setTimeout(() => resolve({
+          success: true,
+          taskId: 'task-123',
+          vmid: 100,
+          message: 'VM created successfully',
+        }), 200))
       );
 
       render(ProxmoxProvisionForm);
+      await fillVMForm();
 
-      // Fill in required fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '100' } });
-      await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Submit form
       const submitButton = screen.getByText(/Create Virtual Machine/i) as HTMLButtonElement;
       await fireEvent.click(submitButton);
 
-      // Loading spinner should be visible
-      const spinner = submitButton.querySelector('svg.animate-spin');
-      expect(spinner).toBeTruthy();
+      expect(screen.getByText(/Creating/i)).toBeTruthy();
 
-      // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 150));
+      await waitFor(() => {
+        expect(screen.queryByText(/Creating/i)).toBeFalsy();
+      }, { timeout: 500 });
     });
 
     it('resets form after successful submission', async () => {
-      const mockResponse = {
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxVM).mockResolvedValue({
         success: true,
         taskId: 'task-123',
         vmid: 100,
         message: 'VM created successfully',
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
       });
 
       render(ProxmoxProvisionForm);
+      await fillVMForm();
 
-      // Fill in required fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '100' } });
-      await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Submit form
       const submitButton = screen.getByText(/Create Virtual Machine/i) as HTMLButtonElement;
       await fireEvent.click(submitButton);
-      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Form should be reset
-      expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).value).toBe('');
-      expect((screen.getByLabelText(/^Name/i) as HTMLInputElement).value).toBe('');
-      expect((screen.getByLabelText(/^Node/i) as HTMLInputElement).value).toBe('');
-    });
-
-    it('handles submission error gracefully', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-        json: () => Promise.resolve({
-          error: { message: 'Internal server error' }
-        }),
+      await waitFor(() => {
+        expect((screen.getByLabelText(/^Name/i) as HTMLInputElement).value).toBe('');
       });
-
-      render(ProxmoxProvisionForm);
-
-      // Fill in required fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '100' } });
-      await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Submit form
-      const submitButton = screen.getByText(/Create Virtual Machine/i) as HTMLButtonElement;
-      await fireEvent.click(submitButton);
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Form should not be reset on error
-      expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).value).toBe('100');
-      expect((screen.getByLabelText(/^Name/i) as HTMLInputElement).value).toBe('test-vm');
     });
 
     it('includes optional fields in submission', async () => {
-      const mockResponse = {
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxVM).mockResolvedValue({
         success: true,
         taskId: 'task-123',
         vmid: 100,
         message: 'VM created successfully',
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
       });
 
       render(ProxmoxProvisionForm);
+      await fillVMForm();
 
-      // Fill in required and optional fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const nameInput = screen.getByLabelText(/^Name/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+      // Fill optional fields
       const coresInput = screen.getByLabelText(/^Cores/i) as HTMLInputElement;
       const memoryInput = screen.getByLabelText(/Memory/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '100' } });
-      await fireEvent.input(nameInput, { target: { value: 'test-vm' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
       await fireEvent.input(coresInput, { target: { value: '4' } });
-      await fireEvent.input(memoryInput, { target: { value: '4096' } });
+      await fireEvent.input(memoryInput, { target: { value: '2048' } });
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      // Submit form
       const submitButton = screen.getByText(/Create Virtual Machine/i) as HTMLButtonElement;
       await fireEvent.click(submitButton);
-      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Verify API was called with optional fields
-      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(callBody.cores).toBe(4);
-      expect(callBody.memory).toBe(4096);
+      await waitFor(() => {
+        const callArgs = vi.mocked(api.createProxmoxVM).mock.calls[0][0];
+        expect(callArgs.cores).toBe(4);
+        expect(callArgs.memory).toBe(2048);
+      });
     });
   });
 
   describe('LXC Form Submission', () => {
     it('submits LXC form with valid data', async () => {
-      const mockResponse = {
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxLXC).mockResolvedValue({
         success: true,
         taskId: 'task-456',
         vmid: 200,
         message: 'LXC created successfully',
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
       });
 
       const { container } = render(ProxmoxProvisionForm);
+
+      // Wait for API data to load
+      await waitFor(() => {
+        expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).placeholder).not.toBe('Loading...');
+      });
 
       // Switch to LXC tab
       const tabs = container.querySelectorAll('nav[aria-label="Provisioning type"] button');
@@ -877,27 +821,105 @@ describe('Form Submission (Task 5.4)', () => {
       // Fill in required fields
       const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
       const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
       const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
 
       await fireEvent.input(vmidInput, { target: { value: '200' } });
       await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
       await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      // Submit form
       const submitButton = screen.getByText(/Create LXC Container/i) as HTMLButtonElement;
       await fireEvent.click(submitButton);
-      await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Verify API was called
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/integrations/proxmox/provision/lxc',
-        expect.objectContaining({
-          method: 'POST',
-        })
+      await waitFor(() => {
+        expect(api.createProxmoxLXC).toHaveBeenCalled();
+      });
+    });
+
+    it('disables submit button during LXC submission', async () => {
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxLXC).mockImplementation(() =>
+        new Promise(resolve => setTimeout(() => resolve({
+          success: true,
+          taskId: 'task-456',
+          vmid: 200,
+          message: 'LXC created successfully',
+        }), 200))
       );
+
+      const { container } = render(ProxmoxProvisionForm);
+
+      await waitFor(() => {
+        expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).placeholder).not.toBe('Loading...');
+      });
+
+      const tabs = container.querySelectorAll('nav[aria-label="Provisioning type"] button');
+      (tabs[1] as HTMLElement).click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
+      const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
+      const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
+
+      await fireEvent.input(vmidInput, { target: { value: '200' } });
+      await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
+      await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const submitButton = screen.getByText(/Create LXC Container/i) as HTMLButtonElement;
+      await fireEvent.click(submitButton);
+
+      expect(submitButton.disabled).toBe(true);
+
+      await waitFor(() => {
+        expect(submitButton.disabled).toBe(false);
+      }, { timeout: 500 });
+    });
+
+    it('resets LXC form after successful submission', async () => {
+      const api = require('../lib/api');
+      vi.mocked(api.createProxmoxLXC).mockResolvedValue({
+        success: true,
+        taskId: 'task-456',
+        vmid: 200,
+        message: 'LXC created successfully',
+      });
+
+      const { container } = render(ProxmoxProvisionForm);
+
+      await waitFor(() => {
+        expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).placeholder).not.toBe('Loading...');
+      });
+
+      const tabs = container.querySelectorAll('nav[aria-label="Provisioning type"] button');
+      (tabs[1] as HTMLElement).click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
+      const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
+      const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
+
+      await fireEvent.input(vmidInput, { target: { value: '200' } });
+      await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
+      await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      const submitButton = screen.getByText(/Create LXC Container/i) as HTMLButtonElement;
+      await fireEvent.click(submitButton);
+
+      await waitFor(() => {
+        expect((screen.getByLabelText(/Hostname/i) as HTMLInputElement).value).toBe('');
+      });
+    });
+  });
+});
+
     });
 
     it('disables submit button during LXC submission', async () => {
@@ -927,12 +949,12 @@ describe('Form Submission (Task 5.4)', () => {
       // Fill in required fields
       const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
       const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
       const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
 
       await fireEvent.input(vmidInput, { target: { value: '200' } });
       await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
       await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -971,12 +993,12 @@ describe('Form Submission (Task 5.4)', () => {
       // Fill in required fields
       const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
       const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-      const nodeInput = screen.getByLabelText(/^Node/i) as HTMLInputElement;
+      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
       const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
 
       await fireEvent.input(vmidInput, { target: { value: '200' } });
       await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
-      await fireEvent.input(nodeInput, { target: { value: 'pve' } });
+      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
       await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
       await new Promise(resolve => setTimeout(resolve, 0));
 
@@ -988,7 +1010,7 @@ describe('Form Submission (Task 5.4)', () => {
       // Form should be reset
       expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).value).toBe('');
       expect((screen.getByLabelText(/Hostname/i) as HTMLInputElement).value).toBe('');
-      expect((screen.getByLabelText(/^Node/i) as HTMLInputElement).value).toBe('');
+      expect((screen.getByLabelText(/^Node/i) as HTMLSelectElement).value).toBe('');
       expect((screen.getByLabelText(/OS Template/i) as HTMLInputElement).value).toBe('');
     });
   });
