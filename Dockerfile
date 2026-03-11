@@ -108,7 +108,6 @@ COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
 # This avoids copying TypeScript sources into the runtime image
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/migrations ./dist/database/migrations
 
-
 # Copy built frontend to public directory
 COPY --from=frontend-builder --chown=pabawi:pabawi /app/frontend/dist ./public
 
