@@ -747,7 +747,7 @@
                   onclick={() => homeSourceFilter = homeSourceFilter === source ? 'all' : source}
                   class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors {homeSourceFilter === source ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-900' : 'hover:opacity-80'}"
                 >
-                  <IntegrationBadge integration={source} variant="badge" size="sm" />
+                  <IntegrationBadge integration={source as import('../lib/integrationColors.svelte').IntegrationType} variant="badge" size="sm" />
                   <span class="text-gray-600 dark:text-gray-300">({homeNodeCountsBySource[source]})</span>
                 </button>
               {/each}

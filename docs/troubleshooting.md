@@ -2788,6 +2788,674 @@ If you can't find a solution in this guide:
    - Include Pabawi and Bolt versions
    - Describe steps to reproduce
 
+## Proxmox Provisioning Issues
+
+### Problem: "VMID already exists"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PROXMOX_VMID_EXISTS",
+    "message": "VM with VMID 100 already exists on node pve1"
+  }
+}
+```
+
+**Causes:**
+
+- VMID is already in use by another VM or container
+- Previous VM with same ID wasn't fully deleted
+- VMID conflict across nodes
+
+**Solutions:**
+
+1. **Choose a different VMID:**
+   - Use a unique ID between 100 and 999999999
+   - Check existing VMs in inventory
+   - Follow your organization's VMID allocation scheme
+
+2. **Verify existing VM:**
+
+   ```bash
+   # Via Proxmox CLI
+   qm list | grep 100
+   pct list | grep 100
+   
+   # Via Pabawi
+   # Navigate to Inventory and search for VMID
+   ```
+
+3. **Delete existing VM if appropriate:**
+   - Navigate to the existing VM in inventory
+   - Use Manage tab → Destroy
+   - Confirm deletion
+   - Wait for deletion to complete
+
+4. **Check across all nodes:**
+   - VMIDs must be unique across the entire cluster
+   - Check all nodes for conflicts
+
+### Problem: "Insufficient resources"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PROXMOX_INSUFFICIENT_RESOURCES",
+    "message": "Not enough memory available on node pve1"
+  }
+}
+```
+
+**Causes:**
+
+- Target node doesn't have enough CPU, memory, or storage
+- Resources allocated but not yet freed
+- Storage pool is full
+
+**Solutions:**
+
+1. **Check available resources:**
+
+   ```bash
+   # Via Proxmox CLI
+   pvesh get /nodes/pve1/status
+   
+   # Check storage
+   pvesh get /nodes/pve1/storage/local-lvm/status
+   ```
+
+2. **Choose a different node:**
+   - Select a node with more available resources
+   - Check resource availability in Proxmox web interface
+   - Balance load across cluster nodes
+
+3. **Reduce resource allocation:**
+   - Decrease CPU cores
+   - Reduce memory allocation
+   - Use smaller disk size
+   - Example: Change from 8GB to 4GB RAM
+
+4. **Free up resources:**
+   - Stop unused VMs
+   - Delete temporary VMs
+   - Clean up old snapshots
+   - Expand storage if needed
+
+5. **Check storage space:**
+
+   ```bash
+   # Check disk usage
+   df -h
+   
+   # Check LVM space
+   lvs
+   vgs
+   ```
+
+### Problem: "Template not found"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PROXMOX_TEMPLATE_NOT_FOUND",
+    "message": "Template 'local:vztmpl/ubuntu-22.04.tar.zst' not found"
+  }
+}
+```
+
+**Causes:**
+
+- Template doesn't exist on target node
+- Wrong template name or path
+- Template not downloaded yet
+- Storage location incorrect
+
+**Solutions:**
+
+1. **List available templates:**
+
+   ```bash
+   # Via Proxmox CLI
+   pveam available
+   pveam list local
+   ```
+
+2. **Download template:**
+
+   ```bash
+   # Via Proxmox CLI
+   pveam download local ubuntu-22.04-standard_22.04-1_amd64.tar.zst
+   
+   # Or via Proxmox web interface:
+   # Node → local → CT Templates → Templates → Download
+   ```
+
+3. **Verify template path:**
+   - Format: `storage:vztmpl/template-name.tar.zst`
+   - Example: `local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst`
+   - Check exact filename including version numbers
+
+4. **Use a different template:**
+   - Select from available templates
+   - Use a template that exists on the target node
+
+5. **Check storage configuration:**
+
+   ```bash
+   # Verify storage is configured for templates
+   pvesm status
+   ```
+
+### Problem: "Invalid hostname format"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Hostname must contain only lowercase letters, numbers, and hyphens"
+  }
+}
+```
+
+**Causes:**
+
+- Hostname contains invalid characters
+- Uppercase letters used
+- Starts or ends with hyphen
+- Contains underscores or spaces
+
+**Solutions:**
+
+1. **Use valid hostname format:**
+   - Only lowercase letters (a-z)
+   - Numbers (0-9)
+   - Hyphens (-) but not at start or end
+   - No underscores, spaces, or special characters
+
+2. **Valid examples:**
+   - ✓ `web-server-01`
+   - ✓ `app-prod`
+   - ✓ `db-staging-02`
+   - ✗ `Web_Server_01` (uppercase, underscore)
+   - ✗ `app server` (space)
+   - ✗ `-web-01` (starts with hyphen)
+
+3. **Convert invalid hostnames:**
+   - Replace underscores with hyphens
+   - Convert to lowercase
+   - Remove spaces
+   - Remove leading/trailing hyphens
+
+### Problem: "Network configuration error"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PROXMOX_NETWORK_ERROR",
+    "message": "Invalid network configuration"
+  }
+}
+```
+
+**Causes:**
+
+- Bridge doesn't exist on target node
+- Invalid network configuration syntax
+- IP address format incorrect
+- Gateway not specified for static IP
+
+**Solutions:**
+
+1. **Verify bridge exists:**
+
+   ```bash
+   # List available bridges
+   ip link show | grep vmbr
+   
+   # Or via Proxmox web interface:
+   # Node → System → Network
+   ```
+
+2. **Use correct network format:**
+
+   **For VMs:**
+
+   ```
+   model=virtio,bridge=vmbr0
+   model=virtio,bridge=vmbr0,firewall=1
+   model=e1000,bridge=vmbr1
+   ```
+
+   **For LXC:**
+
+   ```
+   name=eth0,bridge=vmbr0,ip=dhcp
+   name=eth0,bridge=vmbr0,ip=192.168.1.100/24,gw=192.168.1.1
+   ```
+
+3. **Check IP address format:**
+   - Use CIDR notation: `192.168.1.100/24`
+   - Include gateway for static IPs: `gw=192.168.1.1`
+   - Or use DHCP: `ip=dhcp`
+
+4. **Common network configurations:**
+
+   ```
+   # DHCP (automatic)
+   name=eth0,bridge=vmbr0,ip=dhcp
+   
+   # Static IP
+   name=eth0,bridge=vmbr0,ip=192.168.1.50/24,gw=192.168.1.1
+   
+   # Multiple interfaces
+   name=eth0,bridge=vmbr0,ip=dhcp
+   name=eth1,bridge=vmbr1,ip=10.0.0.50/24
+   ```
+
+### Problem: "Permission denied for provisioning"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PERMISSION_DENIED",
+    "message": "User does not have permission to create VMs"
+  }
+}
+```
+
+**Causes:**
+
+- User lacks provisioning permissions
+- Proxmox user/token doesn't have required permissions
+- Integration not configured with proper credentials
+
+**Solutions:**
+
+1. **Check Pabawi permissions:**
+   - Verify your user has `provision:create_vm` or `provision:create_lxc` permission
+   - Contact administrator to grant permissions
+   - See [Permissions and RBAC Guide](permissions-rbac.md)
+
+2. **Check Proxmox permissions:**
+
+   ```bash
+   # Via Proxmox CLI
+   pveum user permissions <user>@<realm>
+   
+   # Required permissions:
+   # - VM.Allocate
+   # - VM.Config.*
+   # - Datastore.Allocate
+   ```
+
+3. **Grant Proxmox permissions:**
+   - Log in to Proxmox web interface
+   - Navigate to Datacenter → Permissions
+   - Add permissions for the API user/token
+   - See [Proxmox Setup Guide](proxmox-setup-guide.md)
+
+4. **Verify API token permissions:**
+   - Check token has privilege separation disabled
+   - Or grant explicit permissions to token
+   - Test token with curl:
+
+     ```bash
+     curl -k https://proxmox:8006/api2/json/nodes \
+       -H "Authorization: PVEAPIToken=user@realm!token=uuid"
+     ```
+
+### Problem: "Provisioning operation timeout"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "OPERATION_TIMEOUT",
+    "message": "Provisioning operation timed out after 300s"
+  }
+}
+```
+
+**Causes:**
+
+- VM/container creation takes longer than timeout
+- Slow storage (network storage, spinning disks)
+- Target node is overloaded
+- Large disk allocation
+
+**Solutions:**
+
+1. **Increase timeout:**
+
+   ```bash
+   # In backend/.env
+   PROXMOX_TIMEOUT=600000  # 10 minutes
+   ```
+
+2. **Check target node load:**
+
+   ```bash
+   # Via Proxmox CLI
+   uptime
+   top
+   iostat
+   ```
+
+3. **Use faster storage:**
+   - Prefer local SSD over network storage
+   - Use thin provisioning
+   - Reduce initial disk size
+
+4. **Reduce resource allocation:**
+   - Smaller disk size provisions faster
+   - Fewer CPU cores
+   - Less memory
+
+5. **Try again:**
+   - Node may have been temporarily busy
+   - Wait a few minutes and retry
+   - Choose a different node
+
+### Problem: "Storage not available"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PROXMOX_STORAGE_ERROR",
+    "message": "Storage 'local-lvm' is not available"
+  }
+}
+```
+
+**Causes:**
+
+- Storage doesn't exist on target node
+- Storage is disabled
+- Storage is full
+- Wrong storage name
+
+**Solutions:**
+
+1. **List available storage:**
+
+   ```bash
+   # Via Proxmox CLI
+   pvesm status
+   
+   # Or via Proxmox web interface:
+   # Datacenter → Storage
+   ```
+
+2. **Verify storage is enabled:**
+
+   ```bash
+   # Check storage configuration
+   cat /etc/pve/storage.cfg
+   ```
+
+3. **Check storage space:**
+
+   ```bash
+   # Check available space
+   pvesm status | grep local-lvm
+   df -h
+   ```
+
+4. **Use different storage:**
+   - Select storage that exists on target node
+   - Common storage names: `local`, `local-lvm`, `ceph-pool`
+   - Check storage type supports VMs/containers
+
+5. **Enable storage:**
+   - Proxmox web interface: Datacenter → Storage
+   - Edit storage and enable it
+   - Ensure storage is available on target node
+
+### Problem: "Provision menu not visible"
+
+**Symptoms:**
+
+- Provision menu item missing from navigation
+- Cannot access provisioning page
+- No way to create VMs/containers
+
+**Causes:**
+
+- User lacks provisioning permissions
+- No provisioning integrations configured
+- Integration not connected
+
+**Solutions:**
+
+1. **Check permissions:**
+   - Verify you have any `provision:*` permission
+   - Contact administrator for access
+   - See [Permissions and RBAC Guide](permissions-rbac.md)
+
+2. **Verify integration is configured:**
+
+   ```bash
+   # Check integration status
+   curl http://localhost:3000/api/integrations/status
+   ```
+
+3. **Check Proxmox integration:**
+   - Navigate to Setup page
+   - Verify Proxmox integration is configured
+   - Test connection
+   - See [Proxmox Setup Guide](proxmox-setup-guide.md)
+
+4. **Check integration health:**
+   - Integration must be "connected" and "healthy"
+   - Green status indicator
+   - No error messages
+
+5. **Refresh page:**
+   - Clear browser cache
+   - Log out and log back in
+   - Try different browser
+
+### Problem: "Form validation errors"
+
+**Symptoms:**
+
+- Cannot submit provisioning form
+- Red error messages below fields
+- Submit button disabled
+
+**Causes:**
+
+- Required fields empty
+- Invalid field values
+- Values outside acceptable ranges
+
+**Solutions:**
+
+1. **Check required fields:**
+   - VMID (required, 100-999999999)
+   - Name/Hostname (required, valid format)
+   - Node (required, must exist)
+   - OS Template (required for LXC)
+
+2. **Verify field formats:**
+   - VMID: Positive integer
+   - Hostname: Lowercase, alphanumeric, hyphens
+   - Memory: Minimum 512 MB
+   - Cores: Minimum 1
+
+3. **Check value ranges:**
+   - VMID: 100 to 999999999
+   - Memory: At least 512 MB
+   - Cores: At least 1
+   - Port: 1 to 65535
+
+4. **Review error messages:**
+   - Read validation messages carefully
+   - Fix indicated issues
+   - Submit button enables when all valid
+
+### Problem: "VM starts but network doesn't work"
+
+**Symptoms:**
+
+- VM created successfully
+- VM is running
+- No network connectivity
+- Cannot ping or SSH to VM
+
+**Causes:**
+
+- Wrong network configuration
+- Bridge not connected
+- Firewall blocking traffic
+- Guest OS network not configured
+
+**Solutions:**
+
+1. **Verify network configuration:**
+   - Check VM network settings in Proxmox
+   - Verify bridge is correct
+   - Check cable is "connected"
+
+2. **Check bridge configuration:**
+
+   ```bash
+   # On Proxmox node
+   ip link show vmbr0
+   brctl show vmbr0
+   ```
+
+3. **Check guest OS network:**
+   - Access VM console in Proxmox
+   - Check network interface is up: `ip addr`
+   - Check DHCP client is running
+   - Configure static IP if needed
+
+4. **Check firewall:**
+   - Proxmox firewall settings
+   - Guest OS firewall
+   - Network firewall rules
+
+5. **Verify DHCP:**
+   - If using DHCP, check DHCP server is running
+   - Check DHCP leases
+   - Try static IP instead
+
+### Problem: "Cannot destroy VM"
+
+**Symptoms:**
+
+```json
+{
+  "error": {
+    "code": "PROXMOX_DESTROY_ERROR",
+    "message": "Cannot destroy VM: VM is locked"
+  }
+}
+```
+
+**Causes:**
+
+- VM is locked by another operation
+- VM has active snapshots
+- VM is in use
+- Backup is running
+
+**Solutions:**
+
+1. **Wait for operations to complete:**
+   - Check Proxmox task log
+   - Wait for running tasks to finish
+   - Try again after a few minutes
+
+2. **Stop VM first:**
+   - Use Manage tab → Stop
+   - Wait for VM to stop completely
+   - Then try destroy again
+
+3. **Check for locks:**
+
+   ```bash
+   # Via Proxmox CLI
+   qm unlock <vmid>
+   ```
+
+4. **Remove snapshots:**
+   - Delete VM snapshots first
+   - Via Proxmox web interface
+   - Then try destroy again
+
+5. **Force unlock (careful!):**
+
+   ```bash
+   # Via Proxmox CLI (use with caution)
+   qm unlock <vmid>
+   qm destroy <vmid>
+   ```
+
+### Problem: "LXC container won't start"
+
+**Symptoms:**
+
+- Container created successfully
+- Start action fails
+- Error in Proxmox logs
+
+**Causes:**
+
+- Template incompatibility
+- Missing kernel features
+- Resource constraints
+- Configuration error
+
+**Solutions:**
+
+1. **Check Proxmox logs:**
+
+   ```bash
+   # On Proxmox node
+   journalctl -u pve-container@<vmid>
+   cat /var/log/pve/tasks/*
+   ```
+
+2. **Verify template:**
+   - Use official Proxmox templates
+   - Check template is compatible with Proxmox version
+   - Try different template
+
+3. **Check kernel features:**
+
+   ```bash
+   # Verify required kernel modules
+   lsmod | grep overlay
+   lsmod | grep nf_nat
+   ```
+
+4. **Reduce resources:**
+   - Try with less memory
+   - Reduce CPU cores
+   - Use smaller disk
+
+5. **Check configuration:**
+   - Review container configuration in Proxmox
+   - Check for invalid settings
+   - Compare with working container
+
 ## Additional Resources
 
 - [Bolt Documentation](https://puppet.com/docs/bolt/)
@@ -2795,3 +3463,8 @@ If you can't find a solution in this guide:
 - [Pabawi GitHub Repository](https://github.com/example42/pabawi)
 - [Pabawi API Documentation](./api.md)
 - [Pabawi Configuration Guide](./configuration.md)
+- [Provisioning Guide](provisioning-guide.md)
+- [Proxmox Setup Guide](proxmox-setup-guide.md)
+- [Manage Tab Guide](manage-tab-guide.md)
+- [Permissions and RBAC Guide](permissions-rbac.md)
+- [Proxmox Documentation](https://pve.proxmox.com/wiki)

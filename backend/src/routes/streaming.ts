@@ -26,6 +26,9 @@ export function createStreamingRouter(
   /**
    * GET /api/executions/:id/stream
    * Subscribe to streaming events for an execution
+   *
+   * Note: EventSource API doesn't support custom headers, so authentication
+   * token can be passed via query parameter as a fallback
    */
   router.get(
     "/:id/stream",
@@ -46,6 +49,12 @@ export function createStreamingRouter(
       });
 
       try {
+        // Handle token from query parameter (EventSource doesn't support headers)
+        // If token is in query param, move it to Authorization header for middleware
+        if (req.query.token && typeof req.query.token === 'string') {
+          req.headers.authorization = `Bearer ${req.query.token}`;
+        }
+
         // Validate request parameters
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {

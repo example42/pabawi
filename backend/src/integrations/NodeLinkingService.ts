@@ -10,13 +10,27 @@ import type { IntegrationManager } from "./IntegrationManager";
 import { LoggerService } from "../services/LoggerService";
 
 /**
- * Linked node with source attribution
+ * Source-specific node data
+ */
+export interface SourceNodeData {
+  id: string;
+  uri: string;
+  config?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  status?: string;
+}
+
+/**
+ * Linked node with source attribution and source-specific data
  */
 export interface LinkedNode extends Node {
   sources: string[]; // List of sources this node appears in
   linked: boolean; // True if node exists in multiple sources
   certificateStatus?: "signed" | "requested" | "revoked";
   lastCheckIn?: string;
+
+  // Source-specific data (keeps original IDs and URIs per source)
+  sourceData: Record<string, SourceNodeData>;
 }
 
 /**
@@ -56,89 +70,127 @@ export class NodeLinkingService {
    * @returns Linked nodes with source attribution
    */
   linkNodes(nodes: Node[]): LinkedNode[] {
-    // First, group nodes by their identifiers
-    const identifierToNodes = new Map<string, Node[]>();
+      // First, group nodes by their identifiers
+      const identifierToNodes = new Map<string, Node[]>();
 
-    for (const node of nodes) {
-      const identifiers = this.extractIdentifiers(node);
+      for (const node of nodes) {
+        const identifiers = this.extractIdentifiers(node);
 
-      // Add node to all matching identifier groups
-      for (const identifier of identifiers) {
-        const group = identifierToNodes.get(identifier) ?? [];
-        group.push(node);
-        identifierToNodes.set(identifier, group);
-      }
-    }
-
-    // Now merge nodes that share any identifier
-    const processedNodes = new Set<Node>();
-    const linkedNodes: LinkedNode[] = [];
-
-    for (const node of nodes) {
-      if (processedNodes.has(node)) continue;
-
-      // Find all nodes that share any identifier with this node
-      const identifiers = this.extractIdentifiers(node);
-      const relatedNodes = new Set<Node>();
-      relatedNodes.add(node);
-
-      // Collect all nodes that share any identifier
-      for (const identifier of identifiers) {
-        const group = identifierToNodes.get(identifier) ?? [];
-        for (const relatedNode of group) {
-          relatedNodes.add(relatedNode);
+        // Add node to all matching identifier groups
+        for (const identifier of identifiers) {
+          const group = identifierToNodes.get(identifier) ?? [];
+          group.push(node);
+          identifierToNodes.set(identifier, group);
         }
       }
 
-      // Create linked node from all related nodes
-      const linkedNode: LinkedNode = {
-        ...node,
-        sources: [],
-        linked: false,
-      };
+      // Now merge nodes that share any identifier
+      const processedNodes = new Set<Node>();
+      const linkedNodes: LinkedNode[] = [];
 
-      // Merge data from all related nodes
-      for (const relatedNode of relatedNodes) {
-        processedNodes.add(relatedNode);
+      for (const node of nodes) {
+        if (processedNodes.has(node)) continue;
 
-        const nodeSource =
-          (relatedNode as Node & { source?: string }).source ?? "bolt";
+        // Find all nodes that share any identifier with this node
+        const identifiers = this.extractIdentifiers(node);
+        const relatedNodes = new Set<Node>();
+        relatedNodes.add(node);
 
-        if (!linkedNode.sources.includes(nodeSource)) {
-          linkedNode.sources.push(nodeSource);
+        // Collect all nodes that share any identifier
+        for (const identifier of identifiers) {
+          const group = identifierToNodes.get(identifier) ?? [];
+          for (const relatedNode of group) {
+            relatedNodes.add(relatedNode);
+          }
         }
 
-        // Merge certificate status (prefer from puppetserver)
-        if (nodeSource === "puppetserver") {
-          const nodeWithCert = relatedNode as Node & {
-            certificateStatus?: "signed" | "requested" | "revoked";
+        // Use the first node's name as the primary identifier
+        // (all related nodes should have the same name)
+        const primaryName = node.name;
+
+        // Create linked node with common name
+        const linkedNode: LinkedNode = {
+          id: primaryName, // Use name as primary ID for lookups
+          name: primaryName,
+          uri: node.uri, // Will be overwritten with combined URIs
+          transport: node.transport,
+          config: node.config,
+          sources: [],
+          linked: false,
+          sourceData: {},
+        };
+
+        // Collect source-specific data from all related nodes
+        const allUris: string[] = [];
+
+        for (const relatedNode of relatedNodes) {
+          processedNodes.add(relatedNode);
+
+          const nodeSource =
+            (relatedNode as Node & { source?: string }).source ?? "bolt";
+
+          if (!linkedNode.sources.includes(nodeSource)) {
+            linkedNode.sources.push(nodeSource);
+          }
+
+          // Store source-specific data
+          linkedNode.sourceData[nodeSource] = {
+            id: relatedNode.id,
+            uri: relatedNode.uri,
+            config: relatedNode.config,
+            metadata: (relatedNode as Node & { metadata?: Record<string, unknown> }).metadata,
+            status: (relatedNode as Node & { status?: string }).status,
           };
-          if (nodeWithCert.certificateStatus) {
-            linkedNode.certificateStatus = nodeWithCert.certificateStatus;
+
+          // Collect URIs
+          allUris.push(relatedNode.uri);
+
+          // Merge certificate status (prefer from puppetserver)
+          if (nodeSource === "puppetserver") {
+            const nodeWithCert = relatedNode as Node & {
+              certificateStatus?: "signed" | "requested" | "revoked";
+            };
+            if (nodeWithCert.certificateStatus) {
+              linkedNode.certificateStatus = nodeWithCert.certificateStatus;
+            }
+          }
+
+          // Merge last check-in (use most recent)
+          const nodeWithCheckIn = relatedNode as Node & { lastCheckIn?: string };
+          if (nodeWithCheckIn.lastCheckIn) {
+            if (
+              !linkedNode.lastCheckIn ||
+              new Date(nodeWithCheckIn.lastCheckIn) >
+                new Date(linkedNode.lastCheckIn)
+            ) {
+              linkedNode.lastCheckIn = nodeWithCheckIn.lastCheckIn;
+            }
           }
         }
 
-        // Merge last check-in (use most recent)
-        const nodeWithCheckIn = relatedNode as Node & { lastCheckIn?: string };
-        if (nodeWithCheckIn.lastCheckIn) {
-          if (
-            !linkedNode.lastCheckIn ||
-            new Date(nodeWithCheckIn.lastCheckIn) >
-              new Date(linkedNode.lastCheckIn)
-          ) {
-            linkedNode.lastCheckIn = nodeWithCheckIn.lastCheckIn;
-          }
-        }
+        // Combine all URIs
+        linkedNode.uri = Array.from(new Set(allUris)).join(", ");
+
+        // Mark as linked if from multiple sources
+        linkedNode.linked = linkedNode.sources.length > 1;
+
+        this.logger.debug("Created linked node", {
+          component: "NodeLinkingService",
+          operation: "linkNodes",
+          metadata: {
+            nodeId: linkedNode.id,
+            nodeName: linkedNode.name,
+            sources: linkedNode.sources,
+            linked: linkedNode.linked,
+            sourceDataKeys: Object.keys(linkedNode.sourceData),
+          },
+        });
+
+        linkedNodes.push(linkedNode);
       }
 
-      // Mark as linked if from multiple sources
-      linkedNode.linked = linkedNode.sources.length > 1;
-
-      linkedNodes.push(linkedNode);
+      return linkedNodes;
     }
-
-    return linkedNodes;
-  }
 
   /**
    * Get all data for a linked node from all sources
@@ -274,19 +326,22 @@ export class NodeLinkingService {
    */
   private extractIdentifiers(node: Node): string[] {
     const identifiers: string[] = [];
+    const nodeSource = (node as Node & { source?: string }).source ?? "bolt";
 
-    // Add node ID
+    // Add node ID (always unique per source)
     if (node.id) {
       identifiers.push(node.id.toLowerCase());
     }
 
-    // Add node name (certname)
-    if (node.name) {
+    // Add node name (certname) - used for cross-source linking
+    // Skip empty names to prevent incorrect linking
+    if (node.name && node.name.trim() !== "") {
       identifiers.push(node.name.toLowerCase());
     }
 
     // Add URI hostname (extract from URI)
-    if (node.uri) {
+    // Skip Proxmox URIs as they use format proxmox://node/vmid where 'node' is not unique per VM
+    if (node.uri && !node.uri.startsWith("proxmox://")) {
       try {
         // Extract hostname from URI
         // URIs can be in formats like:

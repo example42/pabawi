@@ -35,18 +35,37 @@ export function addToast(
   },
 ): string {
   const id = `toast-${String(nextId++)}`;
+
+  // Determine duration based on type:
+  // - Error notifications: 0 (no auto-dismiss, remain until user dismisses)
+  // - Success notifications: 5000ms (5 seconds)
+  // - Other types: 3000ms (3 seconds)
+  let defaultDuration: number;
+  if (type === "error") {
+    defaultDuration = 0; // No auto-dismiss for errors
+  } else if (type === "success") {
+    defaultDuration = 5000; // 5 seconds for success
+  } else {
+    defaultDuration = 3000; // 3 seconds for info/warning
+  }
+
   const toast: Toast = {
     id,
     type,
     message,
     details: options?.details,
-    duration: options?.duration ?? (type === "error" ? 5000 : 3000),
+    duration: options?.duration ?? defaultDuration,
     dismissible: options?.dismissible ?? true,
   };
 
   state.toasts = [...state.toasts, toast];
 
-  // Auto-dismiss after duration
+  // Log errors to console for debugging
+  if (type === "error") {
+    console.error(`[Toast Error] ${message}`, options?.details ? `\nDetails: ${options.details}` : '');
+  }
+
+  // Auto-dismiss after duration (if duration > 0)
   if (toast.duration && toast.duration > 0) {
     setTimeout(() => {
       removeToast(id);
@@ -74,7 +93,7 @@ export function showSuccess(message: string, details?: string): string {
  * Show error toast
  */
 export function showError(message: string, details?: string): string {
-  return addToast("error", message, { details, duration: 5000 });
+  return addToast("error", message, { details, duration: 0 }); // duration: 0 means no auto-dismiss
 }
 
 /**

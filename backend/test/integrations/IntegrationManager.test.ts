@@ -812,7 +812,7 @@ describe("IntegrationManager", () => {
       expect(inventory.sources.bad.status).toBe("unavailable");
     });
 
-    it("should deduplicate nodes by ID", async () => {
+    it("should deduplicate nodes by ID and track all sources", async () => {
       const node: Node = {
         id: "node1",
         name: "node1",
@@ -845,10 +845,15 @@ describe("IntegrationManager", () => {
       const inventory = await manager.getAggregatedInventory();
 
       expect(inventory.nodes).toHaveLength(1);
-      // Should prefer node from higher priority source (source2)
+      // Should prefer node data from higher priority source (source2)
       expect((inventory.nodes[0] as Node & { source?: string }).source).toBe(
         "source2",
       );
+      // Should track all sources
+      expect(inventory.nodes[0].sources).toEqual(expect.arrayContaining(["source1", "source2"]));
+      expect(inventory.nodes[0].sources).toHaveLength(2);
+      // Should mark as linked since it exists in multiple sources
+      expect(inventory.nodes[0].linked).toBe(true);
     });
   });
 

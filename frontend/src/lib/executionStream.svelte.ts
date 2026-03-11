@@ -6,6 +6,7 @@
  */
 
 import { expertMode } from "./expertMode.svelte";
+import { authManager } from "./auth.svelte";
 
 /**
  * Event types for streaming execution output
@@ -146,7 +147,7 @@ export function useExecutionStream(
   }
 
   /**
-   * Build SSE URL with expert mode parameter
+   * Build SSE URL with expert mode parameter and auth token
    */
   function buildStreamUrl(): string {
     const baseUrl = `/api/executions/${executionId}/stream`;
@@ -154,6 +155,14 @@ export function useExecutionStream(
 
     if (expertMode.enabled) {
       params.set("expertMode", "true");
+    }
+
+    // Add auth token as query parameter for SSE (EventSource doesn't support headers)
+    const authHeader = authManager.getAuthHeader();
+    if (authHeader) {
+      // Extract token from "Bearer <token>" format
+      const token = authHeader.replace(/^Bearer\s+/i, '');
+      params.set("token", token);
     }
 
     const queryString = params.toString();

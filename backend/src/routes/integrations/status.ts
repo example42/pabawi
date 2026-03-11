@@ -214,6 +214,28 @@ export function createStatusRouter(
           });
         }
 
+        // Check if Proxmox is not configured
+        if (!configuredNames.has("proxmox")) {
+          logger.debug("Proxmox integration is not configured", {
+            component: "StatusRouter",
+            integration: "proxmox",
+            operation: "getStatus",
+          });
+          integrations.push({
+            name: "proxmox",
+            type: "both",
+            status: "not_configured",
+            lastCheck: new Date().toISOString(),
+            message: "Proxmox integration is not configured",
+            details: {
+              setupRequired: true,
+              setupUrl: "/setup/proxmox",
+            },
+            workingCapabilities: undefined,
+            failingCapabilities: undefined,
+          });
+        }
+
         const duration = Date.now() - startTime;
         const responseData = {
           integrations,
