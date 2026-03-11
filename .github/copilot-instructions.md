@@ -130,7 +130,14 @@ npm run build:frontend && npm run copy:frontend && npm run dev:backend
 
 ### Database Schema
 
-SQLite schema defined in `backend/src/database/schema.sql`, migrations in `migrations.sql`. Key tables:
+SQLite schema uses a pure migration-first approach:
+
+- All schema definitions are in numbered migrations: `backend/src/database/migrations/*.sql`
+- Migration 000: Initial schema (executions, revoked_tokens)
+- Migration 001: RBAC tables (users, roles, permissions, groups)
+- Future changes: Always create a new numbered migration, never modify existing ones
+
+Key tables:
 
 - `executions`: Stores all command/task execution history with results
 - Auto-create on first run via `DatabaseService`

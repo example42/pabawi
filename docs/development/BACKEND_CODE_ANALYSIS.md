@@ -378,13 +378,21 @@ The Pabawi backend is a Node.js/Express/TypeScript infrastructure management sys
 - `getConnection()` - Get SQLite connection
 - `close()` - Close connection
 - `isInitialized()` - Check if DB is ready
-- `initializeSchema()` - Create tables from schema.sql
-- `runMigrations()` - Apply migrations from migrations.sql
+- `initializeSchema()` - Runs all numbered migrations from migrations/ directory
+- `runMigrations()` - Apply numbered migrations using MigrationRunner
 
 **Key Files:**
 
-- Reads: `schema.sql`, `migrations.sql`
+- Migrations: `migrations/*.sql` (all schema definitions, starting from 000)
 - Creates database at path from config
+
+**Schema Management Policy (Migration-First):**
+
+- ALL schema definitions are in numbered migrations (000, 001, 002, etc.)
+- Migration 000: Initial schema (executions, revoked_tokens)
+- Migration 001: RBAC tables (users, roles, permissions, groups)
+- Future changes: Always create a new numbered migration
+- Never modify existing migrations after they've been applied
 
 **Relationships:**
 

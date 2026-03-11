@@ -1,6 +1,5 @@
 import sqlite3 from "sqlite3";
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
+import { dirname } from "path";
 import { mkdirSync, existsSync } from "fs";
 import { MigrationRunner } from "./MigrationRunner";
 
@@ -74,7 +73,15 @@ export class DatabaseService {
   }
 
   /**
-   * Initialize database schema from SQL file
+   * Initialize database schema using migration-first approach
+   *
+   * Schema Management Policy:
+   * - ALL schema definitions are in numbered migrations (migrations/*.sql)
+   * - Migration 000: Initial schema (executions, revoked_tokens)
+   * - Migration 001: RBAC tables (users, roles, permissions, groups)
+   * - Migration 002+: All subsequent schema changes
+   * - Future changes: Always create a new numbered migration
+   * - Never modify existing migrations after they've been applied
    */
   private async initializeSchema(): Promise<void> {
     if (!this.db) {
@@ -82,57 +89,7 @@ export class DatabaseService {
     }
 
     try {
-      // Read and execute main schema file
-      const schemaPath = join(__dirname, "schema.sql");
-      const schema = readFileSync(schemaPath, "utf-8");
-
-      // Split schema into statements
-      const statements = schema
-        .split(";")
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-
-      // Execute each statement separately to handle migration errors gracefully
-      for (const statement of statements) {
-        try {
-          await this.exec(statement);
-        } catch (error) {
-          // Ignore "duplicate column" errors from ALTER TABLE (migration already applied)
-          const errorMessage = error instanceof Error ? error.message : "";
-          if (!errorMessage.includes("duplicate column")) {
-            throw error;
-          }
-          // Migration already applied, continue
-        }
-      }
-
-      // Read and execute RBAC schema file
-      const rbacSchemaPath = join(__dirname, "rbac-schema.sql");
-      if (existsSync(rbacSchemaPath)) {
-        const rbacSchema = readFileSync(rbacSchemaPath, "utf-8");
-
-        // Split RBAC schema into statements
-        const rbacStatements = rbacSchema
-          .split(";")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-
-        // Execute each RBAC statement
-        for (const statement of rbacStatements) {
-          try {
-            await this.exec(statement);
-          } catch (error) {
-            // Ignore "duplicate column" errors from ALTER TABLE (migration already applied)
-            const errorMessage = error instanceof Error ? error.message : "";
-            if (!errorMessage.includes("duplicate column")) {
-              throw error;
-            }
-            // Migration already applied, continue
-          }
-        }
-      }
-
-      // Run migrations
+      // Run all migrations (including initial schema)
       await this.runMigrations();
     } catch (error) {
       throw new Error(
@@ -161,26 +118,6 @@ export class DatabaseService {
         `Migration failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
-  }
-
-  /**
-   * Execute SQL statement
-   */
-  private exec(sql: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.db) {
-        reject(new Error("Database connection not established"));
-        return;
-      }
-
-      this.db.exec(sql, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
   }
 
   /**
