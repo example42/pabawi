@@ -240,6 +240,78 @@ describe("NodeLinkingService", () => {
       expect(linkedNodes[0].sources).toEqual(["bolt"]);
       expect(linkedNodes[0].linked).toBe(false);
     });
+
+    it("should store source-specific data for each source", () => {
+      // Test that source-specific IDs and URIs are preserved
+      const nodes: Node[] = [
+        {
+          id: "debian13.test.example42.com",
+          name: "debian13.test.example42.com",
+          uri: "ssh://debian13.test.example42.com",
+          transport: "ssh",
+          config: {},
+          source: "bolt",
+        } as Node & { source: string },
+        {
+          id: "proxmox:minis:100",
+          name: "debian13.test.example42.com",
+          uri: "proxmox://minis/100",
+          transport: "ssh",
+          config: {},
+          source: "proxmox",
+          metadata: {
+            vmid: 100,
+            node: "minis",
+            type: "qemu",
+            status: "running",
+          },
+        } as Node & { source: string; metadata: Record<string, unknown> },
+        {
+          id: "debian13.test.example42.com",
+          name: "debian13.test.example42.com",
+          uri: "ssh://debian13.test.example42.com",
+          transport: "ssh",
+          config: {},
+          source: "puppetdb",
+        } as Node & { source: string },
+      ];
+
+      const linkedNodes = service.linkNodes(nodes);
+
+      // Should have only one linked node
+      expect(linkedNodes).toHaveLength(1);
+
+      const linkedNode = linkedNodes[0];
+
+      // Primary ID should be the name (common identifier)
+      expect(linkedNode.id).toBe("debian13.test.example42.com");
+      expect(linkedNode.name).toBe("debian13.test.example42.com");
+
+      // Should include all sources
+      expect(linkedNode.sources).toContain("proxmox");
+      expect(linkedNode.sources).toContain("bolt");
+      expect(linkedNode.sources).toContain("puppetdb");
+      expect(linkedNode.sources).toHaveLength(3);
+
+      // Should be marked as linked
+      expect(linkedNode.linked).toBe(true);
+
+      // Should have source-specific data
+      expect(linkedNode.sourceData).toBeDefined();
+      expect(linkedNode.sourceData.proxmox).toBeDefined();
+      expect(linkedNode.sourceData.proxmox.id).toBe("proxmox:minis:100");
+      expect(linkedNode.sourceData.proxmox.uri).toBe("proxmox://minis/100");
+      expect(linkedNode.sourceData.proxmox.metadata).toBeDefined();
+      expect(linkedNode.sourceData.proxmox.metadata?.vmid).toBe(100);
+
+      expect(linkedNode.sourceData.bolt).toBeDefined();
+      expect(linkedNode.sourceData.bolt.id).toBe("debian13.test.example42.com");
+      expect(linkedNode.sourceData.bolt.uri).toBe("ssh://debian13.test.example42.com");
+
+      expect(linkedNode.sourceData.puppetdb).toBeDefined();
+      expect(linkedNode.sourceData.puppetdb.id).toBe("debian13.test.example42.com");
+      expect(linkedNode.sourceData.puppetdb.uri).toBe("ssh://debian13.test.example42.com");
+    });
   });
 
   describe("findMatchingNodes", () => {

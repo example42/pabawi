@@ -20,6 +20,7 @@ export interface IntegrationColors {
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
   ssh: IntegrationColorConfig;
+  proxmox: IntegrationColorConfig;
 }
 
 /**
@@ -43,16 +44,32 @@ class IntegrationColorStore {
   colors = $state<IntegrationColors | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
+  private loadPromise: Promise<void> | null = null;
 
   /**
    * Load colors from the backend API
+   * Uses a singleton promise to prevent multiple simultaneous requests
    */
   async loadColors(): Promise<void> {
+    // Already loaded
     if (this.colors) {
-      // Already loaded
       return;
     }
 
+    // Already loading - return existing promise
+    if (this.loadPromise) {
+      return this.loadPromise;
+    }
+
+    // Start new load
+    this.loadPromise = this.fetchColors();
+    return this.loadPromise;
+  }
+
+  /**
+   * Internal method to fetch colors from API
+   */
+  private async fetchColors(): Promise<void> {
     this.loading = true;
     this.error = null;
 
@@ -67,6 +84,7 @@ class IntegrationColorStore {
       this.colors = this.getDefaultColors();
     } finally {
       this.loading = false;
+      this.loadPromise = null;
     }
   }
 
@@ -107,7 +125,7 @@ class IntegrationColorStore {
    * @returns Array of valid integration names
    */
   getValidIntegrations(): IntegrationType[] {
-    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh'];
+    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh', 'proxmox'];
   }
 
   /**
@@ -155,6 +173,11 @@ class IntegrationColorStore {
         primary: '#10B981',
         light: '#D1FAE5',
         dark: '#059669',
+      },
+      proxmox: {
+        primary: '#6300e5ff',
+        light: '#FFF3E0',
+        dark: '#B85600',
       },
     };
   }

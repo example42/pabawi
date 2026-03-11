@@ -764,3 +764,155 @@ export interface BatchStatusResponse {
 export async function getBatchStatus(batchId: string): Promise<BatchStatusResponse> {
   return get<BatchStatusResponse>(`/api/executions/batch/${batchId}`);
 }
+
+/**
+ * Provisioning API methods
+ * Validates Requirements: 2.1, 3.3, 4.3, 6.4, 7.3, 8.3, 10.4
+ */
+
+import type {
+  ListIntegrationsResponse,
+  ProxmoxVMParams,
+  ProxmoxLXCParams,
+  ProvisioningResult,
+} from './types/provisioning';
+
+/**
+ * Configuration for Proxmox integration
+ */
+export interface ProxmoxConfig {
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  realm?: string;
+  token?: string;
+  ssl?: {
+    rejectUnauthorized: boolean;
+  };
+}
+
+/**
+ * Response from Proxmox connection test
+ */
+export interface ProxmoxTestResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Get available provisioning integrations
+ * Validates Requirements: 2.1
+ *
+ * Retry logic: 2 retries with 1000ms delay for status queries
+ */
+export async function getProvisioningIntegrations(): Promise<ListIntegrationsResponse> {
+  return get<ListIntegrationsResponse>('/api/integrations/provisioning', {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+}
+
+/**
+ * Create a Proxmox VM
+ * Validates Requirements: 3.3
+ *
+ * Retry logic: No retries for provisioning operations (user-initiated)
+ */
+export async function createProxmoxVM(params: ProxmoxVMParams): Promise<ProvisioningResult> {
+  return post<ProvisioningResult>('/api/integrations/proxmox/provision/vm', params, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+/**
+ * Create a Proxmox LXC container
+ * Validates Requirements: 4.3
+ *
+ * Retry logic: No retries for provisioning operations (user-initiated)
+ */
+export async function createProxmoxLXC(params: ProxmoxLXCParams): Promise<ProvisioningResult> {
+  return post<ProvisioningResult>('/api/integrations/proxmox/provision/lxc', params, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+/**
+ * Execute a lifecycle action on a node
+ * Validates Requirements: 6.4
+ *
+ * Retry logic: No retries for provisioning operations (user-initiated)
+ *
+ * @param nodeId - The ID of the node to perform the action on
+ * @param action - The action to perform (start, stop, reboot, etc.)
+ * @param parameters - Optional parameters for the action
+ */
+export async function executeNodeAction(
+  nodeId: string,
+  action: string,
+  parameters?: Record<string, unknown>
+): Promise<ProvisioningResult> {
+  const response = await post<{ success: boolean; message: string; result?: unknown }>(
+    `/api/nodes/${nodeId}/action`,
+    { action, parameters },
+    {
+      maxRetries: 0,
+      showRetryNotifications: false,
+    }
+  );
+
+  return {
+    success: response.success,
+    message: response.message,
+    nodeId,
+  };
+}
+
+/**
+ * Destroy a node (VM or LXC)
+ * Validates Requirements: 7.3, 8.3
+ *
+ * Retry logic: No retries for provisioning operations (user-initiated)
+ *
+ * @param nodeId - The ID of the node to destroy
+ */
+export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
+  const response = await del<{ success: boolean; message: string; result?: unknown }>(`/api/nodes/${nodeId}`, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+
+  return {
+    success: response.success,
+    message: response.message,
+    nodeId,
+  };
+}
+
+/**
+ * Save Proxmox integration configuration
+ * Validates Requirements: 10.4
+ *
+ * Retry logic: No retries for configuration operations (user-initiated)
+ */
+export async function saveProxmoxConfig(config: ProxmoxConfig): Promise<{ success: boolean; message: string }> {
+  return put<{ success: boolean; message: string }>('/api/integrations/proxmox/config', config, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+/**
+ * Test Proxmox connection with provided configuration
+ * Validates Requirements: 10.4
+ *
+ * Retry logic: No retries for test operations (user-initiated)
+ */
+export async function testProxmoxConnection(config: ProxmoxConfig): Promise<ProxmoxTestResponse> {
+  return post<ProxmoxTestResponse>('/api/integrations/proxmox/test', config, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}

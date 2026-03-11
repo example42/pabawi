@@ -24,6 +24,7 @@
     puppetserver: 'Puppetserver',
     hiera: 'Hiera',
     ssh: 'SSH',
+    proxmox: 'Proxmox',
   };
 
   const label = $derived(integrationLabels[integration]);
