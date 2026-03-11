@@ -466,18 +466,18 @@ export class BoltPlugin
         return null;
       }
 
-      // Extract targets and map to node IDs
+      // Extract targets and map to node IDs (prefixed with source)
       const nodes: string[] = [];
       if (Array.isArray(groupData.targets)) {
         for (const target of groupData.targets) {
           if (typeof target === "string") {
-            nodes.push(target);
+            nodes.push(`bolt:${target}`);
           } else if (typeof target === "object" && target !== null) {
             // Handle target objects with name property
             const targetObj = target as Record<string, unknown>;
             const targetName = typeof targetObj.name === "string" ? targetObj.name : null;
             if (targetName) {
-              nodes.push(targetName);
+              nodes.push(`bolt:${targetName}`);
             }
           }
         }

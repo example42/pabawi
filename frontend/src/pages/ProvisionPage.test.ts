@@ -787,6 +787,7 @@ describe('ProvisionPage', () => {
             const integrations = generatedIntegrations.map((integration, index) => ({
               ...integration,
               name: `${integration.name}-${index}`,
+              displayName: `${integration.displayName}-${index}`,
             }));
 
             // Mock API to return the generated integrations
@@ -892,12 +893,14 @@ describe('ProvisionPage', () => {
             // Check for integration display name
             expect(getByText(newIntegration.displayName)).toBeInTheDocument();
 
-            // Check for integration type
-            expect(getByText(new RegExp(newIntegration.type, 'i'))).toBeInTheDocument();
+            // Check for integration type (use queryAllByText to handle multiple matches)
+            const typeElements = screen.queryAllByText(new RegExp(newIntegration.type, 'i'));
+            expect(typeElements.length).toBeGreaterThan(0);
 
             // Check for integration status
             const statusText = newIntegration.status.replace('_', ' ');
-            expect(getByText(new RegExp(statusText, 'i'))).toBeInTheDocument();
+            const statusElements = screen.queryAllByText(new RegExp(statusText, 'i'));
+            expect(statusElements.length).toBeGreaterThan(0);
 
             // Check for capability count
             const capabilityCount = newIntegration.capabilities.length;
@@ -906,7 +909,8 @@ describe('ProvisionPage', () => {
 
             // Check that capability names are displayed
             for (const capability of newIntegration.capabilities) {
-              expect(getByText(capability.name)).toBeInTheDocument();
+              const capElements = screen.queryAllByText(capability.name);
+              expect(capElements.length).toBeGreaterThan(0);
             }
 
             // Verify appropriate action button is rendered based on status
@@ -946,6 +950,7 @@ describe('ProvisionPage', () => {
               const uniqueIntegration = {
                 ...integration,
                 name: `${integration.name}-${index}`,
+                displayName: `${integration.displayName}-${index}`,
               };
 
               if (uniqueIntegration.capabilities.length === 0) {

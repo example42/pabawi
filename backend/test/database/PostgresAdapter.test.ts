@@ -38,9 +38,9 @@ describe("PostgresAdapter", () => {
       expect(adapter.getPlaceholder(99)).toBe("$99");
     });
 
-    it("returns $0 for index 0", () => {
+    it("throws for index 0 (Postgres placeholders are 1-based)", () => {
       const adapter = new PostgresAdapter("postgresql://localhost:5432/test");
-      expect(adapter.getPlaceholder(0)).toBe("$0");
+      expect(() => adapter.getPlaceholder(0)).toThrow("Invalid placeholder index");
     });
   });
 

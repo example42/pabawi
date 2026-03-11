@@ -398,6 +398,12 @@ export class ProxmoxClient {
       body = data ? JSON.stringify(data) : undefined;
     }
 
+    // Node.js http.request uses chunked encoding when Content-Length is absent,
+    // which Proxmox rejects. Always set an explicit Content-Length.
+    if (body !== undefined) {
+      headers["Content-Length"] = Buffer.byteLength(body).toString();
+    }
+
     // Add authentication
     if (useAuth) {
       if (this.config.token) {

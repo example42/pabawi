@@ -404,7 +404,7 @@ describe('Feature: proxmox-frontend-ui, Property 8 & 9: Form Validation with val
           const hasInvalidVMID = !formData.vmid || formData.vmid < 100 || formData.vmid > 999999999;
           const hasInvalidName = !formData.name || formData.name.length === 0 || formData.name.length > 50 || !/^[a-zA-Z0-9-]+$/.test(formData.name);
           const hasInvalidNode = !formData.node || formData.node.length === 0;
-          const hasInvalidMemory = formData.memory && formData.memory < 512;
+          const hasInvalidMemory = formData.memory !== undefined && formData.memory < 512;
           const hasInvalidCores = formData.cores !== null && formData.cores !== undefined && (formData.cores < 1 || formData.cores > 64);
 
           if (hasInvalidVMID || hasInvalidName || hasInvalidNode || hasInvalidMemory || hasInvalidCores) {
