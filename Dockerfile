@@ -104,9 +104,8 @@ COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/dist ./dist
 COPY --from=backend-deps --chown=pabawi:pabawi /app/backend/node_modules ./node_modules
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
 
-# Copy only database migrations (not copied by TypeScript compiler)
-# This avoids copying TypeScript sources into the runtime image
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/migrations ./dist/database/migrations
+# Copy migration SQL files (already placed in dist/ by the build script)
+COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/dist/database/migrations ./dist/database/migrations
 
 # Copy built frontend to public directory
 COPY --from=frontend-builder --chown=pabawi:pabawi /app/frontend/dist ./public
