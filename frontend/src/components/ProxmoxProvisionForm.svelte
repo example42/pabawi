@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { ProxmoxVMParams, ProxmoxLXCParams, PVENode, StorageContent } from '../lib/types/provisioning';
+  import type { ProxmoxVMParams, ProxmoxLXCParams, PVENode, StorageContent, PVEStorage, PVENetwork } from '../lib/types/provisioning';
   import { validateVMID, validateHostname, validateMemory, validateRequired, validateNumericRange } from '../lib/validation';
-  import { createProxmoxVM, createProxmoxLXC, getProxmoxNodes, getProxmoxNextVMID, getProxmoxISOs, getProxmoxTemplates } from '../lib/api';
+  import { createProxmoxVM, createProxmoxLXC, getProxmoxNodes, getProxmoxNextVMID, getProxmoxISOs, getProxmoxTemplates, getProxmoxStorages, getProxmoxNetworks } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { logger } from '../lib/logger.svelte';
 
@@ -27,6 +27,10 @@
   let loadingVMID = $state(false);
   let loadingISOs = $state(false);
   let loadingTemplates = $state(false);
+  let storages = $state<PVEStorage[]>([]);
+  let networks = $state<PVENetwork[]>([]);
+  let loadingStorages = $state(false);
+  let loadingNetworks = $state(false);
 
   /**
    * Computed property to check if form is valid
@@ -72,6 +76,22 @@
    */
   async function onNodeChange(node: string): Promise<void> {
     if (!node) return;
+
+    // Always fetch storages and networks for both tabs
+    loadingStorages = true;
+    loadingNetworks = true;
+    storages = [];
+    networks = [];
+
+    Promise.all([
+      getProxmoxStorages(node).catch((e) => { logger.error('ProxmoxProvisionForm', 'onNodeChange', 'Failed to fetch storages', e as Error); return [] as PVEStorage[]; }),
+      getProxmoxNetworks(node).catch((e) => { logger.error('ProxmoxProvisionForm', 'onNodeChange', 'Failed to fetch networks', e as Error); return [] as PVENetwork[]; }),
+    ]).then(([s, n]) => {
+      storages = s;
+      networks = n;
+      loadingStorages = false;
+      loadingNetworks = false;
+    });
 
     if (activeTab === 'vm') {
       loadingISOs = true;
@@ -164,6 +184,8 @@
     validationErrors = {};
     isoImages = [];
     osTemplates = [];
+    storages = [];
+    networks = [];
 
     // Preserve VMID from current form or fetch a new one
     const currentVmid = (formData as ProxmoxVMParams).vmid;
@@ -471,7 +493,21 @@
           <!-- Net0 (Optional) -->
           <div>
             <label for="vm-net0" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Network Interface</label>
-            <input type="text" id="vm-net0" name="net0" bind:value={(formData as ProxmoxVMParams).net0} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm" placeholder="virtio,bridge=vmbr0" />
+            {#if networks.length > 0}
+              <select
+                id="vm-net0"
+                name="net0"
+                bind:value={(formData as ProxmoxVMParams).net0}
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+              >
+                <option value="">Select bridge</option>
+                {#each networks as net}
+                  <option value="virtio,bridge={net.iface}">{net.iface}{net.cidr ? ` (${net.cidr})` : ''}</option>
+                {/each}
+              </select>
+            {:else}
+              <input type="text" id="vm-net0" name="net0" bind:value={(formData as ProxmoxVMParams).net0} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm" placeholder={loadingNetworks ? 'Loading networks...' : (formData as ProxmoxVMParams).node ? 'No bridges found — enter manually' : 'Select a node first'} />
+            {/if}
           </div>
 
           <!-- OS Type (Optional) -->
@@ -622,13 +658,41 @@
           <!-- Root Filesystem (Optional) -->
           <div>
             <label for="lxc-rootfs" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Root Filesystem</label>
-            <input type="text" id="lxc-rootfs" name="rootfs" bind:value={(formData as ProxmoxLXCParams).rootfs} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm" placeholder="local-lvm:8" />
+            {#if storages.length > 0}
+              <select
+                id="lxc-rootfs"
+                name="rootfs"
+                bind:value={(formData as ProxmoxLXCParams).rootfs}
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+              >
+                <option value="">Select storage</option>
+                {#each storages.filter(s => s.content.includes('rootdir')) as s}
+                  <option value="{s.storage}:8">{s.storage} ({s.type})</option>
+                {/each}
+              </select>
+            {:else}
+              <input type="text" id="lxc-rootfs" name="rootfs" bind:value={(formData as ProxmoxLXCParams).rootfs} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm" placeholder={loadingStorages ? 'Loading storages...' : (formData as ProxmoxLXCParams).node ? 'No storages found — enter manually' : 'Select a node first'} />
+            {/if}
           </div>
 
           <!-- Network Interface (Optional) -->
           <div>
             <label for="lxc-net0" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Network Interface</label>
-            <input type="text" id="lxc-net0" name="net0" bind:value={(formData as ProxmoxLXCParams).net0} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm" placeholder="name=eth0,bridge=vmbr0,ip=dhcp" />
+            {#if networks.length > 0}
+              <select
+                id="lxc-net0"
+                name="net0"
+                bind:value={(formData as ProxmoxLXCParams).net0}
+                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+              >
+                <option value="">Select bridge</option>
+                {#each networks as net}
+                  <option value="name=eth0,bridge={net.iface},ip=dhcp">{net.iface}{net.cidr ? ` (${net.cidr})` : ''}</option>
+                {/each}
+              </select>
+            {:else}
+              <input type="text" id="lxc-net0" name="net0" bind:value={(formData as ProxmoxLXCParams).net0} class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm" placeholder={loadingNetworks ? 'Loading networks...' : (formData as ProxmoxLXCParams).node ? 'No bridges found — enter manually' : 'Select a node first'} />
+            {/if}
           </div>
 
           <!-- Password (Optional) -->

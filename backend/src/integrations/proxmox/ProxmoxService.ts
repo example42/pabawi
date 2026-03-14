@@ -1029,6 +1029,112 @@ export class ProxmoxService {
   }
 
   /**
+   * Get available storages on a node, optionally filtered by content type
+   *
+   * Queries the Proxmox API for storages on the given node.
+   * Results are cached for 120 seconds.
+   *
+   * @param node - PVE node name
+   * @param contentType - Optional content filter (e.g. 'rootdir', 'images', 'vztmpl', 'iso')
+   * @returns Array of storage objects
+   */
+  async getStorages(node: string, contentType?: string): Promise<{ storage: string; type: string; content: string; active: number; total?: number; used?: number; avail?: number }[]> {
+    if (!this.client) {
+      throw new Error("ProxmoxClient not initialized");
+    }
+
+    const cacheKey = `storages:${node}:${contentType ?? "all"}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return cached as { storage: string; type: string; content: string; active: number; total?: number; used?: number; avail?: number }[];
+    }
+
+    try {
+      const query = contentType ? `?content=${contentType}` : "";
+      const result = await this.client.get(
+        `/api2/json/nodes/${node}/storage${query}`
+      );
+      if (!Array.isArray(result)) {
+        throw new Error("Unexpected response format from Proxmox API");
+      }
+
+      const storages = result.map((item: Record<string, unknown>) => ({
+        storage: item.storage as string,
+        type: item.type as string,
+        content: item.content as string,
+        active: item.active as number,
+        total: item.total as number | undefined,
+        used: item.used as number | undefined,
+        avail: item.avail as number | undefined,
+      }));
+
+      this.cache.set(cacheKey, storages, 120000);
+      return storages;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to fetch storages", {
+        component: "ProxmoxService",
+        operation: "getStorages",
+        metadata: { node, contentType, error: errorMessage },
+      }, error instanceof Error ? error : undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Get available network bridges/interfaces on a node
+   *
+   * Queries the Proxmox API for network devices on the given node,
+   * filtered to bridges only by default.
+   * Results are cached for 120 seconds.
+   *
+   * @param node - PVE node name
+   * @param type - Optional type filter (defaults to 'bridge')
+   * @returns Array of network interface objects
+   */
+  async getNetworkBridges(node: string, type = "bridge"): Promise<{ iface: string; type: string; active: number; address?: string; cidr?: string; bridge_ports?: string }[]> {
+    if (!this.client) {
+      throw new Error("ProxmoxClient not initialized");
+    }
+
+    const cacheKey = `networks:${node}:${type}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return cached as { iface: string; type: string; active: number; address?: string; cidr?: string; bridge_ports?: string }[];
+    }
+
+    try {
+      const query = type ? `?type=${type}` : "";
+      const result = await this.client.get(
+        `/api2/json/nodes/${node}/network${query}`
+      );
+      if (!Array.isArray(result)) {
+        throw new Error("Unexpected response format from Proxmox API");
+      }
+
+      const networks = result.map((item: Record<string, unknown>) => ({
+        iface: item.iface as string,
+        type: item.type as string,
+        active: item.active as number,
+        address: item.address as string | undefined,
+        cidr: item.cidr as string | undefined,
+        bridge_ports: item.bridge_ports as string | undefined,
+      }));
+
+      this.cache.set(cacheKey, networks, 120000);
+      return networks;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to fetch network bridges", {
+        component: "ProxmoxService",
+        operation: "getNetworkBridges",
+        metadata: { node, type, error: errorMessage },
+      }, error instanceof Error ? error : undefined);
+      throw error;
+    }
+  }
+
+  /**
    * Clear all cached data
    *
    * Useful for forcing fresh data retrieval or after provisioning operations.
@@ -1415,7 +1521,10 @@ export class ProxmoxService {
 
       // Call Proxmox API to create VM
       const endpoint = `/api2/json/nodes/${params.node}/qemu`;
-      const taskId = await this.client.post(endpoint, params);
+      // Strip 'node' from the payload — it's already in the URL path
+      // and Proxmox rejects unknown parameters
+      const { node: _node, ...apiPayload } = params;
+      const taskId = await this.client.post(endpoint, apiPayload);
 
       this.logger.debug("VM creation task started", {
         component: "ProxmoxService",
@@ -1541,7 +1650,10 @@ export class ProxmoxService {
 
       // Call Proxmox API to create LXC
       const endpoint = `/api2/json/nodes/${params.node}/lxc`;
-      const taskId = await this.client.post(endpoint, params);
+      // Strip 'node' from the payload — it's already in the URL path
+      // and Proxmox rejects unknown parameters
+      const { node: _node, ...apiPayload } = params;
+      const taskId = await this.client.post(endpoint, apiPayload);
 
       this.logger.debug("LXC creation task started", {
         component: "ProxmoxService",

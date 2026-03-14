@@ -166,6 +166,56 @@ export function createProxmoxRouter(
   );
 
   /**
+   * GET /api/integrations/proxmox/nodes/:node/storages
+   * Get available storages on a node, optionally filtered by content type
+   */
+  router.get(
+    "/nodes/:node/storages",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const proxmox = getProxmoxIntegration();
+      if (!proxmox) {
+        res.status(503).json({ error: { code: "PROXMOX_NOT_CONFIGURED", message: "Proxmox integration is not configured" } });
+        return;
+      }
+      const { node } = req.params;
+      const content = (req.query.content as string) || undefined;
+      try {
+        const storages = await proxmox.getStorages(node, content);
+        res.json({ storages });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("Failed to fetch storages", { component: "ProxmoxRouter", operation: "getStorages", metadata: { node, error: msg } }, error instanceof Error ? error : undefined);
+        res.status(500).json({ error: { code: "FETCH_STORAGES_FAILED", message: msg } });
+      }
+    })
+  );
+
+  /**
+   * GET /api/integrations/proxmox/nodes/:node/networks
+   * Get available network bridges on a node
+   */
+  router.get(
+    "/nodes/:node/networks",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const proxmox = getProxmoxIntegration();
+      if (!proxmox) {
+        res.status(503).json({ error: { code: "PROXMOX_NOT_CONFIGURED", message: "Proxmox integration is not configured" } });
+        return;
+      }
+      const { node } = req.params;
+      const type = (req.query.type as string) || undefined;
+      try {
+        const networks = await proxmox.getNetworkBridges(node, type);
+        res.json({ networks });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("Failed to fetch networks", { component: "ProxmoxRouter", operation: "getNetworks", metadata: { node, error: msg } }, error instanceof Error ? error : undefined);
+        res.status(500).json({ error: { code: "FETCH_NETWORKS_FAILED", message: msg } });
+      }
+    })
+  );
+
+  /**
    * POST /api/integrations/proxmox/provision/vm
    * Create a new virtual machine
    */
