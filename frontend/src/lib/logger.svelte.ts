@@ -190,19 +190,32 @@ class FrontendLogger {
     const logsToSend = [...this.pendingLogs];
     this.pendingLogs = [];
 
-    fetch('/api/debug/frontend-logs', {
-      method: 'POST',
-      headers: {
+    // Import authManager dynamically to avoid circular dependencies
+    import('./auth.svelte').then(({ authManager }) => {
+      const headers: HeadersInit = {
         'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        logs: logsToSend,
-        browserInfo: this.getBrowserInfo(),
-      }),
+      };
+
+      // Add authentication header if available
+      const authHeader = authManager.getAuthHeader();
+      if (authHeader) {
+        headers['Authorization'] = authHeader;
+      }
+
+      fetch('/api/debug/frontend-logs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          logs: logsToSend,
+          browserInfo: this.getBrowserInfo(),
+        }),
+      }).catch((error: unknown) => {
+        // Failed to send logs - add back to buffer but don't retry
+        // to avoid infinite loops
+        console.warn('Failed to send logs to backend:', error);
+      });
     }).catch((error: unknown) => {
-      // Failed to send logs - add back to buffer but don't retry
-      // to avoid infinite loops
-      console.warn('Failed to send logs to backend:', error);
+      console.warn('Failed to import authManager:', error);
     });
   }
 
