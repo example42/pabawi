@@ -45,14 +45,20 @@ export class ProxmoxClient {
     this.logger = logger;
     this.baseUrl = `https://${config.host}:${String(config.port ?? 8006)}`;
 
-    // Configure SSL for fetch - set environment variable if needed
-    // This affects all HTTPS requests in the process, but is necessary for Node.js fetch
+    // Configure SSL behavior
+    // NOTE: Setting NODE_TLS_REJECT_UNAUTHORIZED is process-wide and would disable TLS verification
+    // for ALL HTTPS traffic, not just Proxmox. Instead, log a warning to guide the operator.
+    // Per-client TLS bypass via a custom HTTPS agent/dispatcher is the correct solution.
     if (config.ssl && config.ssl.rejectUnauthorized === false) {
-      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-      this.logger.debug("Disabled TLS certificate verification for Proxmox", {
-        component: "ProxmoxClient",
-        operation: "constructor",
-      });
+      this.logger.warn(
+        "Proxmox ssl.rejectUnauthorized=false is set, but per-client TLS bypass is not yet implemented. " +
+        "Proxmox connections will use the default TLS verification. " +
+        "Configure a trusted CA certificate (ssl.ca) to connect to Proxmox with self-signed certs.",
+        {
+          component: "ProxmoxClient",
+          operation: "constructor",
+        }
+      );
     }
 
     // Configure retry logic

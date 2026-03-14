@@ -50,9 +50,15 @@ export function createStreamingRouter(
 
       try {
         // Handle token from query parameter (EventSource doesn't support headers)
-        // If token is in query param, move it to Authorization header for middleware
-        if (req.query.token && typeof req.query.token === 'string') {
+        // Only move to Authorization header when no Authorization header is already present,
+        // then remove from query to reduce the chance of it being logged downstream.
+        if (
+          typeof req.query.token === "string" &&
+          !req.headers.authorization
+        ) {
           req.headers.authorization = `Bearer ${req.query.token}`;
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+          delete (req.query as Record<string, unknown>).token;
         }
 
         // Validate request parameters

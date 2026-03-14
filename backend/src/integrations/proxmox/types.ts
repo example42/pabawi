@@ -4,7 +4,9 @@
  * Type definitions for the Proxmox VE integration plugin.
  */
 
-import type { Capability } from "../types";
+import type { ProvisioningCapability } from "../types";
+
+export type { ProvisioningCapability };
 
 /**
  * Proxmox configuration
@@ -134,13 +136,6 @@ export interface ProxmoxTaskStatus {
   pstart: number;
   starttime: number;
   upid: string;
-}
-
-/**
- * Provisioning capability interface
- */
-export interface ProvisioningCapability extends Capability {
-  operation: "create" | "destroy";
 }
 
 /**

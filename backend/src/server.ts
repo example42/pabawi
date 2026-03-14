@@ -711,7 +711,7 @@ async function startServer(): Promise<Express> {
           name: "proxmox",
           type: "both",
           config: proxmoxConfig as unknown as Record<string, unknown>,
-          priority: proxmoxConfig.priority ?? 7, // Between Puppetserver (8) and Hiera (6)
+          priority: proxmoxConfig.priority ?? 7, // Default 7: between Bolt/PuppetDB (10) and Hiera (6)
         };
 
         logger.debug("Registering Proxmox plugin", {

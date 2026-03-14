@@ -912,145 +912,20 @@ export class IntegrationManager {
     return true;
   }
 
-  /**
-   * Deduplicate nodes by ID, preferring nodes from higher priority sources
-   *
-   * @param nodes - Array of nodes potentially with duplicates
-   * @returns Deduplicated array of nodes
-   */
-  /**
-     * Deduplicate and link nodes by ID
-     *
-     * When multiple sources provide the same node (by ID), merge them into a single
-     * node entry with all sources tracked. This matches the behavior of group linking.
-     * The node data is taken from the highest priority source, but all sources are
-     * recorded in the sources array.
-     *
-     * @param nodes - Array of nodes from all sources
-     * @returns Deduplicated and linked array of nodes with source attribution
-     */
     /**
-       * Deduplicate and link nodes by ID
-       *
-       * When multiple sources provide the same node (by ID), merge them into a single
-       * node entry with all sources tracked. This matches the behavior of group linking.
-       * The node data is taken from the highest priority source, but all sources are
-       * recorded in the sources array.
-       *
-       * @param nodes - Array of nodes from all sources
-       * @returns Deduplicated and linked array of nodes with source attribution
-       */
-      /**
-         * Deduplicate and link nodes by matching identifiers
-         *
-         * When multiple sources provide the same node (matched by identifiers like certname,
-         * hostname, URI), merge them into a single node entry with all sources tracked.
-         * This matches the behavior of group linking. The node data is taken from the highest
-         * priority source, but all sources and URIs are recorded.
-         *
-         * @param nodes - Array of nodes from all sources
-         * @returns Deduplicated and linked array of nodes with source attribution
-         */
-        private deduplicateNodes(nodes: Node[]): LinkedNode[] {
-                  // Use NodeLinkingService to link nodes by identifiers
-                  // This already handles source-specific data correctly
-                  return this.nodeLinkingService.linkNodes(nodes);
-                }
-
-        /**
-         * Check if a node matches a linked node by comparing identifiers
-         *
-         * @param node - Node to check
-         * @param linkedNode - Linked node to match against
-         * @returns True if nodes match
-         * @private
-         */
-        private nodesMatch(node: Node, linkedNode: LinkedNode): boolean {
-          const nodeIdentifiers = this.extractNodeIdentifiers(node);
-          const linkedIdentifiers = this.extractNodeIdentifiers(linkedNode);
-
-          // Check if any identifiers match
-          for (const id of nodeIdentifiers) {
-            if (linkedIdentifiers.includes(id)) {
-              return true;
-            }
-          }
-
-          return false;
-        }
-
-        /**
-         * Extract all possible identifiers from a node
-         *
-         * @param node - Node to extract identifiers from
-         * @returns Array of identifiers (normalized to lowercase)
-         * @private
-         */
-        private extractNodeIdentifiers(node: Node): string[] {
-          const identifiers: string[] = [];
-
-          // Add node ID
-          if (node.id) {
-            identifiers.push(node.id.toLowerCase());
-          }
-
-          // Add node name (certname)
-          // Skip empty names to prevent incorrect linking
-          if (node.name && node.name.trim() !== "") {
-            // Normalize hostname: trim, lowercase, remove domain suffix
-            const normalizedName = node.name.trim().toLowerCase();
-            identifiers.push(normalizedName);
-
-            // Also add short hostname (without domain)
-            const shortName = normalizedName.split('.')[0];
-            if (shortName !== normalizedName) {
-              identifiers.push(shortName);
-            }
-          }
-
-          // Add URI hostname (extract from URI)
-          // Skip Proxmox URIs as they use format proxmox://node/vmid where 'node' is not unique per VM
-          if (node.uri && !node.uri.startsWith("proxmox://")) {
-            try {
-              // Extract hostname from URI
-              // URIs can be in formats like:
-              // - ssh://hostname
-              // - hostname
-              // - hostname:port
-              const uriParts = node.uri.split("://");
-              const hostPart = uriParts.length > 1 ? uriParts[1] : uriParts[0];
-              const hostname = hostPart.split(":")[0].split("/")[0].trim().toLowerCase();
-
-              if (hostname) {
-                identifiers.push(hostname);
-
-                // Also add short hostname
-                const shortHostname = hostname.split('.')[0];
-                if (shortHostname !== hostname) {
-                  identifiers.push(shortHostname);
-                }
-              }
-            } catch {
-              // Ignore URI parsing errors
-            }
-          }
-
-          // Add hostname from config if available
-          const nodeConfig = node.config as { hostname?: string } | undefined;
-          if (nodeConfig?.hostname) {
-            const normalizedHostname = nodeConfig.hostname.trim().toLowerCase();
-            identifiers.push(normalizedHostname);
-
-            // Also add short hostname
-            const shortHostname = normalizedHostname.split('.')[0];
-            if (shortHostname !== normalizedHostname) {
-              identifiers.push(shortHostname);
-            }
-          }
-
-          // Remove duplicates
-          return Array.from(new Set(identifiers));
-        }
+   * Deduplicate and link nodes by matching identifiers.
+   *
+   * When multiple sources provide the same node (matched by identifiers like certname,
+   * hostname, or URI), merge them into a single node entry with all sources tracked.
+   * The node data is taken from the highest priority source, but all sources and URIs
+   * are recorded in sourceData.
+   *
+   * @param nodes - Array of nodes from all sources
+   * @returns Deduplicated and linked array of nodes with source attribution
+   */
+  private deduplicateNodes(nodes: Node[]): LinkedNode[] {
+    return this.nodeLinkingService.linkNodes(nodes);
+  }
 
   /**
    * Link groups with the same name across multiple sources
