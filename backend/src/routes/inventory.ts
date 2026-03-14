@@ -13,6 +13,7 @@ import { ExpertModeService } from "../services/ExpertModeService";
 import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import type { ProxmoxIntegration } from "../integrations/proxmox/ProxmoxIntegration";
 
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
@@ -1177,8 +1178,8 @@ export function createInventoryRouter(
           return;
         }
 
-        const proxmoxSource = integrationManager.getInformationSource("proxmox");
-        if (!proxmoxSource) {
+        const proxmoxTool = integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
+        if (!proxmoxTool) {
           const errorResponse = {
             error: {
               code: "PROXMOX_NOT_CONFIGURED",
@@ -1190,14 +1191,11 @@ export function createInventoryRouter(
           return;
         }
 
-        // Execute the action
-        const proxmoxService = proxmoxSource as unknown as {
-          executeAction: (action: { action: string; target: string }) => Promise<unknown>;
-        };
-
-        const result = await proxmoxService.executeAction({
-          action: body.action,
+        // Execute the action with a properly-shaped Action object
+        const result = await proxmoxTool.executeAction({
+          type: "task",
           target: nodeId,
+          action: body.action,
         });
 
         const duration = Date.now() - startTime;
@@ -1309,8 +1307,8 @@ export function createInventoryRouter(
           return;
         }
 
-        const proxmoxSource = integrationManager.getInformationSource("proxmox");
-        if (!proxmoxSource) {
+        const proxmoxTool = integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
+        if (!proxmoxTool) {
           const errorResponse = {
             error: {
               code: "PROXMOX_NOT_CONFIGURED",
@@ -1339,12 +1337,24 @@ export function createInventoryRouter(
         const node = parts[1];
         const vmid = parseInt(parts[2], 10);
 
-        // Execute the destroy action
-        const proxmoxService = proxmoxSource as unknown as {
-          destroyGuest: (node: string, vmid: number) => Promise<unknown>;
-        };
+        if (!Number.isFinite(vmid)) {
+          const errorResponse = {
+            error: {
+              code: "INVALID_NODE_ID",
+              message: "Invalid Proxmox node ID: vmid is not a valid number",
+            },
+          };
 
-        const result = await proxmoxService.destroyGuest(node, vmid);
+          res.status(400).json(errorResponse);
+          return;
+        }
+
+        const result = await proxmoxTool.executeAction({
+          type: "task",
+          target: nodeId,
+          action: "destroy_vm",
+          parameters: { node, vmid },
+        });
 
         const duration = Date.now() - startTime;
 
