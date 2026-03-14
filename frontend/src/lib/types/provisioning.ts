@@ -177,3 +177,28 @@ export interface StorageContent {
   format: string;
   size: number;
 }
+
+/**
+ * Proxmox storage info from node
+ */
+export interface PVEStorage {
+  storage: string;
+  type: string;
+  content: string;
+  active: number;
+  total?: number;
+  used?: number;
+  avail?: number;
+}
+
+/**
+ * Proxmox network bridge/interface from node
+ */
+export interface PVENetwork {
+  iface: string;
+  type: string;
+  active: number;
+  address?: string;
+  cidr?: string;
+  bridge_ports?: string;
+}
