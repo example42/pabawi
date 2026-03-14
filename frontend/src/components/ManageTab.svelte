@@ -185,6 +185,16 @@
     confirmDialog = { action: '', open: false };
   }
 
+  // Handle Escape key to close confirmation dialog via window-level listener
+  $effect(() => {
+    if (!confirmDialog.open) return;
+    function handleKeydown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') cancelConfirmation();
+    }
+    window.addEventListener('keydown', handleKeydown);
+    return () => { window.removeEventListener('keydown', handleKeydown); };
+  });
+
   // Confirm and execute destructive action
   function confirmAction(): void {
     if (confirmDialog.action) {
@@ -323,9 +333,8 @@
       <div
         class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity dark:bg-gray-900 dark:bg-opacity-75"
         onclick={cancelConfirmation}
-        onkeydown={(e) => e.key === 'Escape' && cancelConfirmation()}
         role="button"
-        tabindex="-1"
+        tabindex="0"
         aria-label="Close dialog"
       ></div>
 

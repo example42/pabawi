@@ -168,8 +168,10 @@ export class NodeLinkingService {
           }
         }
 
-        // Combine all URIs
-        linkedNode.uri = Array.from(new Set(allUris)).join(", ");
+        // Keep uri as the primary URI from the first non-empty source.
+        // Source-specific URIs are preserved in sourceData[source].uri.
+        const primaryUri = allUris.find((u) => u) ?? linkedNode.uri;
+        linkedNode.uri = primaryUri;
 
         // Mark as linked if from multiple sources
         linkedNode.linked = linkedNode.sources.length > 1;
@@ -326,7 +328,6 @@ export class NodeLinkingService {
    */
   private extractIdentifiers(node: Node): string[] {
     const identifiers: string[] = [];
-    const nodeSource = (node as Node & { source?: string }).source ?? "bolt";
 
     // Add node ID (always unique per source)
     if (node.id) {
