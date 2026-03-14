@@ -261,9 +261,9 @@
 
   <!-- Task Selection -->
   <div>
-    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+    <div class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
       Select Task <span class="text-red-500">*</span>
-    </label>
+    </div>
 
     <!-- Loading State -->
     {#if loading}

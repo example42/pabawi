@@ -56,7 +56,7 @@ All infrastructure integrations (Bolt, PuppetDB, Puppetserver, Hiera, Ansible, S
 - **`services/`** — Cross-cutting services: `ExecutionQueue` (concurrent limiting, FIFO), `StreamingExecutionManager` (SSE real-time output), `CommandWhitelistService` (security), `DatabaseService`, `AuthenticationService`, `BatchExecutionService`, and RBAC services (`UserService`, `RoleService`, `PermissionService`, `GroupService`)
 - **`routes/`** — Express route handlers. All async handlers must be wrapped with `asyncHandler()` from `utils/`
 - **`middleware/`** — Auth (JWT), RBAC, error handler, rate limiting, security headers
-- **`database/`** — `DatabaseService.ts` (SQLite, schema/migration on startup), `ExecutionRepository.ts` (CRUD for execution history). Schema in `database/schema.sql`, migrations in `database/migrations.sql`
+- **`database/`** — `DatabaseService.ts` (SQLite, migration-first approach), `ExecutionRepository.ts` (CRUD for execution history). All schema in `migrations/*.sql` (000: initial, 001: RBAC, etc.)
 - **`errors/`** — Typed error classes extending base classes; use these instead of generic `Error`
 - **`validation/`** — Zod schemas for request body validation
 

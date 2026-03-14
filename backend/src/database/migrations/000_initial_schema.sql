@@ -1,3 +1,7 @@
+-- Migration 000: Initial Schema
+-- Creates the base executions table and revoked_tokens table
+-- This is the foundation schema for the Pabawi application
+
 -- Executions table for storing command and task execution history
 CREATE TABLE IF NOT EXISTS executions (
   id TEXT PRIMARY KEY,

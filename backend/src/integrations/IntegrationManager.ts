@@ -32,7 +32,7 @@ export interface HealthCheckCacheEntry {
  * Aggregated inventory from multiple sources
  */
 export interface AggregatedInventory {
-  nodes: Node[];
+  nodes: LinkedNode[];
   /** Groups aggregated from all sources */
   groups: NodeGroup[];
   sources: Record<
@@ -234,6 +234,75 @@ export class IntegrationManager {
    */
   getAllPlugins(): PluginRegistration[] {
     return Array.from(this.plugins.values());
+  }
+
+  /**
+   * Get provisioning capabilities from all execution tools
+   *
+   * Queries all execution tool plugins that support provisioning capabilities
+   * and aggregates them into a single list with source attribution.
+   *
+   * @returns Array of provisioning capabilities from all plugins
+   */
+  getAllProvisioningCapabilities(): Array<{
+    source: string;
+    capabilities: Array<{
+      name: string;
+      description: string;
+      operation: "create" | "destroy";
+      parameters: Array<{
+        name: string;
+        type: string;
+        required: boolean;
+        default?: unknown;
+      }>;
+    }>;
+  }> {
+    const result: Array<{
+      source: string;
+      capabilities: Array<{
+        name: string;
+        description: string;
+        operation: "create" | "destroy";
+        parameters: Array<{
+          name: string;
+          type: string;
+          required: boolean;
+          default?: unknown;
+        }>;
+      }>;
+    }> = [];
+
+    for (const [name, tool] of this.executionTools) {
+      // Check if the plugin has listProvisioningCapabilities method
+      if (
+        "listProvisioningCapabilities" in tool &&
+        typeof tool.listProvisioningCapabilities === "function"
+      ) {
+        try {
+          const capabilities = tool.listProvisioningCapabilities();
+          if (capabilities && capabilities.length > 0) {
+            result.push({
+              source: name,
+              capabilities,
+            });
+          }
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.logger.error(
+            `Failed to get provisioning capabilities from '${name}'`,
+            {
+              component: "IntegrationManager",
+              operation: "getAllProvisioningCapabilities",
+              metadata: { sourceName: name },
+            },
+            err
+          );
+        }
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -843,41 +912,19 @@ export class IntegrationManager {
     return true;
   }
 
-  /**
-   * Deduplicate nodes by ID, preferring nodes from higher priority sources
+    /**
+   * Deduplicate and link nodes by matching identifiers.
    *
-   * @param nodes - Array of nodes potentially with duplicates
-   * @returns Deduplicated array of nodes
+   * When multiple sources provide the same node (matched by identifiers like certname,
+   * hostname, or URI), merge them into a single node entry with all sources tracked.
+   * The node data is taken from the highest priority source, but all sources and URIs
+   * are recorded in sourceData.
+   *
+   * @param nodes - Array of nodes from all sources
+   * @returns Deduplicated and linked array of nodes with source attribution
    */
-  private deduplicateNodes(nodes: Node[]): Node[] {
-    const nodeMap = new Map<string, Node>();
-
-    for (const node of nodes) {
-      const existing = nodeMap.get(node.id);
-
-      if (!existing) {
-        nodeMap.set(node.id, node);
-        continue;
-      }
-
-      // Get priority for both nodes
-      const existingSource = (existing as Node & { source?: string }).source;
-      const newSource = (node as Node & { source?: string }).source;
-
-      const existingPriority = existingSource
-        ? (this.plugins.get(existingSource)?.config.priority ?? 0)
-        : 0;
-      const newPriority = newSource
-        ? (this.plugins.get(newSource)?.config.priority ?? 0)
-        : 0;
-
-      // Keep node from higher priority source
-      if (newPriority > existingPriority) {
-        nodeMap.set(node.id, node);
-      }
-    }
-
-    return Array.from(nodeMap.values());
+  private deduplicateNodes(nodes: Node[]): LinkedNode[] {
+    return this.nodeLinkingService.linkNodes(nodes);
   }
 
   /**

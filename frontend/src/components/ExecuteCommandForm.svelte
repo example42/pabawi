@@ -204,10 +204,10 @@
   <form onsubmit={handleSubmit} class="space-y-4">
     <!-- Execution Tool Selector -->
     {#if availableTools.length > 1}
-      <div>
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <fieldset>
+        <legend class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Execution Tool
-        </label>
+        </legend>
         <div class="flex gap-2">
           {#each availableTools as tool}
             <button
@@ -228,7 +228,7 @@
             </button>
           {/each}
         </div>
-      </div>
+      </fieldset>
     {/if}
 
     <!-- Command Input -->

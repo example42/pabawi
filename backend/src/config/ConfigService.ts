@@ -109,6 +109,23 @@ export class ConfigService {
         exclusionPatterns?: string[];
       };
     };
+    proxmox?: {
+      enabled: boolean;
+      host: string;
+      port?: number;
+      username?: string;
+      password?: string;
+      realm?: string;
+      token?: string;
+      ssl?: {
+        rejectUnauthorized?: boolean;
+        ca?: string;
+        cert?: string;
+        key?: string;
+      };
+      timeout?: number;
+      priority?: number;
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -392,6 +409,50 @@ export class ConfigService {
             ? parseInt(process.env.HIERA_CODE_ANALYSIS_INTERVAL, 10)
             : undefined,
           exclusionPatterns,
+        };
+      }
+    }
+
+    // Parse Proxmox configuration
+    if (process.env.PROXMOX_ENABLED === "true") {
+      const host = process.env.PROXMOX_HOST;
+      if (!host) {
+        throw new Error(
+          "PROXMOX_HOST is required when PROXMOX_ENABLED is true",
+        );
+      }
+
+      integrations.proxmox = {
+        enabled: true,
+        host,
+        port: process.env.PROXMOX_PORT
+          ? parseInt(process.env.PROXMOX_PORT, 10)
+          : undefined,
+        username: process.env.PROXMOX_USERNAME,
+        password: process.env.PROXMOX_PASSWORD,
+        realm: process.env.PROXMOX_REALM,
+        token: process.env.PROXMOX_TOKEN,
+        timeout: process.env.PROXMOX_TIMEOUT
+          ? parseInt(process.env.PROXMOX_TIMEOUT, 10)
+          : undefined,
+        priority: process.env.PROXMOX_PRIORITY
+          ? parseInt(process.env.PROXMOX_PRIORITY, 10)
+          : undefined,
+      };
+
+      // Parse SSL configuration if any SSL-related env vars are set
+      if (
+        process.env.PROXMOX_SSL_REJECT_UNAUTHORIZED !== undefined ||
+        process.env.PROXMOX_SSL_CA ||
+        process.env.PROXMOX_SSL_CERT ||
+        process.env.PROXMOX_SSL_KEY
+      ) {
+        integrations.proxmox.ssl = {
+          rejectUnauthorized:
+            process.env.PROXMOX_SSL_REJECT_UNAUTHORIZED !== "false",
+          ca: process.env.PROXMOX_SSL_CA,
+          cert: process.env.PROXMOX_SSL_CERT,
+          key: process.env.PROXMOX_SSL_KEY,
         };
       }
     }

@@ -26,6 +26,9 @@ export function createStreamingRouter(
   /**
    * GET /api/executions/:id/stream
    * Subscribe to streaming events for an execution
+   *
+   * Note: EventSource API doesn't support custom headers, so authentication
+   * token can be passed via query parameter as a fallback
    */
   router.get(
     "/:id/stream",
@@ -46,6 +49,18 @@ export function createStreamingRouter(
       });
 
       try {
+        // Handle token from query parameter (EventSource doesn't support headers)
+        // Only move to Authorization header when no Authorization header is already present,
+        // then remove from query to reduce the chance of it being logged downstream.
+        if (
+          typeof req.query.token === "string" &&
+          !req.headers.authorization
+        ) {
+          req.headers.authorization = `Bearer ${req.query.token}`;
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+          delete (req.query as Record<string, unknown>).token;
+        }
+
         // Validate request parameters
         if (debugInfo) {
           expertModeService.addDebug(debugInfo, {

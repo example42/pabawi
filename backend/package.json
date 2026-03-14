@@ -1,11 +1,11 @@
 {
   "name": "backend",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Backend API server for Pabawi",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc && mkdir -p dist/database && cp src/database/schema.sql dist/database/ && cp src/database/migrations.sql dist/database/",
+    "build": "tsc && mkdir -p dist/database && cp -r src/database/migrations dist/database/",
     "start": "node dist/server.js",
     "test": "vitest --run --passWithNoTests",
     "test:watch": "vitest",

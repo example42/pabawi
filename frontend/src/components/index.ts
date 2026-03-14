@@ -27,6 +27,8 @@ export { default as NodeHieraTab } from "./NodeHieraTab.svelte";
 export { default as NodeStatus } from "./NodeStatus.svelte";
 export { default as PaginationControls } from "./PaginationControls.svelte";
 export { default as ParallelExecutionModal } from "./ParallelExecutionModal.svelte";
+export { default as ProxmoxProvisionForm } from "./ProxmoxProvisionForm.svelte";
+export { default as ProxmoxSetupGuide } from "./ProxmoxSetupGuide.svelte";
 export { default as PuppetDBAdmin } from "./PuppetDBAdmin.svelte";
 export { default as PuppetOutputViewer } from "./PuppetOutputViewer.svelte";
 export { default as PuppetReportsSummary } from "./PuppetReportsSummary.svelte";
