@@ -775,6 +775,8 @@ import type {
   ProxmoxVMParams,
   ProxmoxLXCParams,
   ProvisioningResult,
+  type PVENode,
+  type StorageContent,
 } from './types/provisioning';
 
 /**
@@ -837,6 +839,62 @@ export async function createProxmoxLXC(params: ProxmoxLXCParams): Promise<Provis
     maxRetries: 0,
     showRetryNotifications: false,
   });
+}
+
+/**
+ * Get list of PVE nodes in the Proxmox cluster
+ * Retry logic: 2 retries for read operations
+ */
+export async function getProxmoxNodes(): Promise<PVENode[]> {
+  const response = await get<{ nodes: PVENode[] }>('/api/integrations/proxmox/nodes', {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.nodes;
+}
+
+/**
+ * Get the next available VMID from Proxmox
+ * Retry logic: 2 retries for read operations
+ */
+export async function getProxmoxNextVMID(): Promise<number> {
+  const response = await get<{ vmid: number }>('/api/integrations/proxmox/nextid', {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.vmid;
+}
+
+/**
+ * Get ISO images available on a Proxmox node
+ * Retry logic: 2 retries for read operations
+ *
+ * @param node - PVE node name
+ * @param storage - Storage name (optional)
+ */
+export async function getProxmoxISOs(node: string, storage?: string): Promise<StorageContent[]> {
+  const params = storage ? `?storage=${encodeURIComponent(storage)}` : '';
+  const response = await get<{ isos: StorageContent[] }>(`/api/integrations/proxmox/nodes/${encodeURIComponent(node)}/isos${params}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.isos;
+}
+
+/**
+ * Get OS templates available on a Proxmox node
+ * Retry logic: 2 retries for read operations
+ *
+ * @param node - PVE node name
+ * @param storage - Storage name (optional)
+ */
+export async function getProxmoxTemplates(node: string, storage?: string): Promise<StorageContent[]> {
+  const params = storage ? `?storage=${encodeURIComponent(storage)}` : '';
+  const response = await get<{ templates: StorageContent[] }>(`/api/integrations/proxmox/nodes/${encodeURIComponent(node)}/templates${params}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.templates;
 }
 
 /**

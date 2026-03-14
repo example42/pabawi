@@ -858,6 +858,177 @@ export class ProxmoxService {
   }
 
   /**
+   * Get list of PVE nodes in the cluster
+   *
+   * Queries the Proxmox API for all physical nodes.
+   * Results are cached for 60 seconds.
+   *
+   * @returns Array of node objects with name, status, and resource info
+   */
+  async getNodes(): Promise<{ node: string; status: string; maxcpu?: number; maxmem?: number }[]> {
+    if (!this.client) {
+      throw new Error("ProxmoxClient not initialized");
+    }
+
+    const cacheKey = "pve:nodes";
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return cached as { node: string; status: string; maxcpu?: number; maxmem?: number }[];
+    }
+
+    try {
+      const result = await this.client.get("/api2/json/nodes");
+      if (!Array.isArray(result)) {
+        throw new Error("Unexpected response format from Proxmox API");
+      }
+
+      const nodes = result.map((n: Record<string, unknown>) => ({
+        node: n.node as string,
+        status: n.status as string,
+        maxcpu: n.maxcpu as number | undefined,
+        maxmem: n.maxmem as number | undefined,
+      }));
+
+      this.cache.set(cacheKey, nodes, 60000);
+      return nodes;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to fetch PVE nodes", {
+        component: "ProxmoxService",
+        operation: "getNodes",
+        metadata: { error: errorMessage },
+      }, error instanceof Error ? error : undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the next available VMID from Proxmox cluster
+   *
+   * Proxmox provides a cluster-wide endpoint that returns the next free VMID.
+   *
+   * @returns Next available VMID number
+   */
+  async getNextVMID(): Promise<number> {
+    if (!this.client) {
+      throw new Error("ProxmoxClient not initialized");
+    }
+
+    try {
+      const result = await this.client.get("/api2/json/cluster/nextid");
+      const vmid = typeof result === "string" ? parseInt(result, 10) : result as number;
+      if (isNaN(vmid as number)) {
+        throw new Error("Unexpected response format for next VMID");
+      }
+      return vmid as number;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to fetch next VMID", {
+        component: "ProxmoxService",
+        operation: "getNextVMID",
+        metadata: { error: errorMessage },
+      }, error instanceof Error ? error : undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Get ISO images available on a specific node's storage
+   *
+   * Queries the Proxmox API for ISO content on the given node.
+   * Results are cached for 120 seconds.
+   *
+   * @param node - PVE node name
+   * @param storage - Storage name (defaults to 'local')
+   * @returns Array of ISO image objects
+   */
+  async getISOImages(node: string, storage = "local"): Promise<{ volid: string; format: string; size: number }[]> {
+    if (!this.client) {
+      throw new Error("ProxmoxClient not initialized");
+    }
+
+    const cacheKey = `iso:${node}:${storage}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return cached as { volid: string; format: string; size: number }[];
+    }
+
+    try {
+      const result = await this.client.get(
+        `/api2/json/nodes/${node}/storage/${storage}/content?content=iso`
+      );
+      if (!Array.isArray(result)) {
+        throw new Error("Unexpected response format from Proxmox API");
+      }
+
+      const isos = result.map((item: Record<string, unknown>) => ({
+        volid: item.volid as string,
+        format: item.format as string,
+        size: item.size as number,
+      }));
+
+      this.cache.set(cacheKey, isos, 120000);
+      return isos;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to fetch ISO images", {
+        component: "ProxmoxService",
+        operation: "getISOImages",
+        metadata: { node, storage, error: errorMessage },
+      }, error instanceof Error ? error : undefined);
+      throw error;
+    }
+  }
+
+  /**
+   * Get OS templates available on a specific node's storage
+   *
+   * Queries the Proxmox API for container templates on the given node.
+   * Results are cached for 120 seconds.
+   *
+   * @param node - PVE node name
+   * @param storage - Storage name (defaults to 'local')
+   * @returns Array of template objects
+   */
+  async getTemplates(node: string, storage = "local"): Promise<{ volid: string; format: string; size: number }[]> {
+    if (!this.client) {
+      throw new Error("ProxmoxClient not initialized");
+    }
+
+    const cacheKey = `templates:${node}:${storage}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) {
+      return cached as { volid: string; format: string; size: number }[];
+    }
+
+    try {
+      const result = await this.client.get(
+        `/api2/json/nodes/${node}/storage/${storage}/content?content=vztmpl`
+      );
+      if (!Array.isArray(result)) {
+        throw new Error("Unexpected response format from Proxmox API");
+      }
+
+      const templates = result.map((item: Record<string, unknown>) => ({
+        volid: item.volid as string,
+        format: item.format as string,
+        size: item.size as number,
+      }));
+
+      this.cache.set(cacheKey, templates, 120000);
+      return templates;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error("Failed to fetch OS templates", {
+        component: "ProxmoxService",
+        operation: "getTemplates",
+        metadata: { node, storage, error: errorMessage },
+      }, error instanceof Error ? error : undefined);
+      throw error;
+    }
+  }
+
+  /**
    * Clear all cached data
    *
    * Useful for forcing fresh data retrieval or after provisioning operations.

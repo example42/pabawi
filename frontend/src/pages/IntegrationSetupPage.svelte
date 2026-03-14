@@ -69,7 +69,7 @@
 
 {#if integration === 'puppetserver'}
   <!-- Use the dedicated Puppetserver setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -96,7 +96,7 @@
   </div>
 {:else if integration === 'puppetdb'}
   <!-- Use the dedicated PuppetDB setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -123,7 +123,7 @@
   </div>
 {:else if integration === 'bolt'}
   <!-- Use the dedicated Bolt setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -150,7 +150,7 @@
   </div>
 {:else if integration === 'hiera'}
   <!-- Use the dedicated Hiera setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -177,7 +177,7 @@
   </div>
 {:else if integration === 'ansible'}
   <!-- Use the dedicated Ansible setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -204,7 +204,7 @@
   </div>
 {:else if integration === 'ssh'}
   <!-- Use the dedicated SSH setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -231,7 +231,7 @@
   </div>
 {:else if integration === 'proxmox'}
   <!-- Use the dedicated Proxmox setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -258,7 +258,7 @@
   </div>
 {:else}
   <!-- Generic setup guide for other integrations -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <!-- Header -->
     <div class="mb-8">
       <button

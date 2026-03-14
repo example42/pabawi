@@ -158,3 +158,22 @@ export interface ExecuteLifecycleActionRequest {
 export interface ExecuteLifecycleActionResponse {
   result: ProvisioningResult;
 }
+
+/**
+ * PVE node info from Proxmox cluster
+ */
+export interface PVENode {
+  node: string;
+  status: string;
+  maxcpu?: number;
+  maxmem?: number;
+}
+
+/**
+ * ISO image or OS template from Proxmox storage
+ */
+export interface StorageContent {
+  volid: string;
+  format: string;
+  size: number;
+}

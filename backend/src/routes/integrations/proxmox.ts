@@ -68,6 +68,104 @@ export function createProxmoxRouter(
   };
 
   /**
+   * GET /api/integrations/proxmox/nodes
+   * Get list of PVE nodes in the cluster
+   */
+  router.get(
+    "/nodes",
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+      const proxmox = getProxmoxIntegration();
+      if (!proxmox) {
+        res.status(503).json({ error: { code: "PROXMOX_NOT_CONFIGURED", message: "Proxmox integration is not configured" } });
+        return;
+      }
+      try {
+        const nodes = await proxmox.getNodes();
+        res.json({ nodes });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("Failed to fetch PVE nodes", { component: "ProxmoxRouter", operation: "getNodes", metadata: { error: msg } }, error instanceof Error ? error : undefined);
+        res.status(500).json({ error: { code: "FETCH_NODES_FAILED", message: msg } });
+      }
+    })
+  );
+
+  /**
+   * GET /api/integrations/proxmox/nextid
+   * Get the next available VMID
+   */
+  router.get(
+    "/nextid",
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+      const proxmox = getProxmoxIntegration();
+      if (!proxmox) {
+        res.status(503).json({ error: { code: "PROXMOX_NOT_CONFIGURED", message: "Proxmox integration is not configured" } });
+        return;
+      }
+      try {
+        const vmid = await proxmox.getNextVMID();
+        res.json({ vmid });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("Failed to fetch next VMID", { component: "ProxmoxRouter", operation: "getNextVMID", metadata: { error: msg } }, error instanceof Error ? error : undefined);
+        res.status(500).json({ error: { code: "FETCH_NEXTID_FAILED", message: msg } });
+      }
+    })
+  );
+
+  /**
+   * GET /api/integrations/proxmox/nodes/:node/isos
+   * Get ISO images available on a node
+   * Query params: storage (optional, defaults to 'local')
+   */
+  router.get(
+    "/nodes/:node/isos",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const proxmox = getProxmoxIntegration();
+      if (!proxmox) {
+        res.status(503).json({ error: { code: "PROXMOX_NOT_CONFIGURED", message: "Proxmox integration is not configured" } });
+        return;
+      }
+      const { node } = req.params;
+      const storage = (req.query.storage as string) || undefined;
+      try {
+        const isos = await proxmox.getISOImages(node, storage);
+        res.json({ isos });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("Failed to fetch ISOs", { component: "ProxmoxRouter", operation: "getISOImages", metadata: { node, error: msg } }, error instanceof Error ? error : undefined);
+        res.status(500).json({ error: { code: "FETCH_ISOS_FAILED", message: msg } });
+      }
+    })
+  );
+
+  /**
+   * GET /api/integrations/proxmox/nodes/:node/templates
+   * Get OS templates available on a node
+   * Query params: storage (optional, defaults to 'local')
+   */
+  router.get(
+    "/nodes/:node/templates",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const proxmox = getProxmoxIntegration();
+      if (!proxmox) {
+        res.status(503).json({ error: { code: "PROXMOX_NOT_CONFIGURED", message: "Proxmox integration is not configured" } });
+        return;
+      }
+      const { node } = req.params;
+      const storage = (req.query.storage as string) || undefined;
+      try {
+        const templates = await proxmox.getTemplates(node, storage);
+        res.json({ templates });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("Failed to fetch templates", { component: "ProxmoxRouter", operation: "getTemplates", metadata: { node, error: msg } }, error instanceof Error ? error : undefined);
+        res.status(500).json({ error: { code: "FETCH_TEMPLATES_FAILED", message: msg } });
+      }
+    })
+  );
+
+  /**
    * POST /api/integrations/proxmox/provision/vm
    * Create a new virtual machine
    */
