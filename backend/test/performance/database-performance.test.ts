@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import sqlite3 from 'sqlite3';
 import { ExecutionRepository, type ExecutionRecord } from '../../src/database/ExecutionRepository';
-import { readFileSync } from 'fs';
+import { MigrationRunner } from '../../src/database/MigrationRunner';
 import { join } from 'path';
 
 // Performance thresholds (in milliseconds)
@@ -46,21 +46,10 @@ function allAsync(db: sqlite3.Database, sql: string, params?: any[]): Promise<an
 async function setupDatabase(): Promise<sqlite3.Database> {
   const db = new sqlite3.Database(':memory:');
 
-  // Load and execute schema
-  const schemaPath = join(__dirname, '../../src/database/schema.sql');
-  const schema = readFileSync(schemaPath, 'utf-8');
-
-  // Execute full schema using db.exec (handles comments and multiple statements)
-  await new Promise<void>((resolve, reject) => {
-    db.exec(schema, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-
-  // Add columns from migration 006 (batch execution support)
-  await runAsync(db, 'ALTER TABLE executions ADD COLUMN batch_id TEXT');
-  await runAsync(db, 'ALTER TABLE executions ADD COLUMN batch_position INTEGER');
+  // Apply all migrations using MigrationRunner (migration-first approach)
+  const migrationsDir = join(__dirname, '../../src/database/migrations');
+  const runner = new MigrationRunner(db, migrationsDir);
+  await runner.runPendingMigrations();
 
   return db;
 }
