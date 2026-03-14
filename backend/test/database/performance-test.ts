@@ -23,8 +23,8 @@ function runAsync(db: sqlite3.Database, sql: string): Promise<void> {
 async function setupDatabase(): Promise<sqlite3.Database> {
   const db = new sqlite3.Database(':memory:');
 
-  // Load and execute schema
-  const schemaPath = join(__dirname, '../../src/database/schema.sql');
+  // Load and execute migration 000 (initial schema)
+  const schemaPath = join(__dirname, '../../src/database/migrations/000_initial_schema.sql');
   const schema = readFileSync(schemaPath, 'utf-8');
 
   // Split by semicolon and execute each statement

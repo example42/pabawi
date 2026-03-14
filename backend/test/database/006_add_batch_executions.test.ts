@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import sqlite3 from "sqlite3";
-import { MigrationRunner } from "../../src/database/MigrationRunner";
 import { readFileSync } from "fs";
 import { join } from "path";
 
@@ -10,9 +9,9 @@ describe("Migration 006: Add batch executions", () => {
   beforeEach(async () => {
     db = new sqlite3.Database(":memory:");
 
-    // Apply base schema first (executions table)
+    // Apply migration 000 (initial schema with executions table)
     const baseSchema = readFileSync(
-      join(__dirname, "../../src/database/schema.sql"),
+      join(__dirname, "../../src/database/migrations/000_initial_schema.sql"),
       "utf-8"
     );
     await new Promise<void>((resolve, reject) => {
