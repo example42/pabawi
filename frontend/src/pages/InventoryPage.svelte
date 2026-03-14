@@ -206,7 +206,7 @@
 
     // Filter by source
     if (sourceFilter !== 'all') {
-      result = result.filter(node => (node.source || 'bolt') === sourceFilter);
+      result = result.filter(node => getNodeSources(node).includes(sourceFilter));
     }
 
 
@@ -227,7 +227,7 @@
           break;
         }
         case 'source':
-          comparison = (a.source || 'bolt').localeCompare(b.source || 'bolt');
+          comparison = getNodeSources(a)[0].localeCompare(getNodeSources(b)[0]);
           break;
         default:
           comparison = 0;
@@ -239,12 +239,23 @@
     return result;
   });
 
-  // Computed node counts by source
+ // Helper: get effective sources for a node (handles both linked and non-linked nodes)
+  function getNodeSources(node: Node): string[] {
+    if (node.sources && node.sources.length > 0) return node.sources;
+    return [node.source || 'bolt'];
+  }
+
+  // Computed node counts by source (includes all configured sources, even with 0 nodes)
   let nodeCountsBySource = $derived.by(() => {
     const counts: Record<string, number> = {};
+    // Seed with all configured sources so they always appear in the filter
+    for (const sourceName of Object.keys(sources)) {
+      counts[sourceName] = 0;
+    }
     for (const node of nodes) {
-      const source = node.source || 'bolt';
-      counts[source] = (counts[source] || 0) + 1;
+      for (const src of getNodeSources(node)) {
+        counts[src] = (counts[src] || 0) + 1;
+      }
     }
     return counts;
   });
@@ -253,8 +264,10 @@
   let groupCountsBySource = $derived.by(() => {
     const counts: Record<string, number> = {};
     for (const group of groups) {
-      const source = group.source || 'bolt';
-      counts[source] = (counts[source] || 0) + 1;
+      const groupSources = group.sources && group.sources.length > 0 ? group.sources : [group.source || 'bolt'];
+      for (const src of groupSources) {
+        counts[src] = (counts[src] || 0) + 1;
+      }
     }
     return counts;
   });
@@ -273,7 +286,10 @@
 
     // Filter by source
     if (sourceFilter !== 'all') {
-      result = result.filter(group => (group.source || 'bolt') === sourceFilter);
+      result = result.filter(group => {
+        const groupSources = group.sources && group.sources.length > 0 ? group.sources : [group.source || 'bolt'];
+        return groupSources.includes(sourceFilter);
+      });
     }
 
     // Sort groups (same logic as nodes)
@@ -284,9 +300,12 @@
         case 'name':
           comparison = a.name.localeCompare(b.name);
           break;
-        case 'source':
-          comparison = (a.source || 'bolt').localeCompare(b.source || 'bolt');
+        case 'source': {
+          const srcA = a.sources && a.sources.length > 0 ? a.sources[0] : (a.source || 'bolt');
+          const srcB = b.sources && b.sources.length > 0 ? b.sources[0] : (b.source || 'bolt');
+          comparison = srcA.localeCompare(srcB);
           break;
+        }
         default:
           comparison = 0;
       }
@@ -489,7 +508,7 @@
   <title>{pageTitle}</title>
 </svelte:head>
 
-<div class="container mx-auto px-4 py-8">
+<div class="w-full px-4 sm:px-6 lg:px-8 py-8">
   <!-- Header -->
   <div class="mb-6">
     <div class="flex items-center justify-between">

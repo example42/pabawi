@@ -98,7 +98,7 @@
       {#if setupComplete}
         <!-- Footer -->
         <footer class="mt-auto py-8 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <div class="max-w-7xl mx-auto px-4 text-left">
+          <div class="w-full px-4 sm:px-6 lg:px-8 text-left">
             <p class="text-sm text-gray-500 dark:text-gray-400">
               Made by Alessandro Franceschi <a
                 href="https://example42.com"

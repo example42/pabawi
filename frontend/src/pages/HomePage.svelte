@@ -21,6 +21,9 @@
     name: string;
     uri: string;
     transport: 'ssh' | 'winrm' | 'docker' | 'local';
+    source?: string;
+    sources?: string[];
+    linked?: boolean;
   }
 
   interface IntegrationStatusData {
@@ -73,6 +76,7 @@
   }
 
   let nodes = $state<Node[]>([]);
+  let homeSources = $state<Record<string, unknown>>({});
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -187,7 +191,7 @@
 
     // Filter by source
     if (homeSourceFilter !== 'all') {
-      result = result.filter(node => (node.source || 'bolt') === homeSourceFilter);
+      result = result.filter(node => getNodeSources(node).includes(homeSourceFilter));
     }
 
     // Sort nodes
@@ -202,7 +206,7 @@
           comparison = a.transport.localeCompare(b.transport);
           break;
         case 'source':
-          comparison = (a.source || 'bolt').localeCompare(b.source || 'bolt');
+          comparison = getNodeSources(a)[0].localeCompare(getNodeSources(b)[0]);
           break;
         default:
           comparison = 0;
@@ -214,12 +218,23 @@
     return result;
   });
 
-  // Computed node counts by source for home page
+  // Helper: get effective sources for a node (handles both linked and non-linked nodes)
+  function getNodeSources(node: Node): string[] {
+    if (node.sources && node.sources.length > 0) return node.sources;
+    return [node.source || 'bolt'];
+  }
+
+  // Computed node counts by source for home page (includes all configured sources, even with 0 nodes)
   const homeNodeCountsBySource = $derived.by(() => {
     const counts: Record<string, number> = {};
+    // Seed with all configured sources so they always appear in the filter
+    for (const sourceName of Object.keys(homeSources)) {
+      counts[sourceName] = 0;
+    }
     for (const node of nodes) {
-      const source = node.source || 'bolt';
-      counts[source] = (counts[source] || 0) + 1;
+      for (const src of getNodeSources(node)) {
+        counts[src] = (counts[src] || 0) + 1;
+      }
     }
     return counts;
   });
@@ -258,8 +273,9 @@
     error = null;
 
     try {
-      const data = await get<{ nodes: Node[]; _debug?: DebugInfo }>('/api/inventory');
+      const data = await get<{ nodes: Node[]; sources?: Record<string, unknown>; _debug?: DebugInfo }>('/api/inventory');
       nodes = data.nodes || [];
+      homeSources = data.sources || {};
 
       // Store debug info if present
       if (data._debug) {
@@ -270,6 +286,7 @@
       console.error('[HomePage] Error fetching inventory:', err);
       // Set empty array on error so the page still renders
       nodes = [];
+      homeSources = {};
     } finally {
       loading = false;
     }
@@ -494,7 +511,7 @@
   <title>{pageTitle}</title>
 </svelte:head>
 
-<div class="container mx-auto px-4 py-8">
+<div class="w-full px-4 sm:px-6 lg:px-8 py-8">
   <!-- Welcome Section with Logo and Stats -->
   <div class="mb-12">
     <div class="flex flex-col lg:flex-row gap-8 items-start">

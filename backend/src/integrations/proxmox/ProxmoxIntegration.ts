@@ -302,6 +302,38 @@ export class ProxmoxIntegration
     return this.service!.listProvisioningCapabilities();
   }
 
+  /**
+   * Get list of PVE nodes in the cluster
+   */
+  async getNodes(): Promise<{ node: string; status: string; maxcpu?: number; maxmem?: number }[]> {
+    this.ensureInitialized();
+    return this.service!.getNodes();
+  }
+
+  /**
+   * Get the next available VMID
+   */
+  async getNextVMID(): Promise<number> {
+    this.ensureInitialized();
+    return this.service!.getNextVMID();
+  }
+
+  /**
+   * Get ISO images available on a node
+   */
+  async getISOImages(node: string, storage?: string): Promise<{ volid: string; format: string; size: number }[]> {
+    this.ensureInitialized();
+    return this.service!.getISOImages(node, storage);
+  }
+
+  /**
+   * Get OS templates available on a node
+   */
+  async getTemplates(node: string, storage?: string): Promise<{ volid: string; format: string; size: number }[]> {
+    this.ensureInitialized();
+    return this.service!.getTemplates(node, storage);
+  }
+
   // ========================================
   // Helper Methods
   // ========================================
