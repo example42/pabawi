@@ -323,9 +323,23 @@ export class ProxmoxClient {
     useAuth = true
   ): Promise<unknown> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+    const headers: Record<string, string> = {};
+
+    // Proxmox API expects form-urlencoded for POST/PUT/DELETE, not JSON
+    let body: string | undefined;
+    if (data && method !== "GET") {
+      headers["Content-Type"] = "application/x-www-form-urlencoded";
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      }
+      body = params.toString();
+    } else {
+      headers["Content-Type"] = "application/json";
+      body = data ? JSON.stringify(data) : undefined;
+    }
 
     // Add authentication
     if (useAuth) {
@@ -343,7 +357,7 @@ export class ProxmoxClient {
       const response = await this.fetchWithTimeout(url, {
         method,
         headers,
-        body: data ? JSON.stringify(data) : undefined,
+        body,
       });
 
       return await this.handleResponse(response);
@@ -388,8 +402,10 @@ export class ProxmoxClient {
     // Handle other errors
     if (!response.ok) {
       const errorText = await response.text();
+      // Include the body in the message for better diagnostics
+      const detail = errorText ? `: ${errorText}` : "";
       throw new ProxmoxError(
-        `Proxmox API error: ${response.statusText}`,
+        `Proxmox API error: ${response.statusText}${detail}`,
         `HTTP_${String(response.status)}`,
         {
           status: response.status,

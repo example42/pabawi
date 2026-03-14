@@ -775,8 +775,10 @@ import type {
   ProxmoxVMParams,
   ProxmoxLXCParams,
   ProvisioningResult,
-  type PVENode,
-  type StorageContent,
+  PVENode,
+  StorageContent,
+  PVEStorage,
+  PVENetwork,
 } from './types/provisioning';
 
 /**
@@ -895,6 +897,40 @@ export async function getProxmoxTemplates(node: string, storage?: string): Promi
     retryDelay: 1000,
   });
   return response.templates;
+}
+
+/**
+ * Get available storages on a Proxmox node
+ *
+ * Retry logic: 2 retries for read operations
+ *
+ * @param node - PVE node name
+ * @param content - Content type filter (optional, e.g. 'rootdir', 'images')
+ */
+export async function getProxmoxStorages(node: string, content?: string): Promise<PVEStorage[]> {
+  const params = content ? `?content=${encodeURIComponent(content)}` : '';
+  const response = await get<{ storages: PVEStorage[] }>(`/api/integrations/proxmox/nodes/${encodeURIComponent(node)}/storages${params}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.storages;
+}
+
+/**
+ * Get available network bridges on a Proxmox node
+ *
+ * Retry logic: 2 retries for read operations
+ *
+ * @param node - PVE node name
+ * @param type - Network type filter (optional, defaults to 'bridge' on backend)
+ */
+export async function getProxmoxNetworks(node: string, type?: string): Promise<PVENetwork[]> {
+  const params = type ? `?type=${encodeURIComponent(type)}` : '';
+  const response = await get<{ networks: PVENetwork[] }>(`/api/integrations/proxmox/nodes/${encodeURIComponent(node)}/networks${params}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.networks;
 }
 
 /**

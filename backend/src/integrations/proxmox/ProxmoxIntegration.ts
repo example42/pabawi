@@ -334,6 +334,16 @@ export class ProxmoxIntegration
     return this.service!.getTemplates(node, storage);
   }
 
+  async getStorages(node: string, contentType?: string): Promise<{ storage: string; type: string; content: string; active: number; total?: number; used?: number; avail?: number }[]> {
+    this.ensureInitialized();
+    return this.service!.getStorages(node, contentType);
+  }
+
+  async getNetworkBridges(node: string, type?: string): Promise<{ iface: string; type: string; active: number; address?: string; cidr?: string; bridge_ports?: string }[]> {
+    this.ensureInitialized();
+    return this.service!.getNetworkBridges(node, type);
+  }
+
   // ========================================
   // Helper Methods
   // ========================================
