@@ -450,6 +450,7 @@
                 class="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md bg-gray-50 dark:bg-gray-900/50"
                 role="region"
                 aria-labelledby="target-nodes-label"
+                tabindex="0"
               >
                 {#if targetNodes.length === 0}
                   <div class="p-4 text-center text-sm text-gray-500 dark:text-gray-400" role="status">
