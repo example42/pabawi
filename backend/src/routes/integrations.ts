@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { Database } from "sqlite3";
+import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { PuppetDBService } from "../integrations/puppetdb/PuppetDBService";
 import type { PuppetserverService } from "../integrations/puppetserver/PuppetserverService";
@@ -20,7 +20,7 @@ export function createIntegrationsRouter(
   integrationManager: IntegrationManager,
   puppetDBService?: PuppetDBService,
   puppetserverService?: PuppetserverService,
-  db?: Database,
+  db?: DatabaseAdapter,
   jwtSecret?: string,
 ): Router {
   const router = Router();

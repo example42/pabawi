@@ -1,4 +1,4 @@
-import type { Database } from 'sqlite3';
+import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import { randomUUID } from 'crypto';
 import { performanceMonitor } from './PerformanceMonitor';
 
@@ -65,11 +65,11 @@ export interface PaginatedResult<T> {
  * - Cache permission check results for performance
  */
 export class PermissionService {
-  private db: Database;
+  private db: DatabaseAdapter;
   private cache: Map<string, { value: boolean; expiresAt: number }>;
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-  constructor(db: Database) {
+  constructor(db: DatabaseAdapter) {
     this.db = db;
     this.cache = new Map();
   }
@@ -116,7 +116,7 @@ export class PermissionService {
     const now = new Date().toISOString();
 
     // Insert permission
-    await this.runQuery(
+    await this.db.execute(
       `INSERT INTO permissions (id, resource, "action", description, createdAt)
        VALUES (?, ?, ?, ?, ?)`,
       [permissionId, data.resource, data.action, data.description || '', now]
@@ -138,7 +138,7 @@ export class PermissionService {
    * @returns Permission or null if not found
    */
   public async getPermissionById(id: string): Promise<Permission | null> {
-    return this.getQuery<Permission>(
+    return this.db.queryOne<Permission>(
       'SELECT * FROM permissions WHERE id = ?',
       [id]
     );
@@ -152,7 +152,7 @@ export class PermissionService {
    * @returns Permission or null if not found
    */
   private async getPermissionByResourceAction(resource: string, action: string): Promise<Permission | null> {
-    return this.getQuery<Permission>(
+    return this.db.queryOne<Permission>(
       'SELECT * FROM permissions WHERE resource = ? AND "action" = ?',
       [resource, action]
     );
@@ -191,14 +191,14 @@ export class PermissionService {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Get total count
-    const countResult = await this.getQuery<{ count: number }>(
+    const countResult = await this.db.queryOne<{ count: number }>(
       `SELECT COUNT(*) as count FROM permissions ${whereClause}`,
       params
     );
     const total = countResult?.count ?? 0;
 
     // Get paginated results
-    const permissions = await this.allQuery<Permission>(
+    const permissions = await this.db.query<Permission>(
       `SELECT * FROM permissions ${whereClause} ORDER BY resource ASC, "action" ASC LIMIT ? OFFSET ?`,
       [...params, String(limit), String(offset)]
     );
@@ -258,7 +258,7 @@ export class PermissionService {
     }
 
     // Step 2: Check if user exists and get admin/active status (Requirement 5.5, 5.6)
-    const user = await this.getQuery<{ isAdmin: number; isActive: number }>(
+    const user = await this.db.queryOne<{ isAdmin: number; isActive: number }>(
       'SELECT isAdmin, isActive FROM users WHERE id = ?',
       [userId]
     );
@@ -309,7 +309,7 @@ export class PermissionService {
       )
     `;
 
-    const result = await this.getQuery<{ count: number }>(hasPermissionQuery, [
+    const result = await this.db.queryOne<{ count: number }>(hasPermissionQuery, [
       resource,
       action,
       userId,
@@ -383,7 +383,7 @@ export class PermissionService {
    */
   public async getUserPermissions(userId: string): Promise<Permission[]> {
     // Step 1: Check if user exists and get admin/active status
-    const user = await this.getQuery<{ isAdmin: number; isActive: number }>(
+    const user = await this.db.queryOne<{ isAdmin: number; isActive: number }>(
       'SELECT isAdmin, isActive FROM users WHERE id = ?',
       [userId]
     );
@@ -395,7 +395,7 @@ export class PermissionService {
 
     // Admin users get all permissions (Requirement 8.3)
     if (user.isAdmin === 1) {
-      return this.allQuery<Permission>(
+      return this.db.query<Permission>(
         'SELECT * FROM permissions ORDER BY resource ASC, "action" ASC'
       );
     }
@@ -419,7 +419,7 @@ export class PermissionService {
       ORDER BY p.resource ASC, p.action ASC
     `;
 
-    return this.allQuery<Permission>(permissionsQuery, [userId, userId]);
+    return this.db.query<Permission>(permissionsQuery, [userId, userId]);
   }
 
   /**
@@ -466,7 +466,7 @@ export class PermissionService {
     }
 
     // Step 2: Check user status once for all uncached checks
-    const user = await this.getQuery<{ isAdmin: number; isActive: number }>(
+    const user = await this.db.queryOne<{ isAdmin: number; isActive: number }>(
       'SELECT isAdmin, isActive FROM users WHERE id = ?',
       [userId]
     );
@@ -522,7 +522,7 @@ export class PermissionService {
       )
     `;
 
-    const allowedPermissions = await this.allQuery<{ resource: string; action: string }>(
+    const allowedPermissions = await this.db.query<{ resource: string; action: string }>(
       batchQuery,
       [...params, userId, userId]
     );
@@ -550,39 +550,4 @@ export class PermissionService {
 
 
 
-  /**
-   * Helper: Run a query that doesn't return rows
-   */
-  private runQuery(sql: string, params: (string | number | boolean | null)[] = []): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  /**
-   * Helper: Get a single row
-   */
-  private getQuery<T>(sql: string, params: (string | number | boolean | null)[] = []): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve((row as T) ?? null);
-      });
-    });
-  }
-
-  /**
-   * Helper: Get all rows
-   */
-  private allQuery<T>(sql: string, params: (string | number | boolean | null)[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as T[]);
-      });
-    });
-  }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { UserService } from '../../../src/services/UserService';
 import { RoleService } from '../../../src/services/RoleService';
 import { PermissionService } from '../../../src/services/PermissionService';
@@ -23,7 +23,7 @@ import { randomUUID } from 'crypto';
  * - Permission inheritance is transitive
  */
 describe('Permission Transitivity Properties', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let userService: UserService;
   let roleService: RoleService;
   let permissionService: PermissionService;
@@ -32,7 +32,8 @@ describe('Permission Transitivity Properties', () => {
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeRBACSchema(db);
@@ -45,12 +46,7 @@ describe('Permission Transitivity Properties', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   /**
@@ -375,7 +371,7 @@ describe('Permission Transitivity Properties', () => {
 
 // Helper functions
 
-async function initializeRBACSchema(db: Database): Promise<void> {
+async function initializeRBACSchema(db: SQLiteAdapter): Promise<void> {
   const schema = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -464,16 +460,11 @@ async function initializeRBACSchema(db: Database): Promise<void> {
   const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
   for (const statement of statements) {
-    await new Promise<void>((resolve, reject) => {
-      db.run(statement, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.execute(statement);
   }
 }
 
-async function createTestUser(db: Database, userId: string): Promise<void> {
+async function createTestUser(db: SQLiteAdapter, userId: string): Promise<void> {
   const sql = `
     INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
@@ -491,15 +482,10 @@ async function createTestUser(db: Database, userId: string): Promise<void> {
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
-async function createTestRole(db: Database, roleId: string, name?: string): Promise<void> {
+async function createTestRole(db: SQLiteAdapter, roleId: string, name?: string): Promise<void> {
   const sql = `
     INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
     VALUES (?, ?, ?, 0, ?, ?)
@@ -515,16 +501,11 @@ async function createTestRole(db: Database, roleId: string, name?: string): Prom
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
 async function createTestPermission(
-  db: Database,
+  db: SQLiteAdapter,
   permissionId: string,
   resource: string,
   action: string
@@ -543,10 +524,5 @@ async function createTestPermission(
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }

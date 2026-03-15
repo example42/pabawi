@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { UserService } from '../../../src/services/UserService';
 import { PermissionService } from '../../../src/services/PermissionService';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
@@ -22,7 +22,7 @@ import { randomUUID } from 'crypto';
  * - Admin users bypass normal permission checks
  */
 describe('Admin Privilege Properties', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let userService: UserService;
   let permissionService: PermissionService;
   let authService: AuthenticationService;
@@ -30,7 +30,8 @@ describe('Admin Privilege Properties', () => {
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeRBACSchema(db);
@@ -42,12 +43,7 @@ describe('Admin Privilege Properties', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   /**
@@ -395,7 +391,7 @@ describe('Admin Privilege Properties', () => {
 
 // Helper functions
 
-async function initializeRBACSchema(db: Database): Promise<void> {
+async function initializeRBACSchema(db: SQLiteAdapter): Promise<void> {
   const schema = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -484,16 +480,11 @@ async function initializeRBACSchema(db: Database): Promise<void> {
   const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
   for (const statement of statements) {
-    await new Promise<void>((resolve, reject) => {
-      db.run(statement, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.execute(statement);
   }
 }
 
-async function createTestUser(db: Database, userId: string, isAdmin: boolean = false): Promise<void> {
+async function createTestUser(db: SQLiteAdapter, userId: string, isAdmin: boolean = false): Promise<void> {
   const sql = `
     INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
@@ -512,10 +503,5 @@ async function createTestUser(db: Database, userId: string, isAdmin: boolean = f
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }

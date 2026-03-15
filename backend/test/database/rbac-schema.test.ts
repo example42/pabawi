@@ -26,15 +26,7 @@ describe('RBAC Database Schema', () => {
   it('should create users table with correct schema', async () => {
     const db = dbService.getConnection();
 
-    const result = await new Promise<any>((resolve, reject) => {
-      db.get(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'",
-        (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
+    const result = await db.queryOne<any>("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
 
     expect(result).toBeDefined();
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
@@ -48,15 +40,7 @@ describe('RBAC Database Schema', () => {
   it('should create groups table', async () => {
     const db = dbService.getConnection();
 
-    const result = await new Promise<any>((resolve, reject) => {
-      db.get(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='groups'",
-        (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
+    const result = await db.queryOne<any>("SELECT sql FROM sqlite_master WHERE type='table' AND name='groups'");
 
     expect(result).toBeDefined();
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
@@ -66,15 +50,7 @@ describe('RBAC Database Schema', () => {
   it('should create roles table', async () => {
     const db = dbService.getConnection();
 
-    const result = await new Promise<any>((resolve, reject) => {
-      db.get(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='roles'",
-        (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
+    const result = await db.queryOne<any>("SELECT sql FROM sqlite_master WHERE type='table' AND name='roles'");
 
     expect(result).toBeDefined();
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
@@ -85,15 +61,7 @@ describe('RBAC Database Schema', () => {
   it('should create permissions table with unique constraint', async () => {
     const db = dbService.getConnection();
 
-    const result = await new Promise<any>((resolve, reject) => {
-      db.get(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='permissions'",
-        (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
+    const result = await db.queryOne<any>("SELECT sql FROM sqlite_master WHERE type='table' AND name='permissions'");
 
     expect(result).toBeDefined();
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
@@ -108,15 +76,7 @@ describe('RBAC Database Schema', () => {
     const tables = ['user_groups', 'user_roles', 'group_roles', 'role_permissions'];
 
     for (const tableName of tables) {
-      const result = await new Promise<any>((resolve, reject) => {
-        db.get(
-          `SELECT sql FROM sqlite_master WHERE type='table' AND name='${tableName}'`,
-          (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          }
-        );
-      });
+      const result = await db.queryOne<any>(`SELECT sql FROM sqlite_master WHERE type='table' AND name='${tableName}'`);
 
       expect(result).toBeDefined();
       expect(result.sql).toContain('PRIMARY KEY');
@@ -127,15 +87,7 @@ describe('RBAC Database Schema', () => {
   it('should create revoked_tokens table', async () => {
     const db = dbService.getConnection();
 
-    const result = await new Promise<any>((resolve, reject) => {
-      db.get(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='revoked_tokens'",
-        (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
+    const result = await db.queryOne<any>("SELECT sql FROM sqlite_master WHERE type='table' AND name='revoked_tokens'");
 
     expect(result).toBeDefined();
     expect(result.sql).toContain('token TEXT PRIMARY KEY');
@@ -166,15 +118,7 @@ describe('RBAC Database Schema', () => {
     ];
 
     for (const indexName of expectedIndexes) {
-      const result = await new Promise<any>((resolve, reject) => {
-        db.get(
-          `SELECT name FROM sqlite_master WHERE type='index' AND name='${indexName}'`,
-          (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          }
-        );
-      });
+      const result = await db.queryOne<any>(`SELECT name FROM sqlite_master WHERE type='index' AND name='${indexName}'`);
 
       expect(result).toBeDefined();
       expect(result.name).toBe(indexName);
@@ -185,29 +129,13 @@ describe('RBAC Database Schema', () => {
     const db = dbService.getConnection();
 
     // Insert first user
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, createdAt, updatedAt)
-         VALUES ('user1', 'testuser', 'test@example.com', 'hash123', 'Test', 'User', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, createdAt, updatedAt)
+         VALUES ('user1', 'testuser', 'test@example.com', 'hash123', 'Test', 'User', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`);
 
     // Try to insert duplicate username
     await expect(
-      new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, createdAt, updatedAt)
-           VALUES ('user2', 'testuser', 'other@example.com', 'hash456', 'Other', 'User', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`,
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      })
+      db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, createdAt, updatedAt)
+           VALUES ('user2', 'testuser', 'other@example.com', 'hash456', 'Other', 'User', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`)
     ).rejects.toThrow();
   });
 
@@ -215,29 +143,13 @@ describe('RBAC Database Schema', () => {
     const db = dbService.getConnection();
 
     // Insert first permission (use unique test values to avoid conflicts with seed data)
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO permissions (id, resource, "action", description, createdAt)
-         VALUES ('perm-test-1', 'test-resource', 'test-read', 'Test permission', '2024-01-01T00:00:00Z')`,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(`INSERT INTO permissions (id, resource, "action", description, createdAt)
+         VALUES ('perm-test-1', 'test-resource', 'test-read', 'Test permission', '2024-01-01T00:00:00Z')`);
 
     // Try to insert duplicate resource-action
     await expect(
-      new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO permissions (id, resource, "action", description, createdAt)
-           VALUES ('perm-test-2', 'test-resource', 'test-read', 'Another test permission', '2024-01-01T00:00:00Z')`,
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      })
+      db.execute(`INSERT INTO permissions (id, resource, "action", description, createdAt)
+           VALUES ('perm-test-2', 'test-resource', 'test-read', 'Another test permission', '2024-01-01T00:00:00Z')`)
     ).rejects.toThrow();
   });
 });

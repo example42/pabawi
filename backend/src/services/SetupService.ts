@@ -1,4 +1,4 @@
-import type { Database } from "sqlite3";
+import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import { LoggerService } from "./LoggerService";
 
 const logger = new LoggerService();
@@ -24,9 +24,9 @@ export interface SetupStatus {
  * Service for managing initial setup and configuration
  */
 export class SetupService {
-  private db: Database;
+  private db: DatabaseAdapter;
 
-  constructor(db: Database) {
+  constructor(db: DatabaseAdapter) {
     this.db = db;
   }
 
@@ -35,22 +35,18 @@ export class SetupService {
    * Setup is complete if at least one admin user exists
    */
   public async isSetupComplete(): Promise<boolean> {
-    return new Promise((resolve, reject) => {
-      this.db.get(
-        "SELECT COUNT(*) as count FROM users WHERE isAdmin = 1",
-        (err, row: { count: number } | undefined) => {
-          if (err) {
-            logger.error("Failed to check setup status", {
-              component: "SetupService",
-              operation: "isSetupComplete",
-            }, err);
-            reject(err);
-          } else {
-            resolve((row?.count ?? 0) > 0);
-          }
-        }
+    try {
+      const row = await this.db.queryOne<{ count: number }>(
+        "SELECT COUNT(*) as count FROM users WHERE isAdmin = 1"
       );
-    });
+      return (row?.count ?? 0) > 0;
+    } catch (err) {
+      logger.error("Failed to check setup status", {
+        component: "SetupService",
+        operation: "isSetupComplete",
+      }, err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
   }
 
   /**
@@ -98,50 +94,41 @@ export class SetupService {
    * Get a configuration value from the database
    */
   private async getConfigValue(key: string, defaultValue: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      this.db.get(
+    try {
+      const row = await this.db.queryOne<{ value: string }>(
         "SELECT value FROM config WHERE key = ?",
-        [key],
-        (err, row: { value: string } | undefined) => {
-          if (err) {
-            logger.error("Failed to get config value", {
-              component: "SetupService",
-              operation: "getConfigValue",
-              metadata: { key },
-            }, err);
-            reject(err);
-          } else {
-            resolve(row?.value ?? defaultValue);
-          }
-        }
+        [key]
       );
-    });
+      return row?.value ?? defaultValue;
+    } catch (err) {
+      logger.error("Failed to get config value", {
+        component: "SetupService",
+        operation: "getConfigValue",
+        metadata: { key },
+      }, err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
   }
 
   /**
    * Set a configuration value in the database
    */
   private async setConfigValue(key: string, value: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(
+    try {
+      await this.db.execute(
         `INSERT INTO config (key, value, updatedAt)
          VALUES (?, ?, datetime('now'))
          ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = datetime('now')`,
-        [key, value, value],
-        (err) => {
-          if (err) {
-            logger.error("Failed to set config value", {
-              component: "SetupService",
-              operation: "setConfigValue",
-              metadata: { key },
-            }, err);
-            reject(err);
-          } else {
-            resolve();
-          }
-        }
+        [key, value, value]
       );
-    });
+    } catch (err) {
+      logger.error("Failed to set config value", {
+        component: "SetupService",
+        operation: "setConfigValue",
+        metadata: { key },
+      }, err instanceof Error ? err : new Error(String(err)));
+      throw err;
+    }
   }
 
   /**

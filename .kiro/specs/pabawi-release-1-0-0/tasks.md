@@ -34,8 +34,8 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - For any set of mutations in withTransaction, if callback resolves all mutations are committed; if callback rejects no mutations are visible
     - **Validates: Requirements 7.1, 7.2**
 
-- [ ] 2. Database Migration System Upgrade
-  - [ ] 2.1 Refactor MigrationRunner for dialect-aware migrations
+- [x] 2. Database Migration System Upgrade
+  - [x] 2.1 Refactor MigrationRunner for dialect-aware migrations
     - Modify `backend/src/database/MigrationRunner.ts` to accept a DatabaseAdapter instead of sqlite3.Database
     - Support dialect-specific files (`NNN_name.sqlite.sql`, `NNN_name.postgres.sql`) and shared files (`NNN_name.sql`)
     - Select migration files matching the active dialect, skip already-applied migrations, track applied migrations in a `schema_migrations` table
@@ -51,30 +51,30 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - For any set of migration files with dialect-specific variants, MigrationRunner selects only files matching the active adapter's dialect
     - **Validates: Requirement 5.3**
 
-- [ ] 3. Migrate Existing Services to DatabaseAdapter
-  - [ ] 3.1 Migrate UserService and AuthenticationService
+- [x] 3. Migrate Existing Services to DatabaseAdapter
+  - [x] 3.1 Migrate UserService and AuthenticationService
     - Replace `private db: Database` with `private db: DatabaseAdapter` in `backend/src/services/UserService.ts`
     - Replace `runQuery/getQuery/allQuery` helpers with `db.execute/db.queryOne/db.query` calls
     - Update constructor to accept DatabaseAdapter instead of sqlite3.Database
     - Apply same migration to `backend/src/services/AuthenticationService.ts`
     - _Requirements: 6.1, 6.4, 6.5_
 
-  - [ ] 3.2 Migrate RoleService, GroupService, and PermissionService
+  - [x] 3.2 Migrate RoleService, GroupService, and PermissionService
     - Replace sqlite3.Database with DatabaseAdapter in `backend/src/services/RoleService.ts`, `backend/src/services/GroupService.ts`, `backend/src/services/PermissionService.ts`
     - Remove private runQuery/getQuery/allQuery helpers, use adapter methods directly
     - _Requirements: 6.2, 6.3, 6.4, 6.5_
 
-  - [ ] 3.3 Migrate SetupService, AuditLoggingService, and BatchExecutionService
+  - [x] 3.3 Migrate SetupService, AuditLoggingService, and BatchExecutionService
     - Replace sqlite3.Database with DatabaseAdapter in `backend/src/services/SetupService.ts`, `backend/src/services/AuditLoggingService.ts`, `backend/src/services/BatchExecutionService.ts`
     - Remove private runQuery/getQuery/allQuery helpers, use adapter methods directly
     - _Requirements: 6.4, 6.5_
 
-  - [ ] 3.4 Migrate ExecutionRepository, PuppetRunHistoryService, and ReportFilterService
+  - [x] 3.4 Migrate ExecutionRepository, PuppetRunHistoryService, and ReportFilterService
     - Replace sqlite3.Database with DatabaseAdapter in `backend/src/database/ExecutionRepository.ts`, `backend/src/services/PuppetRunHistoryService.ts`, `backend/src/services/ReportFilterService.ts`
     - Remove private runQuery/getQuery/allQuery helpers, use adapter methods directly
     - _Requirements: 6.4, 6.5_
 
-  - [ ] 3.5 Update DatabaseService and server.ts bootstrap
+  - [x] 3.5 Update DatabaseService and server.ts bootstrap
     - Refactor `backend/src/database/DatabaseService.ts` to use AdapterFactory and DatabaseAdapter
     - Update `backend/src/server.ts` to create adapter via `createDatabaseAdapter(config)`, call `initialize()` and `runMigrations()`, then pass adapter to all services
     - Ensure all service constructors receive DatabaseAdapter instead of sqlite3.Database

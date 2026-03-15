@@ -1009,16 +1009,10 @@ describe('Auth Routes - POST /api/auth/login', () => {
         .expect(201);
 
       // Deactivate the user directly in database
-      await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
-          'UPDATE users SET isActive = 0 WHERE username = ?',
-          ['testuser'],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await databaseService.getConnection().execute(
+        'UPDATE users SET isActive = 0 WHERE username = ?',
+        ['testuser']
+      );
 
       // Try to login
       const loginData = {
@@ -1744,16 +1738,10 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token = loginResponse.body.token;
 
       // Deactivate the user
-      await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
-          'UPDATE users SET isActive = 0 WHERE username = ?',
-          ['testuser'],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await databaseService.getConnection().execute(
+        'UPDATE users SET isActive = 0 WHERE username = ?',
+        ['testuser']
+      );
 
       // Logout should still work (token is still valid, just revoke it)
       const response = await request(app)
@@ -2157,16 +2145,10 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Deactivate the user
-      await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
-          'UPDATE users SET isActive = 0 WHERE username = ?',
-          ['testuser'],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await databaseService.getConnection().execute(
+        'UPDATE users SET isActive = 0 WHERE username = ?',
+        ['testuser']
+      );
 
       // Try to refresh token
       const response = await request(app)

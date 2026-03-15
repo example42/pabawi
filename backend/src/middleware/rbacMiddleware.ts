@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { PermissionService } from "../services/PermissionService";
 import { AuditLoggingService } from "../services/AuditLoggingService";
-import type { Database } from "sqlite3";
+import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import { ERROR_CODES, sendAuthorizationError, sendDatabaseError, isDatabaseConnectionError } from "../utils/errorHandling";
 import { LoggerService } from "../services/LoggerService";
 
@@ -20,7 +20,7 @@ import { LoggerService } from "../services/LoggerService";
  *
  * Requirements: 5.2, 5.3, 5.4, 7.4, 16.2, 16.5
  */
-export function createRbacMiddleware(db: Database) {
+export function createRbacMiddleware(db: DatabaseAdapter) {
   const permissionService = new PermissionService(db);
   const auditLogger = new AuditLoggingService(db);
   const logger = new LoggerService();
