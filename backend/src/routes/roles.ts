@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { RoleService } from "../services/RoleService";
+import { PermissionService } from "../services/PermissionService";
 import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
@@ -44,6 +45,7 @@ export function createRolesRouter(
   const router = Router();
   const jwtSecret = process.env.JWT_SECRET;
   const roleService = new RoleService(databaseService.getConnection());
+  const permissionService = new PermissionService(databaseService.getConnection());
   const authMiddleware = createAuthMiddleware(databaseService.getConnection(), jwtSecret);
   const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
 
@@ -548,6 +550,9 @@ export function createRolesRouter(
         // Assign permission to role
         await roleService.assignPermissionToRole(roleId, permissionId);
 
+        // Invalidate permission cache for all users affected by this role (Requirement 30.2)
+        await permissionService.invalidateRolePermissionCache(roleId);
+
         logger.info("Permission assigned to role successfully", {
           component: "RolesRouter",
           operation: "assignPermissionToRole",
@@ -667,6 +672,9 @@ export function createRolesRouter(
 
         // Remove permission from role
         await roleService.removePermissionFromRole(roleId, permissionId);
+
+        // Invalidate permission cache for all users affected by this role (Requirement 30.2)
+        await permissionService.invalidateRolePermissionCache(roleId);
 
         logger.info("Permission removed from role successfully", {
           component: "RolesRouter",
