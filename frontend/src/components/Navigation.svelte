@@ -135,7 +135,7 @@
             <h1 class="text-2xl font-bold text-primary-600 dark:text-primary-400">
               Pabawi
             </h1>
-            <span class="text-xs text-gray-500 dark:text-gray-400">v0.9.0</span>
+            <span class="text-xs text-gray-500 dark:text-gray-400">v0.10.0</span>
           </div>
         </a>
         <div class="ml-10 flex items-baseline space-x-4">
