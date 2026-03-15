@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { UserService } from '../../../src/services/UserService';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
 import * as fc from 'fast-check';
@@ -19,14 +19,15 @@ import * as fc from 'fast-check';
  * - No two users can have the same email address
  */
 describe('Email Uniqueness Properties', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let authService: AuthenticationService;
   let userService: UserService;
   const testJwtSecret = 'test-secret-key-for-testing-only'; // pragma: allowlist secret
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeSchema(db);
@@ -37,12 +38,7 @@ describe('Email Uniqueness Properties', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   /**
@@ -220,7 +216,7 @@ describe('Email Uniqueness Properties', () => {
 });
 
 // Helper function to initialize schema
-async function initializeSchema(db: Database): Promise<void> {
+async function initializeSchema(db: SQLiteAdapter): Promise<void> {
   const schema = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -317,16 +313,14 @@ async function initializeSchema(db: Database): Promise<void> {
     INSERT INTO config (key, value, updatedAt) VALUES
       ('allow_self_registration', 'false', datetime('now')),
       ('default_new_user_role', 'role-viewer-001', datetime('now'));
+
+    INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
+      ('role-viewer-001', 'Viewer', 'Default viewer role', 1, datetime('now'), datetime('now'));
   `;
 
   const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
   for (const statement of statements) {
-    await new Promise<void>((resolve, reject) => {
-      db.run(statement, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.execute(statement);
   }
 }

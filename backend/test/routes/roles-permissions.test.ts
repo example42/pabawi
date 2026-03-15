@@ -120,36 +120,11 @@ describe('Roles Router - Role-Permission Association Routes', () => {
   afterEach(async () => {
     // Clean up database after each test
     const db = databaseService.getConnection();
-    await new Promise<void>((resolve, reject) => {
-      db.run('DELETE FROM user_roles', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-    await new Promise<void>((resolve, reject) => {
-      db.run('DELETE FROM role_permissions', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-    await new Promise<void>((resolve, reject) => {
-      db.run('DELETE FROM roles WHERE isBuiltIn = 0', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-    await new Promise<void>((resolve, reject) => {
-      db.run('DELETE FROM permissions WHERE resource NOT IN (\'ansible\', \'bolt\', \'puppetdb\', \'users\', \'groups\', \'roles\')', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-    await new Promise<void>((resolve, reject) => {
-      db.run('DELETE FROM users', (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM permissions WHERE resource NOT IN ('ansible', 'bolt', 'puppetdb', 'users', 'groups', 'roles')");
+    await db.execute('DELETE FROM users');
   });
 
   describe('POST /api/roles/:id/permissions/:permissionId', () => {

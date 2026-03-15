@@ -1,18 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import sqlite3 from "sqlite3";
 import { MigrationRunner } from "../../src/database/MigrationRunner";
+import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join } from "path";
 
 describe("MigrationRunner", () => {
-  let db: sqlite3.Database;
+  let db: SQLiteAdapter;
   let testMigrationsDir: string;
 
   beforeEach(async () => {
-    // Create in-memory database for testing
-    db = new sqlite3.Database(":memory:");
+    db = new SQLiteAdapter(":memory:");
+    await db.initialize();
 
-    // Create temporary migrations directory
     testMigrationsDir = join(__dirname, "test-migrations");
     if (existsSync(testMigrationsDir)) {
       rmSync(testMigrationsDir, { recursive: true });
@@ -21,40 +20,24 @@ describe("MigrationRunner", () => {
   });
 
   afterEach(async () => {
-    // Close database
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
 
-    // Clean up test migrations directory
     if (existsSync(testMigrationsDir)) {
       rmSync(testMigrationsDir, { recursive: true });
     }
   });
 
-  it("should initialize migrations table", async () => {
+  it("creates migrations table on first run", async () => {
     const runner = new MigrationRunner(db, testMigrationsDir);
     await runner.runPendingMigrations();
 
-    // Check that migrations table exists
-    const result = await new Promise<{ count: number }>((resolve, reject) => {
-      db.get(
-        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='migrations'",
-        (err, row: { count: number }) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
-
-    expect(result.count).toBe(1);
+    const result = await db.queryOne<{ count: number }>(
+      "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='migrations'"
+    );
+    expect(result?.count).toBe(1);
   });
 
-  it("should run pending migrations in order", async () => {
-    // Create test migration files
+  it("applies pending migrations in order", async () => {
     writeFileSync(
       join(testMigrationsDir, "001_create_users.sql"),
       "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)"
@@ -66,49 +49,27 @@ describe("MigrationRunner", () => {
 
     const runner = new MigrationRunner(db, testMigrationsDir);
     const appliedCount = await runner.runPendingMigrations();
-
     expect(appliedCount).toBe(2);
 
-    // Verify migrations were recorded
-    const migrations = await new Promise<Array<{ id: string; name: string }>>(
-      (resolve, reject) => {
-        db.all(
-          "SELECT id, name FROM migrations ORDER BY id",
-          (err, rows: Array<{ id: string; name: string }>) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      }
+    const migrations = await db.query<{ id: string; name: string }>(
+      "SELECT id, name FROM migrations ORDER BY id"
     );
-
     expect(migrations).toHaveLength(2);
     expect(migrations[0].id).toBe("001");
     expect(migrations[0].name).toBe("001_create_users.sql");
     expect(migrations[1].id).toBe("002");
     expect(migrations[1].name).toBe("002_add_email.sql");
 
-    // Verify table was created and column added
-    const tableInfo = await new Promise<Array<{ name: string }>>(
-      (resolve, reject) => {
-        db.all(
-          "PRAGMA table_info(users)",
-          (err, rows: Array<{ name: string }>) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      }
+    const tableInfo = await db.query<{ name: string }>(
+      "PRAGMA table_info(users)"
     );
-
     const columnNames = tableInfo.map((col) => col.name);
     expect(columnNames).toContain("id");
     expect(columnNames).toContain("name");
     expect(columnNames).toContain("email");
   });
 
-  it("should not re-run already applied migrations", async () => {
-    // Create test migration
+  it("skips already-applied migrations", async () => {
     writeFileSync(
       join(testMigrationsDir, "001_create_users.sql"),
       "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)"
@@ -116,23 +77,113 @@ describe("MigrationRunner", () => {
 
     const runner = new MigrationRunner(db, testMigrationsDir);
 
-    // Run migrations first time
     const firstRun = await runner.runPendingMigrations();
     expect(firstRun).toBe(1);
 
-    // Run migrations second time
     const secondRun = await runner.runPendingMigrations();
     expect(secondRun).toBe(0);
   });
 
-  it("should handle multi-statement migrations", async () => {
-    // Create migration with multiple statements
+  it("selects dialect-specific files over shared files", async () => {
+    // Shared file
+    writeFileSync(
+      join(testMigrationsDir, "001_create_users.sql"),
+      "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT DEFAULT 'shared')"
+    );
+    // SQLite-specific file (should win since our adapter is sqlite)
+    writeFileSync(
+      join(testMigrationsDir, "001_create_users.sqlite.sql"),
+      "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT DEFAULT 'sqlite')"
+    );
+
+    const runner = new MigrationRunner(db, testMigrationsDir);
+    await runner.runPendingMigrations();
+
+    // Verify the sqlite-specific migration was used
+    const migrations = await db.query<{ name: string }>(
+      "SELECT name FROM migrations"
+    );
+    expect(migrations[0].name).toBe("001_create_users.sqlite.sql");
+
+    // Verify the default value proves the sqlite variant ran
+    await db.execute("INSERT INTO users (id) VALUES ('test1')");
+    const user = await db.queryOne<{ name: string }>(
+      "SELECT name FROM users WHERE id = 'test1'"
+    );
+    expect(user?.name).toBe("sqlite");
+  });
+
+  it("ignores files for the wrong dialect", async () => {
+    // Only a postgres-specific file — should be skipped on sqlite
+    writeFileSync(
+      join(testMigrationsDir, "001_pg_only.postgres.sql"),
+      "CREATE TABLE pg_table (id TEXT PRIMARY KEY)"
+    );
+    // A shared file for a different migration
+    writeFileSync(
+      join(testMigrationsDir, "002_shared.sql"),
+      "CREATE TABLE shared_table (id TEXT PRIMARY KEY)"
+    );
+
+    const runner = new MigrationRunner(db, testMigrationsDir);
+    const appliedCount = await runner.runPendingMigrations();
+
+    // Only the shared migration should have been applied
+    expect(appliedCount).toBe(1);
+
+    const migrations = await db.query<{ id: string; name: string }>(
+      "SELECT id, name FROM migrations ORDER BY id"
+    );
+    expect(migrations).toHaveLength(1);
+    expect(migrations[0].id).toBe("002");
+    expect(migrations[0].name).toBe("002_shared.sql");
+
+    // pg_table should not exist
+    const tables = await db.query<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='pg_table'"
+    );
+    expect(tables).toHaveLength(0);
+  });
+
+  it("running migrations multiple times is idempotent", async () => {
+    writeFileSync(
+      join(testMigrationsDir, "001_create_users.sql"),
+      "CREATE TABLE users (id TEXT PRIMARY KEY, name TEXT)"
+    );
+    writeFileSync(
+      join(testMigrationsDir, "002_create_posts.sql"),
+      "CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT)"
+    );
+
+    const runner = new MigrationRunner(db, testMigrationsDir);
+
+    // Run three times
+    const first = await runner.runPendingMigrations();
+    const second = await runner.runPendingMigrations();
+    const third = await runner.runPendingMigrations();
+
+    expect(first).toBe(2);
+    expect(second).toBe(0);
+    expect(third).toBe(0);
+
+    // Schema state is the same
+    const migrations = await db.query<{ id: string }>(
+      "SELECT id FROM migrations ORDER BY id"
+    );
+    expect(migrations).toHaveLength(2);
+
+    const tables = await db.query<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users', 'posts') ORDER BY name"
+    );
+    expect(tables).toHaveLength(2);
+  });
+
+  it("handles multi-statement migrations", async () => {
     const multiStatementSQL = `
       CREATE TABLE users (id TEXT PRIMARY KEY);
       CREATE TABLE posts (id TEXT PRIMARY KEY, userId TEXT);
       CREATE INDEX idx_posts_user ON posts(userId);
     `;
-
     writeFileSync(
       join(testMigrationsDir, "001_multi_statement.sql"),
       multiStatementSQL
@@ -141,26 +192,13 @@ describe("MigrationRunner", () => {
     const runner = new MigrationRunner(db, testMigrationsDir);
     await runner.runPendingMigrations();
 
-    // Verify all tables were created
-    const tables = await new Promise<Array<{ name: string }>>(
-      (resolve, reject) => {
-        db.all(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users', 'posts')",
-          (err, rows: Array<{ name: string }>) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      }
+    const tables = await db.query<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('users', 'posts')"
     );
-
     expect(tables).toHaveLength(2);
-    expect(tables.map((t) => t.name)).toContain("users");
-    expect(tables.map((t) => t.name)).toContain("posts");
   });
 
-  it("should get migration status", async () => {
-    // Create test migrations
+  it("gets migration status", async () => {
     writeFileSync(
       join(testMigrationsDir, "001_create_users.sql"),
       "CREATE TABLE users (id TEXT PRIMARY KEY)"
@@ -171,73 +209,54 @@ describe("MigrationRunner", () => {
     );
 
     const runner = new MigrationRunner(db, testMigrationsDir);
-
-    // Apply first migration only
     await runner.runPendingMigrations();
 
-    // Add a new migration file
+    // Add a new migration file after initial run
     writeFileSync(
       join(testMigrationsDir, "003_create_comments.sql"),
       "CREATE TABLE comments (id TEXT PRIMARY KEY)"
     );
 
-    // Get status
     const status = await runner.getStatus();
-
     expect(status.applied).toHaveLength(2);
     expect(status.pending).toHaveLength(1);
     expect(status.pending[0].id).toBe("003");
   });
 
-  it("should handle empty migrations directory", async () => {
+  it("handles empty migrations directory", async () => {
     const runner = new MigrationRunner(db, testMigrationsDir);
     const appliedCount = await runner.runPendingMigrations();
-
     expect(appliedCount).toBe(0);
   });
 
-  it("should reject invalid migration filename format", async () => {
-    // Create migration with invalid filename
+  it("rejects invalid migration filename format", async () => {
     writeFileSync(
       join(testMigrationsDir, "invalid_migration.sql"),
       "CREATE TABLE test (id TEXT)"
     );
 
     const runner = new MigrationRunner(db, testMigrationsDir);
-
     await expect(runner.runPendingMigrations()).rejects.toThrow(
       "Invalid migration filename format"
     );
   });
 
-  it("should handle migration failure gracefully", async () => {
-    // Create migration with invalid SQL
+  it("handles migration failure gracefully", async () => {
     writeFileSync(
       join(testMigrationsDir, "001_invalid.sql"),
       "INVALID SQL STATEMENT"
     );
 
     const runner = new MigrationRunner(db, testMigrationsDir);
-
     await expect(runner.runPendingMigrations()).rejects.toThrow();
 
-    // Verify migration was not recorded as applied
-    const migrations = await new Promise<Array<{ id: string }>>(
-      (resolve, reject) => {
-        db.all(
-          "SELECT id FROM migrations",
-          (err, rows: Array<{ id: string }>) => {
-            if (err) reject(err);
-            else resolve(rows);
-          }
-        );
-      }
+    const migrations = await db.query<{ id: string }>(
+      "SELECT id FROM migrations"
     );
-
     expect(migrations).toHaveLength(0);
   });
 
-  it("should ignore SQL comments in migrations", async () => {
+  it("ignores SQL comments in migrations", async () => {
     const sqlWithComments = `
       -- This is a comment
       CREATE TABLE users (
@@ -247,7 +266,6 @@ describe("MigrationRunner", () => {
       );
       -- Final comment
     `;
-
     writeFileSync(
       join(testMigrationsDir, "001_with_comments.sql"),
       sqlWithComments
@@ -256,17 +274,9 @@ describe("MigrationRunner", () => {
     const runner = new MigrationRunner(db, testMigrationsDir);
     await runner.runPendingMigrations();
 
-    // Verify table was created
-    const result = await new Promise<{ count: number }>((resolve, reject) => {
-      db.get(
-        "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='users'",
-        (err, row: { count: number }) => {
-          if (err) reject(err);
-          else resolve(row);
-        }
-      );
-    });
-
-    expect(result.count).toBe(1);
+    const result = await db.queryOne<{ count: number }>(
+      "SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='users'"
+    );
+    expect(result?.count).toBe(1);
   });
 });

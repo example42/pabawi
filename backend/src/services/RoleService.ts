@@ -1,4 +1,4 @@
-import type { Database } from 'sqlite3';
+import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import { randomUUID } from 'crypto';
 
 /**
@@ -81,9 +81,9 @@ export interface Permission {
  * - Validate role data
  */
 export class RoleService {
-  private db: Database;
+  private db: DatabaseAdapter;
 
-  constructor(db: Database) {
+  constructor(db: DatabaseAdapter) {
     this.db = db;
   }
 
@@ -116,7 +116,7 @@ export class RoleService {
     const now = new Date().toISOString();
 
     // Insert role (isBuiltIn defaults to 0 for custom roles)
-    await this.runQuery(
+    await this.db.execute(
       `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
        VALUES (?, ?, ?, 0, ?, ?)`,
       [roleId, data.name, data.description || '', now, now]
@@ -138,7 +138,7 @@ export class RoleService {
    * @returns Role or null if not found
    */
   public async getRoleById(id: string): Promise<Role | null> {
-    return this.getQuery<Role>(
+    return this.db.queryOne<Role>(
       'SELECT * FROM roles WHERE id = ?',
       [id]
     );
@@ -151,7 +151,7 @@ export class RoleService {
    * @returns Role or null if not found
    */
   private async getRoleByName(name: string): Promise<Role | null> {
-    return this.getQuery<Role>(
+    return this.db.queryOne<Role>(
       'SELECT * FROM roles WHERE name = ?',
       [name]
     );
@@ -217,7 +217,7 @@ export class RoleService {
     params.push(id);
 
     // Execute update
-    await this.runQuery(
+    await this.db.execute(
       `UPDATE roles SET ${updates.join(', ')} WHERE id = ?`,
       params
     );
@@ -250,7 +250,7 @@ export class RoleService {
     }
 
     // Hard delete: CASCADE will remove user_roles, group_roles, and role_permissions associations
-    await this.runQuery(
+    await this.db.execute(
       'DELETE FROM roles WHERE id = ?',
       [id]
     );
@@ -279,14 +279,14 @@ export class RoleService {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Get total count
-    const countResult = await this.getQuery<{ count: number }>(
+    const countResult = await this.db.queryOne<{ count: number }>(
       `SELECT COUNT(*) as count FROM roles ${whereClause}`,
       params
     );
     const total = countResult?.count ?? 0;
 
     // Get paginated results
-    const roles = await this.allQuery<Role>(
+    const roles = await this.db.query<Role>(
       `SELECT * FROM roles ${whereClause} ORDER BY name ASC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -305,7 +305,7 @@ export class RoleService {
    * @returns Array of built-in roles (Viewer, Operator, Administrator)
    */
   public async getBuiltInRoles(): Promise<Role[]> {
-    return this.allQuery<Role>(
+    return this.db.query<Role>(
       'SELECT * FROM roles WHERE isBuiltIn = 1 ORDER BY name',
       []
     );
@@ -337,7 +337,7 @@ export class RoleService {
     }
 
     // Check if permission exists
-    const permission = await this.getQuery<Permission>(
+    const permission = await this.db.queryOne<Permission>(
       'SELECT * FROM permissions WHERE id = ?',
       [permissionId]
     );
@@ -346,7 +346,7 @@ export class RoleService {
     }
 
     // Check if assignment already exists
-    const existing = await this.getQuery<{ roleId: string }>(
+    const existing = await this.db.queryOne<{ roleId: string }>(
       'SELECT roleId FROM role_permissions WHERE roleId = ? AND permissionId = ?',
       [roleId, permissionId]
     );
@@ -355,7 +355,7 @@ export class RoleService {
     }
 
     // Create assignment
-    await this.runQuery(
+    await this.db.execute(
       'INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)',
       [roleId, permissionId, new Date().toISOString()]
     );
@@ -370,7 +370,7 @@ export class RoleService {
    */
   public async removePermissionFromRole(roleId: string, permissionId: string): Promise<void> {
     // Check if assignment exists
-    const existing = await this.getQuery<{ roleId: string }>(
+    const existing = await this.db.queryOne<{ roleId: string }>(
       'SELECT roleId FROM role_permissions WHERE roleId = ? AND permissionId = ?',
       [roleId, permissionId]
     );
@@ -379,7 +379,7 @@ export class RoleService {
     }
 
     // Remove assignment
-    await this.runQuery(
+    await this.db.execute(
       'DELETE FROM role_permissions WHERE roleId = ? AND permissionId = ?',
       [roleId, permissionId]
     );
@@ -392,7 +392,7 @@ export class RoleService {
    * @returns Array of permissions assigned to the role
    */
   public async getRolePermissions(roleId: string): Promise<Permission[]> {
-    return this.allQuery<Permission>(
+    return this.db.query<Permission>(
       `SELECT p.* FROM permissions p
        INNER JOIN role_permissions rp ON rp.permissionId = p.id
        WHERE rp.roleId = ?
@@ -401,39 +401,4 @@ export class RoleService {
     );
   }
 
-  /**
-   * Helper: Run a query that doesn't return rows
-   */
-  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  /**
-   * Helper: Get a single row
-   */
-  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err: Error | null, row: unknown) => {
-        if (err) reject(err);
-        else resolve((row as T) ?? null);
-      });
-    });
-  }
-
-  /**
-   * Helper: Get all rows
-   */
-  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err: Error | null, rows: unknown[]) => {
-        if (err) reject(err);
-        else resolve(rows as T[]);
-      });
-    });
-  }
 }

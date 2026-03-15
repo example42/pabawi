@@ -1,6 +1,6 @@
-import type sqlite3 from "sqlite3";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
+import type { DatabaseAdapter } from "./DatabaseAdapter";
 
 /**
  * Migration metadata
@@ -22,13 +22,15 @@ interface MigrationFile {
 
 /**
  * Database migration runner
- * Tracks which migrations have been applied and runs pending migrations in order
+ * Tracks which migrations have been applied and runs pending migrations in order.
+ * Supports dialect-specific files (NNN_name.sqlite.sql, NNN_name.postgres.sql)
+ * and shared files (NNN_name.sql).
  */
 export class MigrationRunner {
-  private db: sqlite3.Database;
+  private db: DatabaseAdapter;
   private migrationsDir: string;
 
-  constructor(db: sqlite3.Database, migrationsDir?: string) {
+  constructor(db: DatabaseAdapter, migrationsDir?: string) {
     this.db = db;
     this.migrationsDir = migrationsDir ?? join(__dirname, "migrations");
   }
@@ -44,62 +46,90 @@ export class MigrationRunner {
         appliedAt TEXT NOT NULL
       )
     `;
-
-    return new Promise((resolve, reject) => {
-      this.db.run(createTableSQL, (err) => {
-        if (err) {
-          reject(new Error(`Failed to create migrations table: ${err.message}`));
-        } else {
-          resolve();
-        }
-      });
-    });
+    await this.db.execute(createTableSQL);
   }
 
   /**
    * Get list of applied migrations from database
    */
   private async getAppliedMigrations(): Promise<Migration[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(
-        "SELECT id, name, appliedAt FROM migrations ORDER BY id",
-        (err, rows: Migration[]) => {
-          if (err) {
-            reject(new Error(`Failed to fetch applied migrations: ${err.message}`));
-          } else {
-            resolve(rows);
-          }
-        }
-      );
-    });
+    return this.db.query<Migration>(
+      "SELECT id, name, appliedAt FROM migrations ORDER BY id"
+    );
   }
 
   /**
-   * Get list of migration files from migrations directory
+   * Get list of migration files from migrations directory, filtered by dialect.
+   *
+   * Supports three filename patterns:
+   *   - NNN_name.sql          — shared (works for both dialects)
+   *   - NNN_name.sqlite.sql   — SQLite-specific
+   *   - NNN_name.postgres.sql — PostgreSQL-specific
+   *
+   * If both a shared file and a dialect-specific file exist for the same ID,
+   * the dialect-specific file takes precedence.
    */
   private getMigrationFiles(): MigrationFile[] {
+    const dialect = this.db.getDialect();
+
     try {
       const files = readdirSync(this.migrationsDir);
 
-      return files
-        .filter(file => file.endsWith(".sql"))
-        .map(filename => {
-          // Extract migration ID from filename (e.g., "001_initial_rbac.sql" -> "001")
-          const match = /^(\d+)_(.+)\.sql$/.exec(filename);
-          if (!match) {
-            throw new Error(`Invalid migration filename format: ${filename}. Expected format: NNN_name.sql`);
-          }
+      // Regex matches: NNN_name.sql, NNN_name.sqlite.sql, NNN_name.postgres.sql
+      const migrationRegex = /^(\d+)_(.+?)(?:\.(sqlite|postgres))?\.sql$/;
 
-          return {
-            id: match[1],
-            filename,
-            path: join(this.migrationsDir, filename)
-          };
-        })
-        .sort((a, b) => a.id.localeCompare(b.id));
+      // Collect candidates grouped by migration ID
+      const candidatesByID = new Map<
+        string,
+        { shared?: MigrationFile; dialectSpecific?: MigrationFile }
+      >();
+
+      for (const filename of files) {
+        if (!filename.endsWith(".sql")) continue;
+
+        const match = migrationRegex.exec(filename);
+        if (!match) {
+          throw new Error(
+            `Invalid migration filename format: ${filename}. Expected format: NNN_name.sql, NNN_name.sqlite.sql, or NNN_name.postgres.sql`
+          );
+        }
+
+        const id = match[1];
+        const fileDialect = match[3] as "sqlite" | "postgres" | undefined;
+
+        const migrationFile: MigrationFile = {
+          id,
+          filename,
+          path: join(this.migrationsDir, filename),
+        };
+
+        if (!candidatesByID.has(id)) {
+          candidatesByID.set(id, {});
+        }
+        const entry = candidatesByID.get(id)!;
+
+        if (fileDialect === undefined) {
+          // Shared file
+          entry.shared = migrationFile;
+        } else if (fileDialect === dialect) {
+          // Dialect-specific file matching the active dialect
+          entry.dialectSpecific = migrationFile;
+        }
+        // Files for the OTHER dialect are silently ignored
+      }
+
+      // For each ID, prefer dialect-specific over shared
+      const result: MigrationFile[] = [];
+      for (const [, entry] of candidatesByID) {
+        const chosen = entry.dialectSpecific ?? entry.shared;
+        if (chosen) {
+          result.push(chosen);
+        }
+      }
+
+      return result.sort((a, b) => a.id.localeCompare(b.id));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        // Migrations directory doesn't exist, return empty array
         return [];
       }
       throw error;
@@ -111,11 +141,9 @@ export class MigrationRunner {
    */
   private async getPendingMigrations(): Promise<MigrationFile[]> {
     const appliedMigrations = await this.getAppliedMigrations();
-    const appliedIds = new Set(appliedMigrations.map(m => m.id));
-
+    const appliedIds = new Set(appliedMigrations.map((m) => m.id));
     const allMigrations = this.getMigrationFiles();
-
-    return allMigrations.filter(migration => !appliedIds.has(migration.id));
+    return allMigrations.filter((migration) => !appliedIds.has(migration.id));
   }
 
   /**
@@ -123,32 +151,30 @@ export class MigrationRunner {
    */
   private async executeMigration(migration: MigrationFile): Promise<void> {
     try {
-      // Read migration file
       const sql = readFileSync(migration.path, "utf-8");
 
       // Split into statements (handle multi-statement migrations)
       const statements = sql
         .split(";")
-        .map(s => s.trim())
-        .filter(s => {
-          // Filter out empty statements and comment-only statements
+        .map((s) => s.trim())
+        .filter((s) => {
           if (s.length === 0) return false;
           // Remove single-line comments and check if anything remains
-          const withoutComments = s.split('\n')
-            .map(line => line.replace(/--.*$/, '').trim())
-            .filter(line => line.length > 0)
-            .join('\n');
+          const withoutComments = s
+            .split("\n")
+            .map((line) => line.replace(/--.*$/, "").trim())
+            .filter((line) => line.length > 0)
+            .join("\n");
           return withoutComments.length > 0;
         });
 
-      // Execute each statement
+      // Execute each statement individually via the adapter
       for (const statement of statements) {
-        await this.execStatement(statement);
+        await this.db.execute(statement);
       }
 
       // Record migration as applied
       await this.recordMigration(migration);
-
     } catch (error) {
       throw new Error(
         `Failed to execute migration ${migration.filename}: ${error instanceof Error ? error.message : "Unknown error"}`
@@ -157,39 +183,14 @@ export class MigrationRunner {
   }
 
   /**
-   * Execute a single SQL statement
-   */
-  private execStatement(sql: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.exec(sql, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  /**
    * Record a migration as applied in the migrations table
    */
   private async recordMigration(migration: MigrationFile): Promise<void> {
     const now = new Date().toISOString();
-
-    return new Promise((resolve, reject) => {
-      this.db.run(
-        "INSERT INTO migrations (id, name, appliedAt) VALUES (?, ?, ?)",
-        [migration.id, migration.filename, now],
-        (err) => {
-          if (err) {
-            reject(new Error(`Failed to record migration: ${err.message}`));
-          } else {
-            resolve();
-          }
-        }
-      );
-    });
+    await this.db.execute(
+      "INSERT INTO migrations (id, name, appliedAt) VALUES (?, ?, ?)",
+      [migration.id, migration.filename, now]
+    );
   }
 
   /**
@@ -198,23 +199,19 @@ export class MigrationRunner {
    */
   public async runPendingMigrations(): Promise<number> {
     try {
-      // Initialize migrations table if it doesn't exist
       await this.initializeMigrationsTable();
 
-      // Get pending migrations
       const pendingMigrations = await this.getPendingMigrations();
 
       if (pendingMigrations.length === 0) {
         return 0;
       }
 
-      // Execute each pending migration in order
       for (const migration of pendingMigrations) {
         await this.executeMigration(migration);
       }
 
       return pendingMigrations.length;
-
     } catch (error) {
       throw new Error(
         `Migration failed: ${error instanceof Error ? error.message : "Unknown error"}`

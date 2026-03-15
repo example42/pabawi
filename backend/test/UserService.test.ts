@@ -1,17 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
+import type { DatabaseAdapter } from '../src/database/DatabaseAdapter';
 import { UserService, CreateUserDTO, UpdateUserDTO } from '../src/services/UserService';
 import { AuthenticationService } from '../src/services/AuthenticationService';
 import { randomUUID } from 'crypto';
 
 describe('UserService', () => {
-  let db: Database;
+  let db: DatabaseAdapter;
   let userService: UserService;
   let authService: AuthenticationService;
 
   beforeEach(async () => {
-    // Create in-memory database
-    db = new Database(':memory:');
+    // Create in-memory database via SQLiteAdapter
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeSchema(db);
@@ -22,7 +24,7 @@ describe('UserService', () => {
   });
 
   afterEach(async () => {
-    await closeDatabase(db);
+    await db.close();
   });
 
   describe('createUser', () => {
@@ -496,11 +498,15 @@ describe('UserService', () => {
 
       const roleId = await createTestRole(db, 'Test Role');
 
+      // User already has default Viewer role from createUser
+      const rolesBefore = await userService.getUserRoles(user.id);
+      const countBefore = rolesBefore.length;
+
       await userService.assignRoleToUser(user.id, roleId);
 
       const roles = await userService.getUserRoles(user.id);
-      expect(roles.length).toBe(1);
-      expect(roles[0].name).toBe('Test Role');
+      expect(roles.length).toBe(countBefore + 1);
+      expect(roles.map(r => r.name)).toContain('Test Role');
     });
 
     it('should throw error if user not found', async () => {
@@ -556,13 +562,17 @@ describe('UserService', () => {
 
       const roleId = await createTestRole(db, 'Test Role');
 
+      // User already has default Viewer role from createUser
+      const rolesBefore = await userService.getUserRoles(user.id);
+      const countBefore = rolesBefore.length;
+
       await userService.assignRoleToUser(user.id, roleId);
       let roles = await userService.getUserRoles(user.id);
-      expect(roles.length).toBe(1);
+      expect(roles.length).toBe(countBefore + 1);
 
       await userService.removeRoleFromUser(user.id, roleId);
       roles = await userService.getUserRoles(user.id);
-      expect(roles.length).toBe(0);
+      expect(roles.length).toBe(countBefore);
     });
 
     it('should throw error if role not assigned', async () => {
@@ -647,119 +657,120 @@ describe('UserService', () => {
 
 // Helper functions
 
-async function initializeSchema(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.exec(`
-      CREATE TABLE users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        passwordHash TEXT NOT NULL,
-        firstName TEXT NOT NULL,
-        lastName TEXT NOT NULL,
-        isActive INTEGER DEFAULT 1,
-        isAdmin INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL,
-        lastLoginAt TEXT
-      );
+async function initializeSchema(db: DatabaseAdapter): Promise<void> {
+  await db.execute(`
+    CREATE TABLE users (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      passwordHash TEXT NOT NULL,
+      firstName TEXT NOT NULL,
+      lastName TEXT NOT NULL,
+      isActive INTEGER DEFAULT 1,
+      isAdmin INTEGER DEFAULT 0,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      lastLoginAt TEXT
+    )
+  `);
 
-      CREATE TABLE groups (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
+  await db.execute(`
+    CREATE TABLE groups (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      description TEXT,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    )
+  `);
 
-      CREATE TABLE roles (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        isBuiltIn INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
+  await db.execute(`
+    CREATE TABLE roles (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      description TEXT,
+      isBuiltIn INTEGER DEFAULT 0,
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    )
+  `);
 
-      CREATE TABLE user_groups (
-        userId TEXT NOT NULL,
-        groupId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, groupId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (groupId) REFERENCES groups(id)
-      );
+  await db.execute(`
+    CREATE TABLE user_groups (
+      userId TEXT NOT NULL,
+      groupId TEXT NOT NULL,
+      assignedAt TEXT NOT NULL,
+      PRIMARY KEY (userId, groupId),
+      FOREIGN KEY (userId) REFERENCES users(id),
+      FOREIGN KEY (groupId) REFERENCES groups(id)
+    )
+  `);
 
-      CREATE TABLE user_roles (
-        userId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, roleId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (roleId) REFERENCES roles(id)
-      );
+  await db.execute(`
+    CREATE TABLE user_roles (
+      userId TEXT NOT NULL,
+      roleId TEXT NOT NULL,
+      assignedAt TEXT NOT NULL,
+      PRIMARY KEY (userId, roleId),
+      FOREIGN KEY (userId) REFERENCES users(id),
+      FOREIGN KEY (roleId) REFERENCES roles(id)
+    )
+  `);
 
-      CREATE TABLE revoked_tokens (
-        token TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
-        revokedAt TEXT NOT NULL,
-        expiresAt TEXT NOT NULL
-      );
+  await db.execute(`
+    CREATE TABLE revoked_tokens (
+      token TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      revokedAt TEXT NOT NULL,
+      expiresAt TEXT NOT NULL
+    )
+  `);
 
-      CREATE TABLE config (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
+  await db.execute(`
+    CREATE TABLE config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    )
+  `);
 
-      -- Insert default config values
-      INSERT INTO config (key, value, updatedAt) VALUES
-        ('allow_self_registration', 'false', datetime('now')),
-        ('default_new_user_role', 'role-viewer-001', datetime('now'));
-    `, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  // Insert default config values
+  await db.execute(
+    `INSERT INTO config (key, value, updatedAt) VALUES (?, ?, datetime('now'))`,
+    ['allow_self_registration', 'false']
+  );
+  await db.execute(
+    `INSERT INTO config (key, value, updatedAt) VALUES (?, ?, datetime('now'))`,
+    ['default_new_user_role', 'role-viewer-001']
+  );
+
+  // Seed the default viewer role so FK constraints are satisfied
+  await db.execute(
+    `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    ['role-viewer-001', 'Viewer', 'Default viewer role', 1]
+  );
 }
 
-async function closeDatabase(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.close((err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-async function createTestGroup(db: Database, name: string): Promise<string> {
+async function createTestGroup(db: DatabaseAdapter, name: string): Promise<string> {
   const groupId = randomUUID();
   const now = new Date().toISOString();
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-      [groupId, name, 'Test group description', now, now],
-      (err) => {
-        if (err) reject(err);
-        else resolve(groupId);
-      }
-    );
-  });
+  await db.execute(
+    'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+    [groupId, name, 'Test group description', now, now]
+  );
+
+  return groupId;
 }
 
-async function createTestRole(db: Database, name: string): Promise<string> {
+async function createTestRole(db: DatabaseAdapter, name: string): Promise<string> {
   const roleId = randomUUID();
   const now = new Date().toISOString();
 
-  return new Promise((resolve, reject) => {
-    db.run(
-      'INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
-      [roleId, name, 'Test role description', 0, now, now],
-      (err) => {
-        if (err) reject(err);
-        else resolve(roleId);
-      }
-    );
-  });
+  await db.execute(
+    'INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+    [roleId, name, 'Test role description', 0, now, now]
+  );
+
+  return roleId;
 }

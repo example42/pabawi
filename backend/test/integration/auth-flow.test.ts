@@ -655,16 +655,10 @@ describe('Authentication Flow Integration Tests', () => {
         .expect(200);
 
       // Deactivate user
-      await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
-          'UPDATE users SET isActive = 0 WHERE id = ?',
-          [userId],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await databaseService.getConnection().execute(
+        'UPDATE users SET isActive = 0 WHERE id = ?',
+        [userId]
+      );
 
       // Try to login with inactive account
       await request(app)

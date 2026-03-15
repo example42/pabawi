@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { UserService } from '../../../src/services/UserService';
 import { RoleService } from '../../../src/services/RoleService';
 import { PermissionService } from '../../../src/services/PermissionService';
@@ -23,7 +23,7 @@ import { randomUUID } from 'crypto';
  * - Deactivated users lose all access
  */
 describe('Inactive User Denial Properties', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let userService: UserService;
   let roleService: RoleService;
   let permissionService: PermissionService;
@@ -32,7 +32,8 @@ describe('Inactive User Denial Properties', () => {
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeRBACSchema(db);
@@ -45,12 +46,7 @@ describe('Inactive User Denial Properties', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   /**
@@ -445,7 +441,7 @@ describe('Inactive User Denial Properties', () => {
 
 // Helper functions
 
-async function initializeRBACSchema(db: Database): Promise<void> {
+async function initializeRBACSchema(db: SQLiteAdapter): Promise<void> {
   const schema = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -534,17 +530,12 @@ async function initializeRBACSchema(db: Database): Promise<void> {
   const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
   for (const statement of statements) {
-    await new Promise<void>((resolve, reject) => {
-      db.run(statement, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.execute(statement);
   }
 }
 
 async function createTestUser(
-  db: Database,
+  db: SQLiteAdapter,
   userId: string,
   isActive: boolean = true,
   isAdmin: boolean = false
@@ -568,15 +559,10 @@ async function createTestUser(
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
-async function createTestRole(db: Database, roleId: string, name?: string): Promise<void> {
+async function createTestRole(db: SQLiteAdapter, roleId: string, name?: string): Promise<void> {
   const sql = `
     INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
     VALUES (?, ?, ?, 0, ?, ?)
@@ -592,16 +578,11 @@ async function createTestRole(db: Database, roleId: string, name?: string): Prom
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
 async function createTestPermission(
-  db: Database,
+  db: SQLiteAdapter,
   permissionId: string,
   resource: string,
   action: string
@@ -620,15 +601,10 @@ async function createTestPermission(
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
-async function createTestGroup(db: Database, groupId: string): Promise<void> {
+async function createTestGroup(db: SQLiteAdapter, groupId: string): Promise<void> {
   const sql = `
     INSERT INTO groups (id, name, description, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?)
@@ -643,15 +619,10 @@ async function createTestGroup(db: Database, groupId: string): Promise<void> {
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
-async function assignRoleToGroup(db: Database, groupId: string, roleId: string): Promise<void> {
+async function assignRoleToGroup(db: SQLiteAdapter, groupId: string, roleId: string): Promise<void> {
   const sql = `
     INSERT INTO group_roles (groupId, roleId, assignedAt)
     VALUES (?, ?, ?)
@@ -660,10 +631,5 @@ async function assignRoleToGroup(db: Database, groupId: string, roleId: string):
   const now = new Date().toISOString();
   const params = [groupId, roleId, now];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }

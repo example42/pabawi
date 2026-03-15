@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { AuthenticationService } from "../services/AuthenticationService";
-import type { Database } from "sqlite3";
+import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import { ERROR_CODES, sendAuthenticationError, sendDatabaseError, isDatabaseConnectionError } from "../utils/errorHandling";
 
 // Extend Express Request to include user payload
@@ -27,7 +27,7 @@ declare global {
  *
  * Requirements: 5.1, 6.6, 16.1, 16.5
  */
-export function createAuthMiddleware(db: Database, jwtSecret?: string) {
+export function createAuthMiddleware(db: DatabaseAdapter, jwtSecret?: string) {
   const authService = new AuthenticationService(db, jwtSecret);
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {

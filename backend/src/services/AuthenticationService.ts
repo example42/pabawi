@@ -1,6 +1,6 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import type { Database } from 'sqlite3';
+import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import crypto from 'crypto';
 import type { AuditLoggingService } from './AuditLoggingService';
 import { performanceMonitor } from './PerformanceMonitor';
@@ -94,14 +94,14 @@ interface DecodedTokenPayload {
  * - Enforce password policies
  */
 export class AuthenticationService {
-  private db: Database;
+  private db: DatabaseAdapter;
   private jwtSecret: string;
   private accessTokenLifetime = 3600; // 1 hour in seconds
   private refreshTokenLifetime = 604800; // 7 days in seconds
   private bcryptCostFactor = 10;
   private auditLogger?: AuditLoggingService;
 
-  constructor(db: Database, jwtSecret?: string, auditLogger?: AuditLoggingService) {
+  constructor(db: DatabaseAdapter, jwtSecret?: string, auditLogger?: AuditLoggingService) {
     this.db = db;
     this.auditLogger = auditLogger;
 
@@ -480,7 +480,7 @@ export class AuthenticationService {
       const expiresAt = new Date(decoded.exp * 1000).toISOString();
       const revokedAt = new Date().toISOString();
 
-      await this.runQuery(
+      await this.db.execute(
         `INSERT INTO revoked_tokens (token, userId, revokedAt, expiresAt)
          VALUES (?, ?, ?, ?)`,
         [tokenHash, decoded.userId, revokedAt, expiresAt]
@@ -505,20 +505,20 @@ export class AuthenticationService {
     const markerToken = `user_revoke_all_${userId}`;
 
     // First, try to update existing marker
-    const existing = await this.getQuery<{ token: string }>(
+    const existing = await this.db.queryOne<{ token: string }>(
       'SELECT token FROM revoked_tokens WHERE token = ?',
       [markerToken]
     );
 
     if (existing) {
       // Update existing marker with new revocation time
-      await this.runQuery(
+      await this.db.execute(
         `UPDATE revoked_tokens SET revokedAt = ?, expiresAt = ? WHERE token = ?`,
         [revokedAt, expiresAt, markerToken]
       );
     } else {
       // Insert new marker
-      await this.runQuery(
+      await this.db.execute(
         `INSERT INTO revoked_tokens (token, userId, revokedAt, expiresAt)
          VALUES (?, ?, ?, ?)`,
         [markerToken, userId, revokedAt, expiresAt]
@@ -543,7 +543,7 @@ export class AuthenticationService {
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
       // Check if specific token is revoked
-      const revokedToken = await this.getQuery<{ token: string }>(
+      const revokedToken = await this.db.queryOne<{ token: string }>(
         'SELECT token FROM revoked_tokens WHERE token = ? AND expiresAt > ?',
         [tokenHash, new Date().toISOString()]
       );
@@ -553,7 +553,7 @@ export class AuthenticationService {
       }
 
       // Check if all user tokens are revoked
-      const userRevocation = await this.getQuery<{ revokedAt: string }>(
+      const userRevocation = await this.db.queryOne<{ revokedAt: string }>(
         `SELECT revokedAt FROM revoked_tokens
          WHERE token = ? AND expiresAt > ?`,
         [`user_revoke_all_${decoded.userId}`, new Date().toISOString()]
@@ -577,7 +577,7 @@ export class AuthenticationService {
    * Get user by username (including inactive users)
    */
   private async getUserByUsernameIncludingInactive(username: string): Promise<User | null> {
-    return this.getQuery<User>(
+    return this.db.queryOne<User>(
       'SELECT * FROM users WHERE username = ?',
       [username]
     );
@@ -587,7 +587,7 @@ export class AuthenticationService {
    * Get user by ID
    */
   private async getUserById(userId: string): Promise<User | null> {
-    return this.getQuery<User>(
+    return this.db.queryOne<User>(
       'SELECT * FROM users WHERE id = ?',
       [userId]
     );
@@ -597,7 +597,7 @@ export class AuthenticationService {
    * Get user roles
    */
   private async getUserRoles(userId: string): Promise<string[]> {
-    const roles = await this.allQuery<{ name: string }>(
+    const roles = await this.db.query<{ name: string }>(
       `SELECT DISTINCT r.name FROM roles r
        WHERE r.id IN (
          SELECT roleId FROM user_roles WHERE userId = ?
@@ -617,7 +617,7 @@ export class AuthenticationService {
    */
   private async updateLastLogin(userId: string): Promise<void> {
     const now = new Date().toISOString();
-    await this.runQuery(
+    await this.db.execute(
       'UPDATE users SET lastLoginAt = ? WHERE id = ?',
       [now, userId]
     );
@@ -654,7 +654,7 @@ export class AuthenticationService {
   private async checkAccountLockout(username: string): Promise<{ isLocked: boolean; reason?: string }> {
     try {
       // Check for existing lockout
-      const lockout = await this.getQuery<{
+      const lockout = await this.db.queryOne<{
         lockoutType: string;
         lockedUntil: string | null;
         failedAttempts: number;
@@ -685,7 +685,7 @@ export class AuthenticationService {
             };
           } else {
             // Temporary lockout expired - remove it
-            await this.runQuery('DELETE FROM account_lockouts WHERE username = ?', [username]);
+            await this.db.execute('DELETE FROM account_lockouts WHERE username = ?', [username]);
           }
         }
       }
@@ -722,14 +722,14 @@ export class AuthenticationService {
         const timestamp = now.toISOString();
 
         // Record the failed attempt
-        await this.runQuery(
+        await this.db.execute(
           `INSERT INTO failed_login_attempts (username, attemptedAt, ipAddress, reason)
            VALUES (?, ?, ?, ?)`,
           [username, timestamp, ipAddress ?? null, reason]
         );
 
         // Count total failed attempts (not just within window, for permanent lockout)
-        const totalAttempts = await this.getQuery<{ count: number }>(
+        const totalAttempts = await this.db.queryOne<{ count: number }>(
           `SELECT COUNT(*) as count FROM failed_login_attempts
            WHERE username = ?`,
           [username]
@@ -745,7 +745,7 @@ export class AuthenticationService {
 
         // Count recent failed attempts (within the lockout window) for temporary lockout
         const windowStart = new Date(now.getTime() - this.TEMP_LOCKOUT_WINDOW_MINUTES * 60000);
-        const recentAttempts = await this.getQuery<{ count: number }>(
+        const recentAttempts = await this.db.queryOne<{ count: number }>(
           `SELECT COUNT(*) as count FROM failed_login_attempts
            WHERE username = ? AND attemptedAt >= ?`,
           [username, windowStart.toISOString()]
@@ -776,14 +776,14 @@ export class AuthenticationService {
       const lockedUntil = new Date(now.getTime() + this.TEMP_LOCKOUT_DURATION_MINUTES * 60000).toISOString();
 
       // Check if lockout already exists
-      const existing = await this.getQuery<{ username: string }>(
+      const existing = await this.db.queryOne<{ username: string }>(
         'SELECT username FROM account_lockouts WHERE username = ?',
         [username]
       );
 
       if (existing) {
         // Update existing lockout
-        await this.runQuery(
+        await this.db.execute(
           `UPDATE account_lockouts
            SET lockoutType = ?, lockedAt = ?, lockedUntil = ?, failedAttempts = ?, lastAttemptAt = ?
            WHERE username = ?`,
@@ -791,7 +791,7 @@ export class AuthenticationService {
         );
       } else {
         // Insert new lockout
-        await this.runQuery(
+        await this.db.execute(
           `INSERT INTO account_lockouts (username, lockoutType, lockedAt, lockedUntil, failedAttempts, lastAttemptAt)
            VALUES (?, ?, ?, ?, ?, ?)`,
           [username, 'temporary', lockedAt, lockedUntil, failedAttempts, lockedAt]
@@ -816,14 +816,14 @@ export class AuthenticationService {
       const lockedAt = now.toISOString();
 
       // Check if lockout already exists
-      const existing = await this.getQuery<{ username: string }>(
+      const existing = await this.db.queryOne<{ username: string }>(
         'SELECT username FROM account_lockouts WHERE username = ?',
         [username]
       );
 
       if (existing) {
         // Update to permanent lockout
-        await this.runQuery(
+        await this.db.execute(
           `UPDATE account_lockouts
            SET lockoutType = ?, lockedAt = ?, lockedUntil = NULL, failedAttempts = ?, lastAttemptAt = ?
            WHERE username = ?`,
@@ -831,7 +831,7 @@ export class AuthenticationService {
         );
       } else {
         // Insert new permanent lockout
-        await this.runQuery(
+        await this.db.execute(
           `INSERT INTO account_lockouts (username, lockoutType, lockedAt, lockedUntil, failedAttempts, lastAttemptAt)
            VALUES (?, ?, ?, NULL, ?, ?)`,
           [username, 'permanent', lockedAt, failedAttempts, lockedAt]
@@ -852,13 +852,13 @@ export class AuthenticationService {
   private async clearFailedLoginAttempts(username: string): Promise<void> {
     try {
       // Remove failed attempts
-      await this.runQuery(
+      await this.db.execute(
         'DELETE FROM failed_login_attempts WHERE username = ?',
         [username]
       );
 
       // Remove any temporary lockouts (permanent lockouts remain)
-      await this.runQuery(
+      await this.db.execute(
         `DELETE FROM account_lockouts WHERE username = ? AND lockoutType = 'temporary'`,
         [username]
       );
@@ -876,10 +876,10 @@ export class AuthenticationService {
   public async unlockAccount(username: string): Promise<void> {
     try {
       // Remove all lockouts
-      await this.runQuery('DELETE FROM account_lockouts WHERE username = ?', [username]);
+      await this.db.execute('DELETE FROM account_lockouts WHERE username = ?', [username]);
 
       // Clear failed attempts
-      await this.runQuery('DELETE FROM failed_login_attempts WHERE username = ?', [username]);
+      await this.db.execute('DELETE FROM failed_login_attempts WHERE username = ?', [username]);
 
       console.warn(`[ADMIN] Account unlocked: ${username}`);
     } catch (error) {
@@ -900,7 +900,7 @@ export class AuthenticationService {
     reason: string;
   }[]> {
     try {
-      return await this.allQuery<{
+      return await this.db.query<{
         attemptedAt: string;
         ipAddress: string | null;
         reason: string;
@@ -930,7 +930,7 @@ export class AuthenticationService {
     failedAttempts: number;
   } | null> {
     try {
-      return await this.getQuery<{
+      return await this.db.queryOne<{
         lockoutType: string;
         lockedAt: string;
         lockedUntil: string | null;
@@ -962,42 +962,6 @@ export class AuthenticationService {
       updatedAt: user.updatedAt,
       lastLoginAt: user.lastLoginAt
     };
-  }
-
-  /**
-   * Helper: Run a query that doesn't return rows
-   */
-  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  /**
-   * Helper: Get a single row
-   */
-  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row as T || null);
-      });
-    });
-  }
-
-  /**
-   * Helper: Get all rows
-   */
-  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as T[]);
-      });
-    });
   }
 
   // Brute force protection constants

@@ -12,15 +12,9 @@ import { GroupService } from '../../src/services/GroupService';
 
 // Helper function to disable default role assignment in tests
 async function disableDefaultRoleAssignment(databaseService: DatabaseService): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    databaseService.getConnection().run(
-      `INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))`,
-      (err) => {
-        if (err) reject(err);
-        else resolve();
-      }
-    );
-  });
+  await databaseService.getConnection().execute(
+    "INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))"
+  );
 }
 
 describe('Users Router - GET /api/users', () => {
@@ -44,15 +38,9 @@ describe('Users Router - GET /api/users', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Disable default role assignment for all tests
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().run(
-        `INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))`,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await databaseService.getConnection().execute(
+      "INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))"
+    );
 
     // Initialize services
     const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
@@ -133,21 +121,12 @@ describe('Users Router - GET /api/users', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
   });
 
   describe('Authentication and Authorization', () => {
@@ -492,24 +471,15 @@ describe('Users Router - GET /api/users/:id', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM user_groups;
-        DELETE FROM group_roles;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        DELETE FROM groups;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM user_groups');
+    await db.execute('DELETE FROM group_roles');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
+    await db.execute('DELETE FROM groups');
   });
 
   describe('Authentication and Authorization', () => {
@@ -615,16 +585,10 @@ describe('Users Router - GET /api/users/:id', () => {
       // Create a group
       const db = databaseService.getConnection();
       const groupId = randomUUID();
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-          [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()]
+      );
 
       // Add user to group
       await userService.addUserToGroup(testUserId, groupId);
@@ -671,27 +635,15 @@ describe('Users Router - GET /api/users/:id', () => {
       const group1Id = randomUUID();
       const group2Id = randomUUID();
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-          [group1Id, 'Group 1', 'First group', new Date().toISOString(), new Date().toISOString()],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        [group1Id, 'Group 1', 'First group', new Date().toISOString(), new Date().toISOString()]
+      );
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-          [group2Id, 'Group 2', 'Second group', new Date().toISOString(), new Date().toISOString()],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        [group2Id, 'Group 2', 'Second group', new Date().toISOString(), new Date().toISOString()]
+      );
 
       // Add user to groups
       await userService.addUserToGroup(testUserId, group1Id);
@@ -866,24 +818,15 @@ describe('Users Router - PUT /api/users/:id', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM user_groups;
-        DELETE FROM group_roles;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        DELETE FROM groups;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM user_groups');
+    await db.execute('DELETE FROM group_roles');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
+    await db.execute('DELETE FROM groups');
   });
 
   describe('Authentication and Authorization', () => {
@@ -1466,24 +1409,15 @@ describe('Users Router - DELETE /api/users/:id', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM user_groups;
-        DELETE FROM group_roles;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        DELETE FROM groups;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM user_groups');
+    await db.execute('DELETE FROM group_roles');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
+    await db.execute('DELETE FROM groups');
   });
 
   describe('Authentication and Authorization', () => {
@@ -1650,16 +1584,10 @@ describe('Users Router - DELETE /api/users/:id', () => {
       // Create a group and add user to it
       const db = databaseService.getConnection();
       const groupId = randomUUID();
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-          [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()]
+      );
 
       await userService.addUserToGroup(testUserId, groupId);
 
@@ -1696,16 +1624,10 @@ describe('Users Router - DELETE /api/users/:id', () => {
       // Create a group
       const db = databaseService.getConnection();
       const groupId = randomUUID();
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-          [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()]
+      );
 
       await userService.addUserToGroup(testUserId, groupId);
 
@@ -1878,24 +1800,15 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM user_groups;
-        DELETE FROM group_roles;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        DELETE FROM groups;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM user_groups');
+    await db.execute('DELETE FROM group_roles');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
+    await db.execute('DELETE FROM groups');
   });
 
   describe('Authentication and Authorization', () => {
@@ -2302,24 +2215,15 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM user_groups;
-        DELETE FROM group_roles;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        DELETE FROM groups;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM user_groups');
+    await db.execute('DELETE FROM group_roles');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
+    await db.execute('DELETE FROM groups');
   });
 
   describe('Authentication and Authorization', () => {
@@ -2763,24 +2667,15 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM user_groups;
-        DELETE FROM group_roles;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        DELETE FROM groups;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM user_groups');
+    await db.execute('DELETE FROM group_roles');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
+    await db.execute('DELETE FROM groups');
   });
 
   describe('Authentication and Authorization', () => {
@@ -3239,24 +3134,15 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
   afterEach(async () => {
     // Clean up database after each test
-    await new Promise<void>((resolve, reject) => {
-      databaseService.getConnection().exec(
-        `
-        DELETE FROM user_roles;
-        DELETE FROM role_permissions;
-        DELETE FROM user_groups;
-        DELETE FROM group_roles;
-        DELETE FROM users;
-        DELETE FROM roles WHERE isBuiltIn = 0;
-        DELETE FROM permissions;
-        DELETE FROM groups;
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    const db = databaseService.getConnection();
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM user_groups');
+    await db.execute('DELETE FROM group_roles');
+    await db.execute('DELETE FROM users');
+    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute('DELETE FROM permissions');
+    await db.execute('DELETE FROM groups');
   });
 
   describe('Authentication and Authorization', () => {

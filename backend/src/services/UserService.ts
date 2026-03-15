@@ -1,4 +1,4 @@
-import type { Database } from 'sqlite3';
+import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import { randomUUID } from 'crypto';
 import type { AuthenticationService } from './AuthenticationService';
 import { SetupService } from './SetupService';
@@ -117,11 +117,11 @@ export interface Role {
  * - Validate user data
  */
 export class UserService {
-  private db: Database;
+  private db: DatabaseAdapter;
   private authService: AuthenticationService;
   private setupService: SetupService;
 
-  constructor(db: Database, authService: AuthenticationService) {
+  constructor(db: DatabaseAdapter, authService: AuthenticationService) {
     this.db = db;
     this.authService = authService;
     this.setupService = new SetupService(db);
@@ -161,7 +161,7 @@ export class UserService {
     const now = new Date().toISOString();
 
     // Insert user
-    await this.runQuery(
+    await this.db.execute(
       `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -183,7 +183,7 @@ export class UserService {
     if (!data.isAdmin) {
       const defaultRoleId = await this.setupService.getDefaultNewUserRole();
       if (defaultRoleId) {
-        await this.runQuery(
+        await this.db.execute(
           `INSERT INTO user_roles (userId, roleId, assignedAt)
            VALUES (?, ?, ?)`,
           [userId, defaultRoleId, now]
@@ -207,7 +207,7 @@ export class UserService {
    * @returns User or null if not found
    */
   public async getUserById(id: string): Promise<User | null> {
-    return this.getQuery<User>(
+    return this.db.queryOne<User>(
       'SELECT * FROM users WHERE id = ?',
       [id]
     );
@@ -220,7 +220,7 @@ export class UserService {
    * @returns User or null if not found
    */
   public async getUserByUsername(username: string): Promise<User | null> {
-    return this.getQuery<User>(
+    return this.db.queryOne<User>(
       'SELECT * FROM users WHERE username = ?',
       [username]
     );
@@ -233,7 +233,7 @@ export class UserService {
    * @returns User or null if not found
    */
   private async getUserByEmail(email: string): Promise<User | null> {
-    return this.getQuery<User>(
+    return this.db.queryOne<User>(
       'SELECT * FROM users WHERE email = ?',
       [email]
     );
@@ -311,7 +311,7 @@ export class UserService {
     params.push(id);
 
     // Execute update
-    await this.runQuery(
+    await this.db.execute(
       `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
       params
     );
@@ -339,7 +339,7 @@ export class UserService {
     }
 
     // Soft delete: set isActive to 0
-    await this.runQuery(
+    await this.db.execute(
       'UPDATE users SET isActive = 0, updatedAt = ? WHERE id = ?',
       [new Date().toISOString(), id]
     );
@@ -378,14 +378,14 @@ export class UserService {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Get total count
-    const countResult = await this.getQuery<{ count: number }>(
+    const countResult = await this.db.queryOne<{ count: number }>(
       `SELECT COUNT(*) as count FROM users ${whereClause}`,
       params
     );
     const total = countResult?.count ?? 0;
 
     // Get paginated results
-    const users = await this.allQuery<User>(
+    const users = await this.db.query<User>(
       `SELECT * FROM users ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -413,7 +413,7 @@ export class UserService {
     }
 
     // Check if group exists
-    const group = await this.getQuery<Group>(
+    const group = await this.db.queryOne<Group>(
       'SELECT * FROM groups WHERE id = ?',
       [groupId]
     );
@@ -422,7 +422,7 @@ export class UserService {
     }
 
     // Check if association already exists
-    const existing = await this.getQuery<{ userId: string }>(
+    const existing = await this.db.queryOne<{ userId: string }>(
       'SELECT userId FROM user_groups WHERE userId = ? AND groupId = ?',
       [userId, groupId]
     );
@@ -431,7 +431,7 @@ export class UserService {
     }
 
     // Create association
-    await this.runQuery(
+    await this.db.execute(
       'INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)',
       [userId, groupId, new Date().toISOString()]
     );
@@ -446,7 +446,7 @@ export class UserService {
    */
   public async removeUserFromGroup(userId: string, groupId: string): Promise<void> {
     // Check if association exists
-    const existing = await this.getQuery<{ userId: string }>(
+    const existing = await this.db.queryOne<{ userId: string }>(
       'SELECT userId FROM user_groups WHERE userId = ? AND groupId = ?',
       [userId, groupId]
     );
@@ -455,7 +455,7 @@ export class UserService {
     }
 
     // Remove association
-    await this.runQuery(
+    await this.db.execute(
       'DELETE FROM user_groups WHERE userId = ? AND groupId = ?',
       [userId, groupId]
     );
@@ -468,7 +468,7 @@ export class UserService {
    * @returns Array of groups
    */
   public async getUserGroups(userId: string): Promise<Group[]> {
-    return this.allQuery<Group>(
+    return this.db.query<Group>(
       `SELECT g.* FROM groups g
        INNER JOIN user_groups ug ON ug.groupId = g.id
        WHERE ug.userId = ?
@@ -492,7 +492,7 @@ export class UserService {
     }
 
     // Check if role exists
-    const role = await this.getQuery<Role>(
+    const role = await this.db.queryOne<Role>(
       'SELECT * FROM roles WHERE id = ?',
       [roleId]
     );
@@ -501,7 +501,7 @@ export class UserService {
     }
 
     // Check if assignment already exists
-    const existing = await this.getQuery<{ userId: string }>(
+    const existing = await this.db.queryOne<{ userId: string }>(
       'SELECT userId FROM user_roles WHERE userId = ? AND roleId = ?',
       [userId, roleId]
     );
@@ -510,7 +510,7 @@ export class UserService {
     }
 
     // Create assignment
-    await this.runQuery(
+    await this.db.execute(
       'INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)',
       [userId, roleId, new Date().toISOString()]
     );
@@ -525,7 +525,7 @@ export class UserService {
    */
   public async removeRoleFromUser(userId: string, roleId: string): Promise<void> {
     // Check if assignment exists
-    const existing = await this.getQuery<{ userId: string }>(
+    const existing = await this.db.queryOne<{ userId: string }>(
       'SELECT userId FROM user_roles WHERE userId = ? AND roleId = ?',
       [userId, roleId]
     );
@@ -534,7 +534,7 @@ export class UserService {
     }
 
     // Remove assignment
-    await this.runQuery(
+    await this.db.execute(
       'DELETE FROM user_roles WHERE userId = ? AND roleId = ?',
       [userId, roleId]
     );
@@ -547,7 +547,7 @@ export class UserService {
    * @returns Array of roles
    */
   public async getUserRoles(userId: string): Promise<Role[]> {
-    return this.allQuery<Role>(
+    return this.db.query<Role>(
       `SELECT r.* FROM roles r
        INNER JOIN user_roles ur ON ur.roleId = r.id
        WHERE ur.userId = ?
@@ -594,39 +594,4 @@ export class UserService {
     };
   }
 
-  /**
-   * Helper: Run a query that doesn't return rows
-   */
-  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  /**
-   * Helper: Get a single row
-   */
-  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row as T || null);
-      });
-    });
-  }
-
-  /**
-   * Helper: Get all rows
-   */
-  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as T[]);
-      });
-    });
-  }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import sqlite3 from "sqlite3";
+import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
+import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
 import {
   ExecutionRepository,
   ExecutionType,
@@ -7,15 +8,16 @@ import {
 } from "../../src/database/ExecutionRepository";
 
 describe("ExecutionRepository", () => {
-  let db: sqlite3.Database;
+  let db: DatabaseAdapter;
   let repository: ExecutionRepository;
 
   beforeEach(async () => {
-    // Create in-memory database for testing
-    db = new sqlite3.Database(":memory:");
+    // Create in-memory database via SQLiteAdapter
+    db = new SQLiteAdapter(":memory:");
+    await db.initialize();
 
     // Create executions table
-    const schema = `
+    await db.execute(`
       CREATE TABLE executions (
         id TEXT PRIMARY KEY,
         type TEXT NOT NULL,
@@ -37,22 +39,13 @@ describe("ExecutionRepository", () => {
         batch_id TEXT,
         batch_position INTEGER
       )
-    `;
-
-    await new Promise<void>((resolve, reject) => {
-      db.run(schema, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    `, []);
 
     repository = new ExecutionRepository(db);
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
   });
 
   describe("constructor", () => {

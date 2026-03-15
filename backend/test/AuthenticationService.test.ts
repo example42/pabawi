@@ -1,16 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
+import type { DatabaseAdapter } from '../src/database/DatabaseAdapter';
 import { AuthenticationService } from '../src/services/AuthenticationService';
 import { randomUUID } from 'crypto';
 
 describe('AuthenticationService', () => {
-  let db: Database;
+  let db: DatabaseAdapter;
   let authService: AuthenticationService;
   const testJwtSecret = 'test-secret-key-for-testing-only'; // pragma: allowlist secret
 
   beforeEach(async () => {
-    // Create in-memory database
-    db = new Database(':memory:');
+    // Create in-memory database via SQLiteAdapter
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeSchema(db);
@@ -20,12 +22,7 @@ describe('AuthenticationService', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   describe('Password Hashing', () => {
@@ -71,7 +68,7 @@ describe('AuthenticationService', () => {
       const passwordHash = await authService.hashPassword('TestPass123!');
       const now = new Date().toISOString();
 
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
@@ -106,7 +103,7 @@ describe('AuthenticationService', () => {
 
     it('should reject authentication for inactive user', async () => {
       // Deactivate user
-      await runQuery(db, 'UPDATE users SET isActive = 0 WHERE username = ?', ['testuser']);
+      await db.execute('UPDATE users SET isActive = 0 WHERE username = ?', ['testuser']);
 
       const result = await authService.authenticate('testuser', 'TestPass123!');
 
@@ -117,7 +114,7 @@ describe('AuthenticationService', () => {
     it('should update lastLoginAt timestamp on successful authentication', async () => {
       await authService.authenticate('testuser', 'TestPass123!');
 
-      const user = await getQuery<{ lastLoginAt: string }>(db,
+      const user = await db.queryOne<{ lastLoginAt: string }>(
         'SELECT lastLoginAt FROM users WHERE username = ?',
         ['testuser']
       );
@@ -175,12 +172,12 @@ describe('AuthenticationService', () => {
       const passwordHash = await authService.hashPassword('TestPass123!');
       const now = new Date().toISOString();
 
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
-      testUser = await getQuery(db, 'SELECT * FROM users WHERE username = ?', ['testuser']);
+      testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
     });
 
     it('should generate valid JWT access token', async () => {
@@ -228,7 +225,7 @@ describe('AuthenticationService', () => {
 
       expect(payload.jti).toBeDefined();
       expect(typeof payload.jti).toBe('string');
-      expect(payload.jti.length).toBeGreaterThan(0);
+      expect(payload.jti!.length).toBeGreaterThan(0);
     });
   });
 
@@ -241,12 +238,12 @@ describe('AuthenticationService', () => {
       const passwordHash = await authService.hashPassword('TestPass123!');
       const now = new Date().toISOString();
 
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
-      testUser = await getQuery(db, 'SELECT * FROM users WHERE username = ?', ['testuser']);
+      testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
       validToken = await authService.generateToken(testUser);
     });
 
@@ -284,12 +281,12 @@ describe('AuthenticationService', () => {
       const passwordHash = await authService.hashPassword('TestPass123!');
       const now = new Date().toISOString();
 
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
-      testUser = await getQuery(db, 'SELECT * FROM users WHERE username = ?', ['testuser']);
+      testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
       refreshToken = await authService.generateRefreshToken(testUser);
     });
 
@@ -319,7 +316,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should reject refresh token for inactive user', async () => {
-      await runQuery(db, 'UPDATE users SET isActive = 0 WHERE id = ?', [testUser.id]);
+      await db.execute('UPDATE users SET isActive = 0 WHERE id = ?', [testUser.id]);
       const result = await authService.refreshToken(refreshToken);
 
       expect(result.success).toBe(false);
@@ -336,12 +333,12 @@ describe('AuthenticationService', () => {
       const passwordHash = await authService.hashPassword('TestPass123!');
       const now = new Date().toISOString();
 
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
-      testUser = await getQuery(db, 'SELECT * FROM users WHERE username = ?', ['testuser']);
+      testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
       token = await authService.generateToken(testUser);
     });
 
@@ -354,7 +351,7 @@ describe('AuthenticationService', () => {
     it('should store revoked token in database', async () => {
       await authService.revokeToken(token);
 
-      const revokedTokens = await allQuery(db, 'SELECT * FROM revoked_tokens');
+      const revokedTokens = await db.query('SELECT * FROM revoked_tokens');
       expect(revokedTokens.length).toBeGreaterThan(0);
     });
 
@@ -379,24 +376,24 @@ describe('AuthenticationService', () => {
       const now = new Date().toISOString();
 
       // Create user
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
       // Create role
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'TestRole', 'Test role', 0, now, now]);
 
       // Assign role to user
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO user_roles (userId, roleId, assignedAt)
         VALUES (?, ?, ?)
       `, [userId, roleId, now]);
 
-      testUser = await getQuery(db, 'SELECT * FROM users WHERE username = ?', ['testuser']);
+      testUser = await db.queryOne('SELECT * FROM users WHERE username = ?', ['testuser']);
     });
 
     it('should include user roles in token payload', async () => {
@@ -413,25 +410,25 @@ describe('AuthenticationService', () => {
       const now = new Date().toISOString();
 
       // Create group
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO groups (id, name, description, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?)
       `, [groupId, 'TestGroup', 'Test group', now, now]);
 
       // Create role
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'GroupRole', 'Group role', 0, now, now]);
 
       // Add user to group
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO user_groups (userId, groupId, assignedAt)
         VALUES (?, ?, ?)
       `, [testUser.id, groupId, now]);
 
       // Assign role to group
-      await runQuery(db, `
+      await db.execute(`
         INSERT INTO group_roles (groupId, roleId, assignedAt)
         VALUES (?, ?, ?)
       `, [groupId, roleId, now]);
@@ -445,36 +442,9 @@ describe('AuthenticationService', () => {
 });
 
 // Helper functions
-function runQuery(db: Database, sql: string, params: any[] = []): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-function getQuery<T>(db: Database, sql: string, params: any[] = []): Promise<T | null> {
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row as T || null);
-    });
-  });
-}
-
-function allQuery<T>(db: Database, sql: string, params: any[] = []): Promise<T[]> {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows as T[] || []);
-    });
-  });
-}
-
-async function initializeSchema(db: Database): Promise<void> {
-  const schema = `
-    CREATE TABLE users (
+async function initializeSchema(db: DatabaseAdapter): Promise<void> {
+  const statements = [
+    `CREATE TABLE users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
       email TEXT NOT NULL UNIQUE,
@@ -486,82 +456,87 @@ async function initializeSchema(db: Database): Promise<void> {
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       lastLoginAt TEXT
-    );
-
-    CREATE TABLE groups (
+    )`,
+    `CREATE TABLE groups (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       description TEXT NOT NULL,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE roles (
+    )`,
+    `CREATE TABLE roles (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       description TEXT NOT NULL,
       isBuiltIn INTEGER NOT NULL DEFAULT 0,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE permissions (
+    )`,
+    `CREATE TABLE permissions (
       id TEXT PRIMARY KEY,
       resource TEXT NOT NULL,
       action TEXT NOT NULL,
       description TEXT NOT NULL,
       createdAt TEXT NOT NULL,
       UNIQUE(resource, action)
-    );
-
-    CREATE TABLE user_groups (
+    )`,
+    `CREATE TABLE user_groups (
       userId TEXT NOT NULL,
       groupId TEXT NOT NULL,
       assignedAt TEXT NOT NULL,
       PRIMARY KEY (userId, groupId),
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE user_roles (
+    )`,
+    `CREATE TABLE user_roles (
       userId TEXT NOT NULL,
       roleId TEXT NOT NULL,
       assignedAt TEXT NOT NULL,
       PRIMARY KEY (userId, roleId),
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE group_roles (
+    )`,
+    `CREATE TABLE group_roles (
       groupId TEXT NOT NULL,
       roleId TEXT NOT NULL,
       assignedAt TEXT NOT NULL,
       PRIMARY KEY (groupId, roleId),
       FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
       FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE role_permissions (
+    )`,
+    `CREATE TABLE role_permissions (
       roleId TEXT NOT NULL,
       permissionId TEXT NOT NULL,
       assignedAt TEXT NOT NULL,
       PRIMARY KEY (roleId, permissionId),
       FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
       FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE revoked_tokens (
+    )`,
+    `CREATE TABLE revoked_tokens (
       token TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
       revokedAt TEXT NOT NULL,
       expiresAt TEXT NOT NULL,
       FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-    );
-  `;
-
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    )`,
+    `CREATE TABLE account_lockouts (
+      username TEXT PRIMARY KEY,
+      lockoutType TEXT NOT NULL,
+      lockedAt TEXT NOT NULL,
+      lockedUntil TEXT,
+      failedAttempts INTEGER NOT NULL DEFAULT 0,
+      lastAttemptAt TEXT
+    )`,
+    `CREATE TABLE failed_login_attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL,
+      attemptedAt TEXT NOT NULL,
+      ipAddress TEXT,
+      reason TEXT NOT NULL
+    )`
+  ];
 
   for (const statement of statements) {
-    await runQuery(db, statement);
+    await db.execute(statement);
   }
 }

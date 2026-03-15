@@ -8,7 +8,8 @@ import {
 } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
-import sqlite3 from "sqlite3";
+import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
+import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
 import { ExecutionRepository } from "../../src/database/ExecutionRepository";
 import { createExecutionsRouter } from "../../src/routes/executions";
 import { errorHandler, requestIdMiddleware } from "../../src/middleware/errorHandler";
@@ -547,35 +548,26 @@ describe("Batch Execution API Endpoints", () => {
  */
 describe("Batch Execution End-to-End Flow", () => {
   let app: Express;
-  let db: sqlite3.Database;
+  let db: DatabaseAdapter;
   let executionRepository: ExecutionRepository;
   let batchExecutionService: RealBatchExecutionService;
   let mockExecutionQueue: ExecutionQueue;
   let mockIntegrationManager: IntegrationManager;
 
   // Helper to run database queries
-  const runQuery = (sql: string, params: any[] = []): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      db.run(sql, params, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+  const runQuery = async (sql: string, params: any[] = []): Promise<void> => {
+    await db.execute(sql, params);
   };
 
   // Helper to get database rows
-  const getRows = (sql: string, params: any[] = []): Promise<any[]> => {
-    return new Promise((resolve, reject) => {
-      db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+  const getRows = async (sql: string, params: any[] = []): Promise<any[]> => {
+    return db.query<any>(sql, params);
   };
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new sqlite3.Database(":memory:");
+    db = new SQLiteAdapter(":memory:");
+    await db.initialize();
 
     // Create executions table
     await runQuery(`
@@ -704,9 +696,7 @@ describe("Batch Execution End-to-End Flow", () => {
 
   afterEach(async () => {
     // Close database
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
     vi.restoreAllMocks();
   });
 
