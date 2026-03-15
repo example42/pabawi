@@ -12,6 +12,20 @@
 </tr>
 </table>
 
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/example42/pabawi)](https://github.com/example42/pabawi/releases)
+[![Docker Image](https://img.shields.io/docker/v/example42/pabawi?label=docker&color=2496ed)](https://hub.docker.com/r/example42/pabawi)
+[![GitHub Stars](https://img.shields.io/github/stars/example42/pabawi?style=social)](https://github.com/example42/pabawi/stargazers)
+
+## Who is this for?
+
+- **Sysadmins and DevOps teams** using Puppet, Bolt, Ansible or SSH to manage physical servers and VMs
+- **Puppet Open Source users** who want a web UI without Puppet Enterprise
+- **Mixed-tool environments** — if you use both Puppet and Ansible, Pabawi brings them together in one interface
+- **Homelabbers** who just want a web frontend for their servers (SSH-only works fine)
+
+If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — Pabawi is built for you.
+
 ## Table of Contents
 
 - [Features](#features)
@@ -32,11 +46,12 @@
 
 ## Features
 
-- **Multi-Source Inventory**: Nodes from Bolt, PuppetDB, Ansible, SSH
+- **Multi-Source Inventory**: Nodes from Bolt, PuppetDB, Ansible, SSH — with inventory groups
 - **Command Execution**: Ad-hoc commands on remote nodes with whitelist security
 - **Task Execution**: Bolt tasks with automatic parameter discovery
 - **Package Management**: Install and manage packages across infrastructure
 - **Execution History**: Track operations with re-execution capability
+- **RBAC Authentication**: Role-based access control, multiple users, audit trail
 - **Node Facts**: System information from Puppet agents
 - **Puppet Reports**: Run reports with metrics and resource changes
 - **Catalog Inspection**: Compiled catalogs, resource relationships, cross-environment diff
@@ -189,17 +204,30 @@ For details of the repository files and configurations check the [Repository Str
 
 ## Roadmap
 
-**Planned**: Tiny Puppet integration, scheduled executions, custom dashboards, audit logging, CLI tool. Under evaluation: Terraform, AWS/Azure CLI, Kubernetes, Choria, Icinga.
+### Coming next
+
+- **Proxmox** — VM and container management alongside config management (in active development)
+- **Node Journal** - A journal of events and actions on nodes
+
+### Planned integrations
+
+- **Icinga / CheckMK** — monitoring context in the same interface
+- **Terraform / OpenTofu** — infrastructure provisioning alongside configuration management
+- **EC2 / Azure** — hybrid environments spanning on-prem and cloud
+
+### Also planned
+
+Scheduled executions, custom dashboards, CLI tool, audit logging, Tiny Puppet integration.
 
 ### Version History
 
 - **v0.8.0**: RBAC authentication. SSH integrations. Inventory groups
-- **v0.7.0**: Ansible Integration. Used classed aware hiera lookups
+- **v0.7.0**: Ansible Integration. Class-aware Hiera lookups
 - **v0.6.0**: Code consolidation and fixing
-- **v0.5.0**: Report filtering, puppet run history visualization, enhanced expert mode with frontend logging
-- **v0.4.0**: Hiera integration, puppetserver CA management removal, enhanced plugin architecture
+- **v0.5.0**: Report filtering, Puppet run history visualization, enhanced expert mode with frontend logging
+- **v0.4.0**: Hiera integration, enhanced plugin architecture
 - **v0.3.0**: Puppetserver integration, interface enhancements
-- **v0.2.0**: PuppetDB integration, re-execution, expert mode enhancements
+- **v0.2.0**: PuppetDB integration, re-execution, expert mode
 - **v0.1.0**: Initial release with Bolt integration
 
 ## License
