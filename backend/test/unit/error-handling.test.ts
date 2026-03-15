@@ -97,28 +97,22 @@ describe("Error Handling - Unit Tests", () => {
 
     it("should return 401 for inactive user account", async () => {
       // Create inactive user
-      await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            randomUUID(),
-            "inactiveuser",
-            "inactive@example.com",
-            "$2b$10$abcdefghijklmnopqrstuv",
-            "Inactive",
-            "User",
-            0, // isActive = false
-            0,
-            new Date().toISOString(),
-            new Date().toISOString(),
-          ],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await databaseService.getConnection().execute(
+        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          randomUUID(),
+          "inactiveuser",
+          "inactive@example.com",
+          "$2b$10$abcdefghijklmnopqrstuv",
+          "Inactive",
+          "User",
+          0, // isActive = false
+          0,
+          new Date().toISOString(),
+          new Date().toISOString(),
+        ]
+      );
 
       const response = await request(app)
         .post("/api/auth/login")
@@ -814,28 +808,22 @@ async function createTestUser(db: Database): Promise<void> {
   const bcrypt = require("bcrypt");
   const passwordHash = await bcrypt.hash("Password123!", 10);
 
-  return new Promise((resolve, reject) => {
-    databaseService.getConnection().run(
-      `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        "test-user-id",
-        "testuser",
-        "test@example.com",
-        passwordHash,
-        "Test",
-        "User",
-        1,
-        0,
-        new Date().toISOString(),
-        new Date().toISOString(),
-      ],
-      (err) => {
-        if (err) reject(err);
-        else resolve();
-      }
-    );
-  });
+  await databaseService.getConnection().execute(
+    `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      "test-user-id",
+      "testuser",
+      "test@example.com",
+      passwordHash,
+      "Test",
+      "User",
+      1,
+      0,
+      new Date().toISOString(),
+      new Date().toISOString(),
+    ]
+  );
 }
 
 async function closeDatabase(db: Database): Promise<void> {

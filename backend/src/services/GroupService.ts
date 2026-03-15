@@ -1,4 +1,4 @@
-import type { Database } from 'sqlite3';
+import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import { randomUUID } from 'crypto';
 
 /**
@@ -97,9 +97,9 @@ export interface Role {
  * - Validate group data
  */
 export class GroupService {
-  private db: Database;
+  private db: DatabaseAdapter;
 
-  constructor(db: Database) {
+  constructor(db: DatabaseAdapter) {
     this.db = db;
   }
 
@@ -122,7 +122,7 @@ export class GroupService {
     const now = new Date().toISOString();
 
     // Insert group
-    await this.runQuery(
+    await this.db.execute(
       `INSERT INTO groups (id, name, description, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?)`,
       [groupId, data.name, data.description, now, now]
@@ -144,7 +144,7 @@ export class GroupService {
    * @returns Group or null if not found
    */
   public async getGroupById(id: string): Promise<Group | null> {
-    return this.getQuery<Group>(
+    return this.db.queryOne<Group>(
       'SELECT * FROM groups WHERE id = ?',
       [id]
     );
@@ -157,7 +157,7 @@ export class GroupService {
    * @returns Group or null if not found
    */
   private async getGroupByName(name: string): Promise<Group | null> {
-    return this.getQuery<Group>(
+    return this.db.queryOne<Group>(
       'SELECT * FROM groups WHERE name = ?',
       [name]
     );
@@ -208,7 +208,7 @@ export class GroupService {
     params.push(id);
 
     // Execute update
-    await this.runQuery(
+    await this.db.execute(
       `UPDATE groups SET ${updates.join(', ')} WHERE id = ?`,
       params
     );
@@ -236,7 +236,7 @@ export class GroupService {
     }
 
     // Hard delete: CASCADE will remove user_groups and group_roles associations
-    await this.runQuery(
+    await this.db.execute(
       'DELETE FROM groups WHERE id = ?',
       [id]
     );
@@ -265,14 +265,14 @@ export class GroupService {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // Get total count
-    const countResult = await this.getQuery<{ count: number }>(
+    const countResult = await this.db.queryOne<{ count: number }>(
       `SELECT COUNT(*) as count FROM groups ${whereClause}`,
       params
     );
     const total = countResult?.count ?? 0;
 
     // Get paginated results
-    const groups = await this.allQuery<Group>(
+    const groups = await this.db.query<Group>(
       `SELECT * FROM groups ${whereClause} ORDER BY name ASC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
@@ -292,7 +292,7 @@ export class GroupService {
    * @returns Array of users who are members of the group
    */
   public async getGroupMembers(groupId: string): Promise<User[]> {
-    return this.allQuery<User>(
+    return this.db.query<User>(
       `SELECT u.* FROM users u
        INNER JOIN user_groups ug ON ug.userId = u.id
        WHERE ug.groupId = ?
@@ -308,7 +308,7 @@ export class GroupService {
    * @returns Number of members in the group
    */
   public async getGroupMemberCount(groupId: string): Promise<number> {
-    const result = await this.getQuery<{ count: number }>(
+    const result = await this.db.queryOne<{ count: number }>(
       `SELECT COUNT(*) as count FROM user_groups WHERE groupId = ?`,
       [groupId]
     );
@@ -329,7 +329,7 @@ export class GroupService {
       }
 
       // Check if role exists
-      const role = await this.getQuery<Role>(
+      const role = await this.db.queryOne<Role>(
         'SELECT * FROM roles WHERE id = ?',
         [roleId]
       );
@@ -338,7 +338,7 @@ export class GroupService {
       }
 
       // Check if assignment already exists
-      const existing = await this.getQuery<{ groupId: string }>(
+      const existing = await this.db.queryOne<{ groupId: string }>(
         'SELECT groupId FROM group_roles WHERE groupId = ? AND roleId = ?',
         [groupId, roleId]
       );
@@ -347,7 +347,7 @@ export class GroupService {
       }
 
       // Create assignment
-      await this.runQuery(
+      await this.db.execute(
         'INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)',
         [groupId, roleId, new Date().toISOString()]
       );
@@ -362,7 +362,7 @@ export class GroupService {
      */
     public async removeRoleFromGroup(groupId: string, roleId: string): Promise<void> {
       // Check if assignment exists
-      const existing = await this.getQuery<{ groupId: string }>(
+      const existing = await this.db.queryOne<{ groupId: string }>(
         'SELECT groupId FROM group_roles WHERE groupId = ? AND roleId = ?',
         [groupId, roleId]
       );
@@ -371,7 +371,7 @@ export class GroupService {
       }
 
       // Remove assignment
-      await this.runQuery(
+      await this.db.execute(
         'DELETE FROM group_roles WHERE groupId = ? AND roleId = ?',
         [groupId, roleId]
       );
@@ -384,7 +384,7 @@ export class GroupService {
      * @returns Array of roles assigned to the group
      */
     public async getGroupRoles(groupId: string): Promise<Role[]> {
-      return this.allQuery<Role>(
+      return this.db.query<Role>(
         `SELECT r.* FROM roles r
          INNER JOIN group_roles gr ON gr.roleId = r.id
          WHERE gr.groupId = ?
@@ -393,39 +393,4 @@ export class GroupService {
       );
     }
 
-  /**
-   * Helper: Run a query that doesn't return rows
-   */
-  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  /**
-   * Helper: Get a single row
-   */
-  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err: Error | null, row: unknown) => {
-        if (err) reject(err);
-        else resolve((row as T) ?? null);
-      });
-    });
-  }
-
-  /**
-   * Helper: Get all rows
-   */
-  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err: Error | null, rows: unknown[]) => {
-        if (err) reject(err);
-        else resolve(rows as T[]);
-      });
-    });
-  }
 }

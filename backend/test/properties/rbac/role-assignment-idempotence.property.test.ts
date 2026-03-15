@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { UserService } from '../../../src/services/UserService';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
 import * as fc from 'fast-check';
@@ -21,14 +21,15 @@ import { randomUUID } from 'crypto';
  * - No duplicate role assignments exist
  */
 describe('Role Assignment Idempotence Properties', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let userService: UserService;
   let authService: AuthenticationService;
   const testJwtSecret = 'test-secret-key-for-testing-only'; // pragma: allowlist secret
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeRBACSchema(db);
@@ -39,12 +40,7 @@ describe('Role Assignment Idempotence Properties', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   /**
@@ -251,7 +247,7 @@ describe('Role Assignment Idempotence Properties', () => {
 
 // Helper functions
 
-async function initializeRBACSchema(db: Database): Promise<void> {
+async function initializeRBACSchema(db: SQLiteAdapter): Promise<void> {
   const schema = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -296,16 +292,11 @@ async function initializeRBACSchema(db: Database): Promise<void> {
   const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
   for (const statement of statements) {
-    await new Promise<void>((resolve, reject) => {
-      db.run(statement, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.execute(statement);
   }
 }
 
-async function createTestUser(db: Database, userId: string): Promise<void> {
+async function createTestUser(db: SQLiteAdapter, userId: string): Promise<void> {
   const sql = `
     INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
     VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
@@ -323,15 +314,10 @@ async function createTestUser(db: Database, userId: string): Promise<void> {
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
-async function createTestRole(db: Database, roleId: string, name?: string): Promise<void> {
+async function createTestRole(db: SQLiteAdapter, roleId: string, name?: string): Promise<void> {
   const sql = `
     INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
     VALUES (?, ?, ?, 0, ?, ?)
@@ -348,25 +334,16 @@ async function createTestRole(db: Database, roleId: string, name?: string): Prom
     now
   ];
 
-  await new Promise<void>((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  await db.execute(sql, params);
 }
 
 async function queryUserRoleAssignments(
-  db: Database,
+  db: SQLiteAdapter,
   userId: string,
   roleId: string
 ): Promise<number> {
   const sql = 'SELECT COUNT(*) as count FROM user_roles WHERE userId = ? AND roleId = ?';  // pragma: allowlist secret
 
-  return new Promise<number>((resolve, reject) => {
-    db.get(sql, [userId, roleId], (err, row: any) => {
-      if (err) reject(err);
-      else resolve(row.count);
-    });
-  });
+  const row = await db.queryOne<{ count: number }>(sql, [userId, roleId]);
+  return row?.count ?? 0;
 }

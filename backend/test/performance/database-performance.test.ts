@@ -8,7 +8,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import sqlite3 from 'sqlite3';
+import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
+import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { ExecutionRepository, type ExecutionRecord } from '../../src/database/ExecutionRepository';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -25,7 +26,7 @@ const DB_THRESHOLDS = {
 };
 
 // Helper to promisify database operations
-function runAsync(db: sqlite3.Database, sql: string, params?: any[]): Promise<void> {
+function runAsync(db: DatabaseAdapter, sql: string, params?: any[]): Promise<void> {
   return new Promise((resolve, reject) => {
     db.run(sql, params || [], (err) => {
       if (err) reject(err);
@@ -34,7 +35,7 @@ function runAsync(db: sqlite3.Database, sql: string, params?: any[]): Promise<vo
   });
 }
 
-function allAsync(db: sqlite3.Database, sql: string, params?: any[]): Promise<any[]> {
+function allAsync(db: DatabaseAdapter, sql: string, params?: any[]): Promise<any[]> {
   return new Promise((resolve, reject) => {
     db.all(sql, params || [], (err, rows) => {
       if (err) reject(err);
@@ -44,19 +45,14 @@ function allAsync(db: sqlite3.Database, sql: string, params?: any[]): Promise<an
 }
 
 async function setupDatabase(): Promise<sqlite3.Database> {
-  const db = new sqlite3.Database(':memory:');
+  const db = new SQLiteAdapter(':memory:');
 
   // Load and execute schema
   const schemaPath = join(__dirname, '../../src/database/schema.sql');
   const schema = readFileSync(schemaPath, 'utf-8');
 
   // Execute full schema using db.exec (handles comments and multiple statements)
-  await new Promise<void>((resolve, reject) => {
-    db.exec(schema, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  db.execute(schema);
 
   // Add columns from migration 006 (batch execution support)
   await runAsync(db, 'ALTER TABLE executions ADD COLUMN batch_id TEXT');
@@ -111,7 +107,7 @@ async function measureTime<T>(fn: () => Promise<T>): Promise<{ result: T; durati
 }
 
 describe('Database Performance Tests', () => {
-  let db: sqlite3.Database;
+  let db: DatabaseAdapter;
   let repo: ExecutionRepository;
 
   beforeAll(async () => {

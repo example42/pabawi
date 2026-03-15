@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
 import { GroupService } from '../src/services/GroupService';
 import { randomUUID } from 'crypto';
 
 describe('GroupService', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let groupService: GroupService;
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeSchema(db);
@@ -19,12 +20,7 @@ describe('GroupService', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   describe('createGroup', () => {
@@ -854,27 +850,17 @@ describe('GroupService', () => {
 });
 
 // Helper functions
-function runQuery(db: Database, sql: string, params: any[] = []): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+function runQuery(db: SQLiteAdapter, sql: string, params: any[] = []): Promise<void> {
+  return db.execute(sql, params).then(() => {});
 }
 
-function allQuery<T>(db: Database, sql: string, params: any[] = []): Promise<T[]> {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows as T[] || []);
-    });
-  });
+function allQuery<T>(db: SQLiteAdapter, sql: string, params: any[] = []): Promise<T[]> {
+  return db.query<T>(sql, params);
 }
 
-async function initializeSchema(db: Database): Promise<void> {
+async function initializeSchema(db: SQLiteAdapter): Promise<void> {
   // Enable foreign key constraints (required for CASCADE to work in SQLite)
-  await runQuery(db, 'PRAGMA foreign_keys = ON');
+  // foreign_keys already enabled by SQLiteAdapter.initialize()
 
   const schema = `
     CREATE TABLE users (

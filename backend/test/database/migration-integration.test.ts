@@ -43,23 +43,13 @@ describe('Migration Integration Test', () => {
     const db = dbService.getConnection();
 
     // Check that roles exist
-    const roles = await new Promise<any[]>((resolve, reject) => {
-      db.all('SELECT * FROM roles WHERE isBuiltIn = 1', (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    const roles = await db.query<any>('SELECT * FROM roles WHERE isBuiltIn = 1');
 
     expect(roles).toHaveLength(3);
     expect(roles.map(r => r.name).sort()).toEqual(['Administrator', 'Operator', 'Viewer']);
 
     // Check that config table exists and has default values
-    const config = await new Promise<any[]>((resolve, reject) => {
-      db.all('SELECT * FROM config', (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    const config = await db.query<any>('SELECT * FROM config');
 
     expect(config.length).toBeGreaterThan(0);
     const configMap = Object.fromEntries(config.map((c: any) => [c.key, c.value]));
@@ -71,12 +61,8 @@ describe('Migration Integration Test', () => {
     const db = dbService.getConnection();
 
     // Check that no admin users exist
-    const adminCount = await new Promise<number>((resolve, reject) => {
-      db.get('SELECT COUNT(*) as count FROM users WHERE isAdmin = 1', (err, row: any) => {
-        if (err) reject(err);
-        else resolve(row.count);
-      });
-    });
+    const row = await db.queryOne<any>('SELECT COUNT(*) as count FROM users WHERE isAdmin = 1');
+    const adminCount = row?.count ?? 0;
 
     expect(adminCount).toBe(0);
   });

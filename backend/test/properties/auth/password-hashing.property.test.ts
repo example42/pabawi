@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
 import * as fc from 'fast-check';
 
@@ -20,13 +20,14 @@ import * as fc from 'fast-check';
  * - Both hashes verify correctly against the original password
  */
 describe('Password Hashing Properties', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let authService: AuthenticationService;
   const testJwtSecret = 'test-secret-key-for-testing-only'; // pragma: allowlist secret
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize minimal schema (not needed for password hashing tests, but good practice)
     await initializeMinimalSchema(db);
@@ -36,12 +37,7 @@ describe('Password Hashing Properties', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   /**
@@ -199,7 +195,7 @@ describe('Password Hashing Properties', () => {
 });
 
 // Helper function to initialize minimal schema
-async function initializeMinimalSchema(db: Database): Promise<void> {
+async function initializeMinimalSchema(db: SQLiteAdapter): Promise<void> {
   const schema = `
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -226,11 +222,6 @@ async function initializeMinimalSchema(db: Database): Promise<void> {
   const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
 
   for (const statement of statements) {
-    await new Promise<void>((resolve, reject) => {
-      db.run(statement, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.execute(statement);
   }
 }

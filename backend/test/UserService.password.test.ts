@@ -1,17 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
 import { UserService } from '../src/services/UserService';
 import { AuthenticationService } from '../src/services/AuthenticationService';
 
 describe('UserService - Password Validation Integration', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let userService: UserService;
   let authService: AuthenticationService;
   const testJwtSecret = 'test-secret-key-for-testing-only'; // pragma: allowlist secret
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeSchema(db);
@@ -21,10 +22,7 @@ describe('UserService - Password Validation Integration', () => {
   });
 
   afterEach(async () => {
-    // Close database
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
   });
 
   describe('createUser - password validation', () => {
@@ -185,7 +183,7 @@ describe('UserService - Password Validation Integration', () => {
 
 
 // Helper function to initialize database schema
-async function initializeSchema(db: Database): Promise<void> {
+async function initializeSchema(db: SQLiteAdapter): Promise<void> {
   const schema = `
     CREATE TABLE users (
       id TEXT PRIMARY KEY,
@@ -280,12 +278,13 @@ async function initializeSchema(db: Database): Promise<void> {
     INSERT INTO config (key, value, updatedAt) VALUES
       ('allow_self_registration', 'false', datetime('now')),
       ('default_new_user_role', 'role-viewer-001', datetime('now'));
+
+    INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
+      ('role-viewer-001', 'Viewer', 'Default viewer role', 1, datetime('now'), datetime('now'));
   `;
 
-  return new Promise((resolve, reject) => {
-    db.exec(schema, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+  for (const statement of statements) {
+    await db.execute(statement);
+  }
 }

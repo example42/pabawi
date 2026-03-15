@@ -1,38 +1,65 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import sqlite3 from 'sqlite3';
+import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
+import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { AuditLoggingService, AuditEventType, AuditAction, AuditResult } from '../../src/services/AuditLoggingService';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
 describe('AuditLoggingService', () => {
-  let db: sqlite3.Database;
+  let db: DatabaseAdapter;
   let auditLogger: AuditLoggingService;
 
   beforeEach(async () => {
-    // Create in-memory database
-    db = new sqlite3.Database(':memory:');
+    // Create in-memory database via SQLiteAdapter
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
-    // Load and execute audit schema
+    // Create users table first (required by audit_logs foreign keys)
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        passwordHash TEXT NOT NULL,
+        firstName TEXT NOT NULL,
+        lastName TEXT NOT NULL,
+        isActive INTEGER NOT NULL DEFAULT 1,
+        isAdmin INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        lastLoginAt TEXT
+      )
+    `);
+
+    // Load and execute audit schema (split multi-statement SQL)
     const schemaPath = join(__dirname, '../../src/database/migrations/004_audit_logging.sql');
     const schema = readFileSync(schemaPath, 'utf-8');
 
-    await new Promise<void>((resolve, reject) => {
-      db.exec(schema, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    // Split by semicolons and execute each statement
+    const statements = schema
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      await db.execute(stmt);
+    }
+
+    // Insert test users referenced by audit log entries (foreign key constraint)
+    const testUsers = ['user-1', 'user-2', 'user-123', 'user-456', 'admin-1', 'admin-123'];
+    for (const userId of testUsers) {
+      await db.execute(
+        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, 1, 0, datetime('now'), datetime('now'))`,
+        [userId, `user-${userId}`, `${userId}@test.com`, 'hash', 'Test', 'User']
+      );
+    }
 
     auditLogger = new AuditLoggingService(db);
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await db.close();
   });
 
   describe('logAuthenticationAttempt', () => {

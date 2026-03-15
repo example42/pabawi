@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import sqlite3 from 'sqlite3';
+import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
+import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { AuthenticationService } from '../../src/services/AuthenticationService';
 import { randomUUID } from 'crypto';
 
 describe('AuthenticationService - Brute Force Protection', () => {
-  let db: sqlite3.Database;
+  let db: DatabaseAdapter;
   let authService: AuthenticationService;
   const testUsername = 'testuser';  // pragma: allowlist secret
   const testPassword = 'TestPass123!';  // pragma: allowlist secret
@@ -12,7 +13,8 @@ describe('AuthenticationService - Brute Force Protection', () => {
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new sqlite3.Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await runQuery(db, `
@@ -127,9 +129,7 @@ describe('AuthenticationService - Brute Force Protection', () => {
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
   });
 
   it('should allow authentication with correct credentials', async () => {
@@ -304,11 +304,6 @@ describe('AuthenticationService - Brute Force Protection', () => {
 });
 
 // Helper function to run queries
-function runQuery(db: sqlite3.Database, sql: string, params: any[] = []): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+async function runQuery(db: DatabaseAdapter, sql: string, params: any[] = []): Promise<void> {
+  await db.execute(sql, params);
 }
