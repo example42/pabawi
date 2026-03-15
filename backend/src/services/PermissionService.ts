@@ -362,6 +362,47 @@ export class PermissionService {
   }
 
   /**
+   * Invalidate cached permission checks for ALL users who have a given role.
+   *
+   * This covers users assigned the role directly (user_roles) and users
+   * who inherit the role through a group (user_groups → group_roles).
+   *
+   * Call this when permissions are added to or removed from a role so that
+   * subsequent hasPermission checks reflect the change.
+   *
+   * @param roleId - Role ID whose affected users' caches should be invalidated
+   *
+   * Requirement: 30.2
+   */
+  public async invalidateRolePermissionCache(roleId: string): Promise<void> {
+    // Find all users affected by this role (direct + group-based)
+    const affectedUsers = await this.db.query<{ userId: string }>(
+      `SELECT userId FROM user_roles WHERE roleId = ?
+       UNION
+       SELECT ug.userId FROM user_groups ug
+       INNER JOIN group_roles gr ON gr.groupId = ug.groupId
+       WHERE gr.roleId = ?`,
+      [roleId, roleId]
+    );
+
+    for (const user of affectedUsers) {
+      this.invalidateUserPermissionCache(user.userId);
+    }
+  }
+
+  /**
+   * Clear the entire permission cache.
+   *
+   * Useful for bulk operations like migrations where many permissions
+   * may change at once.
+   *
+   * Requirement: 30.2
+   */
+  public invalidateAllPermissionCache(): void {
+    this.cache.clear();
+  }
+
+  /**
    * Get all permissions for a user
    *
    * This method aggregates permissions from all sources:
