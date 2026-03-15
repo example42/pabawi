@@ -80,12 +80,12 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - Ensure all service constructors receive DatabaseAdapter instead of sqlite3.Database
     - _Requirements: 6.4, 6.5_
 
-- [ ] 4. Checkpoint - Database abstraction complete
+- [x] 4. Checkpoint - Database abstraction complete
   - Ensure all tests pass, ask the user if questions arise.
   - Verify that the application starts with SQLite adapter and all existing functionality works through DatabaseAdapter.
 
-- [ ] 5. RBAC Enhancements — New Permissions and Provisioner Role
-  - [ ] 5.1 Create migration for new permissions and Provisioner role
+- [x] 5. RBAC Enhancements — New Permissions and Provisioner Role
+  - [x] 5.1 Create migration for new permissions and Provisioner role
     - Create `backend/src/database/migrations/007_new_permissions_and_provisioner_role.sql` seeding:
       - proxmox permissions: read, lifecycle, provision, destroy, admin
       - aws permissions: read, lifecycle, provision, destroy, admin
@@ -96,14 +96,14 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - Preserve all existing permissions and role assignments (backward compatible)
     - _Requirements: 27.1, 27.2, 27.3, 27.4, 27.5, 28.1, 28.2, 28.3, 28.4, 28.5, 29.2, 29.3, 29.4_
 
-  - [ ] 5.2 Update PermissionService with caching for new permission types
+  - [x] 5.2 Update PermissionService with caching for new permission types
     - Add TTL-based cache for permission check results in `backend/src/services/PermissionService.ts`
     - Invalidate cache entries when permissions are added/removed from roles
     - Ensure new action types (provision, destroy, lifecycle, configure, note, export) work in cache lookups
     - Verify existing hasPermission checks (e.g., "proxmox" + "execute") continue to work
     - _Requirements: 29.1, 29.2, 30.1, 30.2, 30.3_
 
-  - [ ]* 5.3 Write property test: Permission Monotonicity
+  - [x] 5.3 Write property test: Permission Monotonicity
     - **Property 19: Permission Monotonicity**
     - Adding a permission to a role never removes existing permissions; removing a permission never adds new ones
     - **Validates: Requirement 29.2**

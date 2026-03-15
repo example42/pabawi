@@ -1627,3 +1627,223 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
     });
   });
 });
+
+describe('PermissionService - Role-level cache invalidation (Requirement 30.2)', () => {
+  let db: DatabaseAdapter;
+  let permissionService: PermissionService;
+  const testDbPath = path.join(__dirname, '../../test-permission-service-role-cache.db');
+  let userId: string;
+  let user2Id: string;
+  let groupId: string;
+  let roleId: string;
+  let groupRoleId: string;
+  let permissionId: string;
+  let permission2Id: string;
+
+  beforeEach(async () => {
+    try { await fs.unlink(testDbPath); } catch { /* ignore */ }
+
+    db = new SQLiteAdapter(testDbPath);
+    await db.initialize();
+
+    // Create full RBAC schema
+    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
+    await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+    await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+    await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
+    await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId) )`);
+    await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId) )`);
+    await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId) )`);
+    await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId) )`);
+
+    permissionService = new PermissionService(db);
+    const now = new Date().toISOString();
+
+    // Users
+    userId = 'user-role-cache-1';  // pragma: allowlist secret
+    user2Id = 'user-role-cache-2';  // pragma: allowlist secret
+    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [userId, 'rolecache1', 'rc1@example.com', 'hash', 'RC', 'One', now, now]);
+    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [user2Id, 'rolecache2', 'rc2@example.com', 'hash', 'RC', 'Two', now, now]);
+
+    // Group
+    groupId = 'group-role-cache-1';  // pragma: allowlist secret
+    await db.execute(`INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`, [groupId, 'RC Group', 'Role cache test group', now, now]);
+
+    // Roles
+    roleId = 'role-cache-direct';  // pragma: allowlist secret
+    groupRoleId = 'role-cache-group';  // pragma: allowlist secret
+    await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, [roleId, 'Direct Role', 'Direct role', now, now]);
+    await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, [groupRoleId, 'Group Role', 'Group role', now, now]);
+
+    // Permissions
+    const perm = await permissionService.createPermission({ resource: 'proxmox', action: 'execute', description: 'Execute Proxmox' });
+    permissionId = perm.id;
+    const perm2 = await permissionService.createPermission({ resource: 'proxmox', action: 'provision', description: 'Provision Proxmox' });
+    permission2Id = perm2.id;
+
+    // Assign role directly to user1
+    await db.execute(`INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`, [userId, roleId, now]);
+    // Assign permission to role
+    await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, permissionId, now]);
+
+    // Assign user2 to group, group to groupRole
+    await db.execute(`INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`, [user2Id, groupId, now]);
+    await db.execute(`INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`, [groupId, groupRoleId, now]);
+    await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [groupRoleId, permissionId, now]);
+  });
+
+  afterEach(async () => {
+    await db.close();
+    try { await fs.unlink(testDbPath); } catch { /* ignore */ }
+  });
+
+  describe('invalidateRolePermissionCache', () => {
+    it('should invalidate cache for users with direct role assignment', async () => {
+      // Populate cache
+      const before = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(before).toBe(true);
+
+      // Invalidate by role
+      await permissionService.invalidateRolePermissionCache(roleId);
+
+      // Cache should be cleared — next call hits DB again (still returns true since data unchanged)
+      const after = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(after).toBe(true);
+    });
+
+    it('should invalidate cache for users with group-based role assignment', async () => {
+      // Populate cache for user2 (group path)
+      const before = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(before).toBe(true);
+
+      // Invalidate by groupRole
+      await permissionService.invalidateRolePermissionCache(groupRoleId);
+
+      // After invalidation, re-check still works
+      const after = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(after).toBe(true);
+    });
+
+    it('should reflect permission changes after role cache invalidation', async () => {
+      // Cache the result (true — user has proxmox:execute via role)
+      const before = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(before).toBe(true);
+
+      // Remove the permission from the role at DB level
+      await db.execute(`DELETE FROM role_permissions WHERE roleId = ? AND permissionId = ?`, [roleId, permissionId]);
+
+      // Without invalidation, cache still returns true
+      const stale = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(stale).toBe(true); // stale cache
+
+      // Invalidate
+      await permissionService.invalidateRolePermissionCache(roleId);
+
+      // Now should reflect the DB change
+      const after = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(after).toBe(false);
+    });
+
+    it('should not affect users who do not have the role', async () => {
+      // Cache for both users
+      await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+
+      // Invalidate only the direct role (affects user1 only)
+      await permissionService.invalidateRolePermissionCache(roleId);
+
+      // user2's cache should remain intact (they use groupRoleId, not roleId)
+      // Both should still return correct results
+      const r1 = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      const r2 = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(r1).toBe(true);
+      expect(r2).toBe(true);
+    });
+
+    it('should handle role with no assigned users gracefully', async () => {
+      const now = new Date().toISOString();
+      await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, ['orphan-role', 'Orphan', 'No users', now, now]);
+
+      // Should not throw
+      await expect(permissionService.invalidateRolePermissionCache('orphan-role')).resolves.not.toThrow();
+    });
+  });
+
+  describe('invalidateAllPermissionCache', () => {
+    it('should clear all cached permission entries', async () => {
+      // Populate cache for multiple users
+      await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+
+      // Remove all role_permissions at DB level
+      await db.execute(`DELETE FROM role_permissions`);
+
+      // Stale cache still returns true
+      const stale1 = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(stale1).toBe(true);
+
+      // Clear entire cache
+      permissionService.invalidateAllPermissionCache();
+
+      // Now should reflect DB state
+      const after1 = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      const after2 = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(after1).toBe(false);
+      expect(after2).toBe(false);
+    });
+
+    it('should handle empty cache gracefully', () => {
+      expect(() => permissionService.invalidateAllPermissionCache()).not.toThrow();
+    });
+  });
+
+  describe('New permission types in cache (Requirement 30.3)', () => {
+    it('should cache and return correct results for new action types', async () => {
+      const now = new Date().toISOString();
+
+      // Create new permission types
+      const provisionPerm = await permissionService.createPermission({ resource: 'aws', action: 'provision', description: 'Provision AWS' });
+      const destroyPerm = await permissionService.createPermission({ resource: 'aws', action: 'destroy', description: 'Destroy AWS' });
+      const lifecyclePerm = await permissionService.createPermission({ resource: 'aws', action: 'lifecycle', description: 'Lifecycle AWS' });
+      const configurePerm = await permissionService.createPermission({ resource: 'integration_config', action: 'configure', description: 'Configure integrations' });
+      const notePerm = await permissionService.createPermission({ resource: 'journal', action: 'note', description: 'Add notes' });
+
+      // Assign some to user's role
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, provisionPerm.id, now]);
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, lifecyclePerm.id, now]);
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, notePerm.id, now]);
+
+      // Check permissions — first call populates cache, second uses cache
+      expect(await permissionService.hasPermission(userId, 'aws', 'provision')).toBe(true);
+      expect(await permissionService.hasPermission(userId, 'aws', 'provision')).toBe(true); // cached
+      expect(await permissionService.hasPermission(userId, 'aws', 'destroy')).toBe(false);
+      expect(await permissionService.hasPermission(userId, 'aws', 'lifecycle')).toBe(true);
+      expect(await permissionService.hasPermission(userId, 'integration_config', 'configure')).toBe(false);
+      expect(await permissionService.hasPermission(userId, 'journal', 'note')).toBe(true);
+    });
+  });
+
+  describe('Backward compatibility (Requirement 29.1)', () => {
+    it('should continue to work for existing proxmox:execute permission checks', async () => {
+      // user1 has proxmox:execute via direct role
+      const result = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(result).toBe(true);
+
+      // Cached result
+      const cached = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(cached).toBe(true);
+    });
+
+    it('should work for existing permission types alongside new ones', async () => {
+      const now = new Date().toISOString();
+
+      // Add a new-style permission to the same role
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, permission2Id, now]);
+
+      // Old permission still works
+      expect(await permissionService.hasPermission(userId, 'proxmox', 'execute')).toBe(true);
+      // New permission also works
+      expect(await permissionService.hasPermission(userId, 'proxmox', 'provision')).toBe(true);
+    });
+  });
+});
