@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import type { ProxmoxIntegration } from "../../integrations/proxmox/ProxmoxIntegration";
+import type { AWSPlugin } from "../../integrations/aws/AWSPlugin";
 import type { ProvisioningCapability } from "../../integrations/types";
 import { asyncHandler } from "../asyncHandler";
 import { createLogger } from "./utils";
@@ -71,10 +72,33 @@ export function createProvisioningRouter(
         integrations.push(proxmoxIntegration);
       }
 
-      // Future integrations (EC2, Azure, Terraform) would be added here
-      // Example:
-      // const ec2 = integrationManager.getExecutionTool("ec2");
-      // if (ec2) { integrations.push(buildEC2Integration(ec2)); }
+      // Check AWS integration
+      const aws = integrationManager.getExecutionTool("aws") as AWSPlugin | null;
+
+      if (aws) {
+        let awsStatus: 'connected' | 'degraded' | 'not_configured' = 'not_configured';
+        const awsHealthCheck = aws.getLastHealthCheck();
+
+        if (awsHealthCheck) {
+          if (awsHealthCheck.healthy) {
+            awsStatus = 'connected';
+          } else if (awsHealthCheck.message?.includes('not initialized') || awsHealthCheck.message?.includes('disabled')) {
+            awsStatus = 'not_configured';
+          } else {
+            awsStatus = 'degraded';
+          }
+        }
+
+        const awsIntegration: ProvisioningIntegration = {
+          name: "aws",
+          displayName: "Amazon Web Services",
+          type: "cloud",
+          status: awsStatus,
+          capabilities: aws.listProvisioningCapabilities(),
+        };
+
+        integrations.push(awsIntegration);
+      }
 
       const response: ListIntegrationsResponse = {
         integrations,

@@ -161,10 +161,11 @@ export class ProxmoxService {
    * Queries the Proxmox cluster resources endpoint for all guests (VMs and containers).
    * Results are cached for 60 seconds to reduce API load.
    *
-   * @returns Array of Node objects representing all guests
+   * @param computeType - Optional filter: "qemu" for VMs only, "lxc" for containers only
+   * @returns Array of Node objects representing all guests (or filtered subset)
    * @throws Error if client is not initialized or API call fails
    */
-  async getInventory(): Promise<Node[]> {
+  async getInventory(computeType?: "qemu" | "lxc"): Promise<Node[]> {
     if (!this.client) {
       throw new Error("ProxmoxClient not initialized");
     }
@@ -172,12 +173,19 @@ export class ProxmoxService {
     const cacheKey = "inventory:all";
     const cached = this.cache.get(cacheKey);
     if (cached) {
+      let result = cached as Node[];
+      if (computeType) {
+        const filteredComputeType = computeType === "qemu" ? "vm" : "lxc";
+        result = result.filter(
+          (n) => (n as Node & { computeType?: string }).computeType === filteredComputeType
+        );
+      }
       this.logger.debug("Returning cached inventory", {
         component: "ProxmoxService",
         operation: "getInventory",
-        metadata: { nodeCount: (cached as Node[]).length },
+        metadata: { nodeCount: result.length },
       });
-      return cached as Node[];
+      return result;
     }
 
     const complete = this.performanceMonitor.startTimer("proxmox:getInventory");
@@ -215,6 +223,26 @@ export class ProxmoxService {
         .map((guest) =>
           this.transformGuestToNode(guest as ProxmoxGuest)
         );
+
+      // Apply computeType filter if specified
+      if (computeType) {
+        const filteredComputeType = computeType === "qemu" ? "vm" : "lxc";
+        const filtered = nodes.filter(
+          (n) => (n as Node & { computeType?: string }).computeType === filteredComputeType
+        );
+
+        // Cache the full set, return filtered
+        this.cache.set(cacheKey, nodes, 60000);
+
+        this.logger.info("Inventory fetched and filtered successfully", {
+          component: "ProxmoxService",
+          operation: "getInventory",
+          metadata: { totalCount: nodes.length, filteredCount: filtered.length, computeType, cached: false },
+        });
+
+        complete({ cached: false, nodeCount: filtered.length });
+        return filtered;
+      }
 
       // Cache for 60 seconds
       this.cache.set(cacheKey, nodes, 60000);
@@ -293,8 +321,14 @@ export class ProxmoxService {
       source: "proxmox",
     };
 
+    // Add computeType field: "qemu" → "vm", "lxc" → "lxc"
+    const computeType = guest.type === "qemu" ? "vm" : "lxc";
+
     // Add metadata
     (node as Node & { metadata?: Record<string, unknown> }).metadata = metadata;
+
+    // Add computeType to the node
+    (node as Node & { computeType?: string }).computeType = computeType;
 
     // Add status if available (map to a custom field since Node doesn't have status)
     if (guest.status) {
@@ -523,7 +557,7 @@ export class ProxmoxService {
     // Create NodeGroup objects
     const groups: NodeGroup[] = [];
     for (const [type, nodeList] of typeMap.entries()) {
-      const displayName = type === "qemu" ? "Virtual Machines" : "LXC Containers";
+      const displayName = type === "qemu" ? "Proxmox VMs" : "Proxmox Containers";
       groups.push({
         id: `proxmox:type:${type}`,
         name: displayName,

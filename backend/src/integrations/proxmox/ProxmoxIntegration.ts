@@ -17,6 +17,8 @@ import type {
 import type { Node, Facts, ExecutionResult } from "../bolt/types";
 import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
+import type { JournalService } from "../../services/journal/JournalService";
+import type { CreateJournalEntry } from "../../services/journal/types";
 import { ProxmoxService } from "./ProxmoxService";
 import type { ProxmoxConfig, ProvisioningCapability } from "./types";
 
@@ -38,6 +40,7 @@ export class ProxmoxIntegration
 {
   type = "both" as const;
   private service?: ProxmoxService;
+  private journalService?: JournalService;
 
   /**
    * Create a new ProxmoxIntegration instance
@@ -190,14 +193,15 @@ export class ProxmoxIntegration
    * Delegates to ProxmoxService to retrieve all guests from the Proxmox cluster.
    * Results are cached for 60 seconds to reduce API load.
    *
-   * Validates: Requirements 5.1-5.7
+   * Validates: Requirements 5.1-5.7, 14.3, 14.4, 16.1, 16.2, 16.3
    *
-   * @returns Array of Node objects representing all guests
+   * @param computeType - Optional filter: "qemu" for VMs only, "lxc" for containers only
+   * @returns Array of Node objects representing all guests (or filtered subset)
    * @throws Error if service is not initialized or API call fails
    */
-  async getInventory(): Promise<Node[]> {
+  async getInventory(computeType?: "qemu" | "lxc"): Promise<Node[]> {
     this.ensureInitialized();
-    return await this.service!.getInventory();
+    return await this.service!.getInventory(computeType);
   }
 
   /**
@@ -270,7 +274,18 @@ export class ProxmoxIntegration
    */
   async executeAction(action: Action): Promise<ExecutionResult> {
     this.ensureInitialized();
-    return await this.service!.executeAction(action);
+
+    const target = Array.isArray(action.target) ? action.target[0] : action.target;
+
+    try {
+      const result = await this.service!.executeAction(action);
+      await this.recordJournal(action, target, result);
+      return result;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      await this.recordJournalFailure(action, target, errorMessage);
+      throw error;
+    }
   }
 
   /**
@@ -342,6 +357,124 @@ export class ProxmoxIntegration
   async getNetworkBridges(node: string, type?: string): Promise<{ iface: string; type: string; active: number; address?: string; cidr?: string; bridge_ports?: string }[]> {
     this.ensureInitialized();
     return this.service!.getNetworkBridges(node, type);
+  }
+
+  // ========================================
+  // Journal Integration
+  // ========================================
+
+  /**
+   * Set the JournalService for recording events
+   *
+   * @param journalService - JournalService instance
+   */
+  setJournalService(journalService: JournalService): void {
+    this.journalService = journalService;
+  }
+
+  /**
+   * Record a journal entry for a completed action (success or failure).
+   * Validates: Requirements 10.4, 11.4, 22.1, 22.2, 22.3, 25.1
+   */
+  private async recordJournal(
+    action: Action,
+    target: string,
+    result: ExecutionResult
+  ): Promise<void> {
+    if (!this.journalService) return;
+
+    const eventType = this.mapActionToEventType(action.action);
+    const entry: CreateJournalEntry = {
+      nodeId: target,
+      nodeUri: `proxmox:${target}`,
+      eventType,
+      source: "proxmox",
+      action: action.action,
+      summary:
+        result.status === "success"
+          ? `Proxmox ${action.action} succeeded on ${target}`
+          : `Proxmox ${action.action} failed on ${target}: ${result.error ?? "unknown error"}`,
+      details: {
+        status: result.status,
+        parameters: action.parameters,
+        ...(result.error ? { error: result.error } : {}),
+      },
+    };
+
+    try {
+      await this.journalService.recordEvent(entry);
+    } catch (err) {
+      this.logger.error("Failed to record journal entry", {
+        component: "ProxmoxIntegration",
+        operation: "recordJournal",
+        metadata: { error: err instanceof Error ? err.message : String(err) },
+      });
+    }
+  }
+
+  /**
+   * Record a journal entry for a failure that throws.
+   */
+  private async recordJournalFailure(
+    action: Action,
+    target: string,
+    errorMessage: string
+  ): Promise<void> {
+    if (!this.journalService) return;
+
+    const eventType = this.mapActionToEventType(action.action);
+    const entry: CreateJournalEntry = {
+      nodeId: target,
+      nodeUri: `proxmox:${target}`,
+      eventType,
+      source: "proxmox",
+      action: action.action,
+      summary: `Proxmox ${action.action} failed on ${target}: ${errorMessage}`,
+      details: {
+        status: "failed",
+        parameters: action.parameters,
+        error: errorMessage,
+      },
+    };
+
+    try {
+      await this.journalService.recordEvent(entry);
+    } catch (err) {
+      this.logger.error("Failed to record journal entry", {
+        component: "ProxmoxIntegration",
+        operation: "recordJournalFailure",
+        metadata: { error: err instanceof Error ? err.message : String(err) },
+      });
+    }
+  }
+
+  /**
+   * Map an action name to a JournalEventType
+   */
+  private mapActionToEventType(
+    actionName: string
+  ): "provision" | "destroy" | "start" | "stop" | "reboot" | "suspend" | "resume" | "info" {
+    switch (actionName) {
+      case "create_vm":
+      case "create_lxc":
+        return "provision";
+      case "destroy_vm":
+      case "destroy_lxc":
+        return "destroy";
+      case "start":
+        return "start";
+      case "stop":
+      case "shutdown":
+        return "stop";
+      case "reboot":
+        return "reboot";
+      case "suspend":
+        return "suspend";
+      case "resume":
+        return "resume";
+      default:
+        return "info";
+    }
   }
 
   // ========================================

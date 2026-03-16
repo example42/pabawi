@@ -26,6 +26,7 @@
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import ExecutionList from '../components/ExecutionList.svelte';
   import ManageTab from '../components/ManageTab.svelte';
+  import JournalTimeline from '../components/JournalTimeline.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -104,7 +105,7 @@
   const nodeId = $derived(params?.id || '');
 
   // Tab types
-  type TabId = 'overview' | 'facts' | 'actions' | 'puppet' | 'hiera' | 'manage';
+  type TabId = 'overview' | 'facts' | 'actions' | 'puppet' | 'hiera' | 'journal' | 'manage';
   type PuppetSubTabId = 'node-status' | 'catalog-compilation' | 'puppet-reports' | 'catalog' | 'events' | 'managed-resources';
 
   // State
@@ -992,7 +993,7 @@
     const subTabParam = url.searchParams.get('subtab') as PuppetSubTabId | null;
 
     // Set main tab
-    if (tabParam && ['overview', 'facts', 'actions', 'puppet', 'hiera', 'manage'].includes(tabParam)) {
+    if (tabParam && ['overview', 'facts', 'actions', 'puppet', 'hiera', 'journal', 'manage'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -1293,6 +1294,13 @@
           onclick={() => switchTab('hiera')}
         >
           Hiera
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'journal' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('journal')}
+        >
+          Journal
         </button>
         <button
           type="button"
@@ -2189,6 +2197,25 @@
             </p>
 
             <NodeHieraTab nodeId={nodeId} />
+          </div>
+        </div>
+      {/if}
+
+      <!-- Journal Tab -->
+      {#if activeTab === 'journal'}
+        <div class="space-y-6">
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-4 flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Node Journal</h2>
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                Timeline
+              </span>
+            </div>
+            <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
+              Unified timeline of provisioning events, lifecycle actions, execution results, and manual notes for this node.
+            </p>
+
+            <JournalTimeline nodeId={nodeId} />
           </div>
         </div>
       {/if}

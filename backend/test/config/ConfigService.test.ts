@@ -156,4 +156,86 @@ describe("ConfigService - Integration Configuration", () => {
       expect(integrations.puppetdb?.enabled).toBe(true);
     });
   });
+
+  describe("AWS Configuration", () => {
+    beforeEach(() => {
+      delete process.env.AWS_ENABLED;
+      delete process.env.AWS_ACCESS_KEY_ID;
+      delete process.env.AWS_SECRET_ACCESS_KEY;
+      delete process.env.AWS_DEFAULT_REGION;
+      delete process.env.AWS_SESSION_TOKEN;
+      delete process.env.AWS_PROFILE;
+      delete process.env.AWS_ENDPOINT;
+    });
+
+    it("should load AWS configuration when enabled", () => {
+      process.env.AWS_ENABLED = "true"; // pragma: allowlist secret
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"; // pragma: allowlist secret
+      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"; // pragma: allowlist secret
+      process.env.AWS_DEFAULT_REGION = "us-west-2"; // pragma: allowlist secret
+
+      const configService = new ConfigService();
+      const awsConfig = configService.getAWSConfig();
+
+      expect(awsConfig).not.toBeNull();
+      expect(awsConfig?.enabled).toBe(true);
+      expect(awsConfig?.accessKeyId).toBe("AKIAIOSFODNN7EXAMPLE");
+      expect(awsConfig?.secretAccessKey).toBe("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
+      expect(awsConfig?.region).toBe("us-west-2");
+    });
+
+    it("should return null when AWS is not enabled", () => {
+      const configService = new ConfigService();
+      const awsConfig = configService.getAWSConfig();
+
+      expect(awsConfig).toBeNull();
+    });
+
+    it("should use default region when AWS_DEFAULT_REGION is not set", () => {
+      process.env.AWS_ENABLED = "true"; // pragma: allowlist secret
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"; // pragma: allowlist secret
+      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"; // pragma: allowlist secret
+
+      const configService = new ConfigService();
+      const awsConfig = configService.getAWSConfig();
+
+      expect(awsConfig).not.toBeNull();
+      expect(awsConfig?.region).toBe("us-east-1");
+    });
+
+    it("should include AWS in integrations config when enabled", () => {
+      process.env.AWS_ENABLED = "true"; // pragma: allowlist secret
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"; // pragma: allowlist secret
+      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"; // pragma: allowlist secret
+
+      const configService = new ConfigService();
+      const integrations = configService.getIntegrationsConfig();
+
+      expect(integrations.aws).toBeDefined();
+      expect(integrations.aws?.enabled).toBe(true);
+    });
+
+    it("should not include AWS in integrations when disabled", () => {
+      const configService = new ConfigService();
+      const integrations = configService.getIntegrationsConfig();
+
+      expect(integrations.aws).toBeUndefined();
+    });
+
+    it("should parse optional AWS fields", () => {
+      process.env.AWS_ENABLED = "true"; // pragma: allowlist secret
+      process.env.AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE"; // pragma: allowlist secret
+      process.env.AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"; // pragma: allowlist secret
+      process.env.AWS_SESSION_TOKEN = "FwoGZXIvYXdzEBYaDH"; // pragma: allowlist secret
+      process.env.AWS_PROFILE = "production"; // pragma: allowlist secret
+      process.env.AWS_ENDPOINT = "http://localhost:4566"; // pragma: allowlist secret
+
+      const configService = new ConfigService();
+      const awsConfig = configService.getAWSConfig();
+
+      expect(awsConfig?.sessionToken).toBe("FwoGZXIvYXdzEBYaDH");
+      expect(awsConfig?.profile).toBe("production");
+      expect(awsConfig?.endpoint).toBe("http://localhost:4566");
+    });
+  });
 });
