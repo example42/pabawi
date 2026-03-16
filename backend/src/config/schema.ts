@@ -300,6 +300,21 @@ export const ProxmoxConfigSchema = z.object({
 export type ProxmoxConfig = z.infer<typeof ProxmoxConfigSchema>;
 
 /**
+ * AWS integration configuration schema
+ */
+export const AWSConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  accessKeyId: z.string().optional(),
+  secretAccessKey: z.string().optional(),
+  region: z.string().default("us-east-1"),
+  sessionToken: z.string().optional(),
+  profile: z.string().optional(),
+  endpoint: z.string().optional(),
+});
+
+export type AWSIntegrationConfig = z.infer<typeof AWSConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
@@ -308,6 +323,7 @@ export const IntegrationsConfigSchema = z.object({
   puppetserver: PuppetserverConfigSchema.optional(),
   hiera: HieraConfigSchema.optional(),
   proxmox: ProxmoxConfigSchema.optional(),
+  aws: AWSConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;

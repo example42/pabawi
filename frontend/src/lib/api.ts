@@ -986,16 +986,25 @@ export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
 }
 
 /**
- * Save Proxmox integration configuration
- * Validates Requirements: 10.4
- *
- * Retry logic: No retries for configuration operations (user-initiated)
+ * Save Proxmox integration configuration via IntegrationConfigService
+ * @deprecated Use saveIntegrationConfig('proxmox', config) instead
  */
 export async function saveProxmoxConfig(config: ProxmoxConfig): Promise<{ success: boolean; message: string }> {
-  return put<{ success: boolean; message: string }>('/api/integrations/proxmox/config', config, {
-    maxRetries: 0,
-    showRetryNotifications: false,
-  });
+  const payload: Record<string, unknown> = {
+    host: config.host,
+    port: config.port,
+    ssl_rejectUnauthorized: config.ssl?.rejectUnauthorized ?? true,
+  };
+  if (config.token) {
+    payload.token = config.token;
+  }
+  if (config.username) {
+    payload.username = config.username;
+    payload.password = config.password;
+    payload.realm = config.realm;
+  }
+  await saveIntegrationConfig('proxmox', payload);
+  return { success: true, message: 'Config saved successfully' };
 }
 
 /**
@@ -1009,4 +1018,409 @@ export async function testProxmoxConnection(config: ProxmoxConfig): Promise<Prox
     maxRetries: 0,
     showRetryNotifications: false,
   });
+}
+
+/**
+ * AWS Integration API methods
+ * Validates Requirements: 10.1, 13.1-13.7
+ */
+
+/**
+ * AWS EC2 provisioning parameters
+ */
+export interface AWSProvisionParams {
+  imageId: string;
+  instanceType?: string;
+  keyName?: string;
+  securityGroupIds?: string[];
+  subnetId?: string;
+  region?: string;
+  name?: string;
+}
+
+/**
+ * AWS EC2 lifecycle action parameters
+ */
+export interface AWSLifecycleParams {
+  instanceId: string;
+  action: 'start' | 'stop' | 'reboot' | 'terminate';
+  region?: string;
+}
+
+/**
+ * AWS instance type info
+ */
+export interface AWSInstanceTypeInfo {
+  instanceType: string;
+  vCpus: number;
+  memoryMiB: number;
+  architecture: string;
+  currentGeneration: boolean;
+}
+
+/**
+ * AWS AMI info
+ */
+export interface AWSAMIInfo {
+  imageId: string;
+  name: string;
+  description?: string;
+  architecture: string;
+  ownerId: string;
+  state: string;
+  platform?: string;
+  creationDate?: string;
+}
+
+/**
+ * AWS VPC info
+ */
+export interface AWSVPCInfo {
+  vpcId: string;
+  cidrBlock: string;
+  state: string;
+  isDefault: boolean;
+  tags: Record<string, string>;
+}
+
+/**
+ * AWS Subnet info
+ */
+export interface AWSSubnetInfo {
+  subnetId: string;
+  vpcId: string;
+  cidrBlock: string;
+  availabilityZone: string;
+  availableIpAddressCount: number;
+  tags: Record<string, string>;
+}
+
+/**
+ * AWS Security Group info
+ */
+export interface AWSSecurityGroupInfo {
+  groupId: string;
+  groupName: string;
+  description: string;
+  vpcId: string;
+  tags: Record<string, string>;
+}
+
+/**
+ * AWS Key Pair info
+ */
+export interface AWSKeyPairInfo {
+  keyName: string;
+  keyPairId: string;
+  keyFingerprint: string;
+  keyType?: string;
+}
+
+/**
+ * AWS configuration for setup guide
+ */
+export interface AWSIntegrationConfig {
+  accessKeyId: string;
+  secretAccessKey: string;
+  region: string;
+  sessionToken?: string;
+}
+
+/**
+ * Get AWS EC2 inventory
+ * Validates Requirements: 9.1
+ */
+export async function getAWSInventory(): Promise<{ inventory: unknown[] }> {
+  return get<{ inventory: unknown[] }>('/api/integrations/aws/inventory', {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+}
+
+/**
+ * Provision a new AWS EC2 instance
+ * Validates Requirements: 10.1
+ */
+export async function provisionAWSInstance(params: AWSProvisionParams): Promise<{ result: { status: string; output?: unknown; error?: string } }> {
+  return post<{ result: { status: string; output?: unknown; error?: string } }>('/api/integrations/aws/provision', params, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+/**
+ * Execute AWS EC2 lifecycle action
+ * Validates Requirements: 11.1
+ */
+export async function executeAWSLifecycle(params: AWSLifecycleParams): Promise<{ result: { status: string; output?: unknown; error?: string } }> {
+  return post<{ result: { status: string; output?: unknown; error?: string } }>('/api/integrations/aws/lifecycle', params, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+/**
+ * Get available AWS regions
+ * Validates Requirements: 13.1
+ */
+export async function getAWSRegions(): Promise<string[]> {
+  const response = await get<{ regions: string[] }>('/api/integrations/aws/regions', {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.regions;
+}
+
+/**
+ * Get available EC2 instance types for a region
+ * Validates Requirements: 13.2
+ */
+export async function getAWSInstanceTypes(region?: string): Promise<AWSInstanceTypeInfo[]> {
+  const params = region ? `?region=${encodeURIComponent(region)}` : '';
+  const response = await get<{ instanceTypes: AWSInstanceTypeInfo[] }>(`/api/integrations/aws/instance-types${params}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.instanceTypes;
+}
+
+/**
+ * Get available AMIs for a region
+ * Validates Requirements: 13.3
+ */
+export async function getAWSAMIs(region: string): Promise<AWSAMIInfo[]> {
+  const response = await get<{ amis: AWSAMIInfo[] }>(`/api/integrations/aws/amis?region=${encodeURIComponent(region)}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.amis;
+}
+
+/**
+ * Get available VPCs for a region
+ * Validates Requirements: 13.4
+ */
+export async function getAWSVPCs(region: string): Promise<AWSVPCInfo[]> {
+  const response = await get<{ vpcs: AWSVPCInfo[] }>(`/api/integrations/aws/vpcs?region=${encodeURIComponent(region)}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.vpcs;
+}
+
+/**
+ * Get available subnets for a region and optional VPC
+ * Validates Requirements: 13.5
+ */
+export async function getAWSSubnets(region: string, vpcId?: string): Promise<AWSSubnetInfo[]> {
+  let params = `?region=${encodeURIComponent(region)}`;
+  if (vpcId) params += `&vpcId=${encodeURIComponent(vpcId)}`;
+  const response = await get<{ subnets: AWSSubnetInfo[] }>(`/api/integrations/aws/subnets${params}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.subnets;
+}
+
+/**
+ * Get available security groups for a region and optional VPC
+ * Validates Requirements: 13.6
+ */
+export async function getAWSSecurityGroups(region: string, vpcId?: string): Promise<AWSSecurityGroupInfo[]> {
+  let params = `?region=${encodeURIComponent(region)}`;
+  if (vpcId) params += `&vpcId=${encodeURIComponent(vpcId)}`;
+  const response = await get<{ securityGroups: AWSSecurityGroupInfo[] }>(`/api/integrations/aws/security-groups${params}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.securityGroups;
+}
+
+/**
+ * Get available key pairs for a region
+ * Validates Requirements: 13.7
+ */
+export async function getAWSKeyPairs(region: string): Promise<AWSKeyPairInfo[]> {
+  const response = await get<{ keyPairs: AWSKeyPairInfo[] }>(`/api/integrations/aws/key-pairs?region=${encodeURIComponent(region)}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.keyPairs;
+}
+
+/**
+ * Save AWS integration configuration via IntegrationConfigService
+ * @deprecated Use saveIntegrationConfig('aws', config) instead
+ */
+export async function saveAWSConfig(config: AWSIntegrationConfig): Promise<{ success: boolean; message: string }> {
+  const payload: Record<string, unknown> = {
+    accessKeyId: config.accessKeyId,
+    secretAccessKey: config.secretAccessKey,
+    region: config.region,
+  };
+  if (config.sessionToken) {
+    payload.sessionToken = config.sessionToken;
+  }
+  await saveIntegrationConfig('aws', payload);
+  return { success: true, message: 'Config saved successfully' };
+}
+
+/**
+ * Test AWS connection with provided configuration
+ * Validates Requirements: 12.1
+ */
+export async function testAWSConnection(config: AWSIntegrationConfig): Promise<{ success: boolean; message: string }> {
+  return post<{ success: boolean; message: string }>('/api/integrations/aws/test', config, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+
+/**
+ * Integration Config API methods
+ * Validates Requirements: 21.1, 21.2, 21.3
+ */
+
+/**
+ * Integration config record returned from the API
+ */
+export interface IntegrationConfigRecord {
+  id: string;
+  userId: string;
+  integrationName: string;
+  config: Record<string, unknown>;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * List all integration configs for the authenticated user
+ * Validates Requirements: 21.1
+ */
+export async function getIntegrationConfigs(): Promise<IntegrationConfigRecord[]> {
+  const response = await get<{ configs: IntegrationConfigRecord[] }>('/api/config/integrations', {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.configs;
+}
+
+/**
+ * Get effective (merged) config for a specific integration
+ * Validates Requirements: 21.1
+ */
+export async function getIntegrationConfig(name: string): Promise<Record<string, unknown>> {
+  const response = await get<{ config: Record<string, unknown> }>(`/api/config/integrations/${encodeURIComponent(name)}`, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.config;
+}
+
+/**
+ * Save (upsert) an integration config
+ * Validates Requirements: 21.2
+ */
+export async function saveIntegrationConfig(name: string, config: Record<string, unknown>): Promise<{ message: string }> {
+  return put<{ message: string }>(`/api/config/integrations/${encodeURIComponent(name)}`, { config }, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+/**
+ * Delete an integration config
+ * Validates Requirements: 21.2
+ */
+export async function deleteIntegrationConfig(name: string): Promise<{ message: string }> {
+  return del<{ message: string }>(`/api/config/integrations/${encodeURIComponent(name)}`, {
+    maxRetries: 0,
+    showRetryNotifications: false,
+  });
+}
+
+
+/**
+ * Journal API methods
+ * Validates Requirements: 23.1, 23.3, 24.1
+ */
+
+/** Journal entry returned from the API */
+export interface JournalEntry {
+  id: string;
+  nodeId: string;
+  nodeUri: string;
+  eventType: string;
+  source: string;
+  action: string;
+  summary: string;
+  details: Record<string, unknown>;
+  userId?: string | null;
+  timestamp: string;
+  isLive: boolean;
+}
+
+/** Options for fetching journal timeline */
+export interface JournalTimelineOptions {
+  limit?: number;
+  offset?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
+/**
+ * Get aggregated journal timeline for a node
+ * Validates Requirements: 23.1, 23.3
+ */
+export async function getJournalTimeline(
+  nodeId: string,
+  options?: JournalTimelineOptions,
+): Promise<JournalEntry[]> {
+  const params = new URLSearchParams();
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.offset) params.set('offset', String(options.offset));
+  if (options?.startDate) params.set('startDate', options.startDate);
+  if (options?.endDate) params.set('endDate', options.endDate);
+  const qs = params.toString();
+  const url = `/api/journal/${encodeURIComponent(nodeId)}${qs ? `?${qs}` : ''}`;
+  const response = await get<{ entries: JournalEntry[] }>(url, {
+    maxRetries: 2,
+    retryDelay: 1000,
+  });
+  return response.entries;
+}
+
+/**
+ * Add a manual note to a node's journal
+ * Validates Requirements: 24.1
+ */
+export async function addJournalNote(
+  nodeId: string,
+  content: string,
+): Promise<{ id: string }> {
+  return post<{ id: string }>(
+    `/api/journal/${encodeURIComponent(nodeId)}/notes`,
+    { content },
+    { maxRetries: 0, showRetryNotifications: false },
+  );
+}
+
+/**
+ * Search journal entries
+ * Validates Requirements: 24.1
+ */
+export async function searchJournalEntries(
+  query: string,
+  options?: { limit?: number; offset?: number },
+): Promise<JournalEntry[]> {
+  const params = new URLSearchParams({ q: query });
+  if (options?.limit) params.set('limit', String(options.limit));
+  if (options?.offset) params.set('offset', String(options.offset));
+  const response = await get<{ entries: JournalEntry[] }>(
+    `/api/journal/search?${params.toString()}`,
+    { maxRetries: 2, retryDelay: 1000 },
+  );
+  return response.entries;
 }

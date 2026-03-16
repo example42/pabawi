@@ -327,12 +327,12 @@ describe("ProxmoxService", () => {
       // Verify type groups
       const qemuGroup = groups.find((g) => g.id === "proxmox:type:qemu");
       expect(qemuGroup).toBeDefined();
-      expect(qemuGroup?.name).toBe("Virtual Machines");
+      expect(qemuGroup?.name).toBe("Proxmox VMs");
       expect(qemuGroup?.nodes).toHaveLength(2);
 
       const lxcGroup = groups.find((g) => g.id === "proxmox:type:lxc");
       expect(lxcGroup).toBeDefined();
-      expect(lxcGroup?.name).toBe("LXC Containers");
+      expect(lxcGroup?.name).toBe("Proxmox Containers");
       expect(lxcGroup?.nodes).toHaveLength(2);
 
       // Verify all groups have correct source
@@ -831,8 +831,8 @@ describe("listCapabilities", () => {
   it("should return all lifecycle action capabilities", () => {
     const capabilities = service.listCapabilities();
 
-    // Verify we have all 6 capabilities
-    expect(capabilities).toHaveLength(6);
+    // Verify we have all 7 capabilities
+    expect(capabilities).toHaveLength(7);
 
     // Verify each capability has required fields
     capabilities.forEach((cap) => {
@@ -850,6 +850,7 @@ describe("listCapabilities", () => {
     expect(capabilityNames).toContain("reboot");
     expect(capabilityNames).toContain("suspend");
     expect(capabilityNames).toContain("resume");
+    expect(capabilityNames).toContain("snapshot");
 
     // Verify start capability details
     const startCap = capabilities.find((c) => c.name === "start");
@@ -867,7 +868,7 @@ describe("listCapabilities", () => {
     const capabilities = service.listCapabilities();
 
     // Should still return capabilities
-    expect(capabilities).toHaveLength(6);
+    expect(capabilities).toHaveLength(7);
   });
 });
 
@@ -898,9 +899,10 @@ describe("Provisioning Capabilities", () => {
       // Verify result
       expect(result.status).toBe("success");
       expect(result.action).toBe("create_vm");
+      const { node: _node, ...expectedPayload } = params;
       expect(mockClient.post).toHaveBeenCalledWith(
         "/api2/json/nodes/pve1/qemu",
-        params
+        expectedPayload
       );
       expect(mockClient.waitForTask).toHaveBeenCalledWith("pve1", "UPID:pve1:00001234:task");
     });
@@ -957,9 +959,10 @@ describe("Provisioning Capabilities", () => {
       // Verify result
       expect(result.status).toBe("success");
       expect(result.action).toBe("create_lxc");
+      const { node: _node, ...expectedPayload } = params;
       expect(mockClient.post).toHaveBeenCalledWith(
         "/api2/json/nodes/pve1/lxc",
-        params
+        expectedPayload
       );
       expect(mockClient.waitForTask).toHaveBeenCalledWith("pve1", "UPID:pve1:00001235:task");
     });
@@ -1172,4 +1175,103 @@ describe("Provisioning Capabilities", () => {
     });
   });
 });
+
+  describe("computeType field", () => {
+    it("should include computeType 'vm' for qemu guests", async () => {
+      const mockGuests: ProxmoxGuest[] = [
+        { vmid: 100, name: "test-vm", node: "pve1", type: "qemu", status: "running" },
+      ];
+      mockClient.get.mockResolvedValue(mockGuests);
+      await service.initialize();
+
+      const nodes = await service.getInventory();
+
+      expect(nodes).toHaveLength(1);
+      expect((nodes[0] as any).computeType).toBe("vm");
+    });
+
+    it("should include computeType 'lxc' for lxc guests", async () => {
+      const mockGuests: ProxmoxGuest[] = [
+        { vmid: 200, name: "test-ct", node: "pve1", type: "lxc", status: "running" },
+      ];
+      mockClient.get.mockResolvedValue(mockGuests);
+      await service.initialize();
+
+      const nodes = await service.getInventory();
+
+      expect(nodes).toHaveLength(1);
+      expect((nodes[0] as any).computeType).toBe("lxc");
+    });
+  });
+
+  describe("getInventory with computeType filter", () => {
+    const mixedGuests: ProxmoxGuest[] = [
+      { vmid: 100, name: "vm-1", node: "pve1", type: "qemu", status: "running" },
+      { vmid: 101, name: "vm-2", node: "pve1", type: "qemu", status: "stopped" },
+      { vmid: 200, name: "ct-1", node: "pve1", type: "lxc", status: "running" },
+    ];
+
+    it("should return only VMs when computeType is 'qemu'", async () => {
+      mockClient.get.mockResolvedValue(mixedGuests);
+      await service.initialize();
+
+      const nodes = await service.getInventory("qemu");
+
+      expect(nodes).toHaveLength(2);
+      nodes.forEach((n) => expect((n as any).computeType).toBe("vm"));
+    });
+
+    it("should return only containers when computeType is 'lxc'", async () => {
+      mockClient.get.mockResolvedValue(mixedGuests);
+      await service.initialize();
+
+      const nodes = await service.getInventory("lxc");
+
+      expect(nodes).toHaveLength(1);
+      expect((nodes[0] as any).computeType).toBe("lxc");
+    });
+
+    it("should return all guests when computeType is undefined", async () => {
+      mockClient.get.mockResolvedValue(mixedGuests);
+      await service.initialize();
+
+      const nodes = await service.getInventory();
+
+      expect(nodes).toHaveLength(3);
+    });
+
+    it("should filter cached results by computeType", async () => {
+      mockClient.get.mockResolvedValue(mixedGuests);
+      await service.initialize();
+
+      // First call populates cache
+      await service.getInventory();
+      expect(mockClient.get).toHaveBeenCalledTimes(1);
+
+      // Second call with filter should use cache but filter
+      const vms = await service.getInventory("qemu");
+      expect(mockClient.get).toHaveBeenCalledTimes(1); // Still cached
+      expect(vms).toHaveLength(2);
+      vms.forEach((n) => expect((n as any).computeType).toBe("vm"));
+    });
+  });
+
+  describe("getGroups type group names", () => {
+    it("should use 'Proxmox VMs' and 'Proxmox Containers' as group names", async () => {
+      const mockGuests: ProxmoxGuest[] = [
+        { vmid: 100, name: "vm-1", node: "pve1", type: "qemu", status: "running" },
+        { vmid: 200, name: "ct-1", node: "pve1", type: "lxc", status: "running" },
+      ];
+      mockClient.get.mockResolvedValue(mockGuests);
+      await service.initialize();
+
+      const groups = await service.getGroups();
+
+      const vmGroup = groups.find((g) => g.id === "proxmox:type:qemu");
+      expect(vmGroup?.name).toBe("Proxmox VMs");
+
+      const lxcGroup = groups.find((g) => g.id === "proxmox:type:lxc");
+      expect(lxcGroup?.name).toBe("Proxmox Containers");
+    });
+  });
 });

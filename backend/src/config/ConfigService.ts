@@ -126,6 +126,15 @@ export class ConfigService {
       timeout?: number;
       priority?: number;
     };
+    aws?: {
+      enabled: boolean;
+      accessKeyId?: string;
+      secretAccessKey?: string;
+      region?: string;
+      sessionToken?: string;
+      profile?: string;
+      endpoint?: string;
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -457,6 +466,19 @@ export class ConfigService {
       }
     }
 
+    // Parse AWS configuration
+    if (process.env.AWS_ENABLED === "true") {
+      integrations.aws = {
+        enabled: true,
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        region: process.env.AWS_DEFAULT_REGION || undefined,
+        sessionToken: process.env.AWS_SESSION_TOKEN,
+        profile: process.env.AWS_PROFILE,
+        endpoint: process.env.AWS_ENDPOINT,
+      };
+    }
+
     return integrations;
   }
 
@@ -734,5 +756,18 @@ export class ConfigService {
    */
   public getUIConfig(): typeof this.config.ui {
     return this.config.ui;
+  }
+
+  /**
+   * Get AWS configuration if enabled
+   */
+  public getAWSConfig():
+    | (typeof this.config.integrations.aws & { enabled: true })
+    | null {
+    const aws = this.config.integrations.aws;
+    if (aws?.enabled) {
+      return aws as typeof aws & { enabled: true };
+    }
+    return null;
   }
 }

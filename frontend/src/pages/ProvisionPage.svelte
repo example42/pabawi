@@ -3,15 +3,18 @@
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
-  import ProxmoxProvisionForm from '../components/ProxmoxProvisionForm.svelte';
+  import ProxmoxVMProvisionForm from '../components/ProxmoxVMProvisionForm.svelte';
+  import ProxmoxLXCProvisionForm from '../components/ProxmoxLXCProvisionForm.svelte';
+  import AWSProvisionForm from '../components/AWSProvisionForm.svelte';
   import { getProvisioningIntegrations } from '../lib/api';
   import type { ProvisioningIntegration } from '../lib/types/provisioning';
 
   const pageTitle = 'Provision - Pabawi';
 
-  // State management using Svelte 5 runes (Validates Requirements: 1.4, 2.1, 2.2, 2.3, 2.4)
+  // State management using Svelte 5 runes (Validates Requirements: 1.4, 2.1, 2.2, 2.3, 2.4, 17.1, 17.2, 17.3)
   let integrations = $state<ProvisioningIntegration[]>([]);
   let selectedIntegration = $state<string>('proxmox');
+  let selectedComputeType = $state<'vm' | 'lxc'>('vm');
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -322,9 +325,72 @@
         {/each}
       </div>
 
-      <!-- Provisioning Form (Validates Requirements: 3.1, 4.1) -->
+      <!-- Proxmox Compute Type Selector and Forms (Validates Requirements: 17.1, 17.2, 17.3) -->
       {#if selectedIntegration === 'proxmox'}
-        <ProxmoxProvisionForm />
+        <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+          <!-- Compute Type Selector -->
+          <div class="border-b border-gray-200 dark:border-gray-700">
+            <nav class="-mb-px flex space-x-8 px-6" aria-label="Compute type">
+              <button
+                type="button"
+                class="whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors {selectedComputeType === 'vm'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+                onclick={() => selectedComputeType = 'vm'}
+                aria-current={selectedComputeType === 'vm' ? 'page' : undefined}
+              >
+                <div class="flex items-center gap-2">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                  </svg>
+                  <span>Virtual Machine</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                class="whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium transition-colors {selectedComputeType === 'lxc'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+                onclick={() => selectedComputeType = 'lxc'}
+                aria-current={selectedComputeType === 'lxc' ? 'page' : undefined}
+              >
+                <div class="flex items-center gap-2">
+                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                  <span>LXC Container</span>
+                </div>
+              </button>
+            </nav>
+          </div>
+
+          <!-- Form Content -->
+          <div class="p-6">
+            {#if selectedComputeType === 'vm'}
+              <ProxmoxVMProvisionForm />
+            {:else}
+              <ProxmoxLXCProvisionForm />
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      <!-- AWS EC2 Form (Validates Requirements: 10.1, 13.1-13.7) -->
+      {#if selectedIntegration === 'aws'}
+        <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+          <div class="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
+            <div class="flex items-center gap-2">
+              <svg class="h-5 w-5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+              </svg>
+              <span class="text-sm font-medium text-gray-900 dark:text-white">EC2 Instance</span>
+            </div>
+          </div>
+          <div class="p-6">
+            <AWSProvisionForm />
+          </div>
+        </div>
       {/if}
     </div>
   {/if}
