@@ -382,6 +382,196 @@ describe("ProxmoxIntegration", () => {
     });
   });
 
+  describe("journal integration", () => {
+    let mockJournalService: { recordEvent: ReturnType<typeof vi.fn> };
+
+    beforeEach(async () => {
+      mockJournalService = {
+        recordEvent: vi.fn().mockResolvedValue("entry-id"),
+      };
+
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: "proxmox",
+        type: "both",
+        config: {
+          host: "proxmox.example.com",
+          port: 8006,
+          token: "user@realm!tokenid=uuid",
+        },
+      };
+      await plugin.initialize(config);
+      plugin.setJournalService(mockJournalService as never);
+    });
+
+    it("should record journal entry on successful action", async () => {
+      const mockResult = {
+        id: "task-123",
+        type: "task" as const,
+        targetNodes: ["proxmox:pve1:100"],
+        action: "start",
+        status: "success" as const,
+        startedAt: "2024-01-01T00:00:00Z",
+        completedAt: "2024-01-01T00:00:05Z",
+        results: [],
+      };
+      mockService.executeAction.mockResolvedValue(mockResult);
+
+      await plugin.executeAction({
+        type: "task",
+        target: "proxmox:pve1:100",
+        action: "start",
+      });
+
+      expect(mockJournalService.recordEvent).toHaveBeenCalledOnce();
+      expect(mockJournalService.recordEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          nodeId: "proxmox:pve1:100",
+          eventType: "start",
+          source: "proxmox",
+          action: "start",
+        })
+      );
+    });
+
+    it("should record journal entry on failed action result", async () => {
+      const mockResult = {
+        id: "error-123",
+        type: "task" as const,
+        targetNodes: ["proxmox:pve1:100"],
+        action: "stop",
+        status: "failed" as const,
+        startedAt: "2024-01-01T00:00:00Z",
+        completedAt: "2024-01-01T00:00:01Z",
+        results: [],
+        error: "Guest not found",
+      };
+      mockService.executeAction.mockResolvedValue(mockResult);
+
+      await plugin.executeAction({
+        type: "task",
+        target: "proxmox:pve1:100",
+        action: "stop",
+      });
+
+      expect(mockJournalService.recordEvent).toHaveBeenCalledOnce();
+      expect(mockJournalService.recordEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: "proxmox",
+          action: "stop",
+          summary: expect.stringContaining("failed"),
+        })
+      );
+    });
+
+    it("should record journal entry when service throws", async () => {
+      mockService.executeAction.mockRejectedValue(new Error("API unreachable"));
+
+      await expect(
+        plugin.executeAction({
+          type: "task",
+          target: "proxmox:pve1:100",
+          action: "reboot",
+        })
+      ).rejects.toThrow("API unreachable");
+
+      expect(mockJournalService.recordEvent).toHaveBeenCalledOnce();
+      expect(mockJournalService.recordEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: "proxmox",
+          eventType: "reboot",
+          summary: expect.stringContaining("API unreachable"),
+        })
+      );
+    });
+
+    it("should map provisioning actions to correct event types", async () => {
+      const mockResult = {
+        id: "task-456",
+        type: "task" as const,
+        targetNodes: ["proxmox:pve1:101"],
+        action: "create_vm",
+        status: "success" as const,
+        startedAt: "2024-01-01T00:00:00Z",
+        completedAt: "2024-01-01T00:00:10Z",
+        results: [],
+      };
+      mockService.executeAction.mockResolvedValue(mockResult);
+
+      await plugin.executeAction({
+        type: "task",
+        target: "proxmox:pve1:101",
+        action: "create_vm",
+      });
+
+      expect(mockJournalService.recordEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: "provision",
+          source: "proxmox",
+        })
+      );
+    });
+
+    it("should not fail if journal recording throws", async () => {
+      mockJournalService.recordEvent.mockRejectedValue(new Error("DB error"));
+      const mockResult = {
+        id: "task-789",
+        type: "task" as const,
+        targetNodes: ["proxmox:pve1:100"],
+        action: "start",
+        status: "success" as const,
+        startedAt: "2024-01-01T00:00:00Z",
+        completedAt: "2024-01-01T00:00:05Z",
+        results: [],
+      };
+      mockService.executeAction.mockResolvedValue(mockResult);
+
+      const result = await plugin.executeAction({
+        type: "task",
+        target: "proxmox:pve1:100",
+        action: "start",
+      });
+
+      expect(result.status).toBe("success");
+    });
+
+    it("should work without journal service set", async () => {
+      // Create a fresh plugin without journal service
+      const freshPlugin = new ProxmoxIntegration(mockLogger, mockPerfMonitor);
+      const config: IntegrationConfig = {
+        enabled: true,
+        name: "proxmox",
+        type: "both",
+        config: {
+          host: "proxmox.example.com",
+          port: 8006,
+          token: "user@realm!tokenid=uuid",
+        },
+      };
+      await freshPlugin.initialize(config);
+
+      const mockResult = {
+        id: "task-000",
+        type: "task" as const,
+        targetNodes: ["proxmox:pve1:100"],
+        action: "start",
+        status: "success" as const,
+        startedAt: "2024-01-01T00:00:00Z",
+        completedAt: "2024-01-01T00:00:05Z",
+        results: [],
+      };
+      mockService.executeAction.mockResolvedValue(mockResult);
+
+      const result = await freshPlugin.executeAction({
+        type: "task",
+        target: "proxmox:pve1:100",
+        action: "start",
+      });
+
+      expect(result.status).toBe("success");
+    });
+  });
+
   describe("error handling", () => {
     it("should throw error when calling methods before initialization", async () => {
       await expect(plugin.getInventory()).rejects.toThrow(

@@ -17,6 +17,7 @@
   import GroupDetailPage from './pages/GroupDetailPage.svelte';
   import RoleManagementPage from './pages/RoleManagementPage.svelte';
   import ProvisionPage from './pages/ProvisionPage.svelte';
+  import IntegrationConfigPage from './pages/IntegrationConfigPage.svelte';
   import { router } from './lib/router.svelte';
   import type { RouteConfig } from './lib/router.svelte';
   import { get } from './lib/api';
@@ -36,7 +37,8 @@
     '/groups/:id': { component: GroupDetailPage, requiresAuth: true },
     '/roles': { component: RoleManagementPage, requiresAuth: true, requiresAdmin: true },
     '/nodes/:id': { component: NodeDetailPage, requiresAuth: true },
-    '/integrations/:integration/setup': { component: IntegrationSetupPage, requiresAuth: true }
+    '/integrations/:integration/setup': { component: IntegrationSetupPage, requiresAuth: true },
+    '/integrations/config': { component: IntegrationConfigPage, requiresAuth: true }
   };
 
   let setupComplete = $state(true); // Default to true to avoid flashing

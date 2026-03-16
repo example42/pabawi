@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { saveProxmoxConfig, testProxmoxConnection, type ProxmoxConfig } from '../lib/api';
+  import { onMount } from 'svelte';
+  import { saveIntegrationConfig, getIntegrationConfig, testProxmoxConnection } from '../lib/api';
+  import type { ProxmoxConfig } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { logger } from '../lib/logger.svelte';
 
@@ -18,6 +20,32 @@
   let testResult = $state<{ success: boolean; message: string } | null>(null);
   let testing = $state(false);
   let saving = $state(false);
+  let loadingConfig = $state(true);
+
+  onMount(async () => {
+    try {
+      const effective = await getIntegrationConfig('proxmox');
+      if (effective) {
+        config.host = String(effective.host ?? '');
+        config.port = Number(effective.port ?? 8006);
+        config.username = String(effective.username ?? '');
+        config.password = String(effective.password ?? '');
+        config.realm = String(effective.realm ?? 'pam');
+        config.token = String(effective.token ?? '');
+        config.ssl = {
+          rejectUnauthorized: effective.ssl_rejectUnauthorized !== false && effective.ssl_rejectUnauthorized !== 'false',
+        };
+        // Detect auth method from loaded config
+        if (config.token) {
+          authMethod = 'token';
+        }
+      }
+    } catch {
+      // No existing config — start fresh
+    } finally {
+      loadingConfig = false;
+    }
+  });
 
   const copyToClipboard = (text: string): void => {
     navigator.clipboard.writeText(text);
@@ -53,15 +81,23 @@
     saving = true;
 
     try {
-      const result = await saveProxmoxConfig(config);
+      const configPayload: Record<string, unknown> = {
+        host: config.host,
+        port: config.port,
+        ssl_rejectUnauthorized: config.ssl.rejectUnauthorized,
+      };
 
-      if (result.success) {
-        showSuccess('Configuration saved successfully');
-        logger.info('Proxmox configuration saved', { host: config.host });
+      if (authMethod === 'password') {
+        configPayload.username = config.username;
+        configPayload.password = config.password;
+        configPayload.realm = config.realm;
       } else {
-        showError(`Failed to save configuration: ${result.message}`);
-        logger.warn('Proxmox configuration save failed', { message: result.message });
+        configPayload.token = config.token;
       }
+
+      await saveIntegrationConfig('proxmox', configPayload);
+      showSuccess('Configuration saved successfully');
+      logger.info('Proxmox configuration saved', { host: config.host });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       showError(`Failed to save configuration: ${message}`);
