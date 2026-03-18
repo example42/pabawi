@@ -444,5 +444,124 @@ export function createFactsRouter(
     }),
   );
 
+  /**
+   * GET /api/nodes/:id/facts
+   * Get facts for a node from all available information sources
+   */
+  router.get(
+    "/:id/facts",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+
+      logger.info("Fetching facts from all sources", {
+        component: "FactsRouter",
+        operation: "getAllFacts",
+        metadata: { nodeId: req.params.id },
+      });
+
+      try {
+        const params = NodeIdParamSchema.parse(req.params);
+        const nodeId = params.id;
+
+        // Skip the expensive getAggregatedInventory() call — if no source
+        // knows about this node the response will simply have empty sources,
+        // which the frontend already handles gracefully.
+
+        // Gather facts from all information sources in parallel
+        const sources = integrationManager.getAllInformationSources();
+        const factsResults: Record<
+          string,
+          { facts: Record<string, unknown>; timestamp: string }
+        > = {};
+        const errors: Record<string, string> = {};
+
+        // Per-source timeout (5s) — keep the page snappy
+        const SOURCE_TIMEOUT_MS = 5_000;
+
+        const promises = sources.map(async (source) => {
+          if (!source.isInitialized()) return;
+          try {
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Timeout after ${SOURCE_TIMEOUT_MS}ms`)),
+                SOURCE_TIMEOUT_MS,
+              ),
+            );
+            const nodeFacts = await Promise.race([
+              source.getNodeFacts(nodeId),
+              timeoutPromise,
+            ]);
+            if (nodeFacts && typeof nodeFacts === "object") {
+              const raw = nodeFacts as unknown as Record<string, unknown>;
+              const factsObj =
+                "facts" in raw && typeof raw.facts === "object" && raw.facts !== null
+                  ? (raw.facts as Record<string, unknown>)
+                  : raw;
+              const timestamp =
+                typeof raw.gatheredAt === "string"
+                  ? raw.gatheredAt
+                  : typeof raw.timestamp === "string"
+                    ? raw.timestamp
+                    : new Date().toISOString();
+              factsResults[source.name] = { facts: factsObj, timestamp };
+            }
+          } catch (error) {
+            const errorMsg =
+              error instanceof Error ? error.message : String(error);
+            errors[source.name] = errorMsg;
+            logger.warn(`Failed to gather facts from '${source.name}'`, {
+              component: "FactsRouter",
+              operation: "getAllFacts",
+              metadata: { nodeId, source: source.name, error: errorMsg },
+            });
+          }
+        });
+
+        await Promise.all(promises);
+
+        const duration = Date.now() - startTime;
+
+        logger.info("Facts fetched from all sources", {
+          component: "FactsRouter",
+          operation: "getAllFacts",
+          metadata: {
+            nodeId,
+            sources: Object.keys(factsResults),
+            errorSources: Object.keys(errors),
+            duration,
+          },
+        });
+
+        res.json({
+          sources: factsResults,
+          errors: Object.keys(errors).length > 0 ? errors : undefined,
+        });
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid node ID parameter",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        logger.error("Error fetching facts", {
+          component: "FactsRouter",
+          operation: "getAllFacts",
+        }, error instanceof Error ? error : undefined);
+
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch facts",
+          },
+        });
+      }
+    }),
+  );
+
   return router;
 }

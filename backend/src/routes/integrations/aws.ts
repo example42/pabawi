@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ZodError } from "zod";
 import { asyncHandler } from "../asyncHandler";
 import type { AWSPlugin } from "../../integrations/aws/AWSPlugin";
+import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import { AWSAuthenticationError } from "../../integrations/aws/types";
 import { LoggerService } from "../../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../../utils/errorHandling";
@@ -59,7 +60,7 @@ const LifecycleSchema = z.object({
  *
  * Requirements: 8.1, 9.1, 10.1, 11.1, 13.1-13.7, 27.2
  */
-export function createAWSRouter(awsPlugin: AWSPlugin): Router {
+export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: IntegrationManager): Router {
   const router = Router();
 
   /**
@@ -140,7 +141,12 @@ export function createAWSRouter(awsPlugin: AWSPlugin): Router {
           metadata: { status: result.status },
         });
 
-        res.status(result.status === "success" ? 201 : 500).json({ result });
+        // Invalidate inventory cache so the new instance appears immediately
+        if (result.status === "success") {
+          integrationManager?.clearInventoryCache();
+        }
+
+        res.status(result.status === "success" ? 201 : 200).json({ result });
       } catch (error) {
         if (error instanceof ZodError) {
           sendValidationError(res, error);
@@ -207,6 +213,11 @@ export function createAWSRouter(awsPlugin: AWSPlugin): Router {
           operation: "lifecycle",
           metadata: { action: validatedBody.action, status: result.status },
         });
+
+        // Invalidate inventory cache so state changes appear immediately
+        if (result.status === "success") {
+          integrationManager?.clearInventoryCache();
+        }
 
         res.status(200).json({ result });
       } catch (error) {
@@ -315,7 +326,7 @@ export function createAWSRouter(awsPlugin: AWSPlugin): Router {
 
   /**
    * GET /api/integrations/aws/amis
-   * List available AMIs by region
+   * List available AMIs by region, with optional name search
    *
    * Permission: aws:read
    */
@@ -329,7 +340,14 @@ export function createAWSRouter(awsPlugin: AWSPlugin): Router {
 
       try {
         const { region } = RegionQuerySchema.parse(req.query);
-        const amis = await awsPlugin.getAMIs(region);
+        const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+
+        // Build filters: if search is provided, filter by name wildcard
+        const filters = search
+          ? [{ name: "name", values: [`*${search}*`] }]
+          : undefined;
+
+        const amis = await awsPlugin.getAMIs(region, filters);
         res.status(200).json({ amis });
       } catch (error) {
         if (error instanceof ZodError) {

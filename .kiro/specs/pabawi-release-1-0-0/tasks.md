@@ -199,7 +199,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
   - Ensure all tests pass, ask the user if questions arise.
   - Verify RBAC migration seeds correctly, JournalService records and retrieves events, IntegrationConfigService encrypts/decrypts and merges configs.
 
-- [ ] 9. AWS Plugin — Core Implementation
+- [x] 9. AWS Plugin — Core Implementation
   - [x] 9.1 Create AWSPlugin skeleton and types
     - Create `backend/src/integrations/aws/` directory
     - Create `backend/src/integrations/aws/types.ts` with AWS-specific types: AWSConfig, InstanceTypeInfo, AMIInfo, VPCInfo, SubnetInfo, SecurityGroupInfo, KeyPairInfo, AWSAuthenticationError
@@ -245,7 +245,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - IntegrationManager never contains two plugins with the same name; duplicate registration throws
     - **Validates: Requirements 31.1, 31.2**
 
-- [ ] 10. Proxmox Enhancements — Compute Type Routing and UI Separation
+- [x] 10. Proxmox Enhancements — Compute Type Routing and UI Separation
   - [x] 10.1 Enhance ProxmoxService with explicit compute type routing
     - Add `createVM(node, params)` and `createLXC(node, params)` methods to `backend/src/integrations/proxmox/ProxmoxService.ts` with type-specific parameter validation
     - Update `getInventory(computeType?)` to support optional "qemu" or "lxc" filter, include `computeType` field ("vm" | "lxc") on every inventory item
@@ -298,7 +298,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - Register routes in server.ts
     - _Requirements: 8.1, 9.1, 10.1, 11.1, 13.1-13.7, 27.2_
 
-- [ ] 13. AWS Plugin Registration and ConfigService Integration
+- [x] 13. AWS Plugin Registration and ConfigService Integration
   - [x] 13.1 Register AWSPlugin in IntegrationManager and update ConfigService
     - Update `backend/src/config/ConfigService.ts` to parse AWS configuration from environment variables (AWS_ENABLED, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
     - Update `backend/src/config/schema.ts` to add AWS config to the Zod schema
@@ -312,7 +312,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - Test duplicate registration throws error
     - _Requirements: 8.2, 8.3, 8.4, 31.1_
 
-- [ ] 14. Frontend — Proxmox UI Separation
+- [x] 14. Frontend — Proxmox UI Separation
   - [x] 14.1 Split ProxmoxProvisionForm into VM and Container forms
     - Create `frontend/src/components/ProxmoxVMProvisionForm.svelte` with QEMU-specific parameters (ISO images, CPU sockets, BIOS, machine type)
     - Create `frontend/src/components/ProxmoxLXCProvisionForm.svelte` with LXC-specific parameters (OS templates, unprivileged flag, nesting)
@@ -320,7 +320,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - Update `frontend/src/pages/ProvisionPage.svelte` to show a compute type selector (VM vs Container) that renders the correct form
     - _Requirements: 17.1, 17.2, 17.3_
 
-- [ ] 15. Frontend — AWS Provisioning and Integration Config UI
+- [x] 15. Frontend — AWS Provisioning and Integration Config UI
   - [x] 15.1 Create AWS provisioning UI
     - Create `frontend/src/components/AWSProvisionForm.svelte` with EC2 parameters: region, instance type, AMI, VPC, subnet, security group, key pair
     - Add AWS as a provisioning option in `frontend/src/pages/ProvisionPage.svelte`
@@ -335,7 +335,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - Add navigation link in `frontend/src/components/Navigation.svelte`
     - _Requirements: 21.1, 21.2, 21.3_
 
-- [ ] 16. Frontend — Journal Timeline UI
+- [x] 16. Frontend — Journal Timeline UI
   - [x] 16.1 Create Journal timeline component and integrate into NodeDetailPage
     - Create `frontend/src/components/JournalTimeline.svelte` displaying a paginated, sorted timeline of events with isLive badges, source icons, and event type labels
     - Create `frontend/src/components/JournalNoteForm.svelte` for adding manual notes
@@ -343,7 +343,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - Integrate JournalTimeline into `frontend/src/pages/NodeDetailPage.svelte` as a new tab
     - _Requirements: 23.1, 23.3, 24.1_
 
-- [ ] 17. Frontend — RBAC UI Updates
+- [x] 17. Frontend — RBAC UI Updates
   - [x] 17.1 Update role management UI for new permissions
     - Update `frontend/src/components/RoleDetailDialog.svelte` to display and manage new permission resources (proxmox, aws, journal, integration_config) and actions (provision, destroy, lifecycle, configure, note)
     - Update `frontend/src/lib/permissions.ts` with new permission types
@@ -354,7 +354,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
   - Ensure all tests pass, ask the user if questions arise.
   - Verify Proxmox VM/LXC forms render correctly, AWS provisioning form works, journal timeline displays events, and RBAC UI shows new permissions.
 
-- [ ] 19. Wire Journal Events into Plugins
+- [x] 19. Wire Journal Events into Plugins
   - [x] 19.1 Integrate JournalService into ProxmoxIntegration and AWSPlugin
     - Pass JournalService to ProxmoxIntegration and AWSPlugin constructors
     - Record journal entries in ProxmoxService after every provisioning and lifecycle action (success or failure) with source "proxmox"
@@ -366,7 +366,7 @@ This plan implements six foundational features for Pabawi 1.0.0 in dependency or
     - For any completed action, exactly one journal entry is recorded with nodeId, nodeUri, eventType, source, action, summary, and timestamp
     - **Validates: Requirements 10.4, 11.4, 22.1, 22.2, 22.3, 22.4**
 
-- [ ] 20. Final Integration and Wiring
+- [x] 20. Final Integration and Wiring
   - [x] 20.1 Update server.ts with complete 1.0.0 bootstrap
     - Ensure server.ts creates DatabaseAdapter via factory, runs migrations, and passes adapter to all services
     - Instantiate JournalService, IntegrationConfigService with adapter

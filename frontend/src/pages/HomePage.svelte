@@ -528,7 +528,7 @@
               Pabawi
             </h1>
             <p class="text-xl text-gray-600 dark:text-gray-400">
-              Your servers. Your eyes. Your actions.
+              Your servers. Your tools. Your actions.
             </p>
           </div>
         </div>

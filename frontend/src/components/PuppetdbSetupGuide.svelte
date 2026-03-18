@@ -1,9 +1,88 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { saveIntegrationConfig, getIntegrationConfig } from '../lib/api';
+  import { showSuccess, showError } from '../lib/toast.svelte';
+  import { logger } from '../lib/logger.svelte';
+
   let selectedAuth = $state<"token" | "ssl">("token");
   let showAdvanced = $state(false);
+  let saving = $state(false);
+  let loadingConfig = $state(true);
+
+  let config = $state({
+    serverUrl: '',
+    port: 8081,
+    token: '',
+    ssl_enabled: true,
+    ssl_ca: '',
+    ssl_cert: '',
+    ssl_key: '',
+    ssl_rejectUnauthorized: true,
+  });
+
+  onMount(async () => {
+    try {
+      const effective = await getIntegrationConfig('puppetdb');
+      if (effective) {
+        config.serverUrl = String(effective.serverUrl ?? '');
+        config.port = Number(effective.port ?? 8081);
+        config.token = String(effective.token ?? '');
+        config.ssl_enabled = effective.ssl_enabled !== false && effective.ssl_enabled !== 'false';
+        config.ssl_ca = String(effective.ssl_ca ?? '');
+        config.ssl_cert = String(effective.ssl_cert ?? '');
+        config.ssl_key = String(effective.ssl_key ?? '');
+        config.ssl_rejectUnauthorized = effective.ssl_rejectUnauthorized !== false && effective.ssl_rejectUnauthorized !== 'false';
+        if (config.token) selectedAuth = 'token';
+        else if (config.ssl_ca || config.ssl_cert) selectedAuth = 'ssl';
+      }
+    } catch {
+      // No existing config
+    } finally {
+      loadingConfig = false;
+    }
+  });
+
+  function validateForm(): boolean {
+    if (!config.serverUrl) return false;
+    if (!config.port || config.port < 1 || config.port > 65535) return false;
+    if (selectedAuth === 'token' && !config.token) return false;
+    if (selectedAuth === 'ssl' && (!config.ssl_ca || !config.ssl_cert || !config.ssl_key)) return false;
+    return true;
+  }
+
+  const isFormValid = $derived(validateForm());
+
+  async function handleSaveConfiguration(): Promise<void> {
+    saving = true;
+    try {
+      const payload: Record<string, unknown> = {
+        serverUrl: config.serverUrl,
+        port: config.port,
+      };
+      if (selectedAuth === 'token') {
+        payload.token = config.token;
+      } else {
+        payload.ssl_enabled = config.ssl_enabled;
+        payload.ssl_ca = config.ssl_ca;
+        payload.ssl_cert = config.ssl_cert;
+        payload.ssl_key = config.ssl_key;
+        payload.ssl_rejectUnauthorized = config.ssl_rejectUnauthorized;
+      }
+      await saveIntegrationConfig('puppetdb', payload);
+      showSuccess('PuppetDB configuration saved successfully');
+      logger.info('PuppetDB configuration saved', { serverUrl: config.serverUrl });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to save configuration: ${message}`);
+      logger.error('PuppetDB configuration save error', { error });
+    } finally {
+      saving = false;
+    }
+  }
 
   const copyToClipboard = (text: string): void => {
     navigator.clipboard.writeText(text);
+    showSuccess('Copied to clipboard');
   };
 
   const tokenConfig = `# PuppetDB Integration - Token Authentication (Puppet Enterprise Only)
@@ -64,7 +143,43 @@ PUPPETDB_PRIORITY=10`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Choose Authentication Method</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Configure Connection</h3>
+
+      <div class="space-y-4">
+        <div>
+          <label for="puppetdb-server-url" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Server URL *
+          </label>
+          <input
+            id="puppetdb-server-url"
+            type="text"
+            bind:value={config.serverUrl}
+            placeholder="https://puppetdb.example.com"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label for="puppetdb-port" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Port *
+          </label>
+          <input
+            id="puppetdb-port"
+            type="number"
+            bind:value={config.port}
+            min="1"
+            max="65535"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Default: 8081</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Choose Authentication Method</h3>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <button
@@ -95,7 +210,20 @@ PUPPETDB_PRIORITY=10`;
       </div>
 
       {#if selectedAuth === "token"}
-        <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div class="mt-4">
+          <label for="puppetdb-token" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            API Token *
+          </label>
+          <input
+            id="puppetdb-token"
+            type="password"
+            bind:value={config.token}
+            placeholder="Enter your PuppetDB API token"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div class="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
           <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Generate API Token (Puppet Enterprise Only)</h4>
           <p class="text-gray-700 dark:text-gray-300 mb-3"><strong>Note:</strong> Token authentication is only available with Puppet Enterprise. Open Source Puppet and OpenVox installations must use SSL certificates.</p>
           <p class="text-gray-700 dark:text-gray-300 mb-3">Run these commands on your Puppetserver:</p>
@@ -105,7 +233,63 @@ PUPPETDB_PRIORITY=10`;
           </div>
         </div>
       {:else}
-        <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div class="mt-4 space-y-4">
+          <div>
+            <label for="puppetdb-ssl-ca" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              CA Certificate Path *
+            </label>
+            <input
+              id="puppetdb-ssl-ca"
+              type="text"
+              bind:value={config.ssl_ca}
+              placeholder="/etc/puppetlabs/puppet/ssl/certs/ca.pem"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label for="puppetdb-ssl-cert" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Client Certificate Path *
+            </label>
+            <input
+              id="puppetdb-ssl-cert"
+              type="text"
+              bind:value={config.ssl_cert}
+              placeholder="/etc/puppetlabs/puppet/ssl/certs/pabawi.pem"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label for="puppetdb-ssl-key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Private Key Path *
+            </label>
+            <input
+              id="puppetdb-ssl-key"
+              type="text"
+              bind:value={config.ssl_key}
+              placeholder="/etc/puppetlabs/puppet/ssl/private_keys/pabawi.pem"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                bind:checked={config.ssl_rejectUnauthorized}
+                class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Verify SSL certificates
+              </span>
+            </label>
+            {#if !config.ssl_rejectUnauthorized}
+              <p class="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
+                ⚠️ SSL verification disabled. Only use for testing with self-signed certificates.
+              </p>
+            {/if}
+          </div>
+        </div>
+
+        <div class="mt-4 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
           <h4 class="text-lg font-medium text-gray-900 dark:text-white mb-2">Certificate Generation Options</h4>
           <p class="text-gray-700 dark:text-gray-300 mb-3">The certname used for PuppetDB integration can be either manually generated on the Puppetserver or generated via the provided script. Note that the same certname can be used for both Puppetserver and PuppetDB integrations for simplicity.</p>
 
@@ -152,12 +336,27 @@ PUPPETDB_PRIORITY=10`;
           </div>
         </div>
       {/if}
+
+      <div class="flex gap-3 pt-6">
+        <button
+          onclick={handleSaveConfiguration}
+          disabled={!isFormValid || saving}
+          class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          {#if saving}
+            <span class="animate-spin">⏳</span>
+            Saving...
+          {:else}
+            💾 Save Configuration
+          {/if}
+        </button>
+      </div>
     </div>
   </div>
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Configure Environment Variables</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Configure Environment Variables (Alternative)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Add these variables to your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code> file:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
@@ -227,7 +426,7 @@ PUPPETDB_PRIORITY=10`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Restart Backend Server</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Restart Backend Server</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Apply the configuration by restarting the backend:</p>
       <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
         <div>cd backend</div>
@@ -238,7 +437,7 @@ PUPPETDB_PRIORITY=10`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Verify Connection</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Verify Connection</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Check the integration status:</p>
       <ol class="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 mb-4">
         <li>Navigate to the <strong>Integrations</strong> page</li>

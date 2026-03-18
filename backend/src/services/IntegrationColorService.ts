@@ -17,6 +17,8 @@ export interface IntegrationColors {
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
   ssh: IntegrationColorConfig;
+  proxmox: IntegrationColorConfig;
+  aws: IntegrationColorConfig;
 }
 
 /**
@@ -40,35 +42,48 @@ export class IntegrationColorService {
     // Define color palette for each integration
     // Colors inspired by Puppet logo for better visibility and brand consistency
     this.colors = {
+      // Provisioning tools — dark blues
+      proxmox: {
+        primary: '#1B3A6B',  // Deep navy blue
+        light: '#E3EAF5',
+        dark: '#122850',
+      },
+      aws: {
+        primary: '#1A6B8A',  // Teal-blue, distinct from Proxmox
+        light: '#E1F0F5',
+        dark: '#124D66',
+      },
+      // Remote execution tools — green nuances
       bolt: {
-        primary: '#FFAE1A',  // Bright orange from Puppet logo
-        light: '#FFF4E0',
-        dark: '#CC8B15',
+        primary: '#2D9F4A',  // Green with warm/red undertone (olive-ish)
+        light: '#E6F5E0',
+        dark: '#1E7A35',
       },
       ansible: {
-        primary: '#1A4D8F',  // Blue for Ansible
-        light: '#E8F1FF',
-        dark: '#133A6D',
-      },
-      puppetdb: {
-        primary: '#9063CD',  // Violet/purple from Puppet logo
-        light: '#F0E6FF',
-        dark: '#7249A8',
-      },
-      puppetserver: {
-        primary: '#2E3A87',  // Dark blue from Puppet logo
-        light: '#E8EAFF',
-        dark: '#1F2760',
-      },
-      hiera: {
-        primary: '#C1272D',  // Dark red
-        light: '#FFE8E9',
-        dark: '#9A1F24',
+        primary: '#0B3D1E',  // Very dark green
+        light: '#D0E8D8',
+        dark: '#072A14',
       },
       ssh: {
-        primary: '#10B981',  // Green for SSH connectivity
-        light: '#D1FAE5',
-        dark: '#059669',
+        primary: '#4ADE80',  // Light mint green
+        light: '#F0FDF4',
+        dark: '#22C55E',
+      },
+      // Puppet ecosystem — red-orange
+      puppetdb: {
+        primary: '#D94F00',  // Burnt orange
+        light: '#FFF0E6',
+        dark: '#A63D00',
+      },
+      puppetserver: {
+        primary: '#B83230',  // Brick red
+        light: '#FDEAEA',
+        dark: '#8C2624',
+      },
+      hiera: {
+        primary: '#E07020',  // Warm orange
+        light: '#FFF4E8',
+        dark: '#B35A1A',
       },
     };
 

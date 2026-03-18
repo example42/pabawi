@@ -102,6 +102,18 @@ export class IntegrationManager {
   }
 
   /**
+   * Clear the inventory cache, forcing a fresh fetch on next request.
+   * Call this after provisioning or destroying resources.
+   */
+  clearInventoryCache(): void {
+    this.inventoryCache = null;
+    this.logger.debug("Inventory cache cleared", {
+      component: "IntegrationManager",
+      operation: "clearInventoryCache",
+    });
+  }
+
+  /**
    * Register a plugin with the manager
    *
    * @param plugin - Plugin instance to register
@@ -441,24 +453,37 @@ export class IntegrationManager {
             return { nodes: [], groups: [] };
           }
 
-          // Fetch nodes and groups in parallel
+          // Fetch nodes and groups in parallel with per-source timeout
+          // Prevents a single slow source from blocking the entire inventory
+          const SOURCE_TIMEOUT_MS = 15_000;
+
           this.logger.debug(`Calling getInventory() and getGroups() on source '${name}'`, {
             component: "IntegrationManager",
             operation: "getAggregatedInventory",
             metadata: { sourceName: name },
           });
 
-          const [nodes, groups] = await Promise.all([
-            source.getInventory(),
-            source.getGroups().catch((error: unknown) => {
-              const err = error instanceof Error ? error : new Error(String(error));
-              this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
-                component: "IntegrationManager",
-                operation: "getAggregatedInventory",
-                metadata: { sourceName: name },
-              }, err);
-              return [];
-            }),
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Source '${name}' timed out after ${String(SOURCE_TIMEOUT_MS)}ms`)),
+              SOURCE_TIMEOUT_MS,
+            ),
+          );
+
+          const [nodes, groups] = await Promise.race([
+            Promise.all([
+              source.getInventory(),
+              source.getGroups().catch((error: unknown) => {
+                const err = error instanceof Error ? error : new Error(String(error));
+                this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
+                  component: "IntegrationManager",
+                  operation: "getAggregatedInventory",
+                  metadata: { sourceName: name },
+                }, err);
+                return [] as NodeGroup[];
+              }),
+            ]),
+            timeoutPromise,
           ]);
 
           this.logger.debug(`Source '${name}' returned ${String(nodes.length)} nodes and ${String(groups.length)} groups`, {

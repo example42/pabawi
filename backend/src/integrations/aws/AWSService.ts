@@ -356,7 +356,7 @@ export class AWSService {
       new DescribeImagesCommand({
         Filters: ec2Filters,
         Owners: ["self", "amazon"],
-        MaxResults: 100,
+        MaxResults: 200,
       })
     );
 

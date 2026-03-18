@@ -1,9 +1,66 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { saveIntegrationConfig, getIntegrationConfig } from '../lib/api';
+  import { showSuccess, showError } from '../lib/toast.svelte';
+  import { logger } from '../lib/logger.svelte';
+
   let selectedInventoryFormat = $state<"ini" | "yaml">("ini");
   let showAdvanced = $state(false);
+  let saving = $state(false);
+  let loadingConfig = $state(true);
+
+  let config = $state({
+    projectPath: '',
+    inventoryPath: '',
+    executionTimeout: 300000,
+  });
+
+  onMount(async () => {
+    try {
+      const effective = await getIntegrationConfig('ansible');
+      if (effective) {
+        config.projectPath = String(effective.projectPath ?? '');
+        config.inventoryPath = String(effective.inventoryPath ?? '');
+        config.executionTimeout = Number(effective.executionTimeout ?? 300000);
+      }
+    } catch {
+      // No existing config
+    } finally {
+      loadingConfig = false;
+    }
+  });
+
+  function validateForm(): boolean {
+    if (!config.projectPath) return false;
+    if (!config.inventoryPath) return false;
+    return true;
+  }
+
+  const isFormValid = $derived(validateForm());
+
+  async function handleSaveConfiguration(): Promise<void> {
+    saving = true;
+    try {
+      const payload: Record<string, unknown> = {
+        projectPath: config.projectPath,
+        inventoryPath: config.inventoryPath,
+        executionTimeout: config.executionTimeout,
+      };
+      await saveIntegrationConfig('ansible', payload);
+      showSuccess('Ansible configuration saved successfully');
+      logger.info('Ansible configuration saved', { projectPath: config.projectPath });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to save configuration: ${message}`);
+      logger.error('Ansible configuration save error', { error });
+    } finally {
+      saving = false;
+    }
+  }
 
   const copyToClipboard = (text: string): void => {
     navigator.clipboard.writeText(text);
+    showSuccess('Copied to clipboard');
   };
 
   const baseConfig = `# Ansible Integration - Base Configuration
@@ -85,7 +142,72 @@ ansible-playbook -i inventory/hosts playbooks/site.yml --check`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Prepare Inventory</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Configure Connection</h3>
+
+      <div class="space-y-4">
+        <div>
+          <label for="ansible-project-path" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Project Path *
+          </label>
+          <input
+            id="ansible-project-path"
+            type="text"
+            bind:value={config.projectPath}
+            placeholder="."
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Path to your Ansible project directory</p>
+        </div>
+
+        <div>
+          <label for="ansible-inventory-path" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Inventory Path *
+          </label>
+          <input
+            id="ansible-inventory-path"
+            type="text"
+            bind:value={config.inventoryPath}
+            placeholder="inventory/hosts"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Relative to project path</p>
+        </div>
+
+        <div>
+          <label for="ansible-execution-timeout" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Execution Timeout (ms)
+          </label>
+          <input
+            id="ansible-execution-timeout"
+            type="number"
+            bind:value={config.executionTimeout}
+            min="1000"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Default: 300000 (5 minutes)</p>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button
+            onclick={handleSaveConfiguration}
+            disabled={!isFormValid || saving}
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {#if saving}
+              <span class="animate-spin">⏳</span>
+              Saving...
+            {:else}
+              💾 Save Configuration
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Prepare Inventory</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Create your inventory in INI or YAML format:</p>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
@@ -140,7 +262,7 @@ ansible-playbook -i inventory/hosts playbooks/site.yml --check`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Configure Environment Variables</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Configure Environment Variables (Alternative)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Add these values to your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code>:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
@@ -183,7 +305,7 @@ ansible-playbook -i inventory/hosts playbooks/site.yml --check`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Add a Playbook (Optional)</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Add a Playbook (Optional)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Create a playbook file if you plan to use the Playbook execution action in Pabawi:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
@@ -203,7 +325,7 @@ ansible-playbook -i inventory/hosts playbooks/site.yml --check`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Validate Ansible Locally</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Validate Ansible Locally</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Before using Pabawi, verify your inventory and playbook manually:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
@@ -223,7 +345,7 @@ ansible-playbook -i inventory/hosts playbooks/site.yml --check`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Restart Backend and Verify</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Restart Backend and Verify</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Restart the backend and confirm Ansible appears as connected in Integrations:</p>
       <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1 mb-4">
         <div>cd backend</div>

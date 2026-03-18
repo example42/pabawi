@@ -1188,8 +1188,12 @@ export async function getAWSInstanceTypes(region?: string): Promise<AWSInstanceT
  * Get available AMIs for a region
  * Validates Requirements: 13.3
  */
-export async function getAWSAMIs(region: string): Promise<AWSAMIInfo[]> {
-  const response = await get<{ amis: AWSAMIInfo[] }>(`/api/integrations/aws/amis?region=${encodeURIComponent(region)}`, {
+export async function getAWSAMIs(region: string, search?: string): Promise<AWSAMIInfo[]> {
+  let url = `/api/integrations/aws/amis?region=${encodeURIComponent(region)}`;
+  if (search) {
+    url += `&search=${encodeURIComponent(search)}`;
+  }
+  const response = await get<{ amis: AWSAMIInfo[] }>(url, {
     maxRetries: 2,
     retryDelay: 1000,
   });

@@ -154,6 +154,7 @@ export class AWSPlugin
 
     try {
       const identity = await this.service.validateCredentials();
+      const config = this.config.config as unknown as AWSConfig;
 
       return {
         healthy: true,
@@ -162,19 +163,37 @@ export class AWSPlugin
           account: identity.account,
           arn: identity.arn,
           userId: identity.userId,
+          region: config.region ?? 'us-east-1',
+          hasAccessKey: !!config.accessKeyId,
+          hasProfile: !!config.profile,
+          hasEndpoint: !!config.endpoint,
         },
       };
     } catch (error) {
       if (error instanceof AWSAuthenticationError) {
+        const config = this.config.config as unknown as AWSConfig;
         return {
           healthy: false,
           message: "AWS authentication failed",
+          details: {
+            region: config.region ?? 'us-east-1',
+            hasAccessKey: !!config.accessKeyId,
+            hasProfile: !!config.profile,
+            hasEndpoint: !!config.endpoint,
+          },
         };
       }
 
+      const config = this.config.config as unknown as AWSConfig;
       return {
         healthy: false,
         message: error instanceof Error ? error.message : "AWS health check failed",
+        details: {
+          region: config.region ?? 'us-east-1',
+          hasAccessKey: !!config.accessKeyId,
+          hasProfile: !!config.profile,
+          hasEndpoint: !!config.endpoint,
+        },
       };
     }
   }
