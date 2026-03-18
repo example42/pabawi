@@ -25,6 +25,7 @@
     hiera: 'Hiera',
     ssh: 'SSH',
     proxmox: 'Proxmox',
+    aws: 'AWS',
   };
 
   const label = $derived(integrationLabels[integration]);

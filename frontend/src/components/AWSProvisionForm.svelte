@@ -24,7 +24,7 @@
    * AWSProvisionForm Component
    *
    * EC2 provisioning form with cascading selectors:
-   * Region → Instance Types, AMIs, VPCs → Subnets, Security Groups
+   * Region → Instance Types (filterable by vCPU/RAM), AMIs (searchable), VPCs → Subnets, Security Groups
    *
    * Validates Requirements: 10.1, 13.1-13.7
    */
@@ -60,6 +60,51 @@
   let loadingSecurityGroups = $state(false);
   let loadingKeyPairs = $state(false);
 
+  // Instance type filter state
+  let minVCpus = $state(0);
+  let maxVCpus = $state(0);
+  let minRAMGiB = $state(0);
+  let maxRAMGiB = $state(0);
+  let filterArchitecture = $state('');
+
+  // Derived: unique vCPU and RAM values for range options
+  let vcpuOptions = $derived.by(() => {
+    const vals = [...new Set(instanceTypes.map(it => it.vCpus))].sort((a, b) => a - b);
+    return vals;
+  });
+
+  let ramGiBOptions = $derived.by(() => {
+    const vals = [...new Set(instanceTypes.map(it => Math.round(it.memoryMiB / 1024)))].sort((a, b) => a - b);
+    return vals;
+  });
+
+  let architectureOptions = $derived.by(() => {
+    return [...new Set(instanceTypes.map(it => it.architecture))].sort();
+  });
+
+  // Derived: filtered instance types based on vCPU/RAM/arch selections
+  let filteredInstanceTypes = $derived.by(() => {
+    return instanceTypes.filter(it => {
+      const ramGiB = Math.round(it.memoryMiB / 1024);
+      if (minVCpus > 0 && it.vCpus < minVCpus) return false;
+      if (maxVCpus > 0 && it.vCpus > maxVCpus) return false;
+      if (minRAMGiB > 0 && ramGiB < minRAMGiB) return false;
+      if (maxRAMGiB > 0 && ramGiB > maxRAMGiB) return false;
+      if (filterArchitecture && it.architecture !== filterArchitecture) return false;
+      return true;
+    }).sort((a, b) => {
+      // Sort by vCPU then RAM
+      if (a.vCpus !== b.vCpus) return a.vCpus - b.vCpus;
+      return a.memoryMiB - b.memoryMiB;
+    });
+  });
+
+  // AMI search state
+  let amiSearchQuery = $state('');
+  let amiSearchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let selectedAMIInfo = $state<AWSAMIInfo | null>(null);
+  let showAMIResults = $state(false);
+
   let isFormValid = $derived.by(() => {
     if (!selectedRegion || !selectedAMI) return false;
     return Object.keys(validationErrors).length === 0;
@@ -89,45 +134,95 @@
     // Reset dependent fields
     selectedInstanceType = '';
     selectedAMI = '';
+    selectedAMIInfo = null;
+    amiSearchQuery = '';
+    amis = [];
     selectedVPC = '';
     selectedSubnet = '';
     selectedSecurityGroups = [];
     selectedKeyPair = '';
     instanceTypes = [];
-    amis = [];
     vpcs = [];
     subnets = [];
     securityGroups = [];
     keyPairs = [];
+    // Reset filters
+    minVCpus = 0;
+    maxVCpus = 0;
+    minRAMGiB = 0;
+    maxRAMGiB = 0;
+    filterArchitecture = '';
 
     if (!region) return;
 
     loadingInstanceTypes = true;
-    loadingAMIs = true;
     loadingVPCs = true;
     loadingKeyPairs = true;
 
     const results = await Promise.allSettled([
       getAWSInstanceTypes(region),
-      getAWSAMIs(region),
       getAWSVPCs(region),
       getAWSKeyPairs(region),
     ]);
 
     instanceTypes = results[0].status === 'fulfilled' ? results[0].value : [];
-    amis = results[1].status === 'fulfilled' ? results[1].value : [];
-    vpcs = results[2].status === 'fulfilled' ? results[2].value : [];
-    keyPairs = results[3].status === 'fulfilled' ? results[3].value : [];
+    vpcs = results[1].status === 'fulfilled' ? results[1].value : [];
+    keyPairs = results[2].status === 'fulfilled' ? results[2].value : [];
 
     if (results[0].status === 'rejected') logger.error('AWSProvisionForm', 'onRegionChange', 'Failed to fetch instance types', results[0].reason as Error);
-    if (results[1].status === 'rejected') logger.error('AWSProvisionForm', 'onRegionChange', 'Failed to fetch AMIs', results[1].reason as Error);
-    if (results[2].status === 'rejected') logger.error('AWSProvisionForm', 'onRegionChange', 'Failed to fetch VPCs', results[2].reason as Error);
-    if (results[3].status === 'rejected') logger.error('AWSProvisionForm', 'onRegionChange', 'Failed to fetch key pairs', results[3].reason as Error);
+    if (results[1].status === 'rejected') logger.error('AWSProvisionForm', 'onRegionChange', 'Failed to fetch VPCs', results[1].reason as Error);
+    if (results[2].status === 'rejected') logger.error('AWSProvisionForm', 'onRegionChange', 'Failed to fetch key pairs', results[2].reason as Error);
 
     loadingInstanceTypes = false;
-    loadingAMIs = false;
     loadingVPCs = false;
     loadingKeyPairs = false;
+  }
+
+  /**
+   * Debounced AMI search — calls backend with search query
+   */
+  function onAMISearchInput(query: string): void {
+    amiSearchQuery = query;
+    selectedAMI = '';
+    selectedAMIInfo = null;
+
+    if (amiSearchTimeout) clearTimeout(amiSearchTimeout);
+
+    if (!query || query.length < 2 || !selectedRegion) {
+      amis = [];
+      showAMIResults = false;
+      return;
+    }
+
+    showAMIResults = true;
+    loadingAMIs = true;
+
+    amiSearchTimeout = setTimeout(async () => {
+      try {
+        amis = await getAWSAMIs(selectedRegion, query);
+      } catch (e) {
+        logger.error('AWSProvisionForm', 'onAMISearchInput', 'Failed to search AMIs', e as Error);
+        amis = [];
+      } finally {
+        loadingAMIs = false;
+      }
+    }, 400);
+  }
+
+  function selectAMI(ami: AWSAMIInfo): void {
+    selectedAMI = ami.imageId;
+    selectedAMIInfo = ami;
+    amiSearchQuery = ami.name || ami.imageId;
+    showAMIResults = false;
+    validateField('ami');
+  }
+
+  function clearAMISelection(): void {
+    selectedAMI = '';
+    selectedAMIInfo = null;
+    amiSearchQuery = '';
+    amis = [];
+    showAMIResults = false;
   }
 
   /**
@@ -233,12 +328,20 @@
         // Reset form
         selectedInstanceType = '';
         selectedAMI = '';
+        selectedAMIInfo = null;
+        amiSearchQuery = '';
+        amis = [];
         selectedVPC = '';
         selectedSubnet = '';
         selectedSecurityGroups = [];
         selectedKeyPair = '';
         instanceName = '';
         validationErrors = {};
+        minVCpus = 0;
+        maxVCpus = 0;
+        minRAMGiB = 0;
+        maxRAMGiB = 0;
+        filterArchitecture = '';
       } else {
         const errorMessage = response.result.error || 'Failed to launch EC2 instance';
         showError('EC2 provisioning failed', errorMessage);
@@ -293,54 +396,193 @@
         placeholder="my-ec2-instance"
       />
     </div>
+  </div>
 
-    <!-- Instance Type -->
-    <div>
-      <label for="aws-instance-type" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-        Instance Type
-      </label>
+  <!-- Instance Type Section with vCPU/RAM/Architecture filters -->
+  <fieldset class="border border-gray-200 dark:border-gray-600 rounded-md p-4">
+    <legend class="text-sm font-medium text-gray-700 dark:text-gray-300 px-1">Instance Type</legend>
+
+    {#if !selectedRegion}
+      <p class="text-sm text-gray-500 dark:text-gray-400">Select a region first</p>
+    {:else if loadingInstanceTypes}
+      <p class="text-sm text-gray-500 dark:text-gray-400">Loading instance types...</p>
+    {:else}
+      <!-- Filter controls -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5 mb-4">
+        <div>
+          <label for="filter-min-vcpu" class="block text-xs font-medium text-gray-600 dark:text-gray-400">Min vCPUs</label>
+          <select
+            id="filter-min-vcpu"
+            bind:value={minVCpus}
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
+          >
+            <option value={0}>Any</option>
+            {#each vcpuOptions as v}
+              <option value={v}>{v}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="filter-max-vcpu" class="block text-xs font-medium text-gray-600 dark:text-gray-400">Max vCPUs</label>
+          <select
+            id="filter-max-vcpu"
+            bind:value={maxVCpus}
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
+          >
+            <option value={0}>Any</option>
+            {#each vcpuOptions as v}
+              <option value={v}>{v}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="filter-min-ram" class="block text-xs font-medium text-gray-600 dark:text-gray-400">Min RAM (GiB)</label>
+          <select
+            id="filter-min-ram"
+            bind:value={minRAMGiB}
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
+          >
+            <option value={0}>Any</option>
+            {#each ramGiBOptions as r}
+              <option value={r}>{r}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="filter-max-ram" class="block text-xs font-medium text-gray-600 dark:text-gray-400">Max RAM (GiB)</label>
+          <select
+            id="filter-max-ram"
+            bind:value={maxRAMGiB}
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
+          >
+            <option value={0}>Any</option>
+            {#each ramGiBOptions as r}
+              <option value={r}>{r}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label for="filter-arch" class="block text-xs font-medium text-gray-600 dark:text-gray-400">Architecture</label>
+          <select
+            id="filter-arch"
+            bind:value={filterArchitecture}
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs"
+          >
+            <option value="">Any</option>
+            {#each architectureOptions as arch}
+              <option value={arch}>{arch}</option>
+            {/each}
+          </select>
+        </div>
+      </div>
+
+      <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
+        {filteredInstanceTypes.length} of {instanceTypes.length} types match filters
+      </p>
+
+      <!-- Instance type selector -->
       <select
         id="aws-instance-type"
         name="instanceType"
         bind:value={selectedInstanceType}
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
-        disabled={!selectedRegion}
+        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
       >
-        <option value="">{loadingInstanceTypes ? 'Loading...' : selectedRegion ? 'Select instance type' : 'Select a region first'}</option>
-        {#each instanceTypes as it}
+        <option value="">Select instance type</option>
+        {#each filteredInstanceTypes as it}
           <option value={it.instanceType}>
-            {it.instanceType} ({it.vCpus} vCPU, {Math.round(it.memoryMiB / 1024)} GB RAM, {it.architecture})
+            {it.instanceType} — {it.vCpus} vCPU, {Math.round(it.memoryMiB / 1024)} GiB RAM, {it.architecture}
           </option>
         {/each}
       </select>
-    </div>
+    {/if}
+  </fieldset>
 
-    <!-- AMI -->
-    <div>
-      <label for="aws-ami" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-        AMI <span class="text-red-500">*</span>
-      </label>
-      <select
-        id="aws-ami"
-        name="ami"
-        value={selectedAMI}
-        onchange={(e) => { selectedAMI = (e.target as HTMLSelectElement).value; validateField('ami'); }}
-        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
-        disabled={!selectedRegion}
-        required
-      >
-        <option value="">{loadingAMIs ? 'Loading...' : selectedRegion ? 'Select an AMI' : 'Select a region first'}</option>
-        {#each amis as ami}
-          <option value={ami.imageId}>
-            {ami.name || ami.imageId} ({ami.architecture}{ami.platform ? `, ${ami.platform}` : ''})
-          </option>
-        {/each}
-      </select>
-      {#if validationErrors.ami}
-        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.ami}</p>
-      {/if}
-    </div>
+  <!-- AMI Search Section -->
+  <fieldset class="border border-gray-200 dark:border-gray-600 rounded-md p-4">
+    <legend class="text-sm font-medium text-gray-700 dark:text-gray-300 px-1">
+      AMI <span class="text-red-500">*</span>
+    </legend>
 
+    {#if !selectedRegion}
+      <p class="text-sm text-gray-500 dark:text-gray-400">Select a region first</p>
+    {:else}
+      <div class="relative">
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            id="aws-ami-search"
+            name="amiSearch"
+            value={amiSearchQuery}
+            oninput={(e) => onAMISearchInput((e.target as HTMLInputElement).value)}
+            onfocus={() => { if (amis.length > 0 && !selectedAMI) showAMIResults = true; }}
+            placeholder="Search AMIs by name (e.g. ubuntu, amazon-linux, debian)..."
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+            autocomplete="off"
+          />
+          {#if selectedAMI}
+            <button
+              type="button"
+              onclick={clearAMISelection}
+              class="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              aria-label="Clear AMI selection"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          {/if}
+        </div>
+
+        {#if loadingAMIs}
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Searching AMIs...</p>
+        {/if}
+
+        <!-- Selected AMI badge -->
+        {#if selectedAMIInfo}
+          <div class="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md">
+            <p class="text-sm font-medium text-blue-800 dark:text-blue-200">{selectedAMIInfo.name || selectedAMIInfo.imageId}</p>
+            <p class="text-xs text-blue-600 dark:text-blue-400">
+              {selectedAMIInfo.imageId} · {selectedAMIInfo.architecture}{selectedAMIInfo.platform ? ` · ${selectedAMIInfo.platform}` : ''}
+            </p>
+            {#if selectedAMIInfo.description}
+              <p class="text-xs text-blue-500 dark:text-blue-400 mt-1 truncate">{selectedAMIInfo.description}</p>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Search results dropdown -->
+        {#if showAMIResults && !selectedAMI && amis.length > 0}
+          <div class="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+            {#each amis as ami}
+              <button
+                type="button"
+                onclick={() => selectAMI(ami)}
+                class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+              >
+                <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{ami.name || ami.imageId}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  {ami.imageId} · {ami.architecture}{ami.platform ? ` · ${ami.platform}` : ''}
+                  {#if ami.creationDate}
+                    · {ami.creationDate.split('T')[0]}
+                  {/if}
+                </p>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        {#if showAMIResults && !loadingAMIs && amis.length === 0 && amiSearchQuery.length >= 2}
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No AMIs found matching "{amiSearchQuery}"</p>
+        {/if}
+      </div>
+    {/if}
+
+    {#if validationErrors.ami}
+      <p class="mt-1 text-sm text-red-600 dark:text-red-400">{validationErrors.ami}</p>
+    {/if}
+  </fieldset>
+
+  <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
     <!-- VPC -->
     <div>
       <label for="aws-vpc" class="block text-sm font-medium text-gray-700 dark:text-gray-300">

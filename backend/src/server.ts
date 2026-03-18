@@ -1261,7 +1261,7 @@ async function startServer(): Promise<Express> {
         "/api/integrations/aws",
         authMiddleware,
         rateLimitMiddleware,
-        createAWSRouter(awsPluginInstance),
+        createAWSRouter(awsPluginInstance, integrationManager),
       );
     }
 

@@ -21,6 +21,7 @@ export interface IntegrationColors {
   hiera: IntegrationColorConfig;
   ssh: IntegrationColorConfig;
   proxmox: IntegrationColorConfig;
+  aws: IntegrationColorConfig;
 }
 
 /**
@@ -125,7 +126,7 @@ class IntegrationColorStore {
    * @returns Array of valid integration names
    */
   getValidIntegrations(): IntegrationType[] {
-    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh', 'proxmox'];
+    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh', 'proxmox', 'aws'];
   }
 
   /**
@@ -144,40 +145,48 @@ class IntegrationColorStore {
    */
   private getDefaultColors(): IntegrationColors {
     return {
+      // Provisioning tools — dark blues
+      proxmox: {
+        primary: '#1B3A6B',
+        light: '#E3EAF5',
+        dark: '#122850',
+      },
+      aws: {
+        primary: '#1A6B8A',
+        light: '#E1F0F5',
+        dark: '#124D66',
+      },
+      // Remote execution tools — green nuances
       bolt: {
-        primary: '#FFAE1A',
-        light: '#FFF4E0',
-        dark: '#CC8B15',
+        primary: '#2D9F4A',
+        light: '#E6F5E0',
+        dark: '#1E7A35',
       },
       ansible: {
-        primary: '#1A4D8F',
-        light: '#E8F1FF',
-        dark: '#133A6D',
-      },
-      puppetdb: {
-        primary: '#9063CD',
-        light: '#F0E6FF',
-        dark: '#7249A8',
-      },
-      puppetserver: {
-        primary: '#2E3A87',
-        light: '#E8EAFF',
-        dark: '#1F2760',
-      },
-      hiera: {
-        primary: '#C1272D',
-        light: '#FFE8E9',
-        dark: '#9A1F24',
+        primary: '#0B3D1E',
+        light: '#D0E8D8',
+        dark: '#072A14',
       },
       ssh: {
-        primary: '#10B981',
-        light: '#D1FAE5',
-        dark: '#059669',
+        primary: '#4ADE80',
+        light: '#F0FDF4',
+        dark: '#22C55E',
       },
-      proxmox: {
-        primary: '#6300e5ff',
-        light: '#FFF3E0',
-        dark: '#B85600',
+      // Puppet ecosystem — red-orange
+      puppetdb: {
+        primary: '#D94F00',
+        light: '#FFF0E6',
+        dark: '#A63D00',
+      },
+      puppetserver: {
+        primary: '#B83230',
+        light: '#FDEAEA',
+        dark: '#8C2624',
+      },
+      hiera: {
+        primary: '#E07020',
+        light: '#FFF4E8',
+        dark: '#B35A1A',
       },
     };
   }

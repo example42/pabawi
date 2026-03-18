@@ -1,14 +1,85 @@
 <script lang="ts">
-  import { get } from '../lib/api';
+  import { onMount } from 'svelte';
+  import { get, saveIntegrationConfig, getIntegrationConfig } from '../lib/api';
+  import { showSuccess, showError } from '../lib/toast.svelte';
+  import { logger } from '../lib/logger.svelte';
 
   let selectedFactSource = $state<"puppetdb" | "local">("puppetdb");
   let catalogCompilationEnabled = $state(false);
   let showAdvanced = $state(false);
   let testingConnection = $state(false);
   let testResult = $state<{ success: boolean; message: string; details?: Record<string, unknown> } | null>(null);
+  let saving = $state(false);
+  let loadingConfig = $state(true);
+
+  let config = $state({
+    controlRepoPath: '',
+    hieraConfigPath: 'hiera.yaml',
+    environments: '["production","development"]',
+    factSourcePreferPuppetdb: true,
+    localFactsPath: '',
+    catalogCompilationEnabled: false,
+  });
+
+  onMount(async () => {
+    try {
+      const effective = await getIntegrationConfig('hiera');
+      if (effective) {
+        config.controlRepoPath = String(effective.controlRepoPath ?? '');
+        config.hieraConfigPath = String(effective.hieraConfigPath ?? 'hiera.yaml');
+        config.factSourcePreferPuppetdb = effective.factSourcePreferPuppetdb !== false && effective.factSourcePreferPuppetdb !== 'false';
+        config.localFactsPath = String(effective.localFactsPath ?? '');
+        config.catalogCompilationEnabled = effective.catalogCompilationEnabled === true || effective.catalogCompilationEnabled === 'true';
+        if (effective.environments) {
+          config.environments = typeof effective.environments === 'string'
+            ? effective.environments
+            : JSON.stringify(effective.environments);
+        }
+        selectedFactSource = config.factSourcePreferPuppetdb ? 'puppetdb' : 'local';
+        catalogCompilationEnabled = config.catalogCompilationEnabled;
+      }
+    } catch {
+      // No existing config
+    } finally {
+      loadingConfig = false;
+    }
+  });
+
+  function validateForm(): boolean {
+    if (!config.controlRepoPath) return false;
+    if (!config.hieraConfigPath) return false;
+    if (selectedFactSource === 'local' && !config.localFactsPath) return false;
+    return true;
+  }
+
+  const isFormValid = $derived(validateForm());
+
+  async function handleSaveConfiguration(): Promise<void> {
+    saving = true;
+    try {
+      const payload: Record<string, unknown> = {
+        controlRepoPath: config.controlRepoPath,
+        hieraConfigPath: config.hieraConfigPath,
+        environments: config.environments,
+        factSourcePreferPuppetdb: selectedFactSource === 'puppetdb',
+        localFactsPath: config.localFactsPath,
+        catalogCompilationEnabled: catalogCompilationEnabled,
+      };
+      await saveIntegrationConfig('hiera', payload);
+      showSuccess('Hiera configuration saved successfully');
+      logger.info('Hiera configuration saved', { controlRepoPath: config.controlRepoPath });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to save configuration: ${message}`);
+      logger.error('Hiera configuration save error', { error });
+    } finally {
+      saving = false;
+    }
+  }
 
   const copyToClipboard = (text: string): void => {
     navigator.clipboard.writeText(text);
+    showSuccess('Copied to clipboard');
   };
 
   const basicConfig = `# Hiera Integration - Basic Configuration
@@ -139,7 +210,124 @@ hierarchy:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Prepare Your Control Repository</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Configure Connection</h3>
+
+      <div class="space-y-4">
+        <div>
+          <label for="hiera-control-repo" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Control Repository Path *
+          </label>
+          <input
+            id="hiera-control-repo"
+            type="text"
+            bind:value={config.controlRepoPath}
+            placeholder="/path/to/control-repo"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Absolute path to your Puppet control repository</p>
+        </div>
+
+        <div>
+          <label for="hiera-config-path" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Hiera Config Path *
+          </label>
+          <input
+            id="hiera-config-path"
+            type="text"
+            bind:value={config.hieraConfigPath}
+            placeholder="hiera.yaml"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Relative to control repo (default: hiera.yaml)</p>
+        </div>
+
+        <div>
+          <label for="hiera-environments" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Environments (JSON array)
+          </label>
+          <input
+            id="hiera-environments"
+            type="text"
+            bind:value={config.environments}
+            placeholder='["production","development"]'
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+          />
+        </div>
+
+        <div>
+          <div class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Fact Source</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <button
+              class="p-3 border-2 rounded-lg text-left transition-all text-sm {selectedFactSource === 'puppetdb'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 hover:border-blue-300'}"
+              onclick={() => (selectedFactSource = 'puppetdb')}
+            >
+              <span class="font-semibold text-gray-900 dark:text-white">🗄️ PuppetDB</span>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use facts from PuppetDB</p>
+            </button>
+            <button
+              class="p-3 border-2 rounded-lg text-left transition-all text-sm {selectedFactSource === 'local'
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 hover:border-blue-300'}"
+              onclick={() => (selectedFactSource = 'local')}
+            >
+              <span class="font-semibold text-gray-900 dark:text-white">📁 Local Files</span>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Use exported fact files</p>
+            </button>
+          </div>
+        </div>
+
+        {#if selectedFactSource === 'local'}
+          <div>
+            <label for="hiera-local-facts" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Local Facts Path *
+            </label>
+            <input
+              id="hiera-local-facts"
+              type="text"
+              bind:value={config.localFactsPath}
+              placeholder="/path/to/facts"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+        {/if}
+
+        <div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              bind:checked={catalogCompilationEnabled}
+              class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Enable Catalog Compilation
+            </span>
+          </label>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Advanced: resolves variables defined in Puppet code</p>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button
+            onclick={handleSaveConfiguration}
+            disabled={!isFormValid || saving}
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {#if saving}
+              <span class="animate-spin">⏳</span>
+              Saving...
+            {:else}
+              💾 Save Configuration
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Prepare Your Control Repository</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         Ensure your control repository follows the standard Puppet structure:
       </p>
@@ -174,7 +362,7 @@ hierarchy:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Configure Control Repository Path</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Configure Control Repository Path (Alternative)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         Add the basic Hiera configuration to your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code> file:
       </p>
@@ -205,7 +393,7 @@ hierarchy:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Configure Fact Source</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Configure Fact Source</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         Choose how Pabawi retrieves node facts for Hiera resolution:
       </p>
@@ -306,7 +494,7 @@ hierarchy:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Catalog Compilation Mode (Optional)</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Catalog Compilation Mode (Optional)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         Enable catalog compilation for advanced Hiera resolution that includes Puppet code variables:
       </p>
@@ -378,7 +566,7 @@ hierarchy:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Advanced Configuration (Optional)</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Advanced Configuration (Optional)</h3>
 
       <button
         class="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -420,7 +608,7 @@ hierarchy:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Restart Backend Server</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 7: Restart Backend Server</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Apply the configuration by restarting the backend:</p>
       <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
         <div>cd backend</div>
@@ -431,7 +619,7 @@ hierarchy:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 7: Verify Connection</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 8: Verify Connection</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Test the Hiera integration configuration:</p>
 
       <button

@@ -116,7 +116,14 @@ export class ProxmoxService {
       return {
         healthy: true,
         message: "Proxmox API is reachable",
-        details: { version },
+        details: {
+          version,
+          host: this.config.host,
+          port: this.config.port ?? 8006,
+          hasTokenAuth: !!this.config.token,
+          hasPasswordAuth: !!this.config.password,
+          sslRejectUnauthorized: this.config.ssl?.rejectUnauthorized ?? true,
+        },
       };
     } catch (error) {
       if (error instanceof ProxmoxAuthenticationError) {
@@ -130,7 +137,14 @@ export class ProxmoxService {
           healthy: false,
           degraded: true,
           message: "Authentication failed",
-          details: { error: error.message },
+          details: {
+            error: error.message,
+            host: this.config.host,
+            port: this.config.port ?? 8006,
+            hasTokenAuth: !!this.config.token,
+            hasPasswordAuth: !!this.config.password,
+            sslRejectUnauthorized: this.config.ssl?.rejectUnauthorized ?? true,
+          },
         };
       }
 
@@ -150,7 +164,14 @@ export class ProxmoxService {
       return {
         healthy: false,
         message: "Proxmox API is unreachable",
-        details: { error: errorMessage },
+        details: {
+          error: errorMessage,
+          host: this.config.host,
+          port: this.config.port ?? 8006,
+          hasTokenAuth: !!this.config.token,
+          hasPasswordAuth: !!this.config.password,
+          sslRejectUnauthorized: this.config.ssl?.rejectUnauthorized ?? true,
+        },
       };
     }
   }

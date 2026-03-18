@@ -236,6 +236,28 @@ export function createStatusRouter(
           });
         }
 
+        // Check if AWS is not configured
+        if (!configuredNames.has("aws")) {
+          logger.debug("AWS integration is not configured", {
+            component: "StatusRouter",
+            integration: "aws",
+            operation: "getStatus",
+          });
+          integrations.push({
+            name: "aws",
+            type: "both",
+            status: "not_configured",
+            lastCheck: new Date().toISOString(),
+            message: "AWS integration is not configured",
+            details: {
+              setupRequired: true,
+              setupUrl: "/setup/aws",
+            },
+            workingCapabilities: undefined,
+            failingCapabilities: undefined,
+          });
+        }
+
         const duration = Date.now() - startTime;
         const responseData = {
           integrations,

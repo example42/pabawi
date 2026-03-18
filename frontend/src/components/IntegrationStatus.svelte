@@ -252,6 +252,58 @@
     };
   }
 
+  // Get Proxmox-specific details for display
+  function getProxmoxDetails(integration: IntegrationStatus): {
+    host?: string;
+    port?: number;
+    hasTokenAuth?: boolean;
+    hasPasswordAuth?: boolean;
+    sslRejectUnauthorized?: boolean;
+    version?: unknown;
+    error?: string;
+  } | null {
+    if (integration.name !== 'proxmox' || !integration.details) {
+      return null;
+    }
+    const details = integration.details as Record<string, unknown>;
+    return {
+      host: typeof details.host === 'string' ? details.host : undefined,
+      port: typeof details.port === 'number' ? details.port : undefined,
+      hasTokenAuth: typeof details.hasTokenAuth === 'boolean' ? details.hasTokenAuth : undefined,
+      hasPasswordAuth: typeof details.hasPasswordAuth === 'boolean' ? details.hasPasswordAuth : undefined, // pragma: allowlist secret
+      sslRejectUnauthorized: typeof details.sslRejectUnauthorized === 'boolean' ? details.sslRejectUnauthorized : undefined,
+      version: details.version,
+      error: typeof details.error === 'string' ? details.error : undefined,
+    };
+  }
+
+  // Get AWS-specific details for display
+  function getAWSDetails(integration: IntegrationStatus): {
+    account?: string;
+    arn?: string;
+    userId?: string;
+    region?: string;
+    hasAccessKey?: boolean;
+    hasProfile?: boolean;
+    hasEndpoint?: boolean;
+    error?: string;
+  } | null {
+    if (integration.name !== 'aws' || !integration.details) {
+      return null;
+    }
+    const details = integration.details as Record<string, unknown>;
+    return {
+      account: typeof details.account === 'string' ? details.account : undefined,
+      arn: typeof details.arn === 'string' ? details.arn : undefined,
+      userId: typeof details.userId === 'string' ? details.userId : undefined,
+      region: typeof details.region === 'string' ? details.region : undefined,
+      hasAccessKey: typeof details.hasAccessKey === 'boolean' ? details.hasAccessKey : undefined,
+      hasProfile: typeof details.hasProfile === 'boolean' ? details.hasProfile : undefined,
+      hasEndpoint: typeof details.hasEndpoint === 'boolean' ? details.hasEndpoint : undefined,
+      error: typeof details.error === 'string' ? details.error : undefined,
+    };
+  }
+
   // Get integration-specific troubleshooting steps
   function getTroubleshootingSteps(integration: IntegrationStatus): string[] {
     if (integration.name === 'hiera') {
@@ -1233,6 +1285,187 @@
                       <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
                         <p class="text-xs font-medium text-red-800 dark:text-red-200">Error:</p>
                         <p class="mt-1 text-xs text-red-700 dark:text-red-300">{ansibleDetails.error}</p>
+                      </div>
+                    {/if}
+                  {/if}
+
+                <!-- Proxmox integration -->
+                {:else if integration.name === 'proxmox'}
+                  {@const proxmoxDetails = getProxmoxDetails(integration)}
+
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Set PROXMOX_HOST environment variable</li>
+                        <li>Configure authentication (token or password)</li>
+                        <li>Optionally configure SSL settings</li>
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- Always show host if available -->
+                    {#if proxmoxDetails?.host}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Host:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{proxmoxDetails.host}:{proxmoxDetails.port ?? 8006}</code>
+                      </div>
+                    {/if}
+
+                    <!-- Version info -->
+                    {#if proxmoxDetails?.version}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Version:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{JSON.stringify(proxmoxDetails.version)}</span>
+                      </div>
+                    {/if}
+
+                    <!-- Authentication and SSL status -->
+                    {#if proxmoxDetails?.hasTokenAuth !== undefined || proxmoxDetails?.hasPasswordAuth !== undefined || proxmoxDetails?.sslRejectUnauthorized !== undefined}
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        {#if proxmoxDetails?.hasTokenAuth !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if proxmoxDetails.hasTokenAuth}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Token auth</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No token</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if proxmoxDetails?.hasPasswordAuth !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if proxmoxDetails.hasPasswordAuth}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Password auth</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No password</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if proxmoxDetails?.sslRejectUnauthorized !== undefined}
+                          <div class="flex items-center gap-1 text-xs col-span-2">
+                            {#if proxmoxDetails.sslRejectUnauthorized}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">SSL verification enabled</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                              </svg>
+                              <span class="text-yellow-600 dark:text-yellow-400">SSL verification disabled</span>
+                            {/if}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Error details -->
+                    {#if proxmoxDetails?.error}
+                      <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
+                        <p class="text-xs font-medium text-red-800 dark:text-red-200">Error:</p>
+                        <p class="mt-1 text-xs text-red-700 dark:text-red-300">{proxmoxDetails.error}</p>
+                      </div>
+                    {/if}
+                  {/if}
+
+                <!-- AWS integration -->
+                {:else if integration.name === 'aws'}
+                  {@const awsDetails = getAWSDetails(integration)}
+
+                  {#if integration.status === 'not_configured'}
+                    <div class="text-xs text-blue-700 dark:text-blue-300">
+                      <p class="font-medium mb-1">Configuration Required:</p>
+                      <ul class="list-inside list-disc space-y-1 pl-2">
+                        <li>Set AWS_ENABLED=true environment variable</li>
+                        <li>Configure credentials (access key or profile)</li>
+                        <li>Optionally set AWS_REGION</li>
+                      </ul>
+                    </div>
+                  {:else}
+                    <!-- Always show region if available -->
+                    {#if awsDetails?.region}
+                      <div class="text-xs">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Region:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100">{awsDetails.region}</code>
+                      </div>
+                    {/if}
+
+                    <!-- Account info -->
+                    {#if awsDetails?.account}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">Account:</span>
+                        <span class="ml-1 text-blue-700 dark:text-blue-300">{awsDetails.account}</span>
+                      </div>
+                    {/if}
+
+                    <!-- ARN info -->
+                    {#if awsDetails?.arn}
+                      <div class="text-xs mt-2">
+                        <span class="font-medium text-blue-800 dark:text-blue-300">ARN:</span>
+                        <code class="ml-1 rounded bg-blue-100 px-1 py-0.5 text-blue-900 dark:bg-blue-900/50 dark:text-blue-100 text-[10px] break-all">{awsDetails.arn}</code>
+                      </div>
+                    {/if}
+
+                    <!-- Authentication status -->
+                    {#if awsDetails?.hasAccessKey !== undefined || awsDetails?.hasProfile !== undefined || awsDetails?.hasEndpoint !== undefined}
+                      <div class="mt-2 grid grid-cols-2 gap-2">
+                        {#if awsDetails?.hasAccessKey !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if awsDetails.hasAccessKey}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Access key</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No access key</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if awsDetails?.hasProfile !== undefined}
+                          <div class="flex items-center gap-1 text-xs">
+                            {#if awsDetails.hasProfile}
+                              <svg class="h-3 w-3 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">Profile auth</span>
+                            {:else}
+                              <svg class="h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
+                              </svg>
+                              <span class="text-blue-700 dark:text-blue-300">No profile</span>
+                            {/if}
+                          </div>
+                        {/if}
+                        {#if awsDetails?.hasEndpoint !== undefined && awsDetails.hasEndpoint}
+                          <div class="flex items-center gap-1 text-xs col-span-2">
+                            <svg class="h-3 w-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span class="text-blue-700 dark:text-blue-300">Custom endpoint</span>
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+
+                    <!-- Error details -->
+                    {#if awsDetails?.error}
+                      <div class="mt-2 rounded-md bg-red-100 p-2 dark:bg-red-900/30">
+                        <p class="text-xs font-medium text-red-800 dark:text-red-200">Error:</p>
+                        <p class="mt-1 text-xs text-red-700 dark:text-red-300">{awsDetails.error}</p>
                       </div>
                     {/if}
                   {/if}

@@ -124,10 +124,11 @@
   // Command whitelist state
   let commandWhitelist = $state<CommandWhitelistConfig | null>(null);
 
-  // Facts state
-  let facts = $state<Facts | null>(null);
-  let factsLoading = $state(false);
-  let factsError = $state<string | null>(null);
+  // Facts state — multi-source
+  let allSourceFacts = $state<Record<string, { facts: Record<string, unknown>; timestamp: string }>>({});
+  let allSourceErrors = $state<Record<string, string>>({});
+  let allSourceFactsLoading = $state(false);
+  let gatheringFacts = $state(false);
 
   // Command execution state
   let commandInput = $state('');
@@ -257,6 +258,7 @@
     try {
       const data = await get<{ node: Node; _debug?: DebugInfo }>(`/api/nodes/${nodeId}`, {
         maxRetries: 2,
+        timeout: 20000, // 20s timeout to avoid indefinite hang
       });
 
       node = data.node;
@@ -274,26 +276,58 @@
     }
   }
 
-  // Gather facts
+  // Fetch facts from all information sources (GET)
+  async function fetchAllSourceFacts(): Promise<void> {
+    if (allSourceFactsLoading) return;
+    // Check cache first
+    if (dataCache['all-source-facts']) {
+      const cached = dataCache['all-source-facts'];
+      allSourceFacts = cached.sources;
+      allSourceErrors = cached.errors;
+      return;
+    }
+
+    allSourceFactsLoading = true;
+    allSourceErrors = {};
+
+    try {
+      const data = await get<{
+        sources: Record<string, { facts: Record<string, unknown>; timestamp: string }>;
+        errors?: Record<string, string>;
+      }>(`/api/nodes/${nodeId}/facts`, { maxRetries: 2 });
+
+      allSourceFacts = data.sources ?? {};
+      allSourceErrors = data.errors ?? {};
+      dataCache['all-source-facts'] = { sources: allSourceFacts, errors: allSourceErrors };
+    } catch (err) {
+      console.error('Error fetching all source facts:', err);
+    } finally {
+      allSourceFactsLoading = false;
+    }
+  }
+
+  // Gather facts actively via SSH/Ansible (POST) and refresh
   async function gatherFacts(): Promise<void> {
-    factsLoading = true;
-    factsError = null;
+    gatheringFacts = true;
 
     try {
       showInfo('Gathering facts...');
 
-      const data = await post<{ facts: Facts }>(`/api/nodes/${nodeId}/facts`, undefined, {
+      await post(`/api/nodes/${nodeId}/facts`, undefined, {
         maxRetries: 1,
       });
 
-      facts = data.facts;
+      // Clear cache and re-fetch from all sources to pick up new data
+      delete dataCache['all-source-facts'];
+      await fetchAllSourceFacts();
+
       showSuccess('Facts gathered successfully');
     } catch (err) {
-      factsError = err instanceof Error ? err.message : 'An unknown error occurred';
+      const errMsg = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error gathering facts:', err);
-      showError('Failed to gather facts', factsError);
+      showError('Failed to gather facts', errMsg);
     } finally {
-      factsLoading = false;
+      gatheringFacts = false;
     }
   }
 
@@ -936,18 +970,18 @@
   async function loadTabData(tabId: TabId): Promise<void> {
     switch (tabId) {
       case 'overview':
-        // Load PuppetDB facts for OS/IP info display (if not already loaded)
+        // Load PuppetDB facts for OS/IP info display (non-blocking)
         if (!puppetdbFacts && !puppetdbFactsLoading && !puppetdbFactsError) {
-          await fetchPuppetDBFacts();
+          fetchPuppetDBFacts();
         }
-        // Load latest puppet reports for overview (if not already loaded)
+        // Load latest puppet reports for overview (non-blocking)
         if (puppetReports.length === 0 && !puppetReportsLoading && !puppetReportsError) {
-          await fetchPuppetReports();
+          fetchPuppetReports();
         }
         break;
       case 'facts':
-        // Load facts from PuppetDB only (Puppetserver facts removed per task 16)
-        await fetchPuppetDBFacts();
+        // Load facts from all information sources (non-blocking)
+        fetchAllSourceFacts();
         break;
       case 'actions':
         // Execution history is loaded on demand in the actions tab
@@ -1151,27 +1185,33 @@
       }
     }
 
-    // Fallback to Bolt facts if PuppetDB facts not available
-    if (!info.os && facts?.facts) {
-      const boltFacts = facts.facts;
+    // Fallback to other sources if PuppetDB facts not available
+    if (!info.os) {
+      // Try each source from allSourceFacts (bolt, ssh, ansible, etc.)
+      for (const [, sourceData] of Object.entries(allSourceFacts)) {
+        if (!sourceData?.facts) continue;
+        const f = sourceData.facts as Record<string, any>;
 
-      if (boltFacts.os?.name && boltFacts.os?.release?.full) {
-        info.os = `${boltFacts.os.name} ${boltFacts.os.release.full}`;
-      } else if (boltFacts.operatingsystem && boltFacts.operatingsystemrelease) {
-        info.os = `${boltFacts.operatingsystem} ${boltFacts.operatingsystemrelease}`;
-      }
+        if (!info.os) {
+          if (f.os?.name && f.os?.release?.full) {
+            info.os = `${f.os.name} ${f.os.release.full}`;
+          } else if (f.operatingsystem && f.operatingsystemrelease) {
+            info.os = `${f.operatingsystem} ${f.operatingsystemrelease}`;
+          }
+        }
 
-      info.ip = info.ip || boltFacts.ipaddress || boltFacts.networking?.ip;
-      info.hostname = info.hostname || boltFacts.hostname || boltFacts.fqdn;
-      info.kernel = info.kernel || boltFacts.kernel;
-      info.architecture = info.architecture || boltFacts.architecture;
-      info.puppetVersion = info.puppetVersion || boltFacts.aio_agent_version;
-      info.memory = info.memory || boltFacts.memory?.system?.total;
-      info.cpuCount = info.cpuCount || boltFacts.processors?.count;
-      info.uptime = info.uptime || boltFacts.system_uptime?.uptime;
+        info.ip = info.ip || f.ipaddress || f.networking?.ip;
+        info.hostname = info.hostname || f.hostname || f.fqdn;
+        info.kernel = info.kernel || f.kernel;
+        info.architecture = info.architecture || f.architecture;
+        info.puppetVersion = info.puppetVersion || f.aio_agent_version;
+        info.memory = info.memory || f.memory?.system?.total;
+        info.cpuCount = info.cpuCount || f.processors?.count;
+        info.uptime = info.uptime || f.system_uptime?.uptime;
 
-      if (!info.disks && boltFacts.disks && typeof boltFacts.disks === 'object') {
-        info.disks = Object.keys(boltFacts.disks);
+        if (!info.disks && f.disks && typeof f.disks === 'object') {
+          info.disks = Object.keys(f.disks);
+        }
       }
     }
 
@@ -1199,6 +1239,9 @@
     fetchExecutions();
     fetchCommandWhitelist();
     fetchExecutionTools();
+
+    // Pre-fetch all-source facts in background so the facts tab loads instantly
+    fetchAllSourceFacts();
 
     // Load overview tab data if it's the active tab
     if (activeTab === 'overview') {
@@ -1602,18 +1645,16 @@
             <div class="mb-4">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                View facts from multiple sources with timestamps and categorization
+                View facts from all available information sources
               </p>
             </div>
 
             <MultiSourceFactsViewer
-              boltFacts={facts}
-              boltLoading={factsLoading}
-              boltError={factsError}
-              onGatherBoltFacts={gatherFacts}
-              puppetdbFacts={puppetdbFacts}
-              puppetdbLoading={puppetdbFactsLoading}
-              puppetdbError={puppetdbFactsError}
+              sources={allSourceFacts}
+              sourceErrors={allSourceErrors}
+              loading={allSourceFactsLoading}
+              onGatherFacts={gatherFacts}
+              gatheringFacts={gatheringFacts}
             />
           </div>
         </div>
