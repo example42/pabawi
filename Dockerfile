@@ -87,7 +87,7 @@ RUN apt-get update && \
     ruby-dev \
     build-essential \
     ansible \
-    && gem install openbolt -v 5.1.0 --no-document \
+    openbolt \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -140,7 +140,9 @@ ENV NODE_ENV=production \
     PUPPETDB_ENABLED=false \
     PUPPETSERVER_ENABLED=false \
     HIERA_ENABLED=false \
-    ANSIBLE_ENABLED=false
+    ANSIBLE_ENABLED=false \
+    PROXMOX_ENABLED=false \
+    AWS_ENABLED=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
