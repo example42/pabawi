@@ -35,7 +35,7 @@ export function createProvisioningRouter(
    */
   router.get(
     "/",
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       logger.info("Fetching provisioning integrations", {
         component: "ProvisioningRouter",
         operation: "listIntegrations",

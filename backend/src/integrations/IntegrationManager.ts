@@ -102,18 +102,6 @@ export class IntegrationManager {
   }
 
   /**
-   * Clear the inventory cache, forcing a fresh fetch on next request.
-   * Call this after provisioning or destroying resources.
-   */
-  clearInventoryCache(): void {
-    this.inventoryCache = null;
-    this.logger.debug("Inventory cache cleared", {
-      component: "IntegrationManager",
-      operation: "clearInventoryCache",
-    });
-  }
-
-  /**
    * Register a plugin with the manager
    *
    * @param plugin - Plugin instance to register
