@@ -25,6 +25,7 @@ import {
   type Instance,
   type Tag,
   type Filter,
+  type RunInstancesCommandInput,
 } from "@aws-sdk/client-ec2";
 import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
 import { AWSAuthenticationError } from "./types";
@@ -555,7 +556,7 @@ export class AWSService {
       const response = await client.send(
         new RunInstancesCommand({
           ImageId: params.imageId as string,
-          InstanceType: (params.instanceType as string) || "t2.micro",
+          InstanceType: ((params.instanceType as string) || "t2.micro") as RunInstancesCommandInput["InstanceType"],
           MinCount: 1,
           MaxCount: 1,
           KeyName: params.keyName as string | undefined,

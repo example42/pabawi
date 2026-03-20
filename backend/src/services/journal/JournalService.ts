@@ -90,6 +90,7 @@ export class JournalService {
       source: "user",
       action: "add_note",
       summary: content,
+      details: {},
       userId,
     });
   }

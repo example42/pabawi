@@ -1127,8 +1127,6 @@ export function createInventoryRouter(
     "/:id/action",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
-      const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Executing node action", {
         component: "InventoryRouter",
@@ -1262,8 +1260,6 @@ export function createInventoryRouter(
     "/:id",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
-      const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Destroying node", {
         component: "InventoryRouter",
