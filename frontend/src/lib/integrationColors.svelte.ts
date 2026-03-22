@@ -145,48 +145,48 @@ class IntegrationColorStore {
    */
   private getDefaultColors(): IntegrationColors {
     return {
-      // Provisioning tools — dark blues
+      // Provisioning tools — vivid blues
       proxmox: {
-        primary: '#1B3A6B',
-        light: '#E3EAF5',
-        dark: '#122850',
+        primary: '#3B82F6',
+        light: '#EFF6FF',
+        dark: '#2563EB',
       },
       aws: {
-        primary: '#1A6B8A',
-        light: '#E1F0F5',
-        dark: '#124D66',
+        primary: '#06B6D4',
+        light: '#ECFEFF',
+        dark: '#0891B2',
       },
-      // Remote execution tools — green nuances
+      // Remote execution tools — vivid greens
       bolt: {
-        primary: '#2D9F4A',
-        light: '#E6F5E0',
-        dark: '#1E7A35',
+        primary: '#22C55E',
+        light: '#F0FDF4',
+        dark: '#16A34A',
       },
       ansible: {
-        primary: '#0B3D1E',
-        light: '#D0E8D8',
-        dark: '#072A14',
+        primary: '#10B981',
+        light: '#ECFDF5',
+        dark: '#059669',
       },
       ssh: {
-        primary: '#4ADE80',
-        light: '#F0FDF4',
-        dark: '#22C55E',
+        primary: '#A3E635',
+        light: '#F7FEE7',
+        dark: '#84CC16',
       },
-      // Puppet ecosystem — red-orange
+      // Puppet ecosystem — vivid warm tones
       puppetdb: {
-        primary: '#D94F00',
-        light: '#FFF0E6',
-        dark: '#A63D00',
+        primary: '#F97316',
+        light: '#FFF7ED',
+        dark: '#EA580C',
       },
       puppetserver: {
-        primary: '#B83230',
-        light: '#FDEAEA',
-        dark: '#8C2624',
+        primary: '#EF4444',
+        light: '#FEF2F2',
+        dark: '#DC2626',
       },
       hiera: {
-        primary: '#E07020',
-        light: '#FFF4E8',
-        dark: '#B35A1A',
+        primary: '#F59E0B',
+        light: '#FFFBEB',
+        dark: '#D97706',
       },
     };
   }

@@ -42,48 +42,48 @@ export class IntegrationColorService {
     // Define color palette for each integration
     // Colors inspired by Puppet logo for better visibility and brand consistency
     this.colors = {
-      // Provisioning tools — dark blues
+      // Provisioning tools — vivid blues
       proxmox: {
-        primary: '#1B3A6B',  // Deep navy blue
-        light: '#E3EAF5',
-        dark: '#122850',
+        primary: '#3B82F6',  // Vivid blue
+        light: '#EFF6FF',
+        dark: '#2563EB',
       },
       aws: {
-        primary: '#1A6B8A',  // Teal-blue, distinct from Proxmox
-        light: '#E1F0F5',
-        dark: '#124D66',
+        primary: '#06B6D4',  // Vivid cyan
+        light: '#ECFEFF',
+        dark: '#0891B2',
       },
-      // Remote execution tools — green nuances
+      // Remote execution tools — vivid greens
       bolt: {
-        primary: '#2D9F4A',  // Green with warm/red undertone (olive-ish)
-        light: '#E6F5E0',
-        dark: '#1E7A35',
+        primary: '#22C55E',  // Vivid green
+        light: '#F0FDF4',
+        dark: '#16A34A',
       },
       ansible: {
-        primary: '#0B3D1E',  // Very dark green
-        light: '#D0E8D8',
-        dark: '#072A14',
+        primary: '#10B981',  // Vivid emerald
+        light: '#ECFDF5',
+        dark: '#059669',
       },
       ssh: {
-        primary: '#4ADE80',  // Light mint green
-        light: '#F0FDF4',
-        dark: '#22C55E',
+        primary: '#A3E635',  // Vivid lime
+        light: '#F7FEE7',
+        dark: '#84CC16',
       },
-      // Puppet ecosystem — red-orange
+      // Puppet ecosystem — vivid warm tones
       puppetdb: {
-        primary: '#D94F00',  // Burnt orange
-        light: '#FFF0E6',
-        dark: '#A63D00',
+        primary: '#F97316',  // Vivid orange
+        light: '#FFF7ED',
+        dark: '#EA580C',
       },
       puppetserver: {
-        primary: '#B83230',  // Brick red
-        light: '#FDEAEA',
-        dark: '#8C2624',
+        primary: '#EF4444',  // Vivid red
+        light: '#FEF2F2',
+        dark: '#DC2626',
       },
       hiera: {
-        primary: '#E07020',  // Warm orange
-        light: '#FFF4E8',
-        dark: '#B35A1A',
+        primary: '#F59E0B',  // Vivid amber
+        light: '#FFFBEB',
+        dark: '#D97706',
       },
     };
 

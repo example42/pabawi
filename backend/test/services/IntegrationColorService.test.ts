@@ -12,36 +12,36 @@ describe('IntegrationColorService', () => {
     it('should return correct color for bolt integration', () => {
       const color = service.getColor('bolt');
       expect(color).toEqual({
-        primary: '#FFAE1A',
-        light: '#FFF4E0',
-        dark: '#CC8B15',
+        primary: '#22C55E',
+        light: '#F0FDF4',
+        dark: '#16A34A',
       });
     });
 
     it('should return correct color for puppetdb integration', () => {
       const color = service.getColor('puppetdb');
       expect(color).toEqual({
-        primary: '#9063CD',
-        light: '#F0E6FF',
-        dark: '#7249A8',
+        primary: '#F97316',
+        light: '#FFF7ED',
+        dark: '#EA580C',
       });
     });
 
     it('should return correct color for puppetserver integration', () => {
       const color = service.getColor('puppetserver');
       expect(color).toEqual({
-        primary: '#2E3A87',
-        light: '#E8EAFF',
-        dark: '#1F2760',
+        primary: '#EF4444',
+        light: '#FEF2F2',
+        dark: '#DC2626',
       });
     });
 
     it('should return correct color for hiera integration', () => {
       const color = service.getColor('hiera');
       expect(color).toEqual({
-        primary: '#C1272D',
-        light: '#FFE8E9',
-        dark: '#9A1F24',
+        primary: '#F59E0B',
+        light: '#FFFBEB',
+        dark: '#D97706',
       });
     });
 
@@ -93,7 +93,7 @@ describe('IntegrationColorService', () => {
   describe('getValidIntegrations', () => {
     it('should return array of valid integration names', () => {
       const integrations = service.getValidIntegrations();
-      expect(integrations).toEqual(['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh']);
+      expect(integrations).toEqual(['proxmox', 'aws', 'bolt', 'ansible', 'ssh', 'puppetdb', 'puppetserver', 'hiera']);
     });
   });
 
