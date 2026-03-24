@@ -60,7 +60,7 @@ const LifecycleSchema = z.object({
  *
  * Requirements: 8.1, 9.1, 10.1, 11.1, 13.1-13.7, 27.2
  */
-export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: IntegrationManager): Router {
+export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: IntegrationManager, options?: { allowDestructiveActions?: boolean }): Router {
   const router = Router();
 
   /**
@@ -196,6 +196,17 @@ export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: Integ
 
       try {
         const validatedBody = LifecycleSchema.parse(req.body);
+
+        // Guard: reject terminate if destructive provisioning actions are disabled
+        if (validatedBody.action === "terminate" && options?.allowDestructiveActions === false) {
+          res.status(403).json({
+            error: {
+              code: "DESTRUCTIVE_ACTION_DISABLED",
+              message: "Destructive provisioning actions are disabled by configuration (ALLOW_DESTRUCTIVE_PROVISIONING=false)",
+            },
+          });
+          return;
+        }
 
         const target = validatedBody.region
           ? `aws:${validatedBody.region}:${validatedBody.instanceId}`

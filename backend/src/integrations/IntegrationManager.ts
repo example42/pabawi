@@ -342,14 +342,12 @@ export class IntegrationManager {
     nodes: LinkedNode[];
     sources: AggregatedInventory["sources"];
   }> {
-    // Get aggregated inventory
+    // getAggregatedInventory already deduplicates and links nodes via deduplicateNodes → linkNodes.
+    // The returned nodes are already LinkedNode[] (with sources, sourceData, etc.).
     const aggregated = await this.getAggregatedInventory();
 
-    // Link nodes across sources
-    const linkedNodes = this.nodeLinkingService.linkNodes(aggregated.nodes);
-
     return {
-      nodes: linkedNodes,
+      nodes: aggregated.nodes as LinkedNode[],
       sources: aggregated.sources,
     };
   }

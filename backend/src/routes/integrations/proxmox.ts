@@ -54,7 +54,8 @@ const DestroyParamsSchema = z.object({
  * Create Proxmox router for all Proxmox-related routes
  */
 export function createProxmoxRouter(
-  integrationManager: IntegrationManager
+  integrationManager: IntegrationManager,
+  options?: { allowDestructiveActions?: boolean },
 ): Router {
   const router = Router();
   const logger = createLogger();
@@ -626,6 +627,17 @@ export function createProxmoxRouter(
   router.delete(
     "/provision/:vmid",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      // Guard: reject if destructive provisioning actions are disabled
+      if (options?.allowDestructiveActions === false) {
+        res.status(403).json({
+          error: {
+            code: "DESTRUCTIVE_ACTION_DISABLED",
+            message: "Destructive provisioning actions are disabled by configuration (ALLOW_DESTRUCTIVE_PROVISIONING=false)",
+          },
+        });
+        return;
+      }
+
       const startTime = Date.now();
       const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();

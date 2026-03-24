@@ -413,17 +413,22 @@ After successful provisioning:
 
 **Secure Configuration**:
 
-1. **Use Strong Passwords**:
+1. **Disable Destructive Actions in Production**:
+   - Set `ALLOW_DESTRUCTIVE_PROVISIONING=false` to prevent VM/container destruction
+   - This blocks Proxmox destroy and AWS terminate across all integrations
+   - Non-destructive lifecycle actions (start, stop, reboot) remain available
+
+2. **Use Strong Passwords**:
    - Generate random, complex passwords
    - Store passwords in a password manager
    - Never hardcode passwords in scripts
 
-2. **Network Segmentation**:
+3. **Network Segmentation**:
    - Place resources in appropriate network segments
    - Use firewalls to restrict access
    - Configure security groups properly
 
-3. **Minimal Permissions**:
+4. **Minimal Permissions**:
    - Grant only necessary permissions
    - Use separate accounts for different purposes
    - Audit permission usage regularly

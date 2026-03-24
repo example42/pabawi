@@ -3,7 +3,7 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
-  import { fetchLifecycleActions, executeNodeAction, destroyNode } from '../lib/api';
+  import { fetchLifecycleActions, executeNodeAction, destroyNode, get } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import type { LifecycleAction, ProvisioningResult } from '../lib/types/provisioning';
 
@@ -23,16 +23,39 @@
   let error = $state<string | null>(null);
   let actionInProgress = $state<string | null>(null);
   let confirmDialog = $state<{ action: string; open: boolean }>({ action: '', open: false });
+  let allowDestructiveActions = $state(false);
+  let refreshing = $state(false);
 
-  // Derived: Filter actions based on current node status
+  // Derived: Filter actions based on current node status and destructive config
   const displayableActions = $derived.by(() => {
-    if (!currentStatus) return availableActions;
+    let filtered = availableActions;
 
-    return availableActions.filter(action => {
+    // Filter out destructive actions when disabled by config
+    if (!allowDestructiveActions) {
+      filtered = filtered.filter(action => !action.destructive);
+    }
+
+    if (!currentStatus) return filtered;
+
+    return filtered.filter(action => {
       const availableWhen = action.availableWhen || [];
       return availableWhen.length === 0 || availableWhen.includes(currentStatus);
     });
   });
+
+  // Refresh node status and available actions
+  async function refreshStatus(): Promise<void> {
+    refreshing = true;
+    try {
+      if (onStatusChange) {
+        onStatusChange();
+      }
+      await fetchAvailableActions();
+      showSuccess('Status refreshed');
+    } finally {
+      refreshing = false;
+    }
+  }
 
   // Fetch available actions from backend based on provider
   async function fetchAvailableActions(): Promise<void> {
@@ -40,7 +63,15 @@
     error = null;
 
     try {
-      const response = await fetchLifecycleActions(nodeId);
+      // Fetch provisioning config and lifecycle actions in parallel
+      const [configResponse, response] = await Promise.all([
+        get<{ provisioning: { allowDestructiveActions: boolean } }>('/api/config/provisioning').catch(() => ({
+          provisioning: { allowDestructiveActions: false },
+        })),
+        fetchLifecycleActions(nodeId),
+      ]);
+
+      allowDestructiveActions = configResponse.provisioning.allowDestructiveActions;
       provider = response.provider;
       availableActions = response.actions;
     } catch (err) {
@@ -157,9 +188,23 @@
           Manage the lifecycle of this {nodeType === 'vm' ? 'virtual machine' : nodeType === 'lxc' ? 'container' : 'node'}
         </p>
       </div>
-      {#if provider}
-        <IntegrationBadge integration={provider} variant="badge" size="sm" />
-      {/if}
+      <div class="flex items-center gap-2">
+        {#if provider}
+          <IntegrationBadge integration={provider} variant="badge" size="sm" />
+        {/if}
+        <button
+          type="button"
+          onclick={refreshStatus}
+          disabled={refreshing || actionInProgress !== null}
+          class="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+          title="Refresh status"
+        >
+          <svg class="h-4 w-4 {refreshing ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          {refreshing ? 'Refreshing...' : 'Refresh'}
+        </button>
+      </div>
     </div>
 
     <!-- Current Status -->

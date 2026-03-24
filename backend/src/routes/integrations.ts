@@ -22,6 +22,7 @@ export function createIntegrationsRouter(
   puppetserverService?: PuppetserverService,
   db?: DatabaseAdapter,
   jwtSecret?: string,
+  options?: { allowDestructiveProvisioning?: boolean },
 ): Router {
   const router = Router();
 
@@ -56,7 +57,9 @@ export function createIntegrationsRouter(
   router.use("/puppetserver", createPuppetserverRouter(puppetserverService, puppetDBService));
 
   // Mount Proxmox router
-  router.use("/proxmox", createProxmoxRouter(integrationManager));
+  router.use("/proxmox", createProxmoxRouter(integrationManager, {
+    allowDestructiveActions: options?.allowDestructiveProvisioning ?? true,
+  }));
 
   // Mount Provisioning router (integration discovery) with authentication
   // Validates Requirements: 1.3, 2.1, 9.1, 9.2

@@ -1114,14 +1114,18 @@ async function startServer(): Promise<Express> {
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('ansible', 'read'),
-      createInventoryRouter(boltService, integrationManager),
+      createInventoryRouter(boltService, integrationManager, {
+        allowDestructiveActions: config.provisioning.allowDestructiveActions,
+      }),
     );
     app.use(
       "/api/nodes",
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('ansible', 'read'),
-      createInventoryRouter(boltService, integrationManager),
+      createInventoryRouter(boltService, integrationManager, {
+        allowDestructiveActions: config.provisioning.allowDestructiveActions,
+      }),
     );
     app.use(
       "/api/nodes",
@@ -1245,6 +1249,7 @@ async function startServer(): Promise<Express> {
         puppetserverService,
         databaseService.getConnection(),
         undefined, // JWT secret is read from environment by AuthenticationService
+        { allowDestructiveProvisioning: config.provisioning.allowDestructiveActions },
       ),
     );
     app.use(
@@ -1261,7 +1266,9 @@ async function startServer(): Promise<Express> {
         "/api/integrations/aws",
         authMiddleware,
         rateLimitMiddleware,
-        createAWSRouter(awsPluginInstance, integrationManager),
+        createAWSRouter(awsPluginInstance, integrationManager, {
+          allowDestructiveActions: config.provisioning.allowDestructiveActions,
+        }),
       );
     }
 
