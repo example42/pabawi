@@ -775,6 +775,7 @@ import type {
   ProxmoxVMParams,
   ProxmoxLXCParams,
   ProvisioningResult,
+  LifecycleAction,
   PVENode,
   StorageContent,
   PVEStorage,
@@ -931,6 +932,24 @@ export async function getProxmoxNetworks(node: string, type?: string): Promise<P
     retryDelay: 1000,
   });
   return response.networks;
+}
+
+/**
+ * Fetch available lifecycle actions for a node from its provider.
+ * The backend resolves the provider from the node ID prefix and returns
+ * the actions that integration supports.
+ *
+ * @param nodeId - The ID of the node (e.g. "proxmox:node:vmid", "aws:region:instanceId")
+ */
+export async function fetchLifecycleActions(
+  nodeId: string,
+): Promise<{ provider: string; actions: LifecycleAction[] }> {
+  const response = await get<{ provider: string; actions: LifecycleAction[] }>(
+    `/api/nodes/${nodeId}/lifecycle-actions`,
+    { maxRetries: 2 },
+  );
+
+  return response;
 }
 
 /**

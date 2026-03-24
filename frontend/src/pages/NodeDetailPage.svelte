@@ -2264,36 +2264,57 @@
       <!-- Manage Tab -->
       {#if activeTab === 'manage'}
         {#if node}
-          {@const nodeType = (node as Node & { metadata?: { type?: string } })?.metadata?.type === 'qemu' ? 'vm' : (node as Node & { metadata?: { type?: string } })?.metadata?.type === 'lxc' ? 'lxc' : 'unknown'}
-          {@const currentStatus = (node as Node & { status?: string })?.status || 'unknown'}
-          {@const proxmoxData = (node as Node & { sourceData?: Record<string, any> })?.sourceData?.proxmox}
-          {@const proxmoxNodeId = proxmoxData?.id || node.id}
-          {@const proxmoxMetadata = proxmoxData?.metadata}
-          {@const proxmoxType = proxmoxMetadata?.type === 'qemu' ? 'vm' : proxmoxMetadata?.type === 'lxc' ? 'lxc' : nodeType}
-          {@const proxmoxStatus = proxmoxMetadata?.status || proxmoxData?.status || currentStatus}
+          {@const nodeWithMeta = node as Node & { metadata?: { type?: string }; status?: string; sourceData?: Record<string, any> }}
+          {@const resolvedNodeType = nodeWithMeta.metadata?.type === 'qemu' ? 'vm' : nodeWithMeta.metadata?.type === 'lxc' ? 'lxc' : 'unknown'}
+          {@const resolvedStatus = nodeWithMeta.status || 'unknown'}
+          {@const sourceData = nodeWithMeta.sourceData}
+          {@const provisioningProviders = ['proxmox', 'aws']}
+          {@const providerName = sourceData ? Object.keys(sourceData).find(k => provisioningProviders.includes(k)) : undefined}
+          {@const providerData = providerName ? sourceData?.[providerName] : undefined}
+          {@const providerMetadata = providerData?.metadata}
+          {@const effectiveNodeId = providerData?.id || node.id}
+          {@const effectiveType = providerMetadata?.type === 'qemu' ? 'vm' : providerMetadata?.type === 'lxc' ? 'lxc' : resolvedNodeType}
+          {@const effectiveStatus = providerMetadata?.status || providerData?.status || resolvedStatus}
 
-          <ManageTab
-            nodeId={proxmoxNodeId}
-            nodeType={proxmoxType}
-            currentStatus={proxmoxStatus}
-            onStatusChange={fetchNode}
-          />
+          {#if providerName}
+            <ManageTab
+              nodeId={effectiveNodeId}
+              nodeType={effectiveType}
+              currentStatus={effectiveStatus}
+              onStatusChange={fetchNode}
+            />
+          {:else}
+            <div class="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                Lifecycle management is not available for this node.
+              </p>
+              <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                This node is not managed by a provisioning provider (Proxmox, AWS).
+              </p>
+            </div>
+          {/if}
           {#if expertMode.enabled}
             <div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs dark:border-blue-800 dark:bg-blue-900/20">
               <div class="font-mono text-blue-800 dark:text-blue-400">
-                Debug: nodeId={proxmoxNodeId}, nodeType={proxmoxType}, currentStatus={proxmoxStatus}
+                Debug: nodeId={effectiveNodeId}, nodeType={effectiveType}, currentStatus={effectiveStatus}
               </div>
               <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
                 node.id={node.id}
               </div>
               <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
-                proxmoxData.id={proxmoxData?.id || 'undefined'}
+                provider={providerName || 'none'}, providerData.id={providerData?.id || 'undefined'}
               </div>
               <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
-                metadata.type={proxmoxMetadata?.type || 'undefined'}
+                sources={sourceData ? Object.keys(sourceData).join(', ') : 'none'}
               </div>
               <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
-                metadata.status={proxmoxMetadata?.status || 'undefined'}
+                metadata.type={providerMetadata?.type || 'undefined'}
+              </div>
+              <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
+                metadata.status={providerMetadata?.status || 'undefined'}
               </div>
             </div>
           {/if}

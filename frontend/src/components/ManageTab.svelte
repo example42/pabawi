@@ -3,7 +3,7 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
-  import { executeNodeAction, destroyNode } from '../lib/api';
+  import { fetchLifecycleActions, executeNodeAction, destroyNode } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import type { LifecycleAction, ProvisioningResult } from '../lib/types/provisioning';
 
@@ -18,107 +18,31 @@
 
   // State
   let availableActions = $state<LifecycleAction[]>([]);
+  let provider = $state<string | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let actionInProgress = $state<string | null>(null);
   let confirmDialog = $state<{ action: string; open: boolean }>({ action: '', open: false });
-
-  // Action availability mapping based on node state
-  const actionAvailability: Record<string, string[]> = {
-    start: ['stopped'],
-    stop: ['running'],
-    shutdown: ['running'],
-    reboot: ['running'],
-    suspend: ['running'],
-    resume: ['suspended'],
-    snapshot: ['running', 'stopped'],
-    destroy: ['stopped', 'running', 'suspended', 'unknown']
-  };
 
   // Derived: Filter actions based on current node status
   const displayableActions = $derived.by(() => {
     if (!currentStatus) return availableActions;
 
     return availableActions.filter(action => {
-      const availableWhen = actionAvailability[action.name] || [];
+      const availableWhen = action.availableWhen || [];
       return availableWhen.length === 0 || availableWhen.includes(currentStatus);
     });
   });
 
-  // Fetch available actions from backend
+  // Fetch available actions from backend based on provider
   async function fetchAvailableActions(): Promise<void> {
     loading = true;
     error = null;
 
     try {
-      // For now, we'll define the available actions based on Proxmox capabilities
-      // In the future, this should query the backend for dynamic action discovery
-      availableActions = [
-        {
-          name: 'start',
-          displayName: 'Start',
-          description: 'Start the virtual machine or container',
-          requiresConfirmation: false,
-          destructive: false,
-          availableWhen: ['stopped']
-        },
-        {
-          name: 'stop',
-          displayName: 'Stop',
-          description: 'Force stop the virtual machine or container',
-          requiresConfirmation: false,
-          destructive: false,
-          availableWhen: ['running']
-        },
-        {
-          name: 'shutdown',
-          displayName: 'Shutdown',
-          description: 'Gracefully shutdown the virtual machine or container',
-          requiresConfirmation: false,
-          destructive: false,
-          availableWhen: ['running']
-        },
-        {
-          name: 'reboot',
-          displayName: 'Reboot',
-          description: 'Reboot the virtual machine or container',
-          requiresConfirmation: false,
-          destructive: false,
-          availableWhen: ['running']
-        },
-        {
-          name: 'suspend',
-          displayName: 'Suspend',
-          description: 'Suspend the virtual machine',
-          requiresConfirmation: false,
-          destructive: false,
-          availableWhen: ['running']
-        },
-        {
-          name: 'resume',
-          displayName: 'Resume',
-          description: 'Resume the suspended virtual machine',
-          requiresConfirmation: false,
-          destructive: false,
-          availableWhen: ['suspended']
-        },
-        {
-          name: 'snapshot',
-          displayName: 'Snapshot',
-          description: 'Create a snapshot of the current state',
-          requiresConfirmation: false,
-          destructive: false,
-          availableWhen: ['running', 'stopped']
-        },
-        {
-          name: 'destroy',
-          displayName: 'Destroy',
-          description: 'Permanently delete the virtual machine or container',
-          requiresConfirmation: true,
-          destructive: true,
-          availableWhen: ['stopped', 'running', 'suspended', 'unknown']
-        }
-      ];
+      const response = await fetchLifecycleActions(nodeId);
+      provider = response.provider;
+      availableActions = response.actions;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load available actions';
       console.error('Error fetching available actions:', err);
@@ -149,7 +73,9 @@
 
       let result: ProvisioningResult;
 
-      if (action === 'destroy') {
+      // Use destroyNode for destructive destroy/terminate actions
+      const actionDef = availableActions.find(a => a.name === action);
+      if (actionDef?.destructive && (action === 'destroy' || action === 'destroy_vm' || action === 'destroy_lxc' || action === 'terminate' || action === 'terminate_instance')) {
         result = await destroyNode(nodeId);
       } else {
         result = await executeNodeAction(nodeId, action);
@@ -161,11 +87,6 @@
         // Refresh node status if callback provided
         if (onStatusChange) {
           onStatusChange();
-        }
-
-        // If destroy was successful, navigate away (handled by parent)
-        if (action === 'destroy') {
-          // Parent component should handle navigation
         }
       } else {
         showError(`Action ${action} failed`, result.error || result.message);
@@ -202,14 +123,6 @@
     }
   }
 
-  // Get button style based on action type
-  function getButtonStyle(action: LifecycleAction): string {
-    if (action.destructive) {
-      return 'bg-red-600 hover:bg-red-700 text-white';
-    }
-    return 'bg-blue-600 hover:bg-blue-700 text-white';
-  }
-
   // Get icon for action
   function getActionIcon(actionName: string): string {
     const icons: Record<string, string> = {
@@ -220,7 +133,11 @@
       suspend: 'M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z',
       resume: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z',
       snapshot: 'M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z M15 13a3 3 0 11-6 0 3 3 0 016 0z',
-      destroy: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16'
+      destroy: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+      destroy_vm: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+      destroy_lxc: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+      terminate: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+      terminate_instance: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
     };
     return icons[actionName] || 'M13 10V3L4 14h7v7l9-11h-7z';
   }
@@ -240,7 +157,9 @@
           Manage the lifecycle of this {nodeType === 'vm' ? 'virtual machine' : nodeType === 'lxc' ? 'container' : 'node'}
         </p>
       </div>
-      <IntegrationBadge integration="proxmox" variant="badge" size="sm" />
+      {#if provider}
+        <IntegrationBadge integration={provider} variant="badge" size="sm" />
+      {/if}
     </div>
 
     <!-- Current Status -->
@@ -360,7 +279,7 @@
                 <p class="mt-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                   Node ID: <span class="font-mono text-red-600 dark:text-red-400">{nodeId}</span>
                 </p>
-                {#if confirmDialog.action === 'destroy'}
+                {#if confirmDialog.action === 'destroy' || confirmDialog.action === 'destroy_vm' || confirmDialog.action === 'destroy_lxc' || confirmDialog.action === 'terminate' || confirmDialog.action === 'terminate_instance'}
                   <p class="mt-3 text-sm font-semibold text-red-600 dark:text-red-400">
                     ⚠️ This action cannot be undone. All data will be permanently deleted.
                   </p>
