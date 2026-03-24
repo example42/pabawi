@@ -27,6 +27,7 @@ const InventoryQuerySchema = z.object({
 export function createInventoryRouter(
   boltService: BoltService,
   integrationManager?: IntegrationManager,
+  options?: { allowDestructiveActions?: boolean },
 ): Router {
   const router = Router();
   const logger = new LoggerService();
@@ -1122,16 +1123,16 @@ export function createInventoryRouter(
   function getAvailableWhen(actionName: string): string[] {
     const mapping: Record<string, string[]> = {
       start: ["stopped"],
-      stop: ["running"],
-      shutdown: ["running"],
-      reboot: ["running"],
+      stop: ["running", "paused"],
+      shutdown: ["running", "paused"],
+      reboot: ["running", "paused"],
       suspend: ["running"],
-      resume: ["suspended"],
+      resume: ["suspended", "paused"],
       snapshot: ["running", "stopped"],
-      terminate: ["running", "stopped", "suspended", "unknown"],
-      destroy: ["stopped", "running", "suspended", "unknown"],
-      destroy_vm: ["stopped", "running", "suspended", "unknown"],
-      destroy_lxc: ["stopped", "running", "suspended", "unknown"],
+      terminate: ["running", "stopped", "suspended", "paused", "unknown"],
+      destroy: ["stopped", "running", "suspended", "paused", "unknown"],
+      destroy_vm: ["stopped", "running", "suspended", "paused", "unknown"],
+      destroy_lxc: ["stopped", "running", "suspended", "paused", "unknown"],
     };
     return mapping[actionName] ?? [];
   }
@@ -1245,7 +1246,12 @@ export function createInventoryRouter(
         metadata: { nodeId, provider, actionCount: actions.length },
       });
 
-      res.json({ provider, actions });
+      // Filter out destructive actions when destructive provisioning is disabled
+      const filteredActions = options?.allowDestructiveActions === false
+        ? actions.filter((a) => !a.destructive)
+        : actions;
+
+      res.json({ provider, actions: filteredActions });
     }),
   );
 
@@ -1277,6 +1283,18 @@ export function createInventoryRouter(
           parameters: z.record(z.unknown()).optional(),
         });
         const body = ActionSchema.parse(req.body);
+
+        // Guard: reject destructive actions when disabled
+        const destructiveActions = ["destroy", "destroy_vm", "destroy_lxc", "terminate", "terminate_instance"];
+        if (destructiveActions.includes(body.action) && options?.allowDestructiveActions === false) {
+          res.status(403).json({
+            error: {
+              code: "DESTRUCTIVE_ACTION_DISABLED",
+              message: "Destructive provisioning actions are disabled by configuration (ALLOW_DESTRUCTIVE_PROVISIONING=false)",
+            },
+          });
+          return;
+        }
 
         const resolved = getExecutionToolForNode(nodeId, res);
         if (!resolved) return;

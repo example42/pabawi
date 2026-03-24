@@ -315,6 +315,19 @@ export const AWSConfigSchema = z.object({
 export type AWSIntegrationConfig = z.infer<typeof AWSConfigSchema>;
 
 /**
+ * Provisioning safety configuration schema
+ *
+ * Controls whether destructive provisioning actions (e.g., destroy VM/LXC,
+ * terminate EC2 instance) are allowed. When disabled, all provisioning
+ * integrations will reject destroy/terminate requests.
+ */
+export const ProvisioningConfigSchema = z.object({
+  allowDestructiveActions: z.boolean().default(false),
+});
+
+export type ProvisioningConfig = z.infer<typeof ProvisioningConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
@@ -355,6 +368,7 @@ export const AppConfigSchema = z.object({
   cache: CacheConfigSchema,
   executionQueue: ExecutionQueueConfigSchema,
   integrations: IntegrationsConfigSchema.default({}),
+  provisioning: ProvisioningConfigSchema.default({ allowDestructiveActions: false }),
   ui: UIConfigSchema.default({ showHomePageRunChart: true }),
 });
 

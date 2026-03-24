@@ -387,6 +387,10 @@ CACHE_FACTS_TTL=300000
 CONCURRENT_EXECUTION_LIMIT=5
 MAX_QUEUE_SIZE=50
 
+# ── Provisioning Safety ─────────────────────────────
+# Prevent destructive actions (destroy VM/LXC, terminate EC2)
+ALLOW_DESTRUCTIVE_PROVISIONING=false
+
 EOF
 
   # Append Bolt integration when enabled

@@ -566,6 +566,12 @@ export class ConfigService {
           process.env.UI_SHOW_HOME_PAGE_RUN_CHART !== "false",
       };
 
+      // Parse provisioning safety configuration
+      const provisioning = {
+        allowDestructiveActions:
+          process.env.ALLOW_DESTRUCTIVE_PROVISIONING === "true",
+      };
+
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
@@ -585,6 +591,7 @@ export class ConfigService {
         cache,
         executionQueue,
         integrations,
+        provisioning,
         ui,
       };
 
@@ -697,6 +704,13 @@ export class ConfigService {
    */
   public getIntegrationsConfig(): typeof this.config.integrations {
     return this.config.integrations;
+  }
+
+  /**
+   * Check whether destructive provisioning actions (destroy/terminate) are allowed
+   */
+  public isDestructiveProvisioningAllowed(): boolean {
+    return this.config.provisioning.allowDestructiveActions;
   }
 
   /**
