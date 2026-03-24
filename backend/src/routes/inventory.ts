@@ -13,7 +13,6 @@ import { ExpertModeService } from "../services/ExpertModeService";
 import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
-import type { ProxmoxIntegration } from "../integrations/proxmox/ProxmoxIntegration";
 
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
@@ -1117,8 +1116,143 @@ export function createInventoryRouter(
   );
 
   /**
+   * Map action names to the node states where they are available.
+   * This provides sensible defaults; the frontend can further refine.
+   */
+  function getAvailableWhen(actionName: string): string[] {
+    const mapping: Record<string, string[]> = {
+      start: ["stopped"],
+      stop: ["running"],
+      shutdown: ["running"],
+      reboot: ["running"],
+      suspend: ["running"],
+      resume: ["suspended"],
+      snapshot: ["running", "stopped"],
+      terminate: ["running", "stopped", "suspended", "unknown"],
+      destroy: ["stopped", "running", "suspended", "unknown"],
+      destroy_vm: ["stopped", "running", "suspended", "unknown"],
+      destroy_lxc: ["stopped", "running", "suspended", "unknown"],
+    };
+    return mapping[actionName] ?? [];
+  }
+
+  /**
+   * Resolve the provider name from a node ID prefix.
+   * Node IDs follow the pattern "{provider}:{...}" (e.g. "proxmox:node:vmid", "aws:region:instanceId").
+   * Returns null when the prefix doesn't map to a known integration.
+   */
+  function resolveProvider(nodeId: string): string | null {
+    const prefix = nodeId.split(":")[0];
+    const providerMap: Record<string, string> = {
+      proxmox: "proxmox",
+      aws: "aws",
+    };
+    return providerMap[prefix] ?? null;
+  }
+
+  /**
+   * Look up the execution tool for a given node ID.
+   * Returns the tool and provider name, or sends an error response and returns null.
+   */
+  function getExecutionToolForNode(
+    nodeId: string,
+    res: Response,
+  ): { tool: import("../integrations/types").ExecutionToolPlugin; provider: string } | null {
+    if (!integrationManager?.isInitialized()) {
+      res.status(503).json({
+        error: { code: "INTEGRATION_NOT_AVAILABLE", message: "Integration manager is not available" },
+      });
+      return null;
+    }
+
+    const provider = resolveProvider(nodeId);
+    if (!provider) {
+      res.status(400).json({
+        error: {
+          code: "UNSUPPORTED_PROVIDER",
+          message: `No provisioning provider found for node ID: ${nodeId}`,
+        },
+      });
+      return null;
+    }
+
+    const tool = integrationManager.getExecutionTool(provider);
+    if (!tool) {
+      res.status(503).json({
+        error: {
+          code: "PROVIDER_NOT_CONFIGURED",
+          message: `Integration "${provider}" is not configured`,
+        },
+      });
+      return null;
+    }
+
+    return { tool, provider };
+  }
+
+  /**
+   * GET /api/nodes/:id/lifecycle-actions
+   * Discover available lifecycle actions for a node based on its provider.
+   * Returns actions with metadata so the frontend can render them dynamically.
+   */
+  router.get(
+    "/:id/lifecycle-actions",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const params = NodeIdParamSchema.parse(req.params);
+      const nodeId = params.id;
+
+      const resolved = getExecutionToolForNode(nodeId, res);
+      if (!resolved) return;
+
+      const { tool, provider } = resolved;
+      const capabilities = tool.listCapabilities();
+
+      // Build lifecycle action definitions from the provider's capabilities
+      const actions = capabilities.map((cap) => {
+        const isDestructive = ["destroy", "terminate", "destroy_vm", "destroy_lxc"].includes(cap.name);
+        return {
+          name: cap.name,
+          displayName: cap.name.charAt(0).toUpperCase() + cap.name.slice(1).replace(/_/g, " "),
+          description: cap.description,
+          requiresConfirmation: isDestructive,
+          destructive: isDestructive,
+          // Provider-specific availability hints; frontend can refine with node status
+          availableWhen: getAvailableWhen(cap.name),
+        };
+      });
+
+      // Add destroy action from provisioning capabilities if not already present
+      const provisioningTool = tool as unknown as { listProvisioningCapabilities?: () => Array<{ name: string; description: string; operation: string }> };
+      if (typeof provisioningTool.listProvisioningCapabilities === "function") {
+        const provCaps = provisioningTool.listProvisioningCapabilities();
+        for (const cap of provCaps) {
+          if (cap.operation === "destroy" && !actions.some((a) => a.name === cap.name)) {
+            actions.push({
+              name: cap.name,
+              displayName: cap.name.charAt(0).toUpperCase() + cap.name.slice(1).replace(/_/g, " "),
+              description: cap.description,
+              requiresConfirmation: true,
+              destructive: true,
+              availableWhen: ["stopped", "running", "suspended", "unknown"],
+            });
+          }
+        }
+      }
+
+      logger.info("Lifecycle actions resolved", {
+        component: "InventoryRouter",
+        operation: "getLifecycleActions",
+        metadata: { nodeId, provider, actionCount: actions.length },
+      });
+
+      res.json({ provider, actions });
+    }),
+  );
+
+  /**
    * POST /api/nodes/:id/action
-   * Execute a lifecycle action on a node (start, stop, shutdown, reboot, suspend, resume, snapshot)
+   * Execute a lifecycle action on a node via its provider integration.
+   * Provider-agnostic: routes to the correct integration based on node ID prefix.
    *
    * Note: RBAC middleware should be applied at the route mounting level in server.ts
    * Required permission: lifecycle:* or lifecycle:{action}
@@ -1134,84 +1268,48 @@ export function createInventoryRouter(
       });
 
       try {
-        // Validate request parameters
         const params = NodeIdParamSchema.parse(req.params);
         const nodeId = params.id;
 
-        // Validate request body
+        // Accept any action string — the provider will validate it
         const ActionSchema = z.object({
-          action: z.enum(["start", "stop", "shutdown", "reboot", "suspend", "resume", "snapshot"]),
+          action: z.string().min(1),
+          parameters: z.record(z.unknown()).optional(),
         });
         const body = ActionSchema.parse(req.body);
+
+        const resolved = getExecutionToolForNode(nodeId, res);
+        if (!resolved) return;
+
+        const { tool, provider } = resolved;
 
         logger.debug("Executing action on node", {
           component: "InventoryRouter",
           operation: "executeNodeAction",
-          metadata: { nodeId, action: body.action },
+          metadata: { nodeId, provider, action: body.action },
         });
 
-        // Check if node is from Proxmox (nodeId format: proxmox:{node}:{vmid})
-        if (!nodeId.startsWith("proxmox:")) {
-          const errorResponse = {
-            error: {
-              code: "UNSUPPORTED_NODE_TYPE",
-              message: "Lifecycle actions are only supported for Proxmox nodes",
-            },
-          };
-
-          res.status(400).json(errorResponse);
-          return;
-        }
-
-        // Get Proxmox service from integration manager
-        if (!integrationManager?.isInitialized()) {
-          const errorResponse = {
-            error: {
-              code: "INTEGRATION_NOT_AVAILABLE",
-              message: "Proxmox integration is not available",
-            },
-          };
-
-          res.status(503).json(errorResponse);
-          return;
-        }
-
-        const proxmoxTool = integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
-        if (!proxmoxTool) {
-          const errorResponse = {
-            error: {
-              code: "PROXMOX_NOT_CONFIGURED",
-              message: "Proxmox integration is not configured",
-            },
-          };
-
-          res.status(503).json(errorResponse);
-          return;
-        }
-
-        // Execute the action with a properly-shaped Action object
-        const result = await proxmoxTool.executeAction({
+        const result = await tool.executeAction({
           type: "task",
           target: nodeId,
           action: body.action,
+          parameters: body.parameters,
         });
 
         const duration = Date.now() - startTime;
 
         logger.info("Node action executed successfully", {
           component: "InventoryRouter",
-          integration: "proxmox",
+          integration: provider,
           operation: "executeNodeAction",
           metadata: { nodeId, action: body.action, duration },
         });
 
-        const responseData = {
+        res.json({
           success: true,
           message: `Action ${body.action} executed successfully`,
           result,
-        };
-
-        res.json(responseData);
+        });
       } catch (error) {
         const duration = Date.now() - startTime;
 
@@ -1234,7 +1332,6 @@ export function createInventoryRouter(
 
         logger.error("Error executing node action", {
           component: "InventoryRouter",
-          integration: "proxmox",
           operation: "executeNodeAction",
           metadata: { duration },
         }, error instanceof Error ? error : undefined);
@@ -1251,7 +1348,8 @@ export function createInventoryRouter(
 
   /**
    * DELETE /api/nodes/:id
-   * Destroy a node (permanently delete VM or container)
+   * Destroy a node (permanently delete VM, container, or cloud instance).
+   * Provider-agnostic: routes to the correct integration based on node ID prefix.
    *
    * Note: RBAC middleware should be applied at the route mounting level in server.ts
    * Required permission: lifecycle:destroy
@@ -1267,107 +1365,71 @@ export function createInventoryRouter(
       });
 
       try {
-        // Validate request parameters
         const params = NodeIdParamSchema.parse(req.params);
         const nodeId = params.id;
+
+        const resolved = getExecutionToolForNode(nodeId, res);
+        if (!resolved) return;
+
+        const { tool, provider } = resolved;
 
         logger.debug("Destroying node", {
           component: "InventoryRouter",
           operation: "destroyNode",
-          metadata: { nodeId },
+          metadata: { nodeId, provider },
         });
 
-        // Check if node is from Proxmox (nodeId format: proxmox:{node}:{vmid})
-        if (!nodeId.startsWith("proxmox:")) {
-          const errorResponse = {
-            error: {
-              code: "UNSUPPORTED_NODE_TYPE",
-              message: "Destroy action is only supported for Proxmox nodes",
-            },
-          };
+        // Determine the correct destroy action based on provider
+        let destroyAction: string;
+        let destroyParams: Record<string, unknown> | undefined;
 
-          res.status(400).json(errorResponse);
-          return;
+        if (provider === "proxmox") {
+          const parts = nodeId.split(":");
+          if (parts.length !== 3) {
+            res.status(400).json({
+              error: { code: "INVALID_NODE_ID", message: "Invalid Proxmox node ID format" },
+            });
+            return;
+          }
+          const node = parts[1];
+          const vmid = parseInt(parts[2], 10);
+          if (!Number.isFinite(vmid)) {
+            res.status(400).json({
+              error: { code: "INVALID_NODE_ID", message: "Invalid Proxmox node ID: vmid is not a valid number" },
+            });
+            return;
+          }
+          destroyAction = "destroy_vm";
+          destroyParams = { node, vmid };
+        } else if (provider === "aws") {
+          destroyAction = "terminate";
+          destroyParams = undefined;
+        } else {
+          destroyAction = "destroy";
+          destroyParams = undefined;
         }
 
-        // Get Proxmox service from integration manager
-        if (!integrationManager?.isInitialized()) {
-          const errorResponse = {
-            error: {
-              code: "INTEGRATION_NOT_AVAILABLE",
-              message: "Proxmox integration is not available",
-            },
-          };
-
-          res.status(503).json(errorResponse);
-          return;
-        }
-
-        const proxmoxTool = integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
-        if (!proxmoxTool) {
-          const errorResponse = {
-            error: {
-              code: "PROXMOX_NOT_CONFIGURED",
-              message: "Proxmox integration is not configured",
-            },
-          };
-
-          res.status(503).json(errorResponse);
-          return;
-        }
-
-        // Parse node and vmid from nodeId
-        const parts = nodeId.split(":");
-        if (parts.length !== 3) {
-          const errorResponse = {
-            error: {
-              code: "INVALID_NODE_ID",
-              message: "Invalid Proxmox node ID format",
-            },
-          };
-
-          res.status(400).json(errorResponse);
-          return;
-        }
-
-        const node = parts[1];
-        const vmid = parseInt(parts[2], 10);
-
-        if (!Number.isFinite(vmid)) {
-          const errorResponse = {
-            error: {
-              code: "INVALID_NODE_ID",
-              message: "Invalid Proxmox node ID: vmid is not a valid number",
-            },
-          };
-
-          res.status(400).json(errorResponse);
-          return;
-        }
-
-        const result = await proxmoxTool.executeAction({
+        const result = await tool.executeAction({
           type: "task",
           target: nodeId,
-          action: "destroy_vm",
-          parameters: { node, vmid },
+          action: destroyAction,
+          parameters: destroyParams,
         });
 
         const duration = Date.now() - startTime;
 
         logger.info("Node destroyed successfully", {
           component: "InventoryRouter",
-          integration: "proxmox",
+          integration: provider,
           operation: "destroyNode",
           metadata: { nodeId, duration },
         });
 
-        const responseData = {
+        res.json({
           success: true,
           message: "Node destroyed successfully",
           result,
-        };
-
-        res.json(responseData);
+        });
       } catch (error) {
         const duration = Date.now() - startTime;
 
@@ -1390,7 +1452,6 @@ export function createInventoryRouter(
 
         logger.error("Error destroying node", {
           component: "InventoryRouter",
-          integration: "proxmox",
           operation: "destroyNode",
           metadata: { duration },
         }, error instanceof Error ? error : undefined);

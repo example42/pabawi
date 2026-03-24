@@ -5,6 +5,10 @@
  * Handles authentication, request/response transformation, and error handling.
  */
 
+import * as https from "node:https";
+import * as http from "node:http";
+import { readFileSync } from "node:fs";
+
 import type { LoggerService } from "../../services/LoggerService";
 import type {
   ProxmoxConfig,
@@ -33,6 +37,7 @@ export class ProxmoxClient {
   private ticket?: string;
   private csrfToken?: string;
   private retryConfig: RetryConfig;
+  private httpsAgent?: https.Agent;
 
   /**
    * Create a new ProxmoxClient instance
@@ -45,21 +50,63 @@ export class ProxmoxClient {
     this.logger = logger;
     this.baseUrl = `https://${config.host}:${String(config.port ?? 8006)}`;
 
-    // Configure SSL behavior
-    // NOTE: Setting NODE_TLS_REJECT_UNAUTHORIZED is process-wide and would disable TLS verification
-    // for ALL HTTPS traffic, not just Proxmox. Instead, log a warning to guide the operator.
-    // Per-client TLS bypass via a custom HTTPS agent/dispatcher is the correct solution.
-    if (config.ssl && config.ssl.rejectUnauthorized === false) {
-      this.logger.warn(
-        "Proxmox ssl.rejectUnauthorized=false is set, but per-client TLS bypass is not yet implemented. " +
-        "Proxmox connections will use the default TLS verification. " +
-        "Configure a trusted CA certificate (ssl.ca) to connect to Proxmox with self-signed certs.",
-        {
-          component: "ProxmoxClient",
-          operation: "constructor",
+    // Build a per-client HTTPS agent with SSL options
+    // This allows self-signed certs without the process-wide NODE_TLS_REJECT_UNAUTHORIZED hack
+    const agentOptions: https.AgentOptions = {
+      keepAlive: true,
+    };
+
+    if (config.ssl) {
+      if (config.ssl.rejectUnauthorized === false) {
+        agentOptions.rejectUnauthorized = false;
+        this.logger.warn(
+          "Proxmox TLS certificate verification is disabled (ssl.rejectUnauthorized=false). " +
+            "Consider configuring a trusted CA certificate (PROXMOX_SSL_CA) instead.",
+          {
+            component: "ProxmoxClient",
+            operation: "constructor",
+          }
+        );
+      }
+
+      if (config.ssl.ca) {
+        try {
+          agentOptions.ca = readFileSync(config.ssl.ca);
+        } catch (err) {
+          this.logger.error("Failed to read Proxmox SSL CA file", {
+            component: "ProxmoxClient",
+            operation: "constructor",
+            metadata: { path: config.ssl.ca },
+          }, err instanceof Error ? err : undefined);
         }
-      );
+      }
+
+      if (config.ssl.cert) {
+        try {
+          agentOptions.cert = readFileSync(config.ssl.cert);
+        } catch (err) {
+          this.logger.error("Failed to read Proxmox SSL cert file", {
+            component: "ProxmoxClient",
+            operation: "constructor",
+            metadata: { path: config.ssl.cert },
+          }, err instanceof Error ? err : undefined);
+        }
+      }
+
+      if (config.ssl.key) {
+        try {
+          agentOptions.key = readFileSync(config.ssl.key);
+        } catch (err) {
+          this.logger.error("Failed to read Proxmox SSL key file", {
+            component: "ProxmoxClient",
+            operation: "constructor",
+            metadata: { path: config.ssl.key },
+          }, err instanceof Error ? err : undefined);
+        }
+      }
     }
+
+    this.httpsAgent = new https.Agent(agentOptions);
 
     // Configure retry logic
     this.retryConfig = {
@@ -73,7 +120,11 @@ export class ProxmoxClient {
     this.logger.debug("ProxmoxClient initialized", {
       component: "ProxmoxClient",
       operation: "constructor",
-      metadata: { host: config.host, port: config.port ?? 8006 },
+      metadata: {
+        host: config.host,
+        port: config.port ?? 8006,
+        tlsVerify: config.ssl?.rejectUnauthorized !== false,
+      },
     });
   }
 
@@ -427,32 +478,66 @@ export class ProxmoxClient {
   }
 
   /**
-   * Fetch with timeout
+   * Fetch with timeout using node:https for per-client TLS configuration
+   *
+   * Uses node:https.request instead of native fetch() because Node.js native fetch
+   * does not support per-request TLS options (rejectUnauthorized, custom CA, etc.).
+   * The custom https.Agent configured in the constructor carries the SSL settings.
    *
    * @param url - Request URL
-   * @param options - Fetch options
+   * @param options - Fetch-like options (method, headers, body)
    * @param timeout - Timeout in milliseconds (default: 30000)
-   * @returns Fetch response
+   * @returns A Response-compatible object
    */
   private async fetchWithTimeout(
     url: string,
     options: RequestInit,
     timeout = 30000
   ): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-    }, timeout);
+    return new Promise<Response>((resolve, reject) => {
+      const parsed = new URL(url);
+      const isHttps = parsed.protocol === "https:";
+      const transport = isHttps ? https : http;
 
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
+      const reqOptions: https.RequestOptions = {
+        hostname: parsed.hostname,
+        port: parsed.port || (isHttps ? 443 : 80),
+        path: parsed.pathname + parsed.search,
+        method: options.method ?? "GET",
+        headers: options.headers as Record<string, string>,
+        timeout,
+        ...(isHttps && this.httpsAgent ? { agent: this.httpsAgent } : {}),
+      };
+
+      const req = transport.request(reqOptions, (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          const bodyText = Buffer.concat(chunks).toString("utf-8");
+          // Build a Response-compatible object so the rest of the client code is unchanged
+          const response = new Response(bodyText, {
+            status: res.statusCode ?? 500,
+            statusText: res.statusMessage ?? "",
+            headers: new Headers(res.headers as Record<string, string>),
+          });
+          resolve(response);
+        });
       });
-      return response;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Request timed out"));
+      });
+
+      req.on("error", (err) => {
+        reject(err);
+      });
+
+      if (options.body) {
+        req.write(options.body);
+      }
+      req.end();
+    });
   }
 
   /**
