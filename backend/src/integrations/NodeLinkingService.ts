@@ -176,6 +176,10 @@ export class NodeLinkingService {
         // Mark as linked if from multiple sources
         linkedNode.linked = linkedNode.sources.length > 1;
 
+        // Set source (singular) to the primary source for backward compatibility
+        // This ensures code that reads node.source still works correctly
+        linkedNode.source = linkedNode.sources[0];
+
         this.logger.debug("Created linked node", {
           component: "NodeLinkingService",
           operation: "linkNodes",
@@ -342,7 +346,8 @@ export class NodeLinkingService {
 
     // Add URI hostname (extract from URI)
     // Skip Proxmox URIs as they use format proxmox://node/vmid where 'node' is not unique per VM
-    if (node.uri && !node.uri.startsWith("proxmox://")) {
+    // Skip AWS URIs as they use format aws:region:instance-id where splitting on ':' yields 'aws' for all nodes
+    if (node.uri && !node.uri.startsWith("proxmox://") && !node.uri.startsWith("aws:")) {
       try {
         // Extract hostname from URI
         // URIs can be in formats like:

@@ -100,6 +100,11 @@ describe("AWSPlugin Health Check", () => {
         account: "123456789012",
         arn: "arn:aws:iam::123456789012:user/testuser",
         userId: "AIDAEXAMPLEUSERID",
+        region: "us-east-1",
+        regions: undefined,
+        hasAccessKey: true,
+        hasProfile: false,
+        hasEndpoint: false,
       });
       expect(health.lastCheck).toBeDefined();
       expect(mockValidateCredentials).toHaveBeenCalledOnce();

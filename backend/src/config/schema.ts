@@ -307,6 +307,7 @@ export const AWSConfigSchema = z.object({
   accessKeyId: z.string().optional(),
   secretAccessKey: z.string().optional(),
   region: z.string().default("us-east-1"),
+  regions: z.array(z.string()).optional(),
   sessionToken: z.string().optional(),
   profile: z.string().optional(),
   endpoint: z.string().optional(),

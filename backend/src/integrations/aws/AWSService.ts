@@ -72,11 +72,15 @@ export class AWSService {
   private client: EC2Client;
   private readonly clientConfig: Record<string, unknown>;
   private readonly region: string;
+  private readonly regions: string[];
   private readonly logger: LoggerService;
 
   constructor(config: AWSConfig, logger: LoggerService) {
     this.logger = logger;
     this.region = config.region || "us-east-1";
+    this.regions = config.regions && config.regions.length > 0
+      ? config.regions
+      : [this.region];
 
     const clientConfig: Record<string, unknown> = {
       region: this.region,
@@ -100,7 +104,7 @@ export class AWSService {
     this.logger.debug("AWSService created", {
       component: "AWSService",
       operation: "constructor",
-      metadata: { region: this.region },
+      metadata: { region: this.region, regions: this.regions },
     });
   }
 
@@ -180,15 +184,37 @@ export class AWSService {
     this.logger.debug("Fetching EC2 inventory", {
       component: "AWSService",
       operation: "getInventory",
+      metadata: { regions: this.regions },
     });
 
-    const instances = await this.describeAllInstances();
-    const nodes = instances.map((instance) => this.transformInstanceToNode(instance));
+    // Query all configured regions in parallel
+    const regionResults = await Promise.all(
+      this.regions.map(async (region) => {
+        try {
+          const instances = await this.describeAllInstancesInRegion(region);
+          this.logger.debug(`Region ${region} returned ${String(instances.length)} instances`, {
+            component: "AWSService",
+            operation: "getInventory",
+            metadata: { region, count: instances.length },
+          });
+          return instances.map((instance) => this.transformInstanceToNode(instance, region));
+        } catch (error) {
+          this.logger.error(`Failed to fetch inventory from region ${region}`, {
+            component: "AWSService",
+            operation: "getInventory",
+            metadata: { region },
+          }, error instanceof Error ? error : undefined);
+          return [];
+        }
+      })
+    );
+
+    const nodes = regionResults.flat();
 
     this.logger.info("EC2 inventory fetched", {
       component: "AWSService",
       operation: "getInventory",
-      metadata: { count: nodes.length },
+      metadata: { count: nodes.length, regions: this.regions },
     });
 
     return nodes;
@@ -699,11 +725,19 @@ export class AWSService {
    * Describe all EC2 instances using pagination
    */
   private async describeAllInstances(): Promise<Instance[]> {
+    return this.describeAllInstancesInRegion(this.region);
+  }
+
+  /**
+   * Describe all EC2 instances in a specific region using pagination
+   */
+  private async describeAllInstancesInRegion(region: string): Promise<Instance[]> {
+    const client = this.getClientForRegion(region);
     const instances: Instance[] = [];
     let nextToken: string | undefined;
 
     do {
-      const response = await this.client.send(
+      const response = await client.send(
         new DescribeInstancesCommand({ NextToken: nextToken })
       );
 
@@ -724,14 +758,14 @@ export class AWSService {
    *
    * Validates: Requirement 9.4 - includes state, type, region, VPC, tags
    */
-  private transformInstanceToNode(instance: Instance): Node {
+  private transformInstanceToNode(instance: Instance, queryRegion?: string): Node {
     const instanceId = instance.InstanceId || "unknown";
     const nameTag = getTagValue(instance.Tags, "Name");
     const tags = tagsToRecord(instance.Tags);
     const state = instance.State?.Name || "unknown";
     const instanceType = instance.InstanceType || "unknown";
     const vpcId = instance.VpcId || "";
-    const az = instance.Placement?.AvailabilityZone || this.region;
+    const az = instance.Placement?.AvailabilityZone || queryRegion || this.region;
     const instanceRegion = az.replace(/-[a-z]$/, "");
 
     const nodeId = `aws:${instanceRegion}:${instanceId}`;

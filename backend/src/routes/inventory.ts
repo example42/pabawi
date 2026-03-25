@@ -111,14 +111,21 @@ export function createInventoryRouter(
 
           if (!requestedSources.includes("all")) {
             filteredNodes = aggregated.nodes.filter((node) => {
-              const nodeSource = (node as { source?: string }).source ?? "bolt";
-              return requestedSources.includes(nodeSource);
+              // Check both 'sources' (plural, from linked nodes) and 'source' (singular, from single-source nodes)
+              const linkedNode = node as { source?: string; sources?: string[] };
+              const nodeSources = linkedNode.sources && linkedNode.sources.length > 0
+                ? linkedNode.sources
+                : [linkedNode.source ?? "bolt"];
+              return nodeSources.some((s) => requestedSources.includes(s));
             });
 
             // Apply same source filtering to groups
             filteredGroups = aggregated.groups.filter((group) => {
-              const groupSource = (group as { source?: string }).source ?? "bolt";
-              return requestedSources.includes(groupSource);
+              const linkedGroup = group as { source?: string; sources?: string[] };
+              const groupSources = linkedGroup.sources && linkedGroup.sources.length > 0
+                ? linkedGroup.sources
+                : [linkedGroup.source ?? "bolt"];
+              return groupSources.some((s) => requestedSources.includes(s));
             });
 
             logger.debug("Filtered nodes and groups by source", {

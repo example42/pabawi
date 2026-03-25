@@ -131,6 +131,7 @@ export class ConfigService {
       accessKeyId?: string;
       secretAccessKey?: string;
       region?: string;
+      regions?: string[];
       sessionToken?: string;
       profile?: string;
       endpoint?: string;
@@ -468,11 +469,28 @@ export class ConfigService {
 
     // Parse AWS configuration
     if (process.env.AWS_ENABLED === "true") {
+      // Parse regions from JSON array or comma-separated string
+      let regions: string[] | undefined;
+      if (process.env.AWS_REGIONS) {
+        try {
+          const parsed = JSON.parse(process.env.AWS_REGIONS) as unknown;
+          if (Array.isArray(parsed)) {
+            regions = parsed.filter(
+              (item): item is string => typeof item === "string",
+            );
+          }
+        } catch {
+          // Not JSON — treat as comma-separated
+          regions = process.env.AWS_REGIONS.split(",").map((r) => r.trim()).filter(Boolean);
+        }
+      }
+
       integrations.aws = {
         enabled: true,
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
         region: process.env.AWS_DEFAULT_REGION || undefined,
+        regions,
         sessionToken: process.env.AWS_SESSION_TOKEN,
         profile: process.env.AWS_PROFILE,
         endpoint: process.env.AWS_ENDPOINT,

@@ -39,14 +39,15 @@ Add the AWS integration to your Pabawi configuration:
 
 | Option | Type | Required | Default | Description |
 |--------|------|----------|---------|-------------|
-| `accessKeyId` | string | Yes* | - | AWS access key ID |
-| `secretAccessKey` | string | Yes* | - | AWS secret access key |
-| `region` | string | Yes | us-east-1 | Default AWS region |
+| `accessKeyId` | string | No* | - | AWS access key ID |
+| `secretAccessKey` | string | No* | - | AWS secret access key |
+| `region` | string | No | us-east-1 | Default AWS region |
+| `regions` | string[] | No | - | List of regions to query for inventory (overrides `region` for discovery) |
 | `sessionToken` | string | No | - | Session token for temporary credentials (STS) |
-| `profile` | string | No | - | AWS CLI profile name |
+| `profile` | string | No | - | AWS CLI profile name (resolved by the SDK from `~/.aws/credentials`) |
 | `endpoint` | string | No | - | Custom endpoint URL (for testing or VPC endpoints) |
 
-*Required unless using instance profile or environment-based credentials.
+*If no explicit credentials or profile are provided, the AWS SDK default credential chain is used (environment variables, `~/.aws/credentials`, instance profile, etc.).
 
 ### Environment Variables
 
@@ -55,12 +56,20 @@ You can use environment variables for sensitive configuration:
 ```bash
 # Required
 AWS_ENABLED=true
-AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
-AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+# Credentials (optional — if omitted, the AWS SDK default credential chain is used)
+# AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+# AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 AWS_DEFAULT_REGION=us-east-1
 
+# Query multiple regions for inventory (JSON array or comma-separated)
+# AWS_REGIONS=["us-east-1","eu-west-1","ap-southeast-1"]
+
+# Optional: AWS CLI profile name
+# AWS_PROFILE=default
+
 # Optional: Session token for temporary credentials
-AWS_SESSION_TOKEN=your_session_token_here
+# AWS_SESSION_TOKEN=your_session_token_here
 ```
 
 ### Database Configuration (Recommended)
@@ -149,9 +158,34 @@ AWS_SESSION_TOKEN=FwoGZXIvYXdzE...
 
 **Note**: Temporary credentials expire. The integration does not automatically refresh them.
 
+### AWS CLI Profile
+
+You can use a named profile from your `~/.aws/credentials` and `~/.aws/config` files:
+
+```bash
+AWS_ENABLED=true
+AWS_PROFILE=my-profile
+```
+
+When `AWS_PROFILE` is set, the AWS SDK reads credentials and region from the corresponding profile in your AWS config files. This is useful when you manage multiple AWS accounts or use SSO.
+
+**Note**: `AWS_PROFILE` is passed to the AWS SDK via the process environment (loaded by dotenv). Pabawi does not read the profile files directly — the SDK handles credential resolution.
+
+### Default Credential Chain
+
+If no explicit credentials (`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`) or profile (`AWS_PROFILE`) are configured, the AWS SDK automatically resolves credentials using its default credential provider chain, in this order:
+
+1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+2. Shared credentials file (`~/.aws/credentials`)
+3. AWS config file (`~/.aws/config`)
+4. ECS container credentials (if running in ECS)
+5. EC2 instance metadata / IAM role (if running on EC2)
+
+This means `AWS_ENABLED=true` with no other AWS settings will work if your environment already has credentials configured through any of these mechanisms.
+
 ## Inventory Discovery
 
-The AWS integration discovers all EC2 instances in the configured region.
+The AWS integration discovers all EC2 instances across the configured regions. If `AWS_REGIONS` is set, all listed regions are queried in parallel. Otherwise, only the default region (`AWS_DEFAULT_REGION` or `us-east-1`) is queried.
 
 ### Node Format
 
@@ -414,7 +448,7 @@ AWSAuthenticationError: AWS authentication failed
 
 #### getInventory()
 
-Returns all EC2 instances in the configured region.
+Returns all EC2 instances across the configured regions (queries all regions in parallel).
 
 ```typescript
 const nodes = await awsPlugin.getInventory();

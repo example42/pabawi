@@ -15,6 +15,7 @@ export interface AWSConfig {
   accessKeyId?: string;
   secretAccessKey?: string;
   region?: string;
+  regions?: string[];
   sessionToken?: string;
   profile?: string;
   endpoint?: string;

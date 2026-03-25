@@ -849,6 +849,7 @@ async function startServer(): Promise<Express> {
           metadata: {
             enabled: true,
             region: mergedAwsConfig.region ?? "us-east-1",
+            regions: mergedAwsConfig.regions,
             hasAccessKey: !!mergedAwsConfig.accessKeyId,
             priority: 7,
           },
