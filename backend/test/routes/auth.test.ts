@@ -4,8 +4,6 @@ import request from 'supertest';
 import { createAuthRouter } from '../../src/routes/auth';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { SetupService } from '../../src/services/SetupService';
-import { Database } from 'sqlite3';
-import { initializeSchema } from '../../src/database/schema';
 
 describe('Auth Routes - POST /api/auth/register', () => {
   let app: Express;
@@ -608,21 +606,22 @@ describe('Auth Routes - POST /api/auth/register', () => {
     });
 
     it('should handle database errors gracefully', async () => {
-      // Create a new database instance that we can close
-      const tempDb = new Database(':memory:');
-      await initializeSchema(tempDb);
+      // Create a temporary database service that we can close
+      const tempDatabaseService = new DatabaseService(':memory:');
+      await tempDatabaseService.initialize();
 
-      const tempDatabaseService = {
-        getConnection: () => tempDb,
-        isInitialized: () => true,
-      } as DatabaseService;
+      const tempSetupService = new SetupService(tempDatabaseService.getConnection());
+      await tempSetupService.saveConfig({
+        allowSelfRegistration: true,
+        defaultNewUserRole: null,
+      });
 
       const tempApp = express();
       tempApp.use(express.json());
       tempApp.use('/api/auth', createAuthRouter(tempDatabaseService));
 
       // Close the database to simulate error
-      await closeDatabase(tempDb);
+      await tempDatabaseService.close();
 
       const userData = {
         username: 'testuser',
@@ -641,151 +640,6 @@ describe('Auth Routes - POST /api/auth/register', () => {
     });
   });
 });
-
-// Helper functions
-async function initializeSchema(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.exec(`
-      CREATE TABLE users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        passwordHash TEXT NOT NULL,
-        firstName TEXT NOT NULL,
-        lastName TEXT NOT NULL,
-        isActive INTEGER DEFAULT 1,
-        isAdmin INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL,
-        lastLoginAt TEXT
-      );
-
-      CREATE TABLE groups (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      CREATE TABLE roles (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        isBuiltIn INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      CREATE TABLE permissions (
-        id TEXT PRIMARY KEY,
-        resource TEXT NOT NULL,
-        action TEXT NOT NULL,
-        description TEXT,
-        createdAt TEXT NOT NULL,
-        UNIQUE(resource, action)
-      );
-
-      CREATE TABLE user_groups (
-        userId TEXT NOT NULL,
-        groupId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, groupId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (groupId) REFERENCES groups(id)
-      );
-
-      CREATE TABLE user_roles (
-        userId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, roleId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (roleId) REFERENCES roles(id)
-      );
-
-      CREATE TABLE group_roles (
-        groupId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (groupId, roleId),
-        FOREIGN KEY (groupId) REFERENCES groups(id),
-        FOREIGN KEY (roleId) REFERENCES roles(id)
-      );
-
-      CREATE TABLE role_permissions (
-        roleId TEXT NOT NULL,
-        permissionId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (roleId, permissionId),
-        FOREIGN KEY (roleId) REFERENCES roles(id),
-        FOREIGN KEY (permissionId) REFERENCES permissions(id)
-      );
-
-      CREATE TABLE revoked_tokens (
-        token TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
-        revokedAt TEXT NOT NULL,
-        expiresAt TEXT NOT NULL
-      );
-
-      CREATE TABLE account_lockouts (
-        username TEXT PRIMARY KEY,
-        lockoutType TEXT NOT NULL,
-        lockedAt TEXT NOT NULL,
-        lockedUntil TEXT,
-        failedAttempts INTEGER NOT NULL,
-        lastAttemptAt TEXT NOT NULL
-      );
-
-      CREATE TABLE failed_login_attempts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL,
-        attemptedAt TEXT NOT NULL,
-        ipAddress TEXT,
-        reason TEXT NOT NULL
-      );
-
-      CREATE TABLE audit_logs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp TEXT NOT NULL,
-        userId TEXT,
-        username TEXT,
-        action TEXT NOT NULL,
-        resource TEXT,
-        resourceId TEXT,
-        ipAddress TEXT,
-        userAgent TEXT,
-        success INTEGER NOT NULL,
-        errorMessage TEXT,
-        metadata TEXT
-      );
-
-      CREATE TABLE config (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      -- Insert default config to allow self-registration for tests
-      INSERT INTO config (key, value, updatedAt) VALUES
-        ('allow_self_registration', 'true', datetime('now')),
-        ('default_new_user_role', 'role-viewer-001', datetime('now'));
-    `, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-async function closeDatabase(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.close((err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
 
 describe('Auth Routes - POST /api/auth/login', () => {
   let app: Express;
@@ -1267,21 +1121,22 @@ describe('Auth Routes - POST /api/auth/login', () => {
     });
 
     it('should handle database errors gracefully', async () => {
-      // Create a new database instance that we can close
-      const tempDb = new Database(':memory:');
-      await initializeSchema(tempDb);
+      // Create a temporary database service that we can close
+      const tempDatabaseService = new DatabaseService(':memory:');
+      await tempDatabaseService.initialize();
 
-      const tempDatabaseService = {
-        getConnection: () => tempDb,
-        isInitialized: () => true,
-      } as DatabaseService;
+      const tempSetupService = new SetupService(tempDatabaseService.getConnection());
+      await tempSetupService.saveConfig({
+        allowSelfRegistration: true,
+        defaultNewUserRole: null,
+      });
 
       const tempApp = express();
       tempApp.use(express.json());
       tempApp.use('/api/auth', createAuthRouter(tempDatabaseService));
 
       // Close the database to simulate error
-      await closeDatabase(tempDb);
+      await tempDatabaseService.close();
 
       const loginData = {
         username: 'testuser',
@@ -1694,12 +1549,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token = loginResponse.body.token;
 
       // Close the database to simulate error
-      await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().close((err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      await databaseService.getConnection().close();
 
       // Logout should fail at middleware level (token verification fails)
       // because the database is needed to check revocation
@@ -2272,12 +2122,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Close the database to simulate error
-      await new Promise<void>((resolve, reject) => {
-        databaseService.getConnection().close((err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
+      await databaseService.getConnection().close();
 
       // Refresh should fail gracefully
       const response = await request(app)

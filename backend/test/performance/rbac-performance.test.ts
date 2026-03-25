@@ -521,7 +521,7 @@ async function initializeSchema(db: DatabaseAdapter): Promise<void> {
   await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
   await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
   await db.execute(`CREATE TABLE config ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`INSERT INTO config (key, value, updatedAt) VALUES ('allow_self_registration', 'false', datetime('now')), ('default_new_user_role', 'role-viewer-001', datetime('now'))`);
+  await db.execute(`INSERT INTO config (key, value, updatedAt) VALUES ('allow_self_registration', 'false', datetime('now')), ('default_new_user_role', '', datetime('now'))`);
 }
 
 async function closeDatabase(db: DatabaseAdapter): Promise<void> {

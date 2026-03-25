@@ -149,8 +149,8 @@ describe("Integration Status API", () => {
       expect(response.body).toHaveProperty("integrations");
       expect(response.body).toHaveProperty("timestamp");
       expect(Array.isArray(response.body.integrations)).toBe(true);
-      // Configured plugins + unconfigured Puppetserver and Hiera
-      expect(response.body.integrations).toHaveLength(4);
+      // Configured plugins + unconfigured Puppetserver, Hiera, Proxmox, and AWS
+      expect(response.body.integrations).toHaveLength(6);
 
       // Check first integration
       const puppetdb = response.body.integrations.find(
@@ -246,8 +246,8 @@ describe("Integration Status API", () => {
         .get("/api/integrations/status")
         .expect(200);
 
-      // Should have unconfigured puppetdb, puppetserver, bolt, and hiera entries
-      expect(response.body.integrations).toHaveLength(4);
+      // Should have unconfigured puppetdb, puppetserver, bolt, hiera, proxmox, and aws entries
+      expect(response.body.integrations).toHaveLength(6);
       expect(response.body.timestamp).toBeDefined();
 
       const puppetdb = response.body.integrations.find(
@@ -284,8 +284,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(true);
-      // Configured plugins + unconfigured Puppetserver and Hiera
-      expect(response.body.integrations).toHaveLength(4);
+      // Configured plugins + unconfigured Puppetserver, Hiera, Proxmox, and AWS
+      expect(response.body.integrations).toHaveLength(6);
     });
 
     it("should refresh health checks when requested", async () => {
@@ -294,8 +294,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(false);
-      // Configured plugins + unconfigured Puppetserver and Hiera
-      expect(response.body.integrations).toHaveLength(4);
+      // Configured plugins + unconfigured Puppetserver, Hiera, Proxmox, and AWS
+      expect(response.body.integrations).toHaveLength(6);
     });
   });
 });

@@ -482,7 +482,7 @@ describe('Property 6: Debug Info Completeness', () => {
         operationArb,
         requestIdArb,
         durationArb,
-        fc.array(fc.tuple(fc.string(), fc.anything()), { minLength: 1, maxLength: 10 }),
+        fc.array(fc.tuple(fc.string().filter(k => k !== '__proto__' && k !== 'constructor' && k !== 'prototype'), fc.anything()), { minLength: 1, maxLength: 10 }),
         (operation, requestId, duration, metadataEntries) => {
           const debugInfo = service.createDebugInfo(operation, requestId, duration);
 

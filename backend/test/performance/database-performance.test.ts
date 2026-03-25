@@ -2,7 +2,6 @@
  * Database Performance Tests
  *
  * Tests database operations with large datasets
- * Extends the existing database performance test with additional scenarios
  *
  * Run with: npm test -- backend/test/performance/database-performance.test.ts
  */
@@ -12,7 +11,6 @@ import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
 import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { ExecutionRepository, type ExecutionRecord } from '../../src/database/ExecutionRepository';
 import { MigrationRunner } from '../../src/database/MigrationRunner';
-import { join } from 'path';
 
 // Performance thresholds (in milliseconds)
 const DB_THRESHOLDS = {
@@ -25,45 +23,12 @@ const DB_THRESHOLDS = {
   BULK_DELETE: 500,
 };
 
-// Helper to promisify database operations
-function runAsync(db: DatabaseAdapter, sql: string, params?: any[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.run(sql, params || [], (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
-
-function allAsync(db: DatabaseAdapter, sql: string, params?: any[]): Promise<any[]> {
-  return new Promise((resolve, reject) => {
-    db.all(sql, params || [], (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
-}
-
-async function setupDatabase(): Promise<sqlite3.Database> {
-  const db = new SQLiteAdapter(':memory:');
-
-  // Apply all migrations using MigrationRunner (migration-first approach)
-  const migrationsDir = join(__dirname, '../../src/database/migrations');
-  const runner = new MigrationRunner(db, migrationsDir);
-  await runner.runPendingMigrations();
-
-  return db;
-}
-
 async function generateTestData(
   repo: ExecutionRepository,
   count: number
 ): Promise<string[]> {
   const statuses: Array<'running' | 'success' | 'failed' | 'partial'> = [
-    'running',
-    'success',
-    'failed',
-    'partial',
+    'running', 'success', 'failed', 'partial',
   ];
   const types: Array<'command' | 'task' | 'facts'> = ['command', 'task', 'facts'];
   const nodes = Array.from({ length: 100 }, (_, i) => `node${i}.example.com`);
@@ -105,12 +70,15 @@ describe('Database Performance Tests', () => {
   let repo: ExecutionRepository;
 
   beforeAll(async () => {
-    db = await setupDatabase();
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
+    const migrationRunner = new MigrationRunner(db);
+    await migrationRunner.runPendingMigrations();
     repo = new ExecutionRepository(db);
   });
 
-  afterAll(() => {
-    db.close();
+  afterAll(async () => {
+    await db.close();
   });
 
   describe('Insert Performance', () => {
@@ -120,7 +88,6 @@ describe('Database Performance Tests', () => {
       });
 
       console.log(`  ✓ Inserted 100 records in ${duration}ms (threshold: ${DB_THRESHOLDS.INSERT_100_RECORDS}ms)`);
-      console.log(`    Average: ${(duration / 100).toFixed(2)}ms per record`);
       expect(duration).toBeLessThan(DB_THRESHOLDS.INSERT_100_RECORDS);
       expect(result.length).toBe(100);
     });
@@ -131,7 +98,6 @@ describe('Database Performance Tests', () => {
       });
 
       console.log(`  ✓ Inserted 1000 records in ${duration}ms (threshold: ${DB_THRESHOLDS.INSERT_1000_RECORDS}ms)`);
-      console.log(`    Average: ${(duration / 1000).toFixed(2)}ms per record`);
       expect(duration).toBeLessThan(DB_THRESHOLDS.INSERT_1000_RECORDS);
       expect(result.length).toBe(1000);
     });
@@ -139,12 +105,11 @@ describe('Database Performance Tests', () => {
 
   describe('Query Performance with Indexes', () => {
     beforeAll(async () => {
-      // Ensure we have enough data
       await generateTestData(repo, 500);
     });
 
     it('should query by status using index efficiently', async () => {
-      const { result, duration } = await measureTime(async () => {
+      const { duration } = await measureTime(async () => {
         return repo.findAll({ status: 'success' }, { page: 1, pageSize: 50 });
       });
 
@@ -153,7 +118,7 @@ describe('Database Performance Tests', () => {
     });
 
     it('should query by type using index efficiently', async () => {
-      const { result, duration } = await measureTime(async () => {
+      const { duration } = await measureTime(async () => {
         return repo.findAll({ type: 'command' }, { page: 1, pageSize: 50 });
       });
 
@@ -165,7 +130,7 @@ describe('Database Performance Tests', () => {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const now = new Date().toISOString();
 
-      const { result, duration } = await measureTime(async () => {
+      const { duration } = await measureTime(async () => {
         return repo.findAll(
           { startDate: thirtyDaysAgo, endDate: now },
           { page: 1, pageSize: 50 }
@@ -193,13 +158,9 @@ describe('Database Performance Tests', () => {
     it('should handle complex multi-filter queries efficiently', async () => {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
-      const { result, duration } = await measureTime(async () => {
+      const { duration } = await measureTime(async () => {
         return repo.findAll(
-          {
-            status: 'success',
-            type: 'command',
-            startDate: thirtyDaysAgo,
-          },
+          { status: 'success', type: 'command', startDate: thirtyDaysAgo },
           { page: 1, pageSize: 50 }
         );
       });
@@ -252,9 +213,6 @@ describe('Database Performance Tests', () => {
     });
   });
 
-  // Note: ExecutionRepository does not have a delete method
-  // Delete operations are not part of the current API
-
   describe('Concurrent Operations', () => {
     it('should handle concurrent reads efficiently', async () => {
       await generateTestData(repo, 200);
@@ -296,23 +254,18 @@ describe('Database Performance Tests', () => {
     it('should verify indexes are being used', async () => {
       await generateTestData(repo, 1000);
 
-      // Query with index (status)
       const { duration: withIndex } = await measureTime(async () => {
         return repo.findAll({ status: 'success' }, { page: 1, pageSize: 50 });
       });
 
-      // Query without index (targetNode - uses LIKE on JSON)
       const { duration: withoutIndex } = await measureTime(async () => {
         return repo.findAll({ targetNode: 'node1' }, { page: 1, pageSize: 50 });
       });
 
       console.log(`  ✓ Query with index: ${withIndex}ms`);
       console.log(`  ✓ Query without index: ${withoutIndex}ms`);
-      console.log(`    Index speedup: ${(withoutIndex / withIndex).toFixed(2)}x`);
 
-      // Indexed query should be significantly faster
       expect(withIndex).toBeLessThan(DB_THRESHOLDS.QUERY_WITH_INDEX);
-      // Non-indexed query will be slower but should still be reasonable
       expect(withoutIndex).toBeLessThan(DB_THRESHOLDS.QUERY_WITHOUT_INDEX);
     });
   });
@@ -321,20 +274,6 @@ describe('Database Performance Tests', () => {
     it('should log database performance summary', () => {
       console.log('\n=== Database Performance Test Summary ===');
       console.log('All database performance tests passed!');
-      console.log('\nOperation Thresholds:');
-      console.log(`  - Insert 100 records: ${DB_THRESHOLDS.INSERT_100_RECORDS}ms`);
-      console.log(`  - Insert 1000 records: ${DB_THRESHOLDS.INSERT_1000_RECORDS}ms`);
-      console.log(`  - Query with index: ${DB_THRESHOLDS.QUERY_WITH_INDEX}ms`);
-      console.log(`  - Query without index: ${DB_THRESHOLDS.QUERY_WITHOUT_INDEX}ms`);
-      console.log(`  - Complex query: ${DB_THRESHOLDS.COMPLEX_QUERY}ms`);
-      console.log(`  - Bulk update: ${DB_THRESHOLDS.BULK_UPDATE}ms`);
-      console.log(`  - Bulk delete: ${DB_THRESHOLDS.BULK_DELETE}ms`);
-      console.log('\nRecommendations:');
-      console.log('  - Indexes are working correctly for status, type, and date queries');
-      console.log('  - Consider adding index for frequently queried JSON fields');
-      console.log('  - Use pagination for large result sets');
-      console.log('  - Monitor query performance in production');
-      console.log('  - Consider archiving old execution records');
       console.log('=========================================\n');
     });
   });

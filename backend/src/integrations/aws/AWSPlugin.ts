@@ -114,17 +114,20 @@ export class AWSPlugin
       operation: "validateAWSConfig",
     });
 
-    // Either explicit credentials or a profile must be provided
-    if (!config.accessKeyId && !config.profile) {
-      throw new Error(
-        "AWS configuration must include either accessKeyId/secretAccessKey or a profile"
-      );
-    }
-
+    // If explicit accessKeyId is provided, secretAccessKey must also be present
     if (config.accessKeyId && !config.secretAccessKey) {
       throw new Error(
         "AWS configuration with accessKeyId must also include secretAccessKey"
       );
+    }
+
+    // If no explicit credentials or profile, the AWS SDK will use the default
+    // credential chain (env vars, ~/.aws/credentials, instance profile, etc.)
+    if (!config.accessKeyId && !config.profile) {
+      this.logger.info("No explicit AWS credentials or profile configured — using default credential chain", {
+        component: "AWSPlugin",
+        operation: "validateAWSConfig",
+      });
     }
 
     this.logger.debug("AWS configuration validated successfully", {
@@ -164,6 +167,7 @@ export class AWSPlugin
           arn: identity.arn,
           userId: identity.userId,
           region: config.region ?? 'us-east-1',
+          regions: config.regions,
           hasAccessKey: !!config.accessKeyId,
           hasProfile: !!config.profile,
           hasEndpoint: !!config.endpoint,
@@ -177,6 +181,7 @@ export class AWSPlugin
           message: "AWS authentication failed",
           details: {
             region: config.region ?? 'us-east-1',
+            regions: config.regions,
             hasAccessKey: !!config.accessKeyId,
             hasProfile: !!config.profile,
             hasEndpoint: !!config.endpoint,
@@ -190,6 +195,7 @@ export class AWSPlugin
         message: error instanceof Error ? error.message : "AWS health check failed",
         details: {
           region: config.region ?? 'us-east-1',
+          regions: config.regions,
           hasAccessKey: !!config.accessKeyId,
           hasProfile: !!config.profile,
           hasEndpoint: !!config.endpoint,

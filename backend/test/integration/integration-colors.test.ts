@@ -34,7 +34,7 @@ describe('Integration Colors API', () => {
 
       // Verify all five integrations are present
       const { colors, integrations } = response.body;
-      expect(integrations).toEqual(['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh']);
+      expect(integrations).toEqual(['proxmox', 'aws', 'bolt', 'ansible', 'ssh', 'puppetdb', 'puppetserver', 'hiera']);
 
       // Verify each integration has color configuration
       for (const integration of integrations) {
