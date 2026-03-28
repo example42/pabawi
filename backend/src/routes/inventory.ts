@@ -892,7 +892,8 @@ export function createInventoryRouter(
             });
           }
 
-          const aggregated = await integrationManager.getLinkedInventory();
+          const useCache = req.query.nocache !== '1';
+          const aggregated = await integrationManager.getLinkedInventory(useCache);
           node = aggregated.nodes.find(
             (n) => n.id === nodeId || n.name === nodeId,
           );
@@ -1323,6 +1324,23 @@ export function createInventoryRouter(
 
         const duration = Date.now() - startTime;
 
+        if (result.status === "failed") {
+          logger.error("Node action failed", {
+            component: "InventoryRouter",
+            integration: provider,
+            operation: "executeNodeAction",
+            metadata: { nodeId, action: body.action, duration, error: result.error },
+          });
+          res.status(500).json({
+            error: {
+              code: "ACTION_EXECUTION_FAILED",
+              message: result.error ?? `Action ${body.action} failed`,
+            },
+            result,
+          });
+          return;
+        }
+
         logger.info("Node action executed successfully", {
           component: "InventoryRouter",
           integration: provider,
@@ -1442,6 +1460,23 @@ export function createInventoryRouter(
         });
 
         const duration = Date.now() - startTime;
+
+        if (result.status === "failed") {
+          logger.error("Node destruction failed", {
+            component: "InventoryRouter",
+            integration: provider,
+            operation: "destroyNode",
+            metadata: { nodeId, duration, error: result.error },
+          });
+          res.status(500).json({
+            error: {
+              code: "DESTROY_FAILED",
+              message: result.error ?? "Failed to destroy node",
+            },
+            result,
+          });
+          return;
+        }
 
         logger.info("Node destroyed successfully", {
           component: "InventoryRouter",

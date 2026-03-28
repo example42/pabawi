@@ -759,7 +759,7 @@ export class AWSService {
     const instanceType = instance.InstanceType || "unknown";
     const vpcId = instance.VpcId || "";
     const az = instance.Placement?.AvailabilityZone || queryRegion || this.region;
-    const instanceRegion = az.replace(/-[a-z]$/, "");
+    const instanceRegion = az.replace(/[a-z]$/, "");
 
     const nodeId = `aws:${instanceRegion}:${instanceId}`;
 
@@ -796,7 +796,9 @@ export class AWSService {
     const state = instance.State?.Name || "unknown";
     const instanceType = instance.InstanceType || "unknown";
     const az = instance.Placement?.AvailabilityZone || this.region;
-    const instanceRegion = az.replace(/-[a-z]$/, "");
+    const instanceRegion = az.replace(/[a-z]$/, "");
+
+    const nameTag = getTagValue(instance.Tags, "Name");
 
     return {
       nodeId,
@@ -809,7 +811,9 @@ export class AWSService {
           release: { full: "unknown", major: "unknown" },
         },
         processors: {
-          count: 0, // Not available from describeInstances directly
+          count: instance.CpuOptions?.CoreCount != null && instance.CpuOptions?.ThreadsPerCore != null
+            ? instance.CpuOptions.CoreCount * instance.CpuOptions.ThreadsPerCore
+            : 0,
           models: [],
         },
         memory: {
@@ -819,15 +823,16 @@ export class AWSService {
           hostname: instance.PrivateDnsName || "unknown",
           interfaces: {
             ...(instance.PublicIpAddress
-              ? { public: { ip: instance.PublicIpAddress } }
+              ? { public: { ip: instance.PublicIpAddress, dns: instance.PublicDnsName } }
               : {}),
             ...(instance.PrivateIpAddress
-              ? { private: { ip: instance.PrivateIpAddress } }
+              ? { private: { ip: instance.PrivateIpAddress, dns: instance.PrivateDnsName } }
               : {}),
           },
         },
         categories: {
           system: {
+            name: nameTag,
             instanceId: instance.InstanceId,
             state,
             instanceType,
@@ -836,6 +841,11 @@ export class AWSService {
             launchTime: instance.LaunchTime?.toISOString(),
             architecture: instance.Architecture,
             platform: instance.Platform || "linux",
+            platformDetails: instance.PlatformDetails,
+            virtualizationType: instance.VirtualizationType,
+            hypervisor: instance.Hypervisor,
+            monitoring: instance.Monitoring?.State,
+            iamInstanceProfile: instance.IamInstanceProfile?.Arn,
           },
           network: {
             vpcId: instance.VpcId,
@@ -844,6 +854,19 @@ export class AWSService {
             privateIp: instance.PrivateIpAddress,
             publicDns: instance.PublicDnsName,
             privateDns: instance.PrivateDnsName,
+            sourceDestCheck: instance.SourceDestCheck,
+            networkInterfaces: (instance.NetworkInterfaces || []).map((nic) => ({
+              networkInterfaceId: nic.NetworkInterfaceId,
+              subnetId: nic.SubnetId,
+              vpcId: nic.VpcId,
+              privateIp: nic.PrivateIpAddress,
+              privateDns: nic.PrivateDnsName,
+              publicIp: nic.Association?.PublicIp,
+              publicDns: nic.Association?.PublicDnsName,
+              macAddress: nic.MacAddress,
+              status: nic.Status,
+              description: nic.Description,
+            })),
           },
           hardware: {
             instanceType,
@@ -851,6 +874,19 @@ export class AWSService {
             rootDeviceType: instance.RootDeviceType,
             rootDeviceName: instance.RootDeviceName,
             ebsOptimized: instance.EbsOptimized,
+            cpuOptions: instance.CpuOptions
+              ? {
+                  coreCount: instance.CpuOptions.CoreCount,
+                  threadsPerCore: instance.CpuOptions.ThreadsPerCore,
+                }
+              : undefined,
+            blockDevices: (instance.BlockDeviceMappings || []).map((bdm) => ({
+              deviceName: bdm.DeviceName,
+              volumeId: bdm.Ebs?.VolumeId,
+              status: bdm.Ebs?.Status,
+              attachTime: bdm.Ebs?.AttachTime?.toISOString(),
+              deleteOnTermination: bdm.Ebs?.DeleteOnTermination,
+            })),
           },
           custom: {
             tags,
@@ -860,6 +896,15 @@ export class AWSService {
               groupId: sg.GroupId,
               groupName: sg.GroupName,
             })),
+            spotInstanceRequestId: instance.SpotInstanceRequestId,
+            capacityReservationId: instance.CapacityReservationId,
+            metadataOptions: instance.MetadataOptions
+              ? {
+                  state: instance.MetadataOptions.State,
+                  httpTokens: instance.MetadataOptions.HttpTokens,
+                  httpEndpoint: instance.MetadataOptions.HttpEndpoint,
+                }
+              : undefined,
           },
         },
       },
