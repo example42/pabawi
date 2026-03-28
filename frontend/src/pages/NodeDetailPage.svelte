@@ -1534,7 +1534,14 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                       {#each puppetReports.slice(0, 5) as report}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <tr
+                          class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                          onclick={() => {
+                            switchTab('puppet');
+                            switchPuppetSubTab('puppet-reports');
+                            fetchReportDetails(report);
+                          }}
+                        >
                           <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
                             {formatTimestamp(report.start_time)}
                           </td>

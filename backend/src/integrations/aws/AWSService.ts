@@ -722,13 +722,6 @@ export class AWSService {
   // ========================================
 
   /**
-   * Describe all EC2 instances using pagination
-   */
-  private async describeAllInstances(): Promise<Instance[]> {
-    return this.describeAllInstancesInRegion(this.region);
-  }
-
-  /**
    * Describe all EC2 instances in a specific region using pagination
    */
   private async describeAllInstancesInRegion(region: string): Promise<Instance[]> {
@@ -897,7 +890,7 @@ export class AWSService {
       if (!regionMap.has(region)) {
         regionMap.set(region, []);
       }
-      regionMap.get(region)!.push(node.id);
+      regionMap.get(region)!.push(node.name);
     }
 
     return Array.from(regionMap.entries()).map(([region, nodeIds]) => ({
@@ -922,7 +915,7 @@ export class AWSService {
       if (!vpcMap.has(vpcId)) {
         vpcMap.set(vpcId, []);
       }
-      vpcMap.get(vpcId)!.push(node.id);
+      vpcMap.get(vpcId)!.push(node.name);
     }
 
     return Array.from(vpcMap.entries()).map(([vpcId, nodeIds]) => ({
@@ -956,7 +949,7 @@ export class AWSService {
           if (!valueMap.has(value)) {
             valueMap.set(value, []);
           }
-          valueMap.get(value)!.push(node.id);
+          valueMap.get(value)!.push(node.name);
         }
       }
     }
