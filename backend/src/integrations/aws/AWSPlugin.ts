@@ -242,6 +242,18 @@ export class AWSPlugin
    */
   async getNodeFacts(nodeId: string): Promise<Facts> {
     this.ensureInitialized();
+
+    // If nodeId is already in aws:region:instanceId format, use it directly.
+    // Otherwise resolve by searching the inventory for a node with matching id or name.
+    if (!nodeId.startsWith("aws:")) {
+      const inventory = await this.service!.getInventory();
+      const match = inventory.find((n) => n.id === nodeId || n.name === nodeId);
+      if (!match) {
+        throw new Error(`AWS node not found: ${nodeId}`);
+      }
+      return this.service!.getNodeFacts(match.id);
+    }
+
     return this.service!.getNodeFacts(nodeId);
   }
 
@@ -548,11 +560,6 @@ export class AWSPlugin
         name: "create_instance",
         description: "Launch a new EC2 instance",
         operation: "create",
-      },
-      {
-        name: "terminate_instance",
-        description: "Terminate an EC2 instance",
-        operation: "destroy",
       },
     ];
   }

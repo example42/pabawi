@@ -251,12 +251,13 @@
   }
 
   // Fetch node details
-  async function fetchNode(): Promise<void> {
+  async function fetchNode(nocache = false): Promise<void> {
     loading = true;
     error = null;
 
     try {
-      const data = await get<{ node: Node; _debug?: DebugInfo }>(`/api/nodes/${nodeId}`, {
+      const url = nocache ? `/api/nodes/${nodeId}?nocache=1` : `/api/nodes/${nodeId}`;
+      const data = await get<{ node: Node; _debug?: DebugInfo }>(url, {
         maxRetries: 2,
         timeout: 20000, // 20s timeout to avoid indefinite hang
       });
@@ -2263,7 +2264,7 @@
               Unified timeline of provisioning events, lifecycle actions, execution results, and manual notes for this node.
             </p>
 
-            <JournalTimeline nodeId={nodeId} />
+            <JournalTimeline nodeId={nodeId} active={activeTab === 'journal'} />
           </div>
         </div>
       {/if}
@@ -2288,7 +2289,7 @@
               nodeId={effectiveNodeId}
               nodeType={effectiveType}
               currentStatus={effectiveStatus}
-              onStatusChange={fetchNode}
+              onStatusChange={() => fetchNode(true)}
             />
           {:else}
             <div class="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">

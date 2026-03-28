@@ -3,6 +3,11 @@ import { z } from "zod";
 import { ZodError } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { JournalService } from "../services/journal/JournalService";
+import {
+  collectExecutionEntries,
+  collectPuppetDBEntries,
+  type PuppetDBLike,
+} from "../services/journal/JournalCollectors";
 import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
@@ -37,16 +42,24 @@ const SearchQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+export interface JournalRouterDeps {
+  puppetdb?: PuppetDBLike;
+}
+
 /**
  * Create journal routes
  *
  * Requirements: 22.4, 23.1, 24.1, 27.3
  */
-export function createJournalRouter(databaseService: DatabaseService): Router {
+export function createJournalRouter(
+  databaseService: DatabaseService,
+  deps: JournalRouterDeps = {},
+): Router {
   const router = Router();
   const journalService = new JournalService(databaseService.getConnection());
   const authMiddleware = createAuthMiddleware(databaseService.getConnection());
   const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+  const db = databaseService.getConnection();
 
   /**
    * GET /api/journal/search
@@ -99,6 +112,93 @@ export function createJournalRouter(databaseService: DatabaseService): Router {
         });
       }
     })
+  );
+
+  /**
+   * GET /api/journal/:nodeId/stream
+   * Stream journal events via SSE as each source responds.
+   * Sources: stored journal entries, pabawi execution history, PuppetDB reports.
+   *
+   * Uses fetch-based SSE on the client (not EventSource) so the Authorization
+   * header is sent normally.
+   */
+  router.get(
+    "/:nodeId/stream",
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("journal", "read")),
+    (req: Request, res: Response): void => {
+      const { nodeId } = req.params;
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      function send(eventName: string, data: unknown): void {
+        if (res.writableEnded) return;
+        res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
+
+      const activeSources: string[] = ["journal", "executions"];
+      if (deps.puppetdb?.isInitialized()) activeSources.push("puppetdb");
+
+      send("init", { sources: activeSources });
+
+      // Heartbeat to prevent proxies from closing idle connections
+      const heartbeat = setInterval(() => {
+        if (!res.writableEnded) res.write(": heartbeat\n\n");
+      }, 25000);
+
+      req.on("close", () => clearInterval(heartbeat));
+
+      const tasks: Promise<void>[] = [];
+
+      // Source 1: stored journal entries (DB)
+      tasks.push(
+        journalService
+          .getNodeTimeline(nodeId, { limit: 100, offset: 0 })
+          .then((entries) => {
+            send("batch", { source: "journal", entries });
+          })
+          .catch(() => {
+            send("source_error", { source: "journal", message: "Failed to load journal entries" });
+          }),
+      );
+
+      // Source 2: pabawi execution history
+      tasks.push(
+        collectExecutionEntries(db, nodeId, 50)
+          .then((entries) => {
+            send("batch", { source: "executions", entries });
+          })
+          .catch(() => {
+            send("source_error", { source: "executions", message: "Failed to load execution history" });
+          }),
+      );
+
+      // Source 3: PuppetDB reports (if configured)
+      if (deps.puppetdb?.isInitialized()) {
+        tasks.push(
+          collectPuppetDBEntries(deps.puppetdb, nodeId, 25)
+            .then((entries) => {
+              send("batch", { source: "puppetdb", entries });
+            })
+            .catch(() => {
+              send("source_error", { source: "puppetdb", message: "Failed to load PuppetDB reports" });
+            }),
+        );
+      }
+
+      Promise.all(tasks)
+        .finally(() => {
+          clearInterval(heartbeat);
+          if (!res.writableEnded) {
+            send("complete", {});
+            res.end();
+          }
+        });
+    },
   );
 
   /**

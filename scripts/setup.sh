@@ -161,7 +161,7 @@ if [[ "$SKIP_ENV" != "true" ]]; then
   ask_yn BOLT_ENABLED "Enable Bolt integration?" "$BOLT_DEFAULT"
   BOLT_PROJECT_PATH="."
   COMMAND_WHITELIST_ALLOW_ALL="false"
-  COMMAND_WHITELIST='["ls","pwd","whoami","uptime","cat","df","free"]'
+  COMMAND_WHITELIST='["ls","pwd","whoami","id","hostname","uname -a","uptime","w","cat","head","tail","grep","df -h","du -sh","free -h","lsblk","ps aux","ps -ef","top -bn1","vmstat","ip a","ip r","ss -tulpn","systemctl status","journalctl -u","journalctl -n","facter","puppet facts","date","timedatectl","env","cat /etc/os-release","cat /etc/hosts","lscpu","sestatus","getenforce"]'
   if [[ "$BOLT_ENABLED" == "true" ]]; then
     ask BOLT_PROJECT_PATH "Bolt project directory" "./samples/integrations/bolt"
     ask_yn COMMAND_WHITELIST_ALLOW_ALL "Allow ALL commands? (not recommended for shared/production use)" "n"
@@ -401,7 +401,7 @@ EOF
 BOLT_PROJECT_PATH=${BOLT_PROJECT_PATH}
 COMMAND_WHITELIST_ALLOW_ALL=${COMMAND_WHITELIST_ALLOW_ALL}
 COMMAND_WHITELIST=${COMMAND_WHITELIST}
-COMMAND_WHITELIST_MATCH_MODE=exact
+COMMAND_WHITELIST_MATCH_MODE=prefix
 EOF
   fi
 

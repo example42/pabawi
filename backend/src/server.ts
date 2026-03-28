@@ -1101,7 +1101,9 @@ async function startServer(): Promise<Express> {
     app.use("/api/permissions", authMiddleware, rateLimitMiddleware, createPermissionsRouter(databaseService));
 
     // Journal routes
-    app.use("/api/journal", authMiddleware, rateLimitMiddleware, createJournalRouter(databaseService));
+    app.use("/api/journal", authMiddleware, rateLimitMiddleware, createJournalRouter(databaseService, {
+      puppetdb: puppetDBService,
+    }));
 
     // Integration config routes
     app.use("/api/config/integrations", authMiddleware, rateLimitMiddleware, createIntegrationConfigRouter(databaseService));

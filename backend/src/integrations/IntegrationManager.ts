@@ -338,13 +338,13 @@ export class IntegrationManager {
    *
    * @returns Linked inventory with source attribution
    */
-  async getLinkedInventory(): Promise<{
+  async getLinkedInventory(useCache = true): Promise<{
     nodes: LinkedNode[];
     sources: AggregatedInventory["sources"];
   }> {
     // getAggregatedInventory already deduplicates and links nodes via deduplicateNodes → linkNodes.
     // The returned nodes are already LinkedNode[] (with sources, sourceData, etc.).
-    const aggregated = await this.getAggregatedInventory();
+    const aggregated = await this.getAggregatedInventory(useCache);
 
     return {
       nodes: aggregated.nodes as LinkedNode[],

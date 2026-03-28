@@ -11,7 +11,7 @@
     nodeId: string;
     nodeType?: 'vm' | 'lxc' | 'unknown';
     currentStatus?: string;
-    onStatusChange?: () => void;
+    onStatusChange?: () => void | Promise<void>;
   }
 
   let { nodeId, nodeType = 'unknown', currentStatus = 'unknown', onStatusChange }: Props = $props();
@@ -48,7 +48,7 @@
     refreshing = true;
     try {
       if (onStatusChange) {
-        onStatusChange();
+        await onStatusChange();
       }
       await fetchAvailableActions();
       showSuccess('Status refreshed');
@@ -117,7 +117,7 @@
 
         // Refresh node status if callback provided
         if (onStatusChange) {
-          onStatusChange();
+          await onStatusChange();
         }
       } else {
         showError(`Action ${action} failed`, result.error || result.message);
