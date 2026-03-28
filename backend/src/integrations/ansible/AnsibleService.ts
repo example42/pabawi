@@ -472,7 +472,7 @@ export class AnsibleService {
           source: "ansible",
           sources: ["ansible"],
           linked: false,
-          nodes: hosts.map(host => `ansible:${host}`), // Prefix hosts with ansible:
+          nodes: hosts,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
       }

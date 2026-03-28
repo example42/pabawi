@@ -104,6 +104,8 @@
   let amiSearchTimeout: ReturnType<typeof setTimeout> | null = null;
   let selectedAMIInfo = $state<AWSAMIInfo | null>(null);
   let showAMIResults = $state(false);
+  let amiInputMode = $state<'search' | 'direct'>('search');
+  let directAMIId = $state('');
 
   let isFormValid = $derived.by(() => {
     if (!selectedRegion || !selectedAMI) return false;
@@ -136,6 +138,8 @@
     selectedAMI = '';
     selectedAMIInfo = null;
     amiSearchQuery = '';
+    directAMIId = '';
+    amiInputMode = 'search';
     amis = [];
     selectedVPC = '';
     selectedSubnet = '';
@@ -221,8 +225,26 @@
     selectedAMI = '';
     selectedAMIInfo = null;
     amiSearchQuery = '';
+    directAMIId = '';
     amis = [];
     showAMIResults = false;
+  }
+
+  function switchAMIMode(mode: 'search' | 'direct'): void {
+    amiInputMode = mode;
+    clearAMISelection();
+  }
+
+  function onDirectAMIInput(value: string): void {
+    directAMIId = value;
+    const trimmed = value.trim();
+    if (trimmed) {
+      selectedAMI = trimmed;
+    } else {
+      selectedAMI = '';
+    }
+    selectedAMIInfo = null;
+    validateField('ami');
   }
 
   /**
@@ -330,6 +352,8 @@
         selectedAMI = '';
         selectedAMIInfo = null;
         amiSearchQuery = '';
+        directAMIId = '';
+        amiInputMode = 'search';
         amis = [];
         selectedVPC = '';
         selectedSubnet = '';
@@ -506,25 +530,115 @@
     {#if !selectedRegion}
       <p class="text-sm text-gray-500 dark:text-gray-400">Select a region first</p>
     {:else}
-      <div class="relative">
+      <!-- Mode toggle -->
+      <div class="flex gap-3 mb-3 text-xs">
+        <button
+          type="button"
+          onclick={() => switchAMIMode('search')}
+          class="font-medium {amiInputMode === 'search' ? 'text-blue-600 dark:text-blue-400 underline' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}"
+        >
+          Search by name
+        </button>
+        <span class="text-gray-300 dark:text-gray-600">|</span>
+        <button
+          type="button"
+          onclick={() => switchAMIMode('direct')}
+          class="font-medium {amiInputMode === 'direct' ? 'text-blue-600 dark:text-blue-400 underline' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}"
+        >
+          Enter AMI ID directly
+        </button>
+      </div>
+
+      {#if amiInputMode === 'search'}
+        <div class="relative">
+          <div class="flex items-center gap-2">
+            <input
+              type="text"
+              id="aws-ami-search"
+              name="amiSearch"
+              value={amiSearchQuery}
+              oninput={(e) => onAMISearchInput((e.target as HTMLInputElement).value)}
+              onfocus={() => { if (amis.length > 0 && !selectedAMI) showAMIResults = true; }}
+              placeholder="Search AMIs by name (e.g. ubuntu, amazon-linux, debian)..."
+              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+              autocomplete="off"
+            />
+            {#if selectedAMI}
+              <button
+                type="button"
+                onclick={clearAMISelection}
+                class="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                aria-label="Clear AMI selection"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            {/if}
+          </div>
+
+          {#if loadingAMIs}
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Searching AMIs...</p>
+          {/if}
+
+          <!-- Selected AMI badge -->
+          {#if selectedAMIInfo}
+            <div class="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md">
+              <p class="text-sm font-medium text-blue-800 dark:text-blue-200">{selectedAMIInfo.name || selectedAMIInfo.imageId}</p>
+              <p class="text-xs text-blue-600 dark:text-blue-400">
+                {selectedAMIInfo.imageId} · {selectedAMIInfo.architecture}{selectedAMIInfo.platform ? ` · ${selectedAMIInfo.platform}` : ''}
+              </p>
+              {#if selectedAMIInfo.description}
+                <p class="text-xs text-blue-500 dark:text-blue-400 mt-1 truncate">{selectedAMIInfo.description}</p>
+              {/if}
+            </div>
+          {/if}
+
+          <!-- Search results dropdown -->
+          {#if showAMIResults && !selectedAMI && amis.length > 0}
+            <div class="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
+              {#each amis as ami}
+                <button
+                  type="button"
+                  onclick={() => selectAMI(ami)}
+                  class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
+                >
+                  <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{ami.name || ami.imageId}</p>
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    {ami.imageId} · {ami.architecture}{ami.platform ? ` · ${ami.platform}` : ''}
+                    {#if ami.creationDate}
+                      · {ami.creationDate.split('T')[0]}
+                    {/if}
+                  </p>
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          {#if showAMIResults && !loadingAMIs && amis.length === 0 && amiSearchQuery.length >= 2}
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No AMIs found matching "{amiSearchQuery}"</p>
+          {/if}
+        </div>
+      {:else}
+        <!-- Direct AMI ID input -->
         <div class="flex items-center gap-2">
           <input
             type="text"
-            id="aws-ami-search"
-            name="amiSearch"
-            value={amiSearchQuery}
-            oninput={(e) => onAMISearchInput((e.target as HTMLInputElement).value)}
-            onfocus={() => { if (amis.length > 0 && !selectedAMI) showAMIResults = true; }}
-            placeholder="Search AMIs by name (e.g. ubuntu, amazon-linux, debian)..."
-            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm"
+            id="aws-ami-direct"
+            name="amiDirect"
+            value={directAMIId}
+            oninput={(e) => onDirectAMIInput((e.target as HTMLInputElement).value)}
+            placeholder="ami-0123456789abcdef0"
+            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white sm:text-sm font-mono"
             autocomplete="off"
+            spellcheck={false}
           />
-          {#if selectedAMI}
+          {#if directAMIId}
             <button
               type="button"
               onclick={clearAMISelection}
               class="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              aria-label="Clear AMI selection"
+              aria-label="Clear AMI ID"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -532,49 +646,13 @@
             </button>
           {/if}
         </div>
-
-        {#if loadingAMIs}
-          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Searching AMIs...</p>
-        {/if}
-
-        <!-- Selected AMI badge -->
-        {#if selectedAMIInfo}
+        {#if selectedAMI}
           <div class="mt-2 p-2 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md">
-            <p class="text-sm font-medium text-blue-800 dark:text-blue-200">{selectedAMIInfo.name || selectedAMIInfo.imageId}</p>
-            <p class="text-xs text-blue-600 dark:text-blue-400">
-              {selectedAMIInfo.imageId} · {selectedAMIInfo.architecture}{selectedAMIInfo.platform ? ` · ${selectedAMIInfo.platform}` : ''}
-            </p>
-            {#if selectedAMIInfo.description}
-              <p class="text-xs text-blue-500 dark:text-blue-400 mt-1 truncate">{selectedAMIInfo.description}</p>
-            {/if}
+            <p class="text-sm font-medium text-blue-800 dark:text-blue-200 font-mono">{selectedAMI}</p>
+            <p class="text-xs text-blue-500 dark:text-blue-400 mt-0.5">AMI ID will be used as-is</p>
           </div>
         {/if}
-
-        <!-- Search results dropdown -->
-        {#if showAMIResults && !selectedAMI && amis.length > 0}
-          <div class="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg">
-            {#each amis as ami}
-              <button
-                type="button"
-                onclick={() => selectAMI(ami)}
-                class="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0"
-              >
-                <p class="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{ami.name || ami.imageId}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  {ami.imageId} · {ami.architecture}{ami.platform ? ` · ${ami.platform}` : ''}
-                  {#if ami.creationDate}
-                    · {ami.creationDate.split('T')[0]}
-                  {/if}
-                </p>
-              </button>
-            {/each}
-          </div>
-        {/if}
-
-        {#if showAMIResults && !loadingAMIs && amis.length === 0 && amiSearchQuery.length >= 2}
-          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No AMIs found matching "{amiSearchQuery}"</p>
-        {/if}
-      </div>
+      {/if}
     {/if}
 
     {#if validationErrors.ami}
