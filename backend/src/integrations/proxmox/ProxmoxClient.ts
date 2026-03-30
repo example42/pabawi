@@ -252,7 +252,7 @@ export class ProxmoxClient {
     });
 
     while (Date.now() - startTime < timeout) {
-      const endpoint = `/api2/json/nodes/${node}/tasks/${taskId}/status`;
+      const endpoint = `/api2/json/nodes/${encodeURIComponent(node)}/tasks/${encodeURIComponent(taskId)}/status`;
       const status = (await this.get(endpoint)) as ProxmoxTaskStatus;
 
       if (status.status === "stopped") {
@@ -514,11 +514,21 @@ export class ProxmoxClient {
         res.on("data", (chunk: Buffer) => chunks.push(chunk));
         res.on("end", () => {
           const bodyText = Buffer.concat(chunks).toString("utf-8");
+          // Normalize Node.js IncomingHttpHeaders (string | string[] | undefined) to string values
+          const headerEntries: [string, string][] = [];
+          for (const [key, value] of Object.entries(res.headers)) {
+            if (typeof value === "string") {
+              headerEntries.push([key, value]);
+            } else if (Array.isArray(value)) {
+              headerEntries.push([key, value.join(", ")]);
+            }
+            // Undefined values are implicitly skipped — no push in else branch
+          }
           // Build a Response-compatible object so the rest of the client code is unchanged
           const response = new Response(bodyText, {
             status: res.statusCode ?? 500,
             statusText: res.statusMessage ?? "",
-            headers: new Headers(res.headers as Record<string, string>),
+            headers: new Headers(headerEntries),
           });
           resolve(response);
         });
