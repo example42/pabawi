@@ -471,14 +471,13 @@ export class BoltPlugin
       if (Array.isArray(groupData.targets)) {
         for (const target of groupData.targets) {
           if (typeof target === "string") {
-            // Map target to node ID with bolt: prefix
-            nodes.push(`bolt:${target}`);
+            nodes.push(target);
           } else if (typeof target === "object" && target !== null) {
             // Handle target objects with name property
             const targetObj = target as Record<string, unknown>;
             const targetName = typeof targetObj.name === "string" ? targetObj.name : null;
             if (targetName) {
-              nodes.push(`bolt:${targetName}`);
+              nodes.push(targetName);
             }
           }
         }

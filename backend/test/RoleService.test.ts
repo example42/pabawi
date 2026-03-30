@@ -1,19 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
 import { RoleService, CreateRoleDTO, UpdateRoleDTO } from '../src/services/RoleService';
 
 describe('RoleService', () => {
-  let db: Database;
+  let db: SQLiteAdapter;
   let roleService: RoleService;
 
   beforeEach(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Create schema
-    await new Promise<void>((resolve, reject) => {
-      db.exec(
-        `
+    const schema = `
         CREATE TABLE roles (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL UNIQUE,
@@ -41,32 +40,35 @@ describe('RoleService', () => {
           FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
         );
 
-        -- Seed built-in roles
         INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
-          ('role-viewer-001', 'Viewer', 'Read-only access', 1, datetime('now'), datetime('now')),
-          ('role-operator-001', 'Operator', 'Read and execute access', 1, datetime('now'), datetime('now')),
+          ('role-viewer-001', 'Viewer', 'Read-only access', 1, datetime('now'), datetime('now'));
+
+        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
+          ('role-operator-001', 'Operator', 'Read and execute access', 1, datetime('now'), datetime('now'));
+
+        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
           ('role-admin-001', 'Administrator', 'Full access', 1, datetime('now'), datetime('now'));
 
-        -- Seed permissions
         INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
-          ('perm-ansible-read', 'ansible', 'read', 'View Ansible resources', datetime('now')),
-          ('perm-ansible-write', 'ansible', 'write', 'Modify Ansible resources', datetime('now')),
+          ('perm-ansible-read', 'ansible', 'read', 'View Ansible resources', datetime('now'));
+
+        INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
+          ('perm-ansible-write', 'ansible', 'write', 'Modify Ansible resources', datetime('now'));
+
+        INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
           ('perm-bolt-read', 'bolt', 'read', 'View Bolt resources', datetime('now'));
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    `;
+
+    const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const statement of statements) {
+      await db.execute(statement);
+    }
 
     roleService = new RoleService(db);
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
   });
 
   describe('createRole', () => {

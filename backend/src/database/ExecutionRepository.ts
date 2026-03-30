@@ -1,4 +1,4 @@
-import type sqlite3 from "sqlite3";
+import type { DatabaseAdapter } from "./DatabaseAdapter";
 import { randomUUID } from "crypto";
 
 /**
@@ -118,9 +118,9 @@ export interface StatusCounts {
  * Repository for managing execution records in SQLite
  */
 export class ExecutionRepository {
-  private db: sqlite3.Database;
+  private db: DatabaseAdapter;
 
-  constructor(db: sqlite3.Database) {
+  constructor(db: DatabaseAdapter) {
     this.db = db;
   }
 
@@ -133,15 +133,6 @@ export class ExecutionRepository {
       id,
       ...execution,
     };
-
-    const sql = `
-      INSERT INTO executions (
-        id, type, target_nodes, action, parameters, status,
-        started_at, completed_at, results, error, command, expert_mode,
-        original_execution_id, re_execution_count, stdout, stderr, execution_tool,
-        batch_id, batch_position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
 
     const params = [
       record.id,
@@ -165,8 +156,18 @@ export class ExecutionRepository {
       record.batchPosition ?? null,
     ];
 
+    const placeholders = params.map((_, i) => this.db.getPlaceholder(i + 1)).join(", ");
+    const sql = `
+      INSERT INTO executions (
+        id, type, target_nodes, action, parameters, status,
+        started_at, completed_at, results, error, command, expert_mode,
+        original_execution_id, re_execution_count, stdout, stderr, execution_tool,
+        batch_id, batch_position
+      ) VALUES (${placeholders})
+    `;
+
     try {
-      await this.run(sql, params);
+      await this.db.execute(sql, params);
       return id;
     } catch (error) {
       throw new Error(
@@ -201,7 +202,7 @@ export class ExecutionRepository {
     Object.entries(updates).forEach(([key, value]) => {
       if (allowedFields.includes(key)) {
         const columnName = this.camelToSnake(key);
-        updateFields.push(`${columnName} = ?`);
+        updateFields.push(`${columnName} = ${this.db.getPlaceholder(params.length + 1)}`);
 
         if (key === "results" && value) {
           params.push(JSON.stringify(value));
@@ -220,10 +221,10 @@ export class ExecutionRepository {
     }
 
     params.push(id);
-    const sql = `UPDATE executions SET ${updateFields.join(", ")} WHERE id = ?`;
+    const sql = `UPDATE executions SET ${updateFields.join(", ")} WHERE id = ${this.db.getPlaceholder(params.length)}`;
 
     try {
-      await this.run(sql, params);
+      await this.db.execute(sql, params);
     } catch (error) {
       // Provide detailed error information for debugging
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -244,10 +245,10 @@ export class ExecutionRepository {
    * Find execution by ID
    */
   public async findById(id: string): Promise<ExecutionRecord | null> {
-    const sql = "SELECT * FROM executions WHERE id = ?";
+    const sql = `SELECT * FROM executions WHERE id = ${this.db.getPlaceholder(1)}`;
 
     try {
-      const row = await this.get(sql, [id]);
+      const row = await this.db.queryOne<DbRow>(sql, [id]);
       return row ? this.mapRowToRecord(row) : null;
     } catch (error) {
       throw new Error(
@@ -267,27 +268,27 @@ export class ExecutionRepository {
     const params: unknown[] = [];
 
     if (filters.type) {
-      conditions.push("type = ?");
+      conditions.push(`type = ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.type);
     }
 
     if (filters.status) {
-      conditions.push("status = ?");
+      conditions.push(`status = ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.status);
     }
 
     if (filters.targetNode) {
-      conditions.push("target_nodes LIKE ?");
+      conditions.push(`target_nodes LIKE ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(`%"${filters.targetNode}"%`);
     }
 
     if (filters.startDate) {
-      conditions.push("started_at >= ?");
+      conditions.push(`started_at >= ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.startDate);
     }
 
     if (filters.endDate) {
-      conditions.push("started_at <= ?");
+      conditions.push(`started_at <= ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.endDate);
     }
 
@@ -299,13 +300,13 @@ export class ExecutionRepository {
       SELECT * FROM executions
       ${whereClause}
       ORDER BY started_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${this.db.getPlaceholder(params.length + 1)} OFFSET ${this.db.getPlaceholder(params.length + 2)}
     `;
 
     params.push(pagination.pageSize, offset);
 
     try {
-      const rows = await this.all(sql, params);
+      const rows = await this.db.query<DbRow>(sql, params);
       return rows.map((row) => this.mapRowToRecord(row));
     } catch (error) {
       throw new Error(
@@ -324,11 +325,11 @@ export class ExecutionRepository {
     const sql = `
       SELECT original.* FROM executions original
       INNER JOIN executions reexec ON original.id = reexec.original_execution_id
-      WHERE reexec.id = ?
+      WHERE reexec.id = ${this.db.getPlaceholder(1)}
     `;
 
     try {
-      const row = await this.get(sql, [executionId]);
+      const row = await this.db.queryOne<DbRow>(sql, [executionId]);
       return row ? this.mapRowToRecord(row) : null;
     } catch (error) {
       throw new Error(
@@ -346,12 +347,12 @@ export class ExecutionRepository {
   ): Promise<ExecutionRecord[]> {
     const sql = `
       SELECT * FROM executions
-      WHERE original_execution_id = ?
+      WHERE original_execution_id = ${this.db.getPlaceholder(1)}
       ORDER BY started_at DESC
     `;
 
     try {
-      const rows = await this.all(sql, [originalExecutionId]);
+      const rows = await this.db.query<DbRow>(sql, [originalExecutionId]);
       return rows.map((row) => this.mapRowToRecord(row));
     } catch (error) {
       throw new Error(
@@ -404,7 +405,7 @@ export class ExecutionRepository {
     `;
 
     try {
-      const row = await this.get(sql, []);
+      const row = await this.db.queryOne<DbRow>(sql, []);
       return {
         total: row?.total ?? 0,
         running: row?.running ?? 0,
@@ -417,51 +418,6 @@ export class ExecutionRepository {
         `Failed to count executions by status: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
-  }
-
-  /**
-   * Execute SQL statement with parameters (INSERT, UPDATE, DELETE)
-   */
-  private run(sql: string, params: unknown[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
-  }
-
-  /**
-   * Get single row from database
-   */
-  private get(sql: string, params: unknown[]): Promise<DbRow | undefined> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row: DbRow | undefined) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(row);
-        }
-      });
-    });
-  }
-
-  /**
-   * Get all rows from database
-   */
-  private all(sql: string, params: unknown[]): Promise<DbRow[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(rows as DbRow[]);
-        }
-      });
-    });
   }
 
   /**

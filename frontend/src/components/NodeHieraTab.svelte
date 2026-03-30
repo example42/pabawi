@@ -61,7 +61,7 @@
   let error = $state<string | null>(null);
   let searchQuery = $state('');
   let filterMode = $state<'all' | 'used' | 'unused'>('used');
-  let foundFilter = $state<'all' | 'found' | 'not-found'>('all');
+  let foundFilter = $state<'all' | 'found' | 'not-found'>('found');
   let expandedKeys = $state<Set<string>>(new Set());
   let selectedKey = $state<HieraResolutionInfo | null>(null);
   let debugInfo = $state<DebugInfo | null>(null);

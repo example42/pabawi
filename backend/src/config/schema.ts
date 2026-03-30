@@ -270,6 +270,65 @@ export const HieraConfigSchema = z.object({
 export type HieraConfig = z.infer<typeof HieraConfigSchema>;
 
 /**
+ * Proxmox SSL configuration schema
+ */
+export const ProxmoxSSLConfigSchema = z.object({
+  rejectUnauthorized: z.boolean().default(true),
+  ca: z.string().optional(),
+  cert: z.string().optional(),
+  key: z.string().optional(),
+});
+
+export type ProxmoxSSLConfig = z.infer<typeof ProxmoxSSLConfigSchema>;
+
+/**
+ * Proxmox integration configuration schema
+ */
+export const ProxmoxConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  host: z.string(),
+  port: z.number().int().positive().max(65535).default(8006),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  realm: z.string().optional(),
+  token: z.string().optional(),
+  ssl: ProxmoxSSLConfigSchema.optional(),
+  timeout: z.number().int().positive().default(30000), // 30 seconds
+  priority: z.number().int().nonnegative().default(7),
+});
+
+export type ProxmoxConfig = z.infer<typeof ProxmoxConfigSchema>;
+
+/**
+ * AWS integration configuration schema
+ */
+export const AWSConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  accessKeyId: z.string().optional(),
+  secretAccessKey: z.string().optional(),
+  region: z.string().default("us-east-1"),
+  regions: z.array(z.string()).optional(),
+  sessionToken: z.string().optional(),
+  profile: z.string().optional(),
+  endpoint: z.string().optional(),
+});
+
+export type AWSIntegrationConfig = z.infer<typeof AWSConfigSchema>;
+
+/**
+ * Provisioning safety configuration schema
+ *
+ * Controls whether destructive provisioning actions (e.g., destroy VM/LXC,
+ * terminate EC2 instance) are allowed. When disabled, all provisioning
+ * integrations will reject destroy/terminate requests.
+ */
+export const ProvisioningConfigSchema = z.object({
+  allowDestructiveActions: z.boolean().default(false),
+});
+
+export type ProvisioningConfig = z.infer<typeof ProvisioningConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
@@ -277,6 +336,8 @@ export const IntegrationsConfigSchema = z.object({
   puppetdb: PuppetDBConfigSchema.optional(),
   puppetserver: PuppetserverConfigSchema.optional(),
   hiera: HieraConfigSchema.optional(),
+  proxmox: ProxmoxConfigSchema.optional(),
+  aws: AWSConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
@@ -308,6 +369,7 @@ export const AppConfigSchema = z.object({
   cache: CacheConfigSchema,
   executionQueue: ExecutionQueueConfigSchema,
   integrations: IntegrationsConfigSchema.default({}),
+  provisioning: ProvisioningConfigSchema.default({ allowDestructiveActions: false }),
   ui: UIConfigSchema.default({ showHomePageRunChart: true }),
 });
 

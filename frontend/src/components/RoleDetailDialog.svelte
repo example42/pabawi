@@ -2,6 +2,14 @@
   import { onMount } from 'svelte';
   import { get, post, del } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
+  import {
+    RESOURCE_CATEGORIES,
+    RESOURCE_LABELS,
+    ACTION_LABELS,
+    getResourceCategory,
+    type PermissionResource,
+    type PermissionAction,
+  } from '../lib/permissions';
   import LoadingSpinner from './LoadingSpinner.svelte';
 
   interface Props {
@@ -47,6 +55,48 @@
       (permission) => !role?.permissions.some((rp) => rp.id === permission.id)
     )
   );
+
+  // Group unassigned permissions by resource category for the dropdown
+  let groupedUnassignedPermissions = $derived(groupPermissionsByCategory(unassignedPermissions));
+
+  // Group assigned permissions by resource category for display
+  let groupedAssignedPermissions = $derived(
+    role ? groupPermissionsByCategory(role.permissions) : {}
+  );
+
+  /**
+   * Groups permissions by their resource category as defined in RESOURCE_CATEGORIES.
+   * Permissions whose resource doesn't match any category go into "other".
+   */
+  function groupPermissionsByCategory(
+    permissions: PermissionDTO[]
+  ): Record<string, { label: string; permissions: PermissionDTO[] }> {
+    const groups: Record<string, { label: string; permissions: PermissionDTO[] }> = {};
+
+    for (const permission of permissions) {
+      const categoryKey = getResourceCategory(permission.resource);
+      const key = categoryKey ?? 'other';
+      const label = categoryKey
+        ? RESOURCE_CATEGORIES[categoryKey].label
+        : 'Other';
+
+      if (!groups[key]) {
+        groups[key] = { label, permissions: [] };
+      }
+      groups[key].permissions.push(permission);
+    }
+
+    // Sort permissions within each group by resource then action
+    for (const group of Object.values(groups)) {
+      group.permissions.sort((a, b) => {
+        const resourceCmp = a.resource.localeCompare(b.resource);
+        if (resourceCmp !== 0) return resourceCmp;
+        return a.action.localeCompare(b.action);
+      });
+    }
+
+    return groups;
+  }
 
   // Load role details when dialog opens
   $effect(() => {
@@ -151,6 +201,17 @@
   function formatPermissionName(permission: PermissionDTO): string {
     return `${permission.resource}:${permission.action}`;
   }
+
+  function getResourceLabel(resource: string): string {
+    return RESOURCE_LABELS[resource as PermissionResource] ?? resource;
+  }
+
+  function getActionLabel(action: string): string {
+    return ACTION_LABELS[action as PermissionAction] ?? action;
+  }
+
+  /** Ordered category keys for consistent rendering */
+  const CATEGORY_ORDER = ['infrastructure', 'operations', 'configuration', 'system', 'other'];
 </script>
 
 {#if isOpen}
@@ -228,7 +289,7 @@
                   </h4>
                 </div>
 
-                <!-- Add Permission -->
+                <!-- Add Permission (grouped dropdown) -->
                 {#if unassignedPermissions.length > 0}
                   <div class="flex gap-2 mb-3">
                     <select
@@ -237,10 +298,16 @@
                       class="flex-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="">Select a permission to assign...</option>
-                      {#each unassignedPermissions as permission (permission.id)}
-                        <option value={permission.id}>
-                          {formatPermissionName(permission)} - {permission.description}
-                        </option>
+                      {#each CATEGORY_ORDER as categoryKey}
+                        {#if groupedUnassignedPermissions[categoryKey]}
+                          <optgroup label={groupedUnassignedPermissions[categoryKey].label}>
+                            {#each groupedUnassignedPermissions[categoryKey].permissions as permission (permission.id)}
+                              <option value={permission.id}>
+                                {getResourceLabel(permission.resource)}:{getActionLabel(permission.action)} — {permission.description}
+                              </option>
+                            {/each}
+                          </optgroup>
+                        {/if}
                       {/each}
                     </select>
                     <button
@@ -254,37 +321,51 @@
                   </div>
                 {/if}
 
-                <!-- Permissions List -->
+                <!-- Permissions List grouped by category -->
                 {#if role.permissions.length === 0}
                   <p class="text-sm text-gray-500 dark:text-gray-400 italic">
                     No permissions assigned to this role
                   </p>
                 {:else}
-                  <div class="space-y-2">
-                    {#each role.permissions as permission (permission.id)}
-                      <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md">
-                        <div class="flex-1">
-                          <div class="flex items-center gap-2">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900/20 dark:text-primary-400 font-mono">
-                              {formatPermissionName(permission)}
-                            </span>
+                  <div class="space-y-4">
+                    {#each CATEGORY_ORDER as categoryKey}
+                      {#if groupedAssignedPermissions[categoryKey]}
+                        <div>
+                          <h5 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2">
+                            {groupedAssignedPermissions[categoryKey].label}
+                          </h5>
+                          <div class="space-y-2">
+                            {#each groupedAssignedPermissions[categoryKey].permissions as permission (permission.id)}
+                              <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-md">
+                                <div class="flex-1">
+                                  <div class="flex items-center gap-2">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900/20 dark:text-primary-400 font-mono">
+                                      {formatPermissionName(permission)}
+                                    </span>
+                                    <span class="text-xs text-gray-400 dark:text-gray-500">
+                                      {getResourceLabel(permission.resource)} · {getActionLabel(permission.action)}
+                                    </span>
+                                  </div>
+                                  <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    {permission.description}
+                                  </p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onclick={() => handleRemovePermission(permission.id, formatPermissionName(permission))}
+                                  disabled={isSaving}
+                                  class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Remove permission"
+                                >
+                                  <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
+                              </div>
+                            {/each}
                           </div>
-                          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            {permission.description}
-                          </p>
                         </div>
-                        <button
-                          type="button"
-                          onclick={() => handleRemovePermission(permission.id, formatPermissionName(permission))}
-                          disabled={isSaving}
-                          class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Remove permission"
-                        >
-                          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
+                      {/if}
                     {/each}
                   </div>
                 {/if}

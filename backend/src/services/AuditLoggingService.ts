@@ -1,4 +1,4 @@
-import type { Database } from 'sqlite3';
+import type { DatabaseAdapter } from '../database/DatabaseAdapter';
 import { randomUUID } from 'crypto';
 
 /**
@@ -55,6 +55,7 @@ export enum AuditAction {
   GROUP_MEMBER_ADDED = 'group_member_added',
   GROUP_MEMBER_REMOVED = 'group_member_removed'
 }
+
 
 /**
  * Result of an audited action
@@ -136,9 +137,9 @@ interface AuditStatisticsRow {
  * Requirements: 13.1, 13.2, 13.3, 13.4, 13.6, 13.7
  */
 export class AuditLoggingService {
-  private db: Database;
+  private db: DatabaseAdapter;
 
-  constructor(db: Database) {
+  constructor(db: DatabaseAdapter) {
     this.db = db;
   }
 
@@ -379,7 +380,7 @@ export class AuditLoggingService {
       entry.result
     ];
 
-    await this.runQuery(sql, params);
+    await this.db.execute(sql, params);
   }
 
   /**
@@ -437,7 +438,7 @@ export class AuditLoggingService {
       params.push(filters.offset);
     }
 
-    const rows = await this.allQuery<AuditLogRow>(sql, params);
+    const rows = await this.db.query<AuditLogRow>(sql, params);
 
     return rows.map(row => ({
       id: row.id,
@@ -520,16 +521,8 @@ export class AuditLoggingService {
     const cutoffTimestamp = cutoffDate.toISOString();
 
     const sql = 'DELETE FROM audit_logs WHERE timestamp < ?';
-
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, [cutoffTimestamp], function(err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(this.changes);
-        }
-      });
-    });
+    const result = await this.db.execute(sql, [cutoffTimestamp]);
+    return result.changes;
   }
 
   /**
@@ -566,7 +559,7 @@ export class AuditLoggingService {
       WHERE ${whereClause}
     `;
 
-    const result = await this.getQuery<AuditStatisticsRow>(sql, params);
+    const result = await this.db.queryOne<AuditStatisticsRow>(sql, params);
 
     return {
       totalLogs: result?.totalLogs ?? 0,
@@ -575,33 +568,5 @@ export class AuditLoggingService {
       authorizationFailures: result?.authorizationFailures ?? 0,
       adminActions: result?.adminActions ?? 0
     };
-  }
-
-  // Database helper methods
-  private runQuery(sql: string, params: unknown[] = []): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-  }
-
-  private getQuery<T>(sql: string, params: unknown[] = []): Promise<T | null> {
-    return new Promise((resolve, reject) => {
-      this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row as T || null);
-      });
-    });
-  }
-
-  private allQuery<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-    return new Promise((resolve, reject) => {
-      this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows as T[]);
-      });
-    });
   }
 }

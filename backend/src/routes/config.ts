@@ -20,4 +20,19 @@ router.get(
   }),
 );
 
+/**
+ * GET /api/config/provisioning
+ * Get provisioning safety configuration
+ */
+router.get(
+  "/provisioning",
+  asyncHandler((_req, res) => {
+    res.json({
+      provisioning: {
+        allowDestructiveActions: configService.isDestructiveProvisioningAllowed(),
+      },
+    });
+  }),
+);
+
 export default router;

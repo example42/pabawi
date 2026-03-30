@@ -16,6 +16,8 @@
   import GroupManagementPage from './pages/GroupManagementPage.svelte';
   import GroupDetailPage from './pages/GroupDetailPage.svelte';
   import RoleManagementPage from './pages/RoleManagementPage.svelte';
+  import ProvisionPage from './pages/ProvisionPage.svelte';
+  import IntegrationConfigPage from './pages/IntegrationConfigPage.svelte';
   import { router } from './lib/router.svelte';
   import type { RouteConfig } from './lib/router.svelte';
   import { get } from './lib/api';
@@ -28,13 +30,15 @@
     '/setup': SetupPage,
     '/inventory': { component: InventoryPage, requiresAuth: true },
     '/executions': { component: ExecutionsPage, requiresAuth: true },
+    '/provision': { component: ProvisionPage, requiresAuth: true },
     '/puppet': { component: PuppetPage, requiresAuth: true },
     '/users': { component: UserManagementPage, requiresAuth: true, requiresAdmin: true },
     '/groups': { component: GroupManagementPage, requiresAuth: true, requiresAdmin: true },
     '/groups/:id': { component: GroupDetailPage, requiresAuth: true },
     '/roles': { component: RoleManagementPage, requiresAuth: true, requiresAdmin: true },
     '/nodes/:id': { component: NodeDetailPage, requiresAuth: true },
-    '/integrations/:integration/setup': { component: IntegrationSetupPage, requiresAuth: true }
+    '/integrations/:integration/setup': { component: IntegrationSetupPage, requiresAuth: true },
+    '/integrations/config': { component: IntegrationConfigPage, requiresAuth: true }
   };
 
   let setupComplete = $state(true); // Default to true to avoid flashing
@@ -96,7 +100,7 @@
       {#if setupComplete}
         <!-- Footer -->
         <footer class="mt-auto py-8 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-          <div class="max-w-7xl mx-auto px-4 text-left">
+          <div class="w-full px-4 sm:px-6 lg:px-8 text-left">
             <p class="text-sm text-gray-500 dark:text-gray-400">
               Made by Alessandro Franceschi <a
                 href="https://example42.com"

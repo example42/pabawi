@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { Database } from 'sqlite3';
 import { PermissionService, CreatePermissionDTO } from '../../src/services/PermissionService';
+import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
+import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { promises as fs } from 'fs';
 import path from 'path';
 
 describe('PermissionService', () => {
-  let db: Database;
+  let db: DatabaseAdapter;
   let permissionService: PermissionService;
   const testDbPath = path.join(__dirname, '../../test-permission-service.db');
 
@@ -17,39 +18,29 @@ describe('PermissionService', () => {
       // Ignore if file doesn't exist
     }
 
-    // Create new database
-    db = new Database(testDbPath);
+    // Create new database using SQLiteAdapter
+    db = new SQLiteAdapter(testDbPath);
+    await db.initialize();
 
     // Create permissions table
-    await new Promise<void>((resolve, reject) => {
-      db.exec(
-        `
-        CREATE TABLE permissions (
-          id TEXT PRIMARY KEY,
-          resource TEXT NOT NULL,
-          action TEXT NOT NULL,
-          description TEXT NOT NULL DEFAULT '',
-          createdAt TEXT NOT NULL,
-          UNIQUE(resource, action)
-        );
-
-        CREATE INDEX idx_permissions_resource_action ON permissions(resource, action);
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(`
+      CREATE TABLE permissions (
+        id TEXT PRIMARY KEY,
+        resource TEXT NOT NULL,
+        action TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        createdAt TEXT NOT NULL,
+        UNIQUE(resource, action)
+      )
+    `);
+    await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
 
     permissionService = new PermissionService(db);
   });
 
   afterEach(async () => {
     // Close database
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
 
     // Remove test database
     try {
@@ -467,91 +458,21 @@ describe('PermissionService', () => {
 
     beforeEach(async () => {
       // Create full RBAC schema for permission checking tests
-      await new Promise<void>((resolve, reject) => {
-        db.exec(
-          `
-          CREATE TABLE users (
-            id TEXT PRIMARY KEY,
-            username TEXT NOT NULL UNIQUE,
-            email TEXT NOT NULL UNIQUE,
-            passwordHash TEXT NOT NULL,
-            firstName TEXT NOT NULL,
-            lastName TEXT NOT NULL,
-            isActive INTEGER NOT NULL DEFAULT 1,
-            isAdmin INTEGER NOT NULL DEFAULT 0,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL,
-            lastLoginAt TEXT
-          );
-
-          CREATE TABLE groups (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            description TEXT NOT NULL,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL
-          );
-
-          CREATE TABLE roles (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            description TEXT NOT NULL,
-            isBuiltIn INTEGER NOT NULL DEFAULT 0,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL
-          );
-
-          CREATE TABLE user_groups (
-            userId TEXT NOT NULL,
-            groupId TEXT NOT NULL,
-            assignedAt TEXT NOT NULL,
-            PRIMARY KEY (userId, groupId),
-            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-          );
-
-          CREATE TABLE user_roles (
-            userId TEXT NOT NULL,
-            roleId TEXT NOT NULL,
-            assignedAt TEXT NOT NULL,
-            PRIMARY KEY (userId, roleId),
-            FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-          );
-
-          CREATE TABLE group_roles (
-            groupId TEXT NOT NULL,
-            roleId TEXT NOT NULL,
-            assignedAt TEXT NOT NULL,
-            PRIMARY KEY (groupId, roleId),
-            FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-            FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-          );
-
-          CREATE TABLE role_permissions (
-            roleId TEXT NOT NULL,
-            permissionId TEXT NOT NULL,
-            assignedAt TEXT NOT NULL,
-            PRIMARY KEY (roleId, permissionId),
-            FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-            FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-          );
-
-          CREATE INDEX idx_user_roles_user ON user_roles(userId);
-          CREATE INDEX idx_user_roles_role ON user_roles(roleId);
-          CREATE INDEX idx_user_groups_user ON user_groups(userId);
-          CREATE INDEX idx_user_groups_group ON user_groups(groupId);
-          CREATE INDEX idx_group_roles_group ON group_roles(groupId);
-          CREATE INDEX idx_group_roles_role ON group_roles(roleId);
-          CREATE INDEX idx_role_permissions_role ON role_permissions(roleId);
-          CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId);
-          `,
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
+await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
+await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
+await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
+await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
+await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
+await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
+await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
+await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
 
       // Create test data
       const now = new Date().toISOString();
@@ -561,83 +482,47 @@ describe('PermissionService', () => {
       adminUserId = 'admin-456';  // pragma: allowlist secret
       inactiveUserId = 'inactive-789';  // pragma: allowlist secret
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [userId, 'testuser', 'test@example.com', 'hash', 'Test', 'User', 1, 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [userId, 'testuser', 'test@example.com', 'hash', 'Test', 'User', 1, 0, now, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [adminUserId, 'admin', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [adminUserId, 'admin', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [inactiveUserId, 'inactive', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [inactiveUserId, 'inactive', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now]
+);
 
       // Create group
       groupId = 'group-123';  // pragma: allowlist secret
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?)`,
-          [groupId, 'Test Group', 'Test group description', now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [groupId, 'Test Group', 'Test group description', now, now]
+);
 
       // Create roles
       roleId = 'role-123';  // pragma: allowlist secret
       groupRoleId = 'role-456';  // pragma: allowlist secret
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [roleId, 'Test Role', 'Test role description', 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [roleId, 'Test Role', 'Test role description', 0, now, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [groupRoleId, 'Group Role', 'Group role description', 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [groupRoleId, 'Group Role', 'Group role description', 0, now, now]
+);
 
       // Create permission
       const permission = await permissionService.createPermission({
@@ -656,27 +541,15 @@ describe('PermissionService', () => {
     it('should return false for inactive user (Requirement 5.6)', async () => {
       // Assign role and permission to inactive user
       const now = new Date().toISOString();
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [inactiveUserId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [inactiveUserId, roleId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [roleId, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permissionId, now]
+);
 
       const hasAccess = await permissionService.hasPermission(inactiveUserId, 'ansible', 'read');
       expect(hasAccess).toBe(false);
@@ -696,28 +569,16 @@ describe('PermissionService', () => {
       const now = new Date().toISOString();
 
       // Assign role to user
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
       // Assign permission to role
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [roleId, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permissionId, now]
+);
 
       const hasAccess = await permissionService.hasPermission(userId, 'ansible', 'read');
       expect(hasAccess).toBe(true);
@@ -727,40 +588,22 @@ describe('PermissionService', () => {
       const now = new Date().toISOString();
 
       // Add user to group
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, groupId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, groupId, now]
+);
 
       // Assign role to group
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [groupId, groupRoleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [groupId, groupRoleId, now]
+);
 
       // Assign permission to role
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [groupRoleId, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [groupRoleId, permissionId, now]
+);
 
       const hasAccess = await permissionService.hasPermission(userId, 'ansible', 'read');
       expect(hasAccess).toBe(true);
@@ -770,61 +613,31 @@ describe('PermissionService', () => {
       const now = new Date().toISOString();
 
       // Path 1: Direct role assignment
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [roleId, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permissionId, now]
+);
 
       // Path 2: Group role assignment
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, groupId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, groupId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [groupId, groupRoleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [groupId, groupRoleId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [groupRoleId, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [groupRoleId, permissionId, now]
+);
 
       const hasAccess = await permissionService.hasPermission(userId, 'ansible', 'read');
       expect(hasAccess).toBe(true);
@@ -839,16 +652,10 @@ describe('PermissionService', () => {
       const now = new Date().toISOString();
 
       // Assign role to user but don't assign permission to role
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
       const hasAccess = await permissionService.hasPermission(userId, 'ansible', 'read');
       expect(hasAccess).toBe(false);
@@ -858,27 +665,15 @@ describe('PermissionService', () => {
       const now = new Date().toISOString();
 
       // Assign ansible:read permission
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [roleId, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permissionId, now]
+);
 
       // Check for different resource
       const hasAccess = await permissionService.hasPermission(userId, 'bolt', 'read');
@@ -889,27 +684,15 @@ describe('PermissionService', () => {
       const now = new Date().toISOString();
 
       // Assign ansible:read permission
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [roleId, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permissionId, now]
+);
 
       // Check for different action
       const hasAccess = await permissionService.hasPermission(userId, 'ansible', 'write');
@@ -923,87 +706,45 @@ describe('PermissionService', () => {
       const group2Id = 'group-456';  // pragma: allowlist secret
       const role2Id = 'role-789';  // pragma: allowlist secret
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?)`,
-          [group2Id, 'Test Group 2', 'Second test group', now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [group2Id, 'Test Group 2', 'Second test group', now, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [role2Id, 'Test Role 2', 'Second test role', 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
+);
 
       // Add user to both groups
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, groupId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, groupId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, group2Id, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, group2Id, now]
+);
 
       // Assign roles to groups
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [groupId, groupRoleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [groupId, groupRoleId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [group2Id, role2Id, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [group2Id, role2Id, now]
+);
 
       // Assign permission to second role only
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [role2Id, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [role2Id, permissionId, now]
+);
 
       const hasAccess = await permissionService.hasPermission(userId, 'ansible', 'read');
       expect(hasAccess).toBe(true);
@@ -1015,52 +756,28 @@ describe('PermissionService', () => {
       // Create second role
       const role2Id = 'role-789';  // pragma: allowlist secret
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          [role2Id, 'Test Role 2', 'Second test role', 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
+);
 
       // Assign both roles to user
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [userId, role2Id, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, role2Id, now]
+);
 
       // Assign permission to second role only
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-          [role2Id, permissionId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [role2Id, permissionId, now]
+);
 
       const hasAccess = await permissionService.hasPermission(userId, 'ansible', 'read');
       expect(hasAccess).toBe(true);
@@ -1069,7 +786,7 @@ describe('PermissionService', () => {
 });
 
 describe('PermissionService - getUserPermissions', () => {
-  let db: Database;
+  let db: DatabaseAdapter;
   let permissionService: PermissionService;
   const testDbPath = path.join(__dirname, '../../test-permission-service-get-user-perms.db');
   let userId: string;
@@ -1091,105 +808,27 @@ describe('PermissionService - getUserPermissions', () => {
     }
 
     // Create new database
-    db = new Database(testDbPath);
+    db = new SQLiteAdapter(testDbPath);
+    await db.initialize();
 
     // Create full RBAC schema for getUserPermissions tests
-    await new Promise<void>((resolve, reject) => {
-      db.exec(
-        `
-        CREATE TABLE users (
-          id TEXT PRIMARY KEY,
-          username TEXT NOT NULL UNIQUE,
-          email TEXT NOT NULL UNIQUE,
-          passwordHash TEXT NOT NULL,
-          firstName TEXT NOT NULL,
-          lastName TEXT NOT NULL,
-          isActive INTEGER NOT NULL DEFAULT 1,
-          isAdmin INTEGER NOT NULL DEFAULT 0,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL,
-          lastLoginAt TEXT
-        );
-
-        CREATE TABLE groups (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          description TEXT NOT NULL,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL
-        );
-
-        CREATE TABLE roles (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          description TEXT NOT NULL,
-          isBuiltIn INTEGER NOT NULL DEFAULT 0,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL
-        );
-
-        CREATE TABLE user_groups (
-          userId TEXT NOT NULL,
-          groupId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (userId, groupId),
-          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-          FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE user_roles (
-          userId TEXT NOT NULL,
-          roleId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (userId, roleId),
-          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-          FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE group_roles (
-          groupId TEXT NOT NULL,
-          roleId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (groupId, roleId),
-          FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-          FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE role_permissions (
-          roleId TEXT NOT NULL,
-          permissionId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (roleId, permissionId),
-          FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-          FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX idx_user_roles_user ON user_roles(userId);
-        CREATE INDEX idx_user_roles_role ON user_roles(roleId);
-        CREATE INDEX idx_user_groups_user ON user_groups(userId);
-        CREATE INDEX idx_user_groups_group ON user_groups(groupId);
-        CREATE INDEX idx_group_roles_group ON group_roles(groupId);
-        CREATE INDEX idx_group_roles_role ON group_roles(roleId);
-        CREATE INDEX idx_role_permissions_role ON role_permissions(roleId);
-        CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId);
-
-        CREATE TABLE permissions (
-          id TEXT PRIMARY KEY,
-          resource TEXT NOT NULL,
-          action TEXT NOT NULL,
-          description TEXT NOT NULL DEFAULT '',
-          createdAt TEXT NOT NULL,
-          UNIQUE(resource, action)
-        );
-
-        CREATE INDEX idx_permissions_resource_action ON permissions(resource, action);
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
+await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
+await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
+await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
+await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
+await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
+await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
+await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
+await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
+await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
+await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
 
     // Initialize permission service
     permissionService = new PermissionService(db);
@@ -1202,83 +841,47 @@ describe('PermissionService - getUserPermissions', () => {
     adminUserId = 'admin-456';  // pragma: allowlist secret
     inactiveUserId = 'inactive-789';  // pragma: allowlist secret
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userId, 'testuser', 'test@example.com', 'hash', 'Test', 'User', 1, 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [userId, 'testuser', 'test@example.com', 'hash', 'Test', 'User', 1, 0, now, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [adminUserId, 'admin', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [adminUserId, 'admin', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [inactiveUserId, 'inactive', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [inactiveUserId, 'inactive', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now]
+);
 
     // Create group
     groupId = 'group-123';  // pragma: allowlist secret
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?)`,
-        [groupId, 'Test Group', 'Test group description', now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [groupId, 'Test Group', 'Test group description', now, now]
+);
 
     // Create roles
     roleId = 'role-123';  // pragma: allowlist secret
     groupRoleId = 'role-456';  // pragma: allowlist secret
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [roleId, 'Test Role', 'Test role description', 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [roleId, 'Test Role', 'Test role description', 0, now, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [groupRoleId, 'Group Role', 'Group role description', 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [groupRoleId, 'Group Role', 'Group role description', 0, now, now]
+);
 
     // Create permissions
     const perm1 = await permissionService.createPermission({
@@ -1311,27 +914,15 @@ describe('PermissionService - getUserPermissions', () => {
   it('should return empty array for inactive user (Requirement 8.6)', async () => {
     // Assign role and permission to inactive user
     const now = new Date().toISOString();
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [inactiveUserId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [inactiveUserId, roleId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission1Id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(inactiveUserId);
     expect(permissions).toEqual([]);
@@ -1352,39 +943,21 @@ describe('PermissionService - getUserPermissions', () => {
     const now = new Date().toISOString();
 
     // Assign role to user
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
     // Assign permissions to role
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission1Id, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission2Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission2Id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
 
@@ -1399,40 +972,22 @@ describe('PermissionService - getUserPermissions', () => {
     const now = new Date().toISOString();
 
     // Add user to group
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, groupId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, groupId, now]
+);
 
     // Assign role to group
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [groupId, groupRoleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [groupId, groupRoleId, now]
+);
 
     // Assign permission to role
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [groupRoleId, permission3Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [groupRoleId, permission3Id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
 
@@ -1445,61 +1000,31 @@ describe('PermissionService - getUserPermissions', () => {
     const now = new Date().toISOString();
 
     // Path 1: Direct role assignment with permission1
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission1Id, now]
+);
 
     // Path 2: Group role assignment with same permission1
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, groupId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, groupId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [groupId, groupRoleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [groupId, groupRoleId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [groupRoleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [groupRoleId, permission1Id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
 
@@ -1513,72 +1038,36 @@ describe('PermissionService - getUserPermissions', () => {
     const now = new Date().toISOString();
 
     // Direct role with permission1 and permission2
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission1Id, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission2Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission2Id, now]
+);
 
     // Group role with permission3
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, groupId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, groupId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [groupId, groupRoleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [groupId, groupRoleId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [groupRoleId, permission3Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [groupRoleId, permission3Id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
 
@@ -1607,61 +1096,31 @@ describe('PermissionService - getUserPermissions', () => {
     });
 
     // Assign role to user
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
     // Assign permissions in non-alphabetical order
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission3Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission3Id, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission1Id, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, perm5.id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, perm5.id, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, perm4.id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, perm4.id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
 
@@ -1684,16 +1143,10 @@ describe('PermissionService - getUserPermissions', () => {
     const now = new Date().toISOString();
 
     // Assign role to user but don't assign any permissions to role
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
     expect(permissions).toEqual([]);
@@ -1706,98 +1159,50 @@ describe('PermissionService - getUserPermissions', () => {
     const group2Id = 'group-456';  // pragma: allowlist secret
     const role2Id = 'role-789';  // pragma: allowlist secret
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?)`,
-        [group2Id, 'Test Group 2', 'Second test group', now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [group2Id, 'Test Group 2', 'Second test group', now, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [role2Id, 'Test Role 2', 'Second test role', 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
+);
 
     // Add user to both groups
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, groupId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, groupId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, group2Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, group2Id, now]
+);
 
     // Assign roles to groups
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [groupId, groupRoleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [groupId, groupRoleId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [group2Id, role2Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [group2Id, role2Id, now]
+);
 
     // Assign different permissions to each role
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [groupRoleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [groupRoleId, permission1Id, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [role2Id, permission2Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [role2Id, permission2Id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
 
@@ -1814,63 +1219,33 @@ describe('PermissionService - getUserPermissions', () => {
     // Create second role
     const role2Id = 'role-789';  // pragma: allowlist secret
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [role2Id, 'Test Role 2', 'Second test role', 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
+);
 
     // Assign both roles to user
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, role2Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, role2Id, now]
+);
 
     // Assign different permissions to each role
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permission1Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permission1Id, now]
+);
 
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [role2Id, permission3Id, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [role2Id, permission3Id, now]
+);
 
     const permissions = await permissionService.getUserPermissions(userId);
 
@@ -1883,9 +1258,7 @@ describe('PermissionService - getUserPermissions', () => {
 
   afterEach(async () => {
     // Close database
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
 
     // Remove test database
     try {
@@ -1897,7 +1270,7 @@ describe('PermissionService - getUserPermissions', () => {
 });
 
 describe('PermissionService - Permission Caching', () => {
-  let db: Database;
+  let db: DatabaseAdapter;
   let permissionService: PermissionService;
   const testDbPath = path.join(__dirname, '../../test-permission-service-caching.db');
   let userId: string;
@@ -1913,104 +1286,27 @@ describe('PermissionService - Permission Caching', () => {
     }
 
     // Create new database
-    db = new Database(testDbPath);
+    db = new SQLiteAdapter(testDbPath);
+    await db.initialize();
 
     // Create full RBAC schema
-    await new Promise<void>((resolve, reject) => {
-      db.exec(
-        `
-        CREATE TABLE users (
-          id TEXT PRIMARY KEY,
-          username TEXT NOT NULL UNIQUE,
-          email TEXT NOT NULL UNIQUE,
-          passwordHash TEXT NOT NULL,
-          firstName TEXT NOT NULL,
-          lastName TEXT NOT NULL,
-          isActive INTEGER NOT NULL DEFAULT 1,
-          isAdmin INTEGER NOT NULL DEFAULT 0,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL,
-          lastLoginAt TEXT
-        );
-
-        CREATE TABLE groups (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          description TEXT NOT NULL,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL
-        );
-
-        CREATE TABLE roles (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          description TEXT NOT NULL,
-          isBuiltIn INTEGER NOT NULL DEFAULT 0,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL
-        );
-
-        CREATE TABLE user_groups (
-          userId TEXT NOT NULL,
-          groupId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (userId, groupId),
-          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-          FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE user_roles (
-          userId TEXT NOT NULL,
-          roleId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (userId, roleId),
-          FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-          FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE group_roles (
-          groupId TEXT NOT NULL,
-          roleId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (groupId, roleId),
-          FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-          FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE role_permissions (
-          roleId TEXT NOT NULL,
-          permissionId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (roleId, permissionId),
-          FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-          FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE permissions (
-          id TEXT PRIMARY KEY,
-          resource TEXT NOT NULL,
-          action TEXT NOT NULL,
-          description TEXT NOT NULL DEFAULT '',
-          createdAt TEXT NOT NULL,
-          UNIQUE(resource, action)
-        );
-
-        CREATE INDEX idx_permissions_resource_action ON permissions(resource, action);
-        CREATE INDEX idx_user_roles_user ON user_roles(userId);
-        CREATE INDEX idx_user_roles_role ON user_roles(roleId);
-        CREATE INDEX idx_user_groups_user ON user_groups(userId);
-        CREATE INDEX idx_user_groups_group ON user_groups(groupId);
-        CREATE INDEX idx_group_roles_group ON group_roles(groupId);
-        CREATE INDEX idx_group_roles_role ON group_roles(roleId);
-        CREATE INDEX idx_role_permissions_role ON role_permissions(roleId);
-        CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId);
-        `,
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
+await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
+await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
+await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
+await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
+await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
+await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
+await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
+await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
+await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
+await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
 
     // Initialize permission service
     permissionService = new PermissionService(db);
@@ -2020,31 +1316,19 @@ describe('PermissionService - Permission Caching', () => {
 
     // Create user
     userId = 'user-cache-123';  // pragma: allowlist secret
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userId, 'cacheuser', 'cache@example.com', 'hash', 'Cache', 'User', 1, 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [userId, 'cacheuser', 'cache@example.com', 'hash', 'Cache', 'User', 1, 0, now, now]
+);
 
     // Create role
     roleId = 'role-cache-123';  // pragma: allowlist secret
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+    await db.execute(
+  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [roleId, 'Cache Role', 'Cache test role', 0, now, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+  [roleId, 'Cache Role', 'Cache test role', 0, now, now]
+);
 
     // Create permission
     const permission = await permissionService.createPermission({
@@ -2055,35 +1339,21 @@ describe('PermissionService - Permission Caching', () => {
     permissionId = permission.id;
 
     // Assign role to user
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-        [userId, roleId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [userId, roleId, now]
+);
 
     // Assign permission to role
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
-        [roleId, permissionId, now],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
+    await db.execute(
+  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  [roleId, permissionId, now]
+);
   });
 
   afterEach(async () => {
     // Close database
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
 
     // Remove test database
     try {
@@ -2119,17 +1389,11 @@ describe('PermissionService - Permission Caching', () => {
       const adminId = 'admin-cache-123';  // pragma: allowlist secret
       const now = new Date().toISOString();
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [adminId, 'adminuser', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [adminId, 'adminuser', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now]
+);
 
       // First call
       const result1 = await permissionService.hasPermission(adminId, 'any_resource', 'any_action');
@@ -2145,17 +1409,11 @@ describe('PermissionService - Permission Caching', () => {
       const inactiveId = 'inactive-cache-123';  // pragma: allowlist secret
       const now = new Date().toISOString();
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [inactiveId, 'inactiveuser', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [inactiveId, 'inactiveuser', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now]
+);
 
       // First call
       const result1 = await permissionService.hasPermission(inactiveId, 'ansible', 'read');
@@ -2171,17 +1429,11 @@ describe('PermissionService - Permission Caching', () => {
       const user2Id = 'user-cache-456';  // pragma: allowlist secret
       const now = new Date().toISOString();
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [user2Id, 'cacheuser2', 'cache2@example.com', 'hash', 'Cache2', 'User', 1, 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [user2Id, 'cacheuser2', 'cache2@example.com', 'hash', 'Cache2', 'User', 1, 0, now, now]
+);
 
       // Check permissions for both users
       const result1 = await permissionService.hasPermission(userId, 'ansible', 'read');
@@ -2231,17 +1483,11 @@ describe('PermissionService - Permission Caching', () => {
       const user2Id = 'user-cache-789';  // pragma: allowlist secret
       const now = new Date().toISOString();
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [user2Id, 'cacheuser3', 'cache3@example.com', 'hash', 'Cache3', 'User', 1, 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [user2Id, 'cacheuser3', 'cache3@example.com', 'hash', 'Cache3', 'User', 1, 0, now, now]
+);
 
       // Cache permissions for both users
       await permissionService.hasPermission(userId, 'ansible', 'read');
@@ -2300,17 +1546,11 @@ describe('PermissionService - Permission Caching', () => {
       const adminId = 'admin-correct-123';  // pragma: allowlist secret
       const now = new Date().toISOString();
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [adminId, 'admincorrect', 'admincorrect@example.com', 'hash', 'Admin', 'Correct', 1, 1, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [adminId, 'admincorrect', 'admincorrect@example.com', 'hash', 'Admin', 'Correct', 1, 1, now, now]
+);
 
       // Multiple checks should all return true
       const result1 = await permissionService.hasPermission(adminId, 'resource1', 'action1');
@@ -2327,29 +1567,17 @@ describe('PermissionService - Permission Caching', () => {
       const inactiveId = 'inactive-correct-123';  // pragma: allowlist secret
       const now = new Date().toISOString();
 
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      await db.execute(
+  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [inactiveId, 'inactivecorrect', 'inactivecorrect@example.com', 'hash', 'Inactive', 'Correct', 0, 0, now, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+  [inactiveId, 'inactivecorrect', 'inactivecorrect@example.com', 'hash', 'Inactive', 'Correct', 0, 0, now, now]
+);
 
       // Assign role with permission
-      await new Promise<void>((resolve, reject) => {
-        db.run(
-          `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
-          [inactiveId, roleId, now],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
-        );
-      });
+      await db.execute(
+  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  [inactiveId, roleId, now]
+);
 
       // Multiple checks should all return false (inactive users always denied)
       const result1 = await permissionService.hasPermission(inactiveId, 'ansible', 'read');
@@ -2396,6 +1624,226 @@ describe('PermissionService - Permission Caching', () => {
       // After invalidation, the permission check should still work
       const result = await permissionService.hasPermission(userId, 'ansible', 'read');
       expect(result).toBe(true);
+    });
+  });
+});
+
+describe('PermissionService - Role-level cache invalidation (Requirement 30.2)', () => {
+  let db: DatabaseAdapter;
+  let permissionService: PermissionService;
+  const testDbPath = path.join(__dirname, '../../test-permission-service-role-cache.db');
+  let userId: string;
+  let user2Id: string;
+  let groupId: string;
+  let roleId: string;
+  let groupRoleId: string;
+  let permissionId: string;
+  let permission2Id: string;
+
+  beforeEach(async () => {
+    try { await fs.unlink(testDbPath); } catch { /* ignore */ }
+
+    db = new SQLiteAdapter(testDbPath);
+    await db.initialize();
+
+    // Create full RBAC schema
+    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
+    await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+    await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+    await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
+    await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId) )`);
+    await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId) )`);
+    await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId) )`);
+    await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId) )`);
+
+    permissionService = new PermissionService(db);
+    const now = new Date().toISOString();
+
+    // Users
+    userId = 'user-role-cache-1';  // pragma: allowlist secret
+    user2Id = 'user-role-cache-2';  // pragma: allowlist secret
+    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [userId, 'rolecache1', 'rc1@example.com', 'hash', 'RC', 'One', now, now]);
+    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [user2Id, 'rolecache2', 'rc2@example.com', 'hash', 'RC', 'Two', now, now]);
+
+    // Group
+    groupId = 'group-role-cache-1';  // pragma: allowlist secret
+    await db.execute(`INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`, [groupId, 'RC Group', 'Role cache test group', now, now]);
+
+    // Roles
+    roleId = 'role-cache-direct';  // pragma: allowlist secret
+    groupRoleId = 'role-cache-group';  // pragma: allowlist secret
+    await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, [roleId, 'Direct Role', 'Direct role', now, now]);
+    await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, [groupRoleId, 'Group Role', 'Group role', now, now]);
+
+    // Permissions
+    const perm = await permissionService.createPermission({ resource: 'proxmox', action: 'execute', description: 'Execute Proxmox' });
+    permissionId = perm.id;
+    const perm2 = await permissionService.createPermission({ resource: 'proxmox', action: 'provision', description: 'Provision Proxmox' });
+    permission2Id = perm2.id;
+
+    // Assign role directly to user1
+    await db.execute(`INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`, [userId, roleId, now]);
+    // Assign permission to role
+    await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, permissionId, now]);
+
+    // Assign user2 to group, group to groupRole
+    await db.execute(`INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`, [user2Id, groupId, now]);
+    await db.execute(`INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`, [groupId, groupRoleId, now]);
+    await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [groupRoleId, permissionId, now]);
+  });
+
+  afterEach(async () => {
+    await db.close();
+    try { await fs.unlink(testDbPath); } catch { /* ignore */ }
+  });
+
+  describe('invalidateRolePermissionCache', () => {
+    it('should invalidate cache for users with direct role assignment', async () => {
+      // Populate cache
+      const before = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(before).toBe(true);
+
+      // Invalidate by role
+      await permissionService.invalidateRolePermissionCache(roleId);
+
+      // Cache should be cleared — next call hits DB again (still returns true since data unchanged)
+      const after = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(after).toBe(true);
+    });
+
+    it('should invalidate cache for users with group-based role assignment', async () => {
+      // Populate cache for user2 (group path)
+      const before = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(before).toBe(true);
+
+      // Invalidate by groupRole
+      await permissionService.invalidateRolePermissionCache(groupRoleId);
+
+      // After invalidation, re-check still works
+      const after = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(after).toBe(true);
+    });
+
+    it('should reflect permission changes after role cache invalidation', async () => {
+      // Cache the result (true — user has proxmox:execute via role)
+      const before = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(before).toBe(true);
+
+      // Remove the permission from the role at DB level
+      await db.execute(`DELETE FROM role_permissions WHERE roleId = ? AND permissionId = ?`, [roleId, permissionId]);
+
+      // Without invalidation, cache still returns true
+      const stale = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(stale).toBe(true); // stale cache
+
+      // Invalidate
+      await permissionService.invalidateRolePermissionCache(roleId);
+
+      // Now should reflect the DB change
+      const after = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(after).toBe(false);
+    });
+
+    it('should not affect users who do not have the role', async () => {
+      // Cache for both users
+      await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+
+      // Invalidate only the direct role (affects user1 only)
+      await permissionService.invalidateRolePermissionCache(roleId);
+
+      // user2's cache should remain intact (they use groupRoleId, not roleId)
+      // Both should still return correct results
+      const r1 = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      const r2 = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(r1).toBe(true);
+      expect(r2).toBe(true);
+    });
+
+    it('should handle role with no assigned users gracefully', async () => {
+      const now = new Date().toISOString();
+      await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, ['orphan-role', 'Orphan', 'No users', now, now]);
+
+      // Should not throw
+      await expect(permissionService.invalidateRolePermissionCache('orphan-role')).resolves.not.toThrow();
+    });
+  });
+
+  describe('invalidateAllPermissionCache', () => {
+    it('should clear all cached permission entries', async () => {
+      // Populate cache for multiple users
+      await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+
+      // Remove all role_permissions at DB level
+      await db.execute(`DELETE FROM role_permissions`);
+
+      // Stale cache still returns true
+      const stale1 = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(stale1).toBe(true);
+
+      // Clear entire cache
+      permissionService.invalidateAllPermissionCache();
+
+      // Now should reflect DB state
+      const after1 = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      const after2 = await permissionService.hasPermission(user2Id, 'proxmox', 'execute');
+      expect(after1).toBe(false);
+      expect(after2).toBe(false);
+    });
+
+    it('should handle empty cache gracefully', () => {
+      expect(() => permissionService.invalidateAllPermissionCache()).not.toThrow();
+    });
+  });
+
+  describe('New permission types in cache (Requirement 30.3)', () => {
+    it('should cache and return correct results for new action types', async () => {
+      const now = new Date().toISOString();
+
+      // Create new permission types
+      const provisionPerm = await permissionService.createPermission({ resource: 'aws', action: 'provision', description: 'Provision AWS' });
+      const destroyPerm = await permissionService.createPermission({ resource: 'aws', action: 'destroy', description: 'Destroy AWS' });
+      const lifecyclePerm = await permissionService.createPermission({ resource: 'aws', action: 'lifecycle', description: 'Lifecycle AWS' });
+      const configurePerm = await permissionService.createPermission({ resource: 'integration_config', action: 'configure', description: 'Configure integrations' });
+      const notePerm = await permissionService.createPermission({ resource: 'journal', action: 'note', description: 'Add notes' });
+
+      // Assign some to user's role
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, provisionPerm.id, now]);
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, lifecyclePerm.id, now]);
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, notePerm.id, now]);
+
+      // Check permissions — first call populates cache, second uses cache
+      expect(await permissionService.hasPermission(userId, 'aws', 'provision')).toBe(true);
+      expect(await permissionService.hasPermission(userId, 'aws', 'provision')).toBe(true); // cached
+      expect(await permissionService.hasPermission(userId, 'aws', 'destroy')).toBe(false);
+      expect(await permissionService.hasPermission(userId, 'aws', 'lifecycle')).toBe(true);
+      expect(await permissionService.hasPermission(userId, 'integration_config', 'configure')).toBe(false);
+      expect(await permissionService.hasPermission(userId, 'journal', 'note')).toBe(true);
+    });
+  });
+
+  describe('Backward compatibility (Requirement 29.1)', () => {
+    it('should continue to work for existing proxmox:execute permission checks', async () => {
+      // user1 has proxmox:execute via direct role
+      const result = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(result).toBe(true);
+
+      // Cached result
+      const cached = await permissionService.hasPermission(userId, 'proxmox', 'execute');
+      expect(cached).toBe(true);
+    });
+
+    it('should work for existing permission types alongside new ones', async () => {
+      const now = new Date().toISOString();
+
+      // Add a new-style permission to the same role
+      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, permission2Id, now]);
+
+      // Old permission still works
+      expect(await permissionService.hasPermission(userId, 'proxmox', 'execute')).toBe(true);
+      // New permission also works
+      expect(await permissionService.hasPermission(userId, 'proxmox', 'provision')).toBe(true);
     });
   });
 });

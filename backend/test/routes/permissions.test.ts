@@ -112,11 +112,11 @@ describe('Permissions Router', () => {
   afterEach(async () => {
     // Clean up test data
     const db = databaseService.getConnection();
-    db.exec('DELETE FROM user_roles');
-    db.exec('DELETE FROM role_permissions');
-    db.exec('DELETE FROM users WHERE username IN ("admin_user", "regular_user")');
-    db.exec('DELETE FROM roles WHERE name = "PermissionAdmin"');
-    db.exec('DELETE FROM permissions WHERE resource NOT IN ("users", "groups", "roles", "permissions", "ansible", "bolt", "puppetdb")');
+    await db.execute('DELETE FROM user_roles');
+    await db.execute('DELETE FROM role_permissions');
+    await db.execute('DELETE FROM users WHERE username IN ("admin_user", "regular_user")');
+    await db.execute('DELETE FROM roles WHERE name = "PermissionAdmin"');
+    await db.execute('DELETE FROM permissions WHERE resource NOT IN ("users", "groups", "roles", "permissions", "ansible", "bolt", "puppetdb")');
   });
 
   describe('POST /api/permissions', () => {

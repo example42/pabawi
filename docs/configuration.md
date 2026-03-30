@@ -211,6 +211,22 @@ Configure execution queue and concurrency limits.
   - Prevents unbounded queue growth
   - Should be set based on expected workload and acceptable wait times
 
+### Provisioning Safety
+
+Control whether destructive provisioning actions are allowed globally.
+
+#### ALLOW_DESTRUCTIVE_PROVISIONING
+
+- **Type:** Boolean (`true` or `false`)
+- **Default:** `false` (destructive actions are blocked unless explicitly enabled)
+- **Description:** When set to `false`, blocks all destructive provisioning actions across every integration. This includes destroying Proxmox VMs/LXC containers and terminating AWS EC2 instances. Non-destructive lifecycle actions (start, stop, shutdown, reboot) remain unaffected.
+- **Example:** `ALLOW_DESTRUCTIVE_PROVISIONING=false`
+- **Notes:**
+  - This is a global safety switch — it applies to all current and future provisioning integrations
+  - When disabled, the API returns `403 Forbidden` with error code `DESTRUCTIVE_ACTION_DISABLED`
+  - Useful for production environments where accidental resource deletion must be prevented
+  - Does not affect resource creation (provisioning new VMs/containers is still allowed)
+
 ### UI Configuration
 
 Configure user interface features and behavior.
@@ -570,5 +586,6 @@ Before deploying to production:
 - [ ] Streaming limits configured
 - [ ] Log level appropriate for environment
 - [ ] Expert mode disabled in production (or restricted)
+- [ ] Destructive provisioning disabled if appropriate (`ALLOW_DESTRUCTIVE_PROVISIONING=false`)
 - [ ] UI features configured (run chart visibility)
 - [ ] Integration colors displaying correctly

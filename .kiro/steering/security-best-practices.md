@@ -10,6 +10,7 @@ inclusion: always
 - Validate all user inputs
 - Use parameterized queries to prevent SQL injection
 - Implement proper authentication and authorization
+- Use `// pragma: allowlist secret` as an inline comment to allowlist false positives caught by `detect-secrets` pre-commit hook (use `# pragma: allowlist secret` for Python/YAML files)
 
 ## Dependency Management
 

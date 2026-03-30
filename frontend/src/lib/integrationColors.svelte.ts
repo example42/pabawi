@@ -20,6 +20,8 @@ export interface IntegrationColors {
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
   ssh: IntegrationColorConfig;
+  proxmox: IntegrationColorConfig;
+  aws: IntegrationColorConfig;
 }
 
 /**
@@ -43,16 +45,32 @@ class IntegrationColorStore {
   colors = $state<IntegrationColors | null>(null);
   loading = $state(false);
   error = $state<string | null>(null);
+  private loadPromise: Promise<void> | null = null;
 
   /**
    * Load colors from the backend API
+   * Uses a singleton promise to prevent multiple simultaneous requests
    */
   async loadColors(): Promise<void> {
+    // Already loaded
     if (this.colors) {
-      // Already loaded
       return;
     }
 
+    // Already loading - return existing promise
+    if (this.loadPromise) {
+      return this.loadPromise;
+    }
+
+    // Start new load
+    this.loadPromise = this.fetchColors();
+    return this.loadPromise;
+  }
+
+  /**
+   * Internal method to fetch colors from API
+   */
+  private async fetchColors(): Promise<void> {
     this.loading = true;
     this.error = null;
 
@@ -67,6 +85,7 @@ class IntegrationColorStore {
       this.colors = this.getDefaultColors();
     } finally {
       this.loading = false;
+      this.loadPromise = null;
     }
   }
 
@@ -107,7 +126,7 @@ class IntegrationColorStore {
    * @returns Array of valid integration names
    */
   getValidIntegrations(): IntegrationType[] {
-    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh'];
+    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh', 'proxmox', 'aws'];
   }
 
   /**
@@ -126,35 +145,48 @@ class IntegrationColorStore {
    */
   private getDefaultColors(): IntegrationColors {
     return {
+      // Provisioning tools — vivid blues
+      proxmox: {
+        primary: '#3B82F6',
+        light: '#EFF6FF',
+        dark: '#2563EB',
+      },
+      aws: {
+        primary: '#06B6D4',
+        light: '#ECFEFF',
+        dark: '#0891B2',
+      },
+      // Remote execution tools — vivid greens
       bolt: {
-        primary: '#FFAE1A',
-        light: '#FFF4E0',
-        dark: '#CC8B15',
+        primary: '#22C55E',
+        light: '#F0FDF4',
+        dark: '#16A34A',
       },
       ansible: {
-        primary: '#1A4D8F',
-        light: '#E8F1FF',
-        dark: '#133A6D',
-      },
-      puppetdb: {
-        primary: '#9063CD',
-        light: '#F0E6FF',
-        dark: '#7249A8',
-      },
-      puppetserver: {
-        primary: '#2E3A87',
-        light: '#E8EAFF',
-        dark: '#1F2760',
-      },
-      hiera: {
-        primary: '#C1272D',
-        light: '#FFE8E9',
-        dark: '#9A1F24',
+        primary: '#10B981',
+        light: '#ECFDF5',
+        dark: '#059669',
       },
       ssh: {
-        primary: '#10B981',
-        light: '#D1FAE5',
-        dark: '#059669',
+        primary: '#A3E635',
+        light: '#F7FEE7',
+        dark: '#84CC16',
+      },
+      // Puppet ecosystem — vivid warm tones
+      puppetdb: {
+        primary: '#F97316',
+        light: '#FFF7ED',
+        dark: '#EA580C',
+      },
+      puppetserver: {
+        primary: '#EF4444',
+        light: '#FEF2F2',
+        dark: '#DC2626',
+      },
+      hiera: {
+        primary: '#F59E0B',
+        light: '#FFFBEB',
+        dark: '#D97706',
       },
     };
   }

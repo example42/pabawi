@@ -1,58 +1,84 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import sqlite3 from "sqlite3";
-import { readFileSync } from "fs";
+import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
+import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 
+const migrationsDir = join(__dirname, "../../src/database/migrations");
+
+/**
+ * Apply migrations from 000 up to (but not including) the given stopBefore id.
+ */
+async function applyMigrationsUpTo(db: DatabaseAdapter, stopBeforeId: string): Promise<void> {
+  const files = readdirSync(migrationsDir)
+    .filter(f => f.endsWith(".sql") && !f.includes(".sqlite.") && !f.includes(".postgres."))
+    .sort();
+
+  for (const file of files) {
+    const id = file.split("_")[0];
+    if (id >= stopBeforeId) break;
+
+    const sql = readFileSync(join(migrationsDir, file), "utf-8");
+    const statements = sql
+      .split(";")
+      .map(s => s.trim())
+      .filter(s => {
+        if (s.length === 0) return false;
+        const withoutComments = s
+          .split("\n")
+          .map(line => line.replace(/--.*$/, "").trim())
+          .filter(line => line.length > 0)
+          .join("\n");
+        return withoutComments.length > 0;
+      });
+    for (const statement of statements) {
+      await db.execute(statement);
+    }
+  }
+}
+
+async function applyMigration006(db: DatabaseAdapter): Promise<void> {
+  const sql = readFileSync(
+    join(migrationsDir, "006_add_batch_executions.sql"),
+    "utf-8"
+  );
+  const statements = sql
+    .split(";")
+    .map(s => s.trim())
+    .filter(s => {
+      if (s.length === 0) return false;
+      const withoutComments = s
+        .split("\n")
+        .map(line => line.replace(/--.*$/, "").trim())
+        .filter(line => line.length > 0)
+        .join("\n");
+      return withoutComments.length > 0;
+    });
+  for (const statement of statements) {
+    await db.execute(statement);
+  }
+}
+
 describe("Migration 006: Add batch executions", () => {
-  let db: sqlite3.Database;
+  let db: DatabaseAdapter;
 
   beforeEach(async () => {
-    db = new sqlite3.Database(":memory:");
-
-    // Apply migration 000 (initial schema with executions table)
-    const baseSchema = readFileSync(
-      join(__dirname, "../../src/database/migrations/000_initial_schema.sql"),
-      "utf-8"
-    );
-    await new Promise<void>((resolve, reject) => {
-      db.exec(baseSchema, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    db = new SQLiteAdapter(":memory:");
+    await db.initialize();
+    await applyMigrationsUpTo(db, "006");
   });
 
   afterEach(async () => {
-    await new Promise<void>((resolve) => {
-      db.close(() => resolve());
-    });
+    await db.close();
   });
 
   it("should create batch_executions table with correct schema", async () => {
-    const migrationSQL = readFileSync(
-      join(__dirname, "../../src/database/migrations/006_add_batch_executions.sql"),
-      "utf-8"
-    );
+    await applyMigration006(db);
 
-    await new Promise<void>((resolve, reject) => {
-      db.exec(migrationSQL, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // Verify batch_executions table exists
-    const tableInfo = await new Promise<any[]>((resolve, reject) => {
-      db.all("PRAGMA table_info(batch_executions)", (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
-
+    const tableInfo = await db.query<{ name: string }>("PRAGMA table_info(batch_executions)");
     expect(tableInfo.length).toBeGreaterThan(0);
 
-    // Verify required columns exist
-    const columnNames = tableInfo.map((col: any) => col.name);
+    const columnNames = tableInfo.map(col => col.name);
     expect(columnNames).toContain("id");
     expect(columnNames).toContain("type");
     expect(columnNames).toContain("action");
@@ -73,133 +99,50 @@ describe("Migration 006: Add batch executions", () => {
   });
 
   it("should create indexes for batch_executions table", async () => {
-    const migrationSQL = readFileSync(
-      join(__dirname, "../../src/database/migrations/006_add_batch_executions.sql"),
-      "utf-8"
+    await applyMigration006(db);
+
+    const indexes = await db.query<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='batch_executions'"
     );
-
-    await new Promise<void>((resolve, reject) => {
-      db.exec(migrationSQL, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // Verify indexes exist
-    const indexes = await new Promise<any[]>((resolve, reject) => {
-      db.all(
-        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='batch_executions'",
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        }
-      );
-    });
-
-    const indexNames = indexes.map((idx: any) => idx.name);
+    const indexNames = indexes.map(idx => idx.name);
     expect(indexNames).toContain("idx_batch_executions_created");
     expect(indexNames).toContain("idx_batch_executions_status");
     expect(indexNames).toContain("idx_batch_executions_user");
   });
 
   it("should add batch_id and batch_position columns to executions table", async () => {
-    const migrationSQL = readFileSync(
-      join(__dirname, "../../src/database/migrations/006_add_batch_executions.sql"),
-      "utf-8"
-    );
+    await applyMigration006(db);
 
-    await new Promise<void>((resolve, reject) => {
-      db.exec(migrationSQL, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // Verify executions table has new columns
-    const tableInfo = await new Promise<any[]>((resolve, reject) => {
-      db.all("PRAGMA table_info(executions)", (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
-
-    const columnNames = tableInfo.map((col: any) => col.name);
+    const tableInfo = await db.query<{ name: string }>("PRAGMA table_info(executions)");
+    const columnNames = tableInfo.map(col => col.name);
     expect(columnNames).toContain("batch_id");
     expect(columnNames).toContain("batch_position");
   });
 
   it("should create index for batch queries on executions table", async () => {
-    const migrationSQL = readFileSync(
-      join(__dirname, "../../src/database/migrations/006_add_batch_executions.sql"),
-      "utf-8"
+    await applyMigration006(db);
+
+    const indexes = await db.query<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='executions'"
     );
-
-    await new Promise<void>((resolve, reject) => {
-      db.exec(migrationSQL, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // Verify batch index exists
-    const indexes = await new Promise<any[]>((resolve, reject) => {
-      db.all(
-        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='executions'",
-        (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows);
-        }
-      );
-    });
-
-    const indexNames = indexes.map((idx: any) => idx.name);
+    const indexNames = indexes.map(idx => idx.name);
     expect(indexNames).toContain("idx_executions_batch");
   });
 
   it("should preserve existing data when migrating executions table", async () => {
     // Insert test data before migration
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO executions (
-          id, type, target_nodes, action, status, started_at, results
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          "test-exec-1",
-          "command",
-          '["node1"]',
-          "uptime",
-          "success",
-          "2024-01-01T00:00:00Z",
-          "[]"
-        ],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
-
-    // Apply migration
-    const migrationSQL = readFileSync(
-      join(__dirname, "../../src/database/migrations/006_add_batch_executions.sql"),
-      "utf-8"
+    await db.execute(
+      `INSERT INTO executions (id, type, target_nodes, action, status, started_at, results)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ["test-exec-1", "command", '["node1"]', "uptime", "success", "2024-01-01T00:00:00Z", "[]"]
     );
 
-    await new Promise<void>((resolve, reject) => {
-      db.exec(migrationSQL, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await applyMigration006(db);
 
-    // Verify data was preserved
-    const rows = await new Promise<any[]>((resolve, reject) => {
-      db.all("SELECT * FROM executions WHERE id = ?", ["test-exec-1"], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
-
+    const rows = await db.query<Record<string, unknown>>(
+      "SELECT * FROM executions WHERE id = ?",
+      ["test-exec-1"]
+    );
     expect(rows.length).toBe(1);
     expect(rows[0].id).toBe("test-exec-1");
     expect(rows[0].type).toBe("command");
@@ -209,57 +152,25 @@ describe("Migration 006: Add batch executions", () => {
   });
 
   it("should allow inserting batch execution records", async () => {
-    const migrationSQL = readFileSync(
-      join(__dirname, "../../src/database/migrations/006_add_batch_executions.sql"),
-      "utf-8"
+    await applyMigration006(db);
+
+    await db.execute(
+      `INSERT INTO batch_executions (
+        id, type, action, target_nodes, target_groups, status,
+        created_at, user_id, execution_ids,
+        stats_total, stats_queued, stats_running, stats_success, stats_failed
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "batch-1", "command", "uptime", '["node1", "node2"]', '["group1"]',
+        "running", "2024-01-01T00:00:00Z", "user1", '["exec1", "exec2"]',
+        2, 2, 0, 0, 0
+      ]
     );
 
-    await new Promise<void>((resolve, reject) => {
-      db.exec(migrationSQL, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // Insert a batch execution
-    await new Promise<void>((resolve, reject) => {
-      db.run(
-        `INSERT INTO batch_executions (
-          id, type, action, target_nodes, target_groups, status,
-          created_at, user_id, execution_ids,
-          stats_total, stats_queued, stats_running, stats_success, stats_failed
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          "batch-1",
-          "command",
-          "uptime",
-          '["node1", "node2"]',
-          '["group1"]',
-          "running",
-          "2024-01-01T00:00:00Z",
-          "user1",
-          '["exec1", "exec2"]',
-          2,
-          2,
-          0,
-          0,
-          0
-        ],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
-
-    // Verify insertion
-    const rows = await new Promise<any[]>((resolve, reject) => {
-      db.all("SELECT * FROM batch_executions WHERE id = ?", ["batch-1"], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
-
+    const rows = await db.query<Record<string, unknown>>(
+      "SELECT * FROM batch_executions WHERE id = ?",
+      ["batch-1"]
+    );
     expect(rows.length).toBe(1);
     expect(rows[0].id).toBe("batch-1");
     expect(rows[0].type).toBe("command");
@@ -267,45 +178,21 @@ describe("Migration 006: Add batch executions", () => {
   });
 
   it("should enforce CHECK constraints on batch_executions", async () => {
-    const migrationSQL = readFileSync(
-      join(__dirname, "../../src/database/migrations/006_add_batch_executions.sql"),
-      "utf-8"
-    );
+    await applyMigration006(db);
 
-    await new Promise<void>((resolve, reject) => {
-      db.exec(migrationSQL, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // Try to insert invalid type
-    const insertInvalidType = new Promise<void>((resolve, reject) => {
-      db.run(
+    await expect(
+      db.execute(
         `INSERT INTO batch_executions (
           id, type, action, target_nodes, target_groups, status,
           created_at, user_id, execution_ids,
           stats_total, stats_queued, stats_running, stats_success, stats_failed
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          "batch-invalid",
-          "invalid_type",
-          "uptime",
-          "[]",
-          "[]",
-          "running",
-          "2024-01-01T00:00:00Z",
-          "user1",
-          "[]",
+          "batch-invalid", "invalid_type", "uptime", "[]", "[]",
+          "running", "2024-01-01T00:00:00Z", "user1", "[]",
           0, 0, 0, 0, 0
-        ],
-        (err) => {
-          if (err) reject(err);
-          else resolve();
-        }
-      );
-    });
-
-    await expect(insertInvalidType).rejects.toThrow();
+        ]
+      )
+    ).rejects.toThrow();
   });
 });

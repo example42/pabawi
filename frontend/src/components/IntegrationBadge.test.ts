@@ -7,24 +7,24 @@ import { integrationColors } from '../lib/integrationColors.svelte';
 vi.mock('../lib/integrationColors.svelte', () => {
   const mockColors = {
     bolt: {
-      primary: '#FFAE1A',
-      light: '#FFF4E0',
-      dark: '#CC8B15',
+      primary: '#22C55E',
+      light: '#F0FDF4',
+      dark: '#16A34A',
     },
     puppetdb: {
-      primary: '#9063CD',
-      light: '#F0E6FF',
-      dark: '#7249A8',
+      primary: '#F97316',
+      light: '#FFF7ED',
+      dark: '#EA580C',
     },
     puppetserver: {
-      primary: '#2E3A87',
-      light: '#E8EAFF',
-      dark: '#1F2760',
+      primary: '#EF4444',
+      light: '#FEF2F2',
+      dark: '#DC2626',
     },
     hiera: {
-      primary: '#C1272D',
-      light: '#FFE8E9',
-      dark: '#9A1F24',
+      primary: '#F59E0B',
+      light: '#FFFBEB',
+      dark: '#D97706',
     },
   };
 
@@ -74,7 +74,7 @@ describe('IntegrationBadge Component', () => {
       });
 
       const dot = screen.getByLabelText('PuppetDB indicator');
-      expect(dot.style.backgroundColor).toBe('rgb(144, 99, 205)'); // #9063CD
+      expect(dot.style.backgroundColor).toBe('rgb(249, 115, 22)'); // #F97316
     });
 
     it('should render dot with small size', () => {
@@ -144,7 +144,7 @@ describe('IntegrationBadge Component', () => {
 
       const labelContainer = container.querySelector('.inline-flex.items-center.gap-1\\.5');
       expect(labelContainer).toBeTruthy();
-      expect(labelContainer?.getAttribute('style')).toContain('rgb(154, 31, 36)'); // dark color
+      expect(labelContainer?.getAttribute('style')).toContain('rgb(217, 119, 6)'); // dark color #D97706
     });
 
     it('should render label with small size', () => {
@@ -196,7 +196,7 @@ describe('IntegrationBadge Component', () => {
 
       const dot = container.querySelector('.rounded-full');
       expect(dot).toBeTruthy();
-      expect(dot?.getAttribute('style')).toContain('rgb(255, 174, 26)'); // #FFAE1A
+      expect(dot?.getAttribute('style')).toContain('rgb(34, 197, 94)'); // #22C55E
     });
   });
 
@@ -225,8 +225,8 @@ describe('IntegrationBadge Component', () => {
       });
 
       const badge = screen.getByRole('status');
-      expect(badge.style.backgroundColor).toBe('rgb(240, 230, 255)'); // light color
-      expect(badge.style.color).toBe('rgb(114, 73, 168)'); // dark color
+      expect(badge.style.backgroundColor).toBe('rgb(255, 247, 237)'); // light color #FFF7ED
+      expect(badge.style.color).toBe('rgb(234, 88, 12)'); // dark color #EA580C
     });
 
     it('should render badge with small size', () => {
@@ -331,8 +331,8 @@ describe('IntegrationBadge Component', () => {
       });
 
       const badge = screen.getByRole('status');
-      expect(badge.style.backgroundColor).toBe('rgb(255, 244, 224)'); // #FFF4E0
-      expect(badge.style.color).toBe('rgb(204, 139, 21)'); // #CC8B15
+      expect(badge.style.backgroundColor).toBe('rgb(240, 253, 244)'); // #F0FDF4
+      expect(badge.style.color).toBe('rgb(22, 163, 74)'); // #16A34A
     });
 
     it('should apply puppetdb colors correctly', () => {
@@ -344,8 +344,8 @@ describe('IntegrationBadge Component', () => {
       });
 
       const badge = screen.getByRole('status');
-      expect(badge.style.backgroundColor).toBe('rgb(240, 230, 255)'); // #F0E6FF
-      expect(badge.style.color).toBe('rgb(114, 73, 168)'); // #7249A8
+      expect(badge.style.backgroundColor).toBe('rgb(255, 247, 237)'); // #FFF7ED
+      expect(badge.style.color).toBe('rgb(234, 88, 12)'); // #EA580C
     });
 
     it('should apply puppetserver colors correctly', () => {
@@ -357,8 +357,8 @@ describe('IntegrationBadge Component', () => {
       });
 
       const badge = screen.getByRole('status');
-      expect(badge.style.backgroundColor).toBe('rgb(232, 234, 255)'); // #E8EAFF
-      expect(badge.style.color).toBe('rgb(31, 39, 96)'); // #1F2760
+      expect(badge.style.backgroundColor).toBe('rgb(254, 242, 242)'); // #FEF2F2
+      expect(badge.style.color).toBe('rgb(220, 38, 38)'); // #DC2626
     });
 
     it('should apply hiera colors correctly', () => {
@@ -370,8 +370,8 @@ describe('IntegrationBadge Component', () => {
       });
 
       const badge = screen.getByRole('status');
-      expect(badge.style.backgroundColor).toBe('rgb(255, 232, 233)'); // #FFE8E9
-      expect(badge.style.color).toBe('rgb(154, 31, 36)'); // #9A1F24
+      expect(badge.style.backgroundColor).toBe('rgb(255, 251, 235)'); // #FFFBEB
+      expect(badge.style.color).toBe('rgb(217, 119, 6)'); // #D97706
     });
   });
 

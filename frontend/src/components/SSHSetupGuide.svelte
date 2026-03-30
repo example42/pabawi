@@ -1,8 +1,77 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
+  import { saveIntegrationConfig, getIntegrationConfig } from '../lib/api';
+  import { showSuccess, showError } from '../lib/toast.svelte';
+  import { logger } from '../lib/logger.svelte';
+
   let showAdvanced = $state(false);
+  let saving = $state(false);
+  let loadingConfig = $state(true);
+
+  let config = $state({
+    configPath: '',
+    defaultUser: '',
+    defaultKey: '',
+    defaultPort: 22,
+    hostKeyCheck: true,
+    connectionTimeout: 30,
+    commandTimeout: 300,
+  });
+
+  onMount(async () => {
+    try {
+      const effective = await getIntegrationConfig('ssh');
+      if (effective) {
+        config.configPath = String(effective.configPath ?? '');
+        config.defaultUser = String(effective.defaultUser ?? '');
+        config.defaultKey = String(effective.defaultKey ?? '');
+        config.defaultPort = Number(effective.defaultPort ?? 22);
+        config.hostKeyCheck = effective.hostKeyCheck !== false && effective.hostKeyCheck !== 'false';
+        config.connectionTimeout = Number(effective.connectionTimeout ?? 30);
+        config.commandTimeout = Number(effective.commandTimeout ?? 300);
+      }
+    } catch {
+      // No existing config
+    } finally {
+      loadingConfig = false;
+    }
+  });
+
+  function validateForm(): boolean {
+    if (!config.defaultUser) return false;
+    if (!config.defaultPort || config.defaultPort < 1 || config.defaultPort > 65535) return false;
+    return true;
+  }
+
+  const isFormValid = $derived(validateForm());
+
+  async function handleSaveConfiguration(): Promise<void> {
+    saving = true;
+    try {
+      const payload: Record<string, unknown> = {
+        configPath: config.configPath,
+        defaultUser: config.defaultUser,
+        defaultKey: config.defaultKey,
+        defaultPort: config.defaultPort,
+        hostKeyCheck: config.hostKeyCheck,
+        connectionTimeout: config.connectionTimeout,
+        commandTimeout: config.commandTimeout,
+      };
+      await saveIntegrationConfig('ssh', payload);
+      showSuccess('SSH configuration saved successfully');
+      logger.info('SSH configuration saved', { defaultUser: config.defaultUser });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      showError(`Failed to save configuration: ${message}`);
+      logger.error('SSH configuration save error', { error });
+    } finally {
+      saving = false;
+    }
+  }
 
   const copyToClipboard = (text: string): void => {
     navigator.clipboard.writeText(text);
+    showSuccess('Copied to clipboard');
   };
 
   const baseConfig = `# SSH Integration - Base Configuration
@@ -148,7 +217,132 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Generate and Deploy SSH Keys</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 1: Configure Connection</h3>
+
+      <div class="space-y-4">
+        <div>
+          <label for="ssh-config-path" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            SSH Config Path
+          </label>
+          <input
+            id="ssh-config-path"
+            type="text"
+            bind:value={config.configPath}
+            placeholder="/config/ssh_config"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Path to SSH config file (OpenSSH format)</p>
+        </div>
+
+        <div>
+          <label for="ssh-default-user" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Default User *
+          </label>
+          <input
+            id="ssh-default-user"
+            type="text"
+            bind:value={config.defaultUser}
+            placeholder="deploy"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label for="ssh-default-key" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Default Key Path
+          </label>
+          <input
+            id="ssh-default-key"
+            type="text"
+            bind:value={config.defaultKey}
+            placeholder="~/.ssh/id_rsa"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+
+        <div>
+          <label for="ssh-default-port" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Default Port *
+          </label>
+          <input
+            id="ssh-default-port"
+            type="number"
+            bind:value={config.defaultPort}
+            min="1"
+            max="65535"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Default: 22</p>
+        </div>
+
+        <div>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              bind:checked={config.hostKeyCheck}
+              class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Host Key Checking
+            </span>
+          </label>
+          {#if !config.hostKeyCheck}
+            <p class="mt-1 text-sm text-yellow-600 dark:text-yellow-400">
+              ⚠️ Host key checking disabled. Only use for testing.
+            </p>
+          {/if}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="ssh-connection-timeout" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Connection Timeout (s)
+            </label>
+            <input
+              id="ssh-connection-timeout"
+              type="number"
+              bind:value={config.connectionTimeout}
+              min="1"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Default: 30</p>
+          </div>
+          <div>
+            <label for="ssh-command-timeout" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Command Timeout (s)
+            </label>
+            <input
+              id="ssh-command-timeout"
+              type="number"
+              bind:value={config.commandTimeout}
+              min="1"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Default: 300</p>
+          </div>
+        </div>
+
+        <div class="flex gap-3 pt-4">
+          <button
+            onclick={handleSaveConfiguration}
+            disabled={!isFormValid || saving}
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {#if saving}
+              <span class="animate-spin">⏳</span>
+              Saving...
+            {:else}
+              💾 Save Configuration
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Generate and Deploy SSH Keys</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Create SSH keys and deploy them to your target hosts:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
@@ -174,7 +368,7 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Configure Host Key Verification</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Configure Host Key Verification</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Add target host keys to known_hosts for secure connections:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
@@ -194,7 +388,7 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Create SSH Config File</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Create SSH Config File</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         Create an SSH config file using standard OpenSSH format. Use comments to add custom metadata for Pabawi:
       </p>
@@ -228,7 +422,7 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Configure Sudo (Optional)</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Configure Sudo (Optional)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         For operations requiring elevated privileges, configure passwordless sudo on target hosts:
       </p>
@@ -250,7 +444,7 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Configure Environment Variables</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Configure Environment Variables (Alternative)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Add these values to your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code>:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
@@ -305,7 +499,7 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Docker Deployment (Optional)</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 7: Docker Deployment (Optional)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         If deploying with Docker, use this docker-compose configuration:
       </p>
@@ -327,7 +521,7 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 7: Validate SSH Locally</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 8: Validate SSH Locally</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Before using Pabawi, verify your SSH setup manually:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
@@ -347,7 +541,7 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 8: Restart Backend and Verify</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 9: Restart Backend and Verify</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Restart the backend and confirm SSH appears as connected in Integrations:</p>
       <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1 mb-4">
         <div>cd backend</div>

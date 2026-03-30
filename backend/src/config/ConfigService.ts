@@ -109,6 +109,33 @@ export class ConfigService {
         exclusionPatterns?: string[];
       };
     };
+    proxmox?: {
+      enabled: boolean;
+      host: string;
+      port?: number;
+      username?: string;
+      password?: string;
+      realm?: string;
+      token?: string;
+      ssl?: {
+        rejectUnauthorized?: boolean;
+        ca?: string;
+        cert?: string;
+        key?: string;
+      };
+      timeout?: number;
+      priority?: number;
+    };
+    aws?: {
+      enabled: boolean;
+      accessKeyId?: string;
+      secretAccessKey?: string;
+      region?: string;
+      regions?: string[];
+      sessionToken?: string;
+      profile?: string;
+      endpoint?: string;
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -396,6 +423,80 @@ export class ConfigService {
       }
     }
 
+    // Parse Proxmox configuration
+    if (process.env.PROXMOX_ENABLED === "true") {
+      const host = process.env.PROXMOX_HOST;
+      if (!host) {
+        throw new Error(
+          "PROXMOX_HOST is required when PROXMOX_ENABLED is true",
+        );
+      }
+
+      integrations.proxmox = {
+        enabled: true,
+        host,
+        port: process.env.PROXMOX_PORT
+          ? parseInt(process.env.PROXMOX_PORT, 10)
+          : undefined,
+        username: process.env.PROXMOX_USERNAME,
+        password: process.env.PROXMOX_PASSWORD,
+        realm: process.env.PROXMOX_REALM,
+        token: process.env.PROXMOX_TOKEN,
+        timeout: process.env.PROXMOX_TIMEOUT
+          ? parseInt(process.env.PROXMOX_TIMEOUT, 10)
+          : undefined,
+        priority: process.env.PROXMOX_PRIORITY
+          ? parseInt(process.env.PROXMOX_PRIORITY, 10)
+          : undefined,
+      };
+
+      // Parse SSL configuration if any SSL-related env vars are set
+      if (
+        process.env.PROXMOX_SSL_REJECT_UNAUTHORIZED !== undefined ||
+        process.env.PROXMOX_SSL_CA ||
+        process.env.PROXMOX_SSL_CERT ||
+        process.env.PROXMOX_SSL_KEY
+      ) {
+        integrations.proxmox.ssl = {
+          rejectUnauthorized:
+            process.env.PROXMOX_SSL_REJECT_UNAUTHORIZED !== "false",
+          ca: process.env.PROXMOX_SSL_CA,
+          cert: process.env.PROXMOX_SSL_CERT,
+          key: process.env.PROXMOX_SSL_KEY,
+        };
+      }
+    }
+
+    // Parse AWS configuration
+    if (process.env.AWS_ENABLED === "true") {
+      // Parse regions from JSON array or comma-separated string
+      let regions: string[] | undefined;
+      if (process.env.AWS_REGIONS) {
+        try {
+          const parsed = JSON.parse(process.env.AWS_REGIONS) as unknown;
+          if (Array.isArray(parsed)) {
+            regions = parsed.filter(
+              (item): item is string => typeof item === "string",
+            );
+          }
+        } catch {
+          // Not JSON — treat as comma-separated
+          regions = process.env.AWS_REGIONS.split(",").map((r) => r.trim()).filter(Boolean);
+        }
+      }
+
+      integrations.aws = {
+        enabled: true,
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        region: process.env.AWS_DEFAULT_REGION || undefined,
+        regions,
+        sessionToken: process.env.AWS_SESSION_TOKEN,
+        profile: process.env.AWS_PROFILE,
+        endpoint: process.env.AWS_ENDPOINT,
+      };
+    }
+
     return integrations;
   }
 
@@ -483,6 +584,12 @@ export class ConfigService {
           process.env.UI_SHOW_HOME_PAGE_RUN_CHART !== "false",
       };
 
+      // Parse provisioning safety configuration
+      const provisioning = {
+        allowDestructiveActions:
+          process.env.ALLOW_DESTRUCTIVE_PROVISIONING === "true",
+      };
+
       // Build configuration object
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
@@ -502,6 +609,7 @@ export class ConfigService {
         cache,
         executionQueue,
         integrations,
+        provisioning,
         ui,
       };
 
@@ -617,6 +725,13 @@ export class ConfigService {
   }
 
   /**
+   * Check whether destructive provisioning actions (destroy/terminate) are allowed
+   */
+  public isDestructiveProvisioningAllowed(): boolean {
+    return this.config.provisioning.allowDestructiveActions;
+  }
+
+  /**
    * Get PuppetDB configuration if enabled
    */
   public getPuppetDBConfig():
@@ -673,5 +788,18 @@ export class ConfigService {
    */
   public getUIConfig(): typeof this.config.ui {
     return this.config.ui;
+  }
+
+  /**
+   * Get AWS configuration if enabled
+   */
+  public getAWSConfig():
+    | (typeof this.config.integrations.aws & { enabled: true })
+    | null {
+    const aws = this.config.integrations.aws;
+    if (aws?.enabled) {
+      return aws as typeof aws & { enabled: true };
+    }
+    return null;
   }
 }

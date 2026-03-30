@@ -14,7 +14,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { Database } from 'sqlite3';
+import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
+import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { AuthenticationService } from '../../src/services/AuthenticationService';
 import { PermissionService } from '../../src/services/PermissionService';
 import { UserService } from '../../src/services/UserService';
@@ -62,7 +63,7 @@ function calculateStats(durations: number[]): {
 }
 
 describe('RBAC Performance Tests', () => {
-  let db: Database;
+  let db: DatabaseAdapter;
   let authService: AuthenticationService;
   let permissionService: PermissionService;
   let userService: UserService;
@@ -77,7 +78,8 @@ describe('RBAC Performance Tests', () => {
 
   beforeAll(async () => {
     // Create in-memory database
-    db = new Database(':memory:');
+    db = new SQLiteAdapter(':memory:');
+    await db.initialize();
 
     // Initialize schema
     await initializeSchema(db);
@@ -495,137 +497,33 @@ describe('RBAC Performance Tests', () => {
 
 // Helper functions
 
-async function initializeSchema(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.exec(`
-      CREATE TABLE users (
-        id TEXT PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        passwordHash TEXT NOT NULL,
-        firstName TEXT NOT NULL,
-        lastName TEXT NOT NULL,
-        isActive INTEGER DEFAULT 1,
-        isAdmin INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL,
-        lastLoginAt TEXT
-      );
-
-      CREATE TABLE groups (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      CREATE TABLE roles (
-        id TEXT PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        description TEXT,
-        isBuiltIn INTEGER DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      CREATE TABLE permissions (
-        id TEXT PRIMARY KEY,
-        resource TEXT NOT NULL,
-        action TEXT NOT NULL,
-        description TEXT,
-        createdAt TEXT NOT NULL,
-        UNIQUE(resource, action)
-      );
-
-      CREATE TABLE user_groups (
-        userId TEXT NOT NULL,
-        groupId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, groupId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (groupId) REFERENCES groups(id)
-      );
-
-      CREATE TABLE user_roles (
-        userId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, roleId),
-        FOREIGN KEY (userId) REFERENCES users(id),
-        FOREIGN KEY (roleId) REFERENCES roles(id)
-      );
-
-      CREATE TABLE group_roles (
-        groupId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (groupId, roleId),
-        FOREIGN KEY (groupId) REFERENCES groups(id),
-        FOREIGN KEY (roleId) REFERENCES roles(id)
-      );
-
-      CREATE TABLE role_permissions (
-        roleId TEXT NOT NULL,
-        permissionId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (roleId, permissionId),
-        FOREIGN KEY (roleId) REFERENCES roles(id),
-        FOREIGN KEY (permissionId) REFERENCES permissions(id)
-      );
-
-      CREATE TABLE failed_login_attempts (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL,
-        attemptedAt TEXT NOT NULL,
-        ipAddress TEXT,
-        reason TEXT
-      );
-
-      CREATE TABLE account_lockouts (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL,
-        lockedAt TEXT NOT NULL,
-        lockoutType TEXT NOT NULL,
-        expiresAt TEXT,
-        failedAttempts INTEGER NOT NULL
-      );
-
-      -- Indexes for performance
-      CREATE INDEX idx_users_username ON users(username);
-      CREATE INDEX idx_users_email ON users(email);
-      CREATE INDEX idx_users_active ON users(isActive);
-      CREATE INDEX idx_user_roles_user ON user_roles(userId);
-      CREATE INDEX idx_user_roles_role ON user_roles(roleId);
-      CREATE INDEX idx_group_roles_group ON group_roles(groupId);
-      CREATE INDEX idx_group_roles_role ON group_roles(roleId);
-      CREATE INDEX idx_user_groups_user ON user_groups(userId);
-      CREATE INDEX idx_user_groups_group ON user_groups(groupId);
-      CREATE INDEX idx_role_permissions_role ON role_permissions(roleId);
-      CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId);
-      CREATE INDEX idx_permissions_resource_action ON permissions(resource, action);
-
-      CREATE TABLE config (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
-      );
-
-      INSERT INTO config (key, value, updatedAt) VALUES
-        ('allow_self_registration', 'false', datetime('now')),
-        ('default_new_user_role', 'role-viewer-001', datetime('now'));
-    `, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+async function initializeSchema(db: DatabaseAdapter): Promise<void> {
+  await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER DEFAULT 1, isAdmin INTEGER DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
+  await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+  await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT, isBuiltIn INTEGER DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+  await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT, createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
+  await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (groupId) REFERENCES groups(id) )`);
+  await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (roleId) REFERENCES roles(id) )`);
+  await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id), FOREIGN KEY (roleId) REFERENCES roles(id) )`);
+  await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id), FOREIGN KEY (permissionId) REFERENCES permissions(id) )`);
+  await db.execute(`CREATE TABLE failed_login_attempts ( id TEXT PRIMARY KEY, username TEXT NOT NULL, attemptedAt TEXT NOT NULL, ipAddress TEXT, reason TEXT )`);
+  await db.execute(`CREATE TABLE account_lockouts ( id TEXT PRIMARY KEY, username TEXT NOT NULL, lockedAt TEXT NOT NULL, lockoutType TEXT NOT NULL, expiresAt TEXT, failedAttempts INTEGER NOT NULL )`);
+  await db.execute(`CREATE INDEX idx_users_username ON users(username)`);
+  await db.execute(`CREATE INDEX idx_users_email ON users(email)`);
+  await db.execute(`CREATE INDEX idx_users_active ON users(isActive)`);
+  await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
+  await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
+  await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
+  await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
+  await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
+  await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
+  await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
+  await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
+  await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
+  await db.execute(`CREATE TABLE config ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
+  await db.execute(`INSERT INTO config (key, value, updatedAt) VALUES ('allow_self_registration', 'false', datetime('now')), ('default_new_user_role', '', datetime('now'))`);
 }
 
-async function closeDatabase(db: Database): Promise<void> {
-  return new Promise((resolve, reject) => {
-    db.close((err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+async function closeDatabase(db: DatabaseAdapter): Promise<void> {
+  await db.close();
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { router } from '../lib/router.svelte';
-  import { PuppetserverSetupGuide, PuppetdbSetupGuide, BoltSetupGuide, HieraSetupGuide, AnsibleSetupGuide, SSHSetupGuide } from '../components';
+  import { PuppetserverSetupGuide, PuppetdbSetupGuide, BoltSetupGuide, HieraSetupGuide, AnsibleSetupGuide, SSHSetupGuide, ProxmoxSetupGuide, AWSSetupGuide } from '../components';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { get } from '../lib/api';
@@ -69,7 +69,7 @@
 
 {#if integration === 'puppetserver'}
   <!-- Use the dedicated Puppetserver setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -96,7 +96,7 @@
   </div>
 {:else if integration === 'puppetdb'}
   <!-- Use the dedicated PuppetDB setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -123,7 +123,7 @@
   </div>
 {:else if integration === 'bolt'}
   <!-- Use the dedicated Bolt setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -150,7 +150,7 @@
   </div>
 {:else if integration === 'hiera'}
   <!-- Use the dedicated Hiera setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -177,7 +177,7 @@
   </div>
 {:else if integration === 'ansible'}
   <!-- Use the dedicated Ansible setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -204,7 +204,7 @@
   </div>
 {:else if integration === 'ssh'}
   <!-- Use the dedicated SSH setup guide component -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <button
       type="button"
       onclick={goBack}
@@ -229,9 +229,63 @@
       </div>
     {/if}
   </div>
+{:else if integration === 'proxmox'}
+  <!-- Use the dedicated Proxmox setup guide component -->
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
+    <button
+      type="button"
+      onclick={goBack}
+      class="mb-4 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+    >
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        />
+      </svg>
+      Back to Home
+    </button>
+    <ProxmoxSetupGuide />
+
+    <!-- Expert Mode Debug Panel -->
+    {#if expertMode.enabled && debugInfo}
+      <div class="mt-8">
+        <ExpertModeDebugPanel {debugInfo} compact={true} />
+      </div>
+    {/if}
+  </div>
+{:else if integration === 'aws'}
+  <!-- Use the dedicated AWS setup guide component -->
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
+    <button
+      type="button"
+      onclick={goBack}
+      class="mb-4 inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200"
+    >
+      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        />
+      </svg>
+      Back to Home
+    </button>
+    <AWSSetupGuide />
+
+    <!-- Expert Mode Debug Panel -->
+    {#if expertMode.enabled && debugInfo}
+      <div class="mt-8">
+        <ExpertModeDebugPanel {debugInfo} compact={true} />
+      </div>
+    {/if}
+  </div>
 {:else}
   <!-- Generic setup guide for other integrations -->
-  <div class="mx-auto max-w-4xl px-4 py-8">
+  <div class="w-full px-4 sm:px-6 lg:px-8 py-8">
     <!-- Header -->
     <div class="mb-8">
       <button

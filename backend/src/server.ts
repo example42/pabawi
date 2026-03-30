@@ -28,6 +28,10 @@ import { createUsersRouter } from "./routes/users";
 import { createGroupsRouter } from "./routes/groups";
 import { createRolesRouter } from "./routes/roles";
 import { createPermissionsRouter } from "./routes/permissions";
+import { createJournalRouter } from "./routes/journal";
+import { createIntegrationConfigRouter } from "./routes/integrationConfig";
+import { createAWSRouter } from "./routes/integrations/aws";
+import { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
@@ -52,10 +56,13 @@ import { AnsibleService } from "./integrations/ansible/AnsibleService";
 import { AnsiblePlugin } from "./integrations/ansible/AnsiblePlugin";
 import { SSHPlugin } from "./integrations/ssh/SSHPlugin";
 import { loadSSHConfig } from "./integrations/ssh/config";
+import { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
+import { IntegrationConfigService } from "./services/IntegrationConfigService";
+import { JournalService } from "./services/journal/JournalService";
 
 /**
  * Initialize and start the application
@@ -678,6 +685,203 @@ async function startServer(): Promise<Express> {
       operation: "initializeSSH",
     });
 
+    // Create IntegrationConfigService early so all plugins can use DB config overrides
+    const integrationConfigService = new IntegrationConfigService(
+      databaseService.getConnection(),
+      process.env.JWT_SECRET ?? "default-secret",
+      (integrationName: string) => {
+        // Provide .env config as the base for each integration
+        const integration = config.integrations[integrationName as keyof typeof config.integrations];
+        if (!integration) return {};
+        return integration as unknown as Record<string, unknown>;
+      },
+    );
+    logger.info("IntegrationConfigService initialized", {
+      component: "Server",
+      operation: "startServer",
+    });
+
+    // Initialize Proxmox integration only if configured
+    let proxmoxPlugin: ProxmoxIntegration | undefined;
+    const proxmoxConfig = config.integrations.proxmox;
+    const proxmoxConfigured = proxmoxConfig?.enabled === true;
+
+    logger.debug("=== Proxmox Integration Setup ===", {
+      component: "Server",
+      operation: "initializeProxmox",
+      metadata: {
+        configured: proxmoxConfigured,
+        enabled: proxmoxConfig?.enabled,
+        hasHost: !!proxmoxConfig?.host,
+      },
+    });
+
+    if (proxmoxConfigured && proxmoxConfig) {
+      logger.info("Initializing Proxmox integration...", {
+        component: "Server",
+        operation: "initializeProxmox",
+      });
+      try {
+        proxmoxPlugin = new ProxmoxIntegration(logger, performanceMonitor);
+        logger.debug("ProxmoxIntegration instance created", {
+          component: "Server",
+          operation: "initializeProxmox",
+        });
+
+        // Merge .env config with DB-stored config (DB overrides .env)
+        const effectiveProxmoxConfig = await integrationConfigService.getEffectiveConfig("proxmox");
+        const mergedProxmoxConfig = {
+          ...proxmoxConfig,
+          ...(Object.keys(effectiveProxmoxConfig).length > 0 ? effectiveProxmoxConfig : {}),
+        };
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: true,
+          name: "proxmox",
+          type: "both",
+          config: mergedProxmoxConfig as unknown as Record<string, unknown>,
+          priority: proxmoxConfig.priority ?? 7, // Default 7: between Bolt/PuppetDB (10) and Hiera (6)
+        };
+
+        logger.debug("Registering Proxmox plugin", {
+          component: "Server",
+          operation: "initializeProxmox",
+          metadata: { config: integrationConfig },
+        });
+        integrationManager.registerPlugin(
+          proxmoxPlugin,
+          integrationConfig,
+        );
+
+        logger.info("Proxmox integration registered successfully", {
+          component: "Server",
+          operation: "initializeProxmox",
+          metadata: {
+            enabled: true,
+            host: proxmoxConfig.host,
+            port: proxmoxConfig.port ?? 8006,
+            hasToken: !!proxmoxConfig.token,
+            hasPassword: !!proxmoxConfig.password,
+            priority: proxmoxConfig.priority ?? 7,
+          },
+        });
+      } catch (error) {
+        logger.warn(`WARNING: Failed to initialize Proxmox integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeProxmox",
+        });
+        if (error instanceof Error && error.stack) {
+          logger.error("Proxmox initialization error stack", {
+            component: "Server",
+            operation: "initializeProxmox",
+          }, error);
+        }
+        proxmoxPlugin = undefined;
+      }
+    } else {
+      logger.warn("Proxmox integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeProxmox",
+      });
+      logger.info("Set PROXMOX_ENABLED=true and PROXMOX_HOST to enable Proxmox integration", {
+        component: "Server",
+        operation: "initializeProxmox",
+      });
+    }
+    logger.debug("=== End Proxmox Integration Setup ===", {
+      component: "Server",
+      operation: "initializeProxmox",
+    });
+
+    // Initialize AWS integration only if configured
+    let awsPlugin: AWSPlugin | undefined;
+    const awsConfig = config.integrations.aws;
+    const awsConfigured = awsConfig?.enabled === true;
+
+    logger.debug("=== AWS Integration Setup ===", {
+      component: "Server",
+      operation: "initializeAWS",
+      metadata: {
+        configured: awsConfigured,
+        enabled: awsConfig?.enabled,
+        hasAccessKey: !!awsConfig?.accessKeyId,
+        region: awsConfig?.region,
+      },
+    });
+
+    if (awsConfigured && awsConfig) {
+      logger.info("Initializing AWS integration...", {
+        component: "Server",
+        operation: "initializeAWS",
+      });
+      try {
+        awsPlugin = new AWSPlugin(logger, performanceMonitor);
+        logger.debug("AWSPlugin instance created", {
+          component: "Server",
+          operation: "initializeAWS",
+        });
+
+        // Merge .env config with DB-stored config (DB overrides .env)
+        const effectiveAwsConfig = await integrationConfigService.getEffectiveConfig("aws");
+        const mergedAwsConfig = {
+          ...awsConfig,
+          ...(Object.keys(effectiveAwsConfig).length > 0 ? effectiveAwsConfig : {}),
+        };
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: true,
+          name: "aws",
+          type: "both",
+          config: mergedAwsConfig as unknown as Record<string, unknown>,
+          priority: 7,
+        };
+
+        logger.debug("Registering AWS plugin", {
+          component: "Server",
+          operation: "initializeAWS",
+          metadata: { config: { ...integrationConfig, config: { region: mergedAwsConfig.region } } },
+        });
+        integrationManager.registerPlugin(awsPlugin, integrationConfig);
+
+        logger.info("AWS integration registered successfully", {
+          component: "Server",
+          operation: "initializeAWS",
+          metadata: {
+            enabled: true,
+            region: mergedAwsConfig.region ?? "us-east-1",
+            regions: mergedAwsConfig.regions,
+            hasAccessKey: !!mergedAwsConfig.accessKeyId,
+            priority: 7,
+          },
+        });
+      } catch (error) {
+        logger.warn(`WARNING: Failed to initialize AWS integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeAWS",
+        });
+        if (error instanceof Error && error.stack) {
+          logger.error("AWS initialization error stack", {
+            component: "Server",
+            operation: "initializeAWS",
+          }, error);
+        }
+        awsPlugin = undefined;
+      }
+    } else {
+      logger.warn("AWS integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeAWS",
+      });
+      logger.info("Set AWS_ENABLED=true and AWS_ACCESS_KEY_ID to enable AWS integration", {
+        component: "Server",
+        operation: "initializeAWS",
+      });
+    }
+    logger.debug("=== End AWS Integration Setup ===", {
+      component: "Server",
+      operation: "initializeAWS",
+    });
+
     // Initialize all registered plugins
     logger.info("=== Initializing All Integration Plugins ===", {
       component: "Server",
@@ -745,6 +949,23 @@ async function startServer(): Promise<Express> {
       component: "Server",
       operation: "initializePlugins",
     });
+
+    // Create shared JournalService and wire it to plugins
+    const journalService = new JournalService(databaseService.getConnection());
+    if (proxmoxPlugin) {
+      proxmoxPlugin.setJournalService(journalService);
+      logger.info("JournalService wired to ProxmoxIntegration", {
+        component: "Server",
+        operation: "wireJournalService",
+      });
+    }
+    if (awsPlugin) {
+      awsPlugin.setJournalService(journalService);
+      logger.info("JournalService wired to AWSPlugin", {
+        component: "Server",
+        operation: "wireJournalService",
+      });
+    }
 
     // Make integration manager available globally for cross-service access
     (global as Record<string, unknown>).integrationManager = integrationManager;
@@ -879,6 +1100,14 @@ async function startServer(): Promise<Express> {
     // Permission management routes
     app.use("/api/permissions", authMiddleware, rateLimitMiddleware, createPermissionsRouter(databaseService));
 
+    // Journal routes
+    app.use("/api/journal", authMiddleware, rateLimitMiddleware, createJournalRouter(databaseService, {
+      puppetdb: puppetDBService,
+    }));
+
+    // Integration config routes
+    app.use("/api/config/integrations", authMiddleware, rateLimitMiddleware, createIntegrationConfigRouter(databaseService));
+
     // Monitoring routes (performance metrics)
     app.use("/api/monitoring", authMiddleware, rateLimitMiddleware, monitoringRouter);
 
@@ -888,14 +1117,18 @@ async function startServer(): Promise<Express> {
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('ansible', 'read'),
-      createInventoryRouter(boltService, integrationManager),
+      createInventoryRouter(boltService, integrationManager, {
+        allowDestructiveActions: config.provisioning.allowDestructiveActions,
+      }),
     );
     app.use(
       "/api/nodes",
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('ansible', 'read'),
-      createInventoryRouter(boltService, integrationManager),
+      createInventoryRouter(boltService, integrationManager, {
+        allowDestructiveActions: config.provisioning.allowDestructiveActions,
+      }),
     );
     app.use(
       "/api/nodes",
@@ -1019,6 +1252,7 @@ async function startServer(): Promise<Express> {
         puppetserverService,
         databaseService.getConnection(),
         undefined, // JWT secret is read from environment by AuthenticationService
+        { allowDestructiveProvisioning: config.provisioning.allowDestructiveActions },
       ),
     );
     app.use(
@@ -1027,6 +1261,20 @@ async function startServer(): Promise<Express> {
       rateLimitMiddleware,
       createHieraRouter(integrationManager),
     );
+
+    // AWS integration routes (conditional on plugin availability)
+    const awsPluginInstance = integrationManager.getExecutionTool("aws") as AWSPlugin | null;
+    if (awsPluginInstance) {
+      app.use(
+        "/api/integrations/aws",
+        authMiddleware,
+        rateLimitMiddleware,
+        createAWSRouter(awsPluginInstance, integrationManager, {
+          allowDestructiveActions: config.provisioning.allowDestructiveActions,
+        }),
+      );
+    }
+
     app.use(
       "/api/debug",
       authMiddleware,

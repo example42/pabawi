@@ -25,6 +25,8 @@
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import ExecutionList from '../components/ExecutionList.svelte';
+  import ManageTab from '../components/ManageTab.svelte';
+  import JournalTimeline from '../components/JournalTimeline.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -103,7 +105,7 @@
   const nodeId = $derived(params?.id || '');
 
   // Tab types
-  type TabId = 'overview' | 'facts' | 'actions' | 'puppet' | 'hiera';
+  type TabId = 'overview' | 'facts' | 'actions' | 'puppet' | 'hiera' | 'journal' | 'manage';
   type PuppetSubTabId = 'node-status' | 'catalog-compilation' | 'puppet-reports' | 'catalog' | 'events' | 'managed-resources';
 
   // State
@@ -122,10 +124,11 @@
   // Command whitelist state
   let commandWhitelist = $state<CommandWhitelistConfig | null>(null);
 
-  // Facts state
-  let facts = $state<Facts | null>(null);
-  let factsLoading = $state(false);
-  let factsError = $state<string | null>(null);
+  // Facts state — multi-source
+  let allSourceFacts = $state<Record<string, { facts: Record<string, unknown>; timestamp: string }>>({});
+  let allSourceErrors = $state<Record<string, string>>({});
+  let allSourceFactsLoading = $state(false);
+  let gatheringFacts = $state(false);
 
   // Command execution state
   let commandInput = $state('');
@@ -136,6 +139,10 @@
   let commandExecutionId = $state<string | null>(null);
   let commandStream = $state<ExecutionStream | null>(null);
   let availableExecutionTools = $state<Array<'bolt' | 'ansible' | 'ssh'>>(['bolt']);
+  let commandSectionExpanded = $state(false);
+
+  // Task execution state
+  let taskSectionExpanded = $state(false);
 
   // Re-execution state
   let initialTaskName = $state<string | undefined>(undefined);
@@ -244,13 +251,15 @@
   }
 
   // Fetch node details
-  async function fetchNode(): Promise<void> {
+  async function fetchNode(nocache = false): Promise<void> {
     loading = true;
     error = null;
 
     try {
-      const data = await get<{ node: Node; _debug?: DebugInfo }>(`/api/nodes/${nodeId}`, {
+      const url = nocache ? `/api/nodes/${nodeId}?nocache=1` : `/api/nodes/${nodeId}`;
+      const data = await get<{ node: Node; _debug?: DebugInfo }>(url, {
         maxRetries: 2,
+        timeout: 20000, // 20s timeout to avoid indefinite hang
       });
 
       node = data.node;
@@ -268,26 +277,58 @@
     }
   }
 
-  // Gather facts
+  // Fetch facts from all information sources (GET)
+  async function fetchAllSourceFacts(): Promise<void> {
+    if (allSourceFactsLoading) return;
+    // Check cache first
+    if (dataCache['all-source-facts']) {
+      const cached = dataCache['all-source-facts'];
+      allSourceFacts = cached.sources;
+      allSourceErrors = cached.errors;
+      return;
+    }
+
+    allSourceFactsLoading = true;
+    allSourceErrors = {};
+
+    try {
+      const data = await get<{
+        sources: Record<string, { facts: Record<string, unknown>; timestamp: string }>;
+        errors?: Record<string, string>;
+      }>(`/api/nodes/${nodeId}/facts`, { maxRetries: 2 });
+
+      allSourceFacts = data.sources ?? {};
+      allSourceErrors = data.errors ?? {};
+      dataCache['all-source-facts'] = { sources: allSourceFacts, errors: allSourceErrors };
+    } catch (err) {
+      console.error('Error fetching all source facts:', err);
+    } finally {
+      allSourceFactsLoading = false;
+    }
+  }
+
+  // Gather facts actively via SSH/Ansible (POST) and refresh
   async function gatherFacts(): Promise<void> {
-    factsLoading = true;
-    factsError = null;
+    gatheringFacts = true;
 
     try {
       showInfo('Gathering facts...');
 
-      const data = await post<{ facts: Facts }>(`/api/nodes/${nodeId}/facts`, undefined, {
+      await post(`/api/nodes/${nodeId}/facts`, undefined, {
         maxRetries: 1,
       });
 
-      facts = data.facts;
+      // Clear cache and re-fetch from all sources to pick up new data
+      delete dataCache['all-source-facts'];
+      await fetchAllSourceFacts();
+
       showSuccess('Facts gathered successfully');
     } catch (err) {
-      factsError = err instanceof Error ? err.message : 'An unknown error occurred';
+      const errMsg = err instanceof Error ? err.message : 'An unknown error occurred';
       console.error('Error gathering facts:', err);
-      showError('Failed to gather facts', factsError);
+      showError('Failed to gather facts', errMsg);
     } finally {
-      factsLoading = false;
+      gatheringFacts = false;
     }
   }
 
@@ -930,18 +971,18 @@
   async function loadTabData(tabId: TabId): Promise<void> {
     switch (tabId) {
       case 'overview':
-        // Load PuppetDB facts for OS/IP info display (if not already loaded)
+        // Load PuppetDB facts for OS/IP info display (non-blocking)
         if (!puppetdbFacts && !puppetdbFactsLoading && !puppetdbFactsError) {
-          await fetchPuppetDBFacts();
+          fetchPuppetDBFacts();
         }
-        // Load latest puppet reports for overview (if not already loaded)
+        // Load latest puppet reports for overview (non-blocking)
         if (puppetReports.length === 0 && !puppetReportsLoading && !puppetReportsError) {
-          await fetchPuppetReports();
+          fetchPuppetReports();
         }
         break;
       case 'facts':
-        // Load facts from PuppetDB only (Puppetserver facts removed per task 16)
-        await fetchPuppetDBFacts();
+        // Load facts from all information sources (non-blocking)
+        fetchAllSourceFacts();
         break;
       case 'actions':
         // Execution history is loaded on demand in the actions tab
@@ -987,7 +1028,7 @@
     const subTabParam = url.searchParams.get('subtab') as PuppetSubTabId | null;
 
     // Set main tab
-    if (tabParam && ['overview', 'facts', 'actions', 'puppet', 'hiera'].includes(tabParam)) {
+    if (tabParam && ['overview', 'facts', 'actions', 'puppet', 'hiera', 'journal', 'manage'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
@@ -1145,27 +1186,33 @@
       }
     }
 
-    // Fallback to Bolt facts if PuppetDB facts not available
-    if (!info.os && facts?.facts) {
-      const boltFacts = facts.facts;
+    // Fallback to other sources if PuppetDB facts not available
+    if (!info.os) {
+      // Try each source from allSourceFacts (bolt, ssh, ansible, etc.)
+      for (const [, sourceData] of Object.entries(allSourceFacts)) {
+        if (!sourceData?.facts) continue;
+        const f = sourceData.facts as Record<string, any>;
 
-      if (boltFacts.os?.name && boltFacts.os?.release?.full) {
-        info.os = `${boltFacts.os.name} ${boltFacts.os.release.full}`;
-      } else if (boltFacts.operatingsystem && boltFacts.operatingsystemrelease) {
-        info.os = `${boltFacts.operatingsystem} ${boltFacts.operatingsystemrelease}`;
-      }
+        if (!info.os) {
+          if (f.os?.name && f.os?.release?.full) {
+            info.os = `${f.os.name} ${f.os.release.full}`;
+          } else if (f.operatingsystem && f.operatingsystemrelease) {
+            info.os = `${f.operatingsystem} ${f.operatingsystemrelease}`;
+          }
+        }
 
-      info.ip = info.ip || boltFacts.ipaddress || boltFacts.networking?.ip;
-      info.hostname = info.hostname || boltFacts.hostname || boltFacts.fqdn;
-      info.kernel = info.kernel || boltFacts.kernel;
-      info.architecture = info.architecture || boltFacts.architecture;
-      info.puppetVersion = info.puppetVersion || boltFacts.aio_agent_version;
-      info.memory = info.memory || boltFacts.memory?.system?.total;
-      info.cpuCount = info.cpuCount || boltFacts.processors?.count;
-      info.uptime = info.uptime || boltFacts.system_uptime?.uptime;
+        info.ip = info.ip || f.ipaddress || f.networking?.ip;
+        info.hostname = info.hostname || f.hostname || f.fqdn;
+        info.kernel = info.kernel || f.kernel;
+        info.architecture = info.architecture || f.architecture;
+        info.puppetVersion = info.puppetVersion || f.aio_agent_version;
+        info.memory = info.memory || f.memory?.system?.total;
+        info.cpuCount = info.cpuCount || f.processors?.count;
+        info.uptime = info.uptime || f.system_uptime?.uptime;
 
-      if (!info.disks && boltFacts.disks && typeof boltFacts.disks === 'object') {
-        info.disks = Object.keys(boltFacts.disks);
+        if (!info.disks && f.disks && typeof f.disks === 'object') {
+          info.disks = Object.keys(f.disks);
+        }
       }
     }
 
@@ -1194,6 +1241,9 @@
     fetchCommandWhitelist();
     fetchExecutionTools();
 
+    // Pre-fetch all-source facts in background so the facts tab loads instantly
+    fetchAllSourceFacts();
+
     // Load overview tab data if it's the active tab
     if (activeTab === 'overview') {
       loadTabData('overview');
@@ -1212,7 +1262,7 @@
   <title>{pageTitle}</title>
 </svelte:head>
 
-<div class="container mx-auto px-4 py-8">
+<div class="w-full px-4 sm:px-6 lg:px-8 py-8">
   <!-- Back button -->
   <button
     type="button"
@@ -1288,6 +1338,20 @@
           onclick={() => switchTab('hiera')}
         >
           Hiera
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'journal' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('journal')}
+        >
+          Journal
+        </button>
+        <button
+          type="button"
+          class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'manage' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+          onclick={() => switchTab('manage')}
+        >
+          Manage
         </button>
       </nav>
     </div>
@@ -1471,7 +1535,14 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                       {#each puppetReports.slice(0, 5) as report}
-                        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <tr
+                          class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                          onclick={() => {
+                            switchTab('puppet');
+                            switchPuppetSubTab('puppet-reports');
+                            fetchReportDetails(report);
+                          }}
+                        >
                           <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
                             {formatTimestamp(report.start_time)}
                           </td>
@@ -1582,18 +1653,16 @@
             <div class="mb-4">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                View facts from multiple sources with timestamps and categorization
+                View facts from all available information sources
               </p>
             </div>
 
             <MultiSourceFactsViewer
-              boltFacts={facts}
-              boltLoading={factsLoading}
-              boltError={factsError}
-              onGatherBoltFacts={gatherFacts}
-              puppetdbFacts={puppetdbFacts}
-              puppetdbLoading={puppetdbFactsLoading}
-              puppetdbError={puppetdbFactsError}
+              sources={allSourceFacts}
+              sourceErrors={allSourceErrors}
+              loading={allSourceFactsLoading}
+              onGatherFacts={gatherFacts}
+              gatheringFacts={gatheringFacts}
             />
           </div>
         </div>
@@ -1611,168 +1680,212 @@
             />
           </div>
 
-          <!-- Playbook Execution Section -->
-          <div>
-            <AnsiblePlaybookInterface nodeId={nodeId} onExecutionComplete={fetchExecutions} />
-          </div>
-
           <!-- Command Execution Section -->
-    <div class="mb-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <div class="mb-4 flex items-center gap-3">
-        <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Execute Command</h2>
-        <IntegrationBadge integration={commandTool} variant="badge" size="sm" />
-      </div>
-
-      <!-- Available Commands Display -->
-      {#if commandWhitelist}
-        <div class="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
-          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            Available Commands
-          </h3>
-          {#if commandWhitelist.allowAll}
-            <p class="text-sm text-gray-600 dark:text-gray-400">
-              All commands are allowed
-            </p>
-          {:else if !commandWhitelist.whitelist || commandWhitelist.whitelist.length === 0}
-            <p class="text-sm text-red-600 dark:text-red-400">
-              No commands are allowed (whitelist is empty)
-            </p>
-          {:else}
-            <div class="flex flex-wrap gap-2">
-              {#each commandWhitelist.whitelist as cmd}
-                <button
-                  type="button"
-                  onclick={() => commandInput = cmd}
-                  class="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-mono bg-white text-gray-700 border border-gray-300 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
-                >
-                  {cmd}
-                  {#if commandWhitelist.matchMode === 'prefix'}
-                    <span class="ml-1 text-gray-400">*</span>
-                  {/if}
-                </button>
-              {/each}
-            </div>
-            {#if commandWhitelist.matchMode === 'prefix'}
-              <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                * Prefix match mode: commands starting with these prefixes are allowed
-              </p>
-            {/if}
-          {/if}
-        </div>
-      {/if}
-
-      <form onsubmit={executeCommand} class="space-y-4">
-        {#if availableExecutionTools.length > 1}
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Execution Tool
-            </label>
-            <div class="flex gap-2">
-              {#each availableExecutionTools as tool}
-                <button
-                  type="button"
-                  onclick={() => commandTool = tool}
-                  class="flex items-center gap-2 rounded-lg border-2 px-4 py-2 text-sm font-medium transition-all {commandTool === tool
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-400 dark:hover:bg-gray-700'}"
-                  disabled={commandExecuting}
-                >
-                  <IntegrationBadge integration={tool} variant="dot" size="md" />
-                  <span class="capitalize">{tool}</span>
-                  {#if commandTool === tool}
-                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-                    </svg>
-                  {/if}
-                </button>
-              {/each}
-            </div>
-          </div>
-        {/if}
-
-        <div>
-          <label for="command-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Command
-          </label>
-          <input
-            id="command-input"
-            type="text"
-            bind:value={commandInput}
-            placeholder="Enter command to execute..."
-            class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
-            disabled={commandExecuting}
-          />
-        </div>
-
-        <button
-          type="submit"
-          class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          disabled={commandExecuting || !commandInput.trim()}
+    <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <button
+        type="button"
+        class="flex w-full items-center justify-between text-left"
+        onclick={() => commandSectionExpanded = !commandSectionExpanded}
+      >
+        <h2 class="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
+          <svg class="h-6 w-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          Execute Command
+          <IntegrationBadge integration={commandTool} variant="badge" size="sm" />
+        </h2>
+        <svg
+          class="h-5 w-5 transform text-gray-500 transition-transform dark:text-gray-400"
+          class:rotate-180={commandSectionExpanded}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
         >
-          {commandExecuting ? 'Executing...' : 'Execute'}
-        </button>
-      </form>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
 
-      {#if commandExecuting}
-        <div class="mt-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <LoadingSpinner size="sm" />
-          <span>Executing command...</span>
-        </div>
-      {/if}
-
-      {#if commandError}
-        <div class="mt-4">
-          <ErrorAlert message="Command execution failed" details={commandError} />
-        </div>
-      {/if}
-
-      {#if commandStream && expertMode.enabled && (commandStream.executionStatus === 'running' || commandStream.isConnecting)}
-        <!-- Real-time output viewer for running executions in expert mode -->
-        <div class="mt-4">
-          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
-          <RealtimeOutputViewer stream={commandStream} executionId={commandExecutionId ?? ''} autoConnect={false} />
-        </div>
-      {:else if commandResult}
-        <!-- Static output for completed executions or when expert mode is disabled -->
-        <div class="mt-4 space-y-3">
-          <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Result:</h3>
-          <div class="mb-2">
-            <StatusBadge status={commandResult.status} />
-          </div>
-          {#if commandResult.results.length > 0}
-            {#each commandResult.results as result}
-              {#if result.error}
-                <div class="mt-2">
-                  <ErrorAlert message="Execution error" details={result.error} />
+      {#if commandSectionExpanded}
+        <div class="mt-4 space-y-4">
+          <!-- Available Commands Display -->
+          {#if commandWhitelist}
+            <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+              <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Available Commands
+              </h3>
+              {#if commandWhitelist.allowAll}
+                <p class="text-sm text-gray-600 dark:text-gray-400">
+                  All commands are allowed
+                </p>
+              {:else if !commandWhitelist.whitelist || commandWhitelist.whitelist.length === 0}
+                <p class="text-sm text-red-600 dark:text-red-400">
+                  No commands are allowed (whitelist is empty)
+                </p>
+              {:else}
+                <div class="flex flex-wrap gap-2">
+                  {#each commandWhitelist.whitelist as cmd}
+                    <button
+                      type="button"
+                      onclick={() => commandInput = cmd}
+                      class="inline-flex items-center rounded-md px-2.5 py-1 text-sm font-mono bg-white text-gray-700 border border-gray-300 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-700"
+                    >
+                      {cmd}
+                      {#if commandWhitelist.matchMode === 'prefix'}
+                        <span class="ml-1 text-gray-400">*</span>
+                      {/if}
+                    </button>
+                  {/each}
                 </div>
+                {#if commandWhitelist.matchMode === 'prefix'}
+                  <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    * Prefix match mode: commands starting with these prefixes are allowed
+                  </p>
+                {/if}
               {/if}
-              {#if result.output}
-                <CommandOutput
-                  stdout={result.output.stdout}
-                  stderr={result.output.stderr}
-                  exitCode={result.output.exitCode}
-                  boltCommand={commandResult.command}
-                />
+            </div>
+          {/if}
+
+          <form onsubmit={executeCommand} class="space-y-4">
+            {#if availableExecutionTools.length > 1}
+              <div>
+                <div class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Execution Tool
+                </div>
+                <div class="flex gap-2" role="group" aria-label="Execution Tool">
+                  {#each availableExecutionTools as tool}
+                    <button
+                      type="button"
+                      onclick={() => commandTool = tool}
+                      class="flex items-center gap-2 rounded-lg border-2 px-4 py-2 text-sm font-medium transition-all {commandTool === tool
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                        : 'border-gray-300 bg-white text-gray-700 hover:border-blue-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-400 dark:hover:bg-gray-700'}"
+                      disabled={commandExecuting}
+                    >
+                      <IntegrationBadge integration={tool} variant="dot" size="md" />
+                      <span class="capitalize">{tool}</span>
+                      {#if commandTool === tool}
+                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                        </svg>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <div>
+              <label for="command-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Command
+              </label>
+              <input
+                id="command-input"
+                type="text"
+                bind:value={commandInput}
+                placeholder="Enter command to execute..."
+                class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+                disabled={commandExecuting}
+              />
+            </div>
+
+            <button
+              type="submit"
+              class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={commandExecuting || !commandInput.trim()}
+            >
+              {commandExecuting ? 'Executing...' : 'Execute'}
+            </button>
+          </form>
+
+          {#if commandExecuting}
+            <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+              <LoadingSpinner size="sm" />
+              <span>Executing command...</span>
+            </div>
+          {/if}
+
+          {#if commandError}
+            <div>
+              <ErrorAlert message="Command execution failed" details={commandError} />
+            </div>
+          {/if}
+
+          {#if commandStream && expertMode.enabled && (commandStream.executionStatus === 'running' || commandStream.isConnecting)}
+            <!-- Real-time output viewer for running executions in expert mode -->
+            <div>
+              <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Real-time Output:</h3>
+              <RealtimeOutputViewer stream={commandStream} executionId={commandExecutionId ?? ''} autoConnect={false} />
+            </div>
+          {:else if commandResult}
+            <!-- Static output for completed executions or when expert mode is disabled -->
+            <div class="space-y-3">
+              <h3 class="mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">Result:</h3>
+              <div class="mb-2">
+                <StatusBadge status={commandResult.status} />
+              </div>
+              {#if commandResult.results.length > 0}
+                {#each commandResult.results as result}
+                  {#if result.error}
+                    <div class="mt-2">
+                      <ErrorAlert message="Execution error" details={result.error} />
+                    </div>
+                  {/if}
+                  {#if result.output}
+                    <CommandOutput
+                      stdout={result.output.stdout}
+                      stderr={result.output.stderr}
+                      exitCode={result.output.exitCode}
+                      boltCommand={commandResult.command}
+                    />
+                  {/if}
+                {/each}
               {/if}
-            {/each}
+            </div>
           {/if}
         </div>
       {/if}
     </div>
 
+          <!-- Playbook Execution Section -->
+          <div>
+            <AnsiblePlaybookInterface nodeId={nodeId} onExecutionComplete={fetchExecutions} />
+          </div>
+
           <!-- Task Execution Section -->
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div class="mb-4 flex items-center gap-3">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Execute Task</h2>
-              <IntegrationBadge integration="bolt" variant="badge" size="sm" />
-            </div>
+            <button
+              type="button"
+              class="flex w-full items-center justify-between text-left"
+              onclick={() => taskSectionExpanded = !taskSectionExpanded}
+            >
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white flex items-center gap-3">
+                <svg class="h-6 w-6 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                Execute Task
+                <IntegrationBadge integration="bolt" variant="badge" size="sm" />
+              </h2>
+              <svg
+                class="h-5 w-5 transform text-gray-500 transition-transform dark:text-gray-400"
+                class:rotate-180={taskSectionExpanded}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
 
-            <TaskRunInterface
-              nodeId={nodeId}
-              onExecutionComplete={fetchExecutions}
-              initialTaskName={initialTaskName}
-              initialParameters={initialTaskParameters}
-            />
+            {#if taskSectionExpanded}
+              <div class="mt-4">
+                <TaskRunInterface
+                  nodeId={nodeId}
+                  onExecutionComplete={fetchExecutions}
+                  initialTaskName={initialTaskName}
+                  initialParameters={initialTaskParameters}
+                />
+              </div>
+            {/if}
           </div>
 
           <!-- Execution History Section -->
@@ -2135,6 +2248,85 @@
             <NodeHieraTab nodeId={nodeId} />
           </div>
         </div>
+      {/if}
+
+      <!-- Journal Tab -->
+      {#if activeTab === 'journal'}
+        <div class="space-y-6">
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-4 flex items-center gap-3">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Node Journal</h2>
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400">
+                Timeline
+              </span>
+            </div>
+            <p class="mb-6 text-sm text-gray-500 dark:text-gray-400">
+              Unified timeline of provisioning events, lifecycle actions, execution results, and manual notes for this node.
+            </p>
+
+            <JournalTimeline nodeId={nodeId} active={activeTab === 'journal'} />
+          </div>
+        </div>
+      {/if}
+
+      <!-- Manage Tab -->
+      {#if activeTab === 'manage'}
+        {#if node}
+          {@const nodeWithMeta = node as Node & { metadata?: { type?: string }; status?: string; sourceData?: Record<string, any> }}
+          {@const resolvedNodeType = nodeWithMeta.metadata?.type === 'qemu' ? 'vm' : nodeWithMeta.metadata?.type === 'lxc' ? 'lxc' : 'unknown'}
+          {@const resolvedStatus = nodeWithMeta.status || 'unknown'}
+          {@const sourceData = nodeWithMeta.sourceData}
+          {@const provisioningProviders = ['proxmox', 'aws']}
+          {@const providerName = sourceData ? Object.keys(sourceData).find(k => provisioningProviders.includes(k)) : undefined}
+          {@const providerData = providerName ? sourceData?.[providerName] : undefined}
+          {@const providerMetadata = providerData?.metadata}
+          {@const effectiveNodeId = providerData?.id || node.id}
+          {@const effectiveType = providerMetadata?.type === 'qemu' ? 'vm' : providerMetadata?.type === 'lxc' ? 'lxc' : resolvedNodeType}
+          {@const effectiveStatus = providerMetadata?.status || providerData?.status || resolvedStatus}
+
+          {#if providerName}
+            <ManageTab
+              nodeId={effectiveNodeId}
+              nodeType={effectiveType}
+              currentStatus={effectiveStatus}
+              onStatusChange={() => fetchNode(true)}
+            />
+          {:else}
+            <div class="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
+              <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p class="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                Lifecycle management is not available for this node.
+              </p>
+              <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                This node is not managed by a provisioning provider (Proxmox, AWS).
+              </p>
+            </div>
+          {/if}
+          {#if expertMode.enabled}
+            <div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs dark:border-blue-800 dark:bg-blue-900/20">
+              <div class="font-mono text-blue-800 dark:text-blue-400">
+                Debug: nodeId={effectiveNodeId}, nodeType={effectiveType}, currentStatus={effectiveStatus}
+              </div>
+              <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
+                node.id={node.id}
+              </div>
+              <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
+                provider={providerName || 'none'}, providerData.id={providerData?.id || 'undefined'}
+              </div>
+              <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
+                sources={sourceData ? Object.keys(sourceData).join(', ') : 'none'}
+              </div>
+              <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
+                metadata.type={providerMetadata?.type || 'undefined'}
+              </div>
+              <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
+                metadata.status={providerMetadata?.status || 'undefined'}
+              </div>
+            </div>
+          {/if}
+        {/if}
       {/if}
 
     </div>

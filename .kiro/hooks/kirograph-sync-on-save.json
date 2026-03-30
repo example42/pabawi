@@ -1,0 +1,25 @@
+{
+  "name": "KiroGraph Sync on Save",
+  "version": "1.0.0",
+  "description": "Incrementally sync the KiroGraph index when source files are saved.",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.py",
+      "**/*.go",
+      "**/*.rs",
+      "**/*.java",
+      "**/*.cs",
+      "**/*.rb",
+      "**/*.php"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "kirograph sync --quiet 2>/dev/null || true"
+  }
+}

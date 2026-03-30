@@ -206,10 +206,10 @@
   <!-- Source Selector -->
   {#if showSourceSelector && availableSources().length > 0}
     <div>
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <div class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         Facts Source
-      </label>
-      <div class="flex flex-wrap gap-2">
+      </div>
+      <div class="flex flex-wrap gap-2" role="group" aria-label="Facts Source">
         {#each availableSources() as source}
           <button
             type="button"
@@ -234,10 +234,10 @@
   <!-- Category Selector -->
   {#if showCategorySelector}
     <div>
-      <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+      <div class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
         Facts Category
-      </label>
-      <div class="flex flex-wrap gap-2">
+      </div>
+      <div class="flex flex-wrap gap-2" role="group" aria-label="Facts Category">
         {#each Object.entries(categoryLabels) as [category, label]}
           {@const factCount = category === 'full' ? Object.keys(currentFacts()).length : Object.keys(categorizeFacts(currentFacts())[category as FactCategory]).length}
           <button

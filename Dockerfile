@@ -51,7 +51,7 @@ ARG BUILDPLATFORM
 # Add metadata labels
 LABEL org.opencontainers.image.title="Pabawi"
 LABEL org.opencontainers.image.description="Puppet Ansible Bolt Awesome Web Interface"
-LABEL org.opencontainers.image.version="0.8.1"
+LABEL org.opencontainers.image.version="0.10.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
@@ -87,7 +87,7 @@ RUN apt-get update && \
     ruby-dev \
     build-essential \
     ansible \
-    && gem install openbolt -v 5.1.0 --no-document \
+    openbolt \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -104,10 +104,9 @@ COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/dist ./dist
 COPY --from=backend-deps --chown=pabawi:pabawi /app/backend/node_modules ./node_modules
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
 
-# Copy only database migrations (not copied by TypeScript compiler)
-# This avoids copying TypeScript sources into the runtime image
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/migrations ./dist/database/migrations
-
+# Copy database directory with all SQL files and migrations (not copied by TypeScript compiler)
+# This ensures schema files, migrations, and any future database-related files are included
+COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/ ./dist/database/
 
 # Copy built frontend to public directory
 COPY --from=frontend-builder --chown=pabawi:pabawi /app/frontend/dist ./public
@@ -141,7 +140,9 @@ ENV NODE_ENV=production \
     PUPPETDB_ENABLED=false \
     PUPPETSERVER_ENABLED=false \
     HIERA_ENABLED=false \
-    ANSIBLE_ENABLED=false
+    ANSIBLE_ENABLED=false \
+    PROXMOX_ENABLED=false \
+    AWS_ENABLED=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

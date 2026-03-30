@@ -1,4 +1,4 @@
-import type sqlite3 from "sqlite3";
+import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import type { ExecutionQueue } from "./ExecutionQueue";
 import type { ExecutionRepository, NodeResult } from "../database/ExecutionRepository";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
@@ -184,7 +184,7 @@ export interface BatchStatusResponse {
  */
 export class BatchExecutionService {
   constructor(
-    private db: sqlite3.Database,
+    private db: DatabaseAdapter,
     private executionQueue: ExecutionQueue,
     private executionRepository: ExecutionRepository,
     private integrationManager: IntegrationManager,
@@ -304,16 +304,7 @@ export class BatchExecutionService {
       0,
     ];
 
-    await new Promise<void>((resolve, reject) => {
-      this.db.run(sql, params, (err) => {
-        if (err) {
-          logger.error(`Failed to create batch execution record: ${err.message}`);
-          reject(new Error(`Failed to create batch execution: ${err.message}`));
-        } else {
-          resolve();
-        }
-      });
-    });
+    await this.db.execute(sql, params);
 
     logger.info(
       `Created batch execution ${batchId} with ${String(executionIds.length)} executions`,
@@ -332,178 +323,147 @@ export class BatchExecutionService {
    * Get batch execution status
    *
    * Fetches batch details and aggregates status from all individual executions.
+   * Supports optional status filtering.
+   *
+   * **Validates: Requirements 6.2, 6.3, 6.4, 6.8**
    *
    * @param batchId - Batch execution ID
+   * @param statusFilter - Optional status filter for executions
    * @returns Batch status with aggregated statistics
+   * @throws Error if batch ID does not exist
    */
-  /**
-     * Get batch execution status
-     *
-     * Fetches batch details and aggregates status from all individual executions.
-     * Supports optional status filtering.
-     *
-     * **Validates: Requirements 6.2, 6.3, 6.4, 6.8**
-     *
-     * @param batchId - Batch execution ID
-     * @param statusFilter - Optional status filter for executions
-     * @returns Batch status with aggregated statistics
-     * @throws Error if batch ID does not exist
-     */
-    async getBatchStatus(
-      batchId: string,
-      statusFilter?: string
-    ): Promise<BatchStatusResponse> {
-      const logger = new LoggerService();
+  async getBatchStatus(
+    batchId: string,
+    statusFilter?: string
+  ): Promise<BatchStatusResponse> {
+    const logger = new LoggerService();
 
-      // Step 1: Fetch batch execution record
-      const batchSql = "SELECT * FROM batch_executions WHERE id = ?";
-      const batchRow = await new Promise<BatchExecutionRow | undefined>((resolve, reject) => {
-        this.db.get(batchSql, [batchId], (err, row) => {
-          if (err) {
-            logger.error(`Failed to fetch batch execution: ${err.message}`);
-            reject(new Error(`Failed to fetch batch execution: ${err.message}`));
-          } else {
-            resolve(row as BatchExecutionRow | undefined);
+    // Step 1: Fetch batch execution record
+    const batchRow = await this.db.queryOne<BatchExecutionRow>(
+      "SELECT * FROM batch_executions WHERE id = ?",
+      [batchId]
+    );
+
+    if (!batchRow) {
+      throw new Error(`Batch execution ${batchId} not found`);
+    }
+
+    // Step 2: Fetch all executions for this batch
+    let executionsSql = "SELECT * FROM executions WHERE batch_id = ? ORDER BY batch_position ASC";
+    const executionsParams: (string | number)[] = [batchId];
+
+    // Apply status filter if provided
+    if (statusFilter) {
+      executionsSql = "SELECT * FROM executions WHERE batch_id = ? AND status = ? ORDER BY batch_position ASC";
+      executionsParams.push(statusFilter);
+    }
+
+    const executionRows = await this.db.query<ExecutionRow>(executionsSql, executionsParams);
+
+    // Step 3: Get node names from inventory
+    const inventory = await this.integrationManager.getAggregatedInventory();
+    const nodeMap = new Map(inventory.nodes.map(n => [n.id, n.name]));
+
+    // Step 4: Map execution rows to response format
+    const executions = executionRows.map(row => {
+      const nodeId = (JSON.parse(row.target_nodes) as string[])[0]; // Get first node ID
+      const nodeName = nodeMap.get(nodeId) ?? nodeId;
+
+      // Parse results if available
+      let result: { exitCode?: number; stdout?: string; stderr?: string } | undefined = undefined;
+      if (row.results) {
+        try {
+          const results = JSON.parse(row.results) as NodeResult[];
+          if (results.length > 0) {
+            const nodeResult = results[0];
+            result = {
+              exitCode: nodeResult.output?.exitCode,
+              stdout: nodeResult.output?.stdout ?? row.stdout ?? undefined,
+              stderr: nodeResult.output?.stderr ?? row.stderr ?? undefined,
+            };
           }
-        });
-      });
-
-      if (!batchRow) {
-        throw new Error(`Batch execution ${batchId} not found`);
-      }
-
-      // Step 2: Fetch all executions for this batch
-      let executionsSql = "SELECT * FROM executions WHERE batch_id = ? ORDER BY batch_position ASC";
-      const executionsParams: (string | number)[] = [batchId];
-
-      // Apply status filter if provided
-      if (statusFilter) {
-        executionsSql = "SELECT * FROM executions WHERE batch_id = ? AND status = ? ORDER BY batch_position ASC";
-        executionsParams.push(statusFilter);
-      }
-
-      const executionRows = await new Promise<ExecutionRow[]>((resolve, reject) => {
-        this.db.all(executionsSql, executionsParams, (err, rows) => {
-          if (err) {
-            logger.error(`Failed to fetch executions for batch: ${err.message}`);
-            reject(new Error(`Failed to fetch executions: ${err.message}`));
-          } else {
-            resolve(rows as ExecutionRow[]);
-          }
-        });
-      });
-
-      // Step 3: Get node names from inventory
-      const inventory = await this.integrationManager.getAggregatedInventory();
-      const nodeMap = new Map(inventory.nodes.map(n => [n.id, n.name]));
-
-      // Step 4: Map execution rows to response format
-      const executions = executionRows.map(row => {
-        const nodeId = (JSON.parse(row.target_nodes) as string[])[0]; // Get first node ID
-        const nodeName = nodeMap.get(nodeId) ?? nodeId;
-
-        // Parse results if available
-        let result: { exitCode?: number; stdout?: string; stderr?: string } | undefined = undefined;
-        if (row.results) {
-          try {
-            const results = JSON.parse(row.results) as NodeResult[];
-            if (results.length > 0) {
-              const nodeResult = results[0];
-              result = {
-                exitCode: nodeResult.output?.exitCode,
-                stdout: nodeResult.output?.stdout ?? row.stdout ?? undefined,
-                stderr: nodeResult.output?.stderr ?? row.stderr ?? undefined,
-              };
-            }
-          } catch {
-            logger.warn(`Failed to parse results for execution ${row.id}`);
-          }
-        }
-
-        // Calculate duration if completed
-        let duration: number | undefined;
-        if (row.started_at && row.completed_at) {
-          const startTime = new Date(row.started_at).getTime();
-          const endTime = new Date(row.completed_at).getTime();
-          duration = endTime - startTime;
-        }
-
-        return {
-          id: row.id,
-          nodeId,
-          nodeName,
-          status: row.status,
-          startedAt: row.started_at ? new Date(row.started_at) : undefined,
-          completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
-          duration,
-          result,
-        };
-      });
-
-      // Step 5: Aggregate statistics from all executions (not filtered)
-      const allExecutionsSql = "SELECT status, started_at FROM executions WHERE batch_id = ?";
-      const allExecutionRows = await new Promise<ExecutionStatusRow[]>((resolve, reject) => {
-        this.db.all(allExecutionsSql, [batchId], (err, rows) => {
-          if (err) {
-            logger.error(`Failed to fetch all executions for stats: ${err.message}`);
-            reject(new Error(`Failed to fetch executions: ${err.message}`));
-          } else {
-            resolve(rows as ExecutionStatusRow[]);
-          }
-        });
-      });
-
-      const stats = {
-        total: allExecutionRows.length,
-        queued: allExecutionRows.filter(r => r.status === "running" && !r.started_at).length,
-        running: allExecutionRows.filter(r => r.status === "running").length,
-        success: allExecutionRows.filter(r => r.status === "success").length,
-        failed: allExecutionRows.filter(r => r.status === "failed").length,
-      };
-
-      // Step 6: Calculate progress percentage
-      const completedCount = stats.success + stats.failed;
-      const progress = stats.total > 0 ? Math.round((completedCount / stats.total) * 100) : 0;
-
-      // Step 7: Determine batch status
-      let batchStatus: "running" | "success" | "failed" | "partial" | "cancelled" = "running";
-      if (completedCount === stats.total) {
-        if (stats.success === stats.total) {
-          batchStatus = "success";
-        } else if (stats.failed === stats.total) {
-          batchStatus = "failed";
-        } else {
-          batchStatus = "partial";
+        } catch {
+          logger.warn(`Failed to parse results for execution ${row.id}`);
         }
       }
 
-      // Step 8: Build batch execution object
-      const batch: BatchExecution = {
-        id: batchRow.id,
-        type: batchRow.type as "command" | "task" | "plan",
-        action: batchRow.action,
-        parameters: batchRow.parameters ? JSON.parse(batchRow.parameters) as Record<string, unknown> : undefined,
-        targetNodes: JSON.parse(batchRow.target_nodes) as string[],
-        targetGroups: JSON.parse(batchRow.target_groups) as string[],
-        status: batchStatus,
-        createdAt: new Date(batchRow.created_at),
-        startedAt: batchRow.started_at ? new Date(batchRow.started_at) : undefined,
-        completedAt: batchRow.completed_at ? new Date(batchRow.completed_at) : undefined,
-        userId: batchRow.user_id,
-        executionIds: JSON.parse(batchRow.execution_ids) as string[],
-        stats,
-      };
-
-      logger.info(
-        `Fetched batch status for ${batchId}: ${String(stats.success)}/${String(stats.total)} success, ${String(stats.failed)}/${String(stats.total)} failed, ${String(progress)}% complete`
-      );
+      // Calculate duration if completed
+      let duration: number | undefined;
+      if (row.started_at && row.completed_at) {
+        const startTime = new Date(row.started_at).getTime();
+        const endTime = new Date(row.completed_at).getTime();
+        duration = endTime - startTime;
+      }
 
       return {
-        batch,
-        executions,
-        progress,
+        id: row.id,
+        nodeId,
+        nodeName,
+        status: row.status,
+        startedAt: row.started_at ? new Date(row.started_at) : undefined,
+        completedAt: row.completed_at ? new Date(row.completed_at) : undefined,
+        duration,
+        result,
       };
+    });
+
+    // Step 5: Aggregate statistics from all executions (not filtered)
+    const allExecutionRows = await this.db.query<ExecutionStatusRow>(
+      "SELECT status, started_at FROM executions WHERE batch_id = ?",
+      [batchId]
+    );
+
+    const stats = {
+      total: allExecutionRows.length,
+      queued: allExecutionRows.filter(r => r.status === "running" && !r.started_at).length,
+      running: allExecutionRows.filter(r => r.status === "running").length,
+      success: allExecutionRows.filter(r => r.status === "success").length,
+      failed: allExecutionRows.filter(r => r.status === "failed").length,
+    };
+
+    // Step 6: Calculate progress percentage
+    const completedCount = stats.success + stats.failed;
+    const progress = stats.total > 0 ? Math.round((completedCount / stats.total) * 100) : 0;
+
+    // Step 7: Determine batch status
+    let batchStatus: "running" | "success" | "failed" | "partial" | "cancelled" = "running";
+    if (completedCount === stats.total) {
+      if (stats.success === stats.total) {
+        batchStatus = "success";
+      } else if (stats.failed === stats.total) {
+        batchStatus = "failed";
+      } else {
+        batchStatus = "partial";
+      }
     }
+
+    // Step 8: Build batch execution object
+    const batch: BatchExecution = {
+      id: batchRow.id,
+      type: batchRow.type as "command" | "task" | "plan",
+      action: batchRow.action,
+      parameters: batchRow.parameters ? JSON.parse(batchRow.parameters) as Record<string, unknown> : undefined,
+      targetNodes: JSON.parse(batchRow.target_nodes) as string[],
+      targetGroups: JSON.parse(batchRow.target_groups) as string[],
+      status: batchStatus,
+      createdAt: new Date(batchRow.created_at),
+      startedAt: batchRow.started_at ? new Date(batchRow.started_at) : undefined,
+      completedAt: batchRow.completed_at ? new Date(batchRow.completed_at) : undefined,
+      userId: batchRow.user_id,
+      executionIds: JSON.parse(batchRow.execution_ids) as string[],
+      stats,
+    };
+
+    logger.info(
+      `Fetched batch status for ${batchId}: ${String(stats.success)}/${String(stats.total)} success, ${String(stats.failed)}/${String(stats.total)} failed, ${String(progress)}% complete`
+    );
+
+    return {
+      batch,
+      executions,
+      progress,
+    };
+  }
 
   /**
    * Cancel a batch execution
@@ -517,17 +477,10 @@ export class BatchExecutionService {
     const logger = new LoggerService();
 
     // Step 1: Verify batch exists
-    const batchSql = "SELECT * FROM batch_executions WHERE id = ?";
-    const batchRow = await new Promise<BatchExecutionRow | undefined>((resolve, reject) => {
-      this.db.get(batchSql, [batchId], (err, row) => {
-        if (err) {
-          logger.error(`Failed to fetch batch execution: ${err.message}`);
-          reject(new Error(`Failed to fetch batch execution: ${err.message}`));
-        } else {
-          resolve(row as BatchExecutionRow | undefined);
-        }
-      });
-    });
+    const batchRow = await this.db.queryOne<BatchExecutionRow>(
+      "SELECT * FROM batch_executions WHERE id = ?",
+      [batchId]
+    );
 
     if (!batchRow) {
       throw new Error(`Batch execution ${batchId} not found`);
@@ -540,16 +493,8 @@ export class BatchExecutionService {
       WHERE batch_id = ? AND status = 'running'
     `;
 
-    const cancelledCount = await new Promise<number>((resolve, reject) => {
-      this.db.run(cancelSql, [new Date().toISOString(), batchId], function(err) {
-        if (err) {
-          logger.error(`Failed to cancel executions: ${err.message}`);
-          reject(new Error(`Failed to cancel executions: ${err.message}`));
-        } else {
-          resolve(this.changes);
-        }
-      });
-    });
+    const cancelResult = await this.db.execute(cancelSql, [new Date().toISOString(), batchId]);
+    const cancelledCount = cancelResult.changes;
 
     // Step 3: Update batch status to cancelled
     const updateBatchSql = `
@@ -558,21 +503,13 @@ export class BatchExecutionService {
       WHERE id = ?
     `;
 
-    await new Promise<void>((resolve, reject) => {
-      this.db.run(updateBatchSql, [new Date().toISOString(), batchId], (err) => {
-        if (err) {
-          logger.error(`Failed to update batch status: ${err.message}`);
-          reject(new Error(`Failed to update batch status: ${err.message}`));
-        } else {
-          resolve();
-        }
-      });
-    });
+    await this.db.execute(updateBatchSql, [new Date().toISOString(), batchId]);
 
     logger.info(`Cancelled batch ${batchId}: ${String(cancelledCount)} executions cancelled`);
 
     return { cancelledCount };
   }
+
 
   /**
    * Expand group IDs to node IDs

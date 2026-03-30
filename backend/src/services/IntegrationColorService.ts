@@ -17,6 +17,8 @@ export interface IntegrationColors {
   puppetserver: IntegrationColorConfig;
   hiera: IntegrationColorConfig;
   ssh: IntegrationColorConfig;
+  proxmox: IntegrationColorConfig;
+  aws: IntegrationColorConfig;
 }
 
 /**
@@ -40,35 +42,48 @@ export class IntegrationColorService {
     // Define color palette for each integration
     // Colors inspired by Puppet logo for better visibility and brand consistency
     this.colors = {
+      // Provisioning tools — vivid blues
+      proxmox: {
+        primary: '#3B82F6',  // Vivid blue
+        light: '#EFF6FF',
+        dark: '#2563EB',
+      },
+      aws: {
+        primary: '#06B6D4',  // Vivid cyan
+        light: '#ECFEFF',
+        dark: '#0891B2',
+      },
+      // Remote execution tools — vivid greens
       bolt: {
-        primary: '#FFAE1A',  // Bright orange from Puppet logo
-        light: '#FFF4E0',
-        dark: '#CC8B15',
+        primary: '#22C55E',  // Vivid green
+        light: '#F0FDF4',
+        dark: '#16A34A',
       },
       ansible: {
-        primary: '#1A4D8F',  // Blue for Ansible
-        light: '#E8F1FF',
-        dark: '#133A6D',
-      },
-      puppetdb: {
-        primary: '#9063CD',  // Violet/purple from Puppet logo
-        light: '#F0E6FF',
-        dark: '#7249A8',
-      },
-      puppetserver: {
-        primary: '#2E3A87',  // Dark blue from Puppet logo
-        light: '#E8EAFF',
-        dark: '#1F2760',
-      },
-      hiera: {
-        primary: '#C1272D',  // Dark red
-        light: '#FFE8E9',
-        dark: '#9A1F24',
+        primary: '#10B981',  // Vivid emerald
+        light: '#ECFDF5',
+        dark: '#059669',
       },
       ssh: {
-        primary: '#10B981',  // Green for SSH connectivity
-        light: '#D1FAE5',
-        dark: '#059669',
+        primary: '#A3E635',  // Vivid lime
+        light: '#F7FEE7',
+        dark: '#84CC16',
+      },
+      // Puppet ecosystem — vivid warm tones
+      puppetdb: {
+        primary: '#F97316',  // Vivid orange
+        light: '#FFF7ED',
+        dark: '#EA580C',
+      },
+      puppetserver: {
+        primary: '#EF4444',  // Vivid red
+        light: '#FEF2F2',
+        dark: '#DC2626',
+      },
+      hiera: {
+        primary: '#F59E0B',  // Vivid amber
+        light: '#FFFBEB',
+        dark: '#D97706',
       },
     };
 

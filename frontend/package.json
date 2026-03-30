@@ -1,6 +1,6 @@
 {
   "name": "frontend",
-  "version": "0.8.1",
+  "version": "0.10.0",
   "description": "Pabawi frontend web interface",
   "type": "module",
   "scripts": {
@@ -17,9 +17,11 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.2.1",
+    "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.0.0",
     "@tsconfig/svelte": "^5.0.4",
     "autoprefixer": "^10.4.19",
+    "fast-check": "^4.6.0",
     "jsdom": "^27.4.0",
     "postcss": "^8.4.38",
     "tailwindcss": "^3.4.3",

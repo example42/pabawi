@@ -14,6 +14,43 @@ import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 
+/**
+ * Middleware enforcing authentication/authorization for lifecycle actions.
+ *
+ * This uses a simple bearer token check so that protection travels with the
+ * endpoint instead of relying solely on how the router is mounted.
+ *
+ * Configure the shared secret via the PABAWI_LIFECYCLE_TOKEN environment variable.
+ */
+function requireLifecycleAuth(req: Request, res: Response, next: () => void): void {
+  const token = process.env.PABAWI_LIFECYCLE_TOKEN;
+
+  if (!token) {
+    res.status(500).json({
+      error: {
+        code: "LIFECYCLE_AUTH_MISCONFIGURED",
+        message: "Lifecycle authentication is not configured on the server",
+      },
+    });
+    return;
+  }
+
+  const authHeader = req.headers["authorization"];
+  const expectedHeader = `Bearer ${token}`;
+
+  if (authHeader !== expectedHeader) {
+    res.status(401).json({
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Unauthorized to perform lifecycle actions",
+      },
+    });
+    return;
+  }
+
+  next();
+}
+
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
   pql: z.string().optional(),
@@ -27,6 +64,7 @@ const InventoryQuerySchema = z.object({
 export function createInventoryRouter(
   boltService: BoltService,
   integrationManager?: IntegrationManager,
+  options?: { allowDestructiveActions?: boolean },
 ): Router {
   const router = Router();
   const logger = new LoggerService();
@@ -110,14 +148,21 @@ export function createInventoryRouter(
 
           if (!requestedSources.includes("all")) {
             filteredNodes = aggregated.nodes.filter((node) => {
-              const nodeSource = (node as { source?: string }).source ?? "bolt";
-              return requestedSources.includes(nodeSource);
+              // Check both 'sources' (plural, from linked nodes) and 'source' (singular, from single-source nodes)
+              const linkedNode = node as { source?: string; sources?: string[] };
+              const nodeSources = linkedNode.sources && linkedNode.sources.length > 0
+                ? linkedNode.sources
+                : [linkedNode.source ?? "bolt"];
+              return nodeSources.some((s) => requestedSources.includes(s));
             });
 
             // Apply same source filtering to groups
             filteredGroups = aggregated.groups.filter((group) => {
-              const groupSource = (group as { source?: string }).source ?? "bolt";
-              return requestedSources.includes(groupSource);
+              const linkedGroup = group as { source?: string; sources?: string[] };
+              const groupSources = linkedGroup.sources && linkedGroup.sources.length > 0
+                ? linkedGroup.sources
+                : [linkedGroup.source ?? "bolt"];
+              return groupSources.some((s) => requestedSources.includes(s));
             });
 
             logger.debug("Filtered nodes and groups by source", {
@@ -884,7 +929,8 @@ export function createInventoryRouter(
             });
           }
 
-          const aggregated = await integrationManager.getLinkedInventory();
+          const useCache = req.query.nocache !== '1';
+          const aggregated = await integrationManager.getLinkedInventory(useCache);
           node = aggregated.nodes.find(
             (n) => n.id === nodeId || n.name === nodeId,
           );
@@ -1109,6 +1155,411 @@ export function createInventoryRouter(
           error: {
             code: "INTERNAL_SERVER_ERROR",
             message: "Failed to fetch node details",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * Map action names to the node states where they are available.
+   * This provides sensible defaults; the frontend can further refine.
+   */
+  function getAvailableWhen(actionName: string): string[] {
+    const mapping: Record<string, string[]> = {
+      start: ["stopped"],
+      stop: ["running", "paused"],
+      shutdown: ["running", "paused"],
+      reboot: ["running", "paused"],
+      suspend: ["running"],
+      resume: ["suspended", "paused"],
+      snapshot: ["running", "stopped"],
+      terminate: ["running", "stopped", "suspended", "paused", "unknown"],
+      destroy: ["stopped", "running", "suspended", "paused", "unknown"],
+      destroy_vm: ["stopped", "running", "suspended", "paused", "unknown"],
+      destroy_lxc: ["stopped", "running", "suspended", "paused", "unknown"],
+    };
+    return mapping[actionName] ?? [];
+  }
+
+  /**
+   * Resolve the provider name from a node ID prefix.
+   * Node IDs follow the pattern "{provider}:{...}" (e.g. "proxmox:node:vmid", "aws:region:instanceId").
+   * Returns null when the prefix doesn't map to a known integration.
+   */
+  function resolveProvider(nodeId: string): string | null {
+    const prefix = nodeId.split(":")[0];
+    const providerMap: Record<string, string> = {
+      proxmox: "proxmox",
+      aws: "aws",
+    };
+    return providerMap[prefix] ?? null;
+  }
+
+  /**
+   * Look up the execution tool for a given node ID.
+   * Returns the tool and provider name, or sends an error response and returns null.
+   */
+  function getExecutionToolForNode(
+    nodeId: string,
+    res: Response,
+  ): { tool: import("../integrations/types").ExecutionToolPlugin; provider: string } | null {
+    if (!integrationManager?.isInitialized()) {
+      res.status(503).json({
+        error: { code: "INTEGRATION_NOT_AVAILABLE", message: "Integration manager is not available" },
+      });
+      return null;
+    }
+
+    const provider = resolveProvider(nodeId);
+    if (!provider) {
+      res.status(400).json({
+        error: {
+          code: "UNSUPPORTED_PROVIDER",
+          message: `No provisioning provider found for node ID: ${nodeId}`,
+        },
+      });
+      return null;
+    }
+
+    const tool = integrationManager.getExecutionTool(provider);
+    if (!tool) {
+      res.status(503).json({
+        error: {
+          code: "PROVIDER_NOT_CONFIGURED",
+          message: `Integration "${provider}" is not configured`,
+        },
+      });
+      return null;
+    }
+
+    return { tool, provider };
+  }
+
+  /**
+   * GET /api/nodes/:id/lifecycle-actions
+   * Discover available lifecycle actions for a node based on its provider.
+   * Returns actions with metadata so the frontend can render them dynamically.
+   */
+  router.get(
+    "/:id/lifecycle-actions",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const params = NodeIdParamSchema.parse(req.params);
+      const nodeId = params.id;
+
+      const resolved = getExecutionToolForNode(nodeId, res);
+      if (!resolved) return;
+
+      const { tool, provider } = resolved;
+      const capabilities = tool.listCapabilities();
+
+      // Build lifecycle action definitions from the provider's capabilities
+      const actions = capabilities.map((cap) => {
+        const isDestructive = ["destroy", "terminate", "destroy_vm", "destroy_lxc"].includes(cap.name);
+        return {
+          name: cap.name,
+          displayName: cap.name.charAt(0).toUpperCase() + cap.name.slice(1).replace(/_/g, " "),
+          description: cap.description,
+          requiresConfirmation: isDestructive,
+          destructive: isDestructive,
+          // Provider-specific availability hints; frontend can refine with node status
+          availableWhen: getAvailableWhen(cap.name),
+        };
+      });
+
+      // Add destroy action from provisioning capabilities if not already present
+      const provisioningTool = tool as unknown as { listProvisioningCapabilities?: () => Array<{ name: string; description: string; operation: string }> };
+      if (typeof provisioningTool.listProvisioningCapabilities === "function") {
+        const provCaps = provisioningTool.listProvisioningCapabilities();
+        for (const cap of provCaps) {
+          if (cap.operation === "destroy" && !actions.some((a) => a.name === cap.name)) {
+            actions.push({
+              name: cap.name,
+              displayName: cap.name.charAt(0).toUpperCase() + cap.name.slice(1).replace(/_/g, " "),
+              description: cap.description,
+              requiresConfirmation: true,
+              destructive: true,
+              availableWhen: ["stopped", "running", "suspended", "unknown"],
+            });
+          }
+        }
+      }
+
+      logger.info("Lifecycle actions resolved", {
+        component: "InventoryRouter",
+        operation: "getLifecycleActions",
+        metadata: { nodeId, provider, actionCount: actions.length },
+      });
+
+      // Filter out destructive actions when destructive provisioning is disabled
+      const filteredActions = options?.allowDestructiveActions === false
+        ? actions.filter((a) => !a.destructive)
+        : actions;
+
+      res.json({ provider, actions: filteredActions });
+    }),
+  );
+
+  /**
+   * POST /api/nodes/:id/action
+   * Execute a lifecycle action on a node via its provider integration.
+   * Provider-agnostic: routes to the correct integration based on node ID prefix.
+   *
+   * Authentication/RBAC is enforced explicitly via requireLifecycleAuth in this
+   * router so protection travels with the endpoint. Additional RBAC middleware
+   * may still be applied at the route mounting level in server.ts.
+   * Required permission: lifecycle:* or lifecycle:{action}
+   */
+  router.post(
+    "/:id/action",
+    requireLifecycleAuth,
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+
+      logger.info("Executing node action", {
+        component: "InventoryRouter",
+        operation: "executeNodeAction",
+      });
+
+      try {
+        const params = NodeIdParamSchema.parse(req.params);
+        const nodeId = params.id;
+
+        // Accept any action string — the provider will validate it
+        const ActionSchema = z.object({
+          action: z.string().min(1),
+          parameters: z.record(z.unknown()).optional(),
+        });
+        const body = ActionSchema.parse(req.body);
+
+        // Guard: reject destructive actions when disabled
+        const destructiveActions = ["destroy", "destroy_vm", "destroy_lxc", "terminate", "terminate_instance"];
+        if (destructiveActions.includes(body.action) && options?.allowDestructiveActions === false) {
+          res.status(403).json({
+            error: {
+              code: "DESTRUCTIVE_ACTION_DISABLED",
+              message: "Destructive provisioning actions are disabled by configuration (ALLOW_DESTRUCTIVE_PROVISIONING=false)",
+            },
+          });
+          return;
+        }
+
+        const resolved = getExecutionToolForNode(nodeId, res);
+        if (!resolved) return;
+
+        const { tool, provider } = resolved;
+
+        logger.debug("Executing action on node", {
+          component: "InventoryRouter",
+          operation: "executeNodeAction",
+          metadata: { nodeId, provider, action: body.action },
+        });
+
+        const result = await tool.executeAction({
+          type: "task",
+          target: nodeId,
+          action: body.action,
+          parameters: body.parameters,
+        });
+
+        const duration = Date.now() - startTime;
+
+        if (result.status === "failed") {
+          logger.error("Node action failed", {
+            component: "InventoryRouter",
+            integration: provider,
+            operation: "executeNodeAction",
+            metadata: { nodeId, action: body.action, duration, error: result.error },
+          });
+          res.status(500).json({
+            error: {
+              code: "ACTION_EXECUTION_FAILED",
+              message: result.error ?? `Action ${body.action} failed`,
+            },
+            result,
+          });
+          return;
+        }
+
+        logger.info("Node action executed successfully", {
+          component: "InventoryRouter",
+          integration: provider,
+          operation: "executeNodeAction",
+          metadata: { nodeId, action: body.action, duration },
+        });
+
+        res.json({
+          success: true,
+          message: `Action ${body.action} executed successfully`,
+          result,
+        });
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        if (error instanceof z.ZodError) {
+          logger.warn("Invalid request parameters", {
+            component: "InventoryRouter",
+            operation: "executeNodeAction",
+            metadata: { errors: error.errors },
+          });
+
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid request parameters",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        logger.error("Error executing node action", {
+          component: "InventoryRouter",
+          operation: "executeNodeAction",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        res.status(500).json({
+          error: {
+            code: "ACTION_EXECUTION_FAILED",
+            message: error instanceof Error ? error.message : "Failed to execute action",
+          },
+        });
+      }
+    }),
+  );
+
+  /**
+   * DELETE /api/nodes/:id
+   * Destroy a node (permanently delete VM, container, or cloud instance).
+   * Provider-agnostic: routes to the correct integration based on node ID prefix.
+   *
+   * Note: RBAC middleware should be applied at the route mounting level in server.ts
+   * Required permission: lifecycle:destroy
+   */
+  router.delete(
+    "/:id",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+
+      logger.info("Destroying node", {
+        component: "InventoryRouter",
+        operation: "destroyNode",
+      });
+
+      try {
+        const params = NodeIdParamSchema.parse(req.params);
+        const nodeId = params.id;
+
+        const resolved = getExecutionToolForNode(nodeId, res);
+        if (!resolved) return;
+
+        const { tool, provider } = resolved;
+
+        logger.debug("Destroying node", {
+          component: "InventoryRouter",
+          operation: "destroyNode",
+          metadata: { nodeId, provider },
+        });
+
+        // Determine the correct destroy action based on provider
+        let destroyAction: string;
+        let destroyParams: Record<string, unknown> | undefined;
+
+        if (provider === "proxmox") {
+          const parts = nodeId.split(":");
+          if (parts.length !== 3) {
+            res.status(400).json({
+              error: { code: "INVALID_NODE_ID", message: "Invalid Proxmox node ID format" },
+            });
+            return;
+          }
+          const node = parts[1];
+          const vmid = parseInt(parts[2], 10);
+          if (!Number.isFinite(vmid)) {
+            res.status(400).json({
+              error: { code: "INVALID_NODE_ID", message: "Invalid Proxmox node ID: vmid is not a valid number" },
+            });
+            return;
+          }
+          destroyAction = "destroy_vm";
+          destroyParams = { node, vmid };
+        } else if (provider === "aws") {
+          destroyAction = "terminate";
+          destroyParams = undefined;
+        } else {
+          destroyAction = "destroy";
+          destroyParams = undefined;
+        }
+
+        const result = await tool.executeAction({
+          type: "task",
+          target: nodeId,
+          action: destroyAction,
+          parameters: destroyParams,
+        });
+
+        const duration = Date.now() - startTime;
+
+        if (result.status === "failed") {
+          logger.error("Node destruction failed", {
+            component: "InventoryRouter",
+            integration: provider,
+            operation: "destroyNode",
+            metadata: { nodeId, duration, error: result.error },
+          });
+          res.status(500).json({
+            error: {
+              code: "DESTROY_FAILED",
+              message: result.error ?? "Failed to destroy node",
+            },
+            result,
+          });
+          return;
+        }
+
+        logger.info("Node destroyed successfully", {
+          component: "InventoryRouter",
+          integration: provider,
+          operation: "destroyNode",
+          metadata: { nodeId, duration },
+        });
+
+        res.json({
+          success: true,
+          message: "Node destroyed successfully",
+          result,
+        });
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        if (error instanceof z.ZodError) {
+          logger.warn("Invalid request parameters", {
+            component: "InventoryRouter",
+            operation: "destroyNode",
+            metadata: { errors: error.errors },
+          });
+
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Invalid request parameters",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        logger.error("Error destroying node", {
+          component: "InventoryRouter",
+          operation: "destroyNode",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        res.status(500).json({
+          error: {
+            code: "DESTROY_FAILED",
+            message: error instanceof Error ? error.message : "Failed to destroy node",
           },
         });
       }
