@@ -1,0 +1,25 @@
+{
+  "name": "KiroGraph Sync on Delete",
+  "version": "1.0.0",
+  "description": "Remove deleted files from the KiroGraph index.",
+  "when": {
+    "type": "fileDeleted",
+    "patterns": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.py",
+      "**/*.go",
+      "**/*.rs",
+      "**/*.java",
+      "**/*.cs",
+      "**/*.rb",
+      "**/*.php"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "kirograph sync --quiet 2>/dev/null || true"
+  }
+}

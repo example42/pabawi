@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "languages": [],
+  "exclude": [
+    "node_modules/**",
+    "dist/**",
+    "build/**",
+    ".git/**",
+    "*.min.js",
+    ".kirograph/**"
+  ],
+  "maxFileSize": 1048576,
+  "extractDocstrings": true,
+  "trackCallSites": true
+}
