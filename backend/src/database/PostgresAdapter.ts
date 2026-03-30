@@ -149,6 +149,11 @@ export class PostgresAdapter implements DatabaseAdapter {
   }
 
   getPlaceholder(index: number): string {
+    if (!Number.isInteger(index) || index < 1) {
+      throw new Error(
+        `Invalid placeholder index ${index} for Postgres; parameter positions are 1-based.`,
+      );
+    }
     return "$" + String(index);
   }
 }
