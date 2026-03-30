@@ -123,8 +123,14 @@ export class PostgresAdapter implements DatabaseAdapter {
         [],
       );
     }
+    if (this._txClient) {
+      throw new DatabaseQueryError(
+        "Nested transactions are not supported",
+        "BEGIN TRANSACTION",
+        [],
+      );
+    }
     const client = await this._pool.connect();
-    const previousClient = this._txClient;
     this._txClient = client;
     try {
       await client.query("BEGIN");
@@ -136,7 +142,7 @@ export class PostgresAdapter implements DatabaseAdapter {
       throw error;
     } finally {
       client.release();
-      this._txClient = previousClient;
+      this._txClient = null;
     }
   }
 
