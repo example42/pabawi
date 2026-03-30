@@ -14,6 +14,43 @@ import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 
+/**
+ * Middleware enforcing authentication/authorization for lifecycle actions.
+ *
+ * This uses a simple bearer token check so that protection travels with the
+ * endpoint instead of relying solely on how the router is mounted.
+ *
+ * Configure the shared secret via the PABAWI_LIFECYCLE_TOKEN environment variable.
+ */
+function requireLifecycleAuth(req: Request, res: Response, next: () => void): void {
+  const token = process.env.PABAWI_LIFECYCLE_TOKEN;
+
+  if (!token) {
+    res.status(500).json({
+      error: {
+        code: "LIFECYCLE_AUTH_MISCONFIGURED",
+        message: "Lifecycle authentication is not configured on the server",
+      },
+    });
+    return;
+  }
+
+  const authHeader = req.headers["authorization"];
+  const expectedHeader = `Bearer ${token}`;
+
+  if (authHeader !== expectedHeader) {
+    res.status(401).json({
+      error: {
+        code: "UNAUTHORIZED",
+        message: "Unauthorized to perform lifecycle actions",
+      },
+    });
+    return;
+  }
+
+  next();
+}
+
 const InventoryQuerySchema = z.object({
   sources: z.string().optional(),
   pql: z.string().optional(),
@@ -1268,11 +1305,14 @@ export function createInventoryRouter(
    * Execute a lifecycle action on a node via its provider integration.
    * Provider-agnostic: routes to the correct integration based on node ID prefix.
    *
-   * Note: RBAC middleware should be applied at the route mounting level in server.ts
+   * Authentication/RBAC is enforced explicitly via requireLifecycleAuth in this
+   * router so protection travels with the endpoint. Additional RBAC middleware
+   * may still be applied at the route mounting level in server.ts.
    * Required permission: lifecycle:* or lifecycle:{action}
    */
   router.post(
     "/:id/action",
+    requireLifecycleAuth,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
