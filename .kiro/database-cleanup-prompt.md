@@ -12,17 +12,14 @@ The project uses SQLite with a hybrid approach: base schema files + migration sy
 
 ```
 backend/src/database/
-├── schema.sql              # Base schema: executions table
-├── rbac-schema.sql         # Base schema: RBAC tables (DUPLICATE of 001)
-├── audit-schema.sql        # ⚠️ ORPHANED - never loaded, duplicates 004
-├── migrations.sql          # ⚠️ ORPHANED - never loaded, superseded
-├── DatabaseService.ts      # Loads schema.sql + rbac-schema.sql, then runs migrations
+├── DatabaseService.ts      # Runs only MigrationRunner (migration-first approach)
 ├── MigrationRunner.ts      # Runs numbered migrations from migrations/
 └── migrations/
-    ├── 001_initial_rbac.sql           # Creates RBAC tables (duplicates rbac-schema.sql)
+    ├── 000_initial_schema.sql         # Initial schema: executions + revoked_tokens tables
+    ├── 001_initial_rbac.sql           # Creates RBAC tables
     ├── 002_seed_rbac_data.sql         # Seeds roles, permissions, config
     ├── 003_failed_login_attempts.sql  # Adds security tables
-    ├── 004_audit_logging.sql          # Adds audit_logs (duplicates audit-schema.sql)
+    ├── 004_audit_logging.sql          # Adds audit_logs table
     ├── 005_add_ssh_execution_tool.sql # Updates executions table
     └── 006_add_batch_executions.sql   # Adds batch support
 ```
@@ -146,4 +143,4 @@ After any changes:
 - ✅ No orphaned files in the database directory
 - ✅ Clear documentation of the schema management approach
 - ✅ All tests pass
-- ✅ Docker deployment works with cl
+- ✅ Docker deployment works correctly

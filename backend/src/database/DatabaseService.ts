@@ -31,6 +31,67 @@ export class DatabaseService {
       await this.adapter.initialize();
 
       // Initialize schema
+      await this.initializeSchema();
+    } catch (error) {
+      throw new Error(
+        `Database initialization failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    }
+  }
+
+  /**
+   * Create SQLite database connection with optimized settings
+   */
+  private createConnection(): Promise<sqlite3.Database> {
+    return new Promise((resolve, reject) => {
+      const db = new sqlite3.Database(this.databasePath, (err) => {
+        if (err) {
+          reject(new Error(`Failed to connect to database: ${err.message}`));
+        } else {
+          // Enable WAL mode for better concurrency
+          db.run('PRAGMA journal_mode = WAL;', (walErr) => {
+            if (walErr) {
+              console.warn('Failed to enable WAL mode:', walErr.message);
+            }
+          });
+
+          // Set performance optimizations
+          db.run('PRAGMA synchronous = NORMAL;'); // Balance between safety and speed
+          db.run('PRAGMA cache_size = -64000;'); // 64MB cache
+          db.run('PRAGMA temp_store = MEMORY;'); // Use memory for temp tables
+          db.run('PRAGMA mmap_size = 268435456;'); // 256MB memory-mapped I/O
+
+          // Enable foreign keys
+          db.run('PRAGMA foreign_keys = ON;', (fkErr) => {
+            if (fkErr) {
+              reject(new Error(`Failed to enable foreign keys: ${fkErr.message}`));
+            } else {
+              resolve(db);
+            }
+          });
+        }
+      });
+    });
+  }
+
+  /**
+   * Initialize database schema using migration-first approach
+   *
+   * Schema Management Policy:
+   * - ALL schema definitions are in numbered migrations (migrations/*.sql)
+   * - Migration 000: Initial schema (executions, revoked_tokens)
+   * - Migration 001: RBAC tables (users, roles, permissions, groups)
+   * - Migration 002+: All subsequent schema changes
+   * - Future changes: Always create a new numbered migration
+   * - Never modify existing migrations after they've been applied
+   */
+  private async initializeSchema(): Promise<void> {
+    if (!this.db) {
+      throw new Error("Database connection not established");
+    }
+
+    try {
+      // Run all migrations (including initial schema)
       await this.runMigrations();
     } catch (error) {
       throw new Error(
