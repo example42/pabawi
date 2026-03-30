@@ -106,11 +106,11 @@ export class NodeLinkingService {
 
         // Use the first node's name as the primary identifier
         // (all related nodes should have the same name)
-        const primaryName = node.name;
+        const primaryName = node.name?.trim() || node.id || node.uri;
 
         // Create linked node with common name
         const linkedNode: LinkedNode = {
-          id: primaryName, // Use name as primary ID for lookups
+          id: primaryName, // Use name (or stable fallback) as primary ID for lookups
           name: primaryName,
           uri: node.uri, // Will be overwritten with combined URIs
           transport: node.transport,
