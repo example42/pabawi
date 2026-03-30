@@ -1,0 +1,25 @@
+{
+  "name": "KiroGraph Sync on Create",
+  "version": "1.0.0",
+  "description": "Index newly created source files.",
+  "when": {
+    "type": "fileCreated",
+    "patterns": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.js",
+      "**/*.jsx",
+      "**/*.py",
+      "**/*.go",
+      "**/*.rs",
+      "**/*.java",
+      "**/*.cs",
+      "**/*.rb",
+      "**/*.php"
+    ]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": "kirograph sync --quiet 2>/dev/null || true"
+  }
+}

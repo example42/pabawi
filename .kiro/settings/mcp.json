@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "kirograph": {
+      "command": "kirograph",
+      "args": [
+        "serve",
+        "--mcp"
+      ],
+      "disabled": false,
+      "autoApprove": [
+        "kirograph_search",
+        "kirograph_context",
+        "kirograph_callers",
+        "kirograph_callees",
+        "kirograph_impact",
+        "kirograph_node",
+        "kirograph_status"
+      ]
+    }
+  }
+}
