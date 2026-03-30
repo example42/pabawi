@@ -449,28 +449,35 @@ export class IntegrationManager {
             metadata: { sourceName: name },
           });
 
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(
+          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(
               () => reject(new Error(`Source '${name}' timed out after ${String(SOURCE_TIMEOUT_MS)}ms`)),
               SOURCE_TIMEOUT_MS,
-            ),
-          );
+            );
+          });
 
-          const [nodes, groups] = await Promise.race([
-            Promise.all([
-              source.getInventory(),
-              source.getGroups().catch((error: unknown) => {
-                const err = error instanceof Error ? error : new Error(String(error));
-                this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
-                  component: "IntegrationManager",
-                  operation: "getAggregatedInventory",
-                  metadata: { sourceName: name },
-                }, err);
-                return [] as NodeGroup[];
-              }),
-            ]),
-            timeoutPromise,
-          ]);
+          let nodes: Node[];
+          let groups: NodeGroup[];
+          try {
+            [nodes, groups] = await Promise.race([
+              Promise.all([
+                source.getInventory(),
+                source.getGroups().catch((error: unknown) => {
+                  const err = error instanceof Error ? error : new Error(String(error));
+                  this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
+                    component: "IntegrationManager",
+                    operation: "getAggregatedInventory",
+                    metadata: { sourceName: name },
+                  }, err);
+                  return [] as NodeGroup[];
+                }),
+              ]),
+              timeoutPromise,
+            ]);
+          } finally {
+            clearTimeout(timeoutHandle);
+          }
 
           this.logger.debug(`Source '${name}' returned ${String(nodes.length)} nodes and ${String(groups.length)} groups`, {
             component: "IntegrationManager",

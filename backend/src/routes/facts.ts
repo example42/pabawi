@@ -481,16 +481,22 @@ export function createFactsRouter(
         const promises = sources.map(async (source) => {
           if (!source.isInitialized()) return;
           try {
-            const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(
+            let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              timeoutHandle = setTimeout(
                 () => reject(new Error(`Timeout after ${SOURCE_TIMEOUT_MS}ms`)),
                 SOURCE_TIMEOUT_MS,
-              ),
-            );
-            const nodeFacts = await Promise.race([
-              source.getNodeFacts(nodeId),
-              timeoutPromise,
-            ]);
+              );
+            });
+            let nodeFacts: unknown;
+            try {
+              nodeFacts = await Promise.race([
+                source.getNodeFacts(nodeId),
+                timeoutPromise,
+              ]);
+            } finally {
+              clearTimeout(timeoutHandle);
+            }
             if (nodeFacts && typeof nodeFacts === "object") {
               const raw = nodeFacts as unknown as Record<string, unknown>;
               const factsObj =

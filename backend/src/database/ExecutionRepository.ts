@@ -134,15 +134,6 @@ export class ExecutionRepository {
       ...execution,
     };
 
-    const sql = `
-      INSERT INTO executions (
-        id, type, target_nodes, action, parameters, status,
-        started_at, completed_at, results, error, command, expert_mode,
-        original_execution_id, re_execution_count, stdout, stderr, execution_tool,
-        batch_id, batch_position
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
     const params = [
       record.id,
       record.type,
@@ -164,6 +155,16 @@ export class ExecutionRepository {
       record.batchId ?? null,
       record.batchPosition ?? null,
     ];
+
+    const placeholders = params.map((_, i) => this.db.getPlaceholder(i + 1)).join(", ");
+    const sql = `
+      INSERT INTO executions (
+        id, type, target_nodes, action, parameters, status,
+        started_at, completed_at, results, error, command, expert_mode,
+        original_execution_id, re_execution_count, stdout, stderr, execution_tool,
+        batch_id, batch_position
+      ) VALUES (${placeholders})
+    `;
 
     try {
       await this.db.execute(sql, params);
@@ -201,7 +202,7 @@ export class ExecutionRepository {
     Object.entries(updates).forEach(([key, value]) => {
       if (allowedFields.includes(key)) {
         const columnName = this.camelToSnake(key);
-        updateFields.push(`${columnName} = ?`);
+        updateFields.push(`${columnName} = ${this.db.getPlaceholder(params.length + 1)}`);
 
         if (key === "results" && value) {
           params.push(JSON.stringify(value));
@@ -220,7 +221,7 @@ export class ExecutionRepository {
     }
 
     params.push(id);
-    const sql = `UPDATE executions SET ${updateFields.join(", ")} WHERE id = ?`;
+    const sql = `UPDATE executions SET ${updateFields.join(", ")} WHERE id = ${this.db.getPlaceholder(params.length)}`;
 
     try {
       await this.db.execute(sql, params);
@@ -244,7 +245,7 @@ export class ExecutionRepository {
    * Find execution by ID
    */
   public async findById(id: string): Promise<ExecutionRecord | null> {
-    const sql = "SELECT * FROM executions WHERE id = ?";
+    const sql = `SELECT * FROM executions WHERE id = ${this.db.getPlaceholder(1)}`;
 
     try {
       const row = await this.db.queryOne<DbRow>(sql, [id]);
@@ -267,27 +268,27 @@ export class ExecutionRepository {
     const params: unknown[] = [];
 
     if (filters.type) {
-      conditions.push("type = ?");
+      conditions.push(`type = ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.type);
     }
 
     if (filters.status) {
-      conditions.push("status = ?");
+      conditions.push(`status = ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.status);
     }
 
     if (filters.targetNode) {
-      conditions.push("target_nodes LIKE ?");
+      conditions.push(`target_nodes LIKE ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(`%"${filters.targetNode}"%`);
     }
 
     if (filters.startDate) {
-      conditions.push("started_at >= ?");
+      conditions.push(`started_at >= ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.startDate);
     }
 
     if (filters.endDate) {
-      conditions.push("started_at <= ?");
+      conditions.push(`started_at <= ${this.db.getPlaceholder(params.length + 1)}`);
       params.push(filters.endDate);
     }
 
@@ -299,7 +300,7 @@ export class ExecutionRepository {
       SELECT * FROM executions
       ${whereClause}
       ORDER BY started_at DESC
-      LIMIT ? OFFSET ?
+      LIMIT ${this.db.getPlaceholder(params.length + 1)} OFFSET ${this.db.getPlaceholder(params.length + 2)}
     `;
 
     params.push(pagination.pageSize, offset);
@@ -324,7 +325,7 @@ export class ExecutionRepository {
     const sql = `
       SELECT original.* FROM executions original
       INNER JOIN executions reexec ON original.id = reexec.original_execution_id
-      WHERE reexec.id = ?
+      WHERE reexec.id = ${this.db.getPlaceholder(1)}
     `;
 
     try {
@@ -346,7 +347,7 @@ export class ExecutionRepository {
   ): Promise<ExecutionRecord[]> {
     const sql = `
       SELECT * FROM executions
-      WHERE original_execution_id = ?
+      WHERE original_execution_id = ${this.db.getPlaceholder(1)}
       ORDER BY started_at DESC
     `;
 

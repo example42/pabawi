@@ -386,7 +386,7 @@ export class ProxmoxIntegration
     const eventType = this.mapActionToEventType(action.action);
     const entry: CreateJournalEntry = {
       nodeId: target,
-      nodeUri: `proxmox:${target}`,
+      nodeUri: target,
       eventType,
       source: "proxmox",
       action: action.action,
@@ -425,7 +425,7 @@ export class ProxmoxIntegration
     const eventType = this.mapActionToEventType(action.action);
     const entry: CreateJournalEntry = {
       nodeId: target,
-      nodeUri: `proxmox:${target}`,
+      nodeUri: target,
       eventType,
       source: "proxmox",
       action: action.action,

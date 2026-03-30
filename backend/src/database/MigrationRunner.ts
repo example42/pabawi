@@ -187,8 +187,11 @@ export class MigrationRunner {
    */
   private async recordMigration(migration: MigrationFile): Promise<void> {
     const now = new Date().toISOString();
+    const p1 = this.db.getPlaceholder(1);
+    const p2 = this.db.getPlaceholder(2);
+    const p3 = this.db.getPlaceholder(3);
     await this.db.execute(
-      "INSERT INTO migrations (id, name, appliedAt) VALUES (?, ?, ?)",
+      `INSERT INTO migrations (id, name, appliedAt) VALUES (${p1}, ${p2}, ${p3})`,
       [migration.id, migration.filename, now]
     );
   }
