@@ -56,10 +56,10 @@ export function createJournalRouter(
   deps: JournalRouterDeps = {},
 ): Router {
   const router = Router();
-  const journalService = new JournalService(databaseService.getConnection());
-  const authMiddleware = createAuthMiddleware(databaseService.getConnection());
-  const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
-  const db = databaseService.getConnection();
+  const journalService = new JournalService(databaseService.getAdapter());
+  const authMiddleware = createAuthMiddleware(databaseService.getAdapter());
+  const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
+  const db = databaseService.getAdapter();
 
   /**
    * GET /api/journal/search
@@ -150,7 +150,7 @@ export function createJournalRouter(
         if (!res.writableEnded) res.write(": heartbeat\n\n");
       }, 25000);
 
-      req.on("close", () => clearInterval(heartbeat));
+      req.on("close", () => { clearInterval(heartbeat); });
 
       const tasks: Promise<void>[] = [];
 
@@ -190,7 +190,7 @@ export function createJournalRouter(
         );
       }
 
-      Promise.all(tasks)
+      void Promise.all(tasks)
         .finally(() => {
           clearInterval(heartbeat);
           if (!res.writableEnded) {

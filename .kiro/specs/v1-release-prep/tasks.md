@@ -90,15 +90,15 @@
     - Ensure zero type errors
     - _Requirements: 4.4_
 
-- [ ] 5. Fix Existing Broken Tests
-  - [~] 5.1 Run test suite and fix failures
+- [x] 5. Fix Existing Broken Tests
+  - [x] 5.1 Run test suite and fix failures
     - Run `npm test` from project root
     - Identify and fix test failures caused by the config refactor
     - Update test mocks that referenced IntegrationConfigService or its routes
     - Ensure all existing tests pass
     - _Requirements: 5.1, 5.4_
 
-  - [~] 5.2 Fix lint and type errors
+  - [x] 5.2 Fix lint and type errors
     - Run `npm run lint` and fix all errors
     - Run `tsc --noEmit` in both workspaces and fix all type errors
     - _Requirements: 5.2, 5.3_

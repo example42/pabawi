@@ -341,7 +341,7 @@ export function createProxmoxRouter(
         // Execute VM creation through integration
         const result = await proxmox.executeAction({
           type: "task",
-          target: `proxmox:${params.node}:${params.vmid}`,
+          target: `proxmox:${params.node}:${String(params.vmid)}`,
           action: "create_vm",
           parameters: params,
         });
@@ -541,7 +541,7 @@ export function createProxmoxRouter(
       try {
         const result = await proxmox.executeAction({
           type: "task",
-          target: `proxmox:${params.node}:${params.vmid}`,
+          target: `proxmox:${params.node}:${String(params.vmid)}`,
           action: "create_lxc",
           parameters: params,
         });
@@ -791,7 +791,7 @@ export function createProxmoxRouter(
       try {
         const result = await proxmox.executeAction({
           type: "task",
-          target: `proxmox:${node}:${vmid}`,
+          target: `proxmox:${node}:${String(vmid)}`,
           action: "destroy_vm",
           parameters: { vmid, node },
         });

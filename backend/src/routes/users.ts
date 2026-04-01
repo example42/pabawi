@@ -42,11 +42,11 @@ export function createUsersRouter(
 ): Router {
   const router = Router();
   const jwtSecret = process.env.JWT_SECRET;
-  const authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
-  const userService = new UserService(databaseService.getConnection(), authService);
-  const permissionService = new PermissionService(databaseService.getConnection());
-  const authMiddleware = createAuthMiddleware(databaseService.getConnection(), jwtSecret);
-  const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+  const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret);
+  const userService = new UserService(databaseService.getAdapter(), authService);
+  const permissionService = new PermissionService(databaseService.getAdapter());
+  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
+  const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
 
   /**
    * POST /api/users

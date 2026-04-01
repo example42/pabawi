@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 /**
  * Proxmox Integration Plugin
  *
@@ -247,6 +248,7 @@ export class ProxmoxIntegration
    * @param dataType - Type of data to retrieve
    * @returns null (no additional data types supported)
    */
+  // eslint-disable-next-line @typescript-eslint/require-await
   async getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
     this.ensureInitialized();
 

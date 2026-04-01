@@ -74,11 +74,11 @@ export function createAuthRouter(
 ): Router {
   const router = Router();
   const jwtSecret = process.env.JWT_SECRET; // Use same secret for both
-  const auditLogger = new AuditLoggingService(databaseService.getConnection());
-  const authService = new AuthenticationService(databaseService.getConnection(), jwtSecret, auditLogger);
-  const userService = new UserService(databaseService.getConnection(), authService);
-  const setupService = new SetupService(databaseService.getConnection());
-  const authMiddleware = createAuthMiddleware(databaseService.getConnection(), jwtSecret);
+  const auditLogger = new AuditLoggingService(databaseService.getAdapter());
+  const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret, auditLogger);
+  const userService = new UserService(databaseService.getAdapter(), authService);
+  const setupService = new SetupService(databaseService.getAdapter());
+  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
 
   /**
    * POST /api/auth/register

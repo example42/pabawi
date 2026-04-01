@@ -36,9 +36,9 @@ export function createPermissionsRouter(
 ): Router {
   const router = Router();
   const jwtSecret = process.env.JWT_SECRET;
-  const permissionService = new PermissionService(databaseService.getConnection());
-  const authMiddleware = createAuthMiddleware(databaseService.getConnection(), jwtSecret);
-  const rbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+  const permissionService = new PermissionService(databaseService.getAdapter());
+  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
+  const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
 
   /**
    * POST /api/permissions

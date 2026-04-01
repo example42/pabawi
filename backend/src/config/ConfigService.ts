@@ -489,7 +489,7 @@ export class ConfigService {
         enabled: true,
         accessKeyId: process.env.AWS_ACCESS_KEY_ID,
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-        region: process.env.AWS_DEFAULT_REGION || undefined,
+        region: process.env.AWS_DEFAULT_REGION ?? undefined,
         regions,
         sessionToken: process.env.AWS_SESSION_TOKEN,
         profile: process.env.AWS_PROFILE,

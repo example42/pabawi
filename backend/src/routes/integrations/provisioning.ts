@@ -35,6 +35,7 @@ export function createProvisioningRouter(
    */
   router.get(
     "/",
+    // eslint-disable-next-line @typescript-eslint/require-await
     asyncHandler(async (_req: Request, res: Response): Promise<void> => {
       logger.info("Fetching provisioning integrations", {
         component: "ProvisioningRouter",

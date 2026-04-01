@@ -57,7 +57,7 @@ export function createStreamingRouter(
           !req.headers.authorization
         ) {
           req.headers.authorization = `Bearer ${req.query.token}`;
-          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+           
           delete (req.query as Record<string, unknown>).token;
         }
 

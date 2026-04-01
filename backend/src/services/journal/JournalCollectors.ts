@@ -24,9 +24,11 @@ export interface PuppetDBLike {
  * Convert a Puppet report to a JournalEntry
  */
 export function reportToJournalEntry(report: Report, nodeId: string): JournalEntry {
+  /* eslint-disable @typescript-eslint/no-unnecessary-condition */
   const changedCount = report.metrics?.resources?.changed ?? 0;
   const failedCount = report.metrics?.resources?.failed ?? 0;
   const totalCount = report.metrics?.resources?.total ?? 0;
+  /* eslint-enable @typescript-eslint/no-unnecessary-condition */
 
   const summary = report.status === "changed"
     ? `Puppet run: ${String(changedCount)} resource${changedCount !== 1 ? "s" : ""} changed`
@@ -54,6 +56,7 @@ export function reportToJournalEntry(report: Report, nodeId: string): JournalEnt
       resources_total: totalCount,
       resources_changed: changedCount,
       resources_failed: failedCount,
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       resources_skipped: report.metrics?.resources?.skipped ?? 0,
     },
     userId: undefined,
