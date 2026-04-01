@@ -57,7 +57,7 @@
     testResult = null;
 
     try {
-      const result = await testProxmoxConnection(config);
+      const result = await testProxmoxConnection();
       testResult = result;
 
       if (result.success) {
