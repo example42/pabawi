@@ -10,7 +10,6 @@ import {
   createProxmoxLXC,
   executeNodeAction,
   destroyNode,
-  saveProxmoxConfig,
   testProxmoxConnection,
 } from './api';
 import type {
@@ -293,66 +292,6 @@ describe('Provisioning API Methods', () => {
     });
   });
 
-  describe('saveProxmoxConfig', () => {
-    it('should save Proxmox configuration', async () => {
-      const config = {
-        host: 'proxmox.example.com',
-        port: 8006,
-        username: 'admin',
-        password: 'secret',
-        realm: 'pam',
-        ssl: { rejectUnauthorized: true },
-      };
-
-      const mockResponse = {
-        message: 'Config saved successfully',
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      const result = await saveProxmoxConfig(config);
-
-      expect(result).toEqual({ success: true, message: 'Config saved successfully' });
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/config/integrations/proxmox',
-        expect.objectContaining({
-          method: 'PUT',
-          body: JSON.stringify({
-            config: {
-              host: 'proxmox.example.com',
-              port: 8006,
-              ssl_rejectUnauthorized: true,
-              username: 'admin',
-              password: 'secret',
-              realm: 'pam',
-            },
-          }),
-        })
-      );
-    });
-
-    it('should not retry on failure (user-initiated operation)', async () => {
-      const config = {
-        host: 'proxmox.example.com',
-        port: 8006,
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: () => Promise.resolve({ error: { message: 'Invalid configuration' } }),
-      });
-
-      await expect(saveProxmoxConfig(config)).rejects.toThrow();
-
-      // Should only make 1 call (no retries)
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-    });
-  });
-
   describe('testProxmoxConnection', () => {
     it('should test Proxmox connection', async () => {
       const mockResponse = {
@@ -416,7 +355,7 @@ describe('Provisioning API Methods', () => {
      */
     it('Feature: proxmox-frontend-ui, Property 4: Action Execution Triggers API Call', async () => {
       const fc = await import('fast-check');
-      const { lifecycleActionArbitrary, nodeStateArbitrary } = await import('../__tests__/generators');
+      const { lifecycleActionArbitrary } = await import('../__tests__/generators');
 
       await fc.assert(
         fc.asyncProperty(

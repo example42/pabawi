@@ -331,7 +331,7 @@ describe('ProvisionPage', () => {
         });
       });
 
-      const { container } = render(ProvisionPage);
+      render(ProvisionPage);
 
       // Wait for error to be displayed
       await waitFor(() => {
@@ -888,7 +888,7 @@ describe('ProvisionPage', () => {
 
             // The new integration should be automatically discovered and displayed
             // Use within(container) to scope queries to this specific render
-            const { getByText, getByRole, queryByRole } = within(container);
+            const { getByText, getByRole } = within(container);
 
             // Check for integration display name
             expect(getByText(newIntegration.displayName)).toBeInTheDocument();
