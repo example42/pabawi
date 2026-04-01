@@ -1,13 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { saveIntegrationConfig, getIntegrationConfig } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
-  import { logger } from '../lib/logger.svelte';
 
   let selectedTransport = $state<"ssh" | "winrm">("ssh");
   let showAdvanced = $state(false);
-  let saving = $state(false);
-  let loadingConfig = $state(true);
+  let copied = $state(false);
 
   let config = $state({
     projectPath: '',
@@ -17,26 +13,36 @@
     concurrentExecutionLimit: 10,
   });
 
-  onMount(async () => {
+  function generateEnvSnippet(): string {
+    const lines: string[] = [
+      '# Bolt Integration Configuration',
+      `BOLT_PROJECT_PATH=${config.projectPath || './bolt-project'}`,
+      `COMMAND_WHITELIST_ALLOW_ALL=${config.commandWhitelistAllowAll}`,
+      `COMMAND_WHITELIST=${config.commandWhitelist || '["ls","pwd","whoami","uptime","systemctl status"]'}`,
+      `BOLT_EXECUTION_TIMEOUT=${config.executionTimeout}`,
+      `CONCURRENT_EXECUTION_LIMIT=${config.concurrentExecutionLimit}`,
+    ];
+
+    return lines.join('\n');
+  }
+
+  const envSnippet = $derived(generateEnvSnippet());
+
+  async function copyToClipboard(): Promise<void> {
     try {
-      const effective = await getIntegrationConfig('bolt');
-      if (effective) {
-        config.projectPath = String(effective.projectPath ?? '');
-        config.executionTimeout = Number(effective.executionTimeout ?? 300000);
-        config.commandWhitelistAllowAll = effective.commandWhitelistAllowAll === true || effective.commandWhitelistAllowAll === 'true';
-        config.concurrentExecutionLimit = Number(effective.concurrentExecutionLimit ?? 10);
-        if (effective.commandWhitelist) {
-          config.commandWhitelist = typeof effective.commandWhitelist === 'string'
-            ? effective.commandWhitelist
-            : JSON.stringify(effective.commandWhitelist);
-        }
-      }
+      await navigator.clipboard.writeText(envSnippet);
+      copied = true;
+      showSuccess('Copied to clipboard');
+      setTimeout(() => { copied = false; }, 2000);
     } catch {
-      // No existing config
-    } finally {
-      loadingConfig = false;
+      showError('Failed to copy — please select and copy manually');
     }
-  });
+  }
+
+  const copySnippet = (text: string): void => {
+    navigator.clipboard.writeText(text);
+    showSuccess('Copied to clipboard');
+  };
 
   function validateForm(): boolean {
     if (!config.projectPath) return false;
@@ -46,47 +52,6 @@
   }
 
   const isFormValid = $derived(validateForm());
-
-  async function handleSaveConfiguration(): Promise<void> {
-    saving = true;
-    try {
-      const payload: Record<string, unknown> = {
-        projectPath: config.projectPath,
-        executionTimeout: config.executionTimeout,
-        commandWhitelistAllowAll: config.commandWhitelistAllowAll,
-        concurrentExecutionLimit: config.concurrentExecutionLimit,
-        commandWhitelist: config.commandWhitelist,
-      };
-      await saveIntegrationConfig('bolt', payload);
-      showSuccess('Bolt configuration saved successfully');
-      logger.info('Bolt configuration saved', { projectPath: config.projectPath });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      showError(`Failed to save configuration: ${message}`);
-      logger.error('Bolt configuration save error', { error });
-    } finally {
-      saving = false;
-    }
-  }
-
-  const copyToClipboard = (text: string): void => {
-    navigator.clipboard.writeText(text);
-    showSuccess('Copied to clipboard');
-  };
-
-  const sshConfig = `# Bolt Integration - SSH Transport
-BOLT_PROJECT_PATH=./bolt-project
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST=["ls","pwd","whoami","uptime","systemctl status"]
-BOLT_EXECUTION_TIMEOUT=300000
-CONCURRENT_EXECUTION_LIMIT=10`;
-
-  const winrmConfig = `# Bolt Integration - WinRM Transport
-BOLT_PROJECT_PATH=./bolt-project
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST=["Get-Service","Get-Process","Get-ComputerInfo"]
-BOLT_EXECUTION_TIMEOUT=300000
-CONCURRENT_EXECUTION_LIMIT=10`;
 
   const advancedConfig = `# Advanced Configuration
 LOG_LEVEL=info
@@ -139,7 +104,7 @@ log:
   <div class="mb-8">
     <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">Bolt Integration Setup</h2>
     <p class="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-      Configure Pabawi to use Bolt for remote command execution, task running,
+      Generate a <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">.env</code> snippet to configure Pabawi for Bolt remote command execution, task running,
       and plan orchestration across your infrastructure.
     </p>
   </div>
@@ -242,28 +207,55 @@ log:
             </p>
           {/if}
         </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="flex gap-3 pt-4">
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm mb-6 ring-2 ring-blue-100 dark:ring-blue-900">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Copy Environment Variables</h3>
+      <p class="text-gray-700 dark:text-gray-300 mb-4">
+        Copy the generated snippet below and paste it into your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code> file, then restart the application.
+      </p>
+
+      <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+        <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+          <span class="font-medium text-gray-900 dark:text-white text-sm">.env Configuration</span>
           <button
-            onclick={handleSaveConfiguration}
-            disabled={!isFormValid || saving}
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+            class="px-4 py-1.5 text-white text-sm rounded transition-colors flex items-center gap-2 {copied
+              ? 'bg-green-600'
+              : 'bg-blue-600 hover:bg-blue-700'}"
+            onclick={copyToClipboard}
           >
-            {#if saving}
-              <span class="animate-spin">⏳</span>
-              Saving...
+            {#if copied}
+              ✓ Copied
             {:else}
-              💾 Save Configuration
+              📋 Copy to Clipboard
             {/if}
           </button>
         </div>
+        <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto whitespace-pre-wrap">{envSnippet}</pre>
       </div>
+
+      {#if isFormValid}
+        <div class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
+            <strong>Next:</strong> Paste into <code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-xs">backend/.env</code> and restart the application. Then check the <strong>Integration Status</strong> dashboard to verify the connection.
+          </p>
+        </div>
+      {:else}
+        <div class="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-r-lg">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
+            Fill in the required fields above to generate a complete snippet.
+          </p>
+        </div>
+      {/if}
     </div>
   </div>
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Choose Primary Transport</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Choose Primary Transport</h3>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <button
@@ -319,7 +311,7 @@ log:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Create Bolt Project Structure</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Create Bolt Project Structure</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Set up the required Bolt project files:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
@@ -327,7 +319,7 @@ log:
           <span class="font-medium text-gray-900 dark:text-white text-sm">bolt-project.yaml</span>
           <button
             class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-            onclick={() => copyToClipboard(boltProject)}
+            onclick={() => copySnippet(boltProject)}
           >
             📋 Copy
           </button>
@@ -343,7 +335,7 @@ log:
           <button
             class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
             onclick={() =>
-              copyToClipboard(
+              copySnippet(
                 selectedTransport === "ssh" ? inventorySSH : inventoryWinRM
               )}
           >
@@ -359,37 +351,14 @@ log:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Configure Environment Variables (Alternative)</h3>
-      <p class="text-gray-700 dark:text-gray-300 mb-4">Add these variables to your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code> file:</p>
-
-      <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden mb-4">
-        <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-          <span class="font-medium text-gray-900 dark:text-white text-sm">
-            {selectedTransport === "ssh"
-              ? "SSH Transport Config"
-              : "WinRM Transport Config"}
-          </span>
-          <button
-            class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-            onclick={() =>
-              copyToClipboard(
-                selectedTransport === "ssh" ? sshConfig : winrmConfig
-              )}
-          >
-            📋 Copy
-          </button>
-        </div>
-        <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto">{selectedTransport === "ssh"
-            ? sshConfig
-            : winrmConfig}</pre>
-      </div>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Advanced Configuration (Optional)</h3>
 
       <button
         class="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         onclick={() => (showAdvanced = !showAdvanced)}
       >
         <span class="text-sm">{showAdvanced ? "▼" : "▶"}</span>
-        <span>Advanced Configuration (Optional)</span>
+        <span>Show Advanced Configuration</span>
       </button>
 
       {#if showAdvanced}
@@ -398,7 +367,7 @@ log:
             <span class="font-medium text-gray-900 dark:text-white text-sm">Advanced Options</span>
             <button
               class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-              onclick={() => copyToClipboard(advancedConfig)}
+              onclick={() => copySnippet(advancedConfig)}
             >
               📋 Copy
             </button>
@@ -428,29 +397,17 @@ log:
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Restart Backend Server</h3>
-      <p class="text-gray-700 dark:text-gray-300 mb-4">Apply the configuration by restarting the backend:</p>
-      <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Restart and Verify</h3>
+      <p class="text-gray-700 dark:text-gray-300 mb-4">After pasting the snippet into <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code>, restart the backend:</p>
+      <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1 mb-4">
         <div>cd backend</div>
         <div>npm run dev</div>
       </div>
-    </div>
-  </div>
-
-  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
-    <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 6: Verify Connection</h3>
-      <p class="text-gray-700 dark:text-gray-300 mb-4">Check the integration status:</p>
-      <ol class="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300 mb-4">
-        <li>Navigate to the <strong>Integrations</strong> page</li>
-        <li>Look for "Bolt" in the list</li>
-        <li>Status should show "healthy" with a green indicator</li>
+      <ol class="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300">
+        <li>Open the <strong>Integration Status</strong> dashboard in Pabawi</li>
+        <li>Confirm <strong>Bolt</strong> status is connected</li>
+        <li>Navigate to the <strong>Inventory</strong> page to see discovered nodes</li>
       </ol>
-
-      <p class="text-gray-700 dark:text-gray-300 mb-3">Or test via API:</p>
-      <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm">
-        curl http://localhost:3000/api/inventory
-      </div>
     </div>
   </div>
 
@@ -544,11 +501,7 @@ log:
 
   <div class="mt-8 text-center">
     <p class="text-gray-600 dark:text-gray-400">
-      For detailed documentation, see <a
-        href="https://github.com/example42/pabawi/docs/tree/main/configuration.md"
-        target="_blank"
-        class="text-blue-600 dark:text-blue-400 hover:underline">configuration.md</a
-      >
+      For detailed documentation, see the Bolt Integration guide in the documentation.
     </p>
   </div>
 </div>
