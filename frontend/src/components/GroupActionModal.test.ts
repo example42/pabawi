@@ -204,7 +204,7 @@ describe('GroupActionModal Component', () => {
       });
 
       // Resolve the promise to complete the test
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+       
       resolvePost!();
     });
 
@@ -1280,7 +1280,7 @@ describe('GroupActionModal Component', () => {
       });
 
       // Resolve the promise
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+       
       resolvePost!();
 
       // Wait for completion

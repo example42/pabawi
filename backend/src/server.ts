@@ -186,7 +186,7 @@ async function startServer(): Promise<Express> {
 
     // Initialize execution repository
     const executionRepository = new ExecutionRepository(
-      databaseService.getConnection(),
+      databaseService.getAdapter(),
     );
 
     // Initialize command whitelist service
@@ -244,7 +244,7 @@ async function startServer(): Promise<Express> {
     // Initialize batch execution service
     // Note: This will be fully functional once all integrations are registered
     const batchExecutionService = new BatchExecutionService(
-      databaseService.getConnection(),
+      databaseService.getAdapter(),
       executionQueue,
       executionRepository,
       integrationManager,
@@ -698,6 +698,7 @@ async function startServer(): Promise<Express> {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (proxmoxConfigured && proxmoxConfig) {
       logger.info("Initializing Proxmox integration...", {
         component: "Server",
@@ -715,6 +716,7 @@ async function startServer(): Promise<Express> {
           name: "proxmox",
           type: "both",
           config: proxmoxConfig as unknown as Record<string, unknown>,
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           priority: proxmoxConfig.priority ?? 7, // Default 7: between Bolt/PuppetDB (10) and Hiera (6)
         };
 
@@ -734,9 +736,11 @@ async function startServer(): Promise<Express> {
           metadata: {
             enabled: true,
             host: proxmoxConfig.host,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             port: proxmoxConfig.port ?? 8006,
             hasToken: !!proxmoxConfig.token,
             hasPassword: !!proxmoxConfig.password,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             priority: proxmoxConfig.priority ?? 7,
           },
         });
@@ -784,6 +788,7 @@ async function startServer(): Promise<Express> {
       },
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (awsConfigured && awsConfig) {
       logger.info("Initializing AWS integration...", {
         component: "Server",
@@ -816,6 +821,7 @@ async function startServer(): Promise<Express> {
           operation: "initializeAWS",
           metadata: {
             enabled: true,
+            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             region: awsConfig.region ?? "us-east-1",
             regions: awsConfig.regions,
             hasAccessKey: !!awsConfig.accessKeyId,
@@ -919,7 +925,7 @@ async function startServer(): Promise<Express> {
     });
 
     // Create shared JournalService and wire it to plugins
-    const journalService = new JournalService(databaseService.getConnection());
+    const journalService = new JournalService(databaseService.getAdapter());
     if (proxmoxPlugin) {
       proxmoxPlugin.setJournalService(journalService);
       logger.info("JournalService wired to ProxmoxIntegration", {
@@ -1033,8 +1039,8 @@ async function startServer(): Promise<Express> {
 
     // Create authentication and RBAC middleware instances
     // Wrap async middleware with asyncHandler to satisfy Express's void return expectation
-    const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getConnection()));
-    const rawRbacMiddleware = createRbacMiddleware(databaseService.getConnection());
+    const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getAdapter()));
+    const rawRbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
     const rbacMiddleware = (resource: string, action: string): express.RequestHandler =>
       asyncHandler(rawRbacMiddleware(resource, action));
 
@@ -1215,7 +1221,7 @@ async function startServer(): Promise<Express> {
         integrationManager,
         puppetDBService,
         puppetserverService,
-        databaseService.getConnection(),
+        databaseService.getAdapter(),
         undefined, // JWT secret is read from environment by AuthenticationService
         { allowDestructiveProvisioning: config.provisioning.allowDestructiveActions },
       ),

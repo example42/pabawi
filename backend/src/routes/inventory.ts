@@ -35,7 +35,7 @@ function requireLifecycleAuth(req: Request, res: Response, next: () => void): vo
     return;
   }
 
-  const authHeader = req.headers["authorization"];
+  const authHeader = req.headers.authorization;
   const expectedHeader = `Bearer ${token}`;
 
   if (authHeader !== expectedHeader) {
@@ -1203,7 +1203,7 @@ export function createInventoryRouter(
   function getExecutionToolForNode(
     nodeId: string,
     res: Response,
-  ): { tool: import("../integrations/types").ExecutionToolPlugin; provider: string } | null {
+  ): { tool: import("../integrations/types").ExecutionToolPlugin; provider: string } | null { // eslint-disable-line @typescript-eslint/consistent-type-imports
     if (!integrationManager?.isInitialized()) {
       res.status(503).json({
         error: { code: "INTEGRATION_NOT_AVAILABLE", message: "Integration manager is not available" },
@@ -1243,6 +1243,7 @@ export function createInventoryRouter(
    */
   router.get(
     "/:id/lifecycle-actions",
+    // eslint-disable-next-line @typescript-eslint/require-await
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const params = NodeIdParamSchema.parse(req.params);
       const nodeId = params.id;
@@ -1268,7 +1269,7 @@ export function createInventoryRouter(
       });
 
       // Add destroy action from provisioning capabilities if not already present
-      const provisioningTool = tool as unknown as { listProvisioningCapabilities?: () => Array<{ name: string; description: string; operation: string }> };
+      const provisioningTool = tool as unknown as { listProvisioningCapabilities?: () => { name: string; description: string; operation: string }[] };
       if (typeof provisioningTool.listProvisioningCapabilities === "function") {
         const provCaps = provisioningTool.listProvisioningCapabilities();
         for (const cap of provCaps) {

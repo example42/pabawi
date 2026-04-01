@@ -1187,7 +1187,7 @@ describe("Provisioning Capabilities", () => {
       const nodes = await service.getInventory();
 
       expect(nodes).toHaveLength(1);
-      expect((nodes[0] as any).computeType).toBe("vm");
+      expect((nodes[0] as Record<string, unknown>).computeType).toBe("vm");
     });
 
     it("should include computeType 'lxc' for lxc guests", async () => {
@@ -1200,7 +1200,7 @@ describe("Provisioning Capabilities", () => {
       const nodes = await service.getInventory();
 
       expect(nodes).toHaveLength(1);
-      expect((nodes[0] as any).computeType).toBe("lxc");
+      expect((nodes[0] as Record<string, unknown>).computeType).toBe("lxc");
     });
   });
 
@@ -1218,7 +1218,7 @@ describe("Provisioning Capabilities", () => {
       const nodes = await service.getInventory("qemu");
 
       expect(nodes).toHaveLength(2);
-      nodes.forEach((n) => expect((n as any).computeType).toBe("vm"));
+      nodes.forEach((n) => expect((n as Record<string, unknown>).computeType).toBe("vm"));
     });
 
     it("should return only containers when computeType is 'lxc'", async () => {
@@ -1228,7 +1228,7 @@ describe("Provisioning Capabilities", () => {
       const nodes = await service.getInventory("lxc");
 
       expect(nodes).toHaveLength(1);
-      expect((nodes[0] as any).computeType).toBe("lxc");
+      expect((nodes[0] as Record<string, unknown>).computeType).toBe("lxc");
     });
 
     it("should return all guests when computeType is undefined", async () => {
@@ -1252,7 +1252,7 @@ describe("Provisioning Capabilities", () => {
       const vms = await service.getInventory("qemu");
       expect(mockClient.get).toHaveBeenCalledTimes(1); // Still cached
       expect(vms).toHaveLength(2);
-      vms.forEach((n) => expect((n as any).computeType).toBe("vm"));
+      vms.forEach((n) => expect((n as Record<string, unknown>).computeType).toBe("vm"));
     });
   });
 

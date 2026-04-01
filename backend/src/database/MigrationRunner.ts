@@ -106,6 +106,7 @@ export class MigrationRunner {
         if (!candidatesByID.has(id)) {
           candidatesByID.set(id, {});
         }
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         const entry = candidatesByID.get(id)!;
 
         if (fileDialect === undefined) {

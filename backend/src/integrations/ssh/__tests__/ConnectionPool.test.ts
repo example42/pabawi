@@ -198,7 +198,7 @@ describe('ConnectionPool', () => {
       // Second attempt creates a new connection since first is in use
       // Note: Current implementation has a limitation where it replaces
       // the connection in the pool rather than maintaining multiple connections
-      const _client2 = await pool.acquire(host, createConnection); // eslint-disable-line @typescript-eslint/no-unused-vars
+      const _client2 = await pool.acquire(host, createConnection);
       expect(createConnection).toHaveBeenCalledTimes(2);
 
       // Verify pool stats show only one connection (the latest one)

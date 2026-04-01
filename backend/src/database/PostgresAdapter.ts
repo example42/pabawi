@@ -23,6 +23,7 @@ export class PostgresAdapter implements DatabaseAdapter {
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Unknown connection error";
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
       await this._pool.end().catch(() => {});
       this._pool = null;
       throw new DatabaseConnectionError(
@@ -157,7 +158,7 @@ export class PostgresAdapter implements DatabaseAdapter {
   getPlaceholder(index: number): string {
     if (!Number.isInteger(index) || index < 1) {
       throw new Error(
-        `Invalid placeholder index ${index} for Postgres; parameter positions are 1-based.`,
+        `Invalid placeholder index ${String(index)} for Postgres; parameter positions are 1-based.`,
       );
     }
     return "$" + String(index);

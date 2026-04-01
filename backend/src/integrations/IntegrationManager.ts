@@ -244,34 +244,34 @@ export class IntegrationManager {
    *
    * @returns Array of provisioning capabilities from all plugins
    */
-  getAllProvisioningCapabilities(): Array<{
+  getAllProvisioningCapabilities(): {
     source: string;
-    capabilities: Array<{
+    capabilities: {
       name: string;
       description: string;
       operation: "create" | "destroy";
-      parameters: Array<{
+      parameters: {
         name: string;
         type: string;
         required: boolean;
         default?: unknown;
-      }>;
-    }>;
-  }> {
-    const result: Array<{
+      }[];
+    }[];
+  }[] {
+    const result: {
       source: string;
-      capabilities: Array<{
+      capabilities: {
         name: string;
         description: string;
         operation: "create" | "destroy";
-        parameters: Array<{
+        parameters: {
           name: string;
           type: string;
           required: boolean;
           default?: unknown;
-        }>;
-      }>;
-    }> = [];
+        }[];
+      }[];
+    }[] = [];
 
     for (const [name, tool] of this.executionTools) {
       // Check if the plugin has listProvisioningCapabilities method
@@ -280,10 +280,13 @@ export class IntegrationManager {
         typeof tool.listProvisioningCapabilities === "function"
       ) {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
           const capabilities = tool.listProvisioningCapabilities();
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
           if (capabilities && capabilities.length > 0) {
             result.push({
               source: name,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
               capabilities,
             });
           }
@@ -347,7 +350,7 @@ export class IntegrationManager {
     const aggregated = await this.getAggregatedInventory(useCache);
 
     return {
-      nodes: aggregated.nodes as LinkedNode[],
+      nodes: aggregated.nodes,
       sources: aggregated.sources,
     };
   }
@@ -452,7 +455,7 @@ export class IntegrationManager {
           let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
           const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(
-              () => reject(new Error(`Source '${name}' timed out after ${String(SOURCE_TIMEOUT_MS)}ms`)),
+              () => { reject(new Error(`Source '${name}' timed out after ${String(SOURCE_TIMEOUT_MS)}ms`)); },
               SOURCE_TIMEOUT_MS,
             );
           });

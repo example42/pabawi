@@ -77,7 +77,7 @@ export class AWSService {
 
   constructor(config: AWSConfig, logger: LoggerService) {
     this.logger = logger;
-    this.region = config.region || "us-east-1";
+    this.region = config.region ?? "us-east-1";
     this.regions = config.regions && config.regions.length > 0
       ? config.regions
       : [this.region];
@@ -146,9 +146,9 @@ export class AWSService {
       const response = await stsClient.send(new GetCallerIdentityCommand({}));
 
       const result = {
-        account: response.Account || "",
-        arn: response.Arn || "",
-        userId: response.UserId || "",
+        account: response.Account ?? "",
+        arn: response.Arn ?? "",
+        userId: response.UserId ?? "",
       };
 
       this.logger.info("AWS credentials validated", {
@@ -294,7 +294,7 @@ export class AWSService {
     });
 
     const response = await this.client.send(new DescribeRegionsCommand({}));
-    const regions = (response.Regions || [])
+    const regions = (response.Regions ?? [])
       .map((r) => r.RegionName)
       .filter((name): name is string => !!name)
       .sort();
@@ -319,7 +319,7 @@ export class AWSService {
     this.logger.debug("Fetching instance types", {
       component: "AWSService",
       operation: "getInstanceTypes",
-      metadata: { region: region || this.region },
+      metadata: { region: region ?? this.region },
     });
 
     const results: InstanceTypeInfo[] = [];
@@ -333,12 +333,12 @@ export class AWSService {
         })
       );
 
-      for (const it of response.InstanceTypes || []) {
+      for (const it of response.InstanceTypes ?? []) {
         results.push({
-          instanceType: it.InstanceType || "unknown",
-          vCpus: it.VCpuInfo?.DefaultVCpus || 0,
-          memoryMiB: it.MemoryInfo?.SizeInMiB || 0,
-          architecture: it.ProcessorInfo?.SupportedArchitectures?.[0] || "unknown",
+          instanceType: it.InstanceType ?? "unknown",
+          vCpus: it.VCpuInfo?.DefaultVCpus ?? 0,
+          memoryMiB: it.MemoryInfo?.SizeInMiB ?? 0,
+          architecture: it.ProcessorInfo?.SupportedArchitectures?.[0] ?? "unknown",
           currentGeneration: it.CurrentGeneration ?? false,
         });
       }
@@ -369,7 +369,7 @@ export class AWSService {
       metadata: { region },
     });
 
-    const ec2Filters: Filter[] = (filters || []).map((f) => ({
+    const ec2Filters: Filter[] = (filters ?? []).map((f) => ({
       Name: f.name,
       Values: f.values,
     }));
@@ -387,13 +387,13 @@ export class AWSService {
       })
     );
 
-    const amis: AMIInfo[] = (response.Images || []).map((img) => ({
-      imageId: img.ImageId || "",
-      name: img.Name || "",
+    const amis: AMIInfo[] = (response.Images ?? []).map((img) => ({
+      imageId: img.ImageId ?? "",
+      name: img.Name ?? "",
       description: img.Description,
-      architecture: img.Architecture || "unknown",
-      ownerId: img.OwnerId || "",
-      state: img.State || "unknown",
+      architecture: img.Architecture ?? "unknown",
+      ownerId: img.OwnerId ?? "",
+      state: img.State ?? "unknown",
       platform: img.PlatformDetails,
       creationDate: img.CreationDate,
     }));
@@ -423,10 +423,10 @@ export class AWSService {
 
     const response = await client.send(new DescribeVpcsCommand({}));
 
-    const vpcs: VPCInfo[] = (response.Vpcs || []).map((vpc) => ({
-      vpcId: vpc.VpcId || "",
-      cidrBlock: vpc.CidrBlock || "",
-      state: vpc.State || "unknown",
+    const vpcs: VPCInfo[] = (response.Vpcs ?? []).map((vpc) => ({
+      vpcId: vpc.VpcId ?? "",
+      cidrBlock: vpc.CidrBlock ?? "",
+      state: vpc.State ?? "unknown",
       isDefault: vpc.IsDefault ?? false,
       tags: tagsToRecord(vpc.Tags),
     }));
@@ -465,12 +465,12 @@ export class AWSService {
       })
     );
 
-    const subnets: SubnetInfo[] = (response.Subnets || []).map((s) => ({
-      subnetId: s.SubnetId || "",
-      vpcId: s.VpcId || "",
-      cidrBlock: s.CidrBlock || "",
-      availabilityZone: s.AvailabilityZone || "",
-      availableIpAddressCount: s.AvailableIpAddressCount || 0,
+    const subnets: SubnetInfo[] = (response.Subnets ?? []).map((s) => ({
+      subnetId: s.SubnetId ?? "",
+      vpcId: s.VpcId ?? "",
+      cidrBlock: s.CidrBlock ?? "",
+      availabilityZone: s.AvailabilityZone ?? "",
+      availableIpAddressCount: s.AvailableIpAddressCount ?? 0,
       tags: tagsToRecord(s.Tags),
     }));
 
@@ -508,11 +508,11 @@ export class AWSService {
       })
     );
 
-    const groups: SecurityGroupInfo[] = (response.SecurityGroups || []).map((sg) => ({
-      groupId: sg.GroupId || "",
-      groupName: sg.GroupName || "",
-      description: sg.Description || "",
-      vpcId: sg.VpcId || "",
+    const groups: SecurityGroupInfo[] = (response.SecurityGroups ?? []).map((sg) => ({
+      groupId: sg.GroupId ?? "",
+      groupName: sg.GroupName ?? "",
+      description: sg.Description ?? "",
+      vpcId: sg.VpcId ?? "",
       tags: tagsToRecord(sg.Tags),
     }));
 
@@ -541,10 +541,10 @@ export class AWSService {
 
     const response = await client.send(new DescribeKeyPairsCommand({}));
 
-    const keyPairs: KeyPairInfo[] = (response.KeyPairs || []).map((kp) => ({
-      keyName: kp.KeyName || "",
-      keyPairId: kp.KeyPairId || "",
-      keyFingerprint: kp.KeyFingerprint || "",
+    const keyPairs: KeyPairInfo[] = (response.KeyPairs ?? []).map((kp) => ({
+      keyName: kp.KeyName ?? "",
+      keyPairId: kp.KeyPairId ?? "",
+      keyFingerprint: kp.KeyFingerprint ?? "",
       keyType: kp.KeyType,
     }));
 
@@ -575,14 +575,16 @@ export class AWSService {
       metadata: { imageId: params.imageId, instanceType: params.instanceType },
     });
 
-    const region = (params.region as string) || this.region;
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    const region = (params.region as string) ?? this.region;
     const client = this.getClientForRegion(region);
 
     try {
       const response = await client.send(
         new RunInstancesCommand({
           ImageId: params.imageId as string,
-          InstanceType: ((params.instanceType as string) || "t2.micro") as RunInstancesCommandInput["InstanceType"],
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+          InstanceType: ((params.instanceType as string) ?? "t2.micro") as RunInstancesCommandInput["InstanceType"],
           MinCount: 1,
           MaxCount: 1,
           KeyName: params.keyName as string | undefined,
@@ -622,7 +624,7 @@ export class AWSService {
    * Validates: Requirement 11.1
    */
   async startInstance(instanceId: string, region?: string): Promise<void> {
-    const client = this.getClientForRegion(region || this.region);
+    const client = this.getClientForRegion(region ?? this.region);
     try {
       await client.send(new StartInstancesCommand({ InstanceIds: [instanceId] }));
       this.logger.info("EC2 instance started", {
@@ -641,7 +643,7 @@ export class AWSService {
    * Validates: Requirement 11.1
    */
   async stopInstance(instanceId: string, region?: string): Promise<void> {
-    const client = this.getClientForRegion(region || this.region);
+    const client = this.getClientForRegion(region ?? this.region);
     try {
       await client.send(new StopInstancesCommand({ InstanceIds: [instanceId] }));
       this.logger.info("EC2 instance stopped", {
@@ -660,7 +662,7 @@ export class AWSService {
    * Validates: Requirement 11.1
    */
   async rebootInstance(instanceId: string, region?: string): Promise<void> {
-    const client = this.getClientForRegion(region || this.region);
+    const client = this.getClientForRegion(region ?? this.region);
     try {
       await client.send(new RebootInstancesCommand({ InstanceIds: [instanceId] }));
       this.logger.info("EC2 instance rebooted", {
@@ -679,7 +681,7 @@ export class AWSService {
    * Validates: Requirement 11.1
    */
   async terminateInstance(instanceId: string, region?: string): Promise<void> {
-    const client = this.getClientForRegion(region || this.region);
+    const client = this.getClientForRegion(region ?? this.region);
     try {
       await client.send(new TerminateInstancesCommand({ InstanceIds: [instanceId] }));
       this.logger.info("EC2 instance terminated", {
@@ -699,6 +701,7 @@ export class AWSService {
    */
   private throwIfAuthError(error: unknown): void {
     if (error instanceof Error) {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const name = (error as Error & { name?: string }).name ?? "";
       const code = (error as Error & { Code?: string }).Code ?? "";
       const authErrors = [
@@ -734,8 +737,8 @@ export class AWSService {
         new DescribeInstancesCommand({ NextToken: nextToken })
       );
 
-      for (const reservation of response.Reservations || []) {
-        for (const instance of reservation.Instances || []) {
+      for (const reservation of response.Reservations ?? []) {
+        for (const instance of reservation.Instances ?? []) {
           instances.push(instance);
         }
       }
@@ -752,20 +755,20 @@ export class AWSService {
    * Validates: Requirement 9.4 - includes state, type, region, VPC, tags
    */
   private transformInstanceToNode(instance: Instance, queryRegion?: string): Node {
-    const instanceId = instance.InstanceId || "unknown";
+    const instanceId = instance.InstanceId ?? "unknown";
     const nameTag = getTagValue(instance.Tags, "Name");
     const tags = tagsToRecord(instance.Tags);
-    const state = instance.State?.Name || "unknown";
-    const instanceType = instance.InstanceType || "unknown";
-    const vpcId = instance.VpcId || "";
-    const az = instance.Placement?.AvailabilityZone || queryRegion || this.region;
+    const state = instance.State?.Name ?? "unknown";
+    const instanceType = instance.InstanceType ?? "unknown";
+    const vpcId = instance.VpcId ?? "";
+    const az = instance.Placement?.AvailabilityZone ?? queryRegion ?? this.region;
     const instanceRegion = az.replace(/[a-z]$/, "");
 
     const nodeId = `aws:${instanceRegion}:${instanceId}`;
 
     const node: Node = {
       id: nodeId,
-      name: nameTag || instanceId,
+      name: nameTag ?? instanceId,
       uri: `aws:${instanceRegion}:${instanceId}`,
       transport: "ssh" as const,
       config: {
@@ -793,9 +796,9 @@ export class AWSService {
    */
   private transformToFacts(nodeId: string, instance: Instance): Facts {
     const tags = tagsToRecord(instance.Tags);
-    const state = instance.State?.Name || "unknown";
-    const instanceType = instance.InstanceType || "unknown";
-    const az = instance.Placement?.AvailabilityZone || this.region;
+    const state = instance.State?.Name ?? "unknown";
+    const instanceType = instance.InstanceType ?? "unknown";
+    const az = instance.Placement?.AvailabilityZone ?? this.region;
     const instanceRegion = az.replace(/[a-z]$/, "");
 
     const nameTag = getTagValue(instance.Tags, "Name");
@@ -807,10 +810,11 @@ export class AWSService {
       facts: {
         os: {
           family: instance.Platform === "Windows" ? "windows" : "linux",
-          name: instance.PlatformDetails || "unknown",
+          name: instance.PlatformDetails ?? "unknown",
           release: { full: "unknown", major: "unknown" },
         },
         processors: {
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           count: instance.CpuOptions?.CoreCount != null && instance.CpuOptions?.ThreadsPerCore != null
             ? instance.CpuOptions.CoreCount * instance.CpuOptions.ThreadsPerCore
             : 0,
@@ -820,7 +824,7 @@ export class AWSService {
           system: { total: "unknown", available: "unknown" },
         },
         networking: {
-          hostname: instance.PrivateDnsName || "unknown",
+          hostname: instance.PrivateDnsName ?? "unknown",
           interfaces: {
             ...(instance.PublicIpAddress
               ? { public: { ip: instance.PublicIpAddress, dns: instance.PublicDnsName } }
@@ -840,7 +844,7 @@ export class AWSService {
             availabilityZone: az,
             launchTime: instance.LaunchTime?.toISOString(),
             architecture: instance.Architecture,
-            platform: instance.Platform || "linux",
+            platform: instance.Platform ?? "linux",
             platformDetails: instance.PlatformDetails,
             virtualizationType: instance.VirtualizationType,
             hypervisor: instance.Hypervisor,
@@ -855,7 +859,7 @@ export class AWSService {
             publicDns: instance.PublicDnsName,
             privateDns: instance.PrivateDnsName,
             sourceDestCheck: instance.SourceDestCheck,
-            networkInterfaces: (instance.NetworkInterfaces || []).map((nic) => ({
+            networkInterfaces: (instance.NetworkInterfaces ?? []).map((nic) => ({
               networkInterfaceId: nic.NetworkInterfaceId,
               subnetId: nic.SubnetId,
               vpcId: nic.VpcId,
@@ -880,7 +884,7 @@ export class AWSService {
                   threadsPerCore: instance.CpuOptions.ThreadsPerCore,
                 }
               : undefined,
-            blockDevices: (instance.BlockDeviceMappings || []).map((bdm) => ({
+            blockDevices: (instance.BlockDeviceMappings ?? []).map((bdm) => ({
               deviceName: bdm.DeviceName,
               volumeId: bdm.Ebs?.VolumeId,
               status: bdm.Ebs?.Status,
@@ -892,7 +896,7 @@ export class AWSService {
             tags,
             keyName: instance.KeyName,
             imageId: instance.ImageId,
-            securityGroups: (instance.SecurityGroups || []).map((sg) => ({
+            securityGroups: (instance.SecurityGroups ?? []).map((sg) => ({
               groupId: sg.GroupId,
               groupName: sg.GroupName,
             })),
@@ -931,10 +935,12 @@ export class AWSService {
     const regionMap = new Map<string, string[]>();
 
     for (const node of nodes) {
-      const region = (node.config.region as string) || this.region;
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      const region = (node.config.region as string) ?? this.region;
       if (!regionMap.has(region)) {
         regionMap.set(region, []);
       }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       regionMap.get(region)!.push(node.name);
     }
 
@@ -956,10 +962,12 @@ export class AWSService {
     const vpcMap = new Map<string, string[]>();
 
     for (const node of nodes) {
-      const vpcId = (node.config.vpcId as string) || "no-vpc";
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      const vpcId = (node.config.vpcId as string) ?? "no-vpc";
       if (!vpcMap.has(vpcId)) {
         vpcMap.set(vpcId, []);
       }
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       vpcMap.get(vpcId)!.push(node.name);
     }
 
@@ -983,17 +991,20 @@ export class AWSService {
     const tagGroups = new Map<string, Map<string, string[]>>();
 
     for (const node of nodes) {
-      const tags = (node.config.tags as Record<string, string>) || {};
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      const tags = (node.config.tags as Record<string, string>) ?? {};
       for (const key of tagKeys) {
         const value = tags[key];
         if (value) {
           if (!tagGroups.has(key)) {
             tagGroups.set(key, new Map());
           }
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const valueMap = tagGroups.get(key)!;
           if (!valueMap.has(value)) {
             valueMap.set(value, []);
           }
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           valueMap.get(value)!.push(node.name);
         }
       }

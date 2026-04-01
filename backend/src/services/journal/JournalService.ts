@@ -32,6 +32,7 @@ export class JournalService {
 
   constructor(db: DatabaseAdapter, liveSources?: Map<string, LiveSource>) {
     this.db = db;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     this.liveSources = liveSources ?? new Map();
   }
 
@@ -46,6 +47,7 @@ export class JournalService {
 
     const id = randomUUID();
     const timestamp = new Date().toISOString();
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     const detailsJson = JSON.stringify(validated.details ?? {});
 
     const sql = `
@@ -137,6 +139,7 @@ export class JournalService {
 
     return rows.map((row) => ({
       ...row,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unnecessary-condition
       details: typeof row.details === "string" ? JSON.parse(row.details) : row.details ?? {},
       isLive: false,
     }));
@@ -167,6 +170,7 @@ export class JournalService {
 
     return rows.map((row) => ({
       ...row,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unnecessary-condition
       details: typeof row.details === "string" ? JSON.parse(row.details) : row.details ?? {},
       isLive: false,
     }));

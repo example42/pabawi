@@ -79,7 +79,7 @@ const mockEntries: JournalEntry[] = [
  * Helper to create a mock SSE stream response.
  * Encodes SSE events as a ReadableStream for fetch mock.
  */
-function createSSEStream(events: Array<{ event: string; data: unknown }>): ReadableStream<Uint8Array> {
+function createSSEStream(events: { event: string; data: unknown }[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   const chunks: string[] = [];
 
@@ -100,7 +100,7 @@ function createSSEStream(events: Array<{ event: string; data: unknown }>): Reada
   });
 }
 
-function mockFetchSSE(events: Array<{ event: string; data: unknown }>): void {
+function mockFetchSSE(events: { event: string; data: unknown }[]): void {
   const stream = createSSEStream(events);
   vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
     ok: true,

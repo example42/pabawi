@@ -199,7 +199,7 @@ class FrontendLogger {
       // Add authentication header if available
       const authHeader = authManager.getAuthHeader();
       if (authHeader) {
-        headers['Authorization'] = authHeader;
+        headers.Authorization = authHeader;
       }
 
       fetch('/api/debug/frontend-logs', {

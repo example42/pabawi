@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-non-null-assertion */
 /**
  * Proxmox Service
  *
@@ -352,6 +353,7 @@ export class ProxmoxService {
     (node as Node & { computeType?: string }).computeType = computeType;
 
     // Add status if available (map to a custom field since Node doesn't have status)
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (guest.status) {
       (node as Node & { status?: string }).status = guest.status;
     }
@@ -764,6 +766,7 @@ export class ProxmoxService {
     }
 
     // Find the guest by node and vmid
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const guest = resources.find(
       (r: ProxmoxGuest) => r.node === node && r.vmid === vmid
     );
@@ -813,7 +816,7 @@ export class ProxmoxService {
 
     // For LXC, hostname might be in config
     if (guestType === "lxc" && configData.hostname) {
-      hostname = configData.hostname as string;
+      hostname = configData.hostname;
     }
 
     // Build facts object
@@ -824,7 +827,7 @@ export class ProxmoxService {
       facts: {
         os: {
           family: guestType === "lxc" ? "linux" : "unknown",
-          name: (configData.ostype as string) || "unknown",
+          name: (configData.ostype!) || "unknown",
           release: {
             full: "unknown",
             major: "unknown",
@@ -832,7 +835,7 @@ export class ProxmoxService {
         },
         processors: {
           count: configData.cores || 1,
-          models: configData.cpu ? [configData.cpu as string] : [],
+          models: configData.cpu ? [configData.cpu] : [],
         },
         memory: {
           system: {
@@ -876,9 +879,9 @@ export class ProxmoxService {
       facts.facts.categories!.system = {
         ...facts.facts.categories!.system,
         currentMemory: statusData.mem,
-        currentMemoryFormatted: this.formatBytes(statusData.mem || 0),
+        currentMemoryFormatted: this.formatBytes(statusData.mem ?? 0),
         currentDisk: statusData.disk,
-        currentDiskFormatted: this.formatBytes(statusData.disk || 0),
+        currentDiskFormatted: this.formatBytes(statusData.disk ?? 0),
         networkIn: statusData.netin,
         networkOut: statusData.netout,
         diskRead: statusData.diskread,
@@ -972,10 +975,10 @@ export class ProxmoxService {
     try {
       const result = await this.client.get("/api2/json/cluster/nextid");
       const vmid = typeof result === "string" ? parseInt(result, 10) : result as number;
-      if (isNaN(vmid as number)) {
+      if (isNaN(vmid)) {
         throw new Error("Unexpected response format for next VMID");
       }
-      return vmid as number;
+      return vmid;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error("Failed to fetch next VMID", {
@@ -1329,7 +1332,7 @@ export class ProxmoxService {
           }
           endpoint = `/api2/json/nodes/${node}/qemu/${vmid}/status/resume`;
           break;
-        case "snapshot":
+        case "snapshot": {
           // Snapshot requires special handling with a name parameter
           const snapshotName = `snapshot-${Date.now()}`;
           endpoint = guestType === "lxc"
@@ -1376,6 +1379,7 @@ export class ProxmoxService {
               },
             ],
           };
+        }
         default:
           throw new Error(`Unsupported action: ${action}`);
       }
@@ -1518,7 +1522,7 @@ export class ProxmoxService {
       // Try to get guest status - if it exists, this will succeed
       await this.getGuestType(node, vmid);
       return true;
-    } catch (error) {
+    } catch {
       // If guest doesn't exist, getGuestType will throw
       return false;
     }

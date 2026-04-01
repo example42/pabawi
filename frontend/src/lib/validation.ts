@@ -81,7 +81,7 @@ export function validateNumericRange(
   fieldName: string
 ): string | null {
   if (value < min || value > max) {
-    return `${fieldName} must be between ${min} and ${max}`;
+    return `${fieldName} must be between ${String(min)} and ${String(max)}`;
   }
   return null;
 }
@@ -103,7 +103,7 @@ export function validateStringPattern(
   patternMessage?: string
 ): string | null {
   if (!pattern.test(value)) {
-    return patternMessage || `${fieldName} format is invalid`;
+    return patternMessage ?? `${fieldName} format is invalid`;
   }
   return null;
 }
@@ -163,18 +163,19 @@ export function validateForm(data: Record<string, unknown>, rules: ValidationRul
         if (isNaN(num)) {
           errors[field] = `${rule.label} must be a number`;
         } else if (rule.min !== undefined && num < rule.min) {
-          errors[field] = `${rule.label} must be at least ${rule.min}`;
+          errors[field] = `${rule.label} must be at least ${String(rule.min)}`;
         } else if (rule.max !== undefined && num > rule.max) {
-          errors[field] = `${rule.label} must be at most ${rule.max}`;
+          errors[field] = `${rule.label} must be at most ${String(rule.max)}`;
         }
       } else if (rule.type === 'string') {
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string
         const str = String(value);
         if (rule.minLength && str.length < rule.minLength) {
-          errors[field] = `${rule.label} must be at least ${rule.minLength} characters`;
+          errors[field] = `${rule.label} must be at least ${String(rule.minLength)} characters`;
         } else if (rule.maxLength && str.length > rule.maxLength) {
-          errors[field] = `${rule.label} must be at most ${rule.maxLength} characters`;
+          errors[field] = `${rule.label} must be at most ${String(rule.maxLength)} characters`;
         } else if (rule.pattern && !rule.pattern.test(str)) {
-          errors[field] = rule.patternMessage || `${rule.label} format is invalid`;
+          errors[field] = rule.patternMessage ?? `${rule.label} format is invalid`;
         }
       }
     }

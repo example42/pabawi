@@ -234,6 +234,7 @@ describe("Error Handling - Unit Tests", () => {
       const badDb = new Database(":memory:");
       const badDatabaseService = {
         getConnection: () => badDb,
+        getAdapter: () => badDb,
         isInitialized: () => true,
       } as DatabaseService;
 

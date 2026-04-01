@@ -103,7 +103,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
           reject(new DatabaseQueryError(err.message, sql, params));
           return;
         }
-        resolve((rows ?? []) as T[]);
+        resolve((rows as T[] | undefined) ?? ([] as T[]));
       });
     });
   }

@@ -484,7 +484,7 @@ export function createFactsRouter(
             let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
             const timeoutPromise = new Promise<never>((_, reject) => {
               timeoutHandle = setTimeout(
-                () => reject(new Error(`Timeout after ${SOURCE_TIMEOUT_MS}ms`)),
+                () => { reject(new Error(`Timeout after ${String(SOURCE_TIMEOUT_MS)}ms`)); },
                 SOURCE_TIMEOUT_MS,
               );
             });
