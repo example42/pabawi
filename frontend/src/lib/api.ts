@@ -1013,28 +1013,6 @@ export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
 }
 
 /**
- * Save Proxmox integration configuration via IntegrationConfigService
- * @deprecated Use saveIntegrationConfig('proxmox', config) instead
- */
-export async function saveProxmoxConfig(config: ProxmoxConfig): Promise<{ success: boolean; message: string }> {
-  const payload: Record<string, unknown> = {
-    host: config.host,
-    port: config.port,
-    ssl_rejectUnauthorized: config.ssl?.rejectUnauthorized ?? true,
-  };
-  if (config.token) {
-    payload.token = config.token;
-  }
-  if (config.username) {
-    payload.username = config.username;
-    payload.password = config.password;
-    payload.realm = config.realm;
-  }
-  await saveIntegrationConfig('proxmox', payload);
-  return { success: true, message: 'Config saved successfully' };
-}
-
-/**
  * Test Proxmox connection using .env-sourced configuration
  * Validates Requirements: 12.2, 12.3, 12.7
  *
@@ -1280,93 +1258,11 @@ export async function getAWSKeyPairs(region: string): Promise<AWSKeyPairInfo[]> 
 }
 
 /**
- * Save AWS integration configuration via IntegrationConfigService
- * @deprecated Use saveIntegrationConfig('aws', config) instead
- */
-export async function saveAWSConfig(config: AWSIntegrationConfig): Promise<{ success: boolean; message: string }> {
-  const payload: Record<string, unknown> = {
-    accessKeyId: config.accessKeyId,
-    secretAccessKey: config.secretAccessKey,
-    region: config.region,
-  };
-  if (config.sessionToken) {
-    payload.sessionToken = config.sessionToken;
-  }
-  await saveIntegrationConfig('aws', payload);
-  return { success: true, message: 'Config saved successfully' };
-}
-
-/**
  * Test AWS connection using .env-sourced configuration
  * Validates Requirements: 12.5, 12.6, 12.7
  */
 export async function testAWSConnection(): Promise<{ success: boolean; message: string }> {
   return post<{ success: boolean; message: string }>('/api/integrations/aws/test', undefined, {
-    maxRetries: 0,
-    showRetryNotifications: false,
-  });
-}
-
-
-/**
- * Integration Config API methods
- * Validates Requirements: 21.1, 21.2, 21.3
- */
-
-/**
- * Integration config record returned from the API
- */
-export interface IntegrationConfigRecord {
-  id: string;
-  userId: string;
-  integrationName: string;
-  config: Record<string, unknown>;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/**
- * List all integration configs for the authenticated user
- * Validates Requirements: 21.1
- */
-export async function getIntegrationConfigs(): Promise<IntegrationConfigRecord[]> {
-  const response = await get<{ configs: IntegrationConfigRecord[] }>('/api/config/integrations', {
-    maxRetries: 2,
-    retryDelay: 1000,
-  });
-  return response.configs;
-}
-
-/**
- * Get effective (merged) config for a specific integration
- * Validates Requirements: 21.1
- */
-export async function getIntegrationConfig(name: string): Promise<Record<string, unknown>> {
-  const response = await get<{ config: Record<string, unknown> }>(`/api/config/integrations/${encodeURIComponent(name)}`, {
-    maxRetries: 2,
-    retryDelay: 1000,
-  });
-  return response.config;
-}
-
-/**
- * Save (upsert) an integration config
- * Validates Requirements: 21.2
- */
-export async function saveIntegrationConfig(name: string, config: Record<string, unknown>): Promise<{ message: string }> {
-  return put<{ message: string }>(`/api/config/integrations/${encodeURIComponent(name)}`, { config }, {
-    maxRetries: 0,
-    showRetryNotifications: false,
-  });
-}
-
-/**
- * Delete an integration config
- * Validates Requirements: 21.2
- */
-export async function deleteIntegrationConfig(name: string): Promise<{ message: string }> {
-  return del<{ message: string }>(`/api/config/integrations/${encodeURIComponent(name)}`, {
     maxRetries: 0,
     showRetryNotifications: false,
   });

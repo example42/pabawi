@@ -98,7 +98,7 @@ export function lifecycleActionArbitrary(): fc.Arbitrary<LifecycleAction> {
       description: fc.constant('Start the virtual machine'),
       requiresConfirmation: fc.constant(false),
       destructive: fc.constant(false),
-      availableWhen: fc.constant(['stopped'])
+      availableWhen: fc.constant(['stopped'] as string[])
     }),
     fc.record({
       name: fc.constant('stop'),
@@ -106,7 +106,7 @@ export function lifecycleActionArbitrary(): fc.Arbitrary<LifecycleAction> {
       description: fc.constant('Stop the virtual machine'),
       requiresConfirmation: fc.constant(false),
       destructive: fc.constant(false),
-      availableWhen: fc.constant(['running'])
+      availableWhen: fc.constant(['running'] as string[])
     }),
     fc.record({
       name: fc.constant('reboot'),
@@ -114,7 +114,7 @@ export function lifecycleActionArbitrary(): fc.Arbitrary<LifecycleAction> {
       description: fc.constant('Reboot the virtual machine'),
       requiresConfirmation: fc.constant(false),
       destructive: fc.constant(false),
-      availableWhen: fc.constant(['running'])
+      availableWhen: fc.constant(['running'] as string[])
     }),
     fc.record({
       name: fc.constant('shutdown'),
@@ -122,7 +122,7 @@ export function lifecycleActionArbitrary(): fc.Arbitrary<LifecycleAction> {
       description: fc.constant('Gracefully shutdown the virtual machine'),
       requiresConfirmation: fc.constant(false),
       destructive: fc.constant(false),
-      availableWhen: fc.constant(['running'])
+      availableWhen: fc.constant(['running'] as string[])
     }),
     fc.record({
       name: fc.constant('suspend'),
@@ -130,7 +130,7 @@ export function lifecycleActionArbitrary(): fc.Arbitrary<LifecycleAction> {
       description: fc.constant('Suspend the virtual machine'),
       requiresConfirmation: fc.constant(false),
       destructive: fc.constant(false),
-      availableWhen: fc.constant(['running'])
+      availableWhen: fc.constant(['running'] as string[])
     }),
     fc.record({
       name: fc.constant('resume'),
@@ -138,7 +138,7 @@ export function lifecycleActionArbitrary(): fc.Arbitrary<LifecycleAction> {
       description: fc.constant('Resume the virtual machine'),
       requiresConfirmation: fc.constant(false),
       destructive: fc.constant(false),
-      availableWhen: fc.constant(['suspended'])
+      availableWhen: fc.constant(['suspended'] as string[])
     }),
     fc.record({
       name: fc.constant('destroy'),
@@ -146,7 +146,7 @@ export function lifecycleActionArbitrary(): fc.Arbitrary<LifecycleAction> {
       description: fc.constant('Permanently delete the virtual machine'),
       requiresConfirmation: fc.constant(true),
       destructive: fc.constant(true),
-      availableWhen: fc.constant(['stopped', 'running', 'suspended'])
+      availableWhen: fc.constant(['stopped', 'running', 'suspended'] as string[])
     })
   );
 }
@@ -167,14 +167,14 @@ export function proxmoxVMParamsArbitrary(): fc.Arbitrary<ProxmoxVMParams> {
     vmid: fc.integer({ min: 100, max: 999999999 }),
     name: fc.string({ minLength: 1, maxLength: 50 }).map(s => s.toLowerCase().replace(/[^a-z0-9-]/g, '-')),
     node: fc.constantFrom('pve1', 'pve2', 'pve3', 'node1', 'node2'),
-    cores: fc.option(fc.integer({ min: 1, max: 64 })),
-    memory: fc.option(fc.integer({ min: 512, max: 65536 })),
-    sockets: fc.option(fc.integer({ min: 1, max: 4 })),
-    cpu: fc.option(fc.constantFrom('host', 'kvm64', 'qemu64')),
-    scsi0: fc.option(fc.string()),
-    ide2: fc.option(fc.string()),
-    net0: fc.option(fc.string()),
-    ostype: fc.option(fc.constantFrom('l26', 'win10', 'win11', 'other'))
+    cores: fc.option(fc.integer({ min: 1, max: 64 })).map(v => v ?? undefined),
+    memory: fc.option(fc.integer({ min: 512, max: 65536 })).map(v => v ?? undefined),
+    sockets: fc.option(fc.integer({ min: 1, max: 4 })).map(v => v ?? undefined),
+    cpu: fc.option(fc.constantFrom('host', 'kvm64', 'qemu64')).map(v => v ?? undefined),
+    scsi0: fc.option(fc.string()).map(v => v ?? undefined),
+    ide2: fc.option(fc.string()).map(v => v ?? undefined),
+    net0: fc.option(fc.string()).map(v => v ?? undefined),
+    ostype: fc.option(fc.constantFrom('l26', 'win10', 'win11', 'other')).map(v => v ?? undefined)
   });
 }
 
@@ -192,11 +192,11 @@ export function proxmoxLXCParamsArbitrary(): fc.Arbitrary<ProxmoxLXCParams> {
       'local:vztmpl/debian-12-standard_12.0-1_amd64.tar.zst',
       'local:vztmpl/alpine-3.18-default_20230607_amd64.tar.xz'
     ),
-    cores: fc.option(fc.integer({ min: 1, max: 64 })),
-    memory: fc.option(fc.integer({ min: 512, max: 65536 })),
-    rootfs: fc.option(fc.string()),
-    net0: fc.option(fc.string()),
-    password: fc.option(fc.string({ minLength: 8, maxLength: 32 }))
+    cores: fc.option(fc.integer({ min: 1, max: 64 })).map(v => v ?? undefined),
+    memory: fc.option(fc.integer({ min: 512, max: 65536 })).map(v => v ?? undefined),
+    rootfs: fc.option(fc.string()).map(v => v ?? undefined),
+    net0: fc.option(fc.string()).map(v => v ?? undefined),
+    password: fc.option(fc.string({ minLength: 8, maxLength: 32 })).map(v => v ?? undefined)
   });
 }
 
@@ -207,10 +207,10 @@ export function provisioningResultArbitrary(): fc.Arbitrary<ProvisioningResult> 
   return fc.oneof(
     // Success case
     fc.record({
-      success: fc.constant(true),
+      success: fc.constant(true as const),
       taskId: fc.uuid(),
-      vmid: fc.option(fc.integer({ min: 100, max: 999999999 })),
-      nodeId: fc.option(fc.uuid()),
+      vmid: fc.option(fc.integer({ min: 100, max: 999999999 })).map(v => v ?? undefined),
+      nodeId: fc.option(fc.uuid()).map(v => v ?? undefined),
       message: fc.constantFrom(
         'VM created successfully',
         'LXC container created successfully',
@@ -220,8 +220,8 @@ export function provisioningResultArbitrary(): fc.Arbitrary<ProvisioningResult> 
     }),
     // Error case
     fc.record({
-      success: fc.constant(false),
-      taskId: fc.option(fc.uuid()),
+      success: fc.constant(false as const),
+      taskId: fc.option(fc.uuid()).map(v => v ?? undefined),
       vmid: fc.constant(undefined),
       nodeId: fc.constant(undefined),
       message: fc.constantFrom(
@@ -285,7 +285,7 @@ export function invalidVMFormDataArbitrary(): fc.Arbitrary<FormDataWithErrors> {
         name: fc.string({ minLength: 1 }),
         node: fc.string({ minLength: 1 })
       }),
-      expectedErrors: fc.constant(['vmid'])
+      expectedErrors: fc.constant(['vmid'] as string[])
     }),
     // Invalid VMID (too high)
     fc.record({
@@ -294,7 +294,7 @@ export function invalidVMFormDataArbitrary(): fc.Arbitrary<FormDataWithErrors> {
         name: fc.string({ minLength: 1 }),
         node: fc.string({ minLength: 1 })
       }),
-      expectedErrors: fc.constant(['vmid'])
+      expectedErrors: fc.constant(['vmid'] as string[])
     }),
     // Missing required fields
     fc.record({
@@ -303,7 +303,7 @@ export function invalidVMFormDataArbitrary(): fc.Arbitrary<FormDataWithErrors> {
         name: fc.constant(''),
         node: fc.constant('')
       }),
-      expectedErrors: fc.constant(['name', 'node'])
+      expectedErrors: fc.constant(['name', 'node'] as string[])
     }),
     // Invalid memory (too low)
     fc.record({
@@ -313,7 +313,7 @@ export function invalidVMFormDataArbitrary(): fc.Arbitrary<FormDataWithErrors> {
         node: fc.string({ minLength: 1 }),
         memory: fc.integer({ min: 0, max: 511 })
       }),
-      expectedErrors: fc.constant(['memory'])
+      expectedErrors: fc.constant(['memory'] as string[])
     })
   );
 }
