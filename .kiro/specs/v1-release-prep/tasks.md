@@ -72,8 +72,8 @@
     - Ensure each guide is a pure `.env` snippet wizard
     - _Requirements: 3.1, 3.2, 3.3, 3.6_
 
-- [ ] 4. Remove Frontend Integration Config API Functions
-  - [~] 4.1 Clean up api.ts
+- [x] 4. Remove Frontend Integration Config API Functions
+  - [x] 4.1 Clean up api.ts
     - Remove `saveIntegrationConfig()` function
     - Remove `getIntegrationConfig()` function
     - Remove `getIntegrationConfigs()` function
@@ -84,7 +84,7 @@
     - Verify no remaining imports of these functions across the frontend
     - _Requirements: 4.1, 4.2, 4.3_
 
-  - [~] 4.2 Fix all TypeScript compilation errors
+  - [x] 4.2 Fix all TypeScript compilation errors
     - Run `tsc --noEmit` in frontend workspace
     - Fix any broken imports or references to removed functions/types
     - Ensure zero type errors

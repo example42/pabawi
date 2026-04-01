@@ -11,7 +11,7 @@
  * These tests verify the component integrates validation correctly
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import * as fc from 'fast-check';
 import ProxmoxProvisionForm from './ProxmoxProvisionForm.svelte';
@@ -60,7 +60,7 @@ const invalidHostnameArbitrary = () => fc.oneof(
   fc.constant(''), // Empty string
   fc.constant('-invalid'), // Starts with hyphen
   fc.constant('invalid-'), // Ends with hyphen
-  fc.stringOf(fc.char().filter(c => c.toUpperCase() !== c.toLowerCase()), { minLength: 1 }) // Contains uppercase
+  fc.constant('UPPERCASE') // Contains uppercase
 );
 
 // Generate valid memory (>= 512)
@@ -87,8 +87,8 @@ const validVMFormDataArbitrary = () => fc.record({
   vmid: validVMIDArbitrary(),
   name: validHostnameArbitrary(),
   node: validNodeArbitrary(),
-  cores: fc.option(validCoresArbitrary()),
-  memory: fc.option(validMemoryArbitrary()),
+  cores: fc.option(validCoresArbitrary()).map(v => v ?? undefined),
+  memory: fc.option(validMemoryArbitrary()).map(v => v ?? undefined),
 });
 
 // Generate invalid VM form data (at least one invalid field)
@@ -133,8 +133,8 @@ const validLXCFormDataArbitrary = () => fc.record({
   hostname: validHostnameArbitrary(),
   node: validNodeArbitrary(),
   ostemplate: fc.string({ minLength: 1, maxLength: 100 }),
-  cores: fc.option(validCoresArbitrary()),
-  memory: fc.option(validMemoryArbitrary()),
+  cores: fc.option(validCoresArbitrary()).map(v => v ?? undefined),
+  memory: fc.option(validMemoryArbitrary()).map(v => v ?? undefined),
 });
 
 // Generate invalid LXC form data (at least one invalid field)
@@ -251,9 +251,9 @@ async function fillLXCForm(formData: Partial<ProxmoxLXCParams>): Promise<void> {
 
 describe('Feature: proxmox-frontend-ui, Property 8: Form Validation Completeness (Component Level)', () => {
   describe('VM Form - Invalid data prevents submission', () => {
-    it('Property 8: submit button is disabled for any invalid VM form data', () => {
-      fc.assert(
-        fc.property(
+    it('Property 8: submit button is disabled for any invalid VM form data', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           invalidVMFormDataArbitrary(),
           async (formData) => {
             const { unmount } = render(ProxmoxProvisionForm);
@@ -278,9 +278,9 @@ describe('Feature: proxmox-frontend-ui, Property 8: Form Validation Completeness
       );
     });
 
-    it('Property 8: form submission is prevented when VM form has validation errors', () => {
-      fc.assert(
-        fc.property(
+    it('Property 8: form submission is prevented when VM form has validation errors', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           invalidVMFormDataArbitrary(),
           async (formData) => {
             const { unmount, container } = render(ProxmoxProvisionForm);
@@ -314,15 +314,15 @@ describe('Feature: proxmox-frontend-ui, Property 8: Form Validation Completeness
       );
     });
 
-    it('Property 8: validation errors are displayed for invalid VM fields', () => {
-      fc.assert(
-        fc.property(
+    it('Property 8: validation errors are displayed for invalid VM fields', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           fc.record({
             vmid: fc.oneof(validVMIDArbitrary(), invalidVMIDArbitrary()),
             name: fc.oneof(validHostnameArbitrary(), invalidHostnameArbitrary()),
             node: validNodeArbitrary(),
-            memory: fc.option(fc.oneof(validMemoryArbitrary(), invalidMemoryArbitrary())),
-            cores: fc.option(fc.oneof(validCoresArbitrary(), invalidCoresArbitrary())),
+            memory: fc.option(fc.oneof(validMemoryArbitrary(), invalidMemoryArbitrary())).map(v => v ?? undefined),
+            cores: fc.option(fc.oneof(validCoresArbitrary(), invalidCoresArbitrary())).map(v => v ?? undefined),
           }),
           async (formData) => {
             const { unmount } = render(ProxmoxProvisionForm);
@@ -363,9 +363,9 @@ describe('Feature: proxmox-frontend-ui, Property 8: Form Validation Completeness
   });
 
   describe('LXC Form - Invalid data prevents submission', () => {
-    it('Property 8: submit button is disabled for any invalid LXC form data', () => {
-      fc.assert(
-        fc.property(
+    it('Property 8: submit button is disabled for any invalid LXC form data', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           invalidLXCFormDataArbitrary(),
           async (formData) => {
             const { unmount, container } = render(ProxmoxProvisionForm);
@@ -397,9 +397,9 @@ describe('Feature: proxmox-frontend-ui, Property 8: Form Validation Completeness
       );
     });
 
-    it('Property 8: form submission is prevented when LXC form has validation errors', () => {
-      fc.assert(
-        fc.property(
+    it('Property 8: form submission is prevented when LXC form has validation errors', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           invalidLXCFormDataArbitrary(),
           async (formData) => {
             const { unmount, container } = render(ProxmoxProvisionForm);
@@ -438,9 +438,9 @@ describe('Feature: proxmox-frontend-ui, Property 8: Form Validation Completeness
 
 describe('Feature: proxmox-frontend-ui, Property 9: Valid Form Enables Submission (Component Level)', () => {
   describe('VM Form - Valid data enables submission', () => {
-    it('Property 9: submit button is enabled for any valid VM form data', () => {
-      fc.assert(
-        fc.property(
+    it('Property 9: submit button is enabled for any valid VM form data', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           validVMFormDataArbitrary(),
           async (formData) => {
             const { unmount } = render(ProxmoxProvisionForm);
@@ -465,9 +465,9 @@ describe('Feature: proxmox-frontend-ui, Property 9: Valid Form Enables Submissio
       );
     });
 
-    it('Property 9: valid VM form allows submission attempt', () => {
-      fc.assert(
-        fc.property(
+    it('Property 9: valid VM form allows submission attempt', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           validVMFormDataArbitrary(),
           async (formData) => {
             const { unmount } = render(ProxmoxProvisionForm);
@@ -491,17 +491,17 @@ describe('Feature: proxmox-frontend-ui, Property 9: Valid Form Enables Submissio
       );
     });
 
-    it('Property 9: valid VM form with optional fields enables submission', () => {
-      fc.assert(
-        fc.property(
+    it('Property 9: valid VM form with optional fields enables submission', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           fc.record({
             vmid: validVMIDArbitrary(),
             name: validHostnameArbitrary(),
             node: validNodeArbitrary(),
-            cores: fc.option(validCoresArbitrary()),
-            memory: fc.option(validMemoryArbitrary()),
-            sockets: fc.option(fc.integer({ min: 1, max: 4 })),
-            cpu: fc.option(fc.string({ minLength: 1, maxLength: 20 })),
+            cores: fc.option(validCoresArbitrary()).map(v => v ?? undefined),
+            memory: fc.option(validMemoryArbitrary()).map(v => v ?? undefined),
+            sockets: fc.option(fc.integer({ min: 1, max: 4 })).map(v => v ?? undefined),
+            cpu: fc.option(fc.string({ minLength: 1, maxLength: 20 })).map(v => v ?? undefined),
           }),
           async (formData) => {
             const { unmount } = render(ProxmoxProvisionForm);
@@ -524,9 +524,9 @@ describe('Feature: proxmox-frontend-ui, Property 9: Valid Form Enables Submissio
   });
 
   describe('LXC Form - Valid data enables submission', () => {
-    it('Property 9: submit button is enabled for any valid LXC form data', () => {
-      fc.assert(
-        fc.property(
+    it('Property 9: submit button is enabled for any valid LXC form data', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           validLXCFormDataArbitrary(),
           async (formData) => {
             const { unmount, container } = render(ProxmoxProvisionForm);
@@ -556,9 +556,9 @@ describe('Feature: proxmox-frontend-ui, Property 9: Valid Form Enables Submissio
       );
     });
 
-    it('Property 9: valid LXC form allows submission attempt', () => {
-      fc.assert(
-        fc.property(
+    it('Property 9: valid LXC form allows submission attempt', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           validLXCFormDataArbitrary(),
           async (formData) => {
             const { unmount, container } = render(ProxmoxProvisionForm);
@@ -589,9 +589,9 @@ describe('Feature: proxmox-frontend-ui, Property 9: Valid Form Enables Submissio
   });
 
   describe('Form State Transitions', () => {
-    it('Property 8 & 9: submit button state changes correctly when fixing validation errors', () => {
-      fc.assert(
-        fc.property(
+    it('Property 8 & 9: submit button state changes correctly when fixing validation errors', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           invalidVMIDArbitrary(),
           validVMIDArbitrary(),
           validHostnameArbitrary(),
@@ -624,9 +624,9 @@ describe('Feature: proxmox-frontend-ui, Property 9: Valid Form Enables Submissio
       );
     });
 
-    it('Property 8 & 9: submit button state changes correctly when introducing validation errors', () => {
-      fc.assert(
-        fc.property(
+    it('Property 8 & 9: submit button state changes correctly when introducing validation errors', async () => {
+      await fc.assert(
+        fc.asyncProperty(
           validVMIDArbitrary(),
           invalidVMIDArbitrary(),
           validHostnameArbitrary(),

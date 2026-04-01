@@ -902,7 +902,7 @@ describe('ManageTab Component', () => {
 
   describe('Action Button Styling (Validates Requirements 7.1, 8.1)', () => {
     it('applies destructive styling to Destroy button', async () => {
-      const { container } = render(ManageTab, {
+      render(ManageTab, {
         props: {
           nodeId: 'vm-100',
           nodeType: 'vm',

@@ -120,7 +120,7 @@ export function hasProvisioningPermission(): boolean {
  *
  * Validates Requirements: 9.1, 9.2, 9.3
  */
-export function hasPermission(action: string, integration?: string): boolean {
+export function hasPermission(_action: string, _integration?: string): boolean {
   if (!authManager.isAuthenticated) {
     return false;
   }

@@ -304,7 +304,7 @@ describe('VM Form Rendering (Task 5.2)', () => {
   });
 
   it('has OS Type dropdown with correct options', () => {
-    const { container } = render(ProxmoxProvisionForm);
+    render(ProxmoxProvisionForm);
 
     const osTypeSelect = screen.getByLabelText(/OS Type/i) as HTMLSelectElement;
     const options = Array.from(osTypeSelect.options).map(opt => opt.value);
@@ -916,102 +916,6 @@ describe('Form Submission (Task 5.4)', () => {
       await waitFor(() => {
         expect((screen.getByLabelText(/Hostname/i) as HTMLInputElement).value).toBe('');
       });
-    });
-  });
-});
-
-    });
-
-    it('disables submit button during LXC submission', async () => {
-      const mockResponse = {
-        success: true,
-        taskId: 'task-456',
-        vmid: 200,
-        message: 'LXC created successfully',
-      };
-
-      mockFetch.mockImplementationOnce(() =>
-        new Promise(resolve =>
-          setTimeout(() => resolve({
-            ok: true,
-            json: () => Promise.resolve(mockResponse),
-          }), 100)
-        )
-      );
-
-      const { container } = render(ProxmoxProvisionForm);
-
-      // Switch to LXC tab
-      const tabs = container.querySelectorAll('nav[aria-label="Provisioning type"] button');
-      (tabs[1] as HTMLElement).click();
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Fill in required fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
-      const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '200' } });
-      await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
-      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
-      await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Submit form
-      const submitButton = screen.getByText(/Create LXC Container/i) as HTMLButtonElement;
-      await fireEvent.click(submitButton);
-
-      // Button should be disabled immediately
-      expect(submitButton.disabled).toBe(true);
-      expect(screen.getByText(/Creating LXC.../i)).toBeTruthy();
-
-      // Wait for completion
-      await new Promise(resolve => setTimeout(resolve, 150));
-    });
-
-    it('resets LXC form after successful submission', async () => {
-      const mockResponse = {
-        success: true,
-        taskId: 'task-456',
-        vmid: 200,
-        message: 'LXC created successfully',
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResponse),
-      });
-
-      const { container } = render(ProxmoxProvisionForm);
-
-      // Switch to LXC tab
-      const tabs = container.querySelectorAll('nav[aria-label="Provisioning type"] button');
-      (tabs[1] as HTMLElement).click();
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Fill in required fields
-      const vmidInput = screen.getByLabelText(/VMID/i) as HTMLInputElement;
-      const hostnameInput = screen.getByLabelText(/Hostname/i) as HTMLInputElement;
-      const nodeSelect = screen.getByLabelText(/^Node/i) as HTMLSelectElement;
-      const ostemplateInput = screen.getByLabelText(/OS Template/i) as HTMLInputElement;
-
-      await fireEvent.input(vmidInput, { target: { value: '200' } });
-      await fireEvent.input(hostnameInput, { target: { value: 'test-lxc' } });
-      await fireEvent.change(nodeSelect, { target: { value: 'pve' } });
-      await fireEvent.input(ostemplateInput, { target: { value: 'local:vztmpl/debian-12.tar.zst' } });
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      // Submit form
-      const submitButton = screen.getByText(/Create LXC Container/i) as HTMLButtonElement;
-      await fireEvent.click(submitButton);
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Form should be reset
-      expect((screen.getByLabelText(/VMID/i) as HTMLInputElement).value).toBe('');
-      expect((screen.getByLabelText(/Hostname/i) as HTMLInputElement).value).toBe('');
-      expect((screen.getByLabelText(/^Node/i) as HTMLSelectElement).value).toBe('');
-      expect((screen.getByLabelText(/OS Template/i) as HTMLInputElement).value).toBe('');
     });
   });
 });
