@@ -29,7 +29,6 @@ import { createGroupsRouter } from "./routes/groups";
 import { createRolesRouter } from "./routes/roles";
 import { createPermissionsRouter } from "./routes/permissions";
 import { createJournalRouter } from "./routes/journal";
-import { createIntegrationConfigRouter } from "./routes/integrationConfig";
 import { createAWSRouter } from "./routes/integrations/aws";
 import { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import monitoringRouter from "./routes/monitoring";
@@ -61,7 +60,6 @@ import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
-import { IntegrationConfigService } from "./services/IntegrationConfigService";
 import { JournalService } from "./services/journal/JournalService";
 
 /**
@@ -685,22 +683,6 @@ async function startServer(): Promise<Express> {
       operation: "initializeSSH",
     });
 
-    // Create IntegrationConfigService early so all plugins can use DB config overrides
-    const integrationConfigService = new IntegrationConfigService(
-      databaseService.getConnection(),
-      process.env.JWT_SECRET ?? "default-secret",
-      (integrationName: string) => {
-        // Provide .env config as the base for each integration
-        const integration = config.integrations[integrationName as keyof typeof config.integrations];
-        if (!integration) return {};
-        return integration as unknown as Record<string, unknown>;
-      },
-    );
-    logger.info("IntegrationConfigService initialized", {
-      component: "Server",
-      operation: "startServer",
-    });
-
     // Initialize Proxmox integration only if configured
     let proxmoxPlugin: ProxmoxIntegration | undefined;
     const proxmoxConfig = config.integrations.proxmox;
@@ -728,18 +710,11 @@ async function startServer(): Promise<Express> {
           operation: "initializeProxmox",
         });
 
-        // Merge .env config with DB-stored config (DB overrides .env)
-        const effectiveProxmoxConfig = await integrationConfigService.getEffectiveConfig("proxmox");
-        const mergedProxmoxConfig = {
-          ...proxmoxConfig,
-          ...(Object.keys(effectiveProxmoxConfig).length > 0 ? effectiveProxmoxConfig : {}),
-        };
-
         const integrationConfig: IntegrationConfig = {
           enabled: true,
           name: "proxmox",
           type: "both",
-          config: mergedProxmoxConfig as unknown as Record<string, unknown>,
+          config: proxmoxConfig as unknown as Record<string, unknown>,
           priority: proxmoxConfig.priority ?? 7, // Default 7: between Bolt/PuppetDB (10) and Hiera (6)
         };
 
@@ -821,25 +796,18 @@ async function startServer(): Promise<Express> {
           operation: "initializeAWS",
         });
 
-        // Merge .env config with DB-stored config (DB overrides .env)
-        const effectiveAwsConfig = await integrationConfigService.getEffectiveConfig("aws");
-        const mergedAwsConfig = {
-          ...awsConfig,
-          ...(Object.keys(effectiveAwsConfig).length > 0 ? effectiveAwsConfig : {}),
-        };
-
         const integrationConfig: IntegrationConfig = {
           enabled: true,
           name: "aws",
           type: "both",
-          config: mergedAwsConfig as unknown as Record<string, unknown>,
+          config: awsConfig as unknown as Record<string, unknown>,
           priority: 7,
         };
 
         logger.debug("Registering AWS plugin", {
           component: "Server",
           operation: "initializeAWS",
-          metadata: { config: { ...integrationConfig, config: { region: mergedAwsConfig.region } } },
+          metadata: { config: { ...integrationConfig, config: { region: awsConfig.region } } },
         });
         integrationManager.registerPlugin(awsPlugin, integrationConfig);
 
@@ -848,9 +816,9 @@ async function startServer(): Promise<Express> {
           operation: "initializeAWS",
           metadata: {
             enabled: true,
-            region: mergedAwsConfig.region ?? "us-east-1",
-            regions: mergedAwsConfig.regions,
-            hasAccessKey: !!mergedAwsConfig.accessKeyId,
+            region: awsConfig.region ?? "us-east-1",
+            regions: awsConfig.regions,
+            hasAccessKey: !!awsConfig.accessKeyId,
             priority: 7,
           },
         });
@@ -1104,9 +1072,6 @@ async function startServer(): Promise<Express> {
     app.use("/api/journal", authMiddleware, rateLimitMiddleware, createJournalRouter(databaseService, {
       puppetdb: puppetDBService,
     }));
-
-    // Integration config routes
-    app.use("/api/config/integrations", authMiddleware, rateLimitMiddleware, createIntegrationConfigRouter(databaseService));
 
     // Monitoring routes (performance metrics)
     app.use("/api/monitoring", authMiddleware, rateLimitMiddleware, monitoringRouter);

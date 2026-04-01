@@ -1,0 +1,31 @@
+[Unit]
+Description=Pabawi - Infrastructure Management Web Interface
+Documentation=https://github.com/example/pabawi
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pabawi
+Group=pabawi
+WorkingDirectory=/opt/pabawi
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=-/opt/pabawi/backend/.env
+ExecStartPre=/usr/bin/npm run build
+ExecStart=/usr/bin/npm run start --workspace=backend
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pabawi
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pabawi/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
