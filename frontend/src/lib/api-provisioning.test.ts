@@ -355,14 +355,6 @@ describe('Provisioning API Methods', () => {
 
   describe('testProxmoxConnection', () => {
     it('should test Proxmox connection', async () => {
-      const config = {
-        host: 'proxmox.example.com',
-        port: 8006,
-        username: 'admin',
-        password: 'secret',
-        realm: 'pam',
-      };
-
       const mockResponse = {
         success: true,
         message: 'Connection successful',
@@ -373,46 +365,35 @@ describe('Provisioning API Methods', () => {
         json: () => Promise.resolve(mockResponse),
       });
 
-      const result = await testProxmoxConnection(config);
+      const result = await testProxmoxConnection();
 
       expect(result).toEqual(mockResponse);
       expect(mockFetch).toHaveBeenCalledWith(
         '/api/integrations/proxmox/test',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify(config),
         })
       );
     });
 
     it('should handle connection test failure', async () => {
-      const config = {
-        host: 'proxmox.example.com',
-        port: 8006,
-      };
-
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: () => Promise.resolve({ error: { message: 'Connection failed' } }),
       });
 
-      await expect(testProxmoxConnection(config)).rejects.toThrow();
+      await expect(testProxmoxConnection()).rejects.toThrow();
     });
 
     it('should not retry on failure (user-initiated operation)', async () => {
-      const config = {
-        host: 'proxmox.example.com',
-        port: 8006,
-      };
-
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 503,
         json: () => Promise.resolve({ error: { message: 'Service unavailable' } }),
       });
 
-      await expect(testProxmoxConnection(config)).rejects.toThrow();
+      await expect(testProxmoxConnection()).rejects.toThrow();
 
       // Should only make 1 call (no retries)
       expect(mockFetch).toHaveBeenCalledTimes(1);

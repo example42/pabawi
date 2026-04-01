@@ -537,5 +537,38 @@ export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: Integ
     })
   );
 
+  /**
+   * POST /api/integrations/aws/test
+   * Test AWS connection using .env-sourced configuration
+   * Validates Requirements: 12.5, 12.6, 12.7
+   */
+  router.post(
+    "/test",
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+      logger.info("Testing AWS connection", {
+        component: "AWSRouter",
+        operation: "testConnection",
+      });
+
+      try {
+        const health = await awsPlugin.healthCheck();
+        res.status(200).json({
+          success: health.healthy,
+          message: health.message ?? (health.healthy ? "Connection successful" : "Connection failed"),
+        });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("AWS connection test failed", {
+          component: "AWSRouter",
+          operation: "testConnection",
+        }, error instanceof Error ? error : undefined);
+        res.status(200).json({
+          success: false,
+          message: msg,
+        });
+      }
+    })
+  );
+
   return router;
 }

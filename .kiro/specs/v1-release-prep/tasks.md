@@ -27,8 +27,8 @@
     - Ensure AWS plugin receives config directly from `config.integrations.aws` (verify no DB merge)
     - _Requirements: 1.5, 1.6, 1.7_
 
-- [ ] 2. Convert IntegrationConfigPage to Read-Only Status Dashboard
-  - [~] 2.1 Rewrite IntegrationConfigPage.svelte as status dashboard
+- [x] 2. Convert IntegrationConfigPage to Read-Only Status Dashboard
+  - [x] 2.1 Rewrite IntegrationConfigPage.svelte as status dashboard
     - Remove all CRUD imports (`getIntegrationConfigs`, `getIntegrationConfig`, `saveIntegrationConfig`, `deleteIntegrationConfig`)
     - Fetch from `GET /api/integrations/status` on mount
     - Display each integration with name, icon, status indicator (green/yellow/red/gray)
@@ -38,7 +38,7 @@
     - Display test results (success/failure messages)
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 12.1, 12.4_
 
-  - [~] 2.2 Refactor test connection API functions
+  - [x] 2.2 Refactor test connection API functions
     - Update `testProxmoxConnection()` in `api.ts` to call `POST /api/integrations/proxmox/test` without sending config in body (backend reads from .env)
     - Update `testAWSConnection()` in `api.ts` similarly
     - Update backend Proxmox test endpoint to read config from ConfigService instead of request body

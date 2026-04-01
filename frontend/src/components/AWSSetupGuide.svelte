@@ -42,7 +42,7 @@
     testResult = null;
 
     try {
-      const result = await testAWSConnection(config);
+      const result = await testAWSConnection();
       testResult = result;
 
       if (result.success) {
