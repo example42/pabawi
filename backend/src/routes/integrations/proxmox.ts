@@ -1070,5 +1070,50 @@ export function createProxmoxRouter(
     })
   );
 
+  /**
+   * POST /api/integrations/proxmox/test
+   * Test Proxmox connection using .env-sourced configuration
+   * Validates Requirements: 12.2, 12.3, 12.7
+   */
+  router.post(
+    "/test",
+    asyncHandler(async (_req: Request, res: Response): Promise<void> => {
+      logger.info("Testing Proxmox connection", {
+        component: "ProxmoxRouter",
+        integration: "proxmox",
+        operation: "testConnection",
+      });
+
+      const proxmox = getProxmoxIntegration();
+      if (!proxmox) {
+        res.status(200).json({
+          success: false,
+          message: "Proxmox integration is not configured. Check your .env settings.",
+        });
+        return;
+      }
+
+      try {
+        const health = await proxmox.healthCheck();
+        res.status(200).json({
+          success: health.healthy,
+          message: health.message ?? (health.healthy ? "Connection successful" : "Connection failed"),
+        });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        logger.error("Proxmox connection test failed", {
+          component: "ProxmoxRouter",
+          integration: "proxmox",
+          operation: "testConnection",
+          metadata: { error: msg },
+        }, error instanceof Error ? error : undefined);
+        res.status(200).json({
+          success: false,
+          message: msg,
+        });
+      }
+    })
+  );
+
   return router;
 }

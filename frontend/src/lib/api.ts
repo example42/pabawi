@@ -1035,13 +1035,13 @@ export async function saveProxmoxConfig(config: ProxmoxConfig): Promise<{ succes
 }
 
 /**
- * Test Proxmox connection with provided configuration
- * Validates Requirements: 10.4
+ * Test Proxmox connection using .env-sourced configuration
+ * Validates Requirements: 12.2, 12.3, 12.7
  *
  * Retry logic: No retries for test operations (user-initiated)
  */
-export async function testProxmoxConnection(config: ProxmoxConfig): Promise<ProxmoxTestResponse> {
-  return post<ProxmoxTestResponse>('/api/integrations/proxmox/test', config, {
+export async function testProxmoxConnection(): Promise<ProxmoxTestResponse> {
+  return post<ProxmoxTestResponse>('/api/integrations/proxmox/test', undefined, {
     maxRetries: 0,
     showRetryNotifications: false,
   });
@@ -1297,11 +1297,11 @@ export async function saveAWSConfig(config: AWSIntegrationConfig): Promise<{ suc
 }
 
 /**
- * Test AWS connection with provided configuration
- * Validates Requirements: 12.1
+ * Test AWS connection using .env-sourced configuration
+ * Validates Requirements: 12.5, 12.6, 12.7
  */
-export async function testAWSConnection(config: AWSIntegrationConfig): Promise<{ success: boolean; message: string }> {
-  return post<{ success: boolean; message: string }>('/api/integrations/aws/test', config, {
+export async function testAWSConnection(): Promise<{ success: boolean; message: string }> {
+  return post<{ success: boolean; message: string }>('/api/integrations/aws/test', undefined, {
     maxRetries: 0,
     showRetryNotifications: false,
   });
