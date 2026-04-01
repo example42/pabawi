@@ -45,8 +45,8 @@
     - Update backend AWS test endpoint to read config from ConfigService instead of request body
     - _Requirements: 12.2, 12.3, 12.5, 12.6, 12.7_
 
-- [ ] 3. Convert Setup Guides to Env Snippet Wizards
-  - [~] 3.1 Refactor ProxmoxSetupGuide.svelte
+- [x] 3. Convert Setup Guides to Env Snippet Wizards
+  - [x] 3.1 Refactor ProxmoxSetupGuide.svelte
     - Remove `onMount` config loading from DB (`getIntegrationConfig('proxmox')`)
     - Remove "Save Configuration" button and `handleSaveConfiguration()` function
     - Remove "Test Connection" button (moved to Status Dashboard)
@@ -58,7 +58,7 @@
     - Add instructions: "Paste into `backend/.env` and restart the application"
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.6, 3.7_
 
-  - [~] 3.2 Refactor AWSSetupGuide.svelte
+  - [x] 3.2 Refactor AWSSetupGuide.svelte
     - Same changes as 3.1 but for AWS-specific env vars
     - Remove `onMount` config loading, save/test buttons, DB API calls
     - Keep form fields and `.env` snippet generation
@@ -66,7 +66,7 @@
     - Add masking for sensitive values, copy button, instructions
     - _Requirements: 3.1, 3.2, 3.3, 3.5, 3.6, 3.7_
 
-  - [~] 3.3 Refactor remaining setup guides
+  - [x] 3.3 Refactor remaining setup guides
     - Apply same pattern to: BoltSetupGuide, PuppetdbSetupGuide, SSHSetupGuide, HieraSetupGuide, PuppetserverSetupGuide, AnsibleSetupGuide
     - Remove any `saveIntegrationConfig`/`getIntegrationConfig` calls
     - Ensure each guide is a pure `.env` snippet wizard

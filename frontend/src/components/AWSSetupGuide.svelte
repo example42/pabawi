@@ -1,89 +1,81 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { saveIntegrationConfig, getIntegrationConfig, testAWSConnection } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
-  import { logger } from '../lib/logger.svelte';
 
   let config = $state({
     accessKeyId: '',
     secretAccessKey: '',
     region: 'us-east-1',
     sessionToken: '',
+    endpoint: '',
+    regions: '',
+    profile: '',
   });
 
-  let testResult = $state<{ success: boolean; message: string } | null>(null);
-  let testing = $state(false);
-  let saving = $state(false);
-  let loadingConfig = $state(true);
+  let showAdvanced = $state(false);
+  let copied = $state(false);
 
-  onMount(async () => {
-    try {
-      const effective = await getIntegrationConfig('aws');
-      if (effective) {
-        config.accessKeyId = String(effective.accessKeyId ?? '');
-        config.secretAccessKey = String(effective.secretAccessKey ?? '');
-        config.region = String(effective.region ?? 'us-east-1');
-        config.sessionToken = String(effective.sessionToken ?? '');
-      }
-    } catch {
-      // No existing config — start fresh
-    } finally {
-      loadingConfig = false;
+  /** Sensitive env var keys that should be masked in the preview */
+  const sensitiveKeys = new Set(['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']);
+
+  function generateEnvSnippet(): string {
+    const lines: string[] = [
+      '# AWS Integration Configuration',
+      'AWS_ENABLED=true',
+      `AWS_DEFAULT_REGION=${config.region || 'us-east-1'}`,
+      `AWS_ACCESS_KEY_ID=${config.accessKeyId || 'AKIAIOSFODNN7EXAMPLE'}`, // pragma: allowlist secret
+      `AWS_SECRET_ACCESS_KEY=${config.secretAccessKey || 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'}`, // pragma: allowlist secret
+    ];
+
+    if (config.sessionToken) {
+      lines.push(`AWS_SESSION_TOKEN=${config.sessionToken}`);
     }
-  });
 
-  const copyToClipboard = (text: string): void => {
-    navigator.clipboard.writeText(text);
-    showSuccess('Copied to clipboard');
-  };
-
-  async function handleTestConnection(): Promise<void> {
-    testing = true;
-    testResult = null;
-
-    try {
-      const result = await testAWSConnection();
-      testResult = result;
-
-      if (result.success) {
-        showSuccess('AWS connection successful');
-        logger.info('AWS connection test succeeded', { region: config.region });
-      } else {
-        showError(`Connection failed: ${result.message}`);
-        logger.warn('AWS connection test failed', { region: config.region, message: result.message });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      testResult = { success: false, message };
-      showError(`Connection test failed: ${message}`);
-      logger.error('AWS connection test error', { error });
-    } finally {
-      testing = false;
+    if (config.regions) {
+      lines.push(`AWS_REGIONS=${config.regions}`);
     }
+
+    if (config.endpoint) {
+      lines.push(`AWS_ENDPOINT=${config.endpoint}`);
+    }
+
+    if (config.profile) {
+      lines.push(`AWS_PROFILE=${config.profile}`);
+    }
+
+    return lines.join('\n');
   }
 
-  async function handleSaveConfiguration(): Promise<void> {
-    saving = true;
+  function maskSensitiveValues(snippet: string): string {
+    return snippet
+      .split('\n')
+      .map((line) => {
+        if (line.startsWith('#')) return line;
+        const eqIndex = line.indexOf('=');
+        if (eqIndex === -1) return line;
+        const key = line.substring(0, eqIndex);
+        if (sensitiveKeys.has(key)) {
+          const value = line.substring(eqIndex + 1);
+          const placeholders = ['AKIAIOSFODNN7EXAMPLE', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'];
+          if (value && !placeholders.includes(value)) {
+            return `${key}=${'*'.repeat(Math.min(value.length, 20))}`;
+          }
+        }
+        return line;
+      })
+      .join('\n');
+  }
 
+  const envSnippet = $derived(generateEnvSnippet());
+  const maskedSnippet = $derived(maskSensitiveValues(envSnippet));
+
+  async function copyToClipboard(): Promise<void> {
     try {
-      const configPayload: Record<string, unknown> = {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-        region: config.region,
-      };
-      if (config.sessionToken) {
-        configPayload.sessionToken = config.sessionToken;
-      }
-
-      await saveIntegrationConfig('aws', configPayload);
-      showSuccess('AWS configuration saved successfully');
-      logger.info('AWS configuration saved', { region: config.region });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      showError(`Failed to save configuration: ${message}`);
-      logger.error('AWS configuration save error', { error });
-    } finally {
-      saving = false;
+      await navigator.clipboard.writeText(envSnippet);
+      copied = true;
+      showSuccess('Copied to clipboard');
+      setTimeout(() => { copied = false; }, 2000);
+    } catch {
+      showError('Failed to copy — please select and copy manually');
     }
   }
 
@@ -96,29 +88,20 @@
 
   const isFormValid = $derived(validateForm());
 
-  const envExample = `# AWS Integration Configuration
-AWS_ENABLED=true
-AWS_ACCESS_KEY_ID=${config.accessKeyId || 'AKIAIOSFODNN7EXAMPLE'}  # pragma: allowlist secret
-AWS_SECRET_ACCESS_KEY=${config.secretAccessKey || 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'}  # pragma: allowlist secret
-AWS_DEFAULT_REGION=${config.region || 'us-east-1'}
-# Optional: Session token for temporary credentials
-# AWS_SESSION_TOKEN=your_session_token_here`;
-
-  const cliTest = `# Verify AWS CLI credentials
+  const cliTest = $derived(
+    `# Verify AWS CLI credentials
 aws sts get-caller-identity
 
 # List EC2 instances in the configured region
-aws ec2 describe-instances --region ${config.region || 'us-east-1'} --query 'Reservations[].Instances[].InstanceId'
-
-# List available regions
-aws ec2 describe-regions --query 'Regions[].RegionName' --output text`;
+aws ec2 describe-instances --region ${config.region || 'us-east-1'} --query 'Reservations[].Instances[].InstanceId'`
+  );
 </script>
 
 <div class="max-w-4xl mx-auto px-4 py-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
   <div class="mb-8">
     <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">AWS Integration Setup</h2>
     <p class="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-      Configure Pabawi to provision and manage EC2 instances on your AWS account.
+      Generate a <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">.env</code> snippet to configure Pabawi for AWS EC2 provisioning and management.
     </p>
   </div>
 
@@ -205,50 +188,108 @@ aws ec2 describe-regions --query 'Regions[].RegionName' --output text`;
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Required only when using temporary security credentials (STS)</p>
         </div>
 
-        <div class="flex gap-3 pt-4">
-          <button
-            onclick={handleTestConnection}
-            disabled={!isFormValid || testing}
-            class="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {#if testing}
-              <span class="animate-spin">⏳</span>
-              Testing...
-            {:else}
-              🔍 Test Connection
-            {/if}
-          </button>
+        <button
+          class="flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          onclick={() => (showAdvanced = !showAdvanced)}
+        >
+          <span class="text-sm">{showAdvanced ? "▼" : "▶"}</span>
+          <span>Advanced Settings</span>
+        </button>
 
-          <button
-            onclick={handleSaveConfiguration}
-            disabled={!isFormValid || saving}
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {#if saving}
-              <span class="animate-spin">⏳</span>
-              Saving...
-            {:else}
-              💾 Save Configuration
-            {/if}
-          </button>
-        </div>
+        {#if showAdvanced}
+          <div class="mt-4 p-4 border border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 space-y-4">
+            <div>
+              <label for="aws-regions" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Additional Regions
+              </label>
+              <input
+                id="aws-regions"
+                type="text"
+                bind:value={config.regions}
+                placeholder="us-west-2, eu-west-1"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Comma-separated list of additional regions for multi-region inventory</p>
+            </div>
 
-        {#if testResult}
-          <div class="mt-4 p-4 rounded-lg {testResult.success
-            ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500'
-            : 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500'}">
-            <p class="text-sm {testResult.success ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}">
-              <strong>{testResult.success ? '✓ Success:' : '✗ Failed:'}</strong> {testResult.message}
-            </p>
+            <div>
+              <label for="aws-endpoint" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Custom Endpoint
+              </label>
+              <input
+                id="aws-endpoint"
+                type="text"
+                bind:value={config.endpoint}
+                placeholder="https://ec2.custom-endpoint.example.com"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Override the default AWS endpoint (for LocalStack, MinIO, etc.)</p>
+            </div>
+
+            <div>
+              <label for="aws-profile" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                AWS Profile
+              </label>
+              <input
+                id="aws-profile"
+                type="text"
+                bind:value={config.profile}
+                placeholder="default"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Named profile from ~/.aws/credentials</p>
+            </div>
           </div>
         {/if}
       </div>
     </div>
   </div>
 
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm mb-6 ring-2 ring-blue-100 dark:ring-blue-900">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Copy Environment Variables</h3>
+      <p class="text-gray-700 dark:text-gray-300 mb-4">
+        Copy the generated snippet below and paste it into your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code> file, then restart the application.
+      </p>
+
+      <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+        <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+          <span class="font-medium text-gray-900 dark:text-white text-sm">.env Configuration</span>
+          <button
+            class="px-4 py-1.5 text-white text-sm rounded transition-colors flex items-center gap-2 {copied
+              ? 'bg-green-600'
+              : 'bg-blue-600 hover:bg-blue-700'}"
+            onclick={copyToClipboard}
+          >
+            {#if copied}
+              ✓ Copied
+            {:else}
+              📋 Copy to Clipboard
+            {/if}
+          </button>
+        </div>
+        <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto whitespace-pre-wrap">{maskedSnippet}</pre>
+      </div>
+
+      {#if isFormValid}
+        <div class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
+            <strong>Next:</strong> Paste into <code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-xs">backend/.env</code> and restart the application. Then check the <strong>Integration Status</strong> dashboard to verify the connection.
+          </p>
+        </div>
+      {:else}
+        <div class="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-r-lg">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
+            Fill in the required fields above to generate a complete snippet.
+          </p>
+        </div>
+      {/if}
+    </div>
+  </div>
+
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Create IAM User (Recommended)</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Create IAM User (Recommended)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         Create a dedicated IAM user with least-privilege permissions for Pabawi:
       </p>
@@ -269,28 +310,6 @@ aws ec2 describe-regions --query 'Regions[].RegionName' --output text`;
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Environment Variables (Alternative)</h3>
-      <p class="text-gray-700 dark:text-gray-300 mb-4">
-        Alternatively, configure via environment variables in <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code>:
-      </p>
-
-      <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-        <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-          <span class="font-medium text-gray-900 dark:text-white text-sm">AWS Configuration</span>
-          <button
-            class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-            onclick={() => copyToClipboard(envExample)}
-          >
-            📋 Copy
-          </button>
-        </div>
-        <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto">{envExample}</pre>
-      </div>
-    </div>
-  </div>
-
-  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
-    <div class="p-6">
       <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Validate with AWS CLI</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Test your credentials using the AWS CLI before configuring Pabawi:</p>
 
@@ -299,13 +318,30 @@ aws ec2 describe-regions --query 'Regions[].RegionName' --output text`;
           <span class="font-medium text-gray-900 dark:text-white text-sm">AWS CLI Test Commands</span>
           <button
             class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-            onclick={() => copyToClipboard(cliTest)}
+            onclick={() => { navigator.clipboard.writeText(cliTest); showSuccess('Copied to clipboard'); }}
           >
             📋 Copy
           </button>
         </div>
         <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto">{cliTest}</pre>
       </div>
+    </div>
+  </div>
+
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Restart and Verify</h3>
+      <p class="text-gray-700 dark:text-gray-300 mb-4">After pasting the snippet into <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code>, restart the backend:</p>
+      <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1 mb-4">
+        <div>cd backend</div>
+        <div>npm run dev</div>
+      </div>
+      <ol class="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300">
+        <li>Open the <strong>Integration Status</strong> dashboard in Pabawi</li>
+        <li>Confirm <strong>AWS</strong> status is connected</li>
+        <li>Use the <strong>Test Connection</strong> button on the dashboard to verify</li>
+        <li>Navigate to <strong>Provision</strong> page to launch EC2 instances</li>
+      </ol>
     </div>
   </div>
 

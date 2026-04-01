@@ -1,109 +1,74 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { saveIntegrationConfig, getIntegrationConfig, testProxmoxConnection } from '../lib/api';
-  import type { ProxmoxConfig } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
-  import { logger } from '../lib/logger.svelte';
 
-  let config = $state<ProxmoxConfig>({
+  let config = $state({
     host: '',
     port: 8006,
     username: '',
     password: '',
     realm: 'pam',
     token: '',
-    ssl: { rejectUnauthorized: true }
+    sslRejectUnauthorized: true,
   });
 
-  let authMethod = $state<'password' | 'token'>('password');
+  let authMethod = $state<'password' | 'token'>('token');
   let showAdvanced = $state(false);
-  let testResult = $state<{ success: boolean; message: string } | null>(null);
-  let testing = $state(false);
-  let saving = $state(false);
-  let loadingConfig = $state(true);
+  let copied = $state(false);
 
-  onMount(async () => {
-    try {
-      const effective = await getIntegrationConfig('proxmox');
-      if (effective) {
-        config.host = String(effective.host ?? '');
-        config.port = Number(effective.port ?? 8006);
-        config.username = String(effective.username ?? '');
-        config.password = String(effective.password ?? '');
-        config.realm = String(effective.realm ?? 'pam');
-        config.token = String(effective.token ?? '');
-        config.ssl = {
-          rejectUnauthorized: effective.ssl_rejectUnauthorized !== false && effective.ssl_rejectUnauthorized !== 'false',
-        };
-        // Detect auth method from loaded config
-        if (config.token) {
-          authMethod = 'token';
-        }
-      }
-    } catch {
-      // No existing config — start fresh
-    } finally {
-      loadingConfig = false;
+  /** Sensitive env var keys that should be masked in the preview */
+  const sensitiveKeys = new Set(['PROXMOX_PASSWORD', 'PROXMOX_TOKEN']);
+
+  function generateEnvSnippet(): string {
+    const lines: string[] = [
+      '# Proxmox Integration Configuration',
+      'PROXMOX_ENABLED=true',
+      `PROXMOX_HOST=${config.host || 'proxmox.example.com'}`,
+      `PROXMOX_PORT=${config.port}`,
+    ];
+
+    if (authMethod === 'password') {
+      lines.push(`PROXMOX_USERNAME=${config.username || 'root'}`);
+      lines.push(`PROXMOX_PASSWORD=${config.password || 'your_password_here'}`);
+      lines.push(`PROXMOX_REALM=${config.realm || 'pam'}`);
+    } else {
+      lines.push(`PROXMOX_TOKEN=${config.token || 'PVEAPIToken=user@realm!tokenid=uuid'}`);
     }
-  });
 
-  const copyToClipboard = (text: string): void => {
-    navigator.clipboard.writeText(text);
-    showSuccess('Copied to clipboard');
-  };
+    lines.push(`PROXMOX_SSL_REJECT_UNAUTHORIZED=${config.sslRejectUnauthorized}`);
 
-  async function handleTestConnection(): Promise<void> {
-    testing = true;
-    testResult = null;
-
-    try {
-      const result = await testProxmoxConnection();
-      testResult = result;
-
-      if (result.success) {
-        showSuccess('Connection successful');
-        logger.info('Proxmox connection test succeeded', { host: config.host });
-      } else {
-        showError(`Connection failed: ${result.message}`);
-        logger.warn('Proxmox connection test failed', { host: config.host, message: result.message });
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      testResult = { success: false, message };
-      showError(`Connection test failed: ${message}`);
-      logger.error('Proxmox connection test error', { error });
-    } finally {
-      testing = false;
-    }
+    return lines.join('\n');
   }
 
-  async function handleSaveConfiguration(): Promise<void> {
-    saving = true;
+  function maskSensitiveValues(snippet: string): string {
+    return snippet
+      .split('\n')
+      .map((line) => {
+        if (line.startsWith('#')) return line;
+        const eqIndex = line.indexOf('=');
+        if (eqIndex === -1) return line;
+        const key = line.substring(0, eqIndex);
+        if (sensitiveKeys.has(key)) {
+          const value = line.substring(eqIndex + 1);
+          if (value && value !== 'your_password_here' && value !== 'PVEAPIToken=user@realm!tokenid=uuid') {
+            return `${key}=${'*'.repeat(Math.min(value.length, 20))}`;
+          }
+        }
+        return line;
+      })
+      .join('\n');
+  }
 
+  const envSnippet = $derived(generateEnvSnippet());
+  const maskedSnippet = $derived(maskSensitiveValues(envSnippet));
+
+  async function copyToClipboard(): Promise<void> {
     try {
-      const configPayload: Record<string, unknown> = {
-        host: config.host,
-        port: config.port,
-        ssl_rejectUnauthorized: config.ssl.rejectUnauthorized,
-      };
-
-      if (authMethod === 'password') {
-        configPayload.username = config.username;
-        configPayload.password = config.password;
-        configPayload.realm = config.realm;
-      } else {
-        configPayload.token = config.token;
-      }
-
-      await saveIntegrationConfig('proxmox', configPayload);
-      showSuccess('Configuration saved successfully');
-      logger.info('Proxmox configuration saved', { host: config.host });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      showError(`Failed to save configuration: ${message}`);
-      logger.error('Proxmox configuration save error', { error });
-    } finally {
-      saving = false;
+      await navigator.clipboard.writeText(envSnippet);
+      copied = true;
+      showSuccess('Copied to clipboard');
+      setTimeout(() => { copied = false; }, 2000);
+    } catch {
+      showError('Failed to copy — please select and copy manually');
     }
   }
 
@@ -122,33 +87,17 @@
 
   const isFormValid = $derived(validateForm());
 
-  const envExample = `# Proxmox Integration Configuration
-PROXMOX_ENABLED=true
-PROXMOX_HOST=${config.host || 'proxmox.example.com'}
-PROXMOX_PORT=${config.port}
-PROXMOX_USERNAME=${config.username || 'root'}
-PROXMOX_REALM=${config.realm || 'pam'}
-PROXMOX_PASSWORD=your_password_here
-# OR use token authentication:
-# PROXMOX_TOKEN=PVEAPIToken=user@realm!tokenid=uuid`;
-
-  const curlTest = `# Test Proxmox API connectivity
-curl -k https://${config.host || 'proxmox.example.com'}:${config.port}/api2/json/version
-
-# Test with authentication (password)
-curl -k -d "username=${config.username || 'root'}@${config.realm || 'pam'}&password=YOUR_PASSWORD" \\
-  https://${config.host || 'proxmox.example.com'}:${config.port}/api2/json/access/ticket
-
-# Test with token
-curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID" \\
-  https://${config.host || 'proxmox.example.com'}:${config.port}/api2/json/version`;
+  const curlTest = $derived(
+    `# Test Proxmox API connectivity
+curl -k https://${config.host || 'proxmox.example.com'}:${config.port}/api2/json/version`
+  );
 </script>
 
 <div class="max-w-4xl mx-auto px-4 py-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
   <div class="mb-8">
     <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-4">Proxmox Integration Setup</h2>
     <p class="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-      Configure Pabawi to provision and manage virtual machines and LXC containers on your Proxmox VE cluster.
+      Generate a <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">.env</code> snippet to configure Pabawi for Proxmox VE provisioning and management.
     </p>
   </div>
 
@@ -317,7 +266,7 @@ curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID" \\
             <label class="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
-                bind:checked={config.ssl.rejectUnauthorized}
+                bind:checked={config.sslRejectUnauthorized}
                 class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
               <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -327,7 +276,7 @@ curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID" \\
             <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
               Disable only for testing with self-signed certificates. Always enable in production.
             </p>
-            {#if !config.ssl.rejectUnauthorized}
+            {#if !config.sslRejectUnauthorized}
               <div class="mt-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-r">
                 <p class="text-sm text-gray-700 dark:text-gray-300">
                   <strong>Security Warning:</strong> SSL verification is disabled. This is insecure and should only be used in development.
@@ -336,51 +285,55 @@ curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID" \\
             {/if}
           </div>
         {/if}
+      </div>
+    </div>
+  </div>
 
-        <div class="flex gap-3 pt-4">
-          <button
-            onclick={handleTestConnection}
-            disabled={!isFormValid || testing}
-            class="px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {#if testing}
-              <span class="animate-spin">⏳</span>
-              Testing...
-            {:else}
-              🔍 Test Connection
-            {/if}
-          </button>
+  <div class="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-700 shadow-sm mb-6 ring-2 ring-blue-100 dark:ring-blue-900">
+    <div class="p-6">
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Copy Environment Variables</h3>
+      <p class="text-gray-700 dark:text-gray-300 mb-4">
+        Copy the generated snippet below and paste it into your <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code> file, then restart the application.
+      </p>
 
+      <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+        <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+          <span class="font-medium text-gray-900 dark:text-white text-sm">.env Configuration</span>
           <button
-            onclick={handleSaveConfiguration}
-            disabled={!isFormValid || saving}
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+            class="px-4 py-1.5 text-white text-sm rounded transition-colors flex items-center gap-2 {copied
+              ? 'bg-green-600'
+              : 'bg-blue-600 hover:bg-blue-700'}"
+            onclick={copyToClipboard}
           >
-            {#if saving}
-              <span class="animate-spin">⏳</span>
-              Saving...
+            {#if copied}
+              ✓ Copied
             {:else}
-              💾 Save Configuration
+              📋 Copy to Clipboard
             {/if}
           </button>
         </div>
-
-        {#if testResult}
-          <div class="mt-4 p-4 rounded-lg {testResult.success
-            ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500'
-            : 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500'}">
-            <p class="text-sm {testResult.success ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}">
-              <strong>{testResult.success ? '✓ Success:' : '✗ Failed:'}</strong> {testResult.message}
-            </p>
-          </div>
-        {/if}
+        <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto whitespace-pre-wrap">{maskedSnippet}</pre>
       </div>
+
+      {#if isFormValid}
+        <div class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 rounded-r-lg">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
+            <strong>Next:</strong> Paste into <code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded text-xs">backend/.env</code> and restart the application. Then check the <strong>Integration Status</strong> dashboard to verify the connection.
+          </p>
+        </div>
+      {:else}
+        <div class="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 border-l-4 border-yellow-500 rounded-r-lg">
+          <p class="text-sm text-gray-700 dark:text-gray-300">
+            Fill in the required fields above to generate a complete snippet.
+          </p>
+        </div>
+      {/if}
     </div>
   </div>
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 2: Create API Token (Recommended)</h3>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Create API Token (Recommended)</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">
         For better security, create an API token in Proxmox:
       </p>
@@ -401,37 +354,15 @@ curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID" \\
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 3: Environment Variables (Alternative)</h3>
-      <p class="text-gray-700 dark:text-gray-300 mb-4">
-        Alternatively, configure via environment variables in <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code>:
-      </p>
-
-      <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
-        <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-          <span class="font-medium text-gray-900 dark:text-white text-sm">Proxmox Configuration</span>
-          <button
-            class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-            onclick={() => copyToClipboard(envExample)}
-          >
-            📋 Copy
-          </button>
-        </div>
-        <pre class="bg-gray-900 text-green-400 p-4 text-sm font-mono overflow-x-auto">{envExample}</pre>
-      </div>
-    </div>
-  </div>
-
-  <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
-    <div class="p-6">
       <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 4: Validate Connection</h3>
       <p class="text-gray-700 dark:text-gray-300 mb-4">Test connectivity using curl before configuring Pabawi:</p>
 
       <div class="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
         <div class="flex justify-between items-center px-4 py-3 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
-          <span class="font-medium text-gray-900 dark:text-white text-sm">API Test Commands</span>
+          <span class="font-medium text-gray-900 dark:text-white text-sm">API Test Command</span>
           <button
             class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
-            onclick={() => copyToClipboard(curlTest)}
+            onclick={() => { navigator.clipboard.writeText(curlTest); showSuccess('Copied to clipboard'); }}
           >
             📋 Copy
           </button>
@@ -443,17 +374,17 @@ curl -k -H "Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID" \\
 
   <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm mb-6">
     <div class="p-6">
-      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Restart Backend and Verify</h3>
-      <p class="text-gray-700 dark:text-gray-300 mb-4">Restart the backend and confirm Proxmox appears as connected:</p>
+      <h3 class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Step 5: Restart and Verify</h3>
+      <p class="text-gray-700 dark:text-gray-300 mb-4">After pasting the snippet into <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">backend/.env</code>, restart the backend:</p>
       <div class="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm space-y-1 mb-4">
         <div>cd backend</div>
         <div>npm run dev</div>
       </div>
       <ol class="list-decimal list-inside space-y-2 text-gray-700 dark:text-gray-300">
-        <li>Open the <strong>Integrations</strong> section in Pabawi</li>
+        <li>Open the <strong>Integration Status</strong> dashboard in Pabawi</li>
         <li>Confirm <strong>Proxmox</strong> status is connected</li>
+        <li>Use the <strong>Test Connection</strong> button on the dashboard to verify</li>
         <li>Navigate to <strong>Provision</strong> page to create VMs or LXC containers</li>
-        <li>Check <strong>Inventory</strong> to see Proxmox nodes</li>
       </ol>
     </div>
   </div>
