@@ -13,10 +13,16 @@ services:
       # - /path/to/ssl/certs:/ssl-certs:ro
       # Hiera control repository (optional)
       # - /path/to/control-repo:/control-repo:ro
+      # SSH keys for SSH integration (optional)
+      # - ~/.ssh:/home/pabawi/.ssh:ro
+      # Ansible project directory (optional)
+      # - /path/to/ansible/project:/ansible:ro
+      # Proxmox SSL certificates (optional)
+      # - /path/to/proxmox/certs:/certs/proxmox:ro
     ports:
       - "${PORT:-3000}:3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "node", "-e", "const http=require('http');http.get('http://localhost:3000/api/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>{try{const j=JSON.parse(d);process.exit(r.statusCode===200&&j.status==='ok'?0:1)}catch{process.exit(1)}})}).on('error',()=>process.exit(1))"]
       interval: 30s
       timeout: 3s
       start_period: 5s
