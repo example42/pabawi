@@ -30,4 +30,4 @@ Infrastructure engineers and DevOps teams managing servers with Puppet/OpenVox, 
 
 ### Current Version
 
-v0.10.0 — Licensed under Apache 2.0.
+v1.0.0 — Licensed under Apache 2.0.
