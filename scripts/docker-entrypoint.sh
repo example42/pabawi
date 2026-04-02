@@ -1,6 +1,11 @@
 #!/bin/bash
 set -e
 
+# Create data directory if it doesn't exist (e.g., fresh volume mount)
+if [ ! -d /data ]; then
+    mkdir -p /data
+fi
+
 # Ensure data directory is writable
 if [ ! -w /data ]; then
     echo "Error: /data directory is not writable by user $(id -u)"

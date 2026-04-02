@@ -51,7 +51,7 @@ ARG BUILDPLATFORM
 # Add metadata labels
 LABEL org.opencontainers.image.title="Pabawi"
 LABEL org.opencontainers.image.description="Puppet Ansible Bolt Awesome Web Interface"
-LABEL org.opencontainers.image.version="0.10.0"
+LABEL org.opencontainers.image.version="1.0.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
@@ -142,7 +142,8 @@ ENV NODE_ENV=production \
     HIERA_ENABLED=false \
     ANSIBLE_ENABLED=false \
     PROXMOX_ENABLED=false \
-    AWS_ENABLED=false
+    AWS_ENABLED=false \
+    SSH_ENABLED=false
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

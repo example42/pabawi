@@ -197,31 +197,31 @@
     - Fix any hadolint errors in Dockerfiles
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6_
 
-- [ ] 11. Review, Update, and Verify Docker Configurations
-  - [~] 11.1 Update Dockerfile version labels and description
+- [x] 11. Review, Update, and Verify Docker Configurations
+  - [x] 11.1 Update Dockerfile version labels and description
     - Update `LABEL org.opencontainers.image.version` from `"0.10.0"` to `"1.0.0"` in all three Dockerfiles (`Dockerfile`, `Dockerfile.alpine`, `Dockerfile.ubuntu`)
     - Update `LABEL org.opencontainers.image.description` in `Dockerfile.alpine` and `Dockerfile.ubuntu` from `"Web interface for Bolt automation tool"` to `"Puppet Ansible Bolt Awesome Web Interface"` (match main Dockerfile)
     - _Requirements: 9.6, 11.1_
 
-  - [~] 11.2 Align integration ENV defaults across all Dockerfiles
+  - [x] 11.2 Align integration ENV defaults across all Dockerfiles
     - `Dockerfile` (main) sets `ANSIBLE_ENABLED=false`, `PROXMOX_ENABLED=false`, `AWS_ENABLED=false` — but `Dockerfile.alpine` and `Dockerfile.ubuntu` are missing these
     - Add `ANSIBLE_ENABLED=false`, `PROXMOX_ENABLED=false`, `AWS_ENABLED=false`, `SSH_ENABLED=false` to the ENV block in `Dockerfile.alpine` and `Dockerfile.ubuntu`
     - Verify all Dockerfiles have consistent ENV defaults for all integrations
     - _Requirements: 11.1_
 
-  - [~] 11.3 Fix Dockerfile.alpine and Dockerfile.ubuntu migration copy
+  - [x] 11.3 Fix Dockerfile.alpine and Dockerfile.ubuntu migration copy
     - `Dockerfile.alpine` and `Dockerfile.ubuntu` copy `schema.sql` but NOT the `migrations/` directory — they will fail to run migrations at startup
     - Replace `COPY --from=backend-builder ... /app/backend/src/database/schema.sql ./dist/database/` with `COPY --from=backend-builder ... /app/backend/src/database/migrations ./dist/database/migrations` (matching the main Dockerfile pattern)
     - Verify migration 010 (`DROP TABLE IF EXISTS integration_configs`) runs cleanly in all image variants
     - _Requirements: 11.1, 11.4_
 
-  - [~] 11.4 Fix Dockerfile.alpine and Dockerfile.ubuntu production deps
+  - [x] 11.4 Fix Dockerfile.alpine and Dockerfile.ubuntu production deps
     - Main `Dockerfile` has a separate `backend-deps` stage that installs `--omit=dev` for production node_modules (ensuring native modules like sqlite3 are built for target platform)
     - `Dockerfile.alpine` and `Dockerfile.ubuntu` copy node_modules from the build stage (includes dev deps and may have wrong platform binaries)
     - Add the `backend-deps` stage pattern from main Dockerfile to both `Dockerfile.alpine` and `Dockerfile.ubuntu`
     - _Requirements: 11.1_
 
-  - [~] 11.5 Update .env.docker example file
+  - [x] 11.5 Update .env.docker example file
     - Add missing integration examples: `PROXMOX_ENABLED`, `PROXMOX_HOST`, `PROXMOX_PORT`, `PROXMOX_TOKEN`, `AWS_ENABLED`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
     - Add `JWT_SECRET` placeholder with comment
     - Add `COMMAND_WHITELIST_ALLOW_ALL` setting
@@ -229,18 +229,18 @@
     - Remove any references to DB-stored config overrides
     - _Requirements: 11.3_
 
-  - [~] 11.6 Review and update docker-compose.yml
+  - [x] 11.6 Review and update docker-compose.yml
     - Verify `env_file` configuration correctly passes `.env` to the container
     - Add commented-out volume mounts for SSH keys, Ansible project directory (currently missing)
     - Verify health check matches the updated `/api/health` response (v1.0.0)
     - _Requirements: 11.2_
 
-  - [~] 11.7 Review and update docker-entrypoint.sh
+  - [x] 11.7 Review and update docker-entrypoint.sh
     - Verify `scripts/docker-entrypoint.sh` handles the case where `/data` directory doesn't exist yet (create it)
     - Ensure entrypoint is consistent across all Dockerfiles (main uses external script, alpine/ubuntu use inline heredoc — consider standardizing)
     - _Requirements: 11.1_
 
-  - [~] 11.8 Update Docker deployment documentation
+  - [x] 11.8 Update Docker deployment documentation
     - Update `docs/docker-deployment.md` to reflect v1.0.0 configuration model (`.env` as single source of truth)
     - Remove any references to web-based integration configuration or IntegrationConfigService
     - Add Proxmox and AWS integration examples to the Docker deployment guide (currently missing)
