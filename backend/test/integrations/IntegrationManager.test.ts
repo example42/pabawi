@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import fc from "fast-check";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BasePlugin } from "../../src/integrations/BasePlugin";
 import { LoggerService } from "../../src/services/LoggerService";
@@ -1946,6 +1947,170 @@ describe("IntegrationManager", () => {
       // Should not throw, should return empty array
       const capabilities = manager.getAllProvisioningCapabilities();
       expect(capabilities).toEqual([]);
+    });
+  });
+
+  // Feature: v1-release-prep, Property 8: IntegrationManager graceful degradation
+  // **Validates: Requirements 6.2**
+  describe("Property 8: IntegrationManager graceful degradation", () => {
+    const propertyTestConfig = {
+      numRuns: 100,
+      verbose: false,
+    };
+
+    /**
+     * Arbitrary for generating a plugin descriptor: a name, type, and whether it should fail.
+     */
+    const pluginTypeArb = fc.constantFrom<"execution" | "information">("execution", "information");
+
+    const pluginDescriptorArb = fc.record({
+      name: fc.stringMatching(/^[a-z][a-z0-9-]{0,19}$/).filter(n => n.length > 0),
+      type: pluginTypeArb,
+      shouldFail: fc.boolean(),
+    });
+
+    /**
+     * Arbitrary for generating a set of unique plugin descriptors (1-10 plugins).
+     */
+    const pluginSetArb = fc
+      .array(pluginDescriptorArb, { minLength: 1, maxLength: 10 })
+      .map((descriptors) => {
+        // Deduplicate by name — keep first occurrence
+        const seen = new Set<string>();
+        return descriptors.filter((d) => {
+          if (seen.has(d.name)) return false;
+          seen.add(d.name);
+          return true;
+        });
+      })
+      .filter((arr) => arr.length >= 1);
+
+    /**
+     * Create a mock plugin that either succeeds or fails during initialization.
+     */
+    function createMockPlugin(
+      name: string,
+      type: "execution" | "information",
+      shouldFail: boolean,
+      testLogger: LoggerService,
+    ): BasePlugin & (InformationSourcePlugin | ExecutionToolPlugin) {
+      if (type === "information") {
+        const plugin = new MockInformationSource(name, [], testLogger);
+        if (shouldFail) {
+          plugin.performInitialization = async (): Promise<void> => {
+            throw new Error(`Plugin ${name} initialization failed`);
+          };
+        }
+        return plugin;
+      } else {
+        const plugin = new MockExecutionTool(name, testLogger);
+        if (shouldFail) {
+          plugin.performInitialization = async (): Promise<void> => {
+            throw new Error(`Plugin ${name} initialization failed`);
+          };
+        }
+        return plugin;
+      }
+    }
+
+    it("should register all plugins and only report failing ones as errors after initialization", async () => {
+      await fc.assert(
+        fc.asyncProperty(pluginSetArb, async (descriptors) => {
+          const testLogger = new LoggerService("error");
+          const mgr = new IntegrationManager({ logger: testLogger });
+
+          // Register all plugins
+          for (const desc of descriptors) {
+            const plugin = createMockPlugin(desc.name, desc.type, desc.shouldFail, testLogger);
+            const config: IntegrationConfig = {
+              enabled: true,
+              name: desc.name,
+              type: desc.type,
+              config: {},
+            };
+            mgr.registerPlugin(plugin, config);
+          }
+
+          // All plugins should be registered before initialization
+          expect(mgr.getPluginCount()).toBe(descriptors.length);
+
+          // Initialize — should not throw
+          const errors = await mgr.initializePlugins();
+
+          // Manager should be initialized regardless of plugin failures
+          expect(mgr.isInitialized()).toBe(true);
+
+          // Errors should correspond exactly to the failing plugins
+          const expectedFailures = descriptors.filter((d) => d.shouldFail);
+          expect(errors).toHaveLength(expectedFailures.length);
+
+          const errorPluginNames = new Set(errors.map((e) => e.plugin));
+          for (const failing of expectedFailures) {
+            expect(errorPluginNames.has(failing.name)).toBe(true);
+          }
+
+          // All errors should have Error instances
+          for (const err of errors) {
+            expect(err.error).toBeInstanceOf(Error);
+          }
+
+          // Healthy (non-failing, enabled) plugins should be initialized
+          const expectedHealthy = descriptors.filter((d) => !d.shouldFail);
+          for (const healthy of expectedHealthy) {
+            const allPlugins = mgr.getAllPlugins();
+            const reg = allPlugins.find((p) => p.plugin.name === healthy.name);
+            expect(reg).toBeDefined();
+            expect(reg!.plugin.isInitialized()).toBe(true);
+          }
+
+          // Failing plugins should NOT be initialized
+          for (const failing of expectedFailures) {
+            const allPlugins = mgr.getAllPlugins();
+            const reg = allPlugins.find((p) => p.plugin.name === failing.name);
+            expect(reg).toBeDefined();
+            expect(reg!.plugin.isInitialized()).toBe(false);
+          }
+
+          // Plugin count should remain unchanged (no plugins removed on failure)
+          expect(mgr.getPluginCount()).toBe(descriptors.length);
+        }),
+        propertyTestConfig,
+      );
+    });
+
+    it("should allow health checks on all plugins including failed ones", async () => {
+      await fc.assert(
+        fc.asyncProperty(pluginSetArb, async (descriptors) => {
+          const testLogger = new LoggerService("error");
+          const mgr = new IntegrationManager({ logger: testLogger });
+
+          for (const desc of descriptors) {
+            const plugin = createMockPlugin(desc.name, desc.type, desc.shouldFail, testLogger);
+            const config: IntegrationConfig = {
+              enabled: true,
+              name: desc.name,
+              type: desc.type,
+              config: {},
+            };
+            mgr.registerPlugin(plugin, config);
+          }
+
+          await mgr.initializePlugins();
+
+          // Health check should not throw and should return status for every plugin
+          const healthStatuses = await mgr.healthCheckAll();
+          expect(healthStatuses.size).toBe(descriptors.length);
+
+          // Every registered plugin should have a health status entry
+          for (const desc of descriptors) {
+            expect(healthStatuses.has(desc.name)).toBe(true);
+            const status = healthStatuses.get(desc.name)!;
+            expect(status).toHaveProperty("healthy");
+            expect(status).toHaveProperty("lastCheck");
+          }
+        }),
+        propertyTestConfig,
+      );
     });
   });
 });
