@@ -1027,6 +1027,7 @@ async function startServer(): Promise<Express> {
       res.json({
         status: "ok",
         message: "Backend API is running",
+        version: "1.0.0",
       });
     });
 

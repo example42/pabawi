@@ -174,14 +174,14 @@
     - Identify and remove packages imported by zero source files
     - _Requirements: 8.3_
 
-- [ ] 9. Update Version to 1.0.0
-  - [~] 9.1 Bump version in all package.json files
+- [x] 9. Update Version to 1.0.0
+  - [x] 9.1 Bump version in all package.json files
     - Update `package.json` (root): `"version": "1.0.0"`
     - Update `backend/package.json`: `"version": "1.0.0"`
     - Update `frontend/package.json`: `"version": "1.0.0"`
     - _Requirements: 9.1, 9.2, 9.3_
 
-  - [~] 9.2 Update version in other files
+  - [x] 9.2 Update version in other files
     - Update `.kiro/steering/product.md`: change `v0.10.0` to `v1.0.0`
     - Update health check endpoint in `server.ts` to include `version: "1.0.0"` in response
     - Verify `docker-compose.yml` image tag is `latest` (already correct)
