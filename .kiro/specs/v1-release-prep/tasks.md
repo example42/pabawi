@@ -103,8 +103,8 @@
     - Run `tsc --noEmit` in both workspaces and fix all type errors
     - _Requirements: 5.2, 5.3_
 
-- [ ] 6. Add Missing Test Coverage
-  - [~] 6.1 Add ConfigService property tests
+- [x] 6. Add Missing Test Coverage
+  - [x] 6.1 Add ConfigService property tests
     - Create/update `backend/test/config/ConfigService.test.ts`
     - Property test: for any valid env var combination, ConfigService produces valid AppConfig (Property 1)
     - Unit tests: specific integration config blocks, defaults, error cases
@@ -112,7 +112,7 @@
     - Use fast-check with minimum 100 iterations
     - _Requirements: 6.1_
 
-  - [~] 6.2 Add IntegrationManager property tests
+  - [x] 6.2 Add IntegrationManager property tests
     - Create/update `backend/test/integrations/IntegrationManager.test.ts`
     - Property test: for any set of plugins with some failing, manager registers healthy ones (Property 8)
     - Unit tests: plugin registration, lifecycle, health checks
@@ -120,14 +120,14 @@
     - Use fast-check with minimum 100 iterations
     - _Requirements: 6.2_
 
-  - [~] 6.3 Add Integration Status Dashboard tests
+  - [x] 6.3 Add Integration Status Dashboard tests
     - Create `frontend/src/pages/IntegrationConfigPage.test.ts`
     - Property tests: dashboard renders all integrations (Property 2), no mutation controls (Property 3), correct status colors (Property 4)
     - Unit tests: test connection button behavior, error states, loading states
     - Use fast-check with minimum 100 iterations
     - _Requirements: 6.3_
 
-  - [~] 6.4 Add Env Snippet Wizard tests
+  - [x] 6.4 Add Env Snippet Wizard tests
     - Create `frontend/src/components/ProxmoxSetupGuide.test.ts`
     - Property tests: snippet contains required vars (Property 5), no save calls (Property 6), sensitive masking (Property 7)
     - Create `frontend/src/components/AWSSetupGuide.test.ts`
@@ -135,7 +135,7 @@
     - Use fast-check with minimum 100 iterations
     - _Requirements: 6.4_
 
-  - [~] 6.5 Remove obsolete IntegrationConfigService tests
+  - [x] 6.5 Remove obsolete IntegrationConfigService tests
     - Verify `backend/test/services/IntegrationConfigService.test.ts` was deleted in task 1.1
     - Verify `backend/test/integrationConfig.routes.test.ts` was deleted in task 1.2
     - _Requirements: 6.5_
