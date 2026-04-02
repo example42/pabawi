@@ -65,6 +65,7 @@ sequenceDiagram
 ### Component 1: Backend Removals
 
 Files to delete:
+
 - `backend/src/services/IntegrationConfigService.ts`
 - `backend/src/services/IntegrationConfigService.types.ts`
 - `backend/src/routes/integrationConfig.ts`
@@ -72,6 +73,7 @@ Files to delete:
 - `backend/test/integrationConfig.routes.test.ts`
 
 Code to modify:
+
 - `backend/src/server.ts` — Remove IntegrationConfigService import, instantiation, route registration, and the `getEffectiveConfig` merge in Proxmox/AWS plugin initialization. Plugins receive config directly from ConfigService.
 
 ### Component 2: Database Migration (010_drop_integration_configs.sql)
@@ -91,6 +93,7 @@ The `DROP TABLE IF EXISTS` ensures idempotency — safe to run on fresh database
 The existing `IntegrationConfigPage.svelte` is rewritten as a read-only dashboard.
 
 Interface:
+
 - Fetches from `GET /api/integrations/status` (existing endpoint)
 - Displays each integration: name, icon, enabled/disabled, health status (connected/degraded/error)
 - Color indicators: green (connected), yellow (degraded), red (error), gray (disabled/not configured)
@@ -102,10 +105,12 @@ Interface:
 Each setup guide component (ProxmoxSetupGuide, AWSSetupGuide, etc.) is refactored:
 
 Before:
+
 - Form fields → "Save Configuration" button → `saveIntegrationConfig()` API call → DB write
 - "Test Connection" button → sends form values to test endpoint
 
 After:
+
 - Form fields → live `.env` snippet preview (already partially exists in some guides)
 - "Copy to Clipboard" button copies the full snippet
 - Instructions: "Paste into `backend/.env` and restart the application"
@@ -117,6 +122,7 @@ After:
 ### Component 5: Frontend API Cleanup (api.ts)
 
 Functions to remove from `frontend/src/lib/api.ts`:
+
 - `saveIntegrationConfig()`
 - `getIntegrationConfig()`
 - `getIntegrationConfigs()`
@@ -126,6 +132,7 @@ Functions to remove from `frontend/src/lib/api.ts`:
 - `IntegrationConfigRecord` type
 
 Functions to keep:
+
 - `testProxmoxConnection()` — but refactored to not send form config; instead calls a no-body endpoint that tests using `.env` config
 - `testAWSConnection()` — same refactor
 
@@ -134,6 +141,7 @@ Functions to keep:
 The existing test connection endpoints (`POST /api/integrations/proxmox/test` and `POST /api/integrations/aws/test`) currently accept config in the request body. They need to be refactored to use the `.env`-sourced config from ConfigService instead.
 
 New behavior:
+
 - `POST /api/integrations/proxmox/test` — reads Proxmox config from ConfigService, tests connectivity, returns `{ success, message }`
 - `POST /api/integrations/aws/test` — reads AWS config from ConfigService, tests connectivity, returns `{ success, message }`
 - No request body needed (config comes from `.env`)
@@ -141,6 +149,7 @@ New behavior:
 ### Component 7: Version Bump
 
 Files to update:
+
 - `package.json` (root): `"version": "1.0.0"`
 - `backend/package.json`: `"version": "1.0.0"`
 - `frontend/package.json`: `"version": "1.0.0"`
@@ -151,6 +160,7 @@ Files to update:
 ### Component 8: Documentation Updates
 
 Files to update:
+
 - `README.md` — version, remove web-based config management references
 - `docs/configuration.md` — `.env` as single source of truth
 - `docs/api.md`, `docs/api-endpoints-reference.md`, `docs/integrations-api.md` — remove `/api/config/integrations` CRUD
@@ -313,12 +323,14 @@ interface HealthResponse {
 This feature uses both unit tests and property-based tests for comprehensive coverage.
 
 **Unit tests** cover:
+
 - Specific examples: migration drops table correctly, health endpoint returns version
 - Integration points: Status Dashboard fetches from correct endpoint, test connection buttons call correct endpoints
 - Edge cases: empty integration list, all integrations failing, clipboard API unavailable
 - Error conditions: malformed env vars, network failures on status fetch
 
 **Property-based tests** cover:
+
 - Universal properties across all valid inputs using randomized generation
 - Each correctness property (1-8) is implemented as a single property-based test
 
@@ -333,12 +345,14 @@ This feature uses both unit tests and property-based tests for comprehensive cov
 ### Test File Organization
 
 Backend tests:
+
 - `backend/test/config/ConfigService.test.ts` — Property 1 (env parsing) + unit tests for schema validation
 - `backend/test/integrations/IntegrationManager.test.ts` — Property 8 (graceful degradation) + unit tests for plugin lifecycle
 - Remove: `backend/test/services/IntegrationConfigService.test.ts`
 - Remove: `backend/test/integrationConfig.routes.test.ts`
 
 Frontend tests:
+
 - `frontend/src/pages/IntegrationConfigPage.test.ts` — Properties 2, 3, 4 (dashboard rendering) + unit tests for test connection buttons
 - `frontend/src/components/ProxmoxSetupGuide.test.ts` — Properties 5, 6, 7 (snippet generation, no save calls, masking)
 - `frontend/src/components/AWSSetupGuide.test.ts` — Properties 5, 6 (snippet generation, no save calls)
@@ -346,6 +360,7 @@ Frontend tests:
 ### Test Examples
 
 Property 1 test sketch (ConfigService):
+
 ```typescript
 // Feature: v1-release-prep, Property 1: ConfigService env parsing round-trip
 it.prop([fc.record(...)], { numRuns: 100 }, (envVars) => {
@@ -354,6 +369,7 @@ it.prop([fc.record(...)], { numRuns: 100 }, (envVars) => {
 ```
 
 Property 5 test sketch (Env snippet):
+
 ```typescript
 // Feature: v1-release-prep, Property 5: Env snippet contains required variables
 it.prop([fc.record({ host: fc.string(), port: fc.integer() })], { numRuns: 100 }, (config) => {

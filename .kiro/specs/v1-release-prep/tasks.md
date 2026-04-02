@@ -280,8 +280,8 @@
     - Ensure no Dockerfile sets an ENV default that contradicts what ConfigService would produce from the same value
     - _Requirements: 11.1_
 
-- [ ] 13. Final Validation
-  - [~] 13.1 Run complete test suite
+- [x] 13. Final Validation
+  - [x] 13.1 Run complete test suite
     - Run `npm test` — zero failures
     - Run `npm run lint` — zero errors
     - Run `tsc --noEmit` in both workspaces — zero type errors
