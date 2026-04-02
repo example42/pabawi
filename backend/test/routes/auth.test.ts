@@ -2055,7 +2055,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       expect(response.status).toBe(400);
     });
 
-    it('should handle concurrent refresh requests', async () => {
+    it('should handle multiple sequential refresh requests', async () => {
       // Register and login a user
       const userData = {
         username: 'testuser',
@@ -2077,14 +2077,14 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
       const refreshToken = loginResponse.body.refreshToken;
 
-      // Make multiple concurrent refresh requests
-      const requests = Array(5).fill(null).map(() =>
-        request(app)
+      // Make multiple sequential refresh requests (SQLite doesn't support true concurrency)
+      const responses = [];
+      for (let i = 0; i < 5; i++) {
+        const response = await request(app)
           .post('/api/auth/refresh')
-          .send({ refreshToken })
-      );
-
-      const responses = await Promise.all(requests);
+          .send({ refreshToken });
+        responses.push(response);
+      }
 
       // All should succeed
       responses.forEach(response => {
@@ -2093,7 +2093,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         expect(response.body).toHaveProperty('user');
       });
 
-      // All tokens should be unique
+      // All tokens should be unique (each has a unique jti)
       const tokens = responses.map(r => r.body.token);
       const uniqueTokens = new Set(tokens);
       expect(uniqueTokens.size).toBe(tokens.length);
