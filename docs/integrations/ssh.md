@@ -34,7 +34,7 @@ The SSH integration provides native remote execution capabilities for Pabawi, en
 
 ## Configuration
 
-The SSH integration is configured entirely through environment variables.
+The SSH integration is configured entirely through environment variables in `backend/.env`. You can also use the **SSH Setup Guide** in the Pabawi web UI to generate this snippet — it walks you through the settings and lets you copy the result to your clipboard.
 
 ### Core Configuration
 

@@ -10,7 +10,7 @@ This guide will help you configure the Puppetserver integration in Pabawi to man
 
 ## Configuration Options
 
-Add the following environment variables to your `backend/.env` file:
+Add the following environment variables to your `backend/.env` file. You can also use the **Puppetserver Setup Guide** in the Pabawi web UI to generate this snippet — it walks you through the settings and lets you copy the result to your clipboard.
 
 ### Basic Configuration
 

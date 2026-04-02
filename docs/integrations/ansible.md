@@ -35,7 +35,7 @@ ansible-playbook --version
 
 ## Environment Configuration
 
-Add the following to your `backend/.env`:
+Add the following to your `backend/.env`. You can also use the **Ansible Setup Guide** in the Pabawi web UI to generate this snippet — it walks you through the settings and lets you copy the result to your clipboard.
 
 ```bash
 ANSIBLE_ENABLED=true

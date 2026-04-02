@@ -13,45 +13,11 @@ The AWS integration enables Pabawi to manage Amazon EC2 infrastructure, includin
 
 ## Configuration
 
-### Basic Configuration
-
-Add the AWS integration to your Pabawi configuration:
-
-```typescript
-{
-  integrations: {
-    aws: {
-      enabled: true,
-      name: 'aws',
-      type: 'both',
-      priority: 10,
-      config: {
-        accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
-        secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
-        region: 'us-east-1'
-      }
-    }
-  }
-}
-```
-
-### Configuration Options
-
-| Option | Type | Required | Default | Description |
-|--------|------|----------|---------|-------------|
-| `accessKeyId` | string | No* | - | AWS access key ID |
-| `secretAccessKey` | string | No* | - | AWS secret access key |
-| `region` | string | No | us-east-1 | Default AWS region |
-| `regions` | string[] | No | - | List of regions to query for inventory (overrides `region` for discovery) |
-| `sessionToken` | string | No | - | Session token for temporary credentials (STS) |
-| `profile` | string | No | - | AWS CLI profile name (resolved by the SDK from `~/.aws/credentials`) |
-| `endpoint` | string | No | - | Custom endpoint URL (for testing or VPC endpoints) |
-
-*If no explicit credentials or profile are provided, the AWS SDK default credential chain is used (environment variables, `~/.aws/credentials`, instance profile, etc.).
-
 ### Environment Variables
 
-You can use environment variables for sensitive configuration:
+All AWS configuration is done via environment variables in `backend/.env`. You can also use the **AWS Setup Guide** in the Pabawi web UI to generate the `.env` snippet — it walks you through the settings and lets you copy the result to your clipboard.
+
+Add the following to your `backend/.env`:
 
 ```bash
 # Required
@@ -72,11 +38,20 @@ AWS_DEFAULT_REGION=us-east-1
 # AWS_SESSION_TOKEN=your_session_token_here
 ```
 
-### Database Configuration (Recommended)
+### Configuration Options
 
-You can also configure AWS credentials through the Pabawi UI at **Integrations > Config**. This stores credentials encrypted in the database using AES-256-GCM and allows per-user configuration that overrides environment variables.
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AWS_ENABLED` | Yes | `false` | Enable AWS integration |
+| `AWS_ACCESS_KEY_ID` | No* | - | AWS access key ID |
+| `AWS_SECRET_ACCESS_KEY` | No* | - | AWS secret access key |
+| `AWS_DEFAULT_REGION` | No | `us-east-1` | Default AWS region |
+| `AWS_REGIONS` | No | - | JSON array or comma-separated list of regions for inventory |
+| `AWS_PROFILE` | No | - | AWS CLI profile name |
+| `AWS_SESSION_TOKEN` | No | - | Session token for temporary credentials (STS) |
+| `AWS_ENDPOINT` | No | - | Custom endpoint URL (for testing or VPC endpoints) |
 
-Navigate to `/integrations/config`, select **AWS**, and enter your credentials. Alternatively, use the **AWS Setup Guide** on the setup page for a guided walkthrough.
+*If no explicit credentials or profile are provided, the AWS SDK default credential chain is used (environment variables, `~/.aws/credentials`, instance profile, etc.).
 
 ## Authentication
 
@@ -428,7 +403,7 @@ AWSAuthenticationError: AWS authentication failed
 1. **Use Least Privilege**: Grant only the specific EC2 actions Pabawi needs
 2. **Rotate Credentials**: Regularly rotate access keys
 3. **Use Temporary Credentials**: Prefer STS temporary credentials over long-lived keys
-4. **Store Securely**: Use the Pabawi Integration Config UI (encrypted storage) rather than plain .env files
+4. **Store Securely**: Use `backend/.env` with restricted file permissions (`chmod 600`) and never commit it to version control
 5. **Monitor Access**: Enable CloudTrail logging for API activity
 
 ### Performance

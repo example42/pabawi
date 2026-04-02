@@ -7,7 +7,7 @@
 </td>
 <td>
   <h3>Classic Infrastructures Command & Control Awesomeness</h3>
-  <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It currently provides integrations with Puppet, Bolt, Ansible, PuppetDB, Hiera and SSH. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, viewing system information, and tracking operations across your entire environment.</p>
+  <p>Pabawi is a web frontend for infrastructure management, inventory and remote execution. It provides integrations with Puppet, Bolt, Ansible, PuppetDB, Hiera, SSH, Proxmox and AWS. It supports both Puppet Enterprise and Open Source Puppet / OpenVox. It provides a unified web interface for managing infrastructure, executing commands, provisioning VMs/containers, viewing system information, and tracking operations across your entire environment.</p>
 </td>
 </tr>
 </table>
@@ -46,10 +46,12 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
 
 ## Features
 
-- **Multi-Source Inventory**: Nodes from Bolt, PuppetDB, Ansible, SSH — with inventory groups
+- **Multi-Source Inventory**: Nodes from Bolt, PuppetDB, Ansible, SSH, Proxmox, AWS — with inventory groups
 - **Command Execution**: Ad-hoc commands on remote nodes with whitelist security
 - **Task Execution**: Bolt tasks with automatic parameter discovery
 - **Package Management**: Install and manage packages across infrastructure
+- **Proxmox Provisioning**: VM and container management alongside config management
+- **AWS EC2 Provisioning**: Cloud instance lifecycle management
 - **Execution History**: Track operations with re-execution capability
 - **RBAC Authentication**: Role-based access control, multiple users, audit trail
 - **Node Facts**: System information from Puppet agents
@@ -57,6 +59,7 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
 - **Catalog Inspection**: Compiled catalogs, resource relationships, cross-environment diff
 - **Event Tracking**: Resource changes and failures over time
 - **Hiera Data Browser**: Hierarchical configuration data and key usage analysis
+- **Node Journal**: Timeline of events, actions, and notes per node
 - **Real-time Streaming**: Live output for command and task execution
 - **Expert Mode**: Full command lines and debug output
 - **Graceful Degradation**: Continues operating when individual integrations are unavailable
@@ -177,7 +180,9 @@ For comprehensive Docker deployment instructions including all integrations, see
 
 ## Configuration
 
-Pabawi uses a `backend/.env` file for all configuration. The interactive setup script (`scripts/setup.sh`) generates this file for you. You can also use `backend/.env.example` as a reference template.
+Pabawi uses a `backend/.env` file as the single source of truth for all configuration. The interactive setup script (`scripts/setup.sh`) generates this file for you. You can also use `backend/.env.example` as a reference template.
+
+The web UI includes setup wizards for each integration that generate `.env` snippets you can copy-paste into your configuration file.
 
 Key configuration areas:
 
@@ -187,6 +192,8 @@ Key configuration areas:
 - **Hiera** — control repo path, environments
 - **Ansible** — project path, inventory path
 - **SSH** — config path, default user/key, sudo, connection pool limits
+- **Proxmox** — host, port, token, SSL settings
+- **AWS** — region, access key, secret key, endpoint
 
 For the complete configuration reference, see the [Configuration Guide](docs/configuration.md).
 
@@ -204,16 +211,10 @@ For details of the repository files and configurations check the [Repository Str
 
 ## Roadmap
 
-### Coming next
-
-- **Proxmox** — VM and container management alongside config management (in active development)
-- **Node Journal** - A journal of events and actions on nodes
-
 ### Planned integrations
 
 - **Icinga / CheckMK** — monitoring context in the same interface
 - **Terraform / OpenTofu** — infrastructure provisioning alongside configuration management
-- **EC2 / Azure** — hybrid environments spanning on-prem and cloud
 
 ### Also planned
 
@@ -221,6 +222,9 @@ Scheduled executions, custom dashboards, CLI tool, audit logging, Tiny Puppet in
 
 ### Version History
 
+- **v1.0.0**: Configuration refactor (`.env` as single source of truth), Proxmox and AWS provisioning, Node Journal, setup wizard `.env` snippet generators, Integration Status Dashboard
+- **v0.10.0**: AWS EC2 integration. Integration configuration management
+- **v0.9.0**: Proxmox integration. Node journal
 - **v0.8.0**: RBAC authentication. SSH integrations. Inventory groups
 - **v0.7.0**: Ansible Integration. Class-aware Hiera lookups
 - **v0.6.0**: Code consolidation and fixing
@@ -238,7 +242,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 - [Technical Summary](docs/description.md) | [Architecture](docs/architecture.md) | [Configuration](docs/configuration.md) | [User Guide](docs/user-guide.md)
 - [API Reference](docs/api.md) | [Integrations API](docs/integrations-api.md) | [API Endpoints](docs/api-endpoints-reference.md) | [Error Codes](docs/error-codes.md)
-- [Bolt](docs/integrations/bolt.md) | [Ansible](docs/integrations/ansible.md) | [Hiera](docs/integrations/hiera.md) | [PuppetDB](docs/integrations/puppetdb.md) | [Puppetserver](docs/integrations/puppetserver.md)
+- [Bolt](docs/integrations/bolt.md) | [Ansible](docs/integrations/ansible.md) | [Hiera](docs/integrations/hiera.md) | [PuppetDB](docs/integrations/puppetdb.md) | [Puppetserver](docs/integrations/puppetserver.md) | [SSH](docs/integrations/ssh.md) | [Proxmox](docs/integrations/proxmox.md) | [AWS](docs/integrations/aws.md)
 - [Authentication](docs/authentication.md) | [E2E Testing](docs/e2e-testing.md) | [Troubleshooting](docs/troubleshooting.md) | [Development](docs/development.md) | [Repo Structure](docs/repo_structure_and_config.md)
 
 For help: check the docs, enable expert mode for diagnostics, or [open a GitHub issue](https://github.com/example42/pabawi/issues) with version info, config (sanitized), reproduction steps, and error messages.

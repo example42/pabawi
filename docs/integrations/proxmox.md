@@ -13,51 +13,16 @@ The Proxmox integration enables Pabawi to manage Proxmox Virtual Environment (VE
 
 ## Configuration
 
-### Basic Configuration
-
-Add the Proxmox integration to your Pabawi configuration:
-
-```typescript
-{
-  integrations: {
-    proxmox: {
-      enabled: true,
-      name: 'proxmox',
-      type: 'both',
-      priority: 10,
-      config: {
-        host: 'proxmox.example.com',
-        port: 8006,
-        token: 'user@realm!tokenid=uuid'
-      }
-    }
-  }
-}
-```
-
-### Configuration Options
-
-| Option | Type | Required | Default | Description |
-|--------|------|----------|---------|-------------|
-| `host` | string | Yes | - | Proxmox server hostname or IP address |
-| `port` | number | No | 8006 | Proxmox API port |
-| `token` | string | No* | - | API token for authentication (recommended) |
-| `username` | string | No* | - | Username for password authentication |
-| `password` | string | No* | - | Password for password authentication |
-| `realm` | string | No | - | Authentication realm (required for password auth) |
-| `ssl.rejectUnauthorized` | boolean | No | true | Verify TLS certificates |
-| `ssl.ca` | string | No | - | Path to custom CA certificate |
-| `ssl.cert` | string | No | - | Path to client certificate |
-| `ssl.key` | string | No | - | Path to client certificate key |
-| `timeout` | number | No | 30000 | Request timeout in milliseconds |
-
-*Either `token` or `username`/`password` must be provided.
+All Proxmox configuration is done via environment variables in `backend/.env`. You can also use the **Proxmox Setup Guide** in the Pabawi web UI to generate the `.env` snippet — it walks you through the settings and lets you copy the result to your clipboard.
 
 ### Environment Variables
 
-You can use environment variables for sensitive configuration:
+Add the following to your `backend/.env`:
 
 ```bash
+# Enable Proxmox integration
+PROXMOX_ENABLED=true
+
 # Required
 PROXMOX_HOST=proxmox.example.com
 PROXMOX_PORT=8006
@@ -77,30 +42,24 @@ PROXMOX_CLIENT_CERT=/path/to/client.pem
 PROXMOX_CLIENT_KEY=/path/to/client-key.pem
 ```
 
-Then reference them in your configuration:
+### Configuration Options
 
-```typescript
-{
-  integrations: {
-    proxmox: {
-      enabled: true,
-      name: 'proxmox',
-      type: 'both',
-      config: {
-        host: process.env.PROXMOX_HOST,
-        port: parseInt(process.env.PROXMOX_PORT || '8006'),
-        token: process.env.PROXMOX_TOKEN,
-        ssl: {
-          rejectUnauthorized: process.env.PROXMOX_SSL_VERIFY !== 'false',
-          ca: process.env.PROXMOX_CA_CERT,
-          cert: process.env.PROXMOX_CLIENT_CERT,
-          key: process.env.PROXMOX_CLIENT_KEY
-        }
-      }
-    }
-  }
-}
-```
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `PROXMOX_ENABLED` | Yes | `false` | Enable Proxmox integration |
+| `PROXMOX_HOST` | Yes | - | Proxmox server hostname or IP address |
+| `PROXMOX_PORT` | No | `8006` | Proxmox API port |
+| `PROXMOX_TOKEN` | No* | - | API token for authentication (recommended) |
+| `PROXMOX_USERNAME` | No* | - | Username for password authentication |
+| `PROXMOX_PASSWORD` | No* | - | Password for password authentication |
+| `PROXMOX_REALM` | No | - | Authentication realm (required for password auth) |
+| `PROXMOX_SSL_VERIFY` | No | `true` | Verify TLS certificates |
+| `PROXMOX_CA_CERT` | No | - | Path to custom CA certificate |
+| `PROXMOX_CLIENT_CERT` | No | - | Path to client certificate |
+| `PROXMOX_CLIENT_KEY` | No | - | Path to client certificate key |
+| `PROXMOX_TIMEOUT` | No | `30000` | Request timeout in milliseconds |
+
+*Either `PROXMOX_TOKEN` or `PROXMOX_USERNAME`/`PROXMOX_PASSWORD` must be provided.
 
 ## Authentication
 
@@ -130,12 +89,11 @@ Grant the following permissions to the token user:
 
 #### Configuration Example
 
-```typescript
-config: {
-  host: 'proxmox.example.com',
-  port: 8006,
-  token: 'automation@pve!api-token=12345678-1234-1234-1234-123456789abc'
-}
+```bash
+PROXMOX_ENABLED=true
+PROXMOX_HOST=proxmox.example.com
+PROXMOX_PORT=8006
+PROXMOX_TOKEN=automation@pve!api-token=12345678-1234-1234-1234-123456789abc
 ```
 
 ### Password Authentication
@@ -144,14 +102,13 @@ Password authentication uses username and password to obtain a temporary authent
 
 #### Configuration Example
 
-```typescript
-config: {
-  host: 'proxmox.example.com',
-  port: 8006,
-  username: 'root',
-  password: 'your-secure-password',
-  realm: 'pam'
-}
+```bash
+PROXMOX_ENABLED=true
+PROXMOX_HOST=proxmox.example.com
+PROXMOX_PORT=8006
+PROXMOX_USERNAME=root
+PROXMOX_PASSWORD=your-secure-password
+PROXMOX_REALM=pam
 ```
 
 #### Available Realms
@@ -486,18 +443,14 @@ Retry configuration:
 
 1. For self-signed certificates, provide the CA certificate path:
 
-   ```typescript
-   ssl: {
-     ca: '/path/to/ca.pem'
-   }
+   ```bash
+   PROXMOX_CA_CERT=/path/to/ca.pem
    ```
 
 2. For testing only, disable certificate verification:
 
-   ```typescript
-   ssl: {
-     rejectUnauthorized: false
-   }
+   ```bash
+   PROXMOX_SSL_VERIFY=false
    ```
 
    **Warning**: This is insecure and should not be used in production.
@@ -546,7 +499,7 @@ Retry configuration:
 2. **Enable Certificate Verification**: Always verify TLS certificates in production
 3. **Least Privilege**: Grant only required permissions to API tokens
 4. **Rotate Credentials**: Regularly rotate API tokens and passwords
-5. **Secure Storage**: Store credentials in environment variables or secure vaults
+5. **Secure Storage**: Store credentials in `backend/.env` with restricted file permissions (`chmod 600`) and never commit to version control
 
 ### Performance
 
