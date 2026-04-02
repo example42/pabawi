@@ -249,8 +249,8 @@
     - Fix broken link: `./uppetserver-integration-setup.md` → `./integrations/puppetserver.md` (typo in Additional Resources)
     - _Requirements: 7.6, 11.3_
 
-- [ ] 12. Audit Config Settings Consistency
-  - [~] 12.1 Verify .env.example matches ConfigService parsing
+- [x] 12. Audit Config Settings Consistency
+  - [x] 12.1 Verify .env.example matches ConfigService parsing
     - Cross-reference every env var in `.env.example` and `backend/.env.example` against `ConfigService.parseIntegrationsConfig()` and `ConfigService.loadConfiguration()` — flag any vars listed in .env.example that ConfigService never reads, and any vars ConfigService reads that are missing from .env.example
     - Known gaps to investigate: `PROXMOX_USERNAME`, `PROXMOX_PASSWORD`, `PROXMOX_REALM`, `PROXMOX_TIMEOUT`, `PROXMOX_PRIORITY` are parsed by ConfigService but not in .env.example; `PROXMOX_TOKEN` format in .env.example (`user@realm!tokenid=token-value`) may not match what ConfigService expects
     - Verify SSH env vars: `loadSSHConfig()` reads `SSH_DEFAULT_USER` (required when enabled) but .env.example has it empty — add a comment or sample value
@@ -258,7 +258,7 @@
     - Ensure both `.env.example` files (root and `backend/`) stay in sync — they should be identical or one should be removed
     - _Requirements: 1.1, 7.2_
 
-  - [~] 12.2 Verify setup guide wizards generate correct env var names
+  - [x] 12.2 Verify setup guide wizards generate correct env var names
     - For each of the 8 setup guide components, verify the `.env` snippet they generate uses env var names that exactly match what ConfigService/loadSSHConfig actually parse
     - Cross-reference ProxmoxSetupGuide snippet vars against `ConfigService.parseIntegrationsConfig()` Proxmox section
     - Cross-reference AWSSetupGuide snippet vars against `ConfigService.parseIntegrationsConfig()` AWS section
@@ -268,14 +268,14 @@
     - Flag any env vars in setup guides that don't exist in ConfigService, and any ConfigService vars missing from setup guides
     - _Requirements: 3.1, 3.4, 3.5_
 
-  - [~] 12.3 Verify .env.docker matches ConfigService and Docker ENV defaults
+  - [x] 12.3 Verify .env.docker matches ConfigService and Docker ENV defaults
     - Cross-reference `.env.docker` against ConfigService — ensure all env var names are correct and no stale/renamed vars exist
     - `.env.docker` is missing: Proxmox settings, AWS settings, `JWT_SECRET`, `AUTH_ENABLED`, `COMMAND_WHITELIST_ALLOW_ALL`, `COMMAND_WHITELIST`, streaming/cache/queue settings
     - `.env.docker` uses `DATABASE_PATH=/pabawi/data/pabawi.db` but Dockerfile sets `DATABASE_PATH=/data/pabawi.db` — resolve the inconsistency
     - Verify `.env.docker` paths reference container-internal paths (not host paths)
     - _Requirements: 11.3_
 
-  - [~] 12.4 Reconcile Dockerfile ENV defaults with ConfigService defaults
+  - [x] 12.4 Reconcile Dockerfile ENV defaults with ConfigService defaults
     - Verify that ENV defaults in all three Dockerfiles match ConfigService's Zod schema defaults (port, host, database path, etc.)
     - Ensure no Dockerfile sets an ENV default that contradicts what ConfigService would produce from the same value
     - _Requirements: 11.1_
