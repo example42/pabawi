@@ -1,6 +1,6 @@
 # Docker Deployment Guide
 
-This guide covers deploying Pabawi with Docker, including configuration for PuppetDB, Puppetserver, and Hiera integrations.
+This guide covers deploying Pabawi with Docker, including configuration for all supported integrations (PuppetDB, Puppetserver, Hiera, Proxmox, AWS, SSH, and Ansible).
 
 ## Table of Contents
 
@@ -88,6 +88,9 @@ The volume mounts map your local host files to these container paths. You can mo
 | Puppet certs - CA | `$HOME/puppet/certs/ca.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETSERVER_SSL_CA=/certs/ca.pem` |
 | Puppet certs - User cert | `$HOME/puppet/certs/pabawi.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETDB_SSL_CERT=/certs/pabawi.pem` |
 | Puppet certs - User key | `$HOME/puppet/certs/private/pabawi.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETDB_SSL_KEY=/certs/private/pabawi.pem` |
+| SSH keys | `$HOME/.ssh` | `-v "${HOME}/.ssh:/ssh:ro"` | `SSH_DEFAULT_KEY=/ssh/id_rsa` |
+| SSH config | `$HOME/.ssh/config` | `-v "${HOME}/.ssh:/ssh:ro"` | `SSH_CONFIG_PATH=/ssh/config` |
+| Ansible project | `$HOME/ansible-project` | `-v "${HOME}/ansible-project:/ansible:ro"` | `ANSIBLE_PROJECT_PATH=/ansible` |
 
 **Note:** `PUPPETSERVER_SSL_*` settings can use the same paths as the corresponding `PUPPETDB_SSL_*` ones.
 
@@ -165,8 +168,11 @@ docker run --env-file .env pabawi:latest
 # Local fact files (if not using PuppetDB)
 -v /path/to/facts:/facts:ro
 
-# SSH keys for Bolt connections
--v ~/.ssh:/root/.ssh:ro
+# SSH keys and config for SSH integration
+-v ~/.ssh:/ssh:ro
+
+# Ansible project directory
+-v /path/to/ansible-project:/ansible:ro
 ```
 
 ### Volume Permissions
@@ -255,6 +261,129 @@ sudo chmod -R 600 /path/to/ssl-certs/*.pem
        path: "common.yaml"
    ```
 
+### Proxmox Setup
+
+Add the following to your `.env` file:
+
+```env
+# Proxmox Integration
+PROXMOX_ENABLED=true
+PROXMOX_HOST=proxmox.example.com
+PROXMOX_PORT=8006
+
+# Token authentication (recommended)
+PROXMOX_TOKEN=user@realm!tokenid=token-value
+
+# Username/password authentication (alternative)
+# PROXMOX_USERNAME=root@pam
+# PROXMOX_PASSWORD=your-password-here
+# PROXMOX_REALM=pam
+
+# SSL settings (optional)
+# PROXMOX_SSL_REJECT_UNAUTHORIZED=true
+# PROXMOX_SSL_CA=/certs/proxmox-ca.pem
+# PROXMOX_TIMEOUT=30000
+```
+
+**Test connectivity** from the host before deploying:
+
+```bash
+# Verify Proxmox API is reachable
+curl -k https://proxmox.example.com:8006/api2/json/version
+```
+
+For the full list of Proxmox environment variables, see the [Proxmox Integration Setup Guide](./integrations/proxmox.md).
+
+### AWS Setup
+
+Add the following to your `.env` file:
+
+```env
+# AWS Integration
+AWS_ENABLED=true
+AWS_DEFAULT_REGION=us-east-1
+
+# Static credentials (use IAM roles or profiles when possible)
+# AWS_ACCESS_KEY_ID=your-access-key-here
+# AWS_SECRET_ACCESS_KEY=your-secret-key-here
+
+# Query multiple regions (optional)
+# AWS_REGIONS=["us-east-1","eu-west-1"]
+
+# Session token for temporary credentials (optional)
+# AWS_SESSION_TOKEN=
+# AWS_PROFILE=default
+```
+
+If the container runs on an EC2 instance with an IAM instance profile, you can omit the static credentials — the AWS SDK default credential chain will be used automatically.
+
+For the full list of AWS environment variables, see the [AWS Integration Setup Guide](./integrations/aws.md).
+
+### SSH Setup
+
+Add the following to your `.env` file and mount your SSH keys into the container:
+
+```env
+# SSH Integration
+SSH_ENABLED=true
+SSH_DEFAULT_USER=deploy
+SSH_DEFAULT_KEY=/ssh/id_rsa
+# SSH_CONFIG_PATH=/ssh/config
+# SSH_DEFAULT_PORT=22
+# SSH_HOST_KEY_CHECK=true
+# SSH_CONNECTION_TIMEOUT=30
+# SSH_COMMAND_TIMEOUT=300
+# SSH_MAX_CONNECTIONS=50
+```
+
+Mount your SSH directory as a read-only volume:
+
+```bash
+docker run -d \
+  -v ~/.ssh:/ssh:ro \
+  --env-file .env \
+  pabawi:latest
+```
+
+Or in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ~/.ssh:/ssh:ro
+```
+
+For the full list of SSH environment variables, see the [SSH Integration Setup Guide](./integrations/ssh.md).
+
+### Ansible Setup
+
+Add the following to your `.env` file and mount your Ansible project directory:
+
+```env
+# Ansible Integration
+ANSIBLE_ENABLED=true
+ANSIBLE_PROJECT_PATH=/ansible
+ANSIBLE_INVENTORY_PATH=inventory/hosts
+# ANSIBLE_EXECUTION_TIMEOUT=300000
+```
+
+Mount your Ansible project as a read-only volume:
+
+```bash
+docker run -d \
+  -v /path/to/ansible-project:/ansible:ro \
+  --env-file .env \
+  pabawi:latest
+```
+
+Or in `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ./ansible-project:/ansible:ro
+```
+
+For the full list of Ansible environment variables, see the [Ansible Integration Setup Guide](./integrations/ansible.md).
+
 ## Docker Compose
 
 The project includes a `docker-compose.yml` that uses the published image from Docker Hub.
@@ -331,6 +460,10 @@ networks:
      # Uncomment and adjust paths as needed:
      - /path/to/ssl/certs:/ssl-certs:ro
      - /path/to/control-repo:/control-repo:ro
+     # SSH keys for SSH integration
+     # - ~/.ssh:/ssh:ro
+     # Ansible project directory
+     # - ./ansible-project:/ansible:ro
    ```
 
 4. **Start the service**:
@@ -746,5 +879,10 @@ open http://localhost:3000
 - [Configuration Guide](./configuration.md)
 - [PuppetDB Integration Setup](./integrations/puppetdb.md)
 - [Puppetserver Setup](./integrations/puppetserver.md)
+- [Proxmox Integration Setup](./integrations/proxmox.md)
+- [AWS Integration Setup](./integrations/aws.md)
+- [SSH Integration Setup](./integrations/ssh.md)
+- [Ansible Integration Setup](./integrations/ansible.md)
+- [Hiera Integration Setup](./integrations/hiera.md)
 - [Troubleshooting Guide](./troubleshooting.md)
 - [API Documentation](./api.md)
