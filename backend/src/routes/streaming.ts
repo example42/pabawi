@@ -57,7 +57,7 @@ export function createStreamingRouter(
           !req.headers.authorization
         ) {
           req.headers.authorization = `Bearer ${req.query.token}`;
-           
+
           delete (req.query as Record<string, unknown>).token;
         }
 

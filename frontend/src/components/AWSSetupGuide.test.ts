@@ -28,7 +28,6 @@ const clipboardWriteText = vi.fn<(text: string) => Promise<void>>().mockResolved
  * Helper to set an input value and trigger Svelte's bind:value reactivity.
  */
 async function setInputValue(el: HTMLInputElement, value: string): Promise<void> {
-  // eslint-disable-next-line no-param-reassign
   el.value = value;
   await fireEvent.input(el);
 }
