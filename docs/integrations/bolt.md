@@ -20,7 +20,7 @@ Pabawi is built on top of Puppet Bolt. This guide covers the core configuration 
 
 ## Project Configuration
 
-Pabawi requires a properly structured Bolt project directory to function.
+Pabawi requires a properly structured Bolt project directory to function. You can also use the **Bolt Setup Guide** in the Pabawi web UI to generate the `.env` snippet for Bolt configuration — it walks you through the settings and lets you copy the result to your clipboard.
 
 ### Setting the Project Path
 

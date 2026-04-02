@@ -1,10 +1,12 @@
 # Pabawi Configuration Guide
 
-Version: 0.5.0
+Version: 1.0.0
 
 ## Overview
 
-Pabawi is designed to work with minimal configuration by using your existing Bolt project setup. This guide covers all configuration options, from basic setup to advanced deployment scenarios.
+Pabawi uses `backend/.env` as the single source of truth for all configuration. There are no database-stored configuration overrides — all integration settings are defined exclusively via environment variables, parsed and validated by ConfigService using Zod schemas.
+
+This guide covers all configuration options, from basic setup to advanced deployment scenarios.
 
 ## Table of Contents
 
@@ -41,11 +43,11 @@ Pabawi will automatically discover:
 
 ## Environment Variables
 
-All configuration is managed through environment variables. You can set these in:
+All configuration is managed through environment variables in `backend/.env`. This is the single source of truth — there are no database-stored overrides or web UI configuration forms. You can set these in:
 
-1. System environment
-2. `.env` file in the backend directory
-3. Docker environment variables
+1. `backend/.env` file (recommended)
+2. System environment variables
+3. Docker environment variables (via `env_file` or `-e` flags)
 
 ### Core Server Configuration
 
@@ -588,4 +590,5 @@ Before deploying to production:
 - [ ] Expert mode disabled in production (or restricted)
 - [ ] Destructive provisioning disabled if appropriate (`ALLOW_DESTRUCTIVE_PROVISIONING=false`)
 - [ ] UI features configured (run chart visibility)
-- [ ] Integration colors displaying correctly
+- [ ] Integration settings configured in `backend/.env` (use the web UI setup wizards to generate `.env` snippets)
+- [ ] Integration status verified on the Status Dashboard

@@ -67,23 +67,11 @@ docker run -d \
   -v $(pwd)/control-repo:/control-repo:ro \
   -v $(pwd)/ssl-certs:/ssl-certs:ro \
   -v $(pwd)/data:/data \
-  -e PUPPETDB_ENABLED=true \
-  -e PUPPETDB_SERVER_URL=https://puppetdb.example.com \
-  -e PUPPETDB_SSL_ENABLED=true \
-  -e PUPPETDB_SSL_CA=/ssl-certs/ca.pem \
-  -e PUPPETDB_SSL_CERT=/ssl-certs/client.pem \
-  -e PUPPETDB_SSL_KEY=/ssl-certs/client-key.pem \
-  -e PUPPETSERVER_ENABLED=true \
-  -e PUPPETSERVER_SERVER_URL=https://puppet.example.com \
-  -e PUPPETSERVER_SSL_ENABLED=true \
-  -e PUPPETSERVER_SSL_CA=/ssl-certs/ca.pem \
-  -e PUPPETSERVER_SSL_CERT=/ssl-certs/client.pem \
-  -e PUPPETSERVER_SSL_KEY=/ssl-certs/client-key.pem \
-  -e HIERA_ENABLED=true \
-  -e HIERA_CONTROL_REPO_PATH=/control-repo \
-  -e HIERA_FACT_SOURCE_PREFER_PUPPETDB=true \
+  --env-file .env \
   pabawi:latest
 ```
+
+All integration settings are configured in the `.env` file. See the [Environment File](#environment-file) section for a complete example.
 
 ## Volume Mount Reference
 
@@ -133,7 +121,9 @@ docker buildx build --platform linux/amd64,linux/arm64 -t pabawi:latest .
 
 ## Environment Variables
 
-Pabawi is configured using environment variables. For a complete reference of all available variables, including Core, Bolt, and Integration settings, please consult the **[Configuration Guide](./configuration.md)**.
+Pabawi uses `backend/.env` as the single source of truth for all configuration, including integration settings. There is no web-based configuration management — all settings are defined in the `.env` file.
+
+For a complete reference of all available variables, including Core, Bolt, and Integration settings, please consult the **[Configuration Guide](./configuration.md)**.
 
 You can pass these variables to the Docker container using the `-e` flag:
 
@@ -330,7 +320,7 @@ networks:
    cp .env.example .env
    ```
 
-2. **Edit `.env`** to configure your integrations (see [Environment Variables](#environment-variables))
+2. **Edit `.env`** to configure your integrations. You can use the setup guides in the Pabawi web UI to generate `.env` snippets for each integration — they walk you through the settings and let you copy the result to your clipboard. See the [Configuration Guide](./configuration.md) for all available variables.
 
 3. **Uncomment volume mounts** in `docker-compose.yml` for the integrations you need:
 
@@ -417,6 +407,18 @@ services:
       - HIERA_CONTROL_REPO_PATH=${HIERA_CONTROL_REPO_PATH:-/control-repo}
       - HIERA_FACT_SOURCE_PREFER_PUPPETDB=${HIERA_FACT_SOURCE_PREFER_PUPPETDB:-true}
       
+      # Proxmox Integration
+      - PROXMOX_ENABLED=${PROXMOX_ENABLED:-false}
+      - PROXMOX_HOST=${PROXMOX_HOST}
+      - PROXMOX_PORT=${PROXMOX_PORT:-8006}
+      - PROXMOX_TOKEN=${PROXMOX_TOKEN}
+      
+      # AWS Integration
+      - AWS_ENABLED=${AWS_ENABLED:-false}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
@@ -457,6 +459,29 @@ HIERA_ENABLED=true
 HIERA_CONTROL_REPO_PATH=/control-repo
 HIERA_ENVIRONMENTS=["production","staging"]
 HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
+
+# Proxmox Integration
+PROXMOX_ENABLED=true
+PROXMOX_HOST=proxmox.example.com
+PROXMOX_PORT=8006
+PROXMOX_TOKEN=automation@pve!api-token=12345678-1234-1234-1234-123456789abc
+
+# AWS Integration
+AWS_ENABLED=true
+AWS_DEFAULT_REGION=us-east-1
+# AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
+# AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+# SSH Integration
+SSH_ENABLED=true
+SSH_CONFIG_PATH=/config/ssh_config
+SSH_DEFAULT_USER=deploy
+SSH_DEFAULT_KEY=/keys/deploy_key
+
+# Ansible Integration
+ANSIBLE_ENABLED=true
+ANSIBLE_PROJECT_PATH=/ansible-project
+ANSIBLE_INVENTORY_PATH=inventory/hosts
 ```
 
 ### Running with Docker Compose
@@ -720,6 +745,6 @@ open http://localhost:3000
 
 - [Configuration Guide](./configuration.md)
 - [PuppetDB Integration Setup](./integrations/puppetdb.md)
-- [Puppetserver Setup](./uppetserver-integration-setup.md)
+- [Puppetserver Setup](./integrations/puppetserver.md)
 - [Troubleshooting Guide](./troubleshooting.md)
 - [API Documentation](./api.md)

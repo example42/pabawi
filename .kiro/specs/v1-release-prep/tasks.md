@@ -140,25 +140,25 @@
     - Verify `backend/test/integrationConfig.routes.test.ts` was deleted in task 1.2
     - _Requirements: 6.5_
 
-- [ ] 7. Update Documentation
-  - [~] 7.1 Update README.md
+- [x] 7. Update Documentation
+  - [x] 7.1 Update README.md
     - Update version references to 1.0.0
     - Remove any references to web-based integration configuration management
     - Update setup instructions to reflect `.env`-only configuration
     - _Requirements: 7.1_
 
-  - [~] 7.2 Update configuration and API docs
+  - [x] 7.2 Update configuration and API docs
     - Update `docs/configuration.md` — `.env` as single source of truth, remove DB config override references
     - Update `docs/api.md`, `docs/api-endpoints-reference.md`, `docs/integrations-api.md` — remove `/api/config/integrations` CRUD endpoints
     - Update `docs/architecture.md` — config flow is `.env` → ConfigService → plugins, remove IntegrationConfigService
     - _Requirements: 7.2, 7.3, 7.5_
 
-  - [~] 7.3 Update integration setup guides and Docker docs
+  - [x] 7.3 Update integration setup guides and Docker docs
     - Update `docs/integrations/*.md` — `.env`-based configuration, reference web UI wizard as snippet generator
     - Update `docs/docker-deployment.md` — accurate `.env` passing instructions
     - _Requirements: 7.4, 7.6_
 
-  - [~] 7.4 Update CHANGELOG.md
+  - [x] 7.4 Update CHANGELOG.md
     - Add v1.0.0 entry summarizing: config system refactor, IntegrationConfigService removal, setup wizard conversion, test improvements, documentation updates, breaking changes from v0.10.0
     - _Requirements: 7.7_
 

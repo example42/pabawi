@@ -20,7 +20,7 @@ Pabawi integrates with [Hiera](https://puppet.com/docs/puppet/latest/hiera_intro
 
 ## Configuration
 
-Add the following environment variables to your `.env` file or deployment configuration.
+Add the following environment variables to your `backend/.env` file. You can also use the **Hiera Setup Guide** in the Pabawi web UI to generate this snippet — it walks you through the settings and lets you copy the result to your clipboard.
 
 ### Basic Setup
 

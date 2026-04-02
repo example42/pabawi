@@ -1,6 +1,6 @@
 # Pabawi API Documentation
 
-Version: 0.5.0
+Version: 1.0.0
 
 ## Overview
 
@@ -236,6 +236,7 @@ GET /api/health
 {
   "status": "ok",
   "message": "Backend API is running",
+  "version": "1.0.0",
   "config": {
     "boltProjectPath": "/path/to/bolt-project",
     "commandWhitelistEnabled": true,
@@ -1185,7 +1186,7 @@ future versions.
 The API version is included in the response headers:
 
 ```text
-X-API-Version: 0.1.0
+X-API-Version: 1.0.0
 ```
 
 Future versions will maintain backward compatibility or provide versioned endpoints.

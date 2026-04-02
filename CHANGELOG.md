@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.0.0]
+
+### Added
+
+- Read-only Integration Status Dashboard showing enabled integrations and connection health
+- "Test Connection" buttons for Proxmox and AWS on the Status Dashboard
+- Setup guide `.env` snippet wizards with copy-to-clipboard and sensitive value masking
+- Database migration 010 to drop `integration_configs` table
+- Comprehensive property-based test coverage using fast-check (ConfigService, IntegrationManager, Status Dashboard, Setup Wizards)
+- Unit tests for ConfigService env parsing and Zod schema validation
+- Unit tests for IntegrationManager plugin lifecycle and graceful degradation
+- Frontend component tests for Integration Status Dashboard and Env Snippet Wizards
+
+### Changed
+
+- Configuration system refactored: `.env` is now the single source of truth for all integration settings
+- IntegrationConfigPage converted from CRUD UI to read-only Integration Status Dashboard
+- Setup guide components converted from database-saving wizards to `.env` snippet generators
+- Test connection endpoints refactored to read config from ConfigService (no request body)
+- Proxmox and AWS plugins receive config directly from ConfigService without database merges
+- All documentation updated to reflect `.env`-only configuration model
+- Docker configurations updated with consistent ENV defaults and migration support
+- Version bumped to 1.0.0 across all package.json files, Docker labels, and steering docs
+
+### Removed
+
+- `IntegrationConfigService` and `IntegrationConfigService.types.ts`
+- `IntegrationConfigRouter` and `/api/config/integrations` CRUD endpoints
+- `integration_configs` database table (dropped via migration 010)
+- Frontend API functions: `saveIntegrationConfig`, `getIntegrationConfig`, `getIntegrationConfigs`, `deleteIntegrationConfig`, `saveProxmoxConfig`, `saveAWSConfig`
+- `IntegrationConfigRecord` frontend type
+- Dead code and unused dependencies related to database-stored config overrides
+
+### Breaking Changes from 0.10.0
+
+- `/api/config/integrations` CRUD endpoints removed — all configuration is now via `.env`
+- `integration_configs` database table dropped (migration 010 runs automatically)
+- Setup guides no longer save configuration to the database
+- Test connection endpoints (`POST /api/integrations/proxmox/test`, `POST /api/integrations/aws/test`) no longer accept config in the request body
+
 ## [0.8.0]
 
 ### Added

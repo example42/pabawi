@@ -29,6 +29,8 @@ curl https://puppetdb.example.com:8081/pdb/meta/v1/version
 
 ## Quick Start
 
+You can also use the **PuppetDB Setup Guide** in the Pabawi web UI to generate the `.env` snippet — it walks you through the settings and lets you copy the result to your clipboard.
+
 ### Localhost Configuration (HTTP)
 
 For PuppetDB running on localhost, HTTP access is allowed by default:

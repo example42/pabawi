@@ -1,6 +1,6 @@
 # Pabawi Architecture Documentation
 
-Version: 0.5.0
+Version: 1.0.0
 
 ## Table of Contents
 
@@ -33,6 +33,20 @@ Pabawi is a unified remote execution interface that orchestrates multiple infras
 - **PuppetDB**: Information source for Puppet infrastructure data (priority: 10)
 - **Puppetserver**: Information source for node management and catalog compilation (priority: 20)
 - **Hiera**: Information source for hierarchical configuration data (priority: 6)
+- **Ansible**: Execution tool for Ansible playbooks and commands (priority: 10)
+- **SSH**: Execution tool for direct SSH command execution (priority: 10)
+- **Proxmox**: Provisioning tool for Proxmox VE VMs and containers (priority: 10)
+- **AWS**: Provisioning tool for AWS EC2 instances (priority: 10)
+
+### Configuration Flow
+
+All integration configuration flows exclusively through environment variables:
+
+```
+backend/.env → ConfigService (Zod validation) → IntegrationManager → Plugins
+```
+
+There are no database-stored configuration overrides. The web UI setup guides generate `.env` snippets for operators to copy into their configuration file.
 
 ## Plugin Architecture
 
@@ -346,19 +360,23 @@ Client Request: GET /api/integrations/status
 │  │   Page   │  │  Detail  │  │  History │  │   Page   │   │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
 │       │             │              │             │          │
-│       └─────────────┴──────────────┴─────────────┘          │
+│  ┌────┴─────┐  ┌────┴─────┐                                │
+│  │ Status   │  │  Setup   │                                │
+│  │Dashboard │  │ Wizards  │                                │
+│  └──────────┘  └──────────┘                                │
 │                     │ HTTP/REST                             │
 └─────────────────────┼───────────────────────────────────────┘
                       │
 ┌─────────────────────┼───────────────────────────────────────┐
 │                     │  Backend (Node.js/Express)            │
 │                     ▼                                        │
-│            ┌─────────────────┐                              │
-│            │  API Routes     │                              │
-│            │  /api/*         │                              │
-│            └────────┬────────┘                              │
-│                     │                                        │
-│            ┌────────▼────────┐                              │
+│  ┌──────────────┐  ┌─────────────────┐                     │
+│  │ ConfigService │  │  API Routes     │                     │
+│  │ (.env → Zod) │  │  /api/*         │                     │
+│  └──────┬───────┘  └────────┬────────┘                     │
+│         │                   │                                │
+│         └─────────┬─────────┘                                │
+│            ┌──────▼─────────┐                               │
 │            │ Integration     │                              │
 │            │   Manager       │                              │
 │            │                 │                              │
@@ -378,22 +396,20 @@ Client Request: GET /api/integrations/status
 │            │ └─────────────┘ │                              │
 │            └────────┬────────┘                              │
 │                     │                                        │
-│        ┌────────────┼────────────┐                          │
-│        │            │            │                          │
-│   ┌────▼────┐  ┌───▼────┐  ┌───▼────┐                     │
-│   │  Bolt   │  │PuppetDB│  │Puppet  │                     │
-│   │ Plugin  │  │Service │  │server  │                     │
-│   │         │  │        │  │Service │                     │
-│   │ (both)  │  │ (info) │  │ (info) │                     │
-│   └────┬────┘  └───┬────┘  └───┬────┘                     │
-│        │           │           │                            │
-└────────┼───────────┼───────────┼────────────────────────────┘
-         │           │           │
-    ┌────▼────┐ ┌───▼────┐ ┌───▼────┐
-    │  Bolt   │ │PuppetDB│ │Puppet  │
-    │  CLI    │ │  API   │ │server  │
-    │         │ │        │ │  API   │
-    └─────────┘ └────────┘ └────────┘
+│   ┌─────────┬──────┼──────┬──────────┬──────────┐          │
+│   │         │      │      │          │          │          │
+│ ┌─▼───┐ ┌──▼───┐ ┌▼────┐ ┌▼──────┐ ┌▼──────┐ ┌▼──────┐  │
+│ │Bolt │ │PDB   │ │PS   │ │Hiera │ │Prox  │ │AWS   │  │
+│ │     │ │      │ │     │ │      │ │mox   │ │      │  │
+│ │both │ │info  │ │info │ │info  │ │prov  │ │prov  │  │
+│ └──┬──┘ └──┬───┘ └──┬──┘ └──┬───┘ └──┬───┘ └──┬───┘  │
+│    │       │        │       │        │        │       │
+└────┼───────┼────────┼───────┼────────┼────────┼───────┘
+     │       │        │       │        │        │
+  ┌──▼──┐ ┌─▼────┐ ┌─▼────┐ ┌▼────┐ ┌─▼────┐ ┌─▼────┐
+  │Bolt │ │PDB   │ │PS    │ │Hiera│ │Prox  │ │AWS   │
+  │CLI  │ │API   │ │API   │ │Files│ │API   │ │API   │
+  └─────┘ └──────┘ └──────┘ └─────┘ └──────┘ └──────┘
 ```
 
 ### Plugin Architecture Detail
@@ -738,7 +754,7 @@ The plugin architecture is designed for easy extension:
 1. Implement IntegrationPlugin interface
 2. Extend BasePlugin for common functionality
 3. Register with IntegrationManager
-4. Configure via environment variables or config file
+4. Configure via environment variables in `backend/.env`
 
 ## Related Documentation
 
