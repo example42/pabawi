@@ -187,8 +187,8 @@
     - Verify `docker-compose.yml` image tag is `latest` (already correct)
     - _Requirements: 9.4, 9.5, 9.6_
 
-- [ ] 10. Ensure Pre-Commit Hooks Pass
-  - [~] 10.1 Run full pre-commit check
+- [x] 10. Ensure Pre-Commit Hooks Pass
+  - [x] 10.1 Run full pre-commit check
     - Run `pre-commit run --all-files`
     - Fix any ESLint errors in both workspaces
     - Fix any TypeScript type errors in both workspaces

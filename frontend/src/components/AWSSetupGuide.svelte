@@ -55,7 +55,7 @@
         const key = line.substring(0, eqIndex);
         if (sensitiveKeys.has(key)) {
           const value = line.substring(eqIndex + 1);
-          const placeholders = ['AKIAIOSFODNN7EXAMPLE', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'];
+          const placeholders = ['AKIAIOSFODNN7EXAMPLE', 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY']; // pragma: allowlist secret
           if (value && !placeholders.includes(value)) {
             return `${key}=${'*'.repeat(Math.min(value.length, 20))}`;
           }

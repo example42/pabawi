@@ -204,7 +204,7 @@ describe('GroupActionModal Component', () => {
       });
 
       // Resolve the promise to complete the test
-       
+
       resolvePost!();
     });
 
@@ -1280,7 +1280,7 @@ describe('GroupActionModal Component', () => {
       });
 
       // Resolve the promise
-       
+
       resolvePost!();
 
       // Wait for completion
