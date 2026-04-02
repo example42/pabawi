@@ -162,14 +162,14 @@
     - Add v1.0.0 entry summarizing: config system refactor, IntegrationConfigService removal, setup wizard conversion, test improvements, documentation updates, breaking changes from v0.10.0
     - _Requirements: 7.7_
 
-- [ ] 8. Clean Up Dead Code and Unused Dependencies
-  - [~] 8.1 Verify all IntegrationConfigService references removed
+- [x] 8. Clean Up Dead Code and Unused Dependencies
+  - [x] 8.1 Verify all IntegrationConfigService references removed
     - Search codebase for any remaining references to IntegrationConfigService, IntegrationConfigRouter, integration_configs
     - Remove any commented-out code blocks > 5 lines referencing removed functionality
     - Check `frontend/src/components/index.ts` barrel export for removed components
     - _Requirements: 8.1, 8.2, 8.4, 8.5_
 
-  - [~] 8.2 Check for unused dependencies
+  - [x] 8.2 Check for unused dependencies
     - Run `npm ls` in each workspace
     - Identify and remove packages imported by zero source files
     - _Requirements: 8.3_
