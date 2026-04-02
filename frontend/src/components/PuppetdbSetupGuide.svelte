@@ -94,8 +94,7 @@ PUPPETDB_RETRY_DELAY=1000
 PUPPETDB_CACHE_TTL=300000
 PUPPETDB_CIRCUIT_BREAKER_THRESHOLD=5
 PUPPETDB_CIRCUIT_BREAKER_TIMEOUT=60000
-PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
-PUPPETDB_PRIORITY=10`;
+PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT=30000`;
 </script>
 
 <div class="max-w-4xl mx-auto px-4 py-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
@@ -364,7 +363,6 @@ PUPPETDB_PRIORITY=10`;
           <ul class="space-y-1 text-sm text-gray-700 dark:text-gray-300">
             <li><strong>PUPPETDB_CACHE_TTL</strong>: Cache duration in milliseconds (default: 300000)</li>
             <li><strong>PUPPETDB_CIRCUIT_BREAKER_*</strong>: Resilience settings for connection failures</li>
-            <li><strong>PUPPETDB_PRIORITY</strong>: Source priority for multi-source inventory (default: 10)</li>
           </ul>
         </div>
       {/if}

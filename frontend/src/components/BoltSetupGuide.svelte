@@ -56,9 +56,9 @@
   const advancedConfig = `# Advanced Configuration
 LOG_LEVEL=info
 DATABASE_PATH=./data/pabawi.db
-STREAMING_ENABLED=true
-STREAMING_BUFFER_SIZE=1024
-BOLT_PRIORITY=5`;
+STREAMING_BUFFER_MS=100
+STREAMING_MAX_OUTPUT_SIZE=10485760
+STREAMING_MAX_LINE_LENGTH=10000`;
 
   const inventorySSH = `# bolt-project/inventory.yaml - SSH Example
 version: 2
@@ -387,7 +387,10 @@ log:
               (default: 10)
             </li>
             <li>
-              <strong>STREAMING_*</strong>: Real-time output streaming settings
+              <strong>STREAMING_BUFFER_MS</strong>: Output buffer interval in milliseconds (default: 100)
+            </li>
+            <li>
+              <strong>STREAMING_MAX_OUTPUT_SIZE</strong>: Maximum output size in bytes (default: 10MB)
             </li>
           </ul>
         </div>
