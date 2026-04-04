@@ -115,7 +115,7 @@ export interface StatusCounts {
 }
 
 /**
- * Repository for managing execution records in SQLite
+ * Repository for managing execution records in the configured database adapter
  */
 export class ExecutionRepository {
   private db: DatabaseAdapter;
