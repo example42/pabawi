@@ -56,3 +56,5 @@ bolt-project/data/
 # Stress test generated files (large inventory files)
 samples/stresstest/ansible/inventory/
 samples/stresstest/bolt/inventory.yaml
+
+.claude
