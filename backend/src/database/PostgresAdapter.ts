@@ -88,8 +88,17 @@ export class PostgresAdapter implements DatabaseAdapter {
     if (!this._pool) {
       throw new DatabaseQueryError("Database not connected", "BEGIN", []);
     }
+    if (this._txClient) {
+      throw new Error("Nested transactions are not supported");
+    }
     this._txClient = await this._pool.connect();
-    await this._txClient.query("BEGIN");
+    try {
+      await this._txClient.query("BEGIN");
+    } catch (err: unknown) {
+      this._txClient.release();
+      this._txClient = null;
+      throw err;
+    }
   }
 
   async commit(): Promise<void> {
