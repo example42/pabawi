@@ -153,25 +153,33 @@ export class MigrationRunner {
   private async executeMigration(migration: MigrationFile): Promise<void> {
     try {
       const sql = readFileSync(migration.path, "utf-8");
+      const dialect = this.db.getDialect();
 
-      // Split into statements (handle multi-statement migrations)
-      const statements = sql
-        .split(";")
-        .map((s) => s.trim())
-        .filter((s) => {
-          if (s.length === 0) return false;
-          // Remove single-line comments and check if anything remains
-          const withoutComments = s
-            .split("\n")
-            .map((line) => line.replace(/--.*$/, "").trim())
-            .filter((line) => line.length > 0)
-            .join("\n");
-          return withoutComments.length > 0;
-        });
+      if (dialect === "postgres") {
+        // Execute the entire migration as a single statement so that
+        // dollar-quoted bodies (e.g. PL/pgSQL functions) are never split on
+        // the semicolons they contain.
+        await this.db.execute(sql);
+      } else {
+        // SQLite: split on `;` and execute each statement individually because
+        // the sqlite3 driver does not support multi-statement strings.
+        const statements = sql
+          .split(";")
+          .map((s) => s.trim())
+          .filter((s) => {
+            if (s.length === 0) return false;
+            // Remove single-line comments and check if anything remains
+            const withoutComments = s
+              .split("\n")
+              .map((line) => line.replace(/--.*$/, "").trim())
+              .filter((line) => line.length > 0)
+              .join("\n");
+            return withoutComments.length > 0;
+          });
 
-      // Execute each statement individually via the adapter
-      for (const statement of statements) {
-        await this.db.execute(statement);
+        for (const statement of statements) {
+          await this.db.execute(statement);
+        }
       }
 
       // Record migration as applied

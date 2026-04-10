@@ -1,22 +1,6 @@
--- Migration 009: Integration Configs
--- Add integration_configs table for storing per-user integration configurations
--- with encrypted sensitive fields and unique constraint per user/integration.
--- Requirements: 32.1, 32.2, 32.3, 32.4
-
--- Integration configs table: Stores per-user integration settings
-CREATE TABLE IF NOT EXISTS integration_configs (
-  id TEXT PRIMARY KEY,
-  userId TEXT NOT NULL,
-  integrationName TEXT NOT NULL,
-  config TEXT NOT NULL,          -- JSON, sensitive fields encrypted
-  isActive INTEGER NOT NULL DEFAULT 1,
-  createdAt TEXT NOT NULL,
-  updatedAt TEXT NOT NULL,
-  FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-  UNIQUE(userId, integrationName)
-);
-
--- Performance indexes for integration config queries
-CREATE INDEX IF NOT EXISTS idx_integration_configs_user ON integration_configs(userId);
-CREATE INDEX IF NOT EXISTS idx_integration_configs_name ON integration_configs(integrationName);
-CREATE INDEX IF NOT EXISTS idx_integration_configs_active ON integration_configs(isActive);
+-- Migration 009: Intentionally left as a no-op.
+--
+-- The v1.0.0 configuration direction is ".env as single source of truth",
+-- so the integration_configs table is not part of the schema for fresh installs.
+-- This migration number is retained to preserve migration ordering/history
+-- without creating schema that is immediately removed by migration 010.

@@ -35,33 +35,42 @@ export class SQLiteAdapter implements DatabaseAdapter {
           return;
         }
 
-        db.run("PRAGMA journal_mode = WAL;", (walErr) => {
-          if (walErr) {
-            reject(
-              new DatabaseConnectionError(
-                `Failed to enable WAL mode: ${walErr.message}`,
-                this._databasePath,
-              ),
-            );
+        // Restore the performance-related PRAGMAs that were set in the previous
+        // implementation so that switching to the adapter layer does not regress
+        // performance under load.
+        const pragmas: { sql: string; description: string }[] = [
+          { sql: "PRAGMA journal_mode = WAL;", description: "enable WAL mode" },
+          { sql: "PRAGMA synchronous = NORMAL;", description: "set synchronous mode" },
+          { sql: "PRAGMA cache_size = -20000;", description: "set cache size (20 MB)" },
+          { sql: "PRAGMA temp_store = MEMORY;", description: "set temp store to memory" },
+          { sql: "PRAGMA mmap_size = 268435456;", description: "set mmap size (256 MB)" },
+          { sql: "PRAGMA foreign_keys = ON;", description: "enable foreign keys" },
+        ];
+
+        const applyPragma = (index: number): void => {
+          if (index >= pragmas.length) {
+            this._db = db;
+            this._connected = true;
+            resolve();
             return;
           }
 
-          db.run("PRAGMA foreign_keys = ON;", (fkErr) => {
-            if (fkErr) {
+          const pragma = pragmas[index];
+          db.run(pragma.sql, (pragmaErr) => {
+            if (pragmaErr) {
               reject(
                 new DatabaseConnectionError(
-                  `Failed to enable foreign keys: ${fkErr.message}`,
+                  `Failed to ${pragma.description}: ${pragmaErr.message}`,
                   this._databasePath,
                 ),
               );
               return;
             }
-
-            this._db = db;
-            this._connected = true;
-            resolve();
+            applyPragma(index + 1);
           });
-        });
+        };
+
+        applyPragma(0);
       });
     });
   }
@@ -151,13 +160,19 @@ export class SQLiteAdapter implements DatabaseAdapter {
   }
 
   async commit(): Promise<void> {
-    await this.execute("COMMIT");
-    this._inTransaction = false;
+    try {
+      await this.execute("COMMIT");
+    } finally {
+      this._inTransaction = false;
+    }
   }
 
   async rollback(): Promise<void> {
-    await this.execute("ROLLBACK");
-    this._inTransaction = false;
+    try {
+      await this.execute("ROLLBACK");
+    } finally {
+      this._inTransaction = false;
+    }
   }
 
   async withTransaction<T>(fn: () => Promise<T>): Promise<T> {

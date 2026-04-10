@@ -20,14 +20,18 @@ export class DatabaseService {
    */
   public async initialize(): Promise<void> {
     try {
-      // Ensure database directory exists (for SQLite)
-      const dbDir = dirname(this.databasePath);
-      if (!existsSync(dbDir)) {
-        mkdirSync(dbDir, { recursive: true });
-      }
-
       // Create adapter via factory
       this.adapter = await createDatabaseAdapter({ databasePath: this.databasePath });
+
+      // Ensure the database directory exists only for SQLite (not for Postgres
+      // where DATABASE_PATH is a connection string, not a filesystem path).
+      if (this.adapter.getDialect() === "sqlite") {
+        const dbDir = dirname(this.databasePath);
+        if (!existsSync(dbDir)) {
+          mkdirSync(dbDir, { recursive: true });
+        }
+      }
+
       await this.adapter.initialize();
 
       // Initialize schema

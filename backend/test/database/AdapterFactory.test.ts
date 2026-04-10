@@ -47,18 +47,18 @@ describe("AdapterFactory", () => {
 });
 
 describe("DatabaseQueryError", () => {
-  it("captures query and params context", () => {
+  it("captures query and paramCount context", () => {
     const err = new DatabaseQueryError("fail", "SELECT 1", [42]);
     expect(err.message).toBe("fail");
     expect(err.name).toBe("DatabaseQueryError");
     expect(err.query).toBe("SELECT 1");
-    expect(err.params).toEqual([42]);
+    expect(err.paramCount).toBe(1);
     expect(err).toBeInstanceOf(Error);
   });
 
   it("works without params", () => {
     const err = new DatabaseQueryError("fail", "SELECT 1");
-    expect(err.params).toBeUndefined();
+    expect(err.paramCount).toBe(0);
   });
 });
 

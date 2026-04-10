@@ -59,8 +59,30 @@ export interface LinkedNodeData {
 export class NodeLinkingService {
   private logger: LoggerService;
 
+  /**
+   * Priority order for selecting the "primary" source of a linked node.
+   * Higher number = higher priority. Sources not in this map receive priority 0.
+   * Matches the plugin registration priorities used in server.ts.
+   */
+  private static readonly SOURCE_PRIORITY: Record<string, number> = {
+    ssh: 50,
+    puppetserver: 20,
+    bolt: 10,
+    puppetdb: 10,
+    ansible: 8,
+    hiera: 6,
+  };
+
   constructor(private integrationManager: IntegrationManager) {
     this.logger = new LoggerService();
+  }
+
+  /**
+   * Return the priority for a given source name (case-insensitive).
+   * Sources not in the priority table receive priority 0.
+   */
+  private getSourcePriority(sourceName: string): number {
+    return NodeLinkingService.SOURCE_PRIORITY[sourceName.toLowerCase()] ?? 0;
   }
 
   /**
@@ -109,13 +131,29 @@ export class NodeLinkingService {
         // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
         const primaryName = node.name?.trim() || node.id || node.uri;
 
-        // Create linked node with common name
+        // Determine the primary source deterministically by priority so that
+        // the result is stable across runs regardless of iteration order.
+        const relatedNodesArray = Array.from(relatedNodes);
+        const primaryNode = relatedNodesArray.reduce((best, candidate) => {
+          const bestSource = (best as Node & { source?: string }).source ?? "bolt";
+          const candidateSource = (candidate as Node & { source?: string }).source ?? "bolt";
+          return this.getSourcePriority(candidateSource) > this.getSourcePriority(bestSource)
+            ? candidate
+            : best;
+        }, relatedNodesArray[0]);
+
+        const primarySource = (primaryNode as Node & { source?: string }).source ?? "bolt";
+
+        // Create linked node by spreading the primary node's fields first so
+        // that additional Node properties (status, metadata, etc.) are
+        // preserved, then overriding identity fields and adding multi-source
+        // fields.
         const linkedNode: LinkedNode = {
+          ...primaryNode,
           id: primaryName, // Use name (or stable fallback) as primary ID for lookups
           name: primaryName,
-          uri: node.uri, // Will be overwritten with combined URIs
-          transport: node.transport,
-          config: node.config,
+          uri: primaryNode.uri,
+          source: primarySource,
           sources: [],
           linked: false,
           sourceData: {},
@@ -177,9 +215,13 @@ export class NodeLinkingService {
         // Mark as linked if from multiple sources
         linkedNode.linked = linkedNode.sources.length > 1;
 
-        // Set source (singular) to the primary source for backward compatibility
-        // This ensures code that reads node.source still works correctly
-        linkedNode.source = linkedNode.sources[0];
+        // source (singular) was already set to the highest-priority source
+        // above; update it here in case additional sources were discovered
+        // during the merge loop.
+        const highestPrioritySource = linkedNode.sources.reduce((best, s) =>
+          this.getSourcePriority(s) > this.getSourcePriority(best) ? s : best
+        );
+        linkedNode.source = highestPrioritySource;
 
         this.logger.debug("Created linked node", {
           component: "NodeLinkingService",

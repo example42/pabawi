@@ -445,8 +445,16 @@ export class AnsibleService {
           vars?: Record<string, unknown>;
         };
 
-        // Get hosts (direct members) and prefix with source
-        const hosts = Array.isArray(group.hosts) ? group.hosts.map((h: string) => `ansible:${h}`) : [];
+        // Get hosts (direct members), validate each entry is a non-empty string
+        // before prefixing with the source to avoid producing IDs like
+        // "ansible:[object Object]" for non-string entries.
+        const hosts = Array.isArray(group.hosts)
+          ? group.hosts
+              .filter((h: unknown): h is string => typeof h === "string")
+              .map((h) => h.trim())
+              .filter((h) => h.length > 0)
+              .map((h) => `ansible:${h}`)
+          : [];
 
         // Get children groups (for hierarchy)
         const children = Array.isArray(group.children) ? group.children : [];

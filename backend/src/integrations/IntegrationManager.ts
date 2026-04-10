@@ -29,6 +29,41 @@ export interface HealthCheckCacheEntry {
 }
 
 /**
+ * A single parameter for a provisioning capability
+ */
+export interface ProvisioningCapabilityParameter {
+  name: string;
+  type: string;
+  required: boolean;
+  default?: unknown;
+}
+
+/**
+ * A provisioning capability exposed by an execution tool plugin
+ */
+export interface ProvisioningCapability {
+  name: string;
+  description: string;
+  operation: "create" | "destroy";
+  parameters: ProvisioningCapabilityParameter[];
+}
+
+/**
+ * Provisioning capabilities from a single source plugin
+ */
+export interface ProvisioningCapabilitySource {
+  source: string;
+  capabilities: ProvisioningCapability[];
+}
+
+/**
+ * Interface for execution tool plugins that expose provisioning capabilities
+ */
+export interface ProvisioningCapableExecutionTool {
+  listProvisioningCapabilities(): ProvisioningCapability[];
+}
+
+/**
  * Aggregated inventory from multiple sources
  */
 export interface AggregatedInventory {
@@ -237,6 +272,20 @@ export class IntegrationManager {
   }
 
   /**
+  /**
+   * Type guard: check whether an execution tool plugin implements the optional
+   * provisioning capabilities API.
+   */
+  private isProvisioningCapableExecutionTool(
+    tool: ExecutionToolPlugin
+  ): tool is ExecutionToolPlugin & ProvisioningCapableExecutionTool {
+    return (
+      "listProvisioningCapabilities" in tool &&
+      typeof (tool as ExecutionToolPlugin & ProvisioningCapableExecutionTool).listProvisioningCapabilities === "function"
+    );
+  }
+
+  /**
    * Get provisioning capabilities from all execution tools
    *
    * Queries all execution tool plugins that support provisioning capabilities
@@ -244,49 +293,16 @@ export class IntegrationManager {
    *
    * @returns Array of provisioning capabilities from all plugins
    */
-  getAllProvisioningCapabilities(): {
-    source: string;
-    capabilities: {
-      name: string;
-      description: string;
-      operation: "create" | "destroy";
-      parameters: {
-        name: string;
-        type: string;
-        required: boolean;
-        default?: unknown;
-      }[];
-    }[];
-  }[] {
-    const result: {
-      source: string;
-      capabilities: {
-        name: string;
-        description: string;
-        operation: "create" | "destroy";
-        parameters: {
-          name: string;
-          type: string;
-          required: boolean;
-          default?: unknown;
-        }[];
-      }[];
-    }[] = [];
+  getAllProvisioningCapabilities(): ProvisioningCapabilitySource[] {
+    const result: ProvisioningCapabilitySource[] = [];
 
     for (const [name, tool] of this.executionTools) {
-      // Check if the plugin has listProvisioningCapabilities method
-      if (
-        "listProvisioningCapabilities" in tool &&
-        typeof tool.listProvisioningCapabilities === "function"
-      ) {
+      if (this.isProvisioningCapableExecutionTool(tool)) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
           const capabilities = tool.listProvisioningCapabilities();
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-          if (capabilities && capabilities.length > 0) {
+          if (capabilities.length > 0) {
             result.push({
               source: name,
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
               capabilities,
             });
           }
@@ -460,24 +476,27 @@ export class IntegrationManager {
             );
           });
 
+          // Attach a no-op catch to the work promise so that, if the timeout
+          // wins the race and the work later rejects, the rejection is silently
+          // handled rather than surfacing as an unhandled promise rejection.
+          const workPromise = Promise.all([
+            source.getInventory(),
+            source.getGroups().catch((error: unknown) => {
+              const err = error instanceof Error ? error : new Error(String(error));
+              this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
+                component: "IntegrationManager",
+                operation: "getAggregatedInventory",
+                metadata: { sourceName: name },
+              }, err);
+              return [] as NodeGroup[];
+            }),
+          ]);
+          workPromise.catch(() => { /* handled: either consumed by race winner or logged above */ });
+
           let nodes: Node[];
           let groups: NodeGroup[];
           try {
-            [nodes, groups] = await Promise.race([
-              Promise.all([
-                source.getInventory(),
-                source.getGroups().catch((error: unknown) => {
-                  const err = error instanceof Error ? error : new Error(String(error));
-                  this.logger.error(`Failed to get groups from '${name}', continuing with nodes only`, {
-                    component: "IntegrationManager",
-                    operation: "getAggregatedInventory",
-                    metadata: { sourceName: name },
-                  }, err);
-                  return [] as NodeGroup[];
-                }),
-              ]),
-              timeoutPromise,
-            ]);
+            [nodes, groups] = await Promise.race([workPromise, timeoutPromise]);
           } finally {
             clearTimeout(timeoutHandle);
           }

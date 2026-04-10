@@ -21,16 +21,35 @@ export class PostgresAdapter implements DatabaseAdapter {
       connectionTimeoutMillis: 3000,
     });
 
-    // Create a client with a timeout to detect unreachable servers quickly
+    // Create a client with a timeout to detect unreachable servers quickly.
+    // The timeout handle is always cleared once the race settles to avoid
+    // unhandled rejections from a late-firing timer.  If the timeout wins,
+    // we also arrange to release any client that eventually resolves so it
+    // does not leak back into the pool.
     let client: pg.PoolClient | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => {
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    let timedOut = false;
+    const connectPromise = this._pool.connect();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
         reject(new Error("Connection timed out"));
       }, 3000);
     });
 
+    // If the timeout wins, release any client that resolves afterwards.
+    void connectPromise.then((resolvedClient) => {
+      if (timedOut) {
+        resolvedClient.release();
+      }
+    }).catch(() => { /* handled below via the race winner */ });
+
     try {
-      client = await Promise.race([this._pool.connect(), timeout]);
+      try {
+        client = await Promise.race([connectPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
       await client.query("SELECT 1");
       this._connected = true;
     } catch (err: unknown) {
