@@ -9,6 +9,7 @@ import { describe, test, expect } from 'vitest';
 import fc from 'fast-check';
 import { parseSSHConfig, validateSSHConfig, loadSSHConfig, ConfigurationError } from '../../src/integrations/ssh/config';
 import { SSHConfig } from '../../src/integrations/ssh/types';
+import { homedir } from 'os';
 
 /**
  * Custom generator for valid SSH configuration environment variables
@@ -88,11 +89,17 @@ describe('SSH Configuration Property Tests', () => {
 
           // Verify optional string fields
           if (env.SSH_CONFIG_PATH !== undefined) {
-            expect(config.configPath).toBe(env.SSH_CONFIG_PATH);
+            const expectedPath = env.SSH_CONFIG_PATH.startsWith('~/')
+              ? env.SSH_CONFIG_PATH.replace('~', homedir())
+              : env.SSH_CONFIG_PATH;
+            expect(config.configPath).toBe(expectedPath);
           }
 
           if (env.SSH_DEFAULT_KEY !== undefined) {
-            expect(config.defaultKeyPath).toBe(env.SSH_DEFAULT_KEY);
+            const expectedKey = env.SSH_DEFAULT_KEY.startsWith('~/')
+              ? env.SSH_DEFAULT_KEY.replace('~', homedir())
+              : env.SSH_DEFAULT_KEY;
+            expect(config.defaultKeyPath).toBe(expectedKey);
           }
 
           // Verify numeric fields have correct types

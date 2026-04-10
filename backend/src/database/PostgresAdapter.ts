@@ -16,9 +16,22 @@ export class PostgresAdapter implements DatabaseAdapter {
   }
 
   async initialize(): Promise<void> {
-    this._pool = new pg.Pool({ connectionString: this._databaseUrl });
+    this._pool = new pg.Pool({
+      connectionString: this._databaseUrl,
+      connectionTimeoutMillis: 3000,
+    });
+
+    // Create a client with a timeout to detect unreachable servers quickly
+    let client: pg.PoolClient | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("Connection timed out"));
+      }, 3000);
+    });
+
     try {
-      await this._pool.query("SELECT 1");
+      client = await Promise.race([this._pool.connect(), timeout]);
+      await client.query("SELECT 1");
       this._connected = true;
     } catch (err: unknown) {
       const message =
@@ -30,6 +43,10 @@ export class PostgresAdapter implements DatabaseAdapter {
         `Failed to connect to PostgreSQL: ${message}`,
         this._databaseUrl,
       );
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   }
 

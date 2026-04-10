@@ -479,7 +479,7 @@ export class ProxmoxService {
         source: "proxmox",
         sources: ["proxmox"],
         linked: false,
-        nodes: nodeList.map((n) => n.name),
+        nodes: nodeList.map((n) => n.id),
         metadata: {
           description: `All guests on Proxmox node ${nodeName}`,
           nodeType: "physical",
@@ -532,7 +532,7 @@ export class ProxmoxService {
         source: "proxmox",
         sources: ["proxmox"],
         linked: false,
-        nodes: nodeList.map((n) => n.name),
+        nodes: nodeList.map((n) => n.id),
         metadata: {
           description: `All guests with status ${status}`,
           statusType: status,
@@ -587,7 +587,7 @@ export class ProxmoxService {
         source: "proxmox",
         sources: ["proxmox"],
         linked: false,
-        nodes: nodeList.map((n) => n.name),
+        nodes: nodeList.map((n) => n.id),
         metadata: {
           description: `All ${displayName.toLowerCase()}`,
           guestType: type,
