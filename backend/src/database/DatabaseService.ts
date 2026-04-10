@@ -1,8 +1,6 @@
 import { createDatabaseAdapter } from "./AdapterFactory";
 import type { DatabaseAdapter } from "./DatabaseAdapter";
 import { MigrationRunner } from "./MigrationRunner";
-import { dirname } from "path";
-import { mkdirSync, existsSync } from "fs";
 
 /**
  * Database service for initialization and connection management
@@ -20,18 +18,9 @@ export class DatabaseService {
    */
   public async initialize(): Promise<void> {
     try {
-      // Create adapter via factory
+      // Create adapter via factory and initialize (the SQLite adapter creates
+      // its parent directory internally; Postgres does not need filesystem setup)
       this.adapter = await createDatabaseAdapter({ databasePath: this.databasePath });
-
-      // Ensure the database directory exists only for SQLite (not for Postgres
-      // where DATABASE_PATH is a connection string, not a filesystem path).
-      if (this.adapter.getDialect() === "sqlite") {
-        const dbDir = dirname(this.databasePath);
-        if (!existsSync(dbDir)) {
-          mkdirSync(dbDir, { recursive: true });
-        }
-      }
-
       await this.adapter.initialize();
 
       // Initialize schema

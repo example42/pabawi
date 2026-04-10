@@ -86,6 +86,13 @@ export class NodeLinkingService {
   }
 
   /**
+   * Return the `source` property of a node, defaulting to "bolt" when absent.
+   */
+  private static getNodeSource(node: Node): string {
+    return (node as Node & { source?: string }).source ?? "bolt";
+  }
+
+  /**
    * Link nodes from multiple sources based on matching identifiers
    *
    * @param nodes - Nodes from all sources
@@ -133,16 +140,19 @@ export class NodeLinkingService {
 
         // Determine the primary source deterministically by priority so that
         // the result is stable across runs regardless of iteration order.
+        // Cache priorities to avoid redundant lookups in the reduce accumulator.
         const relatedNodesArray = Array.from(relatedNodes);
-        const primaryNode = relatedNodesArray.reduce((best, candidate) => {
-          const bestSource = (best as Node & { source?: string }).source ?? "bolt";
-          const candidateSource = (candidate as Node & { source?: string }).source ?? "bolt";
-          return this.getSourcePriority(candidateSource) > this.getSourcePriority(bestSource)
-            ? candidate
-            : best;
-        }, relatedNodesArray[0]);
+        let bestPriority = -1;
+        let primaryNode = relatedNodesArray[0];
+        for (const candidate of relatedNodesArray) {
+          const p = this.getSourcePriority(NodeLinkingService.getNodeSource(candidate));
+          if (p > bestPriority) {
+            bestPriority = p;
+            primaryNode = candidate;
+          }
+        }
 
-        const primarySource = (primaryNode as Node & { source?: string }).source ?? "bolt";
+        const primarySource = NodeLinkingService.getNodeSource(primaryNode);
 
         // Create linked node by spreading the primary node's fields first so
         // that additional Node properties (status, metadata, etc.) are
@@ -165,8 +175,7 @@ export class NodeLinkingService {
         for (const relatedNode of relatedNodes) {
           processedNodes.add(relatedNode);
 
-          const nodeSource =
-            (relatedNode as Node & { source?: string }).source ?? "bolt";
+          const nodeSource = NodeLinkingService.getNodeSource(relatedNode);
 
           if (!linkedNode.sources.includes(nodeSource)) {
             linkedNode.sources.push(nodeSource);
@@ -217,10 +226,16 @@ export class NodeLinkingService {
 
         // source (singular) was already set to the highest-priority source
         // above; update it here in case additional sources were discovered
-        // during the merge loop.
-        const highestPrioritySource = linkedNode.sources.reduce((best, s) =>
-          this.getSourcePriority(s) > this.getSourcePriority(best) ? s : best
-        );
+        // during the merge loop.  Cache priorities to avoid redundant lookups.
+        let highestPriority = -1;
+        let highestPrioritySource = linkedNode.sources[0] ?? primarySource;
+        for (const s of linkedNode.sources) {
+          const p = this.getSourcePriority(s);
+          if (p > highestPriority) {
+            highestPriority = p;
+            highestPrioritySource = s;
+          }
+        }
         linkedNode.source = highestPrioritySource;
 
         this.logger.debug("Created linked node", {
