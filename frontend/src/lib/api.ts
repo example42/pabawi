@@ -967,7 +967,7 @@ export async function executeNodeAction(
   action: string,
   parameters?: Record<string, unknown>
 ): Promise<ProvisioningResult> {
-  const response = await post<{ result: { status: string; error?: string; results?: Array<{ output?: { stdout?: string } }> } }>(
+  const response = await post<{ result: { status: string; error?: string; results?: { output?: { stdout?: string } }[] } }>(
     `/api/integrations/proxmox/action`,
     { nodeId, action, parameters },
     {
@@ -976,10 +976,10 @@ export async function executeNodeAction(
     }
   );
 
-  const success = response.result?.status === 'success';
+  const success = response.result.status === 'success';
   const message = success
-    ? response.result?.results?.[0]?.output?.stdout ?? `Action ${action} completed successfully`
-    : response.result?.error ?? `Action ${action} failed`;
+    ? response.result.results?.[0]?.output?.stdout ?? `Action ${action} completed successfully`
+    : response.result.error ?? `Action ${action} failed`;
 
   return {
     success,
@@ -1002,7 +1002,7 @@ export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
   const proxmoxNode = parts.length >= 3 ? parts[1] : '';
   const vmid = parts.length >= 3 ? parts[2] : nodeId;
 
-  const response = await del<{ result: { status: string; error?: string; results?: Array<{ output?: { stdout?: string } }> } }>(
+  const response = await del<{ result: { status: string; error?: string; results?: { output?: { stdout?: string } }[] } }>(
     `/api/integrations/proxmox/provision/${vmid}?node=${encodeURIComponent(proxmoxNode)}`,
     {
       maxRetries: 0,
@@ -1010,10 +1010,10 @@ export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
     }
   );
 
-  const success = response.result?.status === 'success';
+  const success = response.result.status === 'success';
   const message = success
-    ? response.result?.results?.[0]?.output?.stdout ?? 'Guest destroyed successfully'
-    : response.result?.error ?? 'Failed to destroy guest';
+    ? response.result.results?.[0]?.output?.stdout ?? 'Guest destroyed successfully'
+    : response.result.error ?? 'Failed to destroy guest';
 
   return {
     success,
