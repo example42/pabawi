@@ -967,7 +967,7 @@ export async function executeNodeAction(
   action: string,
   parameters?: Record<string, unknown>
 ): Promise<ProvisioningResult> {
-  const response = await post<{ success: boolean; message: string; result?: unknown }>(
+  const response = await post<{ result: { status: string; error?: string; results?: Array<{ output?: { stdout?: string } }> } }>(
     `/api/integrations/proxmox/action`,
     { nodeId, action, parameters },
     {
@@ -976,9 +976,14 @@ export async function executeNodeAction(
     }
   );
 
+  const success = response.result?.status === 'success';
+  const message = success
+    ? response.result?.results?.[0]?.output?.stdout ?? `Action ${action} completed successfully`
+    : response.result?.error ?? `Action ${action} failed`;
+
   return {
-    success: response.success,
-    message: response.message,
+    success,
+    message,
     nodeId,
   };
 }
@@ -997,7 +1002,7 @@ export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
   const proxmoxNode = parts.length >= 3 ? parts[1] : '';
   const vmid = parts.length >= 3 ? parts[2] : nodeId;
 
-  const response = await del<{ success: boolean; message: string; result?: unknown }>(
+  const response = await del<{ result: { status: string; error?: string; results?: Array<{ output?: { stdout?: string } }> } }>(
     `/api/integrations/proxmox/provision/${vmid}?node=${encodeURIComponent(proxmoxNode)}`,
     {
       maxRetries: 0,
@@ -1005,9 +1010,14 @@ export async function destroyNode(nodeId: string): Promise<ProvisioningResult> {
     }
   );
 
+  const success = response.result?.status === 'success';
+  const message = success
+    ? response.result?.results?.[0]?.output?.stdout ?? 'Guest destroyed successfully'
+    : response.result?.error ?? 'Failed to destroy guest';
+
   return {
-    success: response.success,
-    message: response.message,
+    success,
+    message,
     nodeId,
   };
 }

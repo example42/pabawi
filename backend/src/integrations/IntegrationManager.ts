@@ -598,6 +598,54 @@ export class IntegrationManager {
       metadata: { sourceBreakdown },
     });
 
+    // Build a mapping from original source-specific node IDs to linked node IDs.
+    // During deduplication, node IDs are transformed (e.g., "proxmox:pve1:100" → "myvm",
+    // "ansible:hostname" → "hostname", "bolt:server1" → "server1"). Groups still reference
+    // the original IDs, so we need to remap them.
+    const originalIdToLinkedId = new Map<string, string>();
+    for (const linkedNode of uniqueNodes) {
+      const nodeWithSourceData = linkedNode as Node & { sourceData?: Record<string, { id?: string }> };
+      if (nodeWithSourceData.sourceData) {
+        for (const sourceData of Object.values(nodeWithSourceData.sourceData)) {
+          if (sourceData.id && sourceData.id !== linkedNode.id) {
+            originalIdToLinkedId.set(sourceData.id, linkedNode.id);
+          }
+        }
+      }
+      // Also map the node name and common prefixed variants to the linked ID
+      // Groups use prefixed IDs like "bolt:name", "ansible:name", "proxmox:node:vmid"
+      const nodeWithSources = linkedNode as Node & { sources?: string[] };
+      if (nodeWithSources.sources) {
+        for (const src of nodeWithSources.sources) {
+          const prefixedId = `${src}:${linkedNode.name}`;
+          if (!originalIdToLinkedId.has(prefixedId)) {
+            originalIdToLinkedId.set(prefixedId, linkedNode.id);
+          }
+        }
+      }
+    }
+
+    // Remap group node references from original source IDs to linked node IDs
+    const linkedNodeIdSet = new Set(uniqueNodes.map(n => n.id));
+    for (const group of allGroups) {
+      group.nodes = group.nodes.map(nodeId => {
+        // If the node ID already matches a linked node, keep it
+        if (linkedNodeIdSet.has(nodeId)) {
+          return nodeId;
+        }
+        // Try to find the linked ID from the mapping
+        return originalIdToLinkedId.get(nodeId) ?? nodeId;
+      });
+      // Deduplicate node IDs after remapping (multiple original IDs may map to the same linked ID)
+      group.nodes = [...new Set(group.nodes)];
+    }
+
+    this.logger.debug("Remapped group node references to linked node IDs", {
+      component: "IntegrationManager",
+      operation: "getAggregatedInventory",
+      metadata: { mappingSize: originalIdToLinkedId.size },
+    });
+
     // Link groups with same name across sources
     this.logger.debug(`Total groups before linking: ${String(allGroups.length)}`, {
       component: "IntegrationManager",

@@ -2272,13 +2272,17 @@
       <!-- Manage Tab -->
       {#if activeTab === 'manage'}
         {#if node}
-          {@const nodeWithMeta = node as Node & { metadata?: { type?: string }; status?: string; sourceData?: Record<string, any> }}
+          {@const nodeWithMeta = node as Node & { metadata?: { type?: string }; status?: string; source?: string; sources?: string[]; sourceData?: Record<string, any> }}
           {@const resolvedNodeType = nodeWithMeta.metadata?.type === 'qemu' ? 'vm' : nodeWithMeta.metadata?.type === 'lxc' ? 'lxc' : 'unknown'}
           {@const resolvedStatus = nodeWithMeta.status || 'unknown'}
           {@const sourceData = nodeWithMeta.sourceData}
           {@const provisioningProviders = ['proxmox', 'aws']}
-          {@const providerName = sourceData ? Object.keys(sourceData).find(k => provisioningProviders.includes(k)) : undefined}
-          {@const providerData = providerName ? sourceData?.[providerName] : undefined}
+          {@const providerFromSourceData = sourceData ? Object.keys(sourceData).find(k => provisioningProviders.includes(k)) : undefined}
+          {@const providerFromSources = !providerFromSourceData ? (nodeWithMeta.sources ?? []).find((s: string) => provisioningProviders.includes(s)) : undefined}
+          {@const providerFromSource = !providerFromSourceData && !providerFromSources && nodeWithMeta.source ? (provisioningProviders.includes(nodeWithMeta.source) ? nodeWithMeta.source : undefined) : undefined}
+          {@const providerFromId = !providerFromSourceData && !providerFromSources && !providerFromSource ? provisioningProviders.find(p => node.id.startsWith(p + ':')) : undefined}
+          {@const providerName = providerFromSourceData || providerFromSources || providerFromSource || providerFromId}
+          {@const providerData = providerName && sourceData ? sourceData[providerName] : undefined}
           {@const providerMetadata = providerData?.metadata}
           {@const effectiveNodeId = providerData?.id || node.id}
           {@const effectiveType = providerMetadata?.type === 'qemu' ? 'vm' : providerMetadata?.type === 'lxc' ? 'lxc' : resolvedNodeType}
@@ -2316,7 +2320,10 @@
                 provider={providerName || 'none'}, providerData.id={providerData?.id || 'undefined'}
               </div>
               <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
-                sources={sourceData ? Object.keys(sourceData).join(', ') : 'none'}
+                sourceData={sourceData ? Object.keys(sourceData).join(', ') : 'none'}
+              </div>
+              <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
+                source={nodeWithMeta.source || 'undefined'}, sources={nodeWithMeta.sources?.join(', ') || 'undefined'}
               </div>
               <div class="mt-1 font-mono text-blue-700 dark:text-blue-500">
                 metadata.type={providerMetadata?.type || 'undefined'}

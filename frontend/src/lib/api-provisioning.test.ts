@@ -194,20 +194,21 @@ describe('Provisioning API Methods', () => {
       const nodeId = 'node-123';
       const action = 'start';
 
-      const mockResult: ProvisioningResult = {
-        success: true,
-        taskId: 'task-789',
-        message: 'Action executed successfully',
+      const mockApiResponse = {
+        result: {
+          status: 'success',
+          results: [{ output: { stdout: 'Action start completed successfully' } }],
+        },
       };
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockResult),
+        json: () => Promise.resolve(mockApiResponse),
       });
 
       const result = await executeNodeAction(nodeId, action);
 
-      expect(result).toEqual({ success: true, message: 'Action executed successfully', nodeId });
+      expect(result).toEqual({ success: true, message: 'Action start completed successfully', nodeId });
       expect(mockFetch).toHaveBeenCalledWith(
         `/api/integrations/proxmox/action`,
         expect.objectContaining({
@@ -224,7 +225,7 @@ describe('Provisioning API Methods', () => {
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ success: true, message: 'Rebooting' }),
+        json: () => Promise.resolve({ result: { status: 'success', results: [{ output: { stdout: 'Rebooting' } }] } }),
       });
 
       await executeNodeAction(nodeId, action, parameters);
@@ -256,20 +257,21 @@ describe('Provisioning API Methods', () => {
     it('should destroy a node', async () => {
       const nodeId = 'proxmox:pve1:123';
 
-      const mockResult: ProvisioningResult = {
-        success: true,
-        taskId: 'task-999',
-        message: 'Node destroyed successfully',
+      const mockApiResponse = {
+        result: {
+          status: 'success',
+          results: [{ output: { stdout: 'Guest destroyed successfully' } }],
+        },
       };
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockResult),
+        json: () => Promise.resolve(mockApiResponse),
       });
 
       const result = await destroyNode(nodeId);
 
-      expect(result).toEqual({ success: true, message: 'Node destroyed successfully', nodeId });
+      expect(result).toEqual({ success: true, message: 'Guest destroyed successfully', nodeId });
       expect(mockFetch).toHaveBeenCalledWith(
         `/api/integrations/proxmox/provision/123?node=pve1`,
         expect.objectContaining({
@@ -366,16 +368,17 @@ describe('Provisioning API Methods', () => {
             force: fc.boolean(),
           })),
           async (action, nodeId, parameters) => {
-            // Setup: Mock successful API response
-            const mockResult: ProvisioningResult = {
-              success: true,
-              taskId: fc.sample(fc.uuid(), 1)[0],
-              message: `Action ${action.name} executed successfully`,
+            // Setup: Mock successful API response matching backend shape
+            const mockApiResponse = {
+              result: {
+                status: 'success',
+                results: [{ output: { stdout: `Action ${action.name} executed successfully` } }],
+              },
             };
 
             mockFetch.mockResolvedValueOnce({
               ok: true,
-              json: () => Promise.resolve(mockResult),
+              json: () => Promise.resolve(mockApiResponse),
             });
 
             // Execute: Call the API method
