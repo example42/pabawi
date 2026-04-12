@@ -97,6 +97,27 @@ else
   warn "Ansible CLI not found — Ansible integration will default to disabled"
 fi
 
+# Check Docker
+DOCKER_AVAILABLE=false
+DOCKER_COMPOSE_CMD=""
+if command -v docker &>/dev/null; then
+  DOCKER_AVAILABLE=true
+  DOCKER_VERSION=$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')
+  success "Docker ${DOCKER_VERSION} detected"
+  # Detect compose subcommand vs standalone docker-compose
+  if docker compose version &>/dev/null 2>&1; then
+    DOCKER_COMPOSE_CMD="docker compose"
+    success "Docker Compose (plugin) detected"
+  elif command -v docker-compose &>/dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+    success "docker-compose $(docker-compose --version 2>/dev/null | awk '{print $NF}') detected"
+  else
+    warn "Docker Compose not found — Docker install will use 'docker run' directly"
+  fi
+else
+  warn "Docker not found — Docker installation method will not be available"
+fi
+
 # ── Helper: prompt with default ──────────────────────────────────────────────
 # Usage: ask VARNAME "Prompt text" "default_value"
 ask() {
@@ -500,90 +521,187 @@ EOF
   success "backend/.env written successfully"
 fi
 
-# ── Install dependencies ─────────────────────────────────────────────────────
-header "Dependencies"
+# ── Installation method ───────────────────────────────────────────────────────
+header "Installation Method"
 
-ask_yn INSTALL_DEPS "Install Node.js dependencies now?" "y"
-if [[ "$INSTALL_DEPS" == "true" ]]; then
-  cd "$PROJECT_ROOT"
-  info "Running npm install:all (this may take a minute)…"
-  npm run install:all
-  success "Dependencies installed"
+if [[ "$DOCKER_AVAILABLE" == "true" ]]; then
+  INSTALL_DEFAULT="1"
+  echo ""
+  info "Docker is available. Choose your preferred installation method:"
+  echo ""
+  echo "  1) ${BOLD}Docker${RESET}  – Run Pabawi in a container (recommended)"
+  echo "  2) ${BOLD}npm${RESET}     – Install and run locally with Node.js"
+  echo ""
+  printf "${BOLD}Choose [1/2]${RESET} [${GREEN}1${RESET}]: "
+  read -r INSTALL_METHOD
+  INSTALL_METHOD="${INSTALL_METHOD:-$INSTALL_DEFAULT}"
 else
-  info "Skipping dependency installation. Run ${BOLD}npm run install:all${RESET} manually before starting."
+  info "Docker not available — using npm for local installation."
+  INSTALL_METHOD="2"
 fi
 
-# ── Create data directory ────────────────────────────────────────────────────
-mkdir -p "$PROJECT_ROOT/backend/data"
-
-# ── Start the application ────────────────────────────────────────────────────
-header "Ready to Start"
-
-echo ""
-info "How would you like to start Pabawi?"
-echo ""
-echo "  1) ${BOLD}Development${RESET}   – Backend (port 3000) + Frontend dev server (port 5173)"
-echo "  2) ${BOLD}Full-stack${RESET}    – Build frontend, serve everything from backend (port 3000)"
-echo "  3) ${BOLD}Exit${RESET}          – Just finish setup, start manually later"
-echo ""
-printf "${BOLD}Choose [1/2/3]${RESET} [${GREEN}1${RESET}]: "
-read -r START_MODE
-START_MODE="${START_MODE:-1}"
-
-case "$START_MODE" in
+case "$INSTALL_METHOD" in
   1)
-    header "Starting Development Servers"
-    info "Backend  → http://localhost:${PORT:-3000}"
-    info "Frontend → http://localhost:5173"
-    echo ""
-    info "Press Ctrl+C to stop both servers."
-    echo ""
+    # ── Docker installation ────────────────────────────────────────────────
+    header "Docker Setup"
 
-    # Start backend in background, frontend in foreground
-    cd "$PROJECT_ROOT"
-    npm run dev:backend &
-    BACKEND_PID=$!
+    # Ensure .env exists at project root for docker-compose env_file
+    DOCKER_ENV_FILE="$PROJECT_ROOT/.env"
+    if [[ -f "$ENV_FILE" ]]; then
+      cp "$ENV_FILE" "$DOCKER_ENV_FILE"
+      success "Copied backend/.env to project root .env for Docker"
+    else
+      warn "No backend/.env found — Docker will use .env.docker defaults"
+      if [[ -f "$PROJECT_ROOT/.env.docker" ]]; then
+        cp "$PROJECT_ROOT/.env.docker" "$DOCKER_ENV_FILE"
+        success "Copied .env.docker to .env"
+      fi
+    fi
 
-    # Give the backend a moment to start
-    sleep 2
+    # Patch HOST to 0.0.0.0 for Docker (container must listen on all interfaces)
+    if [[ -f "$DOCKER_ENV_FILE" ]]; then
+      if command -v sed &>/dev/null; then
+        sed -i.bak 's/^HOST=.*/HOST=0.0.0.0/' "$DOCKER_ENV_FILE" && rm -f "${DOCKER_ENV_FILE}.bak"
+        info "Set HOST=0.0.0.0 in .env for Docker"
+      fi
+    fi
 
-    # Trap to cleanly stop backend when the script is interrupted
-    cleanup() {
+    # Create data directory for volume mount
+    mkdir -p "$PROJECT_ROOT/data"
+
+    if [[ -n "$DOCKER_COMPOSE_CMD" ]]; then
+      info "Starting Pabawi with ${DOCKER_COMPOSE_CMD}…"
       echo ""
-      info "Shutting down…"
-      kill "$BACKEND_PID" 2>/dev/null || true
-      wait "$BACKEND_PID" 2>/dev/null || true
-      success "Servers stopped."
-    }
-    trap cleanup EXIT INT TERM
-
-    npm run dev:frontend
+      info "Pabawi will be available at http://localhost:${PORT:-3000}"
+      echo ""
+      echo "  Start:   ${BOLD}${DOCKER_COMPOSE_CMD} up -d${RESET}"
+      echo "  Logs:    ${BOLD}${DOCKER_COMPOSE_CMD} logs -f${RESET}"
+      echo "  Stop:    ${BOLD}${DOCKER_COMPOSE_CMD} down${RESET}"
+      echo ""
+      ask_yn START_DOCKER "Start the container now?" "y"
+      if [[ "$START_DOCKER" == "true" ]]; then
+        cd "$PROJECT_ROOT"
+        $DOCKER_COMPOSE_CMD up -d
+        success "Pabawi container started"
+        info "View logs: ${BOLD}${DOCKER_COMPOSE_CMD} logs -f${RESET}"
+      else
+        success "Setup complete!"
+        info "Run ${BOLD}${DOCKER_COMPOSE_CMD} up -d${RESET} to start Pabawi."
+      fi
+    else
+      info "Docker Compose not available — using docker run."
+      echo ""
+      info "Pabawi will be available at http://localhost:${PORT:-3000}"
+      echo ""
+      ask_yn START_DOCKER "Start the container now?" "y"
+      if [[ "$START_DOCKER" == "true" ]]; then
+        docker run -d \
+          --name pabawi \
+          --env-file "$DOCKER_ENV_FILE" \
+          -p "${PORT:-3000}:3000" \
+          -v "$PROJECT_ROOT/data:/opt/pabawi/data" \
+          -v "$PROJECT_ROOT/bolt-project:/opt/pabawi/bolt-project:ro" \
+          --restart unless-stopped \
+          example42/pabawi:latest
+        success "Pabawi container started"
+        info "View logs: ${BOLD}docker logs -f pabawi${RESET}"
+        info "Stop:      ${BOLD}docker stop pabawi && docker rm pabawi${RESET}"
+      else
+        success "Setup complete!"
+        echo ""
+        info "Run manually:"
+        echo "  ${BOLD}docker run -d --name pabawi --env-file .env -p ${PORT:-3000}:3000 -v ./data:/opt/pabawi/data example42/pabawi:latest${RESET}"
+      fi
+    fi
     ;;
 
-  2)
-    header "Building & Starting Full-Stack"
-    cd "$PROJECT_ROOT"
-    info "Building frontend…"
-    npm run build:frontend
-    info "Copying frontend assets…"
-    npm run copy:frontend
-    info "Starting server on http://localhost:${PORT:-3000}"
-    echo ""
-    npm run dev:backend
-    ;;
+  2|*)
+    # ── npm installation ───────────────────────────────────────────────────
+    header "Dependencies"
 
-  3)
-    echo ""
-    success "Setup complete!"
-    echo ""
-    info "Start development servers:  ${BOLD}npm run dev:backend${RESET}  and  ${BOLD}npm run dev:frontend${RESET}"
-    info "Or full-stack build:        ${BOLD}npm run dev:fullstack${RESET}"
-    echo ""
-    ;;
+    ask_yn INSTALL_DEPS "Install Node.js dependencies now?" "y"
+    if [[ "$INSTALL_DEPS" == "true" ]]; then
+      cd "$PROJECT_ROOT"
+      info "Running npm install:all (this may take a minute)…"
+      npm run install:all
+      success "Dependencies installed"
+    else
+      info "Skipping dependency installation. Run ${BOLD}npm run install:all${RESET} manually before starting."
+    fi
 
-  *)
-    warn "Invalid choice — exiting without starting."
+    # ── Create data directory ──────────────────────────────────────────────
+    mkdir -p "$PROJECT_ROOT/backend/data"
+
+    # ── Start the application ──────────────────────────────────────────────
+    header "Ready to Start"
+
     echo ""
-    success "Setup complete! Start manually with npm run dev:backend / dev:frontend."
+    info "How would you like to start Pabawi?"
+    echo ""
+    echo "  1) ${BOLD}Development${RESET}   – Backend (port 3000) + Frontend dev server (port 5173)"
+    echo "  2) ${BOLD}Full-stack${RESET}    – Build frontend, serve everything from backend (port 3000)"
+    echo "  3) ${BOLD}Exit${RESET}          – Just finish setup, start manually later"
+    echo ""
+    printf "${BOLD}Choose [1/2/3]${RESET} [${GREEN}1${RESET}]: "
+    read -r START_MODE
+    START_MODE="${START_MODE:-1}"
+
+    case "$START_MODE" in
+      1)
+        header "Starting Development Servers"
+        info "Backend  → http://localhost:${PORT:-3000}"
+        info "Frontend → http://localhost:5173"
+        echo ""
+        info "Press Ctrl+C to stop both servers."
+        echo ""
+
+        # Start backend in background, frontend in foreground
+        cd "$PROJECT_ROOT"
+        npm run dev:backend &
+        BACKEND_PID=$!
+
+        # Give the backend a moment to start
+        sleep 2
+
+        # Trap to cleanly stop backend when the script is interrupted
+        cleanup() {
+          echo ""
+          info "Shutting down…"
+          kill "$BACKEND_PID" 2>/dev/null || true
+          wait "$BACKEND_PID" 2>/dev/null || true
+          success "Servers stopped."
+        }
+        trap cleanup EXIT INT TERM
+
+        npm run dev:frontend
+        ;;
+
+      2)
+        header "Building & Starting Full-Stack"
+        cd "$PROJECT_ROOT"
+        info "Building frontend…"
+        npm run build:frontend
+        info "Copying frontend assets…"
+        npm run copy:frontend
+        info "Starting server on http://localhost:${PORT:-3000}"
+        echo ""
+        npm run dev:backend
+        ;;
+
+      3)
+        echo ""
+        success "Setup complete!"
+        echo ""
+        info "Start development servers:  ${BOLD}npm run dev:backend${RESET}  and  ${BOLD}npm run dev:frontend${RESET}"
+        info "Or full-stack build:        ${BOLD}npm run dev:fullstack${RESET}"
+        echo ""
+        ;;
+
+      *)
+        warn "Invalid choice — exiting without starting."
+        echo ""
+        success "Setup complete! Start manually with npm run dev:backend / dev:frontend."
+        ;;
+    esac
     ;;
 esac

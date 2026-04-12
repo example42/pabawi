@@ -111,11 +111,14 @@ COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/migr
 # Copy built frontend to public directory
 COPY --from=frontend-builder --chown=pabawi:pabawi /app/frontend/dist ./public
 
-# Create data directory for SQLite database
-RUN mkdir -p /data && chown pabawi:pabawi /data
-
-# Create bolt-project directory
-RUN mkdir -p /bolt-project && chown pabawi:pabawi /bolt-project
+# Create /opt/pabawi directory tree for all runtime data
+RUN mkdir -p /opt/pabawi/data \
+             /opt/pabawi/bolt-project \
+             /opt/pabawi/control-repo \
+             /opt/pabawi/ansible \
+             /opt/pabawi/certs \
+             /opt/pabawi/ssh \
+    && chown -R pabawi:pabawi /opt/pabawi
 
 # Create entrypoint script to handle permissions
 # Copy entrypoint script
@@ -134,8 +137,12 @@ EXPOSE 3000
 ENV NODE_ENV=production \
     PORT=3000 \
     HOST=0.0.0.0 \
-    DATABASE_PATH=/data/pabawi.db \
-    BOLT_PROJECT_PATH=/bolt-project \
+    DATABASE_PATH=/opt/pabawi/data/pabawi.db \
+    BOLT_PROJECT_PATH=/opt/pabawi/bolt-project \
+    HIERA_CONTROL_REPO_PATH=/opt/pabawi/control-repo \
+    ANSIBLE_PROJECT_PATH=/opt/pabawi/ansible \
+    SSH_CONFIG_PATH=/opt/pabawi/ssh/config \
+    SSH_DEFAULT_KEY=/opt/pabawi/ssh/id_rsa \
     # Integration settings (disabled by default)
     PUPPETDB_ENABLED=false \
     PUPPETSERVER_ENABLED=false \

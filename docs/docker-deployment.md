@@ -6,6 +6,7 @@ This guide covers deploying Pabawi with Docker, including configuration for all 
 
 - [Quick Start](#quick-start)
 - [Docker Images](#docker-images)
+- [Directory Structure](#directory-structure)
 - [Environment Variables](#environment-variables)
 - [Volume Mounts](#volume-mounts)
 - [Integration Configuration](#integration-configuration)
@@ -26,8 +27,8 @@ docker build -t pabawi:latest .
 docker run -d \
   --name pabawi \
   -p 127.0.0.1:3000:3000 \
-  -v $(pwd)/bolt-project:/bolt-project:ro \
-  -v $(pwd)/data:/data \
+  -v $(pwd)/bolt-project:/opt/pabawi/bolt-project:ro \
+  -v $(pwd)/data:/opt/pabawi/data \
   -e COMMAND_WHITELIST_ALLOW_ALL=false \
   -e COMMAND_WHITELIST='["ls","pwd","whoami","uptime"]' \
   pabawi:latest
@@ -42,10 +43,10 @@ docker run -d \
   --user "$(id -u):1001" \
   -p 127.0.0.1:3000:3000 \
   --platform "amd64" \
-  -v "$(pwd):/bolt-project:ro" \
-  -v "$(pwd)/data:/data" \
-  -v "$(pwd)/certs:/certs" \
-  -v "$HOME/.ssh:/home/pabawi/.ssh" \
+  -v "$(pwd):/opt/pabawi/bolt-project:ro" \
+  -v "$(pwd)/data:/opt/pabawi/data" \
+  -v "$(pwd)/certs:/opt/pabawi/certs" \
+  -v "$HOME/.ssh:/opt/pabawi/ssh" \
   --env-file ./env \
   example42/pabawi:latest
 ```
@@ -63,15 +64,32 @@ docker run -d \
 docker run -d \
   --name pabawi \
   -p 127.0.0.1:3000:3000 \
-  -v $(pwd)/bolt-project:/bolt-project:ro \
-  -v $(pwd)/control-repo:/control-repo:ro \
-  -v $(pwd)/ssl-certs:/ssl-certs:ro \
-  -v $(pwd)/data:/data \
+  -v $(pwd)/bolt-project:/opt/pabawi/bolt-project:ro \
+  -v $(pwd)/control-repo:/opt/pabawi/control-repo:ro \
+  -v $(pwd)/certs:/opt/pabawi/certs:ro \
+  -v $(pwd)/data:/opt/pabawi/data \
+  -v $(pwd)/ansible:/opt/pabawi/ansible:ro \
+  -v $HOME/.ssh:/opt/pabawi/ssh:ro \
   --env-file .env \
   pabawi:latest
 ```
 
 All integration settings are configured in the `.env` file. See the [Environment File](#environment-file) section for a complete example.
+
+## Directory Structure
+
+All Pabawi data lives under `/opt/pabawi/` both inside the container and on the host (for npm installs). This unified layout means the same paths work everywhere — no mental translation between host and container paths.
+
+```text
+/opt/pabawi/
+├── app/              # Application code (npm install only; Docker uses /app)
+├── data/             # SQLite database (pabawi.db)
+├── bolt-project/     # Bolt project files
+├── control-repo/     # Hiera control repository
+├── ansible/          # Ansible project (inventory, playbooks)
+├── certs/            # SSL certificates (PuppetDB, Puppetserver, Proxmox)
+└── ssh/              # SSH keys and config
+```
 
 ## Volume Mount Reference
 
@@ -80,17 +98,14 @@ The paths you reference in your `.env` file (like `BOLT_PROJECT_PATH` or `PUPPET
 
 The volume mounts map your local host files to these container paths. You can mount as many or as few volumes as needed depending on which integrations you are using.
 
-| Kind of data | Path on host | Volume mount option | Env setting |
-| ------------ | ------------ | ------------------- | ----------- |
-| Bolt project dir | `$HOME/bolt-project` | `-v "${HOME}/bolt-project:/bolt:ro"` | `BOLT_PROJECT_PATH=/bolt` |
-| Control Repo | `$HOME/control-repo` | `-v "${HOME}/control-repo:/control-repo:ro"` | `HIERA_CONTROL_REPO_PATH=/control-repo` |
-| Pabawi Data | `$HOME/pabawi/data` | `-v "${HOME}/pabawi/data:/data"` | `DATABASE_PATH=/data/pabawi.db` |
-| Puppet certs - CA | `$HOME/puppet/certs/ca.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETSERVER_SSL_CA=/certs/ca.pem` |
-| Puppet certs - User cert | `$HOME/puppet/certs/pabawi.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETDB_SSL_CERT=/certs/pabawi.pem` |
-| Puppet certs - User key | `$HOME/puppet/certs/private/pabawi.pem` | `-v "${HOME}/puppet/certs:/certs"` | `PUPPETDB_SSL_KEY=/certs/private/pabawi.pem` |
-| SSH keys | `$HOME/.ssh` | `-v "${HOME}/.ssh:/ssh:ro"` | `SSH_DEFAULT_KEY=/ssh/id_rsa` |
-| SSH config | `$HOME/.ssh/config` | `-v "${HOME}/.ssh:/ssh:ro"` | `SSH_CONFIG_PATH=/ssh/config` |
-| Ansible project | `$HOME/ansible-project` | `-v "${HOME}/ansible-project:/ansible:ro"` | `ANSIBLE_PROJECT_PATH=/ansible` |
+| Kind of data | Host path example | Container path | Env setting |
+| ------------ | ----------------- | -------------- | ----------- |
+| SQLite database | `./data` | `/opt/pabawi/data` | `DATABASE_PATH=/opt/pabawi/data/pabawi.db` |
+| Bolt project | `./bolt-project` | `/opt/pabawi/bolt-project` | `BOLT_PROJECT_PATH=/opt/pabawi/bolt-project` |
+| Control repo | `./control-repo` | `/opt/pabawi/control-repo` | `HIERA_CONTROL_REPO_PATH=/opt/pabawi/control-repo` |
+| Ansible project | `./ansible` | `/opt/pabawi/ansible` | `ANSIBLE_PROJECT_PATH=/opt/pabawi/ansible` |
+| SSL certificates | `./certs` | `/opt/pabawi/certs` | `PUPPETDB_SSL_CA=/opt/pabawi/certs/ca.pem` |
+| SSH keys/config | `~/.ssh` | `/opt/pabawi/ssh` | `SSH_DEFAULT_KEY=/opt/pabawi/ssh/id_rsa` |
 
 **Note:** `PUPPETSERVER_SSL_*` settings can use the same paths as the corresponding `PUPPETDB_SSL_*` ones.
 
@@ -150,29 +165,26 @@ docker run --env-file .env pabawi:latest
 
 ```bash
 # Bolt project (required)
--v /path/to/bolt-project:/bolt-project:ro
+-v /path/to/bolt-project:/opt/pabawi/bolt-project:ro
 
 # Database storage (required)
--v /path/to/data:/data
+-v /path/to/data:/opt/pabawi/data
 ```
 
 ### Optional Volumes
 
 ```bash
 # SSL certificates for integrations
--v /path/to/ssl-certs:/ssl-certs:ro
+-v /path/to/certs:/opt/pabawi/certs:ro
 
 # Hiera control repository
--v /path/to/control-repo:/control-repo:ro
-
-# Local fact files (if not using PuppetDB)
--v /path/to/facts:/facts:ro
+-v /path/to/control-repo:/opt/pabawi/control-repo:ro
 
 # SSH keys and config for SSH integration
--v ~/.ssh:/ssh:ro
+-v ~/.ssh:/opt/pabawi/ssh:ro
 
 # Ansible project directory
--v /path/to/ansible-project:/ansible:ro
+-v /path/to/ansible:/opt/pabawi/ansible:ro
 ```
 
 ### Volume Permissions
@@ -186,7 +198,7 @@ sudo chown -R 1001:1001 /path/to/data
 # Make other directories readable
 sudo chmod -R 755 /path/to/bolt-project
 sudo chmod -R 755 /path/to/control-repo
-sudo chmod -R 600 /path/to/ssl-certs/*.pem
+sudo chmod -R 600 /path/to/certs/*.pem
 ```
 
 ## Integration Configuration
@@ -197,23 +209,23 @@ sudo chmod -R 600 /path/to/ssl-certs/*.pem
 
    ```bash
    # Copy certificates to local directory
-   mkdir -p ./ssl-certs
-   cp /etc/puppetlabs/puppet/ssl/certs/ca.pem ./ssl-certs/
-   cp /etc/puppetlabs/puppet/ssl/certs/client.pem ./ssl-certs/
-   cp /etc/puppetlabs/puppet/ssl/private_keys/client.pem ./ssl-certs/client-key.pem
-   
+   mkdir -p ./certs
+   cp /etc/puppetlabs/puppet/ssl/certs/ca.pem ./certs/
+   cp /etc/puppetlabs/puppet/ssl/certs/client.pem ./certs/pabawi.pem
+   cp /etc/puppetlabs/puppet/ssl/private_keys/client.pem ./certs/pabawi-key.pem
+
    # Set correct permissions
-   chmod 644 ./ssl-certs/ca.pem ./ssl-certs/client.pem
-   chmod 600 ./ssl-certs/client-key.pem
+   chmod 644 ./certs/ca.pem ./certs/pabawi.pem
+   chmod 600 ./certs/pabawi-key.pem
    ```
 
 2. **Test connectivity**:
 
    ```bash
    # Test PuppetDB connection
-   curl --cacert ./ssl-certs/ca.pem \
-        --cert ./ssl-certs/client.pem \
-        --key ./ssl-certs/client-key.pem \
+   curl --cacert ./certs/ca.pem \
+        --cert ./certs/pabawi.pem \
+        --key ./certs/pabawi-key.pem \
         https://puppetdb.example.com:8081/pdb/meta/v1/version
    ```
 
@@ -225,9 +237,9 @@ sudo chmod -R 600 /path/to/ssl-certs/*.pem
 
    ```bash
    # Test Puppetserver connection
-   curl --cacert ./ssl-certs/ca.pem \
-        --cert ./ssl-certs/client.pem \
-        --key ./ssl-certs/client-key.pem \
+   curl --cacert ./certs/ca.pem \
+        --cert ./certs/pabawi.pem \
+        --key ./certs/pabawi-key.pem \
         https://puppet.example.com:8140/status/v1/simple
    ```
 
@@ -238,7 +250,7 @@ sudo chmod -R 600 /path/to/ssl-certs/*.pem
    ```bash
    # Clone your control repository
    git clone https://github.com/your-org/control-repo.git
-   
+
    # Verify structure
    ls -la control-repo/
    # Should contain: hiera.yaml, data/, manifests/, modules/
@@ -274,14 +286,9 @@ PROXMOX_PORT=8006
 # Token authentication (recommended)
 PROXMOX_TOKEN=user@realm!tokenid=token-value
 
-# Username/password authentication (alternative)
-# PROXMOX_USERNAME=root@pam
-# PROXMOX_PASSWORD=your-password-here
-# PROXMOX_REALM=pam
-
 # SSL settings (optional)
 # PROXMOX_SSL_REJECT_UNAUTHORIZED=true
-# PROXMOX_SSL_CA=/certs/proxmox-ca.pem
+# PROXMOX_SSL_CA=/opt/pabawi/certs/proxmox-ca.pem
 # PROXMOX_TIMEOUT=30000
 ```
 
@@ -309,10 +316,6 @@ AWS_DEFAULT_REGION=us-east-1
 
 # Query multiple regions (optional)
 # AWS_REGIONS=["us-east-1","eu-west-1"]
-
-# Session token for temporary credentials (optional)
-# AWS_SESSION_TOKEN=
-# AWS_PROFILE=default
 ```
 
 If the container runs on an EC2 instance with an IAM instance profile, you can omit the static credentials — the AWS SDK default credential chain will be used automatically.
@@ -327,8 +330,8 @@ Add the following to your `.env` file and mount your SSH keys into the container
 # SSH Integration
 SSH_ENABLED=true
 SSH_DEFAULT_USER=deploy
-SSH_DEFAULT_KEY=/ssh/id_rsa
-# SSH_CONFIG_PATH=/ssh/config
+SSH_DEFAULT_KEY=/opt/pabawi/ssh/id_rsa
+# SSH_CONFIG_PATH=/opt/pabawi/ssh/config
 # SSH_DEFAULT_PORT=22
 # SSH_HOST_KEY_CHECK=true
 # SSH_CONNECTION_TIMEOUT=30
@@ -340,7 +343,7 @@ Mount your SSH directory as a read-only volume:
 
 ```bash
 docker run -d \
-  -v ~/.ssh:/ssh:ro \
+  -v ~/.ssh:/opt/pabawi/ssh:ro \
   --env-file .env \
   pabawi:latest
 ```
@@ -349,7 +352,7 @@ Or in `docker-compose.yml`:
 
 ```yaml
 volumes:
-  - ~/.ssh:/ssh:ro
+  - ~/.ssh:/opt/pabawi/ssh:ro
 ```
 
 For the full list of SSH environment variables, see the [SSH Integration Setup Guide](./integrations/ssh.md).
@@ -361,16 +364,16 @@ Add the following to your `.env` file and mount your Ansible project directory:
 ```env
 # Ansible Integration
 ANSIBLE_ENABLED=true
-ANSIBLE_PROJECT_PATH=/ansible
+ANSIBLE_PROJECT_PATH=/opt/pabawi/ansible
 ANSIBLE_INVENTORY_PATH=inventory/hosts
 # ANSIBLE_EXECUTION_TIMEOUT=300000
 ```
 
-Mount your Ansible project as a read-only volume:
+Mount your Ansible project:
 
 ```bash
 docker run -d \
-  -v /path/to/ansible-project:/ansible:ro \
+  -v /path/to/ansible-project:/opt/pabawi/ansible:ro \
   --env-file .env \
   pabawi:latest
 ```
@@ -379,7 +382,7 @@ Or in `docker-compose.yml`:
 
 ```yaml
 volumes:
-  - ./ansible-project:/ansible:ro
+  - ./ansible:/opt/pabawi/ansible:ro
 ```
 
 For the full list of Ansible environment variables, see the [Ansible Integration Setup Guide](./integrations/ansible.md).
@@ -416,29 +419,16 @@ services:
     env_file:
       - .env
     volumes:
-      # Bolt project directory (read-only)
-      - ./bolt-project:/bolt-project:ro
-      # SQLite database persistence
-      - ./data:/data
-      # SSL certificates for PuppetDB/Puppetserver (optional)
-      # - /path/to/ssl/certs:/ssl-certs:ro
-      # Hiera control repository (optional)
-      # - /path/to/control-repo:/control-repo:ro
+      - ./data:/opt/pabawi/data
+      - ./bolt-project:/opt/pabawi/bolt-project:ro
+      # Uncomment as needed:
+      # - ./control-repo:/opt/pabawi/control-repo:ro
+      # - ./ansible:/opt/pabawi/ansible:ro
+      # - ./certs:/opt/pabawi/certs:ro
+      # - ~/.ssh:/opt/pabawi/ssh:ro
     ports:
       - "${PORT:-3000}:3000"
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
-      timeout: 3s
-      start_period: 5s
-      retries: 3
     restart: unless-stopped
-    networks:
-      - pabawi-network
-
-networks:
-  pabawi-network:
-    driver: bridge
 ```
 
 ### Enabling Integrations
@@ -446,7 +436,7 @@ networks:
 1. **Create your `.env` file** from the example:
 
    ```bash
-   cp .env.example .env
+   cp .env.docker .env
    ```
 
 2. **Edit `.env`** to configure your integrations. You can use the setup guides in the Pabawi web UI to generate `.env` snippets for each integration — they walk you through the settings and let you copy the result to your clipboard. See the [Configuration Guide](./configuration.md) for all available variables.
@@ -455,15 +445,13 @@ networks:
 
    ```yaml
    volumes:
-     - ./bolt-project:/bolt-project:ro
-     - ./data:/data
+     - ./data:/opt/pabawi/data
+     - ./bolt-project:/opt/pabawi/bolt-project:ro
      # Uncomment and adjust paths as needed:
-     - /path/to/ssl/certs:/ssl-certs:ro
-     - /path/to/control-repo:/control-repo:ro
-     # SSH keys for SSH integration
-     # - ~/.ssh:/ssh:ro
-     # Ansible project directory
-     # - ./ansible-project:/ansible:ro
+     - ./certs:/opt/pabawi/certs:ro
+     - ./control-repo:/opt/pabawi/control-repo:ro
+     - ~/.ssh:/opt/pabawi/ssh:ro
+     - ./ansible:/opt/pabawi/ansible:ro
    ```
 
 4. **Start the service**:
@@ -501,57 +489,63 @@ services:
     ports:
       - "127.0.0.1:3000:3000"
     volumes:
-      - ./bolt-project:/bolt-project:ro
-      - ./data:/data
-      - ./ssl-certs:/ssl-certs:ro
-      - ./control-repo:/control-repo:ro
+      - ./data:/opt/pabawi/data
+      - ./bolt-project:/opt/pabawi/bolt-project:ro
+      - ./certs:/opt/pabawi/certs:ro
+      - ./control-repo:/opt/pabawi/control-repo:ro
+      - ./ansible:/opt/pabawi/ansible:ro
+      - ~/.ssh:/opt/pabawi/ssh:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
-      - DATABASE_PATH=/data/pabawi.db
-      - BOLT_PROJECT_PATH=/bolt-project
+      - DATABASE_PATH=/opt/pabawi/data/pabawi.db
+      - BOLT_PROJECT_PATH=/opt/pabawi/bolt-project
       - LOG_LEVEL=info
-      
+
       # Security
       - COMMAND_WHITELIST_ALLOW_ALL=false
       - COMMAND_WHITELIST=["ls","pwd","whoami","uptime"]
-      
+
       # PuppetDB Integration
       - PUPPETDB_ENABLED=${PUPPETDB_ENABLED:-false}
       - PUPPETDB_SERVER_URL=${PUPPETDB_SERVER_URL}
       - PUPPETDB_PORT=${PUPPETDB_PORT:-8081}
       - PUPPETDB_SSL_ENABLED=${PUPPETDB_SSL_ENABLED:-true}
-      - PUPPETDB_SSL_CA=${PUPPETDB_SSL_CA:-/ssl-certs/ca.pem}
-      - PUPPETDB_SSL_CERT=${PUPPETDB_SSL_CERT:-/ssl-certs/client.pem}
-      - PUPPETDB_SSL_KEY=${PUPPETDB_SSL_KEY:-/ssl-certs/client-key.pem}
-      
+      - PUPPETDB_SSL_CA=${PUPPETDB_SSL_CA:-/opt/pabawi/certs/ca.pem}
+      - PUPPETDB_SSL_CERT=${PUPPETDB_SSL_CERT:-/opt/pabawi/certs/pabawi.pem}
+      - PUPPETDB_SSL_KEY=${PUPPETDB_SSL_KEY:-/opt/pabawi/certs/pabawi-key.pem}
+
       # Puppetserver Integration
       - PUPPETSERVER_ENABLED=${PUPPETSERVER_ENABLED:-false}
       - PUPPETSERVER_SERVER_URL=${PUPPETSERVER_SERVER_URL}
       - PUPPETSERVER_PORT=${PUPPETSERVER_PORT:-8140}
       - PUPPETSERVER_SSL_ENABLED=${PUPPETSERVER_SSL_ENABLED:-true}
-      - PUPPETSERVER_SSL_CA=${PUPPETSERVER_SSL_CA:-/ssl-certs/ca.pem}
-      - PUPPETSERVER_SSL_CERT=${PUPPETSERVER_SSL_CERT:-/ssl-certs/client.pem}
-      - PUPPETSERVER_SSL_KEY=${PUPPETSERVER_SSL_KEY:-/ssl-certs/client-key.pem}
-      
+      - PUPPETSERVER_SSL_CA=${PUPPETSERVER_SSL_CA:-/opt/pabawi/certs/ca.pem}
+      - PUPPETSERVER_SSL_CERT=${PUPPETSERVER_SSL_CERT:-/opt/pabawi/certs/pabawi.pem}
+      - PUPPETSERVER_SSL_KEY=${PUPPETSERVER_SSL_KEY:-/opt/pabawi/certs/pabawi-key.pem}
+
       # Hiera Integration
       - HIERA_ENABLED=${HIERA_ENABLED:-false}
-      - HIERA_CONTROL_REPO_PATH=${HIERA_CONTROL_REPO_PATH:-/control-repo}
+      - HIERA_CONTROL_REPO_PATH=${HIERA_CONTROL_REPO_PATH:-/opt/pabawi/control-repo}
       - HIERA_FACT_SOURCE_PREFER_PUPPETDB=${HIERA_FACT_SOURCE_PREFER_PUPPETDB:-true}
-      
+
+      # Ansible Integration
+      - ANSIBLE_ENABLED=${ANSIBLE_ENABLED:-false}
+      - ANSIBLE_PROJECT_PATH=${ANSIBLE_PROJECT_PATH:-/opt/pabawi/ansible}
+
       # Proxmox Integration
       - PROXMOX_ENABLED=${PROXMOX_ENABLED:-false}
       - PROXMOX_HOST=${PROXMOX_HOST}
       - PROXMOX_PORT=${PROXMOX_PORT:-8006}
       - PROXMOX_TOKEN=${PROXMOX_TOKEN}
-      
+
       # AWS Integration
       - AWS_ENABLED=${AWS_ENABLED:-false}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      
+
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
@@ -574,24 +568,29 @@ PUPPETDB_ENABLED=true
 PUPPETDB_SERVER_URL=https://puppetdb.example.com
 PUPPETDB_PORT=8081
 PUPPETDB_SSL_ENABLED=true
-PUPPETDB_SSL_CA=/ssl-certs/ca.pem
-PUPPETDB_SSL_CERT=/ssl-certs/client.pem
-PUPPETDB_SSL_KEY=/ssl-certs/client-key.pem
+PUPPETDB_SSL_CA=/opt/pabawi/certs/ca.pem
+PUPPETDB_SSL_CERT=/opt/pabawi/certs/pabawi.pem
+PUPPETDB_SSL_KEY=/opt/pabawi/certs/pabawi-key.pem
 
 # Puppetserver Integration
 PUPPETSERVER_ENABLED=true
 PUPPETSERVER_SERVER_URL=https://puppet.example.com
 PUPPETSERVER_PORT=8140
 PUPPETSERVER_SSL_ENABLED=true
-PUPPETSERVER_SSL_CA=/ssl-certs/ca.pem
-PUPPETSERVER_SSL_CERT=/ssl-certs/client.pem
-PUPPETSERVER_SSL_KEY=/ssl-certs/client-key.pem
+PUPPETSERVER_SSL_CA=/opt/pabawi/certs/ca.pem
+PUPPETSERVER_SSL_CERT=/opt/pabawi/certs/pabawi.pem
+PUPPETSERVER_SSL_KEY=/opt/pabawi/certs/pabawi-key.pem
 
 # Hiera Integration
 HIERA_ENABLED=true
-HIERA_CONTROL_REPO_PATH=/control-repo
+HIERA_CONTROL_REPO_PATH=/opt/pabawi/control-repo
 HIERA_ENVIRONMENTS=["production","staging"]
 HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
+
+# Ansible Integration
+ANSIBLE_ENABLED=true
+ANSIBLE_PROJECT_PATH=/opt/pabawi/ansible
+ANSIBLE_INVENTORY_PATH=inventory/hosts
 
 # Proxmox Integration
 PROXMOX_ENABLED=true
@@ -602,19 +601,12 @@ PROXMOX_TOKEN=automation@pve!api-token=12345678-1234-1234-1234-123456789abc
 # AWS Integration
 AWS_ENABLED=true
 AWS_DEFAULT_REGION=us-east-1
-# AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
-# AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
 
 # SSH Integration
 SSH_ENABLED=true
-SSH_CONFIG_PATH=/config/ssh_config
+SSH_CONFIG_PATH=/opt/pabawi/ssh/config
 SSH_DEFAULT_USER=deploy
-SSH_DEFAULT_KEY=/keys/deploy_key
-
-# Ansible Integration
-ANSIBLE_ENABLED=true
-ANSIBLE_PROJECT_PATH=/ansible-project
-ANSIBLE_INVENTORY_PATH=inventory/hosts
+SSH_DEFAULT_KEY=/opt/pabawi/ssh/id_rsa
 ```
 
 ### Running with Docker Compose
@@ -656,49 +648,49 @@ If you prefer manual setup:
 
 ```bash
 # Create certificate directory
-mkdir -p ./ssl-certs
+mkdir -p ./certs
 
 # Copy CA certificate
-cp /etc/puppetlabs/puppet/ssl/certs/ca.pem ./ssl-certs/
+cp /etc/puppetlabs/puppet/ssl/certs/ca.pem ./certs/
 
 # Generate private key
-openssl genrsa -out ./ssl-certs/pabawi-key.pem 2048
+openssl genrsa -out ./certs/pabawi-key.pem 2048
 
 # Create certificate signing request
 openssl req -new \
-  -key ./ssl-certs/pabawi-key.pem \
-  -out ./ssl-certs/pabawi.csr \
+  -key ./certs/pabawi-key.pem \
+  -out ./certs/pabawi.csr \
   -subj "/CN=pabawi"
 
 # Submit CSR to Puppetserver (adjust URL)
 curl -X PUT \
-  --cacert ./ssl-certs/ca.pem \
-  --data-binary @./ssl-certs/pabawi.csr \
+  --cacert ./certs/ca.pem \
+  --data-binary @./certs/pabawi.csr \
   https://puppet.example.com:8140/puppet-ca/v1/certificate_request/pabawi
 
 # Sign certificate on Puppetserver
 puppetserver ca sign --certname pabawi
 
 # Download signed certificate
-curl --cacert ./ssl-certs/ca.pem \
+curl --cacert ./certs/ca.pem \
   https://puppet.example.com:8140/puppet-ca/v1/certificate/pabawi \
-  -o ./ssl-certs/pabawi.pem
+  -o ./certs/pabawi.pem
 
 # Set permissions
-chmod 644 ./ssl-certs/ca.pem ./ssl-certs/pabawi.pem
-chmod 600 ./ssl-certs/pabawi-key.pem
+chmod 644 ./certs/ca.pem ./certs/pabawi.pem
+chmod 600 ./certs/pabawi-key.pem
 ```
 
 ### Certificate Verification
 
 ```bash
 # Verify certificate
-openssl x509 -in ./ssl-certs/pabawi.pem -text -noout
+openssl x509 -in ./certs/pabawi.pem -text -noout
 
 # Test PuppetDB connection
-curl --cacert ./ssl-certs/ca.pem \
-     --cert ./ssl-certs/pabawi.pem \
-     --key ./ssl-certs/pabawi-key.pem \
+curl --cacert ./certs/ca.pem \
+     --cert ./certs/pabawi.pem \
+     --key ./certs/pabawi-key.pem \
      https://puppetdb.example.com:8081/pdb/meta/v1/version
 ```
 
@@ -727,10 +719,10 @@ docker logs pabawi
 docker exec pabawi curl -k https://puppetdb.example.com:8081/pdb/meta/v1/version
 
 # Check certificate paths
-docker exec pabawi ls -la /ssl-certs/
+docker exec pabawi ls -la /opt/pabawi/certs/
 
 # Verify certificate content
-docker exec pabawi openssl x509 -in /ssl-certs/client.pem -text -noout
+docker exec pabawi openssl x509 -in /opt/pabawi/certs/pabawi.pem -text -noout
 ```
 
 **Puppetserver connection failed**:
@@ -740,20 +732,20 @@ docker exec pabawi openssl x509 -in /ssl-certs/client.pem -text -noout
 docker exec pabawi curl -k https://puppet.example.com:8140/status/v1/simple
 
 # Check SSL configuration
-docker exec pabawi openssl s_client -connect puppet.example.com:8140 -CAfile /ssl-certs/ca.pem
+docker exec pabawi openssl s_client -connect puppet.example.com:8140 -CAfile /opt/pabawi/certs/ca.pem
 ```
 
 **Hiera integration issues**:
 
 ```bash
 # Check control repository mount
-docker exec pabawi ls -la /control-repo/
+docker exec pabawi ls -la /opt/pabawi/control-repo/
 
 # Verify hiera.yaml
-docker exec pabawi cat /control-repo/hiera.yaml
+docker exec pabawi cat /opt/pabawi/control-repo/hiera.yaml
 
 # Check hieradata
-docker exec pabawi find /control-repo/data -name "*.yaml" | head -10
+docker exec pabawi find /opt/pabawi/control-repo/data -name "*.yaml" | head -10
 ```
 
 ### Performance Issues
@@ -833,7 +825,7 @@ If you want to allow Pabawi access to different users, configure a reverse proxy
 services:
   pabawi:
     # ... other configuration ...
-    
+
     # Resource limits
     deploy:
       resources:
@@ -843,16 +835,16 @@ services:
         reservations:
           memory: 512M
           cpus: '0.5'
-    
+
     # Security options
     security_opt:
       - no-new-privileges:true
-    
+
     # Read-only root filesystem (requires writable /tmp)
     read_only: true
     tmpfs:
       - /tmp
-    
+
     # Drop capabilities
     cap_drop:
       - ALL

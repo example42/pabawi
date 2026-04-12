@@ -5,20 +5,26 @@ services:
     env_file:
       - .env
     volumes:
-      # Bolt project directory (read-only)
-      - ./bolt-project:/bolt-project:ro
-      # SQLite database persistence
-      - ./data:/data
-      # SSL certificates for PuppetDB/Puppetserver (optional)
-      # - /path/to/ssl/certs:/ssl-certs:ro
+      # All Pabawi data lives under /opt/pabawi inside the container.
+      # Mount host directories to the matching container paths.
+
+      # SQLite database persistence (required)
+      - ./data:/opt/pabawi/data
+
+      # Bolt project directory (required, read-only)
+      - ./bolt-project:/opt/pabawi/bolt-project:ro
+
       # Hiera control repository (optional)
-      # - /path/to/control-repo:/control-repo:ro
-      # SSH keys for SSH integration (optional)
-      # - ~/.ssh:/home/pabawi/.ssh:ro
+      # - /path/to/control-repo:/opt/pabawi/control-repo:ro
+
       # Ansible project directory (optional)
-      # - /path/to/ansible/project:/ansible:ro
-      # Proxmox SSL certificates (optional)
-      # - /path/to/proxmox/certs:/certs/proxmox:ro
+      # - /path/to/ansible:/opt/pabawi/ansible:ro
+
+      # SSL certificates for PuppetDB/Puppetserver/Proxmox (optional)
+      # - /path/to/certs:/opt/pabawi/certs:ro
+
+      # SSH keys and config for SSH integration (optional)
+      # - ~/.ssh:/opt/pabawi/ssh:ro
     ports:
       - "${PORT:-3000}:3000"
     healthcheck:
