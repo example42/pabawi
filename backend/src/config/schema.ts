@@ -353,7 +353,7 @@ export const AppConfigSchema = z.object({
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes
   logLevel: z.enum(["error", "warn", "info", "debug"]).default("info"),
   databasePath: z.string().default("./data/pabawi.db"),
-  corsAllowedOrigins: z.array(z.string()).default(["http://localhost:5173", "http://localhost:3000"]),
+  corsAllowedOrigins: z.array(z.string().url()).default([]),
   packageTasks: z.array(PackageTaskConfigSchema).default([
     {
       name: "package",

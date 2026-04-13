@@ -392,7 +392,18 @@ export class FactService {
       return null;
     }
 
-    return path.join(this.localFactsPath, `${nodeId}.json`);
+    // Prevent path traversal via crafted node IDs
+    if (!/^[a-zA-Z0-9._-]+$/.test(nodeId)) {
+      throw new Error(`Invalid nodeId for fact file lookup: "${nodeId}"`);
+    }
+
+    const resolved = path.resolve(this.localFactsPath, `${nodeId}.json`);
+    const factsRoot = path.resolve(this.localFactsPath) + path.sep;
+    if (!resolved.startsWith(factsRoot)) {
+      throw new Error(`Path traversal detected in fact file lookup for nodeId: "${nodeId}"`);
+    }
+
+    return resolved;
   }
 
   /**

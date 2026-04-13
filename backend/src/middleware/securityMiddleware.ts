@@ -32,7 +32,7 @@ export const helmetMiddleware = helmet({
     },
   },
   crossOriginEmbedderPolicy: false, // Allow embedding for development
-  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin requests
+  crossOriginResourcePolicy: { policy: "same-site" }, // Restrict cross-origin resource sharing
 });
 
 /**
@@ -44,13 +44,6 @@ export const helmetMiddleware = helmet({
  * @returns Express middleware function
  */
 export function createRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => void {
-  // Skip rate limiting in test environment
-  if (process.env.NODE_ENV === 'test') {
-    return (_req: Request, _res: Response, next: NextFunction): void => {
-      next();
-    };
-  }
-
   return rateLimit({
     windowMs: 60 * 1000, // 1 minute window
     max: 100, // Limit each user to 100 requests per window
@@ -98,13 +91,6 @@ export function createRateLimitMiddleware(): (req: Request, res: Response, next:
  * @returns Express middleware function
  */
 export function createAuthRateLimitMiddleware(): (req: Request, res: Response, next: NextFunction) => void {
-  // Skip rate limiting in test environment
-  if (process.env.NODE_ENV === 'test') {
-    return (_req: Request, _res: Response, next: NextFunction): void => {
-      next();
-    };
-  }
-
   return rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minute window
     max: 10, // Limit each IP to 10 requests per window

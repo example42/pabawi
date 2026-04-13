@@ -210,10 +210,19 @@ describe("API Integration Tests", () => {
       expect(response.body.error.troubleshooting.documentation).toBeDefined();
     });
 
-    it("should include expert mode details when header is set", async () => {
+    it("should include expert mode details when req.expertMode is set by middleware", async () => {
+      // Security fix: errorHandler reads req.expertMode (set by expertModeMiddleware after role check),
+      // NOT the raw X-Expert-Mode header. Simulate an admin user by adding a middleware
+      // that sets req.expertMode = true before the error handler.
       const testApp = express();
       testApp.use(express.json());
       testApp.use(requestIdMiddleware);
+
+      // Simulate expertModeMiddleware granting expert mode to an admin
+      testApp.use((_req: express.Request, _res: express.Response, next: express.NextFunction) => {
+        (_req as express.Request & { expertMode?: boolean }).expertMode = true;
+        next();
+      });
 
       testApp.get("/test-expert-mode", () => {
         const error = new Error("Test error");
@@ -225,13 +234,35 @@ describe("API Integration Tests", () => {
       const request = (await import("supertest")).default;
       const response = await request(testApp)
         .get("/test-expert-mode")
-        .set("X-Expert-Mode", "true")
         .expect(500);
 
       expect(response.body.error.stackTrace).toBeDefined();
       expect(response.body.error.requestId).toBeDefined();
       expect(response.body.error.timestamp).toBeDefined();
       expect(response.body.error.executionContext).toBeDefined();
+    });
+
+    it("should NOT expose expert mode details via raw X-Expert-Mode header alone", async () => {
+      // Security: sending the header without the role-gated middleware must not expose internals
+      const testApp = express();
+      testApp.use(express.json());
+      testApp.use(requestIdMiddleware);
+      // No expertModeMiddleware — req.expertMode is never set
+
+      testApp.get("/test-header-only", () => {
+        throw new Error("Test error");
+      });
+
+      testApp.use(errorHandler);
+
+      const request = (await import("supertest")).default;
+      const response = await request(testApp)
+        .get("/test-header-only")
+        .set("X-Expert-Mode", "true") // raw header, no middleware to grant it
+        .expect(500);
+
+      expect(response.body.error.stackTrace).toBeUndefined();
+      expect(response.body.error.executionContext).toBeUndefined();
     });
 
     it("should not include expert mode details without header", async () => {

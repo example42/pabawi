@@ -590,6 +590,13 @@ export class AnsibleService {
    * @returns Path to the temporary inventory file
    */
   private createTempInventory(hostname: string): string {
+    // Validate hostname to prevent INI injection via crafted node IDs.
+    // Ansible INI inventory allows inline variable assignments (e.g. host key=val),
+    // so any whitespace or special characters in the hostname could inject parameters.
+    if (!/^[a-zA-Z0-9._-]+$/.test(hostname)) {
+      throw new Error(`Invalid hostname for Ansible inventory: "${hostname}". Only alphanumeric characters, dots, hyphens, and underscores are allowed.`);
+    }
+
     const tempDir = mkdtempSync(join(tmpdir(), 'ansible-'));
     const inventoryPath = join(tempDir, 'inventory');
 
