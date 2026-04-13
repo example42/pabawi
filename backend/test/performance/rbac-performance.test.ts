@@ -25,8 +25,10 @@ import { MigrationRunner } from '../../src/database/MigrationRunner';
 import path from 'path';
 
 // Performance thresholds (in milliseconds)
+// Note: AUTHENTICATION threshold raised to 500ms because bcrypt cost factor
+// was increased from 10 to 12 per OWASP 2023 guidance (~4x slower, ~400ms expected).
 const PERFORMANCE_THRESHOLDS = {
-  AUTHENTICATION: 200,
+  AUTHENTICATION: 500,
   CACHED_PERMISSION_CHECK: 50,
   UNCACHED_PERMISSION_CHECK: 200,
   CONCURRENT_USERS: 1000,
@@ -507,7 +509,8 @@ async function initializeSchema(db: DatabaseAdapter): Promise<void> {
   await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id), FOREIGN KEY (roleId) REFERENCES roles(id) )`);
   await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id), FOREIGN KEY (permissionId) REFERENCES permissions(id) )`);
   await db.execute(`CREATE TABLE failed_login_attempts ( id TEXT PRIMARY KEY, username TEXT NOT NULL, attemptedAt TEXT NOT NULL, ipAddress TEXT, reason TEXT )`);
-  await db.execute(`CREATE TABLE account_lockouts ( id TEXT PRIMARY KEY, username TEXT NOT NULL, lockedAt TEXT NOT NULL, lockoutType TEXT NOT NULL, expiresAt TEXT, failedAttempts INTEGER NOT NULL )`);
+  await db.execute(`CREATE TABLE account_lockouts ( username TEXT PRIMARY KEY, lockoutType TEXT NOT NULL, lockedAt TEXT NOT NULL, lockedUntil TEXT, failedAttempts INTEGER NOT NULL DEFAULT 0, lastAttemptAt TEXT )`);
+  await db.execute(`CREATE TABLE login_attempt_counters ( username TEXT PRIMARY KEY, cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0, lastFailedAt TEXT )`);
   await db.execute(`CREATE INDEX idx_users_username ON users(username)`);
   await db.execute(`CREATE INDEX idx_users_email ON users(email)`);
   await db.execute(`CREATE INDEX idx_users_active ON users(isActive)`);

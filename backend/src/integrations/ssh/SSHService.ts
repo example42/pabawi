@@ -488,6 +488,10 @@ export class SSHService {
 
       // Configure host key verification
       if (!this.config.hostKeyCheck) {
+        this.logger.warn(
+          'SSH host key verification is DISABLED — connections are vulnerable to man-in-the-middle attacks. Set SSH_HOST_KEY_CHECK=true for production use.',
+          { component: 'SSHService', integration: 'ssh', operation: 'createConnection' },
+        );
         connectConfig.hostVerifier = (): boolean => true;
       }
 

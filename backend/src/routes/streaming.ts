@@ -1,5 +1,6 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
+import crypto from "crypto";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
@@ -14,8 +15,62 @@ const ExecutionIdParamSchema = z.object({
 });
 
 /**
+ * Short-lived single-use stream tickets.
+ *
+ * Clients that need to open an EventSource connection (which cannot set custom
+ * headers) should first call POST /:id/stream-ticket (auth required) to obtain
+ * a 30-second single-use ticket, then pass ?ticket=<value> to the SSE endpoint
+ * instead of the long-lived JWT.  This keeps the JWT out of access logs.
+ */
+interface StreamTicket {
+  executionId: string;
+  userId: string;
+  bearerToken: string; // the original JWT, stored server-side
+  expiresAt: number;   // Date.now() + 30_000
+}
+
+const streamTickets = new Map<string, StreamTicket>();
+
+/** Purge expired tickets (runs every 60 s) */
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, ticket] of streamTickets) {
+    if (ticket.expiresAt < now) streamTickets.delete(key);
+  }
+}, 60_000);
+
+/**
  * Create streaming router for Server-Sent Events (SSE)
  */
+/**
+ * Pre-auth middleware for SSE streaming routes.
+ *
+ * Converts a ?ticket= or ?token= query parameter into an Authorization header
+ * so that the standard authMiddleware can verify it without modification.
+ * Must be placed BEFORE authMiddleware in the route chain.
+ */
+export function streamAuthMiddleware(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  if (!req.headers.authorization) {
+    if (typeof req.query.ticket === "string") {
+      const ticketData = streamTickets.get(req.query.ticket);
+      if (ticketData && ticketData.expiresAt >= Date.now()) {
+        streamTickets.delete(req.query.ticket); // single-use
+        req.headers.authorization = `Bearer ${ticketData.bearerToken}`;
+      }
+      delete (req.query as Record<string, unknown>).ticket;
+    } else if (typeof req.query.token === "string") {
+      // Legacy fallback — JWT in URL (kept for backward compatibility)
+      req.headers.authorization = `Bearer ${req.query.token}`;
+      delete (req.query as Record<string, unknown>).token;
+    }
+  }
+  next();
+}
+
 export function createStreamingRouter(
   streamingManager: StreamingExecutionManager,
   executionRepository: ExecutionRepository,
@@ -24,11 +79,59 @@ export function createStreamingRouter(
   const logger = new LoggerService();
 
   /**
+   * POST /api/executions/:id/stream-ticket
+   * Issue a 30-second single-use ticket for the SSE stream endpoint.
+   *
+   * This allows EventSource clients (which cannot set Authorization headers) to
+   * authenticate without putting the long-lived JWT in the URL / access logs.
+   *
+   * Requires: valid Bearer token in Authorization header.
+   */
+  router.post(
+    "/:id/stream-ticket",
+    asyncHandler((req: Request, res: Response): void => {
+      if (!req.user?.userId) {
+        res.status(401).json({ error: "Authentication required" });
+        return;
+      }
+
+      const params = ExecutionIdParamSchema.safeParse(req.params);
+      if (!params.success) {
+        res.status(400).json({ error: "Invalid execution ID" });
+        return;
+      }
+
+      const executionId = params.data.id;
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        res.status(401).json({ error: "Bearer token required" });
+        return;
+      }
+
+      const ticket = crypto.randomBytes(32).toString("hex");
+      streamTickets.set(ticket, {
+        executionId,
+        userId: req.user.userId,
+        bearerToken: authHeader.slice(7),
+        expiresAt: Date.now() + 30_000,
+      });
+
+      logger.debug("Stream ticket issued", {
+        component: "StreamingRouter",
+        operation: "issueStreamTicket",
+        metadata: { executionId, userId: req.user.userId },
+      });
+
+      res.json({ ticket });
+    })
+  );
+
+  /**
    * GET /api/executions/:id/stream
    * Subscribe to streaming events for an execution
    *
-   * Note: EventSource API doesn't support custom headers, so authentication
-   * token can be passed via query parameter as a fallback
+   * Preferred auth: pass ?ticket=<value> (obtained from POST /:id/stream-ticket)
+   * Fallback: ?token=<JWT> (deprecated — JWT will appear in access logs)
    */
   router.get(
     "/:id/stream",
@@ -49,17 +152,8 @@ export function createStreamingRouter(
       });
 
       try {
-        // Handle token from query parameter (EventSource doesn't support headers)
-        // Only move to Authorization header when no Authorization header is already present,
-        // then remove from query to reduce the chance of it being logged downstream.
-        if (
-          typeof req.query.token === "string" &&
-          !req.headers.authorization
-        ) {
-          req.headers.authorization = `Bearer ${req.query.token}`;
-
-          delete (req.query as Record<string, unknown>).token;
-        }
+        // Auth is resolved by streamAuthMiddleware (runs before authMiddleware).
+        // By the time we reach here, req.user is already populated.
 
         // Validate request parameters
         if (debugInfo) {

@@ -134,31 +134,23 @@ describe('AuthenticationService', () => {
     });
 
     it('should log failed authentication attempts', async () => {
-      // Spy on console.warn to capture log output
+      // LoggerService.warn() calls console.warn internally — spy on that
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      // Test invalid password
+      // Test invalid password — logger emits structured metadata including username and reason
       await authService.authenticate('testuser', 'WrongPassword');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('[AUTH FAILURE]')
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Username: testuser')
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Reason: Invalid password')
-      );
+      const warnCalls = warnSpy.mock.calls.map(args => JSON.stringify(args));
+      expect(warnCalls.some(c => c.includes('Authentication failure'))).toBe(true);
+      expect(warnCalls.some(c => c.includes('testuser'))).toBe(true);
+      expect(warnCalls.some(c => c.includes('Invalid password'))).toBe(true);
 
       warnSpy.mockClear();
 
       // Test non-existent user
       await authService.authenticate('nonexistent', 'SomePassword');
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Username: nonexistent')
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Reason: User not found')
-      );
+      const warnCalls2 = warnSpy.mock.calls.map(args => JSON.stringify(args));
+      expect(warnCalls2.some(c => c.includes('nonexistent'))).toBe(true);
+      expect(warnCalls2.some(c => c.includes('User not found'))).toBe(true);
 
       warnSpy.mockRestore();
     });
@@ -533,6 +525,11 @@ async function initializeSchema(db: DatabaseAdapter): Promise<void> {
       attemptedAt TEXT NOT NULL,
       ipAddress TEXT,
       reason TEXT NOT NULL
+    )`,
+    `CREATE TABLE login_attempt_counters (
+      username TEXT PRIMARY KEY,
+      cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0,
+      lastFailedAt TEXT
     )`
   ];
 

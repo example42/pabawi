@@ -103,6 +103,14 @@ describe('AuthenticationService - Brute Force Protection', () => {
     `);
 
     await runQuery(db, `
+      CREATE TABLE login_attempt_counters (
+        username TEXT PRIMARY KEY,
+        cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0,
+        lastFailedAt TEXT
+      )
+    `);
+
+    await runQuery(db, `
       CREATE TABLE config (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
