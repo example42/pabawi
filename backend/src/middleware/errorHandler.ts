@@ -24,8 +24,8 @@ export function errorHandler(
 ): void {
   const errorService = new ErrorHandlingService();
 
-  // Check if expert mode is enabled via header
-  const expertMode = req.headers["x-expert-mode"] === "true";
+  // Use expertMode from middleware (already role-gated) — never read the raw header directly
+  const expertMode = req.expertMode === true;
 
   // Generate or use existing request ID
   const requestId = req.id ?? errorService.generateRequestId();

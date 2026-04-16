@@ -1,594 +1,317 @@
-# Pabawi Configuration Guide
+# Configuration
 
-Version: 1.0.0
-
-## Overview
-
-Pabawi uses `backend/.env` as the single source of truth for all configuration. There are no database-stored configuration overrides — all integration settings are defined exclusively via environment variables, parsed and validated by ConfigService using Zod schemas.
-
-This guide covers all configuration options, from basic setup to advanced deployment scenarios.
-
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Environment Variables](#environment-variables)
-- [Bolt Project Requirements](#bolt-project-requirements)
-- [Command Whitelist Configuration](#command-whitelist-configuration)
-- [Package Installation Configuration](#package-installation-configuration)
-- [Ansible Integration](#ansible-integration)
-- [Expert Mode](#expert-mode)
-- [Streaming Configuration](#streaming-configuration)
-- [Caching Configuration](#caching-configuration)
-- [Performance Configuration](#performance-configuration)
-- [Deployment Scenarios](#deployment-scenarios)
-- [Troubleshooting](#troubleshooting)
+All configuration is set via environment variables in `backend/.env`. `ConfigService` reads them at startup, validates with Zod, and rejects invalid values with a descriptive error. There are no database-stored overrides.
 
 ## Quick Start
 
-The minimal configuration requires only a Bolt project directory:
-
 ```bash
-# Set the Bolt project path (defaults to current directory)
-export BOLT_PROJECT_PATH=/path/to/bolt-project
-
-# Start the server
-npm start
+# Minimal — Bolt only
+BOLT_PROJECT_PATH=/path/to/bolt-project
+COMMAND_WHITELIST_ALLOW_ALL=false
+COMMAND_WHITELIST='["uptime","df -h","free -m"]'
 ```
 
-Pabawi will automatically discover:
-
-- Node inventory from `inventory.yaml`
-- Available tasks from the `modules` directory
-- Bolt configuration from `bolt-project.yaml`
-
-## Environment Variables
-
-All configuration is managed through environment variables in `backend/.env`. This is the single source of truth — there are no database-stored overrides or web UI configuration forms. You can set these in:
-
-1. `backend/.env` file (recommended)
-2. System environment variables
-3. Docker environment variables (via `env_file` or `-e` flags)
-
-### Core Server Configuration
-
-#### PORT
-
-- **Type:** Integer
-- **Default:** `3000`
-- **Description:** HTTP port for the API server
-- **Example:** `PORT=8080`
-
-#### HOST
-
-- **Type:** String
-- **Default:** `localhost`
-- **Description:** Host address to bind the server
-- **Example:** `HOST=0.0.0.0` (listen on all interfaces)
-
-#### BOLT_PROJECT_PATH
-
-- **Type:** String (path)
-- **Default:** Current working directory (`.`)
-- **Description:** Path to the Bolt project directory containing `inventory.yaml`, `bolt-project.yaml`, and modules
-- **Example:** `BOLT_PROJECT_PATH=/opt/bolt-project`
-- **Notes:**
-  - Must be an absolute path or relative to the server's working directory
-  - The directory must contain a valid Bolt project structure
-  - Read-only access is sufficient
-
-#### LOG_LEVEL
-
-- **Type:** Enum (`error`, `warn`, `info`, `debug`)
-- **Default:** `info`
-- **Description:** Logging verbosity level for backend services
-- **Example:** `LOG_LEVEL=debug`
-- **Notes:**
-  - `error`: Only log errors
-  - `warn`: Log warnings and errors
-  - `info`: Log informational messages, warnings, and errors (recommended for production)
-  - `debug`: Log all messages including debug information (useful for troubleshooting)
-- **New in v0.5.0:** Centralized logging system with consistent log levels across all integration modules
-
-#### DATABASE_PATH
-
-- **Type:** String (path)
-- **Default:** `./data/pabawi.db`
-- **Description:** Path to SQLite database file for execution history
-- **Example:** `DATABASE_PATH=/var/lib/pabawi/pabawi.db`
-- **Notes:**
-  - Directory must exist and be writable
-  - Database file will be created automatically if it doesn't exist
-  - Consider using a persistent volume in Docker deployments
-
-#### BOLT_EXECUTION_TIMEOUT
-
-- **Type:** Integer (milliseconds)
-- **Default:** `300000` (5 minutes)
-- **Description:** Maximum execution time for Bolt commands and tasks
-- **Example:** `BOLT_EXECUTION_TIMEOUT=600000` (10 minutes)
-- **Notes:**
-  - Executions exceeding this timeout will be terminated
-  - Set higher for long-running tasks (e.g., system updates, large deployments)
-  - Minimum recommended: 60000 (1 minute)
-
-### Bolt Integration
-
-For detailed Bolt configuration, security whitelisting, and package task setup, please refer to the dedicated [Bolt Integration Setup Guide](./integrations/bolt.md).
-
-### Ansible Integration
-
-For detailed Ansible configuration, inventory requirements, playbook usage, and troubleshooting, please refer to the dedicated [Ansible Integration Setup Guide](./integrations/ansible.md).
-
-### Hiera Integration
-
-For detailed Hiera configuration, hierarchy setup, and code analysis features, please refer to the dedicated [Hiera Integration Setup Guide](./integrations/hiera.md).
-
-### Streaming Configuration
-
-Configure real-time output streaming for command and task execution.
-
-#### STREAMING_BUFFER_MS
-
-- **Type:** Integer (milliseconds)
-- **Default:** `100`
-- **Description:** Buffer time for batching streaming output events
-- **Example:** `STREAMING_BUFFER_MS=200`
-- **Notes:**
-  - Lower values provide more real-time updates but increase network traffic
-  - Higher values reduce network traffic but delay updates
-  - Recommended range: 50-500ms
-
-#### STREAMING_MAX_OUTPUT_SIZE
-
-- **Type:** Integer (bytes)
-- **Default:** `10485760` (10 MB)
-- **Description:** Maximum total output size per execution
-- **Example:** `STREAMING_MAX_OUTPUT_SIZE=52428800` (50 MB)
-- **Notes:**
-  - Prevents memory exhaustion from extremely verbose output
-  - Output exceeding this limit will be truncated
-  - Consider increasing for tasks with large output (e.g., package installations)
-
-#### STREAMING_MAX_LINE_LENGTH
-
-- **Type:** Integer (characters)
-- **Default:** `10000`
-- **Description:** Maximum length of a single output line
-- **Example:** `STREAMING_MAX_LINE_LENGTH=5000`
-- **Notes:**
-  - Very long lines will be truncated with an indicator
-  - Prevents browser performance issues with extremely long lines
-  - Typical log lines are under 1000 characters
-
-### Caching Configuration
-
-Configure caching to improve performance and reduce load on target nodes.
-
-#### CACHE_INVENTORY_TTL
-
-- **Type:** Integer (milliseconds)
-- **Default:** `30000` (30 seconds)
-- **Description:** Time-to-live for cached inventory data
-- **Example:** `CACHE_INVENTORY_TTL=60000` (1 minute)
-- **Notes:**
-  - Reduces repeated Bolt CLI calls for inventory
-  - Set to 0 to disable caching
-  - Increase for static inventories, decrease for dynamic inventories
-
-#### CACHE_FACTS_TTL
-
-- **Type:** Integer (milliseconds)
-- **Default:** `300000` (5 minutes)
-- **Description:** Time-to-live for cached facts per node
-- **Example:** `CACHE_FACTS_TTL=600000` (10 minutes)
-- **Notes:**
-  - Reduces load on target nodes from repeated fact gathering
-  - Set to 0 to disable caching
-  - Facts are cached per node independently
-
-### Performance Configuration
-
-Configure execution queue and concurrency limits.
-
-#### CONCURRENT_EXECUTION_LIMIT
-
-- **Type:** Integer
-- **Default:** `5`
-- **Description:** Maximum number of concurrent Bolt executions
-- **Example:** `CONCURRENT_EXECUTION_LIMIT=10`
-- **Notes:**
-  - Prevents resource exhaustion from too many simultaneous executions
-  - Additional executions are queued until a slot becomes available
-  - Consider system resources (CPU, memory, network) when setting
-  - Higher values allow more parallelism but increase resource usage
-
-#### MAX_QUEUE_SIZE
-
-- **Type:** Integer
-- **Default:** `50`
-- **Description:** Maximum number of executions that can be queued
-- **Example:** `MAX_QUEUE_SIZE=100`
-- **Notes:**
-  - Executions beyond this limit are rejected with an error
-  - Prevents unbounded queue growth
-  - Should be set based on expected workload and acceptable wait times
-
-### Provisioning Safety
-
-Control whether destructive provisioning actions are allowed globally.
-
-#### ALLOW_DESTRUCTIVE_PROVISIONING
-
-- **Type:** Boolean (`true` or `false`)
-- **Default:** `false` (destructive actions are blocked unless explicitly enabled)
-- **Description:** When set to `false`, blocks all destructive provisioning actions across every integration. This includes destroying Proxmox VMs/LXC containers and terminating AWS EC2 instances. Non-destructive lifecycle actions (start, stop, shutdown, reboot) remain unaffected.
-- **Example:** `ALLOW_DESTRUCTIVE_PROVISIONING=false`
-- **Notes:**
-  - This is a global safety switch — it applies to all current and future provisioning integrations
-  - When disabled, the API returns `403 Forbidden` with error code `DESTRUCTIVE_ACTION_DISABLED`
-  - Useful for production environments where accidental resource deletion must be prevented
-  - Does not affect resource creation (provisioning new VMs/containers is still allowed)
-
-### UI Configuration
-
-Configure user interface features and behavior.
-
-#### UI_SHOW_HOME_PAGE_RUN_CHART
-
-- **Type:** Boolean (`true` or `false`)
-- **Default:** `true`
-- **Description:** Show aggregated Puppet run history chart on the home page
-- **Example:** `UI_SHOW_HOME_PAGE_RUN_CHART=false`
-- **Notes:**
-  - When enabled, displays a 7-day aggregated run history chart for all nodes on the home page
-  - Requires PuppetDB integration to be enabled and active
-  - Chart data is fetched on page load and refreshed every 5 minutes
-  - Disable if data collection takes too long or to reduce API load
-  - Individual node run history charts on node detail pages are not affected by this setting
-- **New in v0.5.0:** Puppet run visualization feature
-
-### Expert Mode Configuration
-
-**Enhanced in v0.5.0**: Expert mode now includes unified logging, frontend log collection, and comprehensive debugging information.
-
-Expert mode provides detailed diagnostic information for troubleshooting. When enabled, API responses include:
-
-- Full error stack traces
-- Request and correlation IDs
-- Frontend logs with automatic sensitive data obfuscation
-- Backend debug information
-- Performance metrics (memory, CPU, cache stats)
-- External API error details
-- Complete request lifecycle visibility
-
-**Enabling Expert Mode:**
-
-- Via UI: Toggle "Expert Mode" in the navigation bar
-- Via API: Include `X-Expert-Mode: true` header in requests
-- Via Request Body: Set `expertMode: true` in request body
-
-**Frontend Logger Configuration:**
-
-Frontend logs are automatically collected when expert mode is enabled:
-
-- **Buffer Size:** 100 log entries (circular buffer)
-- **Sync Throttle:** 1 request per second to backend
-- **TTL:** 5 minutes in-memory storage on backend
-- **Obfuscation:** Automatic sensitive data obfuscation (passwords, tokens, API keys)
-- **Correlation IDs:** Link frontend actions to backend processing
-
-**Security Considerations:**
-
-- Expert mode may expose internal system details
-- Only enable for trusted users in production
-- Frontend logs are obfuscated but may still contain sensitive context
-- Backend stores logs in-memory only (no persistent storage)
-- Automatic cleanup after 5 minutes
-
-## Bolt Project Requirements
-
-For detailed requirements on project structure, `bolt-project.yaml` best practices, and inventory configuration, please refer to the dedicated [Bolt Integration Setup Guide](./integrations/bolt.md).
-
-## Command Whitelist Configuration
-
-For detailed command whitelist configuration, security modes, and examples, please refer to the dedicated [Bolt Integration Setup Guide](./integrations/bolt.md).
-
-## Package Installation Configuration
-
-For detailed package installation configuration, including how to define available tasks and parameter mappings, please refer to the dedicated [Bolt Integration Setup Guide](./integrations/bolt.md).
-
-## Ansible Integration
-
-Pabawi supports Ansible as an execution integration for commands, package operations, and playbooks.
-
-For the complete setup process and environment variable reference (`ANSIBLE_ENABLED`, `ANSIBLE_PROJECT_PATH`, `ANSIBLE_INVENTORY_PATH`, `ANSIBLE_EXECUTION_TIMEOUT`), see the [Ansible Integration Setup Guide](./integrations/ansible.md).
-
-## Expert Mode
-
-Expert mode provides detailed diagnostic information for troubleshooting. It can be enabled globally or per-request.
-
-### Enabling Expert Mode
-
-#### In the Web Interface
-
-1. Click the "Expert Mode" toggle in the navigation bar
-2. The setting is persisted in browser localStorage
-3. All subsequent requests will include expert mode headers
-
-#### Via API
-
-Include the `X-Expert-Mode: true` header:
-
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/command \
-  -H "Content-Type: application/json" \
-  -H "X-Expert-Mode: true" \
-  -d '{"command": "ls -la"}'
-```
-
-Or in the request body:
-
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/command \
-  -H "Content-Type: application/json" \
-  -d '{"command": "ls -la", "expertMode": true}'
-```
-
-### What Expert Mode Provides
-
-When expert mode is enabled, error responses include:
-
-1. **Full stack traces**: Complete error stack for debugging
-2. **Request IDs**: Unique identifiers for correlating logs
-3. **Execution context**: Endpoint, method, timestamp
-4. **Raw Bolt output**: Unprocessed CLI output
-5. **Bolt commands**: The exact command executed
-6. **Additional diagnostics**: Environment details, configuration
-
-**Example error response:**
+Run `scripts/setup.sh` for interactive setup that generates a complete `.env` file.
+
+## Core Server
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `3000` | HTTP port |
+| `HOST` | `localhost` | Bind address (`0.0.0.0` for all interfaces) |
+| `LOG_LEVEL` | `info` | `error` / `warn` / `info` / `debug` |
+| `DATABASE_PATH` | `./data/pabawi.db` | SQLite database file path (directory must exist and be writable) |
+| `CORS_ALLOWED_ORIGINS` | _(none)_ | Comma-separated list of allowed origins (e.g. `http://localhost:5173`) |
+
+## Bolt
+
+| Variable | Default | Description |
+|---|---|---|
+| `BOLT_PROJECT_PATH` | `cwd` | Path to Bolt project directory containing `inventory.yaml` and `bolt-project.yaml` |
+| `BOLT_EXECUTION_TIMEOUT` | `300000` | Max execution time per command in ms (5 min) |
+| `BOLT_PACKAGE_TASKS` | _(see below)_ | JSON array of package task definitions |
+
+**`BOLT_PACKAGE_TASKS`** — JSON array. Defaults to the built-in `package` task:
 
 ```json
-{
-  "error": {
-    "code": "BOLT_EXECUTION_FAILED",
-    "message": "Command execution failed",
-    "details": "Connection timeout",
-    "stackTrace": "Error: Command execution failed\n    at BoltService.runCommand...",
-    "requestId": "req-abc123",
-    "timestamp": "2024-01-01T00:00:00.000Z",
-    "rawResponse": "Error: Connection timeout after 30s\n...",
-    "executionContext": {
-      "endpoint": "/api/nodes/node1/command",
-      "method": "POST",
-      "requestId": "req-abc123",
-      "boltCommand": "bolt command run 'ls -la' --targets node1 --format json"
-    }
+[{
+  "name": "package",
+  "label": "Package (built-in)",
+  "parameterMapping": {
+    "packageName": "name",
+    "ensure": "action",
+    "version": "version"
   }
-}
+}]
 ```
 
-### Use Cases
+## Command Whitelist
 
-- **Development**: Always enable for detailed debugging
-- **Troubleshooting**: Enable when investigating issues
-- **Support**: Provide expert mode output when reporting bugs
-- **Production**: Disable by default, enable only when needed
-
-### Security Considerations
-
-Expert mode may expose:
-
-- Internal file paths
-- System configuration details
-- Bolt project structure
-
-Only enable expert mode for trusted users in production environments.
-
-## Deployment Scenarios
-
-### Development Environment
-
-**Characteristics:**
-
-- Local Bolt project
-- Allow all commands
-- Verbose logging
-- No caching
-
-**Configuration:**
+| Variable | Default | Description |
+|---|---|---|
+| `COMMAND_WHITELIST_ALLOW_ALL` | `false` | `true` to skip whitelist check (dev only) |
+| `COMMAND_WHITELIST` | `[]` | JSON array of allowed commands |
+| `COMMAND_WHITELIST_MATCH_MODE` | `exact` | `exact` (full match) or `prefix` (starts-with) |
 
 ```bash
-# .env file
+# Example: exact match
+COMMAND_WHITELIST='["uptime","df -h","free -m","systemctl status nginx"]'
+COMMAND_WHITELIST_MATCH_MODE=exact
+
+# Example: prefix match (allows "systemctl status *")
+COMMAND_WHITELIST='["systemctl status","journalctl -u"]'
+COMMAND_WHITELIST_MATCH_MODE=prefix
+```
+
+Never set `COMMAND_WHITELIST_ALLOW_ALL=true` in production.
+
+## Streaming
+
+| Variable | Default | Description |
+|---|---|---|
+| `STREAMING_BUFFER_MS` | `100` | Output batch interval in ms. Lower = more real-time, higher = less traffic |
+| `STREAMING_MAX_OUTPUT_SIZE` | `10485760` | Max output per execution in bytes (10 MB) |
+| `STREAMING_MAX_LINE_LENGTH` | `10000` | Max characters per output line before truncation |
+
+## Caching
+
+| Variable | Default | Description |
+|---|---|---|
+| `CACHE_INVENTORY_TTL` | `30000` | Inventory cache TTL in ms. `0` to disable |
+| `CACHE_FACTS_TTL` | `300000` | Node facts cache TTL in ms. `0` to disable |
+
+## Execution Queue
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONCURRENT_EXECUTION_LIMIT` | `5` | Max simultaneous executions. Others queue |
+| `MAX_QUEUE_SIZE` | `50` | Max queued executions before rejecting |
+
+## Provisioning Safety
+
+| Variable | Default | Description |
+|---|---|---|
+| `ALLOW_DESTRUCTIVE_PROVISIONING` | `false` | Allow destroy/terminate actions across all provisioning plugins. Returns `403 DESTRUCTIVE_ACTION_DISABLED` when false |
+
+Keep `false` in production to prevent accidental VM/instance deletion.
+
+## UI
+
+| Variable | Default | Description |
+|---|---|---|
+| `UI_SHOW_HOME_PAGE_RUN_CHART` | `true` | Show aggregated Puppet run history chart on home page. Requires PuppetDB |
+
+## Integrations
+
+Enable integrations by setting `<PREFIX>_ENABLED=true`. Disabled integrations are skipped at startup — no connection attempts, no health check failures.
+
+### Ansible
+
+| Variable | Default | Description |
+|---|---|---|
+| `ANSIBLE_ENABLED` | — | Set to `true` to enable |
+| `ANSIBLE_PROJECT_PATH` | `cwd` | Ansible project directory |
+| `ANSIBLE_INVENTORY_PATH` | `inventory/hosts` | Inventory file path relative to project |
+| `ANSIBLE_EXECUTION_TIMEOUT` | `300000` | Max execution time in ms |
+
+### PuppetDB
+
+| Variable | Default | Description |
+|---|---|---|
+| `PUPPETDB_ENABLED` | — | Set to `true` to enable |
+| `PUPPETDB_SERVER_URL` | **required** | PuppetDB URL (e.g. `https://puppetdb:8081`) |
+| `PUPPETDB_PORT` | _(from URL)_ | Override port |
+| `PUPPETDB_TOKEN` | — | Authentication token |
+| `PUPPETDB_TIMEOUT` | `30000` | Request timeout in ms |
+| `PUPPETDB_RETRY_ATTEMPTS` | `3` | Retry attempts on failure |
+| `PUPPETDB_RETRY_DELAY` | `1000` | Delay between retries in ms |
+| `PUPPETDB_CACHE_TTL` | `300000` | Response cache TTL in ms |
+
+**SSL:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `PUPPETDB_SSL_ENABLED` | `true` | Enable SSL verification |
+| `PUPPETDB_SSL_CA` | — | Path to CA certificate |
+| `PUPPETDB_SSL_CERT` | — | Path to client certificate |
+| `PUPPETDB_SSL_KEY` | — | Path to client key |
+| `PUPPETDB_SSL_REJECT_UNAUTHORIZED` | `true` | Reject invalid certs. Set `false` for self-signed |
+
+**Circuit Breaker:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `PUPPETDB_CIRCUIT_BREAKER_THRESHOLD` | `5` | Failures before opening circuit |
+| `PUPPETDB_CIRCUIT_BREAKER_TIMEOUT` | `60000` | Time circuit stays open in ms |
+| `PUPPETDB_CIRCUIT_BREAKER_RESET_TIMEOUT` | `30000` | Time to half-open after timeout in ms |
+
+### Puppetserver
+
+| Variable | Default | Description |
+|---|---|---|
+| `PUPPETSERVER_ENABLED` | — | Set to `true` to enable |
+| `PUPPETSERVER_SERVER_URL` | **required** | Puppetserver URL (e.g. `https://puppet:8140`) |
+| `PUPPETSERVER_PORT` | _(from URL)_ | Override port |
+| `PUPPETSERVER_TOKEN` | — | Authentication token |
+| `PUPPETSERVER_TIMEOUT` | `30000` | Request timeout in ms |
+| `PUPPETSERVER_RETRY_ATTEMPTS` | `3` | Retry attempts on failure |
+| `PUPPETSERVER_RETRY_DELAY` | `1000` | Delay between retries in ms |
+| `PUPPETSERVER_INACTIVITY_THRESHOLD` | `3600` | Seconds without check-in before node considered inactive |
+| `PUPPETSERVER_CACHE_TTL` | `300000` | Response cache TTL in ms |
+
+**SSL** (same pattern as PuppetDB):
+
+| Variable | Default |
+|---|---|
+| `PUPPETSERVER_SSL_ENABLED` | `true` |
+| `PUPPETSERVER_SSL_CA` | — |
+| `PUPPETSERVER_SSL_CERT` | — |
+| `PUPPETSERVER_SSL_KEY` | — |
+| `PUPPETSERVER_SSL_REJECT_UNAUTHORIZED` | `true` |
+
+**Circuit Breaker:**
+
+| Variable | Default |
+|---|---|
+| `PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD` | `5` |
+| `PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT` | `60000` |
+| `PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT` | `30000` |
+
+### Hiera
+
+| Variable | Default | Description |
+|---|---|---|
+| `HIERA_ENABLED` | — | Set to `true` to enable |
+| `HIERA_CONTROL_REPO_PATH` | **required** | Path to Puppet control repo |
+| `HIERA_CONFIG_PATH` | `hiera.yaml` | Hiera config file relative to control repo |
+| `HIERA_ENVIRONMENTS` | `["production"]` | JSON array of environments |
+
+**Fact sources:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `HIERA_FACT_SOURCE_PREFER_PUPPETDB` | `true` | Use PuppetDB for fact interpolation when available |
+| `HIERA_FACT_SOURCE_LOCAL_PATH` | — | Path to local facts directory (fallback) |
+
+**Catalog compilation:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `HIERA_CATALOG_COMPILATION_ENABLED` | `false` | Enable catalog compilation |
+| `HIERA_CATALOG_COMPILATION_TIMEOUT` | `60000` | Compilation timeout in ms |
+| `HIERA_CATALOG_COMPILATION_CACHE_TTL` | `300000` | Catalog cache TTL in ms |
+
+**Cache:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `HIERA_CACHE_ENABLED` | `true` | Enable Hiera data cache |
+| `HIERA_CACHE_TTL` | `300000` | Cache TTL in ms |
+| `HIERA_CACHE_MAX_ENTRIES` | `10000` | Max cache entries |
+
+**Code analysis:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `HIERA_CODE_ANALYSIS_ENABLED` | `true` | Enable Puppet code analysis |
+| `HIERA_CODE_ANALYSIS_LINT_ENABLED` | `true` | Run puppet-lint |
+| `HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK` | `true` | Check for module updates |
+| `HIERA_CODE_ANALYSIS_INTERVAL` | `3600000` | Analysis interval in ms (1 hour) |
+| `HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS` | `[]` | JSON array of glob patterns to exclude |
+
+### Proxmox
+
+| Variable | Default | Description |
+|---|---|---|
+| `PROXMOX_ENABLED` | — | Set to `true` to enable |
+| `PROXMOX_HOST` | **required** | Proxmox VE host (without scheme, e.g. `pve.example.com`) |
+| `PROXMOX_PORT` | `8006` | API port |
+| `PROXMOX_USERNAME` | — | Username (e.g. `root@pam`) |
+| `PROXMOX_PASSWORD` | — | Password (use token auth in production) |
+| `PROXMOX_REALM` | — | Auth realm override |
+| `PROXMOX_TOKEN` | — | API token (`USER@REALM!TOKENID=UUID`) |
+| `PROXMOX_TIMEOUT` | `30000` | Request timeout in ms |
+| `PROXMOX_PRIORITY` | `7` | Data source priority |
+
+**SSL:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `PROXMOX_SSL_REJECT_UNAUTHORIZED` | `true` | Reject invalid certs. Set `false` for self-signed |
+| `PROXMOX_SSL_CA` | — | Path to CA certificate |
+| `PROXMOX_SSL_CERT` | — | Path to client certificate |
+| `PROXMOX_SSL_KEY` | — | Path to client key |
+
+### AWS
+
+| Variable | Default | Description |
+|---|---|---|
+| `AWS_ENABLED` | — | Set to `true` to enable |
+| `AWS_ACCESS_KEY_ID` | — | Access key (or use instance role) |
+| `AWS_SECRET_ACCESS_KEY` | — | Secret key |
+| `AWS_DEFAULT_REGION` | `us-east-1` | Default region |
+| `AWS_REGIONS` | — | JSON array or comma-separated list of regions to query |
+| `AWS_SESSION_TOKEN` | — | Session token for temporary credentials |
+| `AWS_PROFILE` | — | AWS CLI profile name |
+| `AWS_ENDPOINT` | — | Override endpoint URL (for LocalStack etc.) |
+
+## Example `.env` Files
+
+### Development
+
+```bash
 PORT=3000
 HOST=localhost
-BOLT_PROJECT_PATH=./bolt-project
-COMMAND_WHITELIST_ALLOW_ALL=true
 LOG_LEVEL=debug
+BOLT_PROJECT_PATH=./bolt-project
 DATABASE_PATH=./data/pabawi.db
 BOLT_EXECUTION_TIMEOUT=600000
-
-# Disable caching for immediate updates
+COMMAND_WHITELIST_ALLOW_ALL=true
 CACHE_INVENTORY_TTL=0
 CACHE_FACTS_TTL=0
-
-# Lower concurrency for local testing
 CONCURRENT_EXECUTION_LIMIT=2
+ALLOW_DESTRUCTIVE_PROVISIONING=true
 ```
 
-**Starting the server:**
+### Production (Bolt + PuppetDB + Puppetserver)
 
 ```bash
-# Install dependencies
-cd backend
-npm install
-
-# Start in development mode
-npm run dev
-```
-
-### Staging Environment
-
-**Characteristics:**
-
-- Shared Bolt project
-- Restricted command whitelist
-- Moderate logging
-- Short cache TTLs
-
-**Configuration:**
-
-```bash
-# .env file
 PORT=3000
 HOST=0.0.0.0
-BOLT_PROJECT_PATH=/opt/bolt-project
-COMMAND_WHITELIST_ALLOW_ALL=false
-COMMAND_WHITELIST='["ls","pwd","uptime","systemctl status","journalctl"]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
-LOG_LEVEL=info
-DATABASE_PATH=/var/lib/pabawi/pabawi.db
+LOG_LEVEL=warn
+BOLT_PROJECT_PATH=/opt/pabawi/bolt-project
+DATABASE_PATH=/opt/pabawi/data/pabawi.db
 BOLT_EXECUTION_TIMEOUT=300000
-
-# Short cache for testing
-CACHE_INVENTORY_TTL=30000
-CACHE_FACTS_TTL=60000
-
-# Moderate concurrency
-CONCURRENT_EXECUTION_LIMIT=5
-```
-
-**Starting the server:**
-
-```bash
-# Build the application
-npm run build
-
-# Start with PM2 or systemd
-pm2 start dist/server.js --name pabawi
-```
-
-### Production Environment
-
-**Characteristics:**
-
-- Strict security
-- Minimal logging
-- Optimized caching
-- High concurrency
-
-**Configuration:**
-
-```bash
-# .env file
-PORT=3000
-HOST=0.0.0.0
-BOLT_PROJECT_PATH=/opt/bolt-project
 COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST='["uptime","df -h","free -m","systemctl status"]'
 COMMAND_WHITELIST_MATCH_MODE=exact
-LOG_LEVEL=warn
-DATABASE_PATH=/var/lib/pabawi/pabawi.db
-BOLT_EXECUTION_TIMEOUT=300000
-
-# Optimize caching
 CACHE_INVENTORY_TTL=60000
 CACHE_FACTS_TTL=300000
-
-# Higher concurrency for production load
 CONCURRENT_EXECUTION_LIMIT=10
 MAX_QUEUE_SIZE=100
+ALLOW_DESTRUCTIVE_PROVISIONING=false
 
-# Streaming optimization
-STREAMING_BUFFER_MS=100
-STREAMING_MAX_OUTPUT_SIZE=10485760
+PUPPETDB_ENABLED=true
+PUPPETDB_SERVER_URL=https://puppetdb.example.com:8081
+PUPPETDB_SSL_CA=/opt/pabawi/certs/ca.pem
+PUPPETDB_SSL_CERT=/opt/pabawi/certs/client.crt
+PUPPETDB_SSL_KEY=/opt/pabawi/certs/client.key
+
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppet.example.com:8140
+PUPPETSERVER_TOKEN=your-token-here
 ```
 
-**Deployment with systemd:**
+## SSH Integration
 
-```ini
-# /etc/systemd/system/pabawi.service
-[Unit]
-Description=Pabawi - Unified Remote Execution Interface
-After=network.target
+SSH is configured per-node in the Bolt inventory file, not via env vars. See [integrations/ssh.md](./integrations/ssh.md).
 
-[Service]
-Type=simple
-User=pabawi
-WorkingDirectory=/opt/pabawi
-EnvironmentFile=/opt/pabawi/.env
-ExecStart=/usr/bin/node /opt/pabawi/dist/server.js
-Restart=always
-RestartSec=10
+## Validation Errors
 
-[Install]
-WantedBy=multi-user.target
+If any variable fails Zod validation, the server exits immediately with:
+
+```
+Configuration validation failed: <field>: <reason>
 ```
 
-```bash
-# Enable and start
-sudo systemctl enable pabawi
-sudo systemctl start pabawi
-```
-
-### Docker Deployment
-
-For detailed Docker deployment instructions, including volume mounts, `docker-compose` examples, and environment configuration, please refer to the dedicated [Docker Deployment Guide](./docker-deployment.md).
-
-### Kubernetes Deployment
-
-For detailed Kubernetes configuration including Deployments, Services, ConfigMaps, and Persistent Volumes, please refer to the dedicated [Kubernetes Deployment Guide](./kubernetes-deployment.md).
-
-## Troubleshooting
-
-For a comprehensive guide on diagnosing and resolving issues, including installation problems, connectivity errors, and performance tuning, please refer to the dedicated [Troubleshooting Guide](./troubleshooting.md).
-
-## Configuration Validation
-
-### Startup Checks
-
-Pabawi performs validation on startup:
-
-1. **Bolt project exists**: Verifies `BOLT_PROJECT_PATH` directory
-2. **Required files present**: Checks for `inventory.yaml` and `bolt-project.yaml`
-3. **Database accessible**: Tests database file creation/access
-4. **Configuration valid**: Validates all environment variables
-
-If validation fails, the server will not start and will log detailed error messages.
-
-### Testing Configuration
-
-Test your configuration before deployment:
-
-```bash
-# Test Bolt CLI access
-bolt inventory show --format json
-
-# Test command execution
-bolt command run 'uptime' --targets localhost --format json
-
-# Test task listing
-bolt task show --format json
-
-# Test database access
-sqlite3 $DATABASE_PATH "SELECT 1"
-```
-
-### Configuration Checklist
-
-Before deploying to production:
-
-- [ ] `BOLT_PROJECT_PATH` points to valid Bolt project
-- [ ] `inventory.yaml` contains all target nodes
-- [ ] `bolt-project.yaml` has `color: false`
-- [ ] Command whitelist configured appropriately
-- [ ] Database path is writable
-- [ ] Execution timeout is reasonable
-- [ ] Caching configured for your use case
-- [ ] Concurrency limits set based on resources
-- [ ] Streaming limits configured
-- [ ] Log level appropriate for environment
-- [ ] Expert mode disabled in production (or restricted)
-- [ ] Destructive provisioning disabled if appropriate (`ALLOW_DESTRUCTIVE_PROVISIONING=false`)
-- [ ] UI features configured (run chart visibility)
-- [ ] Integration settings configured in `backend/.env` (use the web UI setup wizards to generate `.env` snippets)
-- [ ] Integration status verified on the Status Dashboard
+Check the exact variable name — there are no fallbacks for required fields.

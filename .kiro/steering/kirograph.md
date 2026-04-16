@@ -4,7 +4,9 @@ inclusion: always
 
 # KiroGraph
 
-KiroGraph builds a semantic knowledge graph of your codebase for faster, smarter code exploration.
+KiroGraph is a Kiro-native semantic knowledge graph of the codebase, purpose-built for Kiro's MCP and hooks system. It enables faster, smarter code exploration without leaving the IDE.
+
+It is already configured in `.kiro/settings/mcp.json` with all tools auto-approved.
 
 ## When `.kirograph/` exists in the project
 
@@ -30,3 +32,7 @@ Use KiroGraph MCP tools for exploration instead of grep/glob/file reads:
 ### If `.kirograph/` does NOT exist
 
 Ask the user: "This project doesn't have KiroGraph initialized. Run `kirograph init -i` to build a code knowledge graph for faster exploration?"
+
+---
+
+> **Note for Claude Code users:** Claude Code uses CodeGraph (`.codegraph/`, `codegraph_*` tools) — a separate but analogous tool configured via the user-level Claude settings. KiroGraph is the Kiro-native equivalent and is what this steering doc covers.

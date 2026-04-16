@@ -84,6 +84,14 @@ export class ProxmoxService {
   }
 
   /**
+   * Get the underlying ProxmoxClient instance.
+   * Returns undefined if not initialized.
+   */
+  getClient(): ProxmoxClient | undefined {
+    return this.client;
+  }
+
+  /**
    * Perform health check
    *
    * Queries the Proxmox API version endpoint to verify connectivity.

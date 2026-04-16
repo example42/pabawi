@@ -736,6 +736,15 @@ export class HieraService {
           );
 
           const fullPath = this.resolvePath(path.join(datadir, interpolationResult.interpolatedPath));
+
+          // Guard against path traversal via malicious fact values
+          const repoRoot = path.resolve(this.config.controlRepoPath) + path.sep;
+          if (!fullPath.startsWith(repoRoot)) {
+            throw new Error(
+              `Path traversal detected in Hiera hierarchy interpolation: resolved path escapes control repo`
+            );
+          }
+
           const exists = fs.existsSync(fullPath);
 
           hierarchyFiles.push({

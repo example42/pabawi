@@ -442,6 +442,12 @@ async function initializeSchema(db: SQLiteAdapter): Promise<void> {
       lastAttemptAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS login_attempt_counters (
+      username TEXT PRIMARY KEY,
+      cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0,
+      lastFailedAt TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS config (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,

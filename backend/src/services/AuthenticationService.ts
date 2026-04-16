@@ -96,9 +96,10 @@ interface DecodedTokenPayload {
 export class AuthenticationService {
   private db: DatabaseAdapter;
   private jwtSecret: string;
+  private logger = new LoggerService();
   private accessTokenLifetime = 3600; // 1 hour in seconds
   private refreshTokenLifetime = 604800; // 7 days in seconds
-  private bcryptCostFactor = 10;
+  private bcryptCostFactor = 12; // OWASP 2023 recommendation
   private auditLogger?: AuditLoggingService;
 
   constructor(db: DatabaseAdapter, jwtSecret?: string, auditLogger?: AuditLoggingService) {
@@ -282,7 +283,7 @@ export class AuthenticationService {
               user: this.toUserDTO(user)
             };
           } catch (error) {
-            console.error('Authentication error:', error);
+            this.logger.error('Authentication error', { component: 'AuthenticationService', operation: 'authenticate', metadata: { error: error instanceof Error ? error.message : String(error) } });
             // Log failed attempt - system error
             await this.logFailedAuthentication(username, `System error: ${error instanceof Error ? error.message : 'Unknown error'}`);
 
@@ -486,7 +487,7 @@ export class AuthenticationService {
         [tokenHash, decoded.userId, revokedAt, expiresAt]
       );
     } catch (error) {
-      console.error('Error revoking token:', error);
+      this.logger.error('Error revoking token', { component: 'AuthenticationService', operation: 'revokeToken', metadata: { error: error instanceof Error ? error.message : String(error) } });
       throw new Error('Failed to revoke token');
     }
   }
@@ -568,7 +569,7 @@ export class AuthenticationService {
 
       return false;
     } catch (error) {
-      console.error('Error checking token revocation:', error);
+      this.logger.error('Error checking token revocation', { component: 'AuthenticationService', operation: 'isTokenRevoked', metadata: { error: error instanceof Error ? error.message : String(error) } });
       return true; // Fail secure: treat as revoked if check fails
     }
   }
@@ -632,8 +633,7 @@ export class AuthenticationService {
   private logFailedAuthentication(username: string, reason: string): Promise<void> {
     const timestamp = new Date().toISOString();
 
-    // Log to console for now (can be extended to database or external logging service)
-    console.warn(`[AUTH FAILURE] ${timestamp} - Username: ${username} - Reason: ${reason}`);
+    this.logger.warn('Authentication failure', { component: 'AuthenticationService', operation: 'logFailedAuthentication', metadata: { timestamp, username, reason } });
 
     // TODO: Store in audit log table for security monitoring
     // This could be extended to:
@@ -692,7 +692,7 @@ export class AuthenticationService {
 
       return { isLocked: false };
     } catch (error) {
-      console.error('Error checking account lockout:', error);
+      this.logger.error('Error checking account lockout', { component: 'AuthenticationService', operation: 'checkAccountLockout', metadata: { error: error instanceof Error ? error.message : String(error) } });
       // Fail secure: don't lock account on error
       return { isLocked: false };
     }
@@ -728,16 +728,26 @@ export class AuthenticationService {
           [username, timestamp, ipAddress ?? null, reason]
         );
 
-        // Count total failed attempts (not just within window, for permanent lockout)
-        const totalAttempts = await this.db.queryOne<{ count: number }>(
-          `SELECT COUNT(*) as count FROM failed_login_attempts
-           WHERE username = ?`,
+        // Increment the cumulative counter (never cleared on successful login).
+        // This is the source of truth for permanent lockout decisions so that
+        // a successful login interspersed with failures cannot reset the count.
+        await this.db.execute(
+          `INSERT INTO login_attempt_counters (username, cumulativeFailedAttempts, lastFailedAt)
+           VALUES (?, 1, ?)
+           ON CONFLICT(username) DO UPDATE SET
+             cumulativeFailedAttempts = cumulativeFailedAttempts + 1,
+             lastFailedAt = excluded.lastFailedAt`,
+          [username, timestamp]
+        );
+
+        const cumulativeRow = await this.db.queryOne<{ count: number }>(
+          `SELECT cumulativeFailedAttempts as count FROM login_attempt_counters WHERE username = ?`,
           [username]
         );
 
-        const totalCount = totalAttempts?.count ?? 0;
+        const totalCount = cumulativeRow?.count ?? 0;
 
-        // Check for permanent lockout first (10 attempts total)
+        // Check for permanent lockout first (10 cumulative attempts, never reset)
         if (totalCount >= this.PERMANENT_LOCKOUT_ATTEMPTS) {
           await this.applyPermanentLockout(username, totalCount);
           return;
@@ -758,7 +768,7 @@ export class AuthenticationService {
           await this.applyTemporaryLockout(username, recentCount);
         }
       } catch (error) {
-        console.error('Error recording failed login attempt:', error);
+        this.logger.error('Error recording failed login attempt', { component: 'AuthenticationService', operation: 'recordFailedAttempt', metadata: { error: error instanceof Error ? error.message : String(error) } });
         // Don't throw - authentication flow should continue
       }
     }
@@ -798,9 +808,9 @@ export class AuthenticationService {
         );
       }
 
-      console.warn(`[SECURITY] Temporary lockout applied to username: ${username} (${String(failedAttempts)} failed attempts)`);
+      this.logger.warn('Temporary account lockout applied', { component: 'AuthenticationService', operation: 'applyTemporaryLockout', metadata: { username, failedAttempts } });
     } catch (error) {
-      console.error('Error applying temporary lockout:', error);
+      this.logger.error('Error applying temporary lockout', { component: 'AuthenticationService', operation: 'applyTemporaryLockout', metadata: { error: error instanceof Error ? error.message : String(error) } });
     }
   }
 
@@ -838,9 +848,9 @@ export class AuthenticationService {
         );
       }
 
-      console.error(`[SECURITY ALERT] Permanent lockout applied to username: ${username} (${String(failedAttempts)} failed attempts)`);
+      this.logger.warn('Permanent account lockout applied', { component: 'AuthenticationService', operation: 'applyPermanentLockout', metadata: { username, failedAttempts } });
     } catch (error) {
-      console.error('Error applying permanent lockout:', error);
+      this.logger.error('Error applying permanent lockout', { component: 'AuthenticationService', operation: 'applyPermanentLockout', metadata: { error: error instanceof Error ? error.message : String(error) } });
     }
   }
 
@@ -863,7 +873,7 @@ export class AuthenticationService {
         [username]
       );
     } catch (error) {
-      console.error('Error clearing failed login attempts:', error);
+      this.logger.error('Error clearing failed login attempts', { component: 'AuthenticationService', operation: 'clearFailedLoginAttempts', metadata: { error: error instanceof Error ? error.message : String(error) } });
       // Don't throw - successful authentication should proceed
     }
   }
@@ -881,9 +891,9 @@ export class AuthenticationService {
       // Clear failed attempts
       await this.db.execute('DELETE FROM failed_login_attempts WHERE username = ?', [username]);
 
-      console.warn(`[ADMIN] Account unlocked: ${username}`);
+      this.logger.info('Account unlocked by admin', { component: 'AuthenticationService', operation: 'unlockAccount', metadata: { username } });
     } catch (error) {
-      console.error('Error unlocking account:', error);
+      this.logger.error('Error unlocking account', { component: 'AuthenticationService', operation: 'unlockAccount', metadata: { error: error instanceof Error ? error.message : String(error) } });
       throw new Error('Failed to unlock account');
     }
   }
@@ -912,7 +922,7 @@ export class AuthenticationService {
         [username]
       );
     } catch (error) {
-      console.error('Error getting failed login attempts:', error);
+      this.logger.error('Error getting failed login attempts', { component: 'AuthenticationService', operation: 'getFailedLoginAttempts', metadata: { error: error instanceof Error ? error.message : String(error) } });
       return [];
     }
   }
@@ -940,7 +950,7 @@ export class AuthenticationService {
         [username]
       );
     } catch (error) {
-      console.error('Error getting account lockout status:', error);
+      this.logger.error('Error getting account lockout status', { component: 'AuthenticationService', operation: 'getAccountLockoutStatus', metadata: { error: error instanceof Error ? error.message : String(error) } });
       return null;
     }
   }

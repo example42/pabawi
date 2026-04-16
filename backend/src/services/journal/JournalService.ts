@@ -4,10 +4,12 @@ import {
   CreateJournalEntrySchema,
   TimelineOptionsSchema,
   SearchOptionsSchema,
+  GlobalTimelineFiltersSchema,
   type CreateJournalEntry,
   type JournalEntry,
   type TimelineOptions,
   type SearchOptions,
+  type GlobalTimelineFilters,
 } from "./types";
 
 /**
@@ -113,13 +115,17 @@ export class JournalService {
     const params: unknown[] = [nodeId];
 
     if (opts.eventType) {
-      sql += ` AND eventType = ?`;
-      params.push(opts.eventType);
+      const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
+      const placeholders = types.map(() => "?").join(", ");
+      sql += ` AND eventType IN (${placeholders})`;
+      params.push(...types);
     }
 
     if (opts.source) {
-      sql += ` AND source = ?`;
-      params.push(opts.source);
+      const sources = Array.isArray(opts.source) ? opts.source : [opts.source];
+      const placeholders = sources.map(() => "?").join(", ");
+      sql += ` AND source IN (${placeholders})`;
+      params.push(...sources);
     }
 
     if (opts.startDate) {
@@ -206,6 +212,120 @@ export class JournalService {
   }
 
   /**
+   * Query journal entries across all nodes with optional filters.
+   * Results sorted by timestamp descending with limit/offset pagination.
+   *
+   * Requirements: 4.1, 4.2, 4.3
+   */
+  async getGlobalTimeline(
+    filters?: Partial<GlobalTimelineFilters>
+  ): Promise<JournalEntry[]> {
+    const opts = GlobalTimelineFiltersSchema.parse(filters ?? {});
+
+    let sql = `SELECT * FROM journal_entries`;
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+
+    if (opts.nodeIds && opts.nodeIds.length > 0) {
+      const placeholders = opts.nodeIds.map(() => "?").join(", ");
+      conditions.push(`nodeId IN (${placeholders})`);
+      params.push(...opts.nodeIds);
+    }
+
+    if (opts.eventType) {
+      const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
+      const placeholders = types.map(() => "?").join(", ");
+      conditions.push(`eventType IN (${placeholders})`);
+      params.push(...types);
+    }
+
+    if (opts.source) {
+      const sources = Array.isArray(opts.source) ? opts.source : [opts.source];
+      const placeholders = sources.map(() => "?").join(", ");
+      conditions.push(`source IN (${placeholders})`);
+      params.push(...sources);
+    }
+
+    if (opts.startDate) {
+      conditions.push(`timestamp >= ?`);
+      params.push(opts.startDate);
+    }
+
+    if (opts.endDate) {
+      conditions.push(`timestamp <= ?`);
+      params.push(opts.endDate);
+    }
+
+    if (conditions.length > 0) {
+      sql += ` WHERE ${conditions.join(" AND ")}`;
+    }
+
+    sql += ` ORDER BY timestamp DESC LIMIT ? OFFSET ?`;
+    params.push(opts.limit, opts.offset);
+
+    const rows = await this.db.query<JournalEntry & { details: string }>(sql, params);
+
+    return rows.map((row) => ({
+      ...row,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unnecessary-condition
+      details: typeof row.details === "string" ? JSON.parse(row.details) : row.details ?? {},
+      isLive: false,
+    }));
+  }
+
+  /**
+   * Count journal entries matching the provided filters (for pagination).
+   *
+   * Requirements: 4.4
+   */
+  async getGlobalEntryCount(
+    filters?: Partial<GlobalTimelineFilters>
+  ): Promise<number> {
+    const opts = GlobalTimelineFiltersSchema.parse(filters ?? {});
+
+    let sql = `SELECT COUNT(*) as count FROM journal_entries`;
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+
+    if (opts.nodeIds && opts.nodeIds.length > 0) {
+      const placeholders = opts.nodeIds.map(() => "?").join(", ");
+      conditions.push(`nodeId IN (${placeholders})`);
+      params.push(...opts.nodeIds);
+    }
+
+    if (opts.eventType) {
+      const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
+      const placeholders = types.map(() => "?").join(", ");
+      conditions.push(`eventType IN (${placeholders})`);
+      params.push(...types);
+    }
+
+    if (opts.source) {
+      const sources = Array.isArray(opts.source) ? opts.source : [opts.source];
+      const placeholders = sources.map(() => "?").join(", ");
+      conditions.push(`source IN (${placeholders})`);
+      params.push(...sources);
+    }
+
+    if (opts.startDate) {
+      conditions.push(`timestamp >= ?`);
+      params.push(opts.startDate);
+    }
+
+    if (opts.endDate) {
+      conditions.push(`timestamp <= ?`);
+      params.push(opts.endDate);
+    }
+
+    if (conditions.length > 0) {
+      sql += ` WHERE ${conditions.join(" AND ")}`;
+    }
+
+    const rows = await this.db.query<{ count: number }>(sql, params);
+    return rows[0]?.count ?? 0;
+  }
+
+  /**
    * Fetch events from all live sources in parallel, gracefully skipping failures.
    */
   private async fetchLiveEntries(nodeId: string): Promise<JournalEntry[]> {
@@ -241,7 +361,7 @@ export class JournalService {
       id: (typeof e.id === "string" ? e.id : null) ?? randomUUID(),
       nodeId: typeof e.nodeId === "string" ? e.nodeId : "",
       nodeUri: typeof e.nodeUri === "string" ? e.nodeUri : `${sourceName}:unknown`,
-      eventType: typeof e.eventType === "string" ? (e.eventType as JournalEntry["eventType"]) : "info",
+      eventType: typeof e.eventType === "string" ? (e.eventType as JournalEntry["eventType"]) : "unknown",
       source: sourceName as JournalEntry["source"],
       action: typeof e.action === "string" ? e.action : "unknown",
       summary: typeof e.summary === "string" ? e.summary : "Live event",

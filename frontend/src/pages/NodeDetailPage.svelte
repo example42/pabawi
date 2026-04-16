@@ -27,6 +27,7 @@
   import ExecutionList from '../components/ExecutionList.svelte';
   import ManageTab from '../components/ManageTab.svelte';
   import JournalTimeline from '../components/JournalTimeline.svelte';
+  import MultiSelectDropdown from '../components/MultiSelectDropdown.svelte';
   import { get, post } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
@@ -123,6 +124,56 @@
 
   // Command whitelist state
   let commandWhitelist = $state<CommandWhitelistConfig | null>(null);
+
+  // Journal filter state
+  const journalEventTypeOptions = [
+    { value: 'provision', label: 'Provisioned' },
+    { value: 'destroy', label: 'Destroyed' },
+    { value: 'start', label: 'Started' },
+    { value: 'stop', label: 'Stopped' },
+    { value: 'reboot', label: 'Rebooted' },
+    { value: 'suspend', label: 'Suspended' },
+    { value: 'resume', label: 'Resumed' },
+    { value: 'command_execution', label: 'Command' },
+    { value: 'task_execution', label: 'Task' },
+    { value: 'puppet_run', label: 'Puppet Run' },
+    { value: 'package_install', label: 'Package' },
+    { value: 'config_change', label: 'Config Change' },
+    { value: 'note', label: 'Note' },
+  ];
+  const journalSourceOptions = [
+    { value: 'proxmox', label: 'Proxmox' },
+    { value: 'aws', label: 'AWS' },
+    { value: 'bolt', label: 'Bolt' },
+    { value: 'ansible', label: 'Ansible' },
+    { value: 'ssh', label: 'SSH' },
+    { value: 'puppetdb', label: 'PuppetDB' },
+    { value: 'user', label: 'User' },
+    { value: 'system', label: 'System' },
+  ];
+  let journalSelectedEventTypes = $state<string[]>([]);
+  let journalSelectedSources = $state<string[]>([]);
+  let journalStartDateInput = $state('');
+  let journalEndDateInput = $state('');
+  let appliedJournalEventTypes = $state<string[] | undefined>(undefined);
+  let appliedJournalSources = $state<string[] | undefined>(undefined);
+  let appliedJournalStartDate = $state<string | undefined>(undefined);
+  let appliedJournalEndDate = $state<string | undefined>(undefined);
+
+  function applyJournalFilters(): void {
+    appliedJournalEventTypes = journalSelectedEventTypes.length > 0 ? [...journalSelectedEventTypes] : undefined;
+    appliedJournalSources = journalSelectedSources.length > 0 ? [...journalSelectedSources] : undefined;
+    appliedJournalStartDate = journalStartDateInput ? new Date(journalStartDateInput).toISOString() : undefined;
+    appliedJournalEndDate = journalEndDateInput ? new Date(journalEndDateInput).toISOString() : undefined;
+  }
+
+  function clearJournalFilters(): void {
+    journalSelectedEventTypes = [];
+    journalSelectedSources = [];
+    journalStartDateInput = '';
+    journalEndDateInput = '';
+    applyJournalFilters();
+  }
 
   // Facts state — multi-source
   let allSourceFacts = $state<Record<string, { facts: Record<string, unknown>; timestamp: string }>>({});
@@ -2264,7 +2315,61 @@
               Unified timeline of provisioning events, lifecycle actions, execution results, and manual notes for this node.
             </p>
 
-            <JournalTimeline nodeId={nodeId} active={activeTab === 'journal'} />
+            <!-- Journal Filters -->
+            <div class="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/40">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label for="node-journal-event-type" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Event Type</label>
+                  <MultiSelectDropdown
+                    id="node-journal-event-type"
+                    label="Event Types"
+                    options={journalEventTypeOptions}
+                    selected={journalSelectedEventTypes}
+                    onchange={(v) => journalSelectedEventTypes = v}
+                  />
+                </div>
+                <div>
+                  <label for="node-journal-source" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Journal Source</label>
+                  <MultiSelectDropdown
+                    id="node-journal-source"
+                    label="Sources"
+                    options={journalSourceOptions}
+                    selected={journalSelectedSources}
+                    onchange={(v) => journalSelectedSources = v}
+                  />
+                </div>
+                <div>
+                  <label for="node-journal-start-date" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
+                  <input id="node-journal-start-date" type="datetime-local" bind:value={journalStartDateInput}
+                    class="block w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white" />
+                </div>
+                <div>
+                  <label for="node-journal-end-date" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">End Date</label>
+                  <input id="node-journal-end-date" type="datetime-local" bind:value={journalEndDateInput}
+                    class="block w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white" />
+                </div>
+              </div>
+              <div class="mt-3 flex items-center gap-3">
+                <button type="button" onclick={applyJournalFilters}
+                  class="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800">
+                  Apply Filters
+                </button>
+                <button type="button" onclick={clearJournalFilters}
+                  class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600">
+                  Clear
+                </button>
+              </div>
+            </div>
+
+            <JournalTimeline
+              mode="node"
+              nodeId={nodeId}
+              active={activeTab === 'journal'}
+              startDate={appliedJournalStartDate}
+              endDate={appliedJournalEndDate}
+              eventTypes={appliedJournalEventTypes}
+              sources={appliedJournalSources}
+            />
           </div>
         </div>
       {/if}

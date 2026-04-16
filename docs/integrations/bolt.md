@@ -1,71 +1,44 @@
-# Bolt Integration Setup Guide
+# Bolt Integration
 
-## Overview
-
-Pabawi is built on top of Puppet Bolt. This guide covers the core configuration required to connect Pabawi to your Bolt project, configure security whitelists, and enable package management tasks.
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Project Configuration](#project-configuration)
-- [Security & Whitelisting](#security--whitelisting)
-- [Package Management](#package-management)
-- [Performance Tuning](#performance-tuning)
-- [Troubleshooting](#troubleshooting)
+Pabawi uses Bolt as its primary execution tool. Bolt handles command execution, task execution, Puppet runs, and package installation.
 
 ## Prerequisites
 
-- A valid [Puppet Bolt](https://puppet.com/docs/bolt/latest/bolt.html) project directory.
-- Bolt installed on the server running Pabawi (unless running via Docker).
+- Bolt CLI installed on the host running Pabawi (not needed inside Docker — Bolt is bundled in the container image)
+- A valid Bolt project directory with `bolt-project.yaml` and `inventory.yaml`
 
-## Project Configuration
-
-Pabawi requires a properly structured Bolt project directory to function. You can also use the **Bolt Setup Guide** in the Pabawi web UI to generate the `.env` snippet for Bolt configuration — it walks you through the settings and lets you copy the result to your clipboard.
-
-### Setting the Project Path
-
-Configure the path to your Bolt project using the `BOLT_PROJECT_PATH` environment variable.
+## Configuration
 
 ```bash
-# Absolute path to your bolt project
-BOLT_PROJECT_PATH=/opt/my-bolt-project
+BOLT_PROJECT_PATH=/opt/my-bolt-project   # required
+BOLT_EXECUTION_TIMEOUT=300000            # default: 5 min
 ```
 
-### Required File Structure
+Run `scripts/setup.sh` or use the **Bolt Setup Guide** in the web UI to generate the `.env` snippet.
 
-Your Bolt project directory must contain the following structure:
+## Project Structure
 
 ```
 bolt-project/
-├── bolt-project.yaml    # Bolt project configuration
-├── inventory.yaml       # Node inventory
-└── modules/            # Bolt modules directory
-    ├── module1/
-    └── module2/
+├── bolt-project.yaml
+├── inventory.yaml
+└── modules/
+    ├── psick/
+    └── tp/
 ```
 
-### `bolt-project.yaml` Best Practices
-
-For optimal integration with Pabawi, we recommend the following settings in your `bolt-project.yaml`:
+**`bolt-project.yaml` — required settings:**
 
 ```yaml
 name: my-project
 modulepath:
   - modules
-
-# Critical: Disable color to ensure Pabawi can parse JSON output correctly
-color: false
-
-# Recommended: Apply settings
+color: false        # critical: ANSI color codes break JSON parsing
 apply-settings:
-  evaltrace: true
-  log_level: info
   show_diff: true
 ```
 
-### `inventory.yaml`
-
-Pabawi parses your `inventory.yaml` to populate the node list.
+**`inventory.yaml` — example:**
 
 ```yaml
 groups:
@@ -80,196 +53,56 @@ groups:
         host-key-check: false
 ```
 
-## Security & Whitelisting
+## Command Whitelist
 
-The command whitelist is a critical security feature that controls which ad-hoc commands can be executed on target nodes via the Pabawi UI.
+All ad-hoc commands are validated against the whitelist before execution.
 
-### Configuration Modes
-
-#### 1. Strict Mode (Recommended)
-
-Only allow specific, exact commands.
+| Mode | Config | Behaviour |
+|---|---|---|
+| **Strict** (production) | `COMMAND_WHITELIST_MATCH_MODE=exact` | Command must match exactly |
+| **Prefix** | `COMMAND_WHITELIST_MATCH_MODE=prefix` | Command must start with a listed prefix |
+| **Open** (dev only) | `COMMAND_WHITELIST_ALLOW_ALL=true` | No validation |
 
 ```bash
+# Production example — exact match
 COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST_MATCH_MODE=exact
-COMMAND_WHITELIST='["uptime", "df -h", "free -m"]'
-```
+COMMAND_WHITELIST='["uptime","df -h","free -m","ps aux"]'
 
-#### 2. Flexible Mode
-
-Allow commands that start with a specific prefix (allows arguments).
-
-```bash
+# Dev example — prefix match for service inspection
 COMMAND_WHITELIST_ALLOW_ALL=false
 COMMAND_WHITELIST_MATCH_MODE=prefix
-COMMAND_WHITELIST='["systemctl status", "cat /var/log/"]'
-# Allows: "systemctl status nginx", "cat /var/log/syslog"
+COMMAND_WHITELIST='["systemctl status","journalctl -u","cat /var/log/"]'
 ```
 
-#### 3. Developer Mode (Unsafe)
+Never whitelist destructive commands (`rm`, `dd`, `mkfs`). Never use `COMMAND_WHITELIST_ALLOW_ALL=true` in production.
 
-Allow all commands. **Do not use in production.**
+## Package Tasks
 
-```bash
-COMMAND_WHITELIST_ALLOW_ALL=true
-```
-
-### Whitelist Examples
-
-#### System Monitoring
-
-```bash
-COMMAND_WHITELIST='[
-  "uptime",
-  "df -h",
-  "free -m",
-  "top -bn1",
-  "ps aux",
-  "netstat -tulpn",
-  "ss -tulpn"
-]'
-COMMAND_WHITELIST_MATCH_MODE=exact
-```
-
-#### Log Viewing
-
-```bash
-COMMAND_WHITELIST='[
-  "cat /var/log",
-  "tail /var/log",
-  "grep",
-  "journalctl"
-]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
-```
-
-#### Service Management
-
-```bash
-COMMAND_WHITELIST='[
-  "systemctl status",
-  "systemctl restart",
-  "systemctl start",
-  "systemctl stop",
-  "service"
-]'
-COMMAND_WHITELIST_MATCH_MODE=prefix
-```
-
-#### Web Server Operations
-
-```bash
-COMMAND_WHITELIST='[
-  "nginx -t",
-  "nginx -s reload",
-  "apache2ctl configtest",
-  "apache2ctl graceful",
-  "curl -I",
-  "wget --spider"
-]'
-COMMAND_WHITELIST_MATCH_MODE=exact
-```
-
-### Best Practices
-
-1. **Start restrictive**: Begin with a minimal whitelist and add commands as needed
-2. **Use prefix mode carefully**: Only use prefix matching when necessary, as it's less secure
-3. **Document your whitelist**: Keep a record of why each command is allowed
-4. **Regular audits**: Review and update the whitelist periodically
-5. **Environment-specific**: Use different whitelists for dev, staging, and production
-6. **Avoid dangerous commands**: Never whitelist destructive commands like `rm`, `dd`, `mkfs`, etc.
-
-## Package Management
-
-Pabawi provides a UI for installing packages on nodes. You must configure which underlying Bolt tasks perform these operations.
-
-### Configuring `BOLT_PACKAGE_TASKS`
-
-This is a JSON array defining available package tasks.
-
-#### Example: Default + Tiny Puppet (tp)
+Configure which Bolt tasks back the "Install Package" UI:
 
 ```bash
 BOLT_PACKAGE_TASKS='[
   {
     "name": "package",
-    "label": "Standard Package (built-in)",
-    "parameterMapping": {
-      "packageName": "name",
-      "ensure": "action",
-      "version": "version"
-    }
+    "label": "Standard Package",
+    "parameterMapping": { "packageName": "name", "ensure": "action", "version": "version" }
   },
   {
     "name": "tp::install",
-    "label": "Tiny Puppet (TP)",
-    "parameterMapping": {
-      "packageName": "app",
-      "ensure": "ensure",
-      "settings": "settings"
-    }
+    "label": "Tiny Puppet",
+    "parameterMapping": { "packageName": "app", "ensure": "ensure", "settings": "settings" }
   }
 ]'
 ```
 
-### Parameter Mapping Keys
-
-- `name`: The actual Bolt task name (e.g., `package`, `tp::install`).
-- `label`: Human-readable name shown in the dropdown.
-- `parameterMapping`: Maps the UI fields to the task's parameters:
-  - `packageName`: Maps to the package name argument.
-  - `ensure`: Maps to the action/state argument (install/absent).
-  - `version`: Maps to the version argument.
-
-## Performance Tuning
-
-Adjust these settings based on your server load and project size.
-
-### Execution Timeouts
-
-Prevent hung processes from blocking resources.
-
-```bash
-# Timeout in milliseconds (default: 5 minutes)
-BOLT_EXECUTION_TIMEOUT=300000
-```
-
-### Concurrency
-
-Control how many Bolt processes can run simultaneously.
-
-```bash
-# Maximum concurrent Bolt processes (default: 5)
-CONCURRENT_EXECUTION_LIMIT=10
-
-# Maximum queued requests before rejection (default: 50)
-MAX_QUEUE_SIZE=100
-```
-
-### Integration Priority
-
-If you are using PuppetDB alongside Bolt, you can define which source takes precedence for node details.
-
-```bash
-# Higher number = higher priority (default: 5)
-BOLT_PRIORITY=5
-```
+`parameterMapping` maps the UI form fields to the actual task parameter names.
 
 ## Troubleshooting
 
-### Common Issues
-
-**"Bolt configuration files not found"**
-
-- Ensure `BOLT_PROJECT_PATH` is absolute.
-- Verify `bolt-project.yaml` and `inventory.yaml` exist in that directory.
-
-**"Cannot parse Bolt output"**
-
-- Check `bolt-project.yaml` and ensure `color: false` is set. ANSI color codes break the JSON parser.
-
-**"Command not in whitelist"**
-
-- If using `prefix` mode, ensure the command starts *exactly* with the whitelist string (including spaces).
-- Check logs to see the exact command Pabawi attempted to run.
+| Problem | Fix |
+|---|---|
+| "Bolt configuration files not found" | Check `BOLT_PROJECT_PATH` is absolute and contains `bolt-project.yaml` + `inventory.yaml` |
+| "Cannot parse Bolt output" | Set `color: false` in `bolt-project.yaml` — ANSI codes break JSON parsing |
+| "Command not in whitelist" | Check the exact command string matches the whitelist entry (including spaces in prefix mode) |
+| Task not in list | Run `bolt module install <module>` and verify it appears in `modules/` |

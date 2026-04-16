@@ -2,14 +2,33 @@
   import { onDestroy } from 'svelte';
   import JournalNoteForm from './JournalNoteForm.svelte';
   import { authManager } from '../lib/auth.svelte';
+  import { router } from '../lib/router.svelte';
   import type { JournalEntry } from '../lib/api';
 
   interface Props {
-    nodeId: string;
+    mode: "node" | "global";
+    nodeId?: string;
     active?: boolean;
+    // Filter props (shared by both modes)
+    nodeIds?: string[];
+    groupId?: string;
+    startDate?: string;
+    endDate?: string;
+    eventTypes?: string[];
+    sources?: string[];
   }
 
-  let { nodeId, active = false }: Props = $props();
+  let {
+    mode,
+    nodeId,
+    active = false,
+    nodeIds,
+    groupId,
+    startDate,
+    endDate,
+    eventTypes,
+    sources,
+  }: Props = $props();
 
   // Source display config
   const sourceConfig: Record<string, { icon: string; color: string; label: string }> = {
@@ -39,9 +58,7 @@
     package_install: 'Package',
     config_change: 'Config Change',
     note: 'Note',
-    error: 'Error',
-    warning: 'Warning',
-    info: 'Info',
+    unknown: 'Unknown',
   };
 
   // SSE state
@@ -59,27 +76,41 @@
   // Expanded entry IDs
   let expandedIds = $state<Set<string>>(new Set());
 
-  function getSourceInfo(source: string) {
-    return sourceConfig[source] ?? { icon: '❓', color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', label: source };
+  function getSourceInfo(src: string): { icon: string; color: string; label: string } {
+    return sourceConfig[src] ?? { icon: '❓', color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', label: src };
   }
 
-  function getEventTypeLabel(eventType: string): string {
-    return eventTypeLabels[eventType] ?? eventType;
+  function getEventTypeLabel(et: string): string {
+    return eventTypeLabels[et] ?? et;
+  }
+
+  function getStatusDotColor(et: string): string {
+    switch (et) {
+      case 'start':
+      case 'resume':
+      case 'provision':
+        return 'bg-green-500';
+      case 'destroy':
+        return 'bg-red-500';
+      case 'command_execution':
+      case 'task_execution':
+      case 'puppet_run':
+        return 'bg-blue-500';
+      case 'note':
+      case 'unknown':
+      default:
+        return 'bg-gray-400';
+    }
   }
 
   function formatTimestamp(ts: string): string {
-    return new Date(ts).toLocaleString();
-  }
-
-  function relativeTime(ts: string): string {
-    const diff = Date.now() - new Date(ts).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+    const d = new Date(ts);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const mins = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${mins}`;
   }
 
   function toggleExpand(id: string): void {
@@ -101,10 +132,29 @@
     entries = merged;
   }
 
+  function buildStreamUrl(): string {
+    // Build common filter query params
+    const params = new URLSearchParams();
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+    if (eventTypes && eventTypes.length > 0) params.set('eventType', eventTypes.join(','));
+    if (sources && sources.length > 0) params.set('source', sources.join(','));
+
+    if (mode === "node") {
+      const qs = params.toString();
+      return `/api/journal/${encodeURIComponent(nodeId ?? '')}/stream${qs ? `?${qs}` : ''}`;
+    }
+    // Global mode — add target selection params
+    if (nodeIds && nodeIds.length > 0) params.set('nodeIds', nodeIds.join(','));
+    if (groupId) params.set('groupId', groupId);
+    const qs = params.toString();
+    return `/api/journal/global/stream${qs ? `?${qs}` : ''}`;
+  }
+
   function startStream(): void {
     if (abortController) return;
 
-    const url = `/api/journal/${encodeURIComponent(nodeId)}/stream`;
+    const url = buildStreamUrl();
     const authHeader = authManager.getAuthHeader();
     const headers: Record<string, string> = { 'Accept': 'text/event-stream' };
     if (authHeader) headers['Authorization'] = authHeader;
@@ -210,6 +260,7 @@
     activeSources = [];
     streamComplete = false;
     streamError = null;
+    expandedIds = new Set();
     startStream();
   }
 
@@ -217,10 +268,24 @@
     reload();
   }
 
-  // Start stream only when the tab becomes active
+  // Start stream when active becomes true.
+  // For global mode, also restart when filter props change.
+  let lastFilterKey = $state('');
+
   $effect(() => {
-    if (active && !abortController && !streamComplete) {
-      startStream();
+    // Build a serialized key from all filter-relevant props so we detect changes
+    const filterKey = JSON.stringify([nodeIds, groupId, startDate, endDate, eventTypes, sources]);
+
+    if (active) {
+      if (filterKey !== lastFilterKey && lastFilterKey !== '') {
+        // Filters changed — reload
+        lastFilterKey = filterKey;
+        reload();
+      } else if (!abortController && !streamComplete) {
+        // Initial start
+        lastFilterKey = filterKey;
+        startStream();
+      }
     }
   });
 
@@ -232,20 +297,22 @@
   const pendingSources = $derived(activeSources.filter((s) => sourceStatuses[s] === 'pending'));
 </script>
 
-<div class="space-y-6">
-  <!-- Add Note Form -->
-  <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-    <h3 class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">Add a Note</h3>
-    <JournalNoteForm {nodeId} onNoteAdded={handleNoteAdded} />
-  </div>
+<div class="space-y-4">
+  <!-- Add Note Form (node mode only) -->
+  {#if mode === "node" && nodeId}
+    <div class="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <h3 class="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">Add a Note</h3>
+      <JournalNoteForm {nodeId} onNoteAdded={handleNoteAdded} />
+    </div>
+  {/if}
 
   <!-- Source loading status bar -->
   {#if activeSources.length > 0 && !streamComplete}
     <div class="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-xs dark:border-blue-800 dark:bg-blue-900/20">
       <span class="font-medium text-blue-700 dark:text-blue-400">Loading journal…</span>
-      {#each activeSources as src (src)}
-        {@const status = sourceStatuses[src] ?? 'pending'}
-        {@const srcInfo = getSourceInfo(src)}
+      {#each activeSources as srcKey (srcKey)}
+        {@const status = sourceStatuses[srcKey] ?? 'pending'}
+        {@const srcInfo = getSourceInfo(srcKey)}
         <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 {status === 'loaded' ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400' : 'bg-white text-gray-500 dark:bg-gray-800 dark:text-gray-400'}">
           {#if status === 'pending'}
             <svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -274,88 +341,82 @@
   <!-- Timeline entries -->
   {#if entries.length === 0 && streamComplete}
     <div class="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm dark:border-gray-700 dark:bg-gray-800">
-      <p class="text-sm text-gray-500 dark:text-gray-400">No journal entries found for this node.</p>
+      <p class="text-sm text-gray-500 dark:text-gray-400">
+        {mode === "global" ? "No journal entries found matching the current filters." : "No journal entries found for this node."}
+      </p>
     </div>
   {:else if entries.length > 0}
-    <div class="space-y-2">
+    <div class="space-y-0.5">
       {#each entries as entry (entry.id)}
         {@const src = getSourceInfo(entry.source)}
         {@const expanded = expandedIds.has(entry.id)}
-        {@const hasDetails = entry.details && Object.keys(entry.details).length > 0}
+        {@const hasDetails = (entry.details && Object.keys(entry.details).length > 0) || (entry.action && entry.action !== 'unknown') || entry.nodeUri}
 
-        <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <!-- Clickable header row -->
+        <div>
+          <!-- Compact single-line entry -->
           <button
             type="button"
-            class="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-750 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
-            onclick={() => hasDetails && toggleExpand(entry.id)}
+            class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+            onclick={() => toggleExpand(entry.id)}
             aria-expanded={expanded}
           >
-            <div class="flex items-start gap-3">
-              <!-- Source icon -->
-              <span class="mt-0.5 text-base leading-none" title={src.label}>{src.icon}</span>
-
-              <div class="min-w-0 flex-1">
-                <!-- Top row: badges + timestamp -->
-                <div class="flex flex-wrap items-center gap-1.5">
-                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
-                    {getEventTypeLabel(entry.eventType)}
-                  </span>
-                  <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {src.color}">
-                    {src.label}
-                  </span>
-                  {#if entry.isLive}
-                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-400">
-                      Live
-                    </span>
-                  {/if}
-                  <span class="ml-auto shrink-0 text-xs text-gray-400 dark:text-gray-500" title={formatTimestamp(entry.timestamp)}>
-                    {formatTimestamp(entry.timestamp)}
-                  </span>
-                </div>
-
-                <!-- Summary (title) -->
-                <p class="mt-1 text-sm font-medium text-gray-900 dark:text-white">{entry.summary}</p>
-
-                <!-- Action subtitle -->
-                {#if entry.action && entry.action !== 'unknown'}
-                  <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                    {entry.action}
-                  </p>
-                {/if}
-              </div>
-
-              <!-- Expand chevron -->
-              {#if hasDetails}
-                <svg
-                  class="mt-1 h-4 w-4 shrink-0 text-gray-400 transition-transform {expanded ? 'rotate-180' : ''}"
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-              {/if}
-            </div>
+            <!-- Status dot -->
+            <span class="h-2 w-2 shrink-0 rounded-full {getStatusDotColor(entry.eventType)}"></span>
+            <!-- Timestamp -->
+            <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500 w-32">{formatTimestamp(entry.timestamp)}</span>
+            <!-- Source icon -->
+            <span class="shrink-0 text-sm" title={src.label}>{src.icon}</span>
+            <!-- Event type -->
+            <span class="shrink-0 text-xs font-medium text-gray-600 dark:text-gray-400 w-20">{getEventTypeLabel(entry.eventType)}</span>
+            <!-- Node ID (global mode only) -->
+            {#if mode === "global"}
+              <a
+                href="/nodes/{encodeURIComponent(entry.nodeId)}"
+                onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(entry.nodeId)}`); }}
+                class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-primary-600 hover:text-primary-800 hover:bg-primary-50 dark:bg-gray-700 dark:text-primary-400 dark:hover:text-primary-300 dark:hover:bg-primary-900/20"
+                title="Go to node {entry.nodeId}"
+              >{entry.nodeId}</a>
+            {/if}
+            <!-- Summary -->
+            <span class="min-w-0 flex-1 truncate text-gray-800 dark:text-gray-200">{entry.summary}</span>
+            <!-- Expand indicator -->
+            {#if hasDetails}
+              <svg class="h-3 w-3 shrink-0 text-gray-400 transition-transform {expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            {/if}
           </button>
 
           <!-- Expanded details -->
           {#if expanded && hasDetails}
-            <div class="border-t border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
-              <dl class="space-y-1.5 text-xs">
-                {#each Object.entries(entry.details) as [key, value] (key)}
-                  {#if value !== null && value !== undefined && value !== ''}
-                    <div class="flex gap-2">
-                      <dt class="w-36 shrink-0 font-medium text-gray-500 dark:text-gray-400">{key}</dt>
-                      <dd class="min-w-0 break-all font-mono text-gray-800 dark:text-gray-200">
-                        {#if typeof value === 'object'}
-                          {JSON.stringify(value, null, 2)}
-                        {:else}
-                          {String(value)}
-                        {/if}
-                      </dd>
-                    </div>
-                  {/if}
-                {/each}
-              </dl>
+            <div class="ml-6 mb-2 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
+              <!-- action -->
+              {#if entry.action && entry.action !== 'unknown'}
+                <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">Action: {entry.action}</p>
+              {/if}
+              <!-- nodeUri -->
+              {#if entry.nodeUri}
+                <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">URI: {entry.nodeUri}</p>
+              {/if}
+              <!-- details key-value pairs -->
+              {#if entry.details && Object.keys(entry.details).length > 0}
+                <dl class="space-y-1 text-xs">
+                  {#each Object.entries(entry.details) as [key, value] (key)}
+                    {#if value !== null && value !== undefined && value !== ''}
+                      <div class="flex gap-2">
+                        <dt class="w-36 shrink-0 font-medium text-gray-500 dark:text-gray-400">{key}</dt>
+                        <dd class="min-w-0 break-all font-mono text-gray-800 dark:text-gray-200">
+                          {#if typeof value === 'object'}
+                            {JSON.stringify(value, null, 2)}
+                          {:else}
+                            {String(value)}
+                          {/if}
+                        </dd>
+                      </div>
+                    {/if}
+                  {/each}
+                </dl>
+              {/if}
             </div>
           {/if}
         </div>

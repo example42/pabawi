@@ -633,8 +633,6 @@ describe('Authentication Flow Integration Tests', () => {
         .send(userData)
         .expect(201);
 
-      await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
-
       const userId = registerResponse.body.user.id;
 
       // Grant user the users:read permission

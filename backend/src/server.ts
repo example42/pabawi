@@ -16,7 +16,7 @@ import { createExecutionsRouter } from "./routes/executions";
 import { createPuppetRouter } from "./routes/puppet";
 import { createPuppetHistoryRouter } from "./routes/puppetHistory";
 import { createPackagesRouter } from "./routes/packages";
-import { createStreamingRouter } from "./routes/streaming";
+import { createStreamingRouter, streamAuthMiddleware } from "./routes/streaming";
 import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
@@ -1078,6 +1078,7 @@ async function startServer(): Promise<Express> {
     // Journal routes
     app.use("/api/journal", authMiddleware, rateLimitMiddleware, createJournalRouter(databaseService, {
       puppetdb: puppetDBService,
+      integrationManager,
     }));
 
     // Monitoring routes (performance metrics)
@@ -1204,12 +1205,14 @@ async function startServer(): Promise<Express> {
     );
     app.use(
       "/api/executions",
+      streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
       authMiddleware,
       rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository),
     );
     app.use(
       "/api/streaming",
+      streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
       authMiddleware,
       rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository),
@@ -1251,6 +1254,7 @@ async function startServer(): Promise<Express> {
       "/api/debug",
       authMiddleware,
       rateLimitMiddleware,
+      rbacMiddleware("debug", "admin"),
       createDebugRouter(),
     );
 

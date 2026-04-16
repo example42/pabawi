@@ -140,15 +140,15 @@ describe('Password Hashing Properties', () => {
         async (password) => {
           const hash = await authService.hashPassword(password);
 
-          // Bcrypt hash format: $2a$10$[22 character salt][31 character hash]
+          // Bcrypt hash format: $2b$12$[22 character salt][31 character hash]
           // Total length should be 60 characters
           expect(hash.length).toBe(60);
 
           // Should start with $2a$, $2b$, or $2y$ (bcrypt version identifiers)
           expect(hash).toMatch(/^\$2[aby]\$/);
 
-          // Should contain the cost factor (default 10)
-          expect(hash).toMatch(/^\$2[aby]\$10\$/);
+          // Should contain the cost factor (OWASP 2023 recommendation: 12)
+          expect(hash).toMatch(/^\$2[aby]\$12\$/);
         }
       ),
       {

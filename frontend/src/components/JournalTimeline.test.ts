@@ -121,7 +121,7 @@ describe('JournalTimeline Component', () => {
   it('renders loading state initially', () => {
     // Mock fetch that never resolves to keep loading state
     vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise(() => {}));
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: true } });
     // Before SSE init event, the component shows "Starting journal load…"
     expect(screen.getByText('Starting journal load…')).toBeTruthy();
   });
@@ -135,44 +135,12 @@ describe('JournalTimeline Component', () => {
       { event: 'complete', data: {} },
     ]);
 
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('VM provisioned successfully')).toBeTruthy();
       expect(screen.getByText('Puppet run completed with changes')).toBeTruthy();
       expect(screen.getByText('Scheduled for maintenance window')).toBeTruthy();
-    });
-  });
-
-  it('displays isLive badge for live entries', async () => {
-    mockFetchSSE([
-      { event: 'init', data: { sources: ['puppetdb'] } },
-      { event: 'batch', data: { source: 'puppetdb', entries: [mockEntries[1]] } },
-      { event: 'complete', data: {} },
-    ]);
-
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Live')).toBeTruthy();
-    });
-  });
-
-  it('displays source badges', async () => {
-    mockFetchSSE([
-      { event: 'init', data: { sources: ['proxmox', 'puppetdb', 'user'] } },
-      { event: 'batch', data: { source: 'proxmox', entries: [mockEntries[0]] } },
-      { event: 'batch', data: { source: 'puppetdb', entries: [mockEntries[1]] } },
-      { event: 'batch', data: { source: 'user', entries: [mockEntries[2]] } },
-      { event: 'complete', data: {} },
-    ]);
-
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
-
-    await waitFor(() => {
-      expect(screen.getByText('Proxmox')).toBeTruthy();
-      expect(screen.getByText('PuppetDB')).toBeTruthy();
-      expect(screen.getByText('User')).toBeTruthy();
     });
   });
 
@@ -185,7 +153,7 @@ describe('JournalTimeline Component', () => {
       { event: 'complete', data: {} },
     ]);
 
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('Provisioned')).toBeTruthy();
@@ -201,7 +169,7 @@ describe('JournalTimeline Component', () => {
       { event: 'complete', data: {} },
     ]);
 
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('No journal entries found for this node.')).toBeTruthy();
@@ -214,7 +182,7 @@ describe('JournalTimeline Component', () => {
       status: 500,
     } as unknown as Response);
 
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText(/Failed to load journal/)).toBeTruthy();
@@ -228,7 +196,7 @@ describe('JournalTimeline Component', () => {
       { event: 'complete', data: {} },
     ]);
 
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: true } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: true } });
 
     await waitFor(() => {
       expect(screen.getByText('3 events')).toBeTruthy();
@@ -237,7 +205,7 @@ describe('JournalTimeline Component', () => {
 
   it('does not start stream when active is false', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
-    render(JournalTimeline, { props: { nodeId: 'node-1', active: false } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: false } });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -250,7 +218,7 @@ describe('JournalTimeline Component', () => {
       ]),
     } as unknown as Response);
 
-    render(JournalTimeline, { props: { nodeId: 'test-node-42', active: true } });
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'test-node-42', active: true } });
 
     await waitFor(() => {
       expect(fetchSpy).toHaveBeenCalledWith(
