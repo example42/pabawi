@@ -8,6 +8,8 @@ import {
   collectPuppetDBEntries,
   collectProxmoxTaskEntries,
   collectAWSStateEntry,
+  collectGlobalExecutionEntries,
+  collectGlobalPuppetDBEntries,
   type PuppetDBLike,
   type AWSServiceLike,
 } from "../services/journal/JournalCollectors";
@@ -50,6 +52,28 @@ const SearchQuerySchema = z.object({
 });
 
 /**
+ * Helper: transform a comma-separated string of enum values into an array.
+ * Accepts a single value or comma-separated list, validates each against the enum.
+ */
+function csvToEnumArray<T extends z.ZodEnum<[string, ...string[]]>>(
+  schema: T,
+): z.ZodEffects<z.ZodString, z.infer<T>[]> {
+  return z.string().transform((val, ctx) => {
+    const items = val.split(",").map((s) => s.trim()).filter(Boolean);
+    const results: z.infer<T>[] = [];
+    for (const item of items) {
+      const parsed = schema.safeParse(item);
+      if (!parsed.success) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid value: ${item}` });
+        return z.NEVER;
+      }
+      results.push(parsed.data as z.infer<T>);
+    }
+    return results;
+  });
+}
+
+/**
  * Zod schema for global stream query parameters
  */
 const GlobalStreamQuerySchema = z.object({
@@ -57,8 +81,19 @@ const GlobalStreamQuerySchema = z.object({
   groupId: z.string().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
-  eventType: JournalEventTypeSchema.optional(),
-  source: JournalSourceSchema.optional(),
+  eventType: csvToEnumArray(JournalEventTypeSchema).optional(),
+  source: csvToEnumArray(JournalSourceSchema).optional(),
+});
+
+/**
+ * Zod schema for node stream query parameters
+ * Supports the same source/eventType/date filters as the global stream.
+ */
+const NodeStreamQuerySchema = z.object({
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  eventType: csvToEnumArray(JournalEventTypeSchema).optional(),
+  source: csvToEnumArray(JournalSourceSchema).optional(),
 });
 
 export interface JournalRouterDeps {
@@ -169,8 +204,6 @@ export function createJournalRouter(
         res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
       }
 
-      send("init", { sources: ["global"] });
-
       const heartbeat = setInterval(() => {
         if (!res.writableEnded) res.write(": heartbeat\n\n");
       }, 25000);
@@ -200,7 +233,16 @@ export function createJournalRouter(
             nodeIds = group.nodes;
           }
 
-          const filters = {
+          // Determine active sources
+          const activeSources: string[] = ["journal", "executions"];
+          if (deps.puppetdb?.isInitialized()) activeSources.push("puppetdb");
+
+          send("init", { sources: activeSources });
+
+          const tasks: Promise<void>[] = [];
+
+          // Source 1: stored journal entries (DB)
+          const journalFilters = {
             nodeIds,
             eventType: query.eventType,
             source: query.source,
@@ -209,14 +251,52 @@ export function createJournalRouter(
             limit: 200,
           };
 
-          const entries = await journalService.getGlobalTimeline(filters);
-          send("batch", { source: "global", entries });
+          tasks.push(
+            journalService
+              .getGlobalTimeline(journalFilters)
+              .then((entries) => { send("batch", { source: "journal", entries }); })
+              .catch(() => { send("source_error", { source: "journal", message: "Failed to load journal entries" }); }),
+          );
+
+          // Source 2: execution history (commands, tasks, puppet runs, ansible)
+          // Skip if source filter excludes execution-related sources
+          const execSources = new Set(["bolt", "ansible", "ssh"]);
+          const execEventTypes = new Set(["command_execution", "task_execution", "puppet_run", "package_install"]);
+          const skipExecBySource = query.source !== undefined && !query.source.some((s) => execSources.has(s));
+          const skipExecByType = query.eventType !== undefined && !query.eventType.some((t) => execEventTypes.has(t));
+
+          if (!skipExecBySource && !skipExecByType) {
+            tasks.push(
+              collectGlobalExecutionEntries(db, 100, {
+                nodeIds,
+                startDate: query.startDate,
+                endDate: query.endDate,
+              })
+                .then((entries) => { send("batch", { source: "executions", entries }); })
+                .catch(() => { send("source_error", { source: "executions", message: "Failed to load execution history" }); }),
+            );
+          }
+
+          // Source 3: PuppetDB reports (if configured)
+          // Skip if source filter excludes puppetdb or event type excludes puppet_run
+          const skipPuppetBySource = query.source !== undefined && !query.source.includes("puppetdb");
+          const skipPuppetByType = query.eventType !== undefined && !query.eventType.includes("puppet_run");
+
+          if (deps.puppetdb?.isInitialized() && !skipPuppetBySource && !skipPuppetByType) {
+            tasks.push(
+              collectGlobalPuppetDBEntries(deps.puppetdb, nodeIds, 50)
+                .then((entries) => { send("batch", { source: "puppetdb", entries }); })
+                .catch(() => { send("source_error", { source: "puppetdb", message: "Failed to load PuppetDB reports" }); }),
+            );
+          }
+
+          await Promise.all(tasks);
         } catch (error) {
           logger.error("Global journal stream failed", {
             component: "JournalRouter",
             operation: "globalStream",
           }, error instanceof Error ? error : undefined);
-          send("source_error", { source: "global", message: "Failed to load global journal entries" });
+          send("source_error", { source: "journal", message: "Failed to load global journal entries" });
         } finally {
           clearInterval(heartbeat);
           if (!res.writableEnded) {
@@ -232,6 +312,7 @@ export function createJournalRouter(
    * GET /api/journal/:nodeId/stream
    * Stream journal events via SSE as each source responds.
    * Sources: stored journal entries, pabawi execution history, PuppetDB reports.
+   * Supports filtering by eventType, source, and date range.
    *
    * Uses fetch-based SSE on the client (not EventSource) so the Authorization
    * header is sent normally.
@@ -242,6 +323,20 @@ export function createJournalRouter(
     asyncHandler(rbacMiddleware("journal", "read")),
     (req: Request, res: Response): void => {
       const { nodeId } = req.params;
+
+      const parsed = NodeStreamQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: {
+            code: ERROR_CODES.VALIDATION_ERROR,
+            message: "Invalid query parameters",
+            details: parsed.error.errors,
+          },
+        });
+        return;
+      }
+
+      const query = parsed.data;
 
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
@@ -293,23 +388,42 @@ export function createJournalRouter(
 
         const tasks: Promise<void>[] = [];
 
-        // Source 1: stored journal entries (DB)
+        // Source 1: stored journal entries (DB) — pass filters through
         tasks.push(
           journalService
-            .getNodeTimeline(nodeId, { limit: 100, offset: 0 })
+            .getNodeTimeline(nodeId, {
+              limit: 100,
+              offset: 0,
+              eventType: query.eventType,
+              source: query.source,
+              startDate: query.startDate,
+              endDate: query.endDate,
+            })
             .then((entries) => { send("batch", { source: "journal", entries }); })
             .catch(() => { send("source_error", { source: "journal", message: "Failed to load journal entries" }); }),
         );
 
         // Source 2: pabawi execution history
-        tasks.push(
-          collectExecutionEntries(db, nodeId, 50)
-            .then((entries) => { send("batch", { source: "executions", entries }); })
-            .catch(() => { send("source_error", { source: "executions", message: "Failed to load execution history" }); }),
-        );
+        // Skip if source filter excludes execution-related sources
+        const execSources = new Set(["bolt", "ansible", "ssh"]);
+        const execEventTypes = new Set(["command_execution", "task_execution", "puppet_run", "package_install"]);
+        const skipExecBySource = query.source !== undefined && !query.source.some((s) => execSources.has(s));
+        const skipExecByType = query.eventType !== undefined && !query.eventType.some((t) => execEventTypes.has(t));
+
+        if (!skipExecBySource && !skipExecByType) {
+          tasks.push(
+            collectExecutionEntries(db, nodeId, 50)
+              .then((entries) => { send("batch", { source: "executions", entries }); })
+              .catch(() => { send("source_error", { source: "executions", message: "Failed to load execution history" }); }),
+          );
+        }
 
         // Source 3: PuppetDB reports (if configured)
-        if (deps.puppetdb?.isInitialized()) {
+        // Skip if source filter excludes puppetdb or event type excludes puppet_run
+        const skipPuppetBySource = query.source !== undefined && !query.source.includes("puppetdb");
+        const skipPuppetByType = query.eventType !== undefined && !query.eventType.includes("puppet_run");
+
+        if (deps.puppetdb?.isInitialized() && !skipPuppetBySource && !skipPuppetByType) {
           tasks.push(
             collectPuppetDBEntries(deps.puppetdb, nodeId, 25)
               .then((entries) => { send("batch", { source: "puppetdb", entries }); })
@@ -318,7 +432,9 @@ export function createJournalRouter(
         }
 
         // Source 4: Proxmox task history (if node belongs to Proxmox)
-        if (activeSources.includes("proxmox_tasks")) {
+        // Skip if source filter excludes proxmox
+        const skipProxmoxBySource = query.source !== undefined && !query.source.includes("proxmox");
+        if (activeSources.includes("proxmox_tasks") && !skipProxmoxBySource) {
           const proxmoxPlugin = deps.integrationManager!.getExecutionTool("proxmox") as ProxmoxIntegration | null;
           const client = proxmoxPlugin?.getClient();
           if (client) {
@@ -338,7 +454,9 @@ export function createJournalRouter(
         }
 
         // Source 5: AWS state changes (if node belongs to AWS)
-        if (activeSources.includes("aws_states")) {
+        // Skip if source filter excludes aws
+        const skipAwsBySource = query.source !== undefined && !query.source.includes("aws");
+        if (activeSources.includes("aws_states") && !skipAwsBySource) {
           const awsPlugin = deps.integrationManager!.getExecutionTool("aws") as AWSPlugin | null;
           if (awsPlugin) {
             const parts = nodeId.split(":");

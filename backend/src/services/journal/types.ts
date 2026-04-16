@@ -32,9 +32,7 @@ export const JournalEventTypeSchema = z.enum([
   "package_install",
   "config_change",
   "note",
-  "error",
-  "warning",
-  "info",
+  "unknown",
 ]);
 
 export type JournalEventType = z.infer<typeof JournalEventTypeSchema>;
@@ -111,8 +109,8 @@ export const TimelineOptionsSchema = z.object({
   offset: z.number().int().min(0).default(0),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
-  eventType: JournalEventTypeSchema.optional(),
-  source: JournalSourceSchema.optional(),
+  eventType: z.union([JournalEventTypeSchema, z.array(JournalEventTypeSchema)]).optional(),
+  source: z.union([JournalSourceSchema, z.array(JournalSourceSchema)]).optional(),
 });
 
 export type TimelineOptions = z.infer<typeof TimelineOptionsSchema>;
@@ -138,8 +136,8 @@ export type SearchOptions = z.infer<typeof SearchOptionsSchema>;
  */
 export const GlobalTimelineFiltersSchema = z.object({
   nodeIds: z.array(z.string().min(1)).optional(),
-  eventType: JournalEventTypeSchema.optional(),
-  source: JournalSourceSchema.optional(),
+  eventType: z.union([JournalEventTypeSchema, z.array(JournalEventTypeSchema)]).optional(),
+  source: z.union([JournalSourceSchema, z.array(JournalSourceSchema)]).optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
   limit: z.number().int().min(1).max(200).default(50),

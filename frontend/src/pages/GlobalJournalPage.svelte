@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import JournalTimeline from '../components/JournalTimeline.svelte';
+  import MultiSelectDropdown from '../components/MultiSelectDropdown.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import { get } from '../lib/api';
 
@@ -45,19 +46,18 @@
   // Other filters
   let startDateInput = $state('');
   let endDateInput = $state('');
-  let eventTypeInput = $state('');
-  let sourceInput = $state('');
+  let selectedEventTypes = $state<string[]>([]);
+  let selectedSources = $state<string[]>([]);
 
   // Applied filters (only update on Apply click)
   let appliedNodeIds = $state<string[] | undefined>(undefined);
   let appliedGroupId = $state<string | undefined>(undefined);
   let appliedStartDate = $state<string | undefined>(undefined);
   let appliedEndDate = $state<string | undefined>(undefined);
-  let appliedEventType = $state<string | undefined>(undefined);
-  let appliedSource = $state<string | undefined>(undefined);
+  let appliedEventTypes = $state<string[] | undefined>(undefined);
+  let appliedSources = $state<string[] | undefined>(undefined);
 
-  const eventTypes = [
-    { value: '', label: 'All Event Types' },
+  const eventTypeOptions = [
     { value: 'provision', label: 'Provisioned' },
     { value: 'destroy', label: 'Destroyed' },
     { value: 'start', label: 'Started' },
@@ -71,13 +71,9 @@
     { value: 'package_install', label: 'Package' },
     { value: 'config_change', label: 'Config Change' },
     { value: 'note', label: 'Note' },
-    { value: 'error', label: 'Error' },
-    { value: 'warning', label: 'Warning' },
-    { value: 'info', label: 'Info' },
   ];
 
-  const journalSources = [
-    { value: '', label: 'All Sources' },
+  const sourceOptions = [
     { value: 'proxmox', label: 'Proxmox' },
     { value: 'aws', label: 'AWS' },
     { value: 'bolt', label: 'Bolt' },
@@ -168,8 +164,8 @@
     appliedGroupId = selectedGroupId || undefined;
     appliedStartDate = startDateInput ? new Date(startDateInput).toISOString() : undefined;
     appliedEndDate = endDateInput ? new Date(endDateInput).toISOString() : undefined;
-    appliedEventType = eventTypeInput || undefined;
-    appliedSource = sourceInput || undefined;
+    appliedEventTypes = selectedEventTypes.length > 0 ? [...selectedEventTypes] : undefined;
+    appliedSources = selectedSources.length > 0 ? [...selectedSources] : undefined;
   }
 
   function clearFilters(): void {
@@ -177,8 +173,8 @@
     selectedGroupId = '';
     startDateInput = '';
     endDateInput = '';
-    eventTypeInput = '';
-    sourceInput = '';
+    selectedEventTypes = [];
+    selectedSources = [];
     searchQuery = '';
     sourceFilter = 'all';
     applyFilters();
@@ -335,21 +331,23 @@
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <label for="filter-event-type" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Event Type</label>
-          <select id="filter-event-type" bind:value={eventTypeInput}
-            class="block w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-            {#each eventTypes as et}
-              <option value={et.value}>{et.label}</option>
-            {/each}
-          </select>
+          <MultiSelectDropdown
+            id="filter-event-type"
+            label="Event Types"
+            options={eventTypeOptions}
+            selected={selectedEventTypes}
+            onchange={(v) => selectedEventTypes = v}
+          />
         </div>
         <div>
           <label for="filter-source" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Journal Source</label>
-          <select id="filter-source" bind:value={sourceInput}
-            class="block w-full rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-            {#each journalSources as src}
-              <option value={src.value}>{src.label}</option>
-            {/each}
-          </select>
+          <MultiSelectDropdown
+            id="filter-source"
+            label="Sources"
+            options={sourceOptions}
+            selected={selectedSources}
+            onchange={(v) => selectedSources = v}
+          />
         </div>
         <div>
           <label for="filter-start-date" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Start Date</label>
@@ -385,7 +383,7 @@
     groupId={appliedGroupId}
     startDate={appliedStartDate}
     endDate={appliedEndDate}
-    eventType={appliedEventType}
-    source={appliedSource}
+    eventTypes={appliedEventTypes}
+    sources={appliedSources}
   />
 </div>

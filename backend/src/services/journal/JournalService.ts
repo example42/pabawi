@@ -115,13 +115,17 @@ export class JournalService {
     const params: unknown[] = [nodeId];
 
     if (opts.eventType) {
-      sql += ` AND eventType = ?`;
-      params.push(opts.eventType);
+      const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
+      const placeholders = types.map(() => "?").join(", ");
+      sql += ` AND eventType IN (${placeholders})`;
+      params.push(...types);
     }
 
     if (opts.source) {
-      sql += ` AND source = ?`;
-      params.push(opts.source);
+      const sources = Array.isArray(opts.source) ? opts.source : [opts.source];
+      const placeholders = sources.map(() => "?").join(", ");
+      sql += ` AND source IN (${placeholders})`;
+      params.push(...sources);
     }
 
     if (opts.startDate) {
@@ -229,13 +233,17 @@ export class JournalService {
     }
 
     if (opts.eventType) {
-      conditions.push(`eventType = ?`);
-      params.push(opts.eventType);
+      const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
+      const placeholders = types.map(() => "?").join(", ");
+      conditions.push(`eventType IN (${placeholders})`);
+      params.push(...types);
     }
 
     if (opts.source) {
-      conditions.push(`source = ?`);
-      params.push(opts.source);
+      const sources = Array.isArray(opts.source) ? opts.source : [opts.source];
+      const placeholders = sources.map(() => "?").join(", ");
+      conditions.push(`source IN (${placeholders})`);
+      params.push(...sources);
     }
 
     if (opts.startDate) {
@@ -286,13 +294,17 @@ export class JournalService {
     }
 
     if (opts.eventType) {
-      conditions.push(`eventType = ?`);
-      params.push(opts.eventType);
+      const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
+      const placeholders = types.map(() => "?").join(", ");
+      conditions.push(`eventType IN (${placeholders})`);
+      params.push(...types);
     }
 
     if (opts.source) {
-      conditions.push(`source = ?`);
-      params.push(opts.source);
+      const sources = Array.isArray(opts.source) ? opts.source : [opts.source];
+      const placeholders = sources.map(() => "?").join(", ");
+      conditions.push(`source IN (${placeholders})`);
+      params.push(...sources);
     }
 
     if (opts.startDate) {
@@ -349,7 +361,7 @@ export class JournalService {
       id: (typeof e.id === "string" ? e.id : null) ?? randomUUID(),
       nodeId: typeof e.nodeId === "string" ? e.nodeId : "",
       nodeUri: typeof e.nodeUri === "string" ? e.nodeUri : `${sourceName}:unknown`,
-      eventType: typeof e.eventType === "string" ? (e.eventType as JournalEntry["eventType"]) : "info",
+      eventType: typeof e.eventType === "string" ? (e.eventType as JournalEntry["eventType"]) : "unknown",
       source: sourceName as JournalEntry["source"],
       action: typeof e.action === "string" ? e.action : "unknown",
       summary: typeof e.summary === "string" ? e.summary : "Live event",
