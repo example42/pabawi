@@ -1,332 +1,89 @@
-# Puppetserver Integration Setup
+# Puppetserver Integration
 
-This guide will help you configure the Puppetserver integration in Pabawi to manage certificates, compile catalogs, and monitor node status.
+Pabawi connects to Puppetserver to provide node inventory (from the CA), facts, catalog compilation, environment management, and service metrics.
 
 ## Prerequisites
 
-- A running Puppetserver instance (version 6.x or 7.x)
-- Network access to the Puppetserver API (default port 8140)
-- Authentication credentials (token for Puppet Enterprise, or SSL certificates for all installations)
+- Puppetserver 6.x or 7.x running and reachable from the Pabawi host
+- Port 8140 open
+- Authentication: SSL client certificate, or PE RBAC token
 
-## Configuration Options
+## Minimal Configuration
 
-Add the following environment variables to your `backend/.env` file. You can also use the **Puppetserver Setup Guide** in the Pabawi web UI to generate this snippet — it walks you through the settings and lets you copy the result to your clipboard.
-
-### Basic Configuration
+**SSL certificate auth (open source Puppet and PE):**
 
 ```bash
-# Enable Puppetserver integration
 PUPPETSERVER_ENABLED=true
-
-# Puppetserver URL (required)
 PUPPETSERVER_SERVER_URL=https://puppet.example.com
-
-# Puppetserver port (optional, defaults to 8140)
-PUPPETSERVER_PORT=8140
+PUPPETSERVER_SSL_CA=/opt/pabawi/certs/ca.pem
+PUPPETSERVER_SSL_CERT=/opt/pabawi/certs/client.crt
+PUPPETSERVER_SSL_KEY=/opt/pabawi/certs/client.key
 ```
 
-### Authentication
-
-Choose one of the following authentication methods:
-
-#### Option 1: Token Authentication (Puppet Enterprise Only)
-
-**Note: Token authentication is only available with Puppet Enterprise. Open Source Puppet installations must use certificate-based authentication.**
+**PE token auth:**
 
 ```bash
-# API token for authentication (Puppet Enterprise only)
-PUPPETSERVER_TOKEN=your-api-token-here
+PUPPETSERVER_ENABLED=true
+PUPPETSERVER_SERVER_URL=https://puppet.example.com
+PUPPETSERVER_TOKEN=<pe-rbac-token>
 ```
 
-To generate a token (Puppet Enterprise only):
+See [configuration.md](../configuration.md) for the full env var reference.
+
+## Certificate Setup (SSL Auth)
+
+If Pabawi runs on the Puppetserver host, the Puppet SSL certs work directly:
 
 ```bash
-puppet access login --lifetime 1y
-puppet access show
+PUPPETSERVER_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
+PUPPETSERVER_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/$(hostname -f).pem
+PUPPETSERVER_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/$(hostname -f).pem
 ```
 
-#### Option 2: SSL Certificate Authentication
+For Pabawi on a separate host, generate a cert with the `cli_auth` extension (required for CA API access):
 
 ```bash
-# Enable SSL
-PUPPETSERVER_SSL_ENABLED=true
-
-# Path to SSL certificate files
-PUPPETSERVER_SSL_CA=/path/to/ca.pem
-PUPPETSERVER_SSL_CERT=/path/to/cert.pem
-PUPPETSERVER_SSL_KEY=/path/to/key.pem
-
-# Verify SSL certificates (default: true)
-PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
-```
-
-**Important**: For certificate management functionality to work properly, your SSL certificate must include the `cli_auth` extension. This extension is required to access the Puppetserver CA API endpoints.
-
-### Step 6: Certificate Setup (SSL Authentication Users)
-
-If you're using SSL certificate authentication and need access to certificate management features, your certificate must have the `cli_auth` extension. You can generate a new certificate with this extension using the provided script:
-
-```bash
-# Generate a new certificate 
+# On Puppetserver
 ./scripts/generate-pabawi-cert.sh
 
-# After running the script, sign the certificate on your Puppetserver:
+# Sign the CSR
 puppetserver ca sign --certname pabawi
 
-# Download the signed certificate
+# Download signed cert
 ./scripts/generate-pabawi-cert.sh --download
 ```
 
-The script will:
+The `cli_auth` extension (OID `1.3.6.1.4.1.34380.1.3.39`) is required for CA management endpoints. Without it, certificate lists fall back to PuppetDB data.
 
-1. Generate a new private key and Certificate Signing Request (CSR) with the cli_auth extension
-2. Submit the CSR to your Puppetserver via the CA API
-3. After you sign it on the Puppetserver, download and install the signed certificate
-4. Update your `.env` file with the new certificate paths
+## What It Provides
 
-**Note**: The cli_auth extension (OID: 1.3.6.1.4.1.34380.1.3.39) is required for accessing Puppetserver CA API endpoints. Without this extension, certificate management features will fall back to PuppetDB data, which only shows signed certificates that have checked in.
-
-### Advanced Configuration
-
-```bash
-# Request timeout in milliseconds (default: 30000)
-PUPPETSERVER_TIMEOUT=30000
-
-# Retry configuration
-PUPPETSERVER_RETRY_ATTEMPTS=3
-PUPPETSERVER_RETRY_DELAY=1000
-
-# Node inactivity threshold in seconds (default: 3600 = 1 hour)
-PUPPETSERVER_INACTIVITY_THRESHOLD=3600
-
-# Cache TTL in milliseconds (default: 300000 = 5 minutes)
-PUPPETSERVER_CACHE_TTL=300000
-
-# Circuit breaker configuration
-PUPPETSERVER_CIRCUIT_BREAKER_THRESHOLD=5
-PUPPETSERVER_CIRCUIT_BREAKER_TIMEOUT=60000
-PUPPETSERVER_CIRCUIT_BREAKER_RESET_TIMEOUT=30000
-```
-
-## Complete Example Configuration
-
-### Example 1: Token Authentication (Puppet Enterprise Only)
-
-```bash
-# Puppetserver Integration (Puppet Enterprise only)
-PUPPETSERVER_ENABLED=true
-PUPPETSERVER_SERVER_URL=https://puppet.example.com
-PUPPETSERVER_PORT=8140
-PUPPETSERVER_TOKEN=eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9...
-PUPPETSERVER_TIMEOUT=30000
-PUPPETSERVER_RETRY_ATTEMPTS=3
-PUPPETSERVER_RETRY_DELAY=1000
-PUPPETSERVER_INACTIVITY_THRESHOLD=3600
-PUPPETSERVER_CACHE_TTL=300000
-```
-
-### Example 2: SSL Certificate Authentication
-
-```bash
-# Puppetserver Integration
-PUPPETSERVER_ENABLED=true
-PUPPETSERVER_SERVER_URL=https://puppet.example.com
-PUPPETSERVER_PORT=8140
-PUPPETSERVER_SSL_ENABLED=true
-PUPPETSERVER_SSL_CA=/etc/puppetlabs/puppet/ssl/certs/ca.pem
-PUPPETSERVER_SSL_CERT=/etc/puppetlabs/puppet/ssl/certs/admin.pem
-PUPPETSERVER_SSL_KEY=/etc/puppetlabs/puppet/ssl/private_keys/admin.pem
-PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true
-PUPPETSERVER_TIMEOUT=30000
-```
+| Feature | Description |
+|---|---|
+| **Inventory** | Nodes from Puppetserver CA (priority 20) |
+| **Node status** | Last check-in time, inactivity detection |
+| **Facts** | Node facts from Puppetserver |
+| **Catalog** | Compile catalog for a node/environment |
+| **Catalog compare** | Diff catalogs across environments |
+| **Environments** | List, deploy, cache flush |
+| **Metrics** | JVM and service metrics |
 
 ## Verification
 
-After configuring the integration:
-
-1. **Restart the backend server**:
-
-   ```bash
-   cd backend
-   npm run dev
-   ```
-
-2. **Check integration status**:
-   - Navigate to the Integrations page in the UI
-   - Look for "Puppetserver" in the list
-   - Status should show "healthy" with a green indicator
-
-3. **Test the connection**:
-
-   ```bash
-   curl http://localhost:3000/api/integrations/puppetserver/health
-   ```
-
-   Expected response:
-
-   ```json
-   {
-     "name": "puppetserver",
-     "type": "information",
-     "status": "healthy",
-     "message": "Puppetserver is reachable",
-     "lastCheck": "2024-12-05T10:30:00.000Z"
-   }
-   ```
-
-### Manual API Verification
-
-If the integration fails, you can test connectivity to the Puppetserver API directly using `curl`.
-
-**1. Test Basic Connectivity:**
-
 ```bash
-# Test HTTPS connection
-curl -k https://puppetserver.example.com:8140
+curl -k https://puppet.example.com:8140/status/v1/simple \
+  -H "X-Authentication: <token>"
+# or with cert:
+curl --cert client.crt --key client.key --cacert ca.pem \
+  https://puppet.example.com:8140/status/v1/simple
 ```
-
-**2. Test Certificate Status API:**
-
-```bash
-# With token authentication
-curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses \
-  -H "X-Authentication: your-token-here"
-
-# With certificate authentication
-curl --cert /path/to/cert.pem \
-     --key /path/to/key.pem \
-     --cacert /path/to/ca.pem \
-     https://puppetserver.example.com:8140/puppet-ca/v1/certificate_statuses
-```
-
-**3. Test Individual Certificate Lookup:**
-
-```bash
-curl -k https://puppetserver.example.com:8140/puppet-ca/v1/certificate_status/node1.example.com \
-  -H "X-Authentication: your-token-here"
-```
-
-**4. Test Facts API:**
-
-```bash
-curl -k https://puppetserver.example.com:8140/puppet/v3/facts/node1.example.com \
-  -H "X-Authentication: your-token-here"
-```
-
-**5. Test Status Endpoints:**
-
-```bash
-curl -k https://puppetserver.example.com:8140/status/v1/simple \
-  -H "X-Authentication: your-token-here"
-```
-
-## Features Available
-
-Once configured, you can:
-
-### Certificate Management
-
-- View all certificates (signed, requested, revoked)
-- Sign certificate requests
-- Revoke certificates
-- Bulk operations on multiple certificates
-
-### Node Monitoring
-
-- View node inventory from Puppetserver CA
-- Check node status and last check-in time
-- Identify inactive nodes
-- View node facts
-
-### Catalog Operations
-
-- Compile catalogs for specific environments
-- Compare catalogs between environments
-- View catalog resources and dependencies
-- Debug catalog compilation errors
-
-### Environment Management
-
-- List available environments
-- View environment details
-- Deploy code to environments
 
 ## Troubleshooting
 
-### Connection Errors
-
-**Error**: "Puppetserver client not initialized"
-
-- **Solution**: Ensure `PUPPETSERVER_ENABLED=true` and `PUPPETSERVER_SERVER_URL` is set
-
-**Error**: "Failed to connect to Puppetserver"
-
-- **Solution**: Verify network connectivity and firewall rules
-- Test connection: `curl -k https://puppet.example.com:8140/status/v1/simple`
-
-### Authentication Errors
-
-**Error**: "Authentication failed"
-
-- **Solution**: Verify token is valid or SSL certificates are correct
-- For token auth: Run `puppet access show` to verify token
-- For SSL auth: Check certificate paths and permissions
-
-**Error**: "SSL certificate verification failed"
-
-- **Solution**: Set `PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=false` for self-signed certificates
-- Or add CA certificate to trusted store
-
-### Performance Issues
-
-**Slow response times**
-
-- **Solution**: Increase `PUPPETSERVER_TIMEOUT` value
-- Adjust `PUPPETSERVER_CACHE_TTL` to cache results longer
-- Check Puppetserver performance and resource usage
-
-**Too many requests**
-
-- **Solution**: Increase `PUPPETSERVER_CACHE_TTL` to reduce API calls
-- Adjust circuit breaker thresholds
-
-## Security Best Practices
-
-1. **Use token authentication** when using Puppet Enterprise (easier to rotate than certificates)
-2. **Store credentials securely** - never commit `.env` files
-3. **Use SSL/TLS** for all connections
-4. **Rotate tokens regularly** (set appropriate lifetime)
-5. **Limit token permissions** to only required operations
-6. **Enable certificate verification** in production (`PUPPETSERVER_SSL_REJECT_UNAUTHORIZED=true`)
-7. **Use firewall rules** to restrict access to Puppetserver API
-
-## API Endpoints
-
-The integration exposes these endpoints:
-
-- `GET /api/integrations/puppetserver/health` - Health check
-- `GET /api/integrations/puppetserver/certificates` - List certificates
-- `GET /api/integrations/puppetserver/certificates/:certname` - Get certificate
-- `POST /api/integrations/puppetserver/certificates/:certname/sign` - Sign certificate
-- `DELETE /api/integrations/puppetserver/certificates/:certname` - Revoke certificate
-- `GET /api/integrations/puppetserver/nodes/:certname/status` - Node status
-- `GET /api/integrations/puppetserver/nodes/:certname/catalog` - Compile catalog
-- `GET /api/integrations/puppetserver/environments` - List environments
-
-## Support
-
-For issues or questions:
-
-- Check the backend logs for detailed error messages
-- Review Puppetserver logs at `/var/log/puppetlabs/puppetserver/`
-- Verify API access with `curl` commands
-- Consult Puppetserver documentation: <https://puppet.com/docs/puppetserver/>
-
-## Next Steps
-
-After setup:
-
-1. Navigate to the **Certificates** page to manage node certificates
-2. Use the **Inventory** page to view nodes from Puppetserver
-3. Explore **Node Details** to view status, facts, and catalogs
-4. Set up **Environment Deployments** for code management
+| Problem | Fix |
+|---|---|
+| "Puppetserver client not initialized" | `PUPPETSERVER_ENABLED=true` and `PUPPETSERVER_SERVER_URL` not set |
+| "SSL handshake failed" | Check cert/key/CA paths and permissions. Cert must be signed by the correct CA. |
+| "Authentication failed" | For PE token: run `puppet access show` to verify. For SSL: check cert is not expired. |
+| "403 Forbidden on CA endpoints" | Cert missing `cli_auth` extension. Re-generate with the provided script. |
+| Slow responses | Increase `PUPPETSERVER_CACHE_TTL`. Check Puppetserver JVM heap. |
+| "Node not found" | Puppetserver only lists nodes with signed certs. Unsigned nodes won't appear. |

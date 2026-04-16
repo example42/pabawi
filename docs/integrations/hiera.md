@@ -1,144 +1,73 @@
-# Hiera Integration Setup Guide
+# Hiera Integration
 
-## Overview
-
-Pabawi integrates with [Hiera](https://puppet.com/docs/puppet/latest/hiera_intro.html) to provide visibility into your infrastructure's configuration data. This integration allows you to browse hierarchy levels, view effective configuration for specific nodes, and analyze Hiera data directly from the UI.
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Configuration](#configuration)
-- [Features](#features)
-- [Caching & Performance](#caching--performance)
-- [Troubleshooting](#troubleshooting)
+Pabawi reads your Puppet control repository to browse Hiera data, resolve node-specific values, search keys, and run code analysis.
 
 ## Prerequisites
 
-- A valid [Control Repository](https://puppet.com/docs/pe/latest/control_repo.html) containing a `hiera.yaml` file.
-- Read access to the control repository from the Pabawi server.
-- (Optional) Access to PuppetDB for accurate fact-based hierarchy resolution.
+- A Puppet control repository on disk, reachable from the Pabawi host (local path or mounted volume)
+- `hiera.yaml` (or `hiera.yaml.v5`) in the repository root
+- Read-only access from the Pabawi process to the control repo
 
 ## Configuration
 
-Add the following environment variables to your `backend/.env` file. You can also use the **Hiera Setup Guide** in the Pabawi web UI to generate this snippet — it walks you through the settings and lets you copy the result to your clipboard.
-
-### Basic Setup
-
 ```bash
-# Enable the integration
 HIERA_ENABLED=true
-
-# Path to your control repository (root directory containing hiera.yaml)
-HIERA_CONTROL_REPO_PATH=/path/to/control-repo
-
-# Name of the config file (defaults to hiera.yaml)
-HIERA_CONFIG_PATH=hiera.yaml
+HIERA_CONTROL_REPO_PATH=/opt/control-repo   # required
+HIERA_CONFIG_PATH=hiera.yaml                # relative to control repo root
+HIERA_ENVIRONMENTS='["production","staging"]'  # JSON array
 ```
 
-### Hierarchy & Facts
-
-To correctly resolve Hiera data for a node, Pabawi needs facts (e.g., `os.family`, `environment`, `hostname`).
+**Fact sources** — Hiera needs node facts to resolve hierarchy interpolations:
 
 ```bash
-# Prefer facts from PuppetDB if available (Recommended)
-HIERA_FACT_SOURCE_PREFER_PUPPETDB=true
-
-# Fallback: Path to local JSON files containing facts (e.g., node1.json)
-HIERA_FACT_SOURCE_LOCAL_PATH=/path/to/facts_dir
+HIERA_FACT_SOURCE_PREFER_PUPPETDB=true   # use PuppetDB facts when available (recommended)
+HIERA_FACT_SOURCE_LOCAL_PATH=/opt/facts  # fallback: dir of per-node JSON files (node1.json, etc.)
 ```
 
-### Environment Support
-
-Specify which Puppet environments are available for browsing.
+**Caching:**
 
 ```bash
-# JSON array of environment names
-HIERA_ENVIRONMENTS='["production", "staging", "development"]'
-```
-
-### Advanced Analysis
-
-Pabawi can perform static analysis on your Hiera data to find missing keys, duplicates, or syntax errors.
-
-```bash
-# Enable code analysis features
-HIERA_CODE_ANALYSIS_ENABLED=true
-
-# Enable linting of YAML files
-HIERA_CODE_ANALYSIS_LINT_ENABLED=true
-
-# Check for module updates
-HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK=true
-
-# Analysis interval in hours (default: 24)
-HIERA_CODE_ANALYSIS_INTERVAL=24
-```
-
-## Features
-
-Once configured, the Hiera integration enables:
-
-1. **Hierarchy Browser:** Visualize your `hiera.yaml` structure and see how layers are ordered.
-2. **Node Lookup:** Simulate a `puppet lookup` for a specific node to see effective values.
-3. **Key Search:** Search for specific configuration keys across all data files.
-4. **Static Analysis:** Identify potentially broken references or missing variables in your hierarchy.
-
-## Caching & Performance
-
-Resolving Hiera lookups can be resource-intensive. Pabawi includes caching mechanisms to improve UI responsiveness.
-
-```bash
-# Enable caching of lookup results
 HIERA_CACHE_ENABLED=true
-
-# Cache Time-To-Live in milliseconds (default: 5 minutes)
-HIERA_CACHE_TTL=300000
-
-# Maximum number of cached entries
-HIERA_CACHE_MAX_ENTRIES=1000
+HIERA_CACHE_TTL=300000       # 5 min default
+HIERA_CACHE_MAX_ENTRIES=10000
 ```
 
-### Catalog Compilation
-
-For deep debugging, Pabawi can trigger catalog compilations to verify Hiera data in context.
+**Code analysis:**
 
 ```bash
-# Enable catalog compilation features
-HIERA_CATALOG_COMPILATION_ENABLED=true
+HIERA_CODE_ANALYSIS_ENABLED=true
+HIERA_CODE_ANALYSIS_LINT_ENABLED=true
+HIERA_CODE_ANALYSIS_MODULE_UPDATE_CHECK=true
+HIERA_CODE_ANALYSIS_INTERVAL=3600000    # 1 hour default
+HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS='["spec/fixtures","vendor/"]'
+```
 
-# Compilation timeout in milliseconds
+**Catalog compilation** (advanced — requires Puppet CLI on the host):
+
+```bash
+HIERA_CATALOG_COMPILATION_ENABLED=true
 HIERA_CATALOG_COMPILATION_TIMEOUT=60000
 ```
 
+See [configuration.md](../configuration.md) for all Hiera env vars.
+
+## What It Provides
+
+| Feature | Description |
+|---|---|
+| **Hierarchy browser** | Visualize `hiera.yaml` structure and layer ordering |
+| **Node lookup** | Simulate `puppet lookup` for a node — see effective values per key |
+| **Key search** | Find keys across all data files |
+| **Cross-node view** | See a key's value on every node at once |
+| **Code analysis** | Detect unused keys, lint issues, and module update opportunities |
+| **Catalog compilation** | Compile a catalog for a node in context (requires Puppet CLI) |
+
 ## Troubleshooting
 
-### Common Issues
-
-**"Hiera configuration file not found"**
-
-- Verify `HIERA_CONTROL_REPO_PATH` points to the root of your repo.
-- Ensure `HIERA_CONFIG_PATH` matches your filename (usually `hiera.yaml` or `hiera.yaml.v5`).
-
-**"Resolution Error: Missing facts"**
-
-- Hiera relies on facts (like `os.family`) to select the correct data files.
-- Ensure PuppetDB integration is active (`HIERA_FACT_SOURCE_PREFER_PUPPETDB=true`) OR provide local fact files.
-
-**"Analysis Error"**
-
-- Large repositories may time out during analysis.
-- Check backend logs for specific parsing errors in your YAML files.
-- You can exclude specific paths from analysis:
-
-  ```bash
-  HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS='["spec/fixtures", "vendor/"]'
-  ```
-
-### Verification
-
-Check the backend logs for initialization messages:
-
-```
-[INFO] Hiera integration initialized
-[INFO] Loaded Hiera config from /path/to/control-repo/hiera.yaml
-```
+| Problem | Fix |
+|---|---|
+| "Hiera configuration file not found" | Verify `HIERA_CONTROL_REPO_PATH` and `HIERA_CONFIG_PATH`. File must exist at `<repo>/<config_path>`. |
+| "Resolution error: missing facts" | Enable PuppetDB integration and `HIERA_FACT_SOURCE_PREFER_PUPPETDB=true`. Or add per-node JSON fact files in `HIERA_FACT_SOURCE_LOCAL_PATH`. |
+| Slow key lookups | Reduce `HIERA_CACHE_TTL` to let the cache warm up faster, or increase `HIERA_CACHE_MAX_ENTRIES`. |
+| Analysis times out on large repos | Add exclusion patterns: `HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS='["vendor/","spec/"]'` |
+| "No environments shown" | Set `HIERA_ENVIRONMENTS` to a JSON array of environment names. |

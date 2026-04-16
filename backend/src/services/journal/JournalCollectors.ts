@@ -1,7 +1,8 @@
 import type { DatabaseAdapter } from "../../database/DatabaseAdapter";
-import type { JournalEntry, JournalSource } from "./types";
+import type { JournalEntry, JournalEventType, JournalSource } from "./types";
 import type { Report } from "../../integrations/puppetdb/types";
 import type { ExecutionRecord } from "../../database/ExecutionRepository";
+import { LoggerService } from "../LoggerService";
 
 /**
  * SSE event types for the journal stream protocol
@@ -209,4 +210,260 @@ export async function collectPuppetDBEntries(
   if (!puppetdb.isInitialized()) return [];
   const reports = await puppetdb.getNodeReports(nodeId, limit, 0);
   return reports.map((r) => reportToJournalEntry(r, nodeId));
+}
+
+// ============================================================================
+// Proxmox Task Collector
+// ============================================================================
+
+/**
+ * Shape of a task record from GET /api2/json/nodes/{node}/tasks
+ */
+export interface ProxmoxTaskRecord {
+  upid: string;
+  node: string;
+  starttime: number;
+  type: string;
+  status?: string;
+  user: string;
+  id: string;
+}
+
+/**
+ * Minimal interface for Proxmox client to avoid circular deps
+ */
+export interface ProxmoxClientLike {
+  get(endpoint: string): Promise<unknown>;
+}
+
+/**
+ * Map a Proxmox task type string to a JournalEventType.
+ */
+export function mapProxmoxTaskType(taskType: string): JournalEventType {
+  const mapping: Record<string, JournalEventType> = {
+    qmstart: "start",
+    vzstart: "start",
+    qmstop: "stop",
+    vzstop: "stop",
+    qmshutdown: "stop",
+    vzshutdown: "stop",
+    qmreboot: "reboot",
+    qmsuspend: "suspend",
+    vzsuspend: "suspend",
+    qmresume: "resume",
+    vzresume: "resume",
+  };
+  return mapping[taskType] ?? "info";
+}
+
+/**
+ * Collect Proxmox task history entries for a guest.
+ * Queries GET /api2/json/nodes/{pveNode}/tasks?vmid={vmid}&limit=50
+ * Returns JournalEntry[] with deterministic IDs based on UPID.
+ */
+export async function collectProxmoxTaskEntries(
+  proxmoxClient: ProxmoxClientLike,
+  pveNode: string,
+  vmid: number,
+  nodeId: string,
+): Promise<JournalEntry[]> {
+  const logger = new LoggerService();
+
+  let rawData: unknown;
+  try {
+    rawData = await proxmoxClient.get(
+      `/api2/json/nodes/${pveNode}/tasks?vmid=${String(vmid)}&limit=50`,
+    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`Failed to fetch Proxmox tasks for vmid ${String(vmid)} on ${pveNode}: ${message}`, {
+      component: "JournalCollectors",
+      integration: "proxmox",
+      operation: "collectProxmoxTaskEntries",
+    });
+    return [];
+  }
+
+  // Extract the data array from the response
+  const response = rawData as { data?: unknown };
+  const records = Array.isArray(response.data) ? (response.data as unknown[]) : [];
+
+  const entries: JournalEntry[] = [];
+  for (const raw of records) {
+    try {
+      const record = raw as ProxmoxTaskRecord;
+      if (!record.upid || typeof record.starttime !== "number" || !record.type) {
+        logger.warn("Skipping malformed Proxmox task record: missing required fields", {
+          component: "JournalCollectors",
+          integration: "proxmox",
+          operation: "collectProxmoxTaskEntries",
+        });
+        continue;
+      }
+
+      const eventType = mapProxmoxTaskType(record.type);
+      const timestamp = new Date(record.starttime * 1000).toISOString();
+
+      entries.push({
+        id: `proxmox:task:${record.upid}`,
+        nodeId,
+        nodeUri: `proxmox:${pveNode}:${String(vmid)}`,
+        eventType,
+        source: "proxmox",
+        action: record.type,
+        summary: `Proxmox ${record.type}: ${record.status ?? "running"}`,
+        details: {
+          upid: record.upid,
+          status: record.status,
+          type: record.type,
+          node: record.node,
+        },
+        userId: undefined,
+        timestamp,
+        isLive: true,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`Skipping malformed Proxmox task record: ${message}`, {
+        component: "JournalCollectors",
+        integration: "proxmox",
+        operation: "collectProxmoxTaskEntries",
+      });
+    }
+  }
+
+  return entries;
+}
+
+// ============================================================================
+// AWS EC2 State Collector
+// ============================================================================
+
+/**
+ * Minimal interface for AWS service to avoid circular deps.
+ * Subset of AWSService — only the method we need for state collection.
+ */
+export interface AWSServiceLike {
+  getNodeFacts(nodeId: string): Promise<{
+    facts: {
+      categories?: {
+        system: {
+          state: string;
+          instanceId?: string;
+          region?: string;
+          stateTransitionReason?: string;
+        };
+      };
+    };
+  }>;
+}
+
+/**
+ * Map an EC2 instance state string to a JournalEventType.
+ */
+export function mapEC2StateToEventType(state: string): JournalEventType {
+  const mapping: Record<string, JournalEventType> = {
+    running: "start",
+    stopped: "stop",
+    terminated: "destroy",
+    pending: "provision",
+    "shutting-down": "stop",
+    stopping: "stop",
+  };
+  return mapping[state] ?? "info";
+}
+
+/**
+ * Collect AWS EC2 state change entry for an instance.
+ * Calls getNodeFacts to get current state, compares against last recorded
+ * state in journal_entries. Returns 0 or 1 JournalEntry with deterministic ID.
+ */
+export async function collectAWSStateEntry(
+  awsService: AWSServiceLike,
+  instanceId: string,
+  region: string,
+  db: DatabaseAdapter,
+  nodeId: string,
+): Promise<JournalEntry[]> {
+  const logger = new LoggerService();
+
+  // 1. Get current state from AWS
+  let currentState: string;
+  let stateTransitionReason: string;
+  try {
+    const factsResult = await awsService.getNodeFacts(nodeId);
+    const system = factsResult.facts.categories?.system;
+    if (!system?.state) {
+      logger.warn("AWS facts missing system state", {
+        component: "JournalCollectors",
+        integration: "aws",
+        operation: "collectAWSStateEntry",
+      });
+      return [];
+    }
+    currentState = system.state;
+    stateTransitionReason = system.stateTransitionReason ?? "State change detected";
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`Failed to fetch AWS facts for ${nodeId}: ${message}`, {
+      component: "JournalCollectors",
+      integration: "aws",
+      operation: "collectAWSStateEntry",
+    });
+    return [];
+  }
+
+  // 2. Query last recorded state from journal_entries
+  let previousState: string | undefined;
+  try {
+    const rows = await db.query<{ details: string }>(
+      `SELECT details FROM journal_entries WHERE nodeId = ? AND source = 'aws' ORDER BY timestamp DESC LIMIT 1`,
+      [nodeId],
+    );
+    if (rows.length > 0) {
+      const details = typeof rows[0].details === "string"
+        ? (JSON.parse(rows[0].details) as Record<string, unknown>)
+        : (rows[0].details as Record<string, unknown>);
+      previousState = details.currentState as string | undefined;
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`Failed to query last AWS state for ${nodeId}: ${message}`, {
+      component: "JournalCollectors",
+      integration: "aws",
+      operation: "collectAWSStateEntry",
+    });
+    // Treat as "no previous state known" — record the current state
+  }
+
+  // 3. If state hasn't changed, return empty
+  if (previousState === currentState) {
+    return [];
+  }
+
+  // 4. Create new journal entry for the state change
+  const eventType = mapEC2StateToEventType(currentState);
+  const timestamp = new Date().toISOString();
+
+  return [
+    {
+      id: `aws:state:${instanceId}:${currentState}`,
+      nodeId,
+      nodeUri: `aws:${region}:${instanceId}`,
+      eventType,
+      source: "aws",
+      action: `EC2 state change: ${previousState ?? "unknown"} → ${currentState}`,
+      summary: `EC2 instance ${currentState} — ${stateTransitionReason}`,
+      details: {
+        instanceId,
+        region,
+        previousState: previousState ?? "unknown",
+        currentState,
+        stateTransitionReason,
+      },
+      userId: undefined,
+      timestamp,
+      isLive: true,
+    },
+  ];
 }

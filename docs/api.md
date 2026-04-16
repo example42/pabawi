@@ -1,1242 +1,498 @@
-# Pabawi API Documentation
+# API Reference
 
-Version: 1.0.0
+All endpoints return JSON. Base URL: `http://<host>:<port>` (default `http://localhost:3000`).
 
-## Overview
+## Authentication
 
-The Pabawi API provides a RESTful interface for managing infrastructure automation through multiple integrations. This API enables you to:
+When `AUTH_ENABLED=true`, most endpoints require a JWT token in the `Authorization: Bearer <token>` header. PuppetDB endpoints additionally accept a PuppetDB token via `X-Authentication-Token`.
 
-- View and manage node inventory from multiple sources (Bolt, PuppetDB)
-- Gather system facts from nodes
-- Execute commands on remote nodes
-- Run Bolt tasks with parameters
-- Trigger Puppet runs with configuration options
-- Install packages on nodes
-- View execution history and results
-- Stream real-time execution output
-- Query PuppetDB for reports, catalogs, and events
-- Compare catalogs across environments
-- Browse Hiera data and key usage analysis
-- Filter puppet reports by status, duration, compile time, and resources (v0.5.0)
-- View puppet run history visualizations (v0.5.0)
-- Access comprehensive debugging information via Expert Mode (v0.5.0)
+## Common Headers
 
-## Puppet Run History
+| Header | Description |
+|---|---|
+| `Authorization: Bearer <token>` | JWT auth (required when auth enabled) |
+| `X-Expert-Mode: true` | Add diagnostics to all responses (stack traces, raw output, request IDs) |
+| `X-Authentication-Token` | PuppetDB auth token (PuppetDB endpoints) |
+| `Content-Type: application/json` | Required for POST requests with a body |
 
-### Get Node Run History
-
-Retrieve puppet run history for a specific node with summary statistics.
-
-**Request:**
-
-```http
-GET /api/puppet/nodes/:id/history?days=7
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Node identifier (certname)
-
-**Query Parameters:**
-
-- `days` (integer, optional): Number of days to look back (default: 7, max: 365)
-
-**Response:**
-
-```json
-{
-  "nodeId": "web-01.example.com",
-  "history": [
-    {
-      "date": "2024-01-15",
-      "success": 3,
-      "failed": 0,
-      "changed": 2,
-      "unchanged": 3
-    }
-  ],
-  "summary": {
-    "totalRuns": 21,
-    "successRate": 95.24,
-    "avgDuration": 45.3,
-    "lastRun": "2024-01-15T10:00:00.000Z"
-  }
-}
-```
-
-### Get Aggregated Run History
-
-Retrieve aggregated puppet run history for all nodes.
-
-**Request:**
-
-```http
-GET /api/puppet/history?days=7
-```
-
-**Query Parameters:**
-
-- `days` (integer, optional): Number of days to look back (default: 7, max: 365)
-
-**Response:**
-
-```json
-[
-  {
-    "date": "2024-01-15",
-    "success": 45,
-    "failed": 2,
-    "changed": 15,
-    "unchanged": 45
-  }
-]
-```
-
-## Integration Support
-
-Pabawi supports multiple infrastructure management integrations:
-
-- **Bolt**: Execution tool for running commands, tasks, and plans
-- **PuppetDB**: Information source for node data, reports, catalogs, and events
-- **Puppetserver**: Information source for catalog compilation
-- **Hiera**: Puppet data source for hierarchical key-value lookups and analysis
-
-For detailed integration-specific API documentation, see:
-
-- [Integrations API Documentation](./integrations-api.md) - Complete reference for PuppetDB, Puppetserver, and Hiera endpoints
-- [PuppetDB API Documentation](./puppetdb-api.md) - Detailed PuppetDB integration guide
-
-## Base URL
-
-```text
-http://localhost:3000/api
-```
-
-## Error Handling
-
-All error responses follow a consistent format:
+## Error Format
 
 ```json
 {
   "error": {
     "code": "ERROR_CODE",
-    "message": "Human-readable error message",
-    "details": "Additional context (optional)"
+    "message": "Human-readable message",
+    "details": "Additional context"
   }
 }
 ```
 
-### Common Error Codes
+Common error codes: `COMMAND_NOT_WHITELISTED`, `INTEGRATION_NOT_AVAILABLE`, `NODE_NOT_FOUND`, `VALIDATION_ERROR`, `DESTRUCTIVE_ACTION_DISABLED`, `UNAUTHORIZED`.
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `INVALID_REQUEST` | 400 | Request validation failed |
-| `COMMAND_NOT_ALLOWED` | 403 | Command not in whitelist |
-| `INVALID_NODE_ID` | 404 | Node not found in inventory |
-| `INVALID_TASK_NAME` | 404 | Task does not exist |
-| `EXECUTION_NOT_FOUND` | 404 | Execution not found |
-| `BOLT_CONFIG_MISSING` | 404 | Bolt configuration files not found |
-| `NODE_UNREACHABLE` | 503 | Cannot connect to node |
-| `BOLT_EXECUTION_FAILED` | 500 | Bolt CLI returned error |
-| `BOLT_TIMEOUT` | 500 | Execution exceeded timeout |
-| `BOLT_PARSE_ERROR` | 500 | Cannot parse Bolt output |
-| `INTERNAL_SERVER_ERROR` | 500 | Unexpected server error |
+## Common Query Parameters
 
-### Expert Mode Error Response
+| Parameter | Description | Applies to |
+|---|---|---|
+| `limit` | Max items to return | List endpoints |
+| `offset` | Pagination offset | List endpoints |
+| `page` | Page number | Execution history, Hiera |
+| `pageSize` | Items per page | Execution history, Hiera |
+| `status` | Filter by status | Executions, reports, events |
+| `type` | Filter by type | Executions |
+| `sources` | Comma-separated source names | Inventory |
+| `sortBy` / `sortOrder` | Sort field and direction (`asc`/`desc`) | Inventory |
+| `days` | Days to look back (1–365, default 7) | Puppet run history |
+| `refresh` | `true` to bypass cache | Integration status |
 
-When expert mode is enabled (via `X-Expert-Mode: true` header), errors include additional fields for comprehensive debugging:
+---
 
-```json
-{
-  "error": {
-    "code": "BOLT_EXECUTION_FAILED",
-    "message": "Bolt command failed",
-    "details": "Connection timeout",
-    "stackTrace": "Error: Bolt command failed\n    at BoltService.runCommand...",
-    "requestId": "req-abc123",
-    "correlationId": "corr-xyz789",
-    "timestamp": "2024-01-01T00:00:00.000Z",
-    "rawResponse": "Error: Connection timeout after 30s",
-    "executionContext": {
-      "endpoint": "/api/nodes/node1/command",
-      "method": "POST",
-      "requestId": "req-abc123"
-    }
-  },
-  "_debug": {
-    "timestamp": "2024-01-01T00:00:00.000Z",
-    "requestId": "req-abc123",
-    "correlationId": "corr-xyz789",
-    "operation": "command-execution",
-    "duration": 30123,
-    "errors": [
-      {
-        "message": "Connection timeout after 30s",
-        "stack": "Error: Connection timeout...",
-        "level": "error"
-      }
-    ],
-    "warnings": [],
-    "info": [
-      {
-        "message": "Attempting connection to node1",
-        "level": "info"
-      }
-    ],
-    "frontendLogs": [
-      {
-        "timestamp": "2024-01-01T00:00:00.000Z",
-        "level": "info",
-        "component": "CommandForm",
-        "operation": "submit",
-        "message": "Submitting command execution",
-        "correlationId": "corr-xyz789"
-      }
-    ],
-    "performance": {
-      "memoryUsage": 125829120,
-      "cpuUsage": 45.2,
-      "activeConnections": 12,
-      "cacheStats": {
-        "hits": 145,
-        "misses": 23,
-        "size": 168,
-        "hitRate": 0.863
-      }
-    }
-  }
-}
-```
+## System
 
-**New in v0.5.0**: Expert mode now includes:
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/config` | Application configuration |
+| `GET` | `/api/config/ui` | UI-specific configuration |
 
-- Frontend logs with correlation IDs
-- Performance metrics (memory, CPU, cache stats)
-- Complete request lifecycle visibility
-- External API error details
-- Timeline view of frontend and backend logs
+---
 
-## Endpoints
+## Integrations
 
-### System
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/status` | Health status of all plugins |
+| `GET` | `/api/integrations/colors` | Integration color palette |
+| `GET` | `/api/integrations/provisioning` | List provisioning integrations and capabilities |
 
-#### Health Check
+---
 
-Check if the API server is running and properly configured.
+## Inventory
 
-**Request:**
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/inventory` | All nodes from all enabled sources, linked |
+| `GET` | `/api/inventory/sources` | Available inventory sources |
+| `GET` | `/api/nodes/:id` | Node details |
 
-```http
-GET /api/health
-```
+**`GET /api/inventory` query params:**
 
-**Response:**
+| Param | Description |
+|---|---|
+| `sources` | Filter by source name (comma-separated) |
+| `pql` | PuppetDB PQL query for filtering |
+| `sortBy` | Sort field |
+| `sortOrder` | `asc` or `desc` |
+
+---
+
+## Facts
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/nodes/:id/facts` | Gather facts for node from all enabled sources |
+
+Response includes facts keyed by source name:
 
 ```json
 {
-  "status": "ok",
-  "message": "Backend API is running",
-  "version": "1.0.0",
-  "config": {
-    "boltProjectPath": "/path/to/bolt-project",
-    "commandWhitelistEnabled": true,
-    "databaseInitialized": true
-  }
+  "bolt": { "os": { "family": "Debian" } },
+  "puppetdb": { "os": { "family": "Debian", "name": "Ubuntu" } }
 }
 ```
 
-#### Get Configuration
+---
 
-Retrieve system configuration (excluding sensitive values).
+## Commands
 
-**Request:**
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/nodes/:id/command` | Execute shell command on node |
 
-```http
-GET /api/config
-```
-
-**Response:**
+**Request body:**
 
 ```json
 {
-  "commandWhitelist": {
-    "allowAll": false,
-    "whitelist": ["ls", "pwd", "whoami"],
-    "matchMode": "exact"
-  },
-  "executionTimeout": 300000
+  "command": "uptime",
+  "tool": "bolt"
 }
 ```
 
-### Inventory
+`tool` is optional when only one execution tool is available.
 
-#### List All Nodes
+---
 
-Retrieve all nodes from the Bolt inventory.
+## Tasks
 
-**Request:**
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/tasks` | List available Bolt tasks |
+| `GET` | `/api/tasks/by-module` | Tasks grouped by module |
+| `POST` | `/api/nodes/:id/task` | Execute Bolt task on node |
 
-```http
-GET /api/inventory
-```
-
-**Response:**
+**Request body (`POST /api/nodes/:id/task`):**
 
 ```json
 {
-  "nodes": [
-    {
-      "id": "node1",
-      "name": "node1",
-      "uri": "ssh://node1.example.com",
-      "transport": "ssh",
-      "config": {
-        "user": "admin",
-        "port": 22
-      }
-    }
-  ]
+  "task": "psick::puppet_agent",
+  "parameters": { "noop": true, "tags": "web" }
 }
 ```
 
-**Error Responses:**
+---
 
-- `404 BOLT_CONFIG_MISSING`: Bolt inventory file not found
-- `500 BOLT_EXECUTION_FAILED`: Failed to read inventory
-- `500 BOLT_PARSE_ERROR`: Cannot parse inventory file
+## Puppet
 
-#### Get Node Details
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/nodes/:id/puppet-run` | Run `puppet agent` on node |
 
-Retrieve detailed information about a specific node.
-
-**Request:**
-
-```http
-GET /api/nodes/{id}
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Node identifier (name or ID)
-
-**Response:**
+**Request body:**
 
 ```json
 {
-  "node": {
-    "id": "node1",
-    "name": "node1",
-    "uri": "ssh://node1.example.com",
-    "transport": "ssh",
-    "config": {
-      "user": "admin",
-      "port": 22
-    }
-  }
-}
-```
-
-**Error Responses:**
-
-- `404 INVALID_NODE_ID`: Node not found in inventory
-
-### Facts
-
-#### Gather Facts from Node
-
-Trigger facts gathering for a specific node.
-
-**Request:**
-
-```http
-POST /api/nodes/{id}/facts
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Node identifier
-
-**Headers:**
-
-- `X-Expert-Mode` (boolean, optional): Enable expert mode
-
-**Response:**
-
-```json
-{
-  "facts": {
-    "nodeId": "node1",
-    "gatheredAt": "2024-01-01T00:00:00.000Z",
-    "facts": {
-      "os": {
-        "family": "RedHat",
-        "name": "CentOS",
-        "release": {
-          "full": "7.9.2009",
-          "major": "7"
-        }
-      },
-      "processors": {
-        "count": 4,
-        "models": ["Intel(R) Xeon(R) CPU E5-2680 v4 @ 2.40GHz"]
-      },
-      "memory": {
-        "system": {
-          "total": "16.00 GiB",
-          "available": "12.34 GiB"
-        }
-      },
-      "networking": {
-        "hostname": "node1.example.com",
-        "interfaces": {
-          "eth0": {
-            "ip": "192.168.1.100"
-          }
-        }
-      }
-    },
-    "command": "bolt task run facts --targets node1 --format json"
-  }
-}
-```
-
-**Error Responses:**
-
-- `404 INVALID_NODE_ID`: Node not found
-- `503 NODE_UNREACHABLE`: Cannot connect to node
-
-### Commands
-
-#### Execute Command on Node
-
-Execute an arbitrary command on a target node. Commands are validated against a configurable whitelist
-unless allow-all mode is enabled.
-
-Returns immediately with an execution ID. Use the executions endpoint to retrieve results, or subscribe to
-the streaming endpoint for real-time output.
-
-**Request:**
-
-```http
-POST /api/nodes/{id}/command
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Node identifier
-
-**Headers:**
-
-- `X-Expert-Mode` (boolean, optional): Enable expert mode
-
-**Request Body:**
-
-```json
-{
-  "command": "ls -la /tmp",
-  "expertMode": false
-}
-```
-
-**Response:**
-
-```json
-{
-  "executionId": "abc123def456",  # pragma: allowlist secret
-  "status": "running",
-  "message": "Command execution started"
-}
-```
-
-**Error Responses:**
-
-- `400 INVALID_REQUEST`: Invalid request body
-- `403 COMMAND_NOT_ALLOWED`: Command not in whitelist
-- `404 INVALID_NODE_ID`: Node not found
-
-**Example:**
-
-```bash
-# Start command execution
-curl -X POST http://localhost:3000/api/nodes/node1/command \
-  -H "Content-Type: application/json" \
-  -d '{"command": "ls -la /tmp", "expertMode": true}'
-
-# Response
-{
-  "executionId": "abc123",
-  "status": "running",
-  "message": "Command execution started"
-}
-
-# Get execution results
-curl http://localhost:3000/api/executions/abc123
-
-# Or stream real-time output
-curl http://localhost:3000/api/executions/abc123/stream
-```
-
-### Tasks
-
-#### List Available Tasks
-
-Retrieve all available Bolt tasks from the modules directory.
-
-**Request:**
-
-```http
-GET /api/tasks
-```
-
-**Response:**
-
-```json
-{
-  "tasks": [
-    {
-      "name": "psick::puppet_agent",
-      "module": "psick",
-      "description": "Run Puppet agent",
-      "parameters": [
-        {
-          "name": "noop",
-          "type": "Boolean",
-          "description": "Enable noop mode",
-          "required": false,
-          "default": false
-        }
-      ],
-      "modulePath": "/path/to/modules/psick"
-    }
-  ]
-}
-```
-
-#### List Tasks Grouped by Module
-
-Retrieve all available Bolt tasks organized by module name.
-
-**Request:**
-
-```http
-GET /api/tasks/by-module
-```
-
-**Response:**
-
-```json
-{
-  "tasksByModule": {
-    "psick": [
-      {
-        "name": "psick::puppet_agent",
-        "module": "psick",
-        "description": "Run Puppet agent",
-        "parameters": [],
-        "modulePath": "/path/to/modules/psick"
-      }
-    ],
-    "tp": [
-      {
-        "name": "tp::install",
-        "module": "tp",
-        "description": "Install package via Tiny Puppet",
-        "parameters": [],
-        "modulePath": "/path/to/modules/tp"
-      }
-    ]
-  }
-}
-```
-
-#### Execute Task on Node
-
-Execute a Bolt task on a target node with optional parameters.
-
-Returns immediately with an execution ID. Use the executions endpoint to retrieve results, or subscribe to
-the streaming endpoint for real-time output.
-
-**Request:**
-
-```http
-POST /api/nodes/{id}/task
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Node identifier
-
-**Headers:**
-
-- `X-Expert-Mode` (boolean, optional): Enable expert mode
-
-**Request Body:**
-
-```json
-{
-  "taskName": "psick::puppet_agent",
-  "parameters": {
-    "noop": true,
-    "tags": "webserver,database"
-  },
-  "expertMode": false
-}
-```
-
-**Response:**
-
-```json
-{
-  "executionId": "def456ghi789",
-  "status": "running",
-  "message": "Task execution started"
-}
-```
-
-**Error Responses:**
-
-- `400 INVALID_REQUEST`: Invalid request body
-- `404 INVALID_NODE_ID`: Node not found
-- `404 INVALID_TASK_NAME`: Task not found
-
-### Puppet
-
-#### Execute Puppet Run on Node
-
-Trigger a Puppet agent run on a target node with configurable options. This executes the
-`psick::puppet_agent` task with the specified configuration.
-
-Returns immediately with an execution ID. Use the executions endpoint to retrieve results, or subscribe to
-the streaming endpoint for real-time output.
-
-**Request:**
-
-```http
-POST /api/nodes/{id}/puppet-run
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Node identifier
-
-**Headers:**
-
-- `X-Expert-Mode` (boolean, optional): Enable expert mode
-
-**Request Body:**
-
-```json
-{
-  "tags": ["webserver", "database"],
+  "tags": "web,ssl",
   "environment": "production",
-  "noop": false,
+  "noop": true,
   "noNoop": false,
-  "debug": false,
-  "expertMode": false
+  "debug": false
 }
 ```
 
-**Response:**
+All fields are optional.
+
+---
+
+## Puppet Run History
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/puppet/nodes/:id/history` | Run history for a node |
+| `GET` | `/api/puppet/history` | Aggregated run history for all nodes |
+
+Query param: `days` (default 7, max 365).
+
+**Response (`/api/puppet/nodes/:id/history`):**
 
 ```json
 {
-  "executionId": "ghi789jkl012",
-  "status": "running",
-  "message": "Puppet run started"
-}
-```
-
-**Error Responses:**
-
-- `400 INVALID_REQUEST`: Invalid request body
-- `404 INVALID_NODE_ID`: Node not found
-
-**Example:**
-
-```bash
-# Trigger Puppet run with noop mode
-curl -X POST http://localhost:3000/api/nodes/node1/puppet-run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tags": ["webserver"],
-    "environment": "production",
-    "noop": true,
-    "expertMode": true
-  }'
-```
-
-### Packages
-
-#### Get Available Package Installation Tasks
-
-Retrieve configured package installation tasks.
-
-**Request:**
-
-```http
-GET /api/package-tasks
-```
-
-**Response:**
-
-```json
-{
-  "tasks": [
-    {
-      "name": "tp::install",
-      "label": "Tiny Puppet",
-      "parameterMapping": {
-        "packageName": "app",
-        "ensure": "ensure",
-        "version": "version",
-        "settings": "settings"
-      }
-    }
-  ]
-}
-```
-
-#### Install Package on Node
-
-Install a package on a target node using a configured package installation task.
-
-Returns immediately with an execution ID. Use the executions endpoint to retrieve results, or subscribe to
-the streaming endpoint for real-time output.
-
-**Request:**
-
-```http
-POST /api/nodes/{id}/install-package
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Node identifier
-
-**Headers:**
-
-- `X-Expert-Mode` (boolean, optional): Enable expert mode
-
-**Request Body:**
-
-```json
-{
-  "taskName": "tp::install",
-  "packageName": "nginx",
-  "ensure": "present",
-  "version": "1.18.0",
-  "settings": {
-    "repo": "epel"
-  },
-  "expertMode": false
-}
-```
-
-**Response:**
-
-```json
-{
-  "executionId": "jkl012mno345",
-  "status": "running",
-  "message": "Package installation started"
-}
-```
-
-**Error Responses:**
-
-- `400 INVALID_REQUEST`: Invalid request body
-- `400 INVALID_TASK`: Task not configured
-- `404 INVALID_NODE_ID`: Node not found
-
-**Example:**
-
-```bash
-# Install nginx package
-curl -X POST http://localhost:3000/api/nodes/node1/install-package \
-  -H "Content-Type: application/json" \
-  -d '{
-    "taskName": "tp::install",
-    "packageName": "nginx",
-    "ensure": "latest"
-  }'
-```
-
-### Executions
-
-#### List Execution History
-
-Retrieve paginated list of executions with optional filtering. Includes summary statistics by status.
-
-**Request:**
-
-```http
-GET /api/executions?type=command&status=success&page=1&pageSize=50
-```
-
-**Query Parameters:**
-
-- `type` (string, optional): Filter by execution type (`command`, `task`, `facts`)
-- `status` (string, optional): Filter by status (`running`, `success`, `failed`, `partial`)
-- `targetNode` (string, optional): Filter by target node ID
-- `startDate` (string, optional): Filter by start date (ISO 8601)
-- `endDate` (string, optional): Filter by end date (ISO 8601)
-- `page` (integer, optional): Page number (default: 1)
-- `pageSize` (integer, optional): Items per page (default: 50, max: 100)
-
-**Response:**
-
-```json
-{
-  "executions": [
-    {
-      "id": "abc123",
-      "type": "command",
-      "targetNodes": ["node1"],
-      "action": "ls -la /tmp",
-      "status": "success",
-      "startedAt": "2024-01-01T00:00:00.000Z",
-      "completedAt": "2024-01-01T00:00:05.000Z",
-      "results": [
-        {
-          "nodeId": "node1",
-          "status": "success",
-          "output": {
-            "stdout": "total 48\ndrwxr-xr-x...",
-            "stderr": "",
-            "exitCode": 0
-          },
-          "duration": 1234
-        }
-      ],
-      "command": "bolt command run 'ls -la /tmp' --targets node1 --format json",
-      "expertMode": true
-    }
+  "nodeId": "web-01.example.com",
+  "history": [
+    { "date": "2026-04-16", "success": 3, "failed": 0, "changed": 2, "unchanged": 1 }
   ],
-  "pagination": {
-    "page": 1,
-    "pageSize": 50,
-    "hasMore": false
-  },
   "summary": {
-    "running": 2,
-    "success": 145,
-    "failed": 8,
-    "partial": 1
+    "totalRuns": 21,
+    "successRate": 95.24,
+    "avgDuration": 45.3,
+    "lastRun": "2026-04-16T10:00:00.000Z"
   }
 }
 ```
 
-**Error Responses:**
+---
 
-- `400 INVALID_REQUEST`: Invalid query parameters
+## Packages
 
-#### Get Execution Details
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/package-tasks` | List configured package tasks |
+| `POST` | `/api/nodes/:id/install-package` | Install package on node |
 
-Retrieve detailed results for a specific execution.
-
-**Request:**
-
-```http
-GET /api/executions/{id}
-```
-
-**Path Parameters:**
-
-- `id` (string, required): Execution ID
-
-**Response:**
+**Request body:**
 
 ```json
 {
-  "execution": {
-    "id": "abc123",
-    "type": "command",
-    "targetNodes": ["node1"],
-    "action": "ls -la /tmp",
-    "status": "success",
-    "startedAt": "2024-01-01T00:00:00.000Z",
-    "completedAt": "2024-01-01T00:00:05.000Z",
-    "results": [
-      {
-        "nodeId": "node1",
-        "status": "success",
-        "output": {
-          "stdout": "total 48\ndrwxr-xr-x...",
-          "stderr": "",
-          "exitCode": 0
-        },
-        "duration": 1234
-      }
-    ],
-    "command": "bolt command run 'ls -la /tmp' --targets node1 --format json"
-  }
+  "taskName": "package",
+  "packageName": "nginx",
+  "version": "",
+  "ensure": "present",
+  "settings": {}
 }
 ```
 
-**Error Responses:**
+---
 
-- `404 EXECUTION_NOT_FOUND`: Execution not found
+## Executions
 
-### Streaming
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/executions` | Execution history |
+| `GET` | `/api/executions/:id` | Execution details |
+| `GET` | `/api/executions/:id/output` | Full execution output |
+| `GET` | `/api/executions/:id/stream` | Stream execution output (SSE) |
+| `POST` | `/api/executions/:id/re-execute` | Re-run an execution |
+| `GET` | `/api/executions/:id/original` | Get the original execution for a re-run |
+| `GET` | `/api/executions/:id/re-executions` | All re-runs of an execution |
+| `POST` | `/api/executions/:id/cancel` | Cancel a running execution |
+| `GET` | `/api/executions/queue/status` | Execution queue status |
+| `GET` | `/api/streaming/stats` | Streaming server stats |
 
-#### Stream Execution Output
+**`GET /api/executions` query params:**
 
-Subscribe to real-time execution output via Server-Sent Events (SSE).
+| Param | Description |
+|---|---|
+| `status` | `success` / `failed` / `running` / `partial` |
+| `type` | `command` / `task` / `puppet-run` / `package` / `facts` |
+| `targetNode` | Filter by node name |
+| `page` | Page number |
+| `pageSize` | Items per page |
 
-This endpoint establishes a persistent connection and streams execution events as they occur. The connection
-remains open until the execution completes or the client disconnects.
+**SSE stream (`GET /api/executions/:id/stream`):** Returns `text/event-stream`. Events have `type` (`output` / `status` / `complete` / `error`) and JSON data.
 
-**Request:**
+---
 
-```http
-GET /api/executions/{id}/stream
-```
+## Playbooks (Ansible)
 
-**Path Parameters:**
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/playbooks` | List available Ansible playbooks |
+| `POST` | `/api/nodes/:id/playbook` | Run an Ansible playbook on node |
 
-- `id` (string, required): Execution ID
+---
 
-**Response:**
+## Hiera
 
-The response is a Server-Sent Events (SSE) stream with the following event types:
+All Hiera endpoints require `HIERA_ENABLED=true`.
 
-##### Event: start
+### Status
 
-```text
-event: start
-data: {"executionId":"abc123","timestamp":"2024-01-01T00:00:00.000Z"}
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/hiera/status` | Integration status |
+| `POST` | `/api/integrations/hiera/reload` | Reload control repository |
 
-##### Event: command
+### Key Discovery
 
-```text
-event: command
-data: {"command":"bolt command run 'ls -la' --targets node1 --format json"}
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/hiera/keys` | All discovered keys |
+| `GET` | `/api/integrations/hiera/keys/search` | Search keys (query param: `q`) |
+| `GET` | `/api/integrations/hiera/keys/:key` | Details for a specific key |
+| `GET` | `/api/integrations/hiera/keys/:key/nodes` | Key values across all nodes |
 
-##### Event: stdout
+### Node Data
 
-```text
-event: stdout
-data: {"chunk":"total 48\ndrwxr-xr-x  12 user  staff   384 Jan  1 00:00 .\n"}
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/hiera/nodes/:nodeId/data` | All Hiera data for a node |
+| `GET` | `/api/integrations/hiera/nodes/:nodeId/keys` | All keys for a node |
+| `GET` | `/api/integrations/hiera/nodes/:nodeId/keys/:key` | Resolve a key for a node |
 
-##### Event: stderr
+Query param for node data: `filter` (`used` / `unused` / `all`).
 
-```text
-event: stderr
-data: {"chunk":"Warning: some warning message\n"}
-```
+### Code Analysis
 
-##### Event: status
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/hiera/analysis` | Full code analysis results |
+| `GET` | `/api/integrations/hiera/analysis/unused` | Unused code report |
+| `GET` | `/api/integrations/hiera/analysis/lint` | Lint issues |
+| `GET` | `/api/integrations/hiera/analysis/modules` | Module update info |
+| `GET` | `/api/integrations/hiera/analysis/statistics` | Usage statistics |
 
-```text
-event: status
-data: {"status":"running"}
-```
+Lint params: `severity` (comma-separated), `types` (comma-separated).
 
-##### Event: complete
+---
 
-```text
-event: complete
-data: {"status":"success","results":[{"nodeId":"node1","status":"success","duration":1234}]}
-```
+## PuppetDB
 
-##### Event: error
+All PuppetDB endpoints require `PUPPETDB_ENABLED=true`. Pass `X-Authentication-Token` for PE environments.
 
-```text
-event: error
-data: {"error":"Connection timeout"}
-```
+### Nodes
 
-**Error Responses:**
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetdb/nodes` | List nodes |
+| `GET` | `/api/integrations/puppetdb/nodes/:certname` | Node details |
+| `GET` | `/api/integrations/puppetdb/nodes/:certname/facts` | Node facts |
 
-- `404 EXECUTION_NOT_FOUND`: Execution not found
+Query param: `query` (PQL expression).
 
-**Example (JavaScript):**
+### Reports
 
-```javascript
-const eventSource = new EventSource('/api/executions/abc123/stream');
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetdb/reports` | All reports |
+| `GET` | `/api/integrations/puppetdb/reports/summary` | Reports summary |
+| `GET` | `/api/integrations/puppetdb/nodes/:certname/reports` | Reports for a node |
+| `GET` | `/api/integrations/puppetdb/nodes/:certname/reports/:hash` | Report details |
 
-eventSource.addEventListener('command', (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Command:', data.command);
-});
+Node report query params: `status`, `days`, `environment`, `minDuration`, `minCompileTime`, `minTotalResources`.
 
-eventSource.addEventListener('stdout', (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Output:', data.chunk);
-});
+### Catalogs and Resources
 
-eventSource.addEventListener('complete', (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Completed:', data.status);
-  eventSource.close();
-});
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetdb/nodes/:certname/catalog` | Node catalog |
+| `GET` | `/api/integrations/puppetdb/nodes/:certname/resources` | Node resources |
+| `GET` | `/api/integrations/puppetdb/nodes/:certname/events` | Node events |
 
-eventSource.addEventListener('error', (event) => {
-  console.error('Stream error:', event);
-  eventSource.close();
-});
-```
+### Admin
 
-**Example (curl):**
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetdb/admin/summary-stats` | Summary statistics |
 
-```bash
-curl -N http://localhost:3000/api/executions/abc123/stream
-```
+---
 
-#### Get Streaming Statistics
+## Puppetserver
 
-Retrieve statistics about active streaming connections.
+All Puppetserver endpoints require `PUPPETSERVER_ENABLED=true`. Auth uses client certificates configured via `PUPPETSERVER_SSL_*` env vars.
 
-**Request:**
+### Nodes
 
-```http
-GET /api/streaming/stats
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetserver/nodes` | List nodes |
+| `GET` | `/api/integrations/puppetserver/nodes/:certname` | Node details |
+| `GET` | `/api/integrations/puppetserver/nodes/:certname/status` | Node check-in status |
+| `GET` | `/api/integrations/puppetserver/nodes/:certname/facts` | Node facts |
 
-**Response:**
+### Catalogs
 
-```json
-{
-  "activeExecutions": 3
-}
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetserver/catalog/:certname/:environment` | Compile catalog |
+| `POST` | `/api/integrations/puppetserver/catalog/compare` | Compare catalogs across environments |
 
-## Common Workflows
+### Environments
 
-### Execute a Command
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetserver/environments` | List environments |
+| `GET` | `/api/integrations/puppetserver/environments/:name` | Environment details |
+| `POST` | `/api/integrations/puppetserver/environments/:name/deploy` | Deploy environment |
+| `DELETE` | `/api/integrations/puppetserver/environments/:name/cache` | Flush environment cache |
 
-1. **Start command execution:**
+### Status and Metrics
 
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/command \
-  -H "Content-Type: application/json" \
-  -d '{"command": "uptime", "expertMode": true}'
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/puppetserver/status/services` | Service status |
+| `GET` | `/api/integrations/puppetserver/status/simple` | Simple status |
+| `GET` | `/api/integrations/puppetserver/metrics` | JVM and service metrics |
 
-Response:
+---
 
-```json
-{
-  "executionId": "abc123",
-  "status": "running",
-  "message": "Command execution started"
-}
-```
+## Provisioning (Proxmox and AWS)
 
-1. **Stream real-time output (optional):**
+Require `PROXMOX_ENABLED=true` or `AWS_ENABLED=true`. Destructive actions (destroy/terminate) additionally require `ALLOW_DESTRUCTIVE_PROVISIONING=true` or return `403 DESTRUCTIVE_ACTION_DISABLED`.
 
-```bash
-curl -N http://localhost:3000/api/executions/abc123/stream
-```
+### Proxmox
 
-1. **Get execution results:**
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/proxmox/nodes` | List Proxmox nodes |
+| `GET` | `/api/integrations/proxmox/vms` | List VMs |
+| `GET` | `/api/integrations/proxmox/containers` | List LXC containers |
+| `POST` | `/api/integrations/proxmox/vms` | Create VM |
+| `POST` | `/api/integrations/proxmox/containers` | Create LXC container |
+| `POST` | `/api/integrations/proxmox/vms/:id/action` | VM lifecycle action |
+| `POST` | `/api/integrations/proxmox/containers/:id/action` | Container lifecycle action |
+| `DELETE` | `/api/integrations/proxmox/vms/:id` | Destroy VM *(destructive)* |
+| `DELETE` | `/api/integrations/proxmox/containers/:id` | Destroy container *(destructive)* |
 
-```bash
-curl http://localhost:3000/api/executions/abc123
-```
+Lifecycle actions: `start`, `stop`, `shutdown`, `reboot`.
 
-### Execute a Task
+### AWS
 
-1. **List available tasks:**
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/aws/instances` | List EC2 instances across regions |
+| `POST` | `/api/integrations/aws/instances` | Launch new instance |
+| `POST` | `/api/integrations/aws/instances/:id/action` | Instance lifecycle action |
+| `DELETE` | `/api/integrations/aws/instances/:id` | Terminate instance *(destructive)* |
 
-```bash
-curl http://localhost:3000/api/tasks/by-module
-```
+Lifecycle actions: `start`, `stop`, `reboot`.
 
-1. **Start task execution:**
+---
 
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/task \
-  -H "Content-Type: application/json" \
-  -d '{
-    "taskName": "psick::puppet_agent",
-    "parameters": {
-      "noop": true,
-      "tags": "webserver"
-    },
-    "expertMode": true
-  }'
-```
+## RBAC
 
-1. **Monitor execution:**
+Require `AUTH_ENABLED=true`. All endpoints require JWT auth and appropriate RBAC permissions.
 
-```bash
-curl http://localhost:3000/api/executions/def456
-```
+### Users
 
-### Run Puppet
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/users` | Create user |
+| `GET` | `/api/users` | List users |
+| `GET` | `/api/users/:id` | Get user |
+| `PUT` | `/api/users/:id` | Update user |
+| `DELETE` | `/api/users/:id` | Delete user |
+| `POST` | `/api/users/:id/roles` | Assign role to user |
+| `DELETE` | `/api/users/:id/roles/:roleId` | Remove role from user |
+| `POST` | `/api/users/login` | Authenticate and get JWT |
+| `DELETE` | `/api/users/:id/sessions` | Revoke user sessions |
 
-1. **Trigger Puppet run:**
+### Roles
 
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/puppet-run \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tags": ["webserver", "database"],
-    "environment": "production",
-    "noop": false,
-    "debug": true,
-    "expertMode": true
-  }'
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/roles` | Create role |
+| `GET` | `/api/roles` | List roles |
+| `GET` | `/api/roles/:id` | Get role |
+| `PUT` | `/api/roles/:id` | Update role |
+| `DELETE` | `/api/roles/:id` | Delete role |
+| `POST` | `/api/roles/:id/permissions` | Assign permission to role |
+| `DELETE` | `/api/roles/:id/permissions/:permId` | Remove permission from role |
 
-1. **Stream Puppet output:**
+### Permissions
 
-```bash
-curl -N http://localhost:3000/api/executions/ghi789/stream
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/permissions` | Create permission |
+| `GET` | `/api/permissions` | List permissions |
 
-1. **View results:**
+### Groups
 
-```bash
-curl http://localhost:3000/api/executions/ghi789
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/groups` | Create group |
+| `GET` | `/api/groups` | List groups |
+| `GET` | `/api/groups/:id` | Get group |
+| `PUT` | `/api/groups/:id` | Update group |
+| `DELETE` | `/api/groups/:id` | Delete group |
+| `POST` | `/api/groups/:id/users` | Add user to group |
+| `DELETE` | `/api/groups/:id/users/:userId` | Remove user from group |
 
-### Install a Package
+---
 
-1. **Get available package tasks:**
+## Auth
 
-```bash
-curl http://localhost:3000/api/package-tasks
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/auth/login` | Login (returns JWT) |
+| `POST` | `/api/auth/logout` | Logout |
+| `GET` | `/api/auth/me` | Current user info |
 
-1. **Install package:**
+---
 
-```bash
-curl -X POST http://localhost:3000/api/nodes/node1/install-package \
-  -H "Content-Type: application/json" \
-  -d '{
-    "taskName": "tp::install",
-    "packageName": "nginx",
-    "ensure": "latest",
-    "expertMode": true
-  }'
-```
+## Debug
 
-1. **Monitor installation:**
+Used internally by the frontend for expert mode log collection.
 
-```bash
-curl http://localhost:3000/api/executions/jkl012
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/debug/frontend-logs` | Submit frontend log batch |
+| `GET` | `/api/debug/frontend-logs` | List stored correlation IDs |
+| `GET` | `/api/debug/frontend-logs/:correlationId` | Get logs by correlation ID |
+| `DELETE` | `/api/debug/frontend-logs/:correlationId` | Clear logs for correlation ID |
+| `DELETE` | `/api/debug/frontend-logs` | Clear all frontend logs |
 
-### View Execution History
+---
 
-1. **List recent executions:**
+## Setup
 
-```bash
-curl "http://localhost:3000/api/executions?page=1&pageSize=20"
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/setup/status` | Setup completion status |
+| `POST` | `/api/setup/complete` | Mark setup as complete |
 
-1. **Filter by status:**
+---
 
-```bash
-curl "http://localhost:3000/api/executions?status=failed&page=1"
-```
+## Monitoring
 
-1. **Filter by node:**
-
-```bash
-curl "http://localhost:3000/api/executions?targetNode=node1"
-```
-
-1. **Filter by date range:**
-
-```bash
-curl "http://localhost:3000/api/executions?startDate=2024-01-01T00:00:00Z&endDate=2024-01-31T23:59:59Z"
-```
-
-## Rate Limiting
-
-Version 0.1.0 does not implement rate limiting. This will be added in future versions.
-
-## Pagination
-
-Endpoints that return lists support pagination via query parameters:
-
-- `page`: Page number (1-indexed, default: 1)
-- `pageSize`: Number of items per page (default: 50, max: 100)
-
-Paginated responses include a `pagination` object:
-
-```json
-{
-  "pagination": {
-    "page": 1,
-    "pageSize": 50,
-    "hasMore": true
-  }
-}
-```
-
-## Timeouts
-
-All Bolt executions are subject to a configurable timeout (default: 5 minutes). If an execution exceeds
-the timeout, it will be terminated and marked as failed with a `BOLT_TIMEOUT` error.
-
-## WebSocket Support
-
-Version 0.1.0 uses Server-Sent Events (SSE) for real-time streaming. WebSocket support may be added in
-future versions.
-
-## Versioning
-
-The API version is included in the response headers:
-
-```text
-X-API-Version: 1.0.0
-```
-
-Future versions will maintain backward compatibility or provide versioned endpoints.
-
-## Integration Endpoints
-
-Version 0.3.0 adds comprehensive integration support. For complete documentation of integration-specific endpoints, see:
-
-### PuppetDB Integration
-
-- **Inventory**: `/api/integrations/puppetdb/nodes`
-- **Facts**: `/api/integrations/puppetdb/nodes/:certname/facts`
-- **Reports**: `/api/integrations/puppetdb/nodes/:certname/reports`
-- **Catalogs**: `/api/integrations/puppetdb/nodes/:certname/catalog`
-- **Events**: `/api/integrations/puppetdb/nodes/:certname/events`
-- **Resources**: `/api/integrations/puppetdb/nodes/:certname/resources`
-- **Admin**: `/api/integrations/puppetdb/admin/*`
-
-See [Integrations API Documentation](./integrations-api.md#puppetdb-integration) for details.
-
-### Puppetserver Integration
-
-- **Nodes**: `/api/integrations/puppetserver/nodes`
-- **Status**: `/api/integrations/puppetserver/nodes/:certname/status`
-- **Facts**: `/api/integrations/puppetserver/nodes/:certname/facts`
-- **Catalogs**: `/api/integrations/puppetserver/catalog/:certname/:environment`
-- **Environments**: `/api/integrations/puppetserver/environments`
-- **Status & Metrics**: `/api/integrations/puppetserver/status/*`
-
-See [Integrations API Documentation](./integrations-api.md#puppetserver-integration) for details.
-
-### Hiera Integration
-
-- **Node Data**: `/api/integrations/hiera/nodes/:nodeId/data`
-- **Global Keys**: `/api/integrations/hiera/keys`
-- **Key Analysis**: `/api/integrations/hiera/keys/:key/analysis`
-- **Configuration**: `/api/integrations/hiera/config`
-
-See [Integrations API Documentation](./integrations-api.md#hiera-integration) for details.
-
-### Integration Status
-
-Check the health and connectivity of all integrations:
-
-```http
-GET /api/integrations/status
-```
-
-Returns status for Bolt, PuppetDB, Puppetserver, and Hiera integrations.
-
-## Support
-
-For issues, questions, or feature requests, please refer to the project documentation or contact the development team.
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/monitoring/metrics` | Performance metrics (memory, CPU, uptime) |
+| `GET` | `/api/monitoring/journal` | System journal entries |

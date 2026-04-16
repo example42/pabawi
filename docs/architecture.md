@@ -1,766 +1,215 @@
-# Pabawi Architecture Documentation
+# Pabawi Architecture
 
-Version: 1.0.0
+Pabawi is a web UI and REST API that wraps multiple infrastructure tools behind a single, consistent interface. The frontend is a Svelte 5 SPA. The backend is a Node.js/Express server with a plugin system that manages integrations, executes commands, aggregates data, and streams output in real time.
 
-## Table of Contents
+## Plugin System
 
-- [Overview](#overview)
-- [Plugin Architecture](#plugin-architecture)
-- [Integration Registration](#integration-registration)
-- [Data Flow](#data-flow)
-- [Component Diagrams](#component-diagrams)
-- [Key Components](#key-components)
-- [Multi-Source Data Aggregation](#multi-source-data-aggregation)
-- [Health Monitoring](#health-monitoring)
-- [Error Handling](#error-handling)
-- [Security](#security)
+Every integration is a plugin. Plugins are registered with `IntegrationManager` at startup and fall into three roles:
 
-## Overview
+| Role | Interface | Examples |
+|---|---|---|
+| Execution tool | `ExecutionToolPlugin` | Bolt, Ansible, SSH |
+| Information source | `InformationSourcePlugin` | PuppetDB, Puppetserver, Hiera |
+| Both | Both interfaces | Bolt |
+| Provisioning tool | `ProvisioningToolPlugin` | Proxmox, AWS |
 
-Pabawi is a unified remote execution interface that orchestrates multiple infrastructure management tools through a consistent plugin-based architecture. The system provides a common abstraction layer and REST API for executing commands, tasks, and workflows across heterogeneous automation backends.
+All plugins extend `BasePlugin`, which handles initialization state, health checks, logging, and config validation. Concrete plugins implement two abstract methods: `performInitialization()` and `performHealthCheck()`.
 
-### Design Principles
+```
+IntegrationPlugin (interface)
+├── ExecutionToolPlugin      → executeAction(), listCapabilities()
+├── InformationSourcePlugin  → getInventory(), getNodeFacts(), getNodeData()
+└── ProvisioningToolPlugin   → provision(), deprovision()
 
-1. **Plugin-Based Architecture**: All integrations follow a consistent plugin pattern
-2. **Multi-Source Aggregation**: Data from multiple sources is combined and linked
-3. **Graceful Degradation**: Failures in one integration don't break others
-4. **Consistent Interfaces**: All plugins implement standard interfaces
-5. **Priority-Based Routing**: Higher priority sources take precedence for duplicate data
+BasePlugin (abstract class, implements IntegrationPlugin)
+├── BoltPlugin           (execution + information, priority: 10)
+├── PuppetDBService      (information, priority: 10)
+├── PuppetserverService  (information, priority: 20)
+├── HieraService         (information, priority: 6)
+├── AnsibleService       (execution, priority: 8)
+├── SSHService           (execution, priority: 50)
+├── ProxmoxService       (provisioning, priority: 10)
+└── AWSService           (provisioning, priority: 10)
+```
 
-### Current Integrations
+## Configuration Flow
 
-- **Bolt**: Execution tool and information source (priority: 10)
-- **PuppetDB**: Information source for Puppet infrastructure data (priority: 10)
-- **Puppetserver**: Information source for node management and catalog compilation (priority: 20)
-- **Hiera**: Information source for hierarchical configuration data (priority: 6)
-- **Ansible**: Execution tool for Ansible playbooks and commands (priority: 10)
-- **SSH**: Execution tool for direct SSH command execution (priority: 10)
-- **Proxmox**: Provisioning tool for Proxmox VE VMs and containers (priority: 10)
-- **AWS**: Provisioning tool for AWS EC2 instances (priority: 10)
-
-### Configuration Flow
-
-All integration configuration flows exclusively through environment variables:
+All configuration comes from environment variables. There are no database-stored config overrides.
 
 ```
 backend/.env → ConfigService (Zod validation) → IntegrationManager → Plugins
 ```
 
-There are no database-stored configuration overrides. The web UI setup guides generate `.env` snippets for operators to copy into their configuration file.
+`ConfigService` is the only place `process.env` is read. Every other file imports from `ConfigService`.
 
-## Plugin Architecture
-
-### Plugin Types
-
-Pabawi supports three types of plugins:
-
-1. **Execution Tool Plugins**: Execute actions on target nodes (commands, tasks, plans)
-2. **Information Source Plugins**: Provide inventory, facts, and node data
-3. **Both**: Plugins that provide both execution and information capabilities
-
-### Plugin Interface Hierarchy
+## Startup Sequence
 
 ```
-IntegrationPlugin (base interface)
-├── ExecutionToolPlugin
-│   ├── executeAction()
-│   └── listCapabilities()
-├── InformationSourcePlugin
-│   ├── getInventory()
-│   ├── getNodeFacts()
-│   └── getNodeData()
-└── Both (implements both interfaces)
+server.ts
+  │
+  ├── ConfigService.load()           parse + validate all env vars
+  ├── DatabaseService.initialize()   run migrations (SQLite)
+  ├── IntegrationManager.new()       create registry
+  │
+  ├── register plugins               one per enabled integration
+  ├── IntegrationManager.initializePlugins()   parallel init, errors logged
+  ├── IntegrationManager.startHealthCheckScheduler()   runs every 60s
+  │
+  └── Express routes mounted         server ready
 ```
 
-### Base Plugin Class
+Plugin init failures don't crash the server. The failed plugin is marked unhealthy and other integrations continue working.
 
-All plugins extend `BasePlugin` which provides:
+## Data Flows
 
-- Configuration management
-- Initialization state tracking
-- Health check framework
-- Logging helpers
-- Common validation logic
-
-```typescript
-abstract class BasePlugin implements IntegrationPlugin {
-  protected config: IntegrationConfig;
-  protected initialized: boolean;
-  
-  // Lifecycle methods
-  async initialize(config: IntegrationConfig): Promise<void>
-  async healthCheck(): Promise<HealthStatus>
-  
-  // Abstract methods for subclasses
-  protected abstract performInitialization(): Promise<void>
-  protected abstract performHealthCheck(): Promise<HealthStatus>
-  
-  // State management
-  isInitialized(): boolean
-  isEnabled(): boolean
-  getPriority(): number
-}
-```
-
-### Plugin Configuration
-
-Each plugin is configured with:
-
-```typescript
-interface IntegrationConfig {
-  enabled: boolean;           // Enable/disable the integration
-  name: string;              // Unique plugin identifier
-  type: "execution" | "information" | "both";
-  config: Record<string, unknown>;  // Plugin-specific configuration
-  priority?: number;         // Priority for data source ordering
-}
-```
-
-## Integration Registration
-
-### Registration Process
-
-1. **Plugin Creation**: Instantiate plugin with specific configuration
-2. **Registration**: Register plugin with IntegrationManager
-3. **Initialization**: Manager calls initialize() on all plugins
-4. **Health Check**: Periodic health checks verify plugin status
-5. **Ready**: Plugin is available for use
-
-### Registration Flow
+### Inventory request
 
 ```
-Application Startup
-    │
-    ├─> Create IntegrationManager
-    │
-    ├─> Create Plugin Instances
-    │   ├─> BoltPlugin
-    │   ├─> PuppetDBService
-    │   └─> PuppetserverService
-    │
-    ├─> Register Plugins
-    │   └─> integrationManager.registerPlugin(plugin, config)
-    │       ├─> Validate plugin name is unique
-    │       ├─> Store in plugins map
-    │       ├─> Add to type-specific maps
-    │       │   ├─> executionTools (if type = execution or both)
-    │       │   └─> informationSources (if type = information or both)
-    │       └─> Log registration
-    │
-    ├─> Initialize All Plugins
-    │   └─> integrationManager.initializePlugins()
-    │       ├─> For each registered plugin:
-    │       │   ├─> Call plugin.initialize(config)
-    │       │   ├─> Plugin performs setup
-    │       │   │   ├─> Validate configuration
-    │       │   │   ├─> Establish connections
-    │       │   │   ├─> Load resources
-    │       │   │   └─> Set initialized = true
-    │       │   └─> Continue even if some fail
-    │       └─> Return array of errors
-    │
-    ├─> Start Health Check Scheduler
-    │   └─> integrationManager.startHealthCheckScheduler()
-    │       ├─> Run initial health check
-    │       └─> Schedule periodic checks
-    │
-    └─> Ready for Requests
+GET /api/inventory
+  │
+  ├── IntegrationManager.getLinkedInventory()
+  │     │
+  │     ├── query all InformationSourcePlugins in parallel
+  │     │     ├── bolt.getInventory()
+  │     │     ├── puppetdb.getInventory()
+  │     │     └── puppetserver.getInventory()
+  │     │
+  │     ├── deduplicate by node ID (higher priority source wins)
+  │     └── NodeLinkingService.linkNodes()
+  │           match on certname → hostname → IP
+  │           build LinkedNode with sources[] array
+  │
+  └── JSON response: linked nodes with source metadata
 ```
 
-### Example Registration Code
-
-```typescript
-// server.ts
-const integrationManager = new IntegrationManager({
-  healthCheckIntervalMs: 60000,  // 1 minute
-  healthCheckCacheTTL: 300000    // 5 minutes
-});
-
-// Register Bolt plugin
-const boltPlugin = new BoltPlugin(boltService);
-integrationManager.registerPlugin(boltPlugin, {
-  enabled: true,
-  name: 'bolt',
-  type: 'both',
-  priority: 10,
-  config: {}
-});
-
-// Register PuppetDB plugin
-const puppetdbService = new PuppetDBService(puppetdbConfig);
-integrationManager.registerPlugin(puppetdbService, {
-  enabled: config.puppetdb.enabled,
-  name: 'puppetdb',
-  type: 'information',
-  priority: 10,
-  config: puppetdbConfig
-});
-
-// Register Puppetserver plugin
-const puppetserverService = new PuppetserverService(puppetserverConfig);
-integrationManager.registerPlugin(puppetserverService, {
-  enabled: config.puppetserver.enabled,
-  name: 'puppetserver',
-  type: 'information',
-  priority: 20,
-  config: puppetserverConfig
-});
-
-// Initialize all plugins
-const errors = await integrationManager.initializePlugins();
-
-// Start health monitoring
-integrationManager.startHealthCheckScheduler();
-```
-
-## Data Flow
-
-### Inventory Retrieval Flow
+### Command execution
 
 ```
-Client Request: GET /api/inventory
-    │
-    ├─> API Route Handler
-    │   └─> integrationManager.getLinkedInventory()
-    │
-    ├─> IntegrationManager.getAggregatedInventory()
-    │   │
-    │   ├─> Query All Information Sources (parallel)
-    │   │   ├─> bolt.getInventory()
-    │   │   │   └─> Returns nodes from Bolt inventory
-    │   │   │
-    │   │   ├─> puppetdb.getInventory()
-    │   │   │   └─> Returns nodes from PuppetDB
-    │   │   │
-    │   │   └─> puppetserver.getInventory()
-    │   │       └─> Returns nodes from Puppetserver
-    │   │
-    │   ├─> Add Source Attribution
-    │   │   └─> Each node tagged with source name
-    │   │
-    │   ├─> Deduplicate by Node ID
-    │   │   └─> Prefer higher priority sources
-    │   │
-    │   └─> Return aggregated inventory
-    │
-    ├─> NodeLinkingService.linkNodes()
-    │   │
-    │   ├─> Group nodes by identifier
-    │   │   └─> Match on certname, hostname, IP
-    │   │
-    │   ├─> Create LinkedNode objects
-    │   │   ├─> Combine data from all sources
-    │   │   ├─> Add sources array
-    │   │   └─> Set linked flag
-    │   │
-    │   └─> Return linked nodes
-    │
-    └─> Response to Client
-        └─> JSON with linked nodes and source metadata
+POST /api/executions
+  │
+  ├── CommandWhitelistService.validate()    reject if not whitelisted
+  ├── ExecutionQueue.enqueue()              enforce concurrency limit
+  │
+  ├── IntegrationManager.executeAction(toolName, action)
+  │     └── tool.executeAction(action)     Bolt/Ansible/SSH
+  │
+  ├── StreamingExecutionManager            SSE real-time output
+  ├── ExecutionRepository.create()         persist result to SQLite
+  │
+  └── JSON response: execution result
 ```
 
-### Command Execution Flow
+### Facts request
 
 ```
-Client Request: POST /api/executions
-    │
-    ├─> API Route Handler
-    │   └─> integrationManager.executeAction(toolName, action)
-    │
-    ├─> IntegrationManager
-    │   ├─> Get execution tool by name
-    │   ├─> Verify tool is initialized
-    │   └─> Call tool.executeAction(action)
-    │
-    ├─> Execution Tool Plugin (e.g., BoltPlugin)
-    │   ├─> Validate action parameters
-    │   ├─> Transform to tool-specific format
-    │   ├─> Execute via tool's API/CLI
-    │   ├─> Parse results
-    │   └─> Return normalized ExecutionResult
-    │
-    ├─> Store Execution Result
-    │   └─> ExecutionRepository.create()
-    │
-    └─> Response to Client
-        └─> JSON with execution result
+GET /api/inventory/:nodeId/facts
+  │
+  ├── query all InformationSourcePlugins in parallel
+  │     ├── bolt.getNodeFacts(nodeId)
+  │     ├── puppetdb.getNodeFacts(nodeId)
+  │     └── puppetserver.getNodeFacts(nodeId)
+  │
+  └── JSON response: { bolt: {...}, puppetdb: {...}, puppetserver: {...} }
 ```
 
-### Node Facts Retrieval Flow
+### Health check
 
 ```
-Client Request: GET /api/inventory/:nodeId/facts
-    │
-    ├─> API Route Handler
-    │   └─> integrationManager.getNodeData(nodeId)
-    │
-    ├─> IntegrationManager.getNodeData()
-    │   │
-    │   ├─> Query All Information Sources (parallel)
-    │   │   ├─> bolt.getNodeFacts(nodeId)
-    │   │   ├─> puppetdb.getNodeFacts(nodeId)
-    │   │   └─> puppetserver.getNodeFacts(nodeId)
-    │   │
-    │   ├─> Aggregate Facts by Source
-    │   │   └─> facts = { bolt: {...}, puppetdb: {...}, puppetserver: {...} }
-    │   │
-    │   └─> Return aggregated data
-    │
-    └─> Response to Client
-        └─> JSON with facts from all sources
+Scheduler (every 60s)
+  └── plugin.healthCheck() for each plugin → cached 5 min
+
+GET /api/integrations/status
+  └── return cached results (or fresh if cache expired)
 ```
 
-### Health Check Flow
+## Backend Directory Layout
 
 ```
-Periodic Health Check (every 60 seconds)
-    │
-    ├─> IntegrationManager.healthCheckAll()
-    │   │
-    │   ├─> For Each Registered Plugin (parallel)
-    │   │   ├─> plugin.healthCheck()
-    │   │   │   ├─> Check if initialized
-    │   │   │   ├─> Check if enabled
-    │   │   │   ├─> Perform plugin-specific check
-    │   │   │   │   ├─> Ping API endpoint
-    │   │   │   │   ├─> Verify authentication
-    │   │   │   │   └─> Test basic query
-    │   │   │   └─> Return HealthStatus
-    │   │   │
-    │   │   └─> Update health check cache
-    │   │
-    │   └─> Return Map<pluginName, HealthStatus>
-    │
-    └─> Cache Results (TTL: 5 minutes)
-
-Client Request: GET /api/integrations/status
-    │
-    ├─> API Route Handler
-    │   └─> integrationManager.healthCheckAll(useCache: true)
-    │
-    ├─> Check Cache
-    │   ├─> If cache valid (< 5 minutes old)
-    │   │   └─> Return cached results
-    │   └─> If cache expired
-    │       └─> Perform fresh health checks
-    │
-    └─> Response to Client
-        └─> JSON with health status for all integrations
+backend/src/
+├── server.ts                      Express app, plugin registration, route wiring
+├── config/                        ConfigService — Zod schemas for all env vars
+├── integrations/
+│   ├── BasePlugin.ts
+│   ├── IntegrationManager.ts
+│   ├── NodeLinkingService.ts
+│   ├── types.ts
+│   ├── bolt/
+│   ├── puppetdb/
+│   ├── puppetserver/
+│   ├── hiera/
+│   ├── ansible/
+│   ├── ssh/
+│   ├── proxmox/
+│   └── aws/
+├── services/
+│   ├── ExecutionQueue.ts           concurrency limit, FIFO
+│   ├── StreamingExecutionManager.ts  SSE real-time output
+│   ├── CommandWhitelistService.ts  security: allowed commands
+│   ├── DatabaseService.ts          SQLite, migrations
+│   ├── AuthenticationService.ts    JWT auth
+│   ├── BatchExecutionService.ts    multi-node execution
+│   ├── UserService.ts
+│   ├── RoleService.ts
+│   ├── PermissionService.ts
+│   └── GroupService.ts
+├── routes/                         Express route handlers (all wrapped in asyncHandler)
+├── middleware/                     JWT auth, RBAC, error handler, rate limit, security headers
+├── database/
+│   ├── DatabaseService.ts
+│   ├── ExecutionRepository.ts
+│   └── migrations/*.sql            schema-first, sequential migration files
+├── errors/                         typed error classes
+└── validation/                     Zod schemas for request bodies
 ```
 
-## Component Diagrams
-
-### High-Level System Architecture
+## Frontend Directory Layout
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Frontend (Svelte)                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
-│  │Inventory │  │   Node   │  │Execution │  │  Puppet  │   │
-│  │   Page   │  │  Detail  │  │  History │  │   Page   │   │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘   │
-│       │             │              │             │          │
-│  ┌────┴─────┐  ┌────┴─────┐                                │
-│  │ Status   │  │  Setup   │                                │
-│  │Dashboard │  │ Wizards  │                                │
-│  └──────────┘  └──────────┘                                │
-│                     │ HTTP/REST                             │
-└─────────────────────┼───────────────────────────────────────┘
-                      │
-┌─────────────────────┼───────────────────────────────────────┐
-│                     │  Backend (Node.js/Express)            │
-│                     ▼                                        │
-│  ┌──────────────┐  ┌─────────────────┐                     │
-│  │ ConfigService │  │  API Routes     │                     │
-│  │ (.env → Zod) │  │  /api/*         │                     │
-│  └──────┬───────┘  └────────┬────────┘                     │
-│         │                   │                                │
-│         └─────────┬─────────┘                                │
-│            ┌──────▼─────────┐                               │
-│            │ Integration     │                              │
-│            │   Manager       │                              │
-│            │                 │                              │
-│            │ ┌─────────────┐ │                              │
-│            │ │  Plugin     │ │                              │
-│            │ │ Registry    │ │                              │
-│            │ └─────────────┘ │                              │
-│            │                 │                              │
-│            │ ┌─────────────┐ │                              │
-│            │ │  Health     │ │                              │
-│            │ │  Monitor    │ │                              │
-│            │ └─────────────┘ │                              │
-│            │                 │                              │
-│            │ ┌─────────────┐ │                              │
-│            │ │   Node      │ │                              │
-│            │ │  Linking    │ │                              │
-│            │ └─────────────┘ │                              │
-│            └────────┬────────┘                              │
-│                     │                                        │
-│   ┌─────────┬──────┼──────┬──────────┬──────────┐          │
-│   │         │      │      │          │          │          │
-│ ┌─▼───┐ ┌──▼───┐ ┌▼────┐ ┌▼──────┐ ┌▼──────┐ ┌▼──────┐  │
-│ │Bolt │ │PDB   │ │PS   │ │Hiera │ │Prox  │ │AWS   │  │
-│ │     │ │      │ │     │ │      │ │mox   │ │      │  │
-│ │both │ │info  │ │info │ │info  │ │prov  │ │prov  │  │
-│ └──┬──┘ └──┬───┘ └──┬──┘ └──┬───┘ └──┬───┘ └──┬───┘  │
-│    │       │        │       │        │        │       │
-└────┼───────┼────────┼───────┼────────┼────────┼───────┘
-     │       │        │       │        │        │
-  ┌──▼──┐ ┌─▼────┐ ┌─▼────┐ ┌▼────┐ ┌─▼────┐ ┌─▼────┐
-  │Bolt │ │PDB   │ │PS    │ │Hiera│ │Prox  │ │AWS   │
-  │CLI  │ │API   │ │API   │ │Files│ │API   │ │API   │
-  └─────┘ └──────┘ └──────┘ └─────┘ └──────┘ └──────┘
+frontend/src/
+├── App.svelte                      router init, auth guard, setup check
+├── pages/                          one component per route
+├── components/                     shared UI components
+└── lib/
+    ├── router.svelte.ts            client-side router (Svelte 5 runes)
+    ├── auth.svelte.ts              JWT auth state
+    ├── api.ts                      HTTP client with error handling
+    ├── executionStream.svelte.ts   SSE client for real-time output
+    ├── expertMode.svelte.ts        debug info toggle
+    ├── integrationColors.svelte.ts per-integration color constants
+    └── toast.svelte.ts             notification system
 ```
 
-### Plugin Architecture Detail
+The frontend uses Svelte 5 runes (`$state()`, `$effect()`, `$derived()`) throughout. Module-level rune state in `lib/*.svelte.ts` persists across component mounts.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│              IntegrationManager                          │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │           Plugin Registry                       │    │
-│  │  Map<name, PluginRegistration>                 │    │
-│  │    - plugin: IntegrationPlugin                 │    │
-│  │    - config: IntegrationConfig                 │    │
-│  │    - registeredAt: timestamp                   │    │
-│  └────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │      Type-Specific Maps                        │    │
-│  │  executionTools: Map<name, ExecutionToolPlugin>│    │
-│  │  informationSources: Map<name, InfoSourcePlugin>│   │
-│  └────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │      Health Check Cache                        │    │
-│  │  Map<name, HealthCheckCacheEntry>             │    │
-│  │    - status: HealthStatus                      │    │
-│  │    - cachedAt: timestamp                       │    │
-│  └────────────────────────────────────────────────┘    │
-│                                                          │
-│  ┌────────────────────────────────────────────────┐    │
-│  │      Node Linking Service                      │    │
-│  │  - linkNodes()                                 │    │
-│  │  - getLinkedNodeData()                         │    │
-│  │  - findMatchingNodes()                         │    │
-│  └────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────┘
-```
+## Database
 
-### Plugin Inheritance Hierarchy
+SQLite. Schema managed by sequential migration files in `database/migrations/`. `DatabaseService` is a shared singleton — never create connections in individual files.
 
-```
-┌──────────────────────────────────────┐
-│      IntegrationPlugin               │
-│  (interface)                         │
-│  - name: string                      │
-│  - type: string                      │
-│  - initialize()                      │
-│  - healthCheck()                     │
-│  - getConfig()                       │
-│  - isInitialized()                   │
-└──────────────┬───────────────────────┘
-               │
-               │ implements
-               │
-┌──────────────▼───────────────────────┐
-│         BasePlugin                   │
-│  (abstract class)                    │
-│  + config: IntegrationConfig         │
-│  + initialized: boolean              │
-│  + initialize()                      │
-│  + healthCheck()                     │
-│  # performInitialization()           │
-│  # performHealthCheck()              │
-│  # validateConfig()                  │
-│  # log()                             │
-└──────────────┬───────────────────────┘
-               │
-               │ extends
-               │
-       ┌───────┴────────┬──────────────────┐
-       │                │                   │
-┌──────▼──────┐  ┌─────▼──────┐  ┌────────▼────────┐
-│ BoltPlugin  │  │ PuppetDB   │  │ Puppetserver    │
-│             │  │ Service    │  │ Service         │
-│ (both)      │  │ (info)     │  │ (info)          │
-│             │  │            │  │                 │
-│ implements: │  │ implements:│  │ implements:     │
-│ - Execution │  │ - Info     │  │ - Info          │
-│ - Info      │  │   Source   │  │   Source        │
-└─────────────┘  └────────────┘  └─────────────────┘
-```
+| Migration | Content |
+|---|---|
+| 000_initial.sql | Execution history, base schema |
+| 001_rbac.sql | Users, roles, permissions, groups |
 
-## Key Components
+## Security Model
 
-### IntegrationManager
+- **Command whitelisting** — `CommandWhitelistService` validates every command before execution. Set `COMMAND_WHITELIST_ALLOW_ALL=false` in production.
+- **JWT authentication** — all API routes behind auth middleware when `AUTH_ENABLED=true`.
+- **RBAC** — role-based access control via `UserService`, `RoleService`, `PermissionService`. See [permissions-rbac.md](./permissions-rbac.md).
+- **Rate limiting** — applied at middleware level.
+- **Security headers** — helmet middleware.
+- **Secret obfuscation** — expert mode logs redact sensitive values.
 
-Central orchestrator for all plugins.
+## Caching
 
-**Responsibilities:**
+| Data | TTL | Location |
+|---|---|---|
+| Inventory | 30 s | Per-plugin service |
+| Node facts | 5 min | Per-plugin service |
+| Health checks | 5 min | IntegrationManager |
 
-- Plugin registration and lifecycle management
-- Plugin routing (finding the right plugin for a task)
-- Multi-source data aggregation
-- Health check scheduling and caching
-- Node linking across sources
+## Related Docs
 
-**Key Methods:**
-
-- `registerPlugin(plugin, config)`: Register a new plugin
-- `initializePlugins()`: Initialize all registered plugins
-- `executeAction(toolName, action)`: Execute action via specific tool
-- `getAggregatedInventory()`: Get inventory from all sources
-- `getLinkedInventory()`: Get inventory with node linking
-- `getNodeData(nodeId)`: Get node data from all sources
-- `healthCheckAll(useCache)`: Check health of all plugins
-- `startHealthCheckScheduler()`: Start periodic health checks
-
-### BasePlugin
-
-Abstract base class for all plugins.
-
-**Responsibilities:**
-
-- Configuration management
-- Initialization state tracking
-- Health check framework
-- Common validation logic
-- Logging helpers
-
-**Lifecycle:**
-
-1. Construction: Create plugin instance
-2. Registration: Register with IntegrationManager
-3. Initialization: Call initialize() with config
-4. Ready: Plugin available for use
-5. Health Checks: Periodic verification
-
-### NodeLinkingService
-
-Links nodes across multiple information sources.
-
-**Responsibilities:**
-
-- Match nodes by identifier (certname, hostname, IP)
-- Create LinkedNode objects with multi-source data
-- Aggregate data from all sources for a node
-- Handle conflicts between sources
-
-**Matching Strategy:**
-
-1. Primary: Match on certname (exact match)
-2. Secondary: Match on hostname (case-insensitive)
-3. Tertiary: Match on IP address
-4. Create LinkedNode with all matching sources
-
-### Plugin-Specific Services
-
-#### BoltPlugin
-
-- Wraps BoltService
-- Implements both ExecutionToolPlugin and InformationSourcePlugin
-- Provides inventory from Bolt inventory files
-- Executes commands, tasks, and plans via Bolt CLI
-
-#### PuppetDBService
-
-- Implements InformationSourcePlugin
-- Provides inventory from PuppetDB nodes
-- Retrieves facts, reports, catalogs, events
-- Uses PuppetDB REST API
-
-#### PuppetserverService
-
-- Implements InformationSourcePlugin
-- Provides inventory from registered nodes
-- Retrieves node status, facts, catalogs
-- Uses Puppetserver REST API
-
-## Multi-Source Data Aggregation
-
-### Inventory Aggregation
-
-When multiple sources provide inventory:
-
-1. **Query All Sources**: Parallel queries to all information sources
-2. **Source Attribution**: Tag each node with its source
-3. **Deduplication**: Remove duplicates by node ID, prefer higher priority
-4. **Node Linking**: Link nodes across sources by identifier
-5. **Return**: Unified inventory with source metadata
-
-### Facts Aggregation
-
-When multiple sources provide facts:
-
-1. **Query All Sources**: Parallel queries for node facts
-2. **Organize by Source**: `{ bolt: {...}, puppetdb: {...}, puppetserver: {...} }`
-3. **Timestamp**: Include timestamp for each source
-4. **Return**: Facts from all sources with attribution
-
-### Priority-Based Selection
-
-When duplicate data exists:
-
-- Higher priority sources take precedence
-- Default priorities:
-  - Bolt: 10
-  - PuppetDB: 10
-  - Puppetserver: 20
-- Configurable per integration
-
-## Health Monitoring
-
-### Health Check System
-
-**Components:**
-
-1. **Plugin Health Checks**: Each plugin implements healthCheck()
-2. **Health Check Scheduler**: Periodic checks every 60 seconds
-3. **Health Check Cache**: Results cached for 5 minutes
-4. **Health Status API**: Expose status via REST API
-
-**Health Status:**
-
-```typescript
-interface HealthStatus {
-  healthy: boolean;
-  message?: string;
-  lastCheck: string;
-  details?: Record<string, unknown>;
-  degraded?: boolean;
-  workingCapabilities?: string[];
-  failingCapabilities?: string[];
-}
-```
-
-**States:**
-
-- **Healthy**: All checks pass, full functionality
-- **Degraded**: Partial functionality, some features work
-- **Unhealthy**: Integration not working
-- **Unavailable**: Integration not configured or disabled
-
-### Graceful Degradation
-
-When an integration fails:
-
-1. **Continue Operation**: Other integrations continue working
-2. **Cache Fallback**: Use cached data if available
-3. **User Notification**: Display error message in UI
-4. **Retry Logic**: Automatic retry with exponential backoff
-5. **Circuit Breaker**: Prevent cascading failures
-
-## Error Handling
-
-### Error Handling Strategy
-
-1. **Plugin-Level**: Each plugin handles its own errors
-2. **Manager-Level**: IntegrationManager catches and logs errors
-3. **API-Level**: Routes return appropriate HTTP status codes
-4. **UI-Level**: Frontend displays user-friendly error messages
-
-### Error Types
-
-- **Connection Errors**: Cannot reach integration endpoint
-- **Authentication Errors**: Invalid credentials or tokens
-- **Timeout Errors**: Request took too long
-- **Validation Errors**: Invalid request parameters
-- **Not Found Errors**: Resource doesn't exist
-- **Internal Errors**: Unexpected errors in plugin logic
-
-### Retry Logic
-
-- Exponential backoff for transient errors
-- Configurable retry attempts per integration
-- Circuit breaker to prevent cascading failures
-- Detailed logging of retry attempts
-
-## Security
-
-### Authentication
-
-- **Token-Based**: PuppetDB, Puppetserver support API tokens
-- **SSH Keys**: Bolt uses SSH keys for node access
-- **SSL/TLS**: Secure communication with client certificates for API access
-
-### Secrets Management
-
-- Environment variables for sensitive configuration
-- Automatic obfuscation in expert mode logs
-- Never log sensitive data (tokens, passwords, keys)
-- SSL certificates stored securely on filesystem
-- Audit logging for execution history
-
-### Access Control
-
-- Role-based access control (future)
-- Operation-level permissions (future)
-- Audit trail for all operations
-
-### Network Security
-
-- HTTPS for all API communications
-- Certificate validation
-- Configurable SSL/TLS settings
-- Network isolation options
-
-## Performance Considerations
-
-### Caching
-
-- Health check results cached for 5 minutes
-- Inventory data cached per source
-- Facts cached with configurable TTL
-- Cache invalidation on updates
-
-### Parallel Execution
-
-- Multi-source queries execute in parallel
-- Health checks run concurrently
-- Independent plugin failures don't block others
-
-### Connection Pooling
-
-- Reuse HTTP connections to integrations
-- Configurable connection limits
-- Connection timeout handling
-
-### Optimization
-
-- Lazy loading of node details
-- Pagination for large datasets
-- Efficient node linking algorithms
-- Minimal data transfer
-
-## Future Enhancements
-
-### Potential Features (Not Currently Planned)
-
-The following are potential future enhancements, not committed roadmap items:
-
-1. **Additional Execution Tools**: Ansible, Salt, or other automation frameworks
-2. **Multi-Tenancy**: Support multiple organizations with isolation
-3. **Advanced RBAC**: Fine-grained role-based access control
-4. **Webhooks**: Event-driven automation triggers
-5. **Enhanced Monitoring**: Prometheus metrics, OpenTelemetry tracing
-6. **Plugin Marketplace**: Community-contributed plugin ecosystem
-
-### Extensibility
-
-The plugin architecture is designed for easy extension:
-
-1. Implement IntegrationPlugin interface
-2. Extend BasePlugin for common functionality
-3. Register with IntegrationManager
-4. Configure via environment variables in `backend/.env`
-
-## Related Documentation
-
-- [API Documentation](./api.md)
-- [Integrations API](./integrations-api.md)
-- [Configuration Guide](./configuration.md)
-- [PuppetDB Integration Setup](./integrations/puppetdb.md)
-- [Puppetserver Setup](./uppetserver-integration-setup.md)
-- [Troubleshooting Guide](./troubleshooting.md)
+- [configuration.md](./configuration.md) — all env vars
+- [api.md](./api.md) — REST API reference
+- [permissions-rbac.md](./permissions-rbac.md) — RBAC model
+- [integrations/](./integrations/) — per-plugin setup guides
