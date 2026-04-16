@@ -48,11 +48,11 @@ This plan implements four enhancements to the Pabawi journal system: Proxmox lif
     - Assert same instanceId+state always produces same `id` following format `aws:state:{instanceId}:{state}`
     - **Validates: Requirements 2.6**
 
-- [-] 3. Checkpoint — Collectors complete
+- [x] 3. Checkpoint — Collectors complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Extend JournalService with global timeline methods
-  - [~] 4.1 Add `GlobalTimelineFilters` interface, `getGlobalTimeline`, and `getGlobalEntryCount` to `backend/src/services/journal/JournalService.ts`
+- [x] 4. Extend JournalService with global timeline methods
+  - [x] 4.1 Add `GlobalTimelineFilters` interface, `getGlobalTimeline`, and `getGlobalEntryCount` to `backend/src/services/journal/JournalService.ts`
     - Define `GlobalTimelineFilters` interface with optional nodeIds, eventType, source, startDate, endDate, limit (default 50, max 200), offset (default 0)
     - Implement `getGlobalTimeline(filters?)` that builds a SQL query across all nodes with dynamic WHERE clauses for each active filter, sorts by timestamp DESC, applies limit/offset
     - Implement `getGlobalEntryCount(filters?)` that returns COUNT(*) with the same filter logic
@@ -77,8 +77,8 @@ This plan implements four enhancements to the Pabawi journal system: Proxmox lif
     - Assert count equals the number of entries returned when no pagination limit is applied
     - **Validates: Requirements 4.4**
 
-- [ ] 5. Extend Journal Router with global stream and collector integration
-  - [~] 5.1 Add `GET /api/journal/global/stream` SSE endpoint to `backend/src/routes/journal.ts`
+- [x] 5. Extend Journal Router with global stream and collector integration
+  - [x] 5.1 Add `GET /api/journal/global/stream` SSE endpoint to `backend/src/routes/journal.ts`
     - Add `GlobalStreamQuerySchema` Zod schema for query params (nodeIds, groupId, startDate, endDate, eventType, source)
     - Add the global stream route before the `/:nodeId` routes to avoid route conflicts
     - Require authentication and `journal:read` RBAC permission
@@ -88,7 +88,7 @@ This plan implements four enhancements to the Pabawi journal system: Proxmox lif
     - Accept `IntegrationManager` as a new dependency in `createJournalRouter`
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8_
 
-  - [~] 5.2 Integrate Proxmox and AWS collectors into the existing `/:nodeId/stream` endpoint
+  - [x] 5.2 Integrate Proxmox and AWS collectors into the existing `/:nodeId/stream` endpoint
     - Accept `IntegrationManager` dependency (already added in 5.1)
     - In the `/:nodeId/stream` handler, determine the node's integration source by looking up the node in the aggregated inventory
     - If node belongs to Proxmox: add `"proxmox_tasks"` to activeSources, call `collectProxmoxTaskEntries` with the ProxmoxClient, PVE node name, and VMID extracted from the node config
@@ -105,7 +105,7 @@ This plan implements four enhancements to the Pabawi journal system: Proxmox lif
     - Place in `backend/test/routes/journal-global.test.ts`
     - _Requirements: 3.1, 3.7, 3.8_
 
-- [ ] 6. Checkpoint — Backend complete
+- [-] 6. Checkpoint — Backend complete
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Refactor JournalTimeline to shared component with compact display

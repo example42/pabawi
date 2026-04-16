@@ -126,3 +126,24 @@ export const SearchOptionsSchema = z.object({
 });
 
 export type SearchOptions = z.infer<typeof SearchOptionsSchema>;
+
+// ============================================================================
+// Global Timeline Schemas
+// ============================================================================
+
+/**
+ * Filters for querying journal entries across all nodes.
+ * Used by getGlobalTimeline and getGlobalEntryCount.
+ * Requirements: 4.1, 4.2, 4.3, 4.4
+ */
+export const GlobalTimelineFiltersSchema = z.object({
+  nodeIds: z.array(z.string().min(1)).optional(),
+  eventType: JournalEventTypeSchema.optional(),
+  source: JournalSourceSchema.optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  limit: z.number().int().min(1).max(200).default(50),
+  offset: z.number().int().min(0).default(0),
+});
+
+export type GlobalTimelineFilters = z.infer<typeof GlobalTimelineFiltersSchema>;

@@ -20,6 +20,7 @@ import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 import type { JournalService } from "../../services/journal/JournalService";
 import type { CreateJournalEntry } from "../../services/journal/types";
+import type { ProxmoxClientLike } from "../../services/journal/JournalCollectors";
 import { ProxmoxService } from "./ProxmoxService";
 import type { ProxmoxConfig, ProvisioningCapability } from "./types";
 
@@ -364,6 +365,15 @@ export class ProxmoxIntegration
   // ========================================
   // Journal Integration
   // ========================================
+
+  /**
+   * Get the underlying Proxmox client for direct API access.
+   * Returns null if the integration is not initialized.
+   */
+  getClient(): ProxmoxClientLike | null {
+    if (!this.initialized || !this.service) return null;
+    return this.service.getClient() ?? null;
+  }
 
   /**
    * Set the JournalService for recording events
