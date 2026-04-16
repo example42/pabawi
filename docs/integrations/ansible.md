@@ -1,95 +1,65 @@
-# Ansible Integration Setup Guide
+# Ansible Integration
 
-## Overview
-
-Pabawi supports Ansible as an execution integration for:
-
-- Ad-hoc command execution on nodes
-- Package installation/removal
-- Playbook execution
-- Execution history tracking with tool attribution (`ansible`)
-
-This guide covers the minimum configuration needed to enable and validate Ansible in Pabawi.
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Environment Configuration](#environment-configuration)
-- [Inventory Setup](#inventory-setup)
-- [Playbook Setup](#playbook-setup)
-- [Validation](#validation)
-- [Troubleshooting](#troubleshooting)
+Pabawi uses Ansible for ad-hoc command execution, package installation, and playbook execution on managed hosts.
 
 ## Prerequisites
 
-- `ansible` and `ansible-playbook` available in `PATH`
-- A reachable inventory file for your managed hosts
-- SSH (or compatible Ansible transport) connectivity from the machine running Pabawi
-
-Example validation:
+- `ansible` and `ansible-playbook` in `PATH` on the Pabawi host
+- A reachable inventory file for managed hosts
+- SSH connectivity from the Pabawi host to target nodes
 
 ```bash
-ansible --version
-ansible-playbook --version
+ansible --version && ansible-playbook --version
 ```
 
-## Environment Configuration
-
-Add the following to your `backend/.env`. You can also use the **Ansible Setup Guide** in the Pabawi web UI to generate this snippet — it walks you through the settings and lets you copy the result to your clipboard.
+## Configuration
 
 ```bash
 ANSIBLE_ENABLED=true
-ANSIBLE_PROJECT_PATH=.
-ANSIBLE_INVENTORY_PATH=inventory/hosts
-ANSIBLE_EXECUTION_TIMEOUT=300000
+ANSIBLE_PROJECT_PATH=/opt/ansible-project   # working directory for ansible commands
+ANSIBLE_INVENTORY_PATH=inventory/hosts      # relative to ANSIBLE_PROJECT_PATH, or absolute
+ANSIBLE_EXECUTION_TIMEOUT=300000            # ms, default 5 min
 ```
 
-### Variable Reference
+Use the **Ansible Setup Guide** in the Pabawi web UI to generate the `.env` snippet interactively.
 
-- `ANSIBLE_ENABLED`: Enables Ansible integration (`true`/`false`)
-- `ANSIBLE_PROJECT_PATH`: Working directory used when running Ansible commands
-- `ANSIBLE_INVENTORY_PATH`: Inventory path relative to `ANSIBLE_PROJECT_PATH` (or absolute)
-- `ANSIBLE_EXECUTION_TIMEOUT`: Execution timeout in milliseconds
+## Inventory
 
-## Inventory Setup
+Pabawi uses the configured inventory file for all Ansible operations. Any valid Ansible inventory format works.
 
-Pabawi can work with your existing Ansible inventory. The configured `ANSIBLE_INVENTORY_PATH` must point to a valid inventory file.
-
-### INI Example (`inventory/hosts`)
+**INI (`inventory/hosts`):**
 
 ```ini
-[linux]
+[web]
 web01.example.com
-db01.example.com
+web02.example.com
 
-[linux:vars]
+[web:vars]
 ansible_user=ubuntu
 ansible_ssh_private_key_file=~/.ssh/id_rsa
 ```
 
-### YAML Example (`inventory/hosts.yaml`)
+**YAML (`inventory/hosts.yaml`):**
 
 ```yaml
 all:
   children:
-    linux:
+    web:
       hosts:
         web01.example.com:
-        db01.example.com:
+        web02.example.com:
       vars:
         ansible_user: ubuntu
         ansible_ssh_private_key_file: ~/.ssh/id_rsa
 ```
 
-## Playbook Setup
+## Playbooks
 
-Create playbooks in your project path (for example, under `playbooks/`) and execute them from the Node Actions page.
-
-Example playbook:
+Place playbooks in `ANSIBLE_PROJECT_PATH` (e.g. `playbooks/`). They appear in the **Run Playbook** section on node detail pages.
 
 ```yaml
 ---
-- name: Sample maintenance playbook
+- name: Maintenance playbook
   hosts: all
   become: true
   tasks:
@@ -101,38 +71,24 @@ Example playbook:
 
 ## Validation
 
-Before testing from UI, validate directly from CLI in `ANSIBLE_PROJECT_PATH`:
+Test from the CLI before using the UI:
 
 ```bash
+cd $ANSIBLE_PROJECT_PATH
 ansible all -i inventory/hosts -m ping
 ansible-playbook -i inventory/hosts playbooks/site.yml --check
 ```
 
 Then in Pabawi:
 
-1. Open Integrations and verify Ansible status is `connected` or `degraded`
-2. Go to a node and run:
-   - Command execution (select tool = Ansible)
-   - Package installation (select tool = Ansible)
-   - Playbook execution
-3. Check Executions page and confirm `Tool` shows `Ansible`
+1. Check Integrations — Ansible should show `connected` or `degraded`
+2. Execute a command on a node with tool = Ansible
+3. Verify executions show `Tool: Ansible`
 
 ## Troubleshooting
 
-### "Ansible integration is not available"
-
-- Ensure `ANSIBLE_ENABLED=true`
-- Restart backend after updating `.env`
-- Confirm `ansible` and `ansible-playbook` are installed on host/container
-
-### "Ansible inventory file was not found"
-
-- Verify `ANSIBLE_PROJECT_PATH` and `ANSIBLE_INVENTORY_PATH`
-- Use absolute paths if needed
-- Check file permissions for the backend process user
-
-### Commands work in shell but fail in Pabawi
-
-- Validate the same inventory path used by Pabawi
-- Check SSH key/user in inventory vars
-- Review backend logs with `LOG_LEVEL=debug`
+| Problem | Fix |
+|---|---|
+| "Ansible integration is not available" | `ANSIBLE_ENABLED=true` not set, or `ansible` not in `PATH`. Restart backend after changing `.env`. |
+| "Ansible inventory file was not found" | Check `ANSIBLE_PROJECT_PATH` + `ANSIBLE_INVENTORY_PATH`. Use absolute paths. Check file permissions. |
+| Commands work in shell but fail in Pabawi | Check `SSH_KEY`/user in inventory vars. Set `LOG_LEVEL=debug` and check backend logs. |
