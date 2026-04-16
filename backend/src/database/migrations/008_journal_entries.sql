@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
   eventType TEXT NOT NULL CHECK (eventType IN (
     'provision', 'destroy', 'start', 'stop', 'reboot', 'suspend', 'resume',
     'command_execution', 'task_execution', 'puppet_run', 'package_install',
-    'config_change', 'note', 'error', 'warning', 'info'
+    'config_change', 'note', 'unknown'
   )),
   source TEXT NOT NULL CHECK (source IN (
     'proxmox', 'aws', 'bolt', 'ansible', 'ssh', 'puppetdb', 'user', 'system'

@@ -19,6 +19,7 @@ export type JournalStreamEvent =
 export interface PuppetDBLike {
   isInitialized(): boolean;
   getNodeReports(nodeId: string, limit?: number, offset?: number): Promise<Report[]>;
+  getAllReports?(limit?: number, offset?: number): Promise<Report[]>;
 }
 
 /**
@@ -79,7 +80,6 @@ export function executionToJournalEntry(
     task: "task_execution",
     puppet: "puppet_run",
     package: "package_install",
-    facts: "info",
     plan: "task_execution",
   };
 
@@ -90,7 +90,7 @@ export function executionToJournalEntry(
     ssh: "ssh",
   };
 
-  const eventType = eventTypeMap[execution.type] ?? "info";
+  const eventType = eventTypeMap[execution.type] ?? "unknown";
   const source: JournalSource = sourceMap[execution.executionTool ?? "bolt"] ?? "bolt";
 
   const nodeResult = execution.results.find((r) => r.nodeId === nodeId);
@@ -253,7 +253,7 @@ export function mapProxmoxTaskType(taskType: string): JournalEventType {
     qmresume: "resume",
     vzresume: "resume",
   };
-  return mapping[taskType] ?? "info";
+  return mapping[taskType] ?? "unknown";
 }
 
 /**
@@ -370,7 +370,7 @@ export function mapEC2StateToEventType(state: string): JournalEventType {
     "shutting-down": "stop",
     stopping: "stop",
   };
-  return mapping[state] ?? "info";
+  return mapping[state] ?? "unknown";
 }
 
 /**
@@ -466,4 +466,147 @@ export async function collectAWSStateEntry(
       isLive: true,
     },
   ];
+}
+
+// ============================================================================
+// Global Collectors (cross-node)
+// ============================================================================
+
+/**
+ * Fetch recent executions across all nodes and convert to journal entries.
+ * Each execution is expanded into one entry per target node.
+ */
+export async function collectGlobalExecutionEntries(
+  db: DatabaseAdapter,
+  limit = 100,
+  filters?: {
+    nodeIds?: string[];
+    startDate?: string;
+    endDate?: string;
+  },
+): Promise<JournalEntry[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (filters?.startDate) {
+    conditions.push("started_at >= ?");
+    params.push(filters.startDate);
+  }
+  if (filters?.endDate) {
+    conditions.push("started_at <= ?");
+    params.push(filters.endDate);
+  }
+
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  const sql = `
+    SELECT * FROM executions
+    ${whereClause}
+    ORDER BY started_at DESC
+    LIMIT ?
+  `;
+  params.push(limit);
+
+  const rows = await db.query<{
+    id: string;
+    type: string;
+    target_nodes: string;
+    action: string;
+    parameters: string | null;
+    status: string;
+    started_at: string;
+    completed_at: string | null;
+    results: string;
+    error: string | null;
+    command: string | null;
+    expert_mode: number;
+    original_execution_id: string | null;
+    re_execution_count: number | null;
+    stdout: string | null;
+    stderr: string | null;
+    execution_tool: string | null;
+    batch_id: string | null;
+    batch_position: number | null;
+  }>(sql, params);
+
+  const entries: JournalEntry[] = [];
+  const nodeIdSet = filters?.nodeIds
+    ? new Set(filters.nodeIds)
+    : undefined;
+
+  for (const row of rows) {
+    const targetNodes = JSON.parse(row.target_nodes) as string[];
+    const execution: ExecutionRecord = {
+      id: row.id,
+      type: row.type as ExecutionRecord["type"],
+      targetNodes,
+      action: row.action,
+      parameters: row.parameters
+        ? (JSON.parse(row.parameters) as Record<string, unknown>)
+        : undefined,
+      status: row.status as ExecutionRecord["status"],
+      startedAt: row.started_at,
+      completedAt: row.completed_at ?? undefined,
+      results: JSON.parse(row.results) as ExecutionRecord["results"],
+      error: row.error ?? undefined,
+      command: row.command ?? undefined,
+      expertMode: row.expert_mode === 1,
+      executionTool: row.execution_tool as ExecutionRecord["executionTool"],
+    };
+
+    for (const nodeId of targetNodes) {
+      if (nodeIdSet && !nodeIdSet.has(nodeId)) continue;
+      entries.push(executionToJournalEntry(execution, nodeId));
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Fetch recent PuppetDB reports across all nodes and convert to journal entries.
+ * Uses getAllReports if available, otherwise falls back to per-node queries
+ * using the provided nodeIds.
+ */
+export async function collectGlobalPuppetDBEntries(
+  puppetdb: PuppetDBLike,
+  nodeIds?: string[],
+  limit = 50,
+): Promise<JournalEntry[]> {
+  if (!puppetdb.isInitialized()) return [];
+
+  // If the service supports getAllReports, use it for efficiency
+  if (puppetdb.getAllReports) {
+    try {
+      const reports = await puppetdb.getAllReports(limit, 0);
+      let filtered = reports;
+      if (nodeIds && nodeIds.length > 0) {
+        const nodeSet = new Set(nodeIds);
+        filtered = reports.filter((r) => nodeSet.has(r.certname));
+      }
+      return filtered.map((r) =>
+        reportToJournalEntry(r, r.certname),
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  // Fallback: query per-node if nodeIds are provided
+  if (!nodeIds || nodeIds.length === 0) return [];
+
+  const perNode = Math.max(1, Math.floor(limit / nodeIds.length));
+  const promises = nodeIds.map(async (nodeId) => {
+    try {
+      const reports = await puppetdb.getNodeReports(nodeId, perNode, 0);
+      return reports.map((r) => reportToJournalEntry(r, nodeId));
+    } catch {
+      return [] as JournalEntry[];
+    }
+  });
+
+  const results = await Promise.all(promises);
+  return results.flat();
 }

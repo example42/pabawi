@@ -9,13 +9,13 @@
     mode: "node" | "global";
     nodeId?: string;
     active?: boolean;
-    // Global mode filter props
+    // Filter props (shared by both modes)
     nodeIds?: string[];
     groupId?: string;
     startDate?: string;
     endDate?: string;
-    eventType?: string;
-    source?: string;
+    eventTypes?: string[];
+    sources?: string[];
   }
 
   let {
@@ -26,8 +26,8 @@
     groupId,
     startDate,
     endDate,
-    eventType,
-    source,
+    eventTypes,
+    sources,
   }: Props = $props();
 
   // Source display config
@@ -58,9 +58,7 @@
     package_install: 'Package',
     config_change: 'Config Change',
     note: 'Note',
-    error: 'Error',
-    warning: 'Warning',
-    info: 'Info',
+    unknown: 'Unknown',
   };
 
   // SSE state
@@ -92,18 +90,14 @@
       case 'resume':
       case 'provision':
         return 'bg-green-500';
-      case 'error':
       case 'destroy':
         return 'bg-red-500';
-      case 'warning':
-        return 'bg-yellow-500';
       case 'command_execution':
       case 'task_execution':
       case 'puppet_run':
-      case 'info':
         return 'bg-blue-500';
       case 'note':
-        return 'bg-gray-400';
+      case 'unknown':
       default:
         return 'bg-gray-400';
     }
@@ -139,17 +133,20 @@
   }
 
   function buildStreamUrl(): string {
-    if (mode === "node") {
-      return `/api/journal/${encodeURIComponent(nodeId ?? '')}/stream`;
-    }
-    // Global mode — build query params from filter props
+    // Build common filter query params
     const params = new URLSearchParams();
-    if (nodeIds && nodeIds.length > 0) params.set('nodeIds', nodeIds.join(','));
-    if (groupId) params.set('groupId', groupId);
     if (startDate) params.set('startDate', startDate);
     if (endDate) params.set('endDate', endDate);
-    if (eventType) params.set('eventType', eventType);
-    if (source) params.set('source', source);
+    if (eventTypes && eventTypes.length > 0) params.set('eventType', eventTypes.join(','));
+    if (sources && sources.length > 0) params.set('source', sources.join(','));
+
+    if (mode === "node") {
+      const qs = params.toString();
+      return `/api/journal/${encodeURIComponent(nodeId ?? '')}/stream${qs ? `?${qs}` : ''}`;
+    }
+    // Global mode — add target selection params
+    if (nodeIds && nodeIds.length > 0) params.set('nodeIds', nodeIds.join(','));
+    if (groupId) params.set('groupId', groupId);
     const qs = params.toString();
     return `/api/journal/global/stream${qs ? `?${qs}` : ''}`;
   }
@@ -277,9 +274,7 @@
 
   $effect(() => {
     // Build a serialized key from all filter-relevant props so we detect changes
-    const filterKey = mode === "global"
-      ? JSON.stringify([nodeIds, groupId, startDate, endDate, eventType, source])
-      : '';
+    const filterKey = JSON.stringify([nodeIds, groupId, startDate, endDate, eventTypes, sources]);
 
     if (active) {
       if (filterKey !== lastFilterKey && lastFilterKey !== '') {

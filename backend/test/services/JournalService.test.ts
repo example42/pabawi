@@ -156,8 +156,8 @@ describe("JournalService", () => {
       });
 
       const [sql, params] = (db.query as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(sql).toContain("AND eventType = ?");
-      expect(sql).toContain("AND source = ?");
+      expect(sql).toContain("AND eventType IN (?)");
+      expect(sql).toContain("AND source IN (?)");
       expect(params).toEqual(["node-1", "provision", "proxmox", 10, 5]);
     });
 
@@ -332,7 +332,7 @@ describe("JournalService", () => {
             id: "live-old",
             nodeId: "node-1",
             nodeUri: "puppetdb:node-1",
-            eventType: "info",
+            eventType: "unknown",
             action: "report",
             summary: "Old live event",
             timestamp: "2024-01-01T00:00:00.000Z",
@@ -341,7 +341,7 @@ describe("JournalService", () => {
             id: "live-new",
             nodeId: "node-1",
             nodeUri: "puppetdb:node-1",
-            eventType: "info",
+            eventType: "unknown",
             action: "report",
             summary: "New live event",
             timestamp: "2024-12-01T00:00:00.000Z",
@@ -383,7 +383,7 @@ describe("JournalService", () => {
             id: "live-1",
             nodeId: "node-1",
             nodeUri: "puppetdb:node-1",
-            eventType: "info",
+            eventType: "unknown",
             action: "report",
             summary: "Live event",
             timestamp: "2024-06-03T00:00:00.000Z",
@@ -489,7 +489,7 @@ describe("JournalService", () => {
             id: "aws-1",
             nodeId: "node-1",
             nodeUri: "aws:i-123",
-            eventType: "info",
+            eventType: "unknown",
             action: "status_check",
             summary: "AWS status",
             timestamp: "2024-06-05T00:00:00.000Z",
