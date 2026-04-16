@@ -1078,6 +1078,7 @@ async function startServer(): Promise<Express> {
     // Journal routes
     app.use("/api/journal", authMiddleware, rateLimitMiddleware, createJournalRouter(databaseService, {
       puppetdb: puppetDBService,
+      integrationManager,
     }));
 
     // Monitoring routes (performance metrics)

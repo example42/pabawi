@@ -6,8 +6,15 @@ import { JournalService } from "../services/journal/JournalService";
 import {
   collectExecutionEntries,
   collectPuppetDBEntries,
+  collectProxmoxTaskEntries,
+  collectAWSStateEntry,
   type PuppetDBLike,
+  type AWSServiceLike,
 } from "../services/journal/JournalCollectors";
+import type { ProxmoxIntegration } from "../integrations/proxmox/ProxmoxIntegration";
+import type { AWSPlugin } from "../integrations/aws/AWSPlugin";
+import { JournalEventTypeSchema, JournalSourceSchema } from "../services/journal/types";
+import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
@@ -42,8 +49,21 @@ const SearchQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
+/**
+ * Zod schema for global stream query parameters
+ */
+const GlobalStreamQuerySchema = z.object({
+  nodeIds: z.string().optional(),
+  groupId: z.string().optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  eventType: JournalEventTypeSchema.optional(),
+  source: JournalSourceSchema.optional(),
+});
+
 export interface JournalRouterDeps {
   puppetdb?: PuppetDBLike;
+  integrationManager?: IntegrationManager;
 }
 
 /**
@@ -115,6 +135,100 @@ export function createJournalRouter(
   );
 
   /**
+   * GET /api/journal/global/stream
+   * Stream journal events via SSE across all nodes.
+   * Supports filtering by nodeIds, groupId, eventType, source, and date range.
+   *
+   * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8
+   */
+  router.get(
+    "/global/stream",
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("journal", "read")),
+    (req: Request, res: Response): void => {
+      const parsed = GlobalStreamQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: {
+            code: ERROR_CODES.VALIDATION_ERROR,
+            message: "Invalid query parameters",
+            details: parsed.error.errors,
+          },
+        });
+        return;
+      }
+
+      res.setHeader("Content-Type", "text/event-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      function send(eventName: string, data: unknown): void {
+        if (res.writableEnded) return;
+        res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
+      }
+
+      send("init", { sources: ["global"] });
+
+      const heartbeat = setInterval(() => {
+        if (!res.writableEnded) res.write(": heartbeat\n\n");
+      }, 25000);
+
+      req.on("close", () => { clearInterval(heartbeat); });
+
+      const query = parsed.data;
+
+      void (async (): Promise<void> => {
+        try {
+          // Resolve groupId to nodeIds if provided
+          let nodeIds: string[] | undefined;
+          if (query.nodeIds) {
+            nodeIds = query.nodeIds.split(",");
+          }
+
+          if (query.groupId && deps.integrationManager) {
+            const inventory = await deps.integrationManager.getAggregatedInventory();
+            const group = inventory.groups.find((g) => g.id === query.groupId);
+            if (!group) {
+              send("source_error", { source: "global", message: "Group not found" });
+              clearInterval(heartbeat);
+              send("complete", {});
+              res.end();
+              return;
+            }
+            nodeIds = group.nodes;
+          }
+
+          const filters = {
+            nodeIds,
+            eventType: query.eventType,
+            source: query.source,
+            startDate: query.startDate,
+            endDate: query.endDate,
+            limit: 200,
+          };
+
+          const entries = await journalService.getGlobalTimeline(filters);
+          send("batch", { source: "global", entries });
+        } catch (error) {
+          logger.error("Global journal stream failed", {
+            component: "JournalRouter",
+            operation: "globalStream",
+          }, error instanceof Error ? error : undefined);
+          send("source_error", { source: "global", message: "Failed to load global journal entries" });
+        } finally {
+          clearInterval(heartbeat);
+          if (!res.writableEnded) {
+            send("complete", {});
+            res.end();
+          }
+        }
+      })();
+    },
+  );
+
+  /**
    * GET /api/journal/:nodeId/stream
    * Stream journal events via SSE as each source responds.
    * Sources: stored journal entries, pabawi execution history, PuppetDB reports.
@@ -140,11 +254,6 @@ export function createJournalRouter(
         res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`);
       }
 
-      const activeSources: string[] = ["journal", "executions"];
-      if (deps.puppetdb?.isInitialized()) activeSources.push("puppetdb");
-
-      send("init", { sources: activeSources });
-
       // Heartbeat to prevent proxies from closing idle connections
       const heartbeat = setInterval(() => {
         if (!res.writableEnded) res.write(": heartbeat\n\n");
@@ -152,52 +261,107 @@ export function createJournalRouter(
 
       req.on("close", () => { clearInterval(heartbeat); });
 
-      const tasks: Promise<void>[] = [];
+      void (async (): Promise<void> => {
+        const activeSources: string[] = ["journal", "executions"];
+        if (deps.puppetdb?.isInitialized()) activeSources.push("puppetdb");
 
-      // Source 1: stored journal entries (DB)
-      tasks.push(
-        journalService
-          .getNodeTimeline(nodeId, { limit: 100, offset: 0 })
-          .then((entries) => {
-            send("batch", { source: "journal", entries });
-          })
-          .catch(() => {
-            send("source_error", { source: "journal", message: "Failed to load journal entries" });
-          }),
-      );
+        // Detect integration source for additional collectors
+        if (deps.integrationManager) {
+          try {
+            const inventory = await deps.integrationManager.getAggregatedInventory();
+            const node = inventory.nodes.find((n) => n.id === nodeId);
 
-      // Source 2: pabawi execution history
-      tasks.push(
-        collectExecutionEntries(db, nodeId, 50)
-          .then((entries) => {
-            send("batch", { source: "executions", entries });
-          })
-          .catch(() => {
-            send("source_error", { source: "executions", message: "Failed to load execution history" });
-          }),
-      );
+            if (node?.source === "proxmox" || nodeId.startsWith("proxmox:")) {
+              const proxmoxPlugin = deps.integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
+              if (proxmoxPlugin?.getClient()) {
+                activeSources.push("proxmox_tasks");
+              }
+            }
 
-      // Source 3: PuppetDB reports (if configured)
-      if (deps.puppetdb?.isInitialized()) {
+            if (node?.source === "aws" || nodeId.startsWith("aws:")) {
+              const awsPlugin = deps.integrationManager.getExecutionTool("aws") as AWSPlugin | null;
+              if (awsPlugin?.isInitialized()) {
+                activeSources.push("aws_states");
+              }
+            }
+          } catch {
+            // Continue without additional sources
+          }
+        }
+
+        send("init", { sources: activeSources });
+
+        const tasks: Promise<void>[] = [];
+
+        // Source 1: stored journal entries (DB)
         tasks.push(
-          collectPuppetDBEntries(deps.puppetdb, nodeId, 25)
-            .then((entries) => {
-              send("batch", { source: "puppetdb", entries });
-            })
-            .catch(() => {
-              send("source_error", { source: "puppetdb", message: "Failed to load PuppetDB reports" });
-            }),
+          journalService
+            .getNodeTimeline(nodeId, { limit: 100, offset: 0 })
+            .then((entries) => { send("batch", { source: "journal", entries }); })
+            .catch(() => { send("source_error", { source: "journal", message: "Failed to load journal entries" }); }),
         );
-      }
 
-      void Promise.all(tasks)
-        .finally(() => {
+        // Source 2: pabawi execution history
+        tasks.push(
+          collectExecutionEntries(db, nodeId, 50)
+            .then((entries) => { send("batch", { source: "executions", entries }); })
+            .catch(() => { send("source_error", { source: "executions", message: "Failed to load execution history" }); }),
+        );
+
+        // Source 3: PuppetDB reports (if configured)
+        if (deps.puppetdb?.isInitialized()) {
+          tasks.push(
+            collectPuppetDBEntries(deps.puppetdb, nodeId, 25)
+              .then((entries) => { send("batch", { source: "puppetdb", entries }); })
+              .catch(() => { send("source_error", { source: "puppetdb", message: "Failed to load PuppetDB reports" }); }),
+          );
+        }
+
+        // Source 4: Proxmox task history (if node belongs to Proxmox)
+        if (activeSources.includes("proxmox_tasks")) {
+          const proxmoxPlugin = deps.integrationManager!.getExecutionTool("proxmox") as ProxmoxIntegration | null;
+          const client = proxmoxPlugin?.getClient();
+          if (client) {
+            const parts = nodeId.split(":");
+            if (parts.length === 3) {
+              const pveNode = parts[1];
+              const vmid = parseInt(parts[2], 10);
+              if (!isNaN(vmid)) {
+                tasks.push(
+                  collectProxmoxTaskEntries(client, pveNode, vmid, nodeId)
+                    .then((entries) => { send("batch", { source: "proxmox_tasks", entries }); })
+                    .catch(() => { send("source_error", { source: "proxmox_tasks", message: "Failed to load Proxmox task history" }); }),
+                );
+              }
+            }
+          }
+        }
+
+        // Source 5: AWS state changes (if node belongs to AWS)
+        if (activeSources.includes("aws_states")) {
+          const awsPlugin = deps.integrationManager!.getExecutionTool("aws") as AWSPlugin | null;
+          if (awsPlugin) {
+            const parts = nodeId.split(":");
+            if (parts.length === 3) {
+              const region = parts[1];
+              const instanceId = parts[2];
+              tasks.push(
+                collectAWSStateEntry(awsPlugin as unknown as AWSServiceLike, instanceId, region, db, nodeId)
+                  .then((entries) => { send("batch", { source: "aws_states", entries }); })
+                  .catch(() => { send("source_error", { source: "aws_states", message: "Failed to load AWS state changes" }); }),
+              );
+            }
+          }
+        }
+
+        await Promise.all(tasks).finally(() => {
           clearInterval(heartbeat);
           if (!res.writableEnded) {
             send("complete", {});
             res.end();
           }
         });
+      })();
     },
   );
 
