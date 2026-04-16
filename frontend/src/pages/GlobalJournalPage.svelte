@@ -35,6 +35,7 @@
   let inventoryError = $state<string | null>(null);
 
   // Target selection
+  let targetsExpanded = $state(true);
   let selectedNodeIds = $state<string[]>([]);
   let selectedGroupId = $state('');
   let viewMode = $state<'nodes' | 'groups'>('nodes');
@@ -202,22 +203,36 @@
   <!-- Filter Panel -->
   <div class="mb-6 rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
     <!-- Target Selection -->
-    <div class="border-b border-gray-200 p-4 dark:border-gray-700">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-sm font-medium text-gray-900 dark:text-white">Select Targets</h3>
-        <div class="text-xs text-gray-500 dark:text-gray-400">
-          {#if selectedGroupId}
-            {@const grp = allGroups.find(g => g.id === selectedGroupId)}
-            Group: <span class="font-medium text-primary-600 dark:text-primary-400">{grp?.name ?? selectedGroupId}</span>
-            ({grp?.nodes.length ?? 0} nodes)
-          {:else if selectedNodeIds.length > 0}
-            <span class="font-medium text-primary-600 dark:text-primary-400">{selectedNodeIds.length}</span>
-            {selectedNodeIds.length === 1 ? 'node' : 'nodes'} selected
-          {:else}
-            All nodes (no filter)
-          {/if}
+    <div class="border-b border-gray-200 dark:border-gray-700">
+      <!-- Collapsible header -->
+      <button
+        type="button"
+        onclick={() => targetsExpanded = !targetsExpanded}
+        class="flex w-full items-center justify-between p-4 text-left hover:bg-gray-50 dark:hover:bg-gray-750 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+        aria-expanded={targetsExpanded}
+      >
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-medium text-gray-900 dark:text-white">Select Targets</h3>
+          <span class="text-xs text-gray-500 dark:text-gray-400">
+            {#if selectedGroupId}
+              {@const grp = allGroups.find(g => g.id === selectedGroupId)}
+              — Group: <span class="font-medium text-primary-600 dark:text-primary-400">{grp?.name ?? selectedGroupId}</span>
+              ({grp?.nodes.length ?? 0} nodes)
+            {:else if selectedNodeIds.length > 0}
+              — <span class="font-medium text-primary-600 dark:text-primary-400">{selectedNodeIds.length}</span>
+              {selectedNodeIds.length === 1 ? 'node' : 'nodes'} selected
+            {:else}
+              — All nodes
+            {/if}
+          </span>
         </div>
-      </div>
+        <svg class="h-4 w-4 shrink-0 text-gray-400 transition-transform {targetsExpanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {#if targetsExpanded}
+      <div class="px-4 pb-4">
 
       {#if inventoryLoading}
         <div class="flex items-center justify-center py-6 text-sm text-gray-500 dark:text-gray-400">
@@ -310,6 +325,8 @@
             {/if}
           </div>
         {/if}
+      {/if}
+      </div>
       {/if}
     </div>
 
