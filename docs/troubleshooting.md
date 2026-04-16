@@ -191,7 +191,7 @@ color: false
 ## FAQ
 
 **Does Pabawi require Bolt?**
-Bolt is required for command and task execution. If `BOLT_ENABLED=false`, execution features are disabled but inventory from other integrations still works.
+No. Bolt is one of several execution plugins alongside SSH and Ansible. You need at least one execution plugin enabled to run commands, but none is strictly required — if all are disabled, execution features are unavailable while inventory from information-source integrations still works.
 
 **Can I use my existing Bolt project?**
 Yes. Point `BOLT_PROJECT_PATH` at your existing project directory.
