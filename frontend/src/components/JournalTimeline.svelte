@@ -270,25 +270,26 @@
     reload();
   }
 
-  // Start stream only when the tab becomes active
-  $effect(() => {
-    if (active && !abortController && !streamComplete) {
-      startStream();
-    }
-  });
+  // Start stream when active becomes true.
+  // For global mode, also restart when filter props change.
+  let lastFilterKey = $state('');
 
-  // Reconnect when global mode filter props change
   $effect(() => {
-    if (mode === "global") {
-      // Track filter dependencies
-      void nodeIds;
-      void groupId;
-      void startDate;
-      void endDate;
-      void eventType;
-      void source;
-      // Reconnect when filters change
-      if (active) reload();
+    // Build a serialized key from all filter-relevant props so we detect changes
+    const filterKey = mode === "global"
+      ? JSON.stringify([nodeIds, groupId, startDate, endDate, eventType, source])
+      : '';
+
+    if (active) {
+      if (filterKey !== lastFilterKey && lastFilterKey !== '') {
+        // Filters changed — reload
+        lastFilterKey = filterKey;
+        reload();
+      } else if (!abortController && !streamComplete) {
+        // Initial start
+        lastFilterKey = filterKey;
+        startStream();
+      }
     }
   });
 
