@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import JournalNoteForm from './JournalNoteForm.svelte';
   import { authManager } from '../lib/auth.svelte';
+  import { router } from '../lib/router.svelte';
   import type { JournalEntry } from '../lib/api';
 
   interface Props {
@@ -374,7 +375,12 @@
             <span class="shrink-0 text-xs font-medium text-gray-600 dark:text-gray-400 w-20">{getEventTypeLabel(entry.eventType)}</span>
             <!-- Node ID (global mode only) -->
             {#if mode === "global"}
-              <span class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-gray-600 dark:bg-gray-700 dark:text-gray-400">{entry.nodeId}</span>
+              <a
+                href="/nodes/{encodeURIComponent(entry.nodeId)}"
+                onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(entry.nodeId)}`); }}
+                class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-primary-600 hover:text-primary-800 hover:bg-primary-50 dark:bg-gray-700 dark:text-primary-400 dark:hover:text-primary-300 dark:hover:bg-primary-900/20"
+                title="Go to node {entry.nodeId}"
+              >{entry.nodeId}</a>
             {/if}
             <!-- Summary -->
             <span class="min-w-0 flex-1 truncate text-gray-800 dark:text-gray-200">{entry.summary}</span>
