@@ -2264,7 +2264,7 @@
               Unified timeline of provisioning events, lifecycle actions, execution results, and manual notes for this node.
             </p>
 
-            <JournalTimeline nodeId={nodeId} active={activeTab === 'journal'} />
+            <JournalTimeline mode="node" nodeId={nodeId} active={activeTab === 'journal'} />
           </div>
         </div>
       {/if}

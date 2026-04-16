@@ -105,18 +105,18 @@ This plan implements four enhancements to the Pabawi journal system: Proxmox lif
     - Place in `backend/test/routes/journal-global.test.ts`
     - _Requirements: 3.1, 3.7, 3.8_
 
-- [-] 6. Checkpoint — Backend complete
+- [x] 6. Checkpoint — Backend complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Refactor JournalTimeline to shared component with compact display
-  - [~] 7.1 Refactor `frontend/src/components/JournalTimeline.svelte` to support `mode` prop
+- [x] 7. Refactor JournalTimeline to shared component with compact display
+  - [x] 7.1 Refactor `frontend/src/components/JournalTimeline.svelte` to support `mode` prop
     - Change Props interface to accept `mode: "node" | "global"`, optional `nodeId`, and optional filter props (nodeIds, groupId, startDate, endDate, eventType, source)
     - In `"node"` mode: connect to `/api/journal/{nodeId}/stream` (existing behavior), show "Add a Note" form
     - In `"global"` mode: connect to `/api/journal/global/stream` with filter query params, hide note form, show node identifier on each entry line
     - Share SSE parsing logic, entry merging, source status tracking, and error handling between modes
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7_
 
-  - [~] 7.2 Implement compact single-line entry display with expand-on-click
+  - [x] 7.2 Implement compact single-line entry display with expand-on-click
     - Replace the current multi-line entry display with a compact single-line format: color-coded status dot, timestamp, source icon, event type label, summary text
     - Status dot colors: green for start/resume/provision, red for error/destroy, yellow for warning, blue for command_execution/task_execution/puppet_run/info, gray for note
     - Click expands to show full details (details object, action, nodeUri); click again collapses
@@ -124,24 +124,24 @@ This plan implements four enhancements to the Pabawi journal system: Proxmox lif
     - Preserve all information from the existing display, accessible through expand
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-  - [~] 7.3 Update `frontend/src/pages/NodeDetailPage.svelte` to pass `mode="node"` to JournalTimeline
+  - [x] 7.3 Update `frontend/src/pages/NodeDetailPage.svelte` to pass `mode="node"` to JournalTimeline
     - Update the JournalTimeline usage to include `mode="node"` prop
     - Verify existing node journal behavior is preserved
     - _Requirements: 7.2_
 
-- [ ] 8. Implement Global Journal Page
-  - [~] 8.1 Create `frontend/src/pages/GlobalJournalPage.svelte`
+- [x] 8. Implement Global Journal Page
+  - [x] 8.1 Create `frontend/src/pages/GlobalJournalPage.svelte`
     - Build filter bar with: node/group selector, date range picker (start/end date inputs), event type dropdown (populated from JournalEventType values), source dropdown (populated from JournalSource values)
     - Render `<JournalTimeline mode="global" ...filters />` below the filter bar
     - Require authentication to access
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8_
 
-  - [~] 8.2 Register `/journal` route in `frontend/src/App.svelte` and add navigation link
+  - [x] 8.2 Register `/journal` route in `frontend/src/App.svelte` and add navigation link
     - Import `GlobalJournalPage` and add `'/journal': { component: GlobalJournalPage, requiresAuth: true }` to the routes object
     - Add "Journal" link to the `Navigation.svelte` component in the main nav bar
     - _Requirements: 5.1_
 
-- [ ] 9. Final checkpoint — Ensure all tests pass
+- [-] 9. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

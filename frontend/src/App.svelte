@@ -9,6 +9,7 @@
   import NodeDetailPage from './pages/NodeDetailPage.svelte';
   import IntegrationSetupPage from './pages/IntegrationSetupPage.svelte';
   import PuppetPage from './pages/PuppetPage.svelte';
+  import GlobalJournalPage from './pages/GlobalJournalPage.svelte';
   import LoginPage from './pages/LoginPage.svelte';
   import RegisterPage from './pages/RegisterPage.svelte';
   import SetupPage from './pages/SetupPage.svelte';
@@ -32,6 +33,7 @@
     '/executions': { component: ExecutionsPage, requiresAuth: true },
     '/provision': { component: ProvisionPage, requiresAuth: true },
     '/puppet': { component: PuppetPage, requiresAuth: true },
+    '/journal': { component: GlobalJournalPage, requiresAuth: true },
     '/users': { component: UserManagementPage, requiresAuth: true, requiresAdmin: true },
     '/groups': { component: GroupManagementPage, requiresAuth: true, requiresAdmin: true },
     '/groups/:id': { component: GroupDetailPage, requiresAuth: true },
