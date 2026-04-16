@@ -141,7 +141,7 @@ This plan implements four enhancements to the Pabawi journal system: Proxmox lif
     - Add "Journal" link to the `Navigation.svelte` component in the main nav bar
     - _Requirements: 5.1_
 
-- [-] 9. Final checkpoint — Ensure all tests pass
+- [x] 9. Final checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
