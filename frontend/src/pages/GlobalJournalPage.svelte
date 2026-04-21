@@ -13,6 +13,7 @@
     uri: string;
     transport: string;
     source?: string;
+    sourceData?: Record<string, { id?: string; uri?: string }>;
   }
 
   interface NodeGroup {
@@ -116,6 +117,30 @@
     allNodes.forEach(n => { if (n.source) s.add(n.source); });
     allGroups.forEach(g => { g.sources.forEach(src => s.add(src)); });
     return Array.from(s).sort();
+  });
+
+  /**
+   * Build a map from all known node identifiers to the display name (hostname).
+   * This resolves raw IDs like "proxmox:minis:107" or "aws:us-east-1:i-abc" to
+   * the consolidated hostname used in the inventory.
+   */
+  let nodeNameMap = $derived.by(() => {
+    const map: Record<string, string> = {};
+    for (const node of allNodes) {
+      // Map the node's own id → name
+      if (node.id && node.name && node.id !== node.name) {
+        map[node.id] = node.name;
+      }
+      // Map source-specific IDs from sourceData (e.g. proxmox:minis:107 → hostname)
+      if (node.sourceData) {
+        for (const srcData of Object.values(node.sourceData)) {
+          if (srcData.id && srcData.id !== node.name) {
+            map[srcData.id] = node.name;
+          }
+        }
+      }
+    }
+    return map;
   });
 
   async function fetchInventory(): Promise<void> {
@@ -385,5 +410,6 @@
     endDate={appliedEndDate}
     eventTypes={appliedEventTypes}
     sources={appliedSources}
+    {nodeNameMap}
   />
 </div>

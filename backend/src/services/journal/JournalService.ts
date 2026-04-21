@@ -102,17 +102,21 @@ export class JournalService {
   /**
    * Get the timeline of journal entries for a specific node,
    * sorted by timestamp descending with pagination.
+   * Accepts a single nodeId or an array of nodeIds to match entries
+   * stored under alternative identifiers (e.g. proxmox:node:vmid).
    *
    * Requirements: 22.4
    */
   async getNodeTimeline(
-    nodeId: string,
+    nodeId: string | string[],
     options?: Partial<TimelineOptions>
   ): Promise<JournalEntry[]> {
     const opts = TimelineOptionsSchema.parse(options ?? {});
 
-    let sql = `SELECT * FROM journal_entries WHERE nodeId = ?`;
-    const params: unknown[] = [nodeId];
+    const ids = Array.isArray(nodeId) ? nodeId : [nodeId];
+    const idPlaceholders = ids.map(() => "?").join(", ");
+    let sql = `SELECT * FROM journal_entries WHERE nodeId IN (${idPlaceholders})`;
+    const params: unknown[] = [...ids];
 
     if (opts.eventType) {
       const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
