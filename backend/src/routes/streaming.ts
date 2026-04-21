@@ -32,13 +32,14 @@ interface StreamTicket {
 const streamTickets = new Map<string, StreamTicket>();
 
 /** Purge expired tickets (runs every 60 s) */
-setInterval(() => {
+const streamTicketPurgeInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, ticket] of streamTickets) {
     if (ticket.expiresAt < now) streamTickets.delete(key);
   }
 }, 60_000);
 
+streamTicketPurgeInterval.unref();
 /**
  * Create streaming router for Server-Sent Events (SSE)
  */
