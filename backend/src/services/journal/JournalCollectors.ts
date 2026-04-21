@@ -143,20 +143,27 @@ export function executionToJournalEntry(
 }
 
 /**
- * Fetch execution history for a node and convert to journal entries
+ * Fetch execution history for a node and convert to journal entries.
+ * Accepts a single nodeId or an array of nodeIds to match entries
+ * stored under alternative identifiers.
  */
 export async function collectExecutionEntries(
   db: DatabaseAdapter,
-  nodeId: string,
+  nodeId: string | string[],
   limit = 50,
 ): Promise<JournalEntry[]> {
-  // Use LIKE filter on target_nodes JSON array
+  const ids = Array.isArray(nodeId) ? nodeId : [nodeId];
+  const primaryId = ids[0];
+
+  // Use LIKE filter on target_nodes JSON array — OR across all IDs
+  const likeConditions = ids.map(() => "target_nodes LIKE ?").join(" OR ");
   const sql = `
     SELECT * FROM executions
-    WHERE target_nodes LIKE ?
+    WHERE (${likeConditions})
     ORDER BY started_at DESC
     LIMIT ?
   `;
+  const likeParams = ids.map((id) => `%"${id}"%`);
   const rows = await db.query<{
     id: string;
     type: string;
@@ -177,7 +184,9 @@ export async function collectExecutionEntries(
     execution_tool: string | null;
     batch_id: string | null;
     batch_position: number | null;
-  }>(sql, [`%"${nodeId}"%`, limit]);
+  }>(sql, [...likeParams, limit]);
+
+  const idSet = new Set(ids);
 
   return rows.map((row) => {
     const execution: ExecutionRecord = {
@@ -195,7 +204,9 @@ export async function collectExecutionEntries(
       expertMode: row.expert_mode === 1,
       executionTool: row.execution_tool as ExecutionRecord["executionTool"],
     };
-    return executionToJournalEntry(execution, nodeId);
+    // Find which of the alternative IDs matched in this execution's target_nodes
+    const matchedId = execution.targetNodes.find((t) => idSet.has(t)) ?? primaryId;
+    return executionToJournalEntry(execution, matchedId);
   });
 }
 

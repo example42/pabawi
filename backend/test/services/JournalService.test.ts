@@ -139,7 +139,7 @@ describe("JournalService", () => {
 
       expect(db.query).toHaveBeenCalledOnce();
       const [sql, params] = (db.query as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(sql).toContain("WHERE nodeId = ?");
+      expect(sql).toContain("WHERE nodeId IN (?)");
       expect(sql).toContain("ORDER BY timestamp DESC");
       expect(sql).toContain("LIMIT ? OFFSET ?");
       expect(params[0]).toBe("node-1");

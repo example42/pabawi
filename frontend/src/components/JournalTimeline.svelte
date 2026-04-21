@@ -16,6 +16,8 @@
     endDate?: string;
     eventTypes?: string[];
     sources?: string[];
+    /** Map of nodeId → display name for resolving raw IDs (e.g. proxmox:node:vmid) to hostnames */
+    nodeNameMap?: Record<string, string>;
   }
 
   let {
@@ -28,6 +30,7 @@
     endDate,
     eventTypes,
     sources,
+    nodeNameMap,
   }: Props = $props();
 
   // Source display config
@@ -82,6 +85,14 @@
 
   function getEventTypeLabel(et: string): string {
     return eventTypeLabels[et] ?? et;
+  }
+
+  /**
+   * Resolve a nodeId to a display name using the nodeNameMap.
+   * Falls back to the raw nodeId if no mapping exists.
+   */
+  function resolveNodeDisplayName(id: string): string {
+    return nodeNameMap?.[id] ?? id;
   }
 
   function getStatusDotColor(entry: JournalEntry): string {
@@ -396,12 +407,13 @@
             <span class="shrink-0 text-xs font-medium text-gray-600 dark:text-gray-400 w-20">{getEventTypeLabel(entry.eventType)}</span>
             <!-- Node ID (global mode only) -->
             {#if mode === "global"}
+              {@const displayName = resolveNodeDisplayName(entry.nodeId)}
               <a
-                href={`/nodes/${encodeURIComponent(entry.nodeId)}`}
-                onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(entry.nodeId)}`); }}
+                href={`/nodes/${encodeURIComponent(displayName)}`}
+                onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(displayName)}`); }}
                 class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-primary-600 hover:text-primary-800 hover:bg-primary-50 dark:bg-gray-700 dark:text-primary-400 dark:hover:text-primary-300 dark:hover:bg-primary-900/20"
-                title={`Go to node ${entry.nodeId}`}
-              >{entry.nodeId}</a>
+                title={displayName !== entry.nodeId ? `${displayName} (${entry.nodeId})` : `Go to node ${entry.nodeId}`}
+              >{displayName}</a>
             {/if}
             <!-- Summary -->
             <span class="min-w-0 flex-1 truncate text-gray-800 dark:text-gray-200">{entry.summary}</span>

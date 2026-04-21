@@ -360,20 +360,51 @@ export function createJournalRouter(
         const activeSources: string[] = ["journal", "executions"];
         if (deps.puppetdb?.isInitialized()) activeSources.push("puppetdb");
 
+        // Collect all alternative IDs for this node from the inventory.
+        // A linked node may have entries stored under source-specific IDs
+        // (e.g. "proxmox:minis:107") in addition to the hostname.
+        const allNodeIds: string[] = [nodeId];
+        let proxmoxSourceId: string | undefined;
+        let awsSourceId: string | undefined;
+
         // Detect integration source for additional collectors
         if (deps.integrationManager) {
           try {
             const inventory = await deps.integrationManager.getAggregatedInventory();
-            const node = inventory.nodes.find((n) => n.id === nodeId);
+            const node = inventory.nodes.find((n) => n.id === nodeId || n.name === nodeId);
 
-            if (node?.source === "proxmox" || nodeId.startsWith("proxmox:")) {
+            // Extract source-specific IDs from the linked node's sourceData
+            if (node) {
+              const linkedNode = node as { sourceData?: Record<string, { id?: string }> };
+              if (linkedNode.sourceData) {
+                for (const [source, data] of Object.entries(linkedNode.sourceData)) {
+                  if (data.id && !allNodeIds.includes(data.id)) {
+                    allNodeIds.push(data.id);
+                  }
+                  if (source === "proxmox" && data.id) {
+                    proxmoxSourceId = data.id;
+                  }
+                  if (source === "aws" && data.id) {
+                    awsSourceId = data.id;
+                  }
+                }
+              }
+            }
+
+            const hasProxmox = node?.source === "proxmox"
+              || nodeId.startsWith("proxmox:")
+              || proxmoxSourceId !== undefined;
+            if (hasProxmox) {
               const proxmoxPlugin = deps.integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
               if (proxmoxPlugin?.getClient()) {
                 activeSources.push("proxmox_tasks");
               }
             }
 
-            if (node?.source === "aws" || nodeId.startsWith("aws:")) {
+            const hasAws = node?.source === "aws"
+              || nodeId.startsWith("aws:")
+              || awsSourceId !== undefined;
+            if (hasAws) {
               const awsPlugin = deps.integrationManager.getExecutionTool("aws") as AWSPlugin | null;
               if (awsPlugin?.isInitialized()) {
                 activeSources.push("aws_states");
@@ -389,9 +420,10 @@ export function createJournalRouter(
         const tasks: Promise<void>[] = [];
 
         // Source 1: stored journal entries (DB) — pass filters through
+        // Query by all known IDs for this node (hostname + source-specific IDs)
         tasks.push(
           journalService
-            .getNodeTimeline(nodeId, {
+            .getNodeTimeline(allNodeIds, {
               limit: 100,
               offset: 0,
               eventType: query.eventType,
@@ -412,7 +444,7 @@ export function createJournalRouter(
 
         if (!skipExecBySource && !skipExecByType) {
           tasks.push(
-            collectExecutionEntries(db, nodeId, 50)
+            collectExecutionEntries(db, allNodeIds, 50)
               .then((entries) => { send("batch", { source: "executions", entries }); })
               .catch(() => { send("source_error", { source: "executions", message: "Failed to load execution history" }); }),
           );
@@ -438,7 +470,10 @@ export function createJournalRouter(
           const proxmoxPlugin = deps.integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
           const client = proxmoxPlugin?.getClient();
           if (client) {
-            const parts = nodeId.split(":");
+            // Use the Proxmox source-specific ID (proxmox:node:vmid) if available,
+            // otherwise fall back to the route nodeId
+            const proxmoxId = proxmoxSourceId ?? nodeId;
+            const parts = proxmoxId.split(":");
             if (parts.length === 3) {
               const pveNode = parts[1];
               const vmid = parseInt(parts[2], 10);
@@ -459,7 +494,10 @@ export function createJournalRouter(
         if (activeSources.includes("aws_states") && !skipAwsBySource && deps.integrationManager) {
           const awsPlugin = deps.integrationManager.getExecutionTool("aws") as AWSPlugin | null;
           if (awsPlugin) {
-            const parts = nodeId.split(":");
+            // Use the AWS source-specific ID (aws:region:instanceId) if available,
+            // otherwise fall back to the route nodeId
+            const awsId = awsSourceId ?? nodeId;
+            const parts = awsId.split(":");
             if (parts.length === 3) {
               const region = parts[1];
               const instanceId = parts[2];
