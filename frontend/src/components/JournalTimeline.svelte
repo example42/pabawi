@@ -64,6 +64,52 @@
     unknown: 'Unknown',
   };
 
+  // Minimum consecutive similar entries to trigger grouping
+  const GROUP_THRESHOLD = 3;
+
+  /** A grouping key for consecutive similar entries */
+  function entryGroupKey(e: JournalEntry): string {
+    return `${e.source}|${e.eventType}|${e.summary}`;
+  }
+
+  /** Either a single entry or a collapsed group of consecutive similar entries */
+  type TimelineItem =
+    | { kind: 'single'; entry: JournalEntry }
+    | { kind: 'group'; key: string; representative: JournalEntry; entries: JournalEntry[] };
+
+  /**
+   * Group consecutive entries with the same source+eventType+summary.
+   * Runs of > GROUP_THRESHOLD are collapsed; shorter runs stay as singles.
+   */
+  function groupConsecutiveEntries(items: JournalEntry[]): TimelineItem[] {
+    if (items.length === 0) return [];
+
+    const result: TimelineItem[] = [];
+    let runStart = 0;
+
+    for (let i = 1; i <= items.length; i++) {
+      const sameRun = i < items.length && entryGroupKey(items[i]) === entryGroupKey(items[runStart]);
+      if (!sameRun) {
+        const runLength = i - runStart;
+        if (runLength > GROUP_THRESHOLD) {
+          result.push({
+            kind: 'group',
+            key: `grp:${items[runStart].id}:${String(runLength)}`,
+            representative: items[runStart],
+            entries: items.slice(runStart, i),
+          });
+        } else {
+          for (let j = runStart; j < i; j++) {
+            result.push({ kind: 'single', entry: items[j] });
+          }
+        }
+        runStart = i;
+      }
+    }
+
+    return result;
+  }
+
   // SSE state
   let abortController = $state<AbortController | null>(null);
   let streamComplete = $state(false);
@@ -76,8 +122,13 @@
   // All accumulated entries
   let entries = $state<JournalEntry[]>([]);
 
-  // Expanded entry IDs
+  // Grouped timeline items (derived from entries)
+  let timelineItems = $derived(groupConsecutiveEntries(entries));
+
+  // Expanded entry IDs (for individual entry details)
   let expandedIds = $state<Set<string>>(new Set());
+  // Expanded group keys (for collapsed groups)
+  let expandedGroups = $state<Set<string>>(new Set());
 
   function getSourceInfo(src: string): { icon: string; color: string; label: string } {
     return sourceConfig[src] ?? { icon: '❓', color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', label: src };
@@ -96,7 +147,6 @@
   }
 
   function getStatusDotColor(entry: JournalEntry): string {
-    // Use the outcome status from details when available (executions, puppet runs, etc.)
     const status = (entry.details?.nodeStatus ?? entry.details?.status) as string | undefined;
     if (status) {
       switch (status) {
@@ -114,7 +164,6 @@
       }
     }
 
-    // Lifecycle events — color by intent
     switch (entry.eventType) {
       case 'provision':
       case 'start':
@@ -147,12 +196,14 @@
 
   function toggleExpand(id: string): void {
     const next = new Set(expandedIds);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
+    if (next.has(id)) next.delete(id); else next.add(id);
     expandedIds = next;
+  }
+
+  function toggleGroup(key: string): void {
+    const next = new Set(expandedGroups);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    expandedGroups = next;
   }
 
   function mergeEntries(newBatch: JournalEntry[]): void {
@@ -165,7 +216,6 @@
   }
 
   function buildStreamUrl(): string {
-    // Build common filter query params
     const params = new URLSearchParams();
     if (startDate) params.set('startDate', startDate);
     if (endDate) params.set('endDate', endDate);
@@ -176,7 +226,6 @@
       const qs = params.toString();
       return `/api/journal/${encodeURIComponent(nodeId ?? '')}/stream${qs ? `?${qs}` : ''}`;
     }
-    // Global mode — add target selection params
     if (nodeIds && nodeIds.length > 0) params.set('nodeIds', nodeIds.join(','));
     if (groupId) params.set('groupId', groupId);
     const qs = params.toString();
@@ -222,7 +271,6 @@
         const decoder = new TextDecoder();
         let buf = '';
 
-        // SSE parser: splits on double newline boundaries
         function dispatchEvent(eventName: string, dataStr: string): void {
           if (!dataStr) return;
           try {
@@ -254,12 +302,11 @@
           if (done) break;
           buf += decoder.decode(value, { stream: true });
 
-          // Process complete SSE messages (separated by \n\n)
           const messages = buf.split('\n\n');
           buf = messages.pop() ?? '';
 
           for (const msg of messages) {
-            if (!msg.trim() || msg.startsWith(':')) continue; // heartbeat/comment
+            if (!msg.trim() || msg.startsWith(':')) continue;
             let eventName = 'message';
             let dataStr = '';
             for (const line of msg.split('\n')) {
@@ -298,6 +345,7 @@
     streamComplete = false;
     streamError = null;
     expandedIds = new Set();
+    expandedGroups = new Set();
     startStream();
   }
 
@@ -305,21 +353,16 @@
     reload();
   }
 
-  // Start stream when active becomes true.
-  // For global mode, also restart when filter props change.
   let lastFilterKey = $state('');
 
   $effect(() => {
-    // Build a serialized key from all filter-relevant props so we detect changes
     const filterKey = JSON.stringify([nodeIds, groupId, startDate, endDate, eventTypes, sources]);
 
     if (active) {
       if (filterKey !== lastFilterKey && lastFilterKey !== '') {
-        // Filters changed — reload
         lastFilterKey = filterKey;
         reload();
       } else if (!abortController && !streamComplete) {
-        // Initial start
         lastFilterKey = filterKey;
         startStream();
       }
@@ -333,6 +376,71 @@
   const isLoading = $derived(!streamComplete && activeSources.length > 0);
   const pendingSources = $derived(activeSources.filter((s) => sourceStatuses[s] === 'pending'));
 </script>
+
+<!-- Reusable snippet for rendering a single entry row -->
+{#snippet entryRow(entry: JournalEntry)}
+  {@const src = getSourceInfo(entry.source)}
+  {@const expanded = expandedIds.has(entry.id)}
+  {@const hasDetails = (entry.details && Object.keys(entry.details).length > 0) || (entry.action && entry.action !== 'unknown') || entry.nodeUri}
+
+  <div>
+    <button
+      type="button"
+      class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
+      onclick={() => toggleExpand(entry.id)}
+      aria-expanded={expanded}
+    >
+      <span class="h-2 w-2 shrink-0 rounded-full {getStatusDotColor(entry)}"></span>
+      <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500 w-32">{formatTimestamp(entry.timestamp)}</span>
+      <span class="shrink-0 text-sm" title={src.label}>{src.icon}</span>
+      <span class="shrink-0 text-xs font-medium text-gray-600 dark:text-gray-400 w-20">{getEventTypeLabel(entry.eventType)}</span>
+      {#if mode === "global"}
+        {@const displayName = resolveNodeDisplayName(entry.nodeId)}
+        <a
+          href={`/nodes/${encodeURIComponent(displayName)}`}
+          onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(displayName)}`); }}
+          class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-primary-600 hover:text-primary-800 hover:bg-primary-50 dark:bg-gray-700 dark:text-primary-400 dark:hover:text-primary-300 dark:hover:bg-primary-900/20"
+          title={displayName !== entry.nodeId ? `${displayName} (${entry.nodeId})` : `Go to node ${entry.nodeId}`}
+        >{displayName}</a>
+      {/if}
+      <span class="min-w-0 flex-1 truncate text-gray-800 dark:text-gray-200">{entry.summary}</span>
+      {#if hasDetails}
+        <svg class="h-3 w-3 shrink-0 text-gray-400 transition-transform {expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      {/if}
+    </button>
+
+    {#if expanded && hasDetails}
+      <div class="ml-6 mb-2 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
+        {#if entry.action && entry.action !== 'unknown'}
+          <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">Action: {entry.action}</p>
+        {/if}
+        {#if entry.nodeUri}
+          <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">URI: {entry.nodeUri}</p>
+        {/if}
+        {#if entry.details && Object.keys(entry.details).length > 0}
+          <dl class="space-y-1 text-xs">
+            {#each Object.entries(entry.details) as [key, value] (key)}
+              {#if value !== null && value !== undefined && value !== ''}
+                <div class="flex gap-2">
+                  <dt class="w-36 shrink-0 font-medium text-gray-500 dark:text-gray-400">{key}</dt>
+                  <dd class="min-w-0 break-all font-mono text-gray-800 dark:text-gray-200">
+                    {#if typeof value === 'object'}
+                      {JSON.stringify(value, null, 2)}
+                    {:else}
+                      {String(value)}
+                    {/if}
+                  </dd>
+                </div>
+              {/if}
+            {/each}
+          </dl>
+        {/if}
+      </div>
+    {/if}
+  </div>
+{/snippet}
 
 <div class="space-y-4">
   <!-- Add Note Form (node mode only) -->
@@ -384,80 +492,72 @@
     </div>
   {:else if entries.length > 0}
     <div class="space-y-0.5">
-      {#each entries as entry (entry.id)}
-        {@const src = getSourceInfo(entry.source)}
-        {@const expanded = expandedIds.has(entry.id)}
-        {@const hasDetails = (entry.details && Object.keys(entry.details).length > 0) || (entry.action && entry.action !== 'unknown') || entry.nodeUri}
+      {#each timelineItems as item (item.kind === 'single' ? item.entry.id : item.key)}
+        {#if item.kind === 'single'}
+          {@render entryRow(item.entry)}
+        {:else}
+          <!-- Collapsed group of similar consecutive entries -->
+          {@const grp = item}
+          {@const rep = grp.representative}
+          {@const src = getSourceInfo(rep.source)}
+          {@const isOpen = expandedGroups.has(grp.key)}
+          {@const first = grp.entries[0]}
+          {@const last = grp.entries[grp.entries.length - 1]}
 
-        <div>
-          <!-- Compact single-line entry -->
-          <button
-            type="button"
-            class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-750 rounded-lg border border-transparent hover:border-gray-200 dark:hover:border-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500"
-            onclick={() => toggleExpand(entry.id)}
-            aria-expanded={expanded}
-          >
-            <!-- Status dot -->
-            <span class="h-2 w-2 shrink-0 rounded-full {getStatusDotColor(entry)}"></span>
-            <!-- Timestamp -->
-            <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500 w-32">{formatTimestamp(entry.timestamp)}</span>
-            <!-- Source icon -->
-            <span class="shrink-0 text-sm" title={src.label}>{src.icon}</span>
-            <!-- Event type -->
-            <span class="shrink-0 text-xs font-medium text-gray-600 dark:text-gray-400 w-20">{getEventTypeLabel(entry.eventType)}</span>
-            <!-- Node ID (global mode only) -->
-            {#if mode === "global"}
-              {@const displayName = resolveNodeDisplayName(entry.nodeId)}
-              <a
-                href={`/nodes/${encodeURIComponent(displayName)}`}
-                onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(displayName)}`); }}
-                class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-primary-600 hover:text-primary-800 hover:bg-primary-50 dark:bg-gray-700 dark:text-primary-400 dark:hover:text-primary-300 dark:hover:bg-primary-900/20"
-                title={displayName !== entry.nodeId ? `${displayName} (${entry.nodeId})` : `Go to node ${entry.nodeId}`}
-              >{displayName}</a>
-            {/if}
-            <!-- Summary -->
-            <span class="min-w-0 flex-1 truncate text-gray-800 dark:text-gray-200">{entry.summary}</span>
-            <!-- Expand indicator -->
-            {#if hasDetails}
-              <svg class="h-3 w-3 shrink-0 text-gray-400 transition-transform {expanded ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div>
+            <!-- Group summary row -->
+            <button
+              type="button"
+              class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm rounded-lg border border-transparent focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500
+                {isOpen
+                  ? 'bg-gray-50 border-gray-200 dark:bg-gray-750 dark:border-gray-700'
+                  : 'hover:bg-gray-50 hover:border-gray-200 dark:hover:bg-gray-750 dark:hover:border-gray-700'}"
+              onclick={() => toggleGroup(grp.key)}
+              aria-expanded={isOpen}
+            >
+              <!-- Status dot -->
+              <span class="h-2 w-2 shrink-0 rounded-full {getStatusDotColor(rep)}"></span>
+              <!-- Time range -->
+              <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500 w-32">{formatTimestamp(last.timestamp)}</span>
+              <!-- Source icon -->
+              <span class="shrink-0 text-sm" title={src.label}>{src.icon}</span>
+              <!-- Event type -->
+              <span class="shrink-0 text-xs font-medium text-gray-600 dark:text-gray-400 w-20">{getEventTypeLabel(rep.eventType)}</span>
+              <!-- Node ID (global mode only) -->
+              {#if mode === "global"}
+                {@const displayName = resolveNodeDisplayName(rep.nodeId)}
+                <a
+                  href={`/nodes/${encodeURIComponent(displayName)}`}
+                  onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(displayName)}`); }}
+                  class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-primary-600 hover:text-primary-800 hover:bg-primary-50 dark:bg-gray-700 dark:text-primary-400 dark:hover:text-primary-300 dark:hover:bg-primary-900/20"
+                  title={displayName !== rep.nodeId ? `${displayName} (${rep.nodeId})` : `Go to node ${rep.nodeId}`}
+                >{displayName}</a>
+              {/if}
+              <!-- Summary + count badge -->
+              <span class="min-w-0 flex-1 truncate text-gray-800 dark:text-gray-200">{rep.summary}</span>
+              <span class="shrink-0 inline-flex items-center rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-600 dark:text-gray-300">
+                ×{grp.entries.length}
+              </span>
+              <!-- Time range label -->
+              <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500">
+                {formatTimestamp(last.timestamp)} – {formatTimestamp(first.timestamp)}
+              </span>
+              <!-- Expand chevron -->
+              <svg class="h-3 w-3 shrink-0 text-gray-400 transition-transform {isOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
               </svg>
-            {/if}
-          </button>
+            </button>
 
-          <!-- Expanded details -->
-          {#if expanded && hasDetails}
-            <div class="ml-6 mb-2 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/40">
-              <!-- action -->
-              {#if entry.action && entry.action !== 'unknown'}
-                <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">Action: {entry.action}</p>
-              {/if}
-              <!-- nodeUri -->
-              {#if entry.nodeUri}
-                <p class="mb-2 text-xs text-gray-500 dark:text-gray-400">URI: {entry.nodeUri}</p>
-              {/if}
-              <!-- details key-value pairs -->
-              {#if entry.details && Object.keys(entry.details).length > 0}
-                <dl class="space-y-1 text-xs">
-                  {#each Object.entries(entry.details) as [key, value] (key)}
-                    {#if value !== null && value !== undefined && value !== ''}
-                      <div class="flex gap-2">
-                        <dt class="w-36 shrink-0 font-medium text-gray-500 dark:text-gray-400">{key}</dt>
-                        <dd class="min-w-0 break-all font-mono text-gray-800 dark:text-gray-200">
-                          {#if typeof value === 'object'}
-                            {JSON.stringify(value, null, 2)}
-                          {:else}
-                            {String(value)}
-                          {/if}
-                        </dd>
-                      </div>
-                    {/if}
-                  {/each}
-                </dl>
-              {/if}
-            </div>
-          {/if}
-        </div>
+            <!-- Expanded group: show all individual entries -->
+            {#if isOpen}
+              <div class="ml-4 border-l-2 border-gray-200 dark:border-gray-700 pl-1">
+                {#each grp.entries as groupEntry (groupEntry.id)}
+                  {@render entryRow(groupEntry)}
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
       {/each}
     </div>
 
@@ -471,7 +571,6 @@
       </div>
     {/if}
   {:else if !streamComplete && activeSources.length === 0}
-    <!-- Not yet started (active just became true) -->
     <div class="flex justify-center py-8">
       <div class="text-sm text-gray-500 dark:text-gray-400">Starting journal load…</div>
     </div>
