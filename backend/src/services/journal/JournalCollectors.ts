@@ -447,7 +447,7 @@ export async function collectAWSStateEntry(
 
   return [
     {
-      id: `aws:state:${instanceId}:${currentState}`,
+      id: `aws:state:${instanceId}:${currentState}:${timestamp}`,
       nodeId,
       nodeUri: `aws:${region}:${instanceId}`,
       eventType,
