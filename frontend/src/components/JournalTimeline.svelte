@@ -141,9 +141,8 @@
     if (sources && sources.length > 0) params.set('source', sources.join(','));
 
     if (mode === "node") {
-      if (!nodeId) return '';
       const qs = params.toString();
-      return `/api/journal/${encodeURIComponent(nodeId)}/stream${qs ? `?${qs}` : ''}`;
+      return `/api/journal/${encodeURIComponent(nodeId ?? '')}/stream${qs ? `?${qs}` : ''}`;
     }
     // Global mode — add target selection params
     if (nodeIds && nodeIds.length > 0) params.set('nodeIds', nodeIds.join(','));

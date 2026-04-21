@@ -466,7 +466,7 @@ export function createJournalRouter(
               tasks.push(
                 collectAWSStateEntry(awsPlugin as unknown as AWSServiceLike, instanceId, region, db, nodeId)
                   .then(async (entries) => {
-                    for (const entry of entries) {
+                    await Promise.all(entries.map(async (entry) => {
                       await journalService.recordEvent({
                         nodeId: entry.nodeId,
                         nodeUri: entry.nodeUri,
@@ -477,7 +477,7 @@ export function createJournalRouter(
                         details: entry.details,
                         userId: null,
                       });
-                    }
+                    }));
                     send("batch", { source: "aws_states", entries });
                   })
                   .catch(() => { send("source_error", { source: "aws_states", message: "Failed to load AWS state changes" }); }),
