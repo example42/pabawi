@@ -84,19 +84,40 @@
     return eventTypeLabels[et] ?? et;
   }
 
-  function getStatusDotColor(et: string): string {
-    switch (et) {
+  function getStatusDotColor(entry: JournalEntry): string {
+    // Use the outcome status from details when available (executions, puppet runs, etc.)
+    const status = (entry.details?.nodeStatus ?? entry.details?.status) as string | undefined;
+    if (status) {
+      switch (status) {
+        case 'success':
+        case 'changed':
+          return 'bg-green-500';
+        case 'failed':
+          return 'bg-red-500';
+        case 'running':
+          return 'bg-yellow-500';
+        case 'partial':
+          return 'bg-orange-500';
+        case 'unchanged':
+          return 'bg-gray-400';
+      }
+    }
+
+    // Lifecycle events — color by intent
+    switch (entry.eventType) {
+      case 'provision':
       case 'start':
       case 'resume':
-      case 'provision':
         return 'bg-green-500';
       case 'destroy':
         return 'bg-red-500';
-      case 'command_execution':
-      case 'task_execution':
-      case 'puppet_run':
+      case 'stop':
+      case 'suspend':
+        return 'bg-yellow-500';
+      case 'reboot':
         return 'bg-blue-500';
       case 'note':
+      case 'config_change':
       case 'unknown':
       default:
         return 'bg-gray-400';
@@ -366,7 +387,7 @@
             aria-expanded={expanded}
           >
             <!-- Status dot -->
-            <span class="h-2 w-2 shrink-0 rounded-full {getStatusDotColor(entry.eventType)}"></span>
+            <span class="h-2 w-2 shrink-0 rounded-full {getStatusDotColor(entry)}"></span>
             <!-- Timestamp -->
             <span class="shrink-0 text-xs text-gray-400 dark:text-gray-500 w-32">{formatTimestamp(entry.timestamp)}</span>
             <!-- Source icon -->
