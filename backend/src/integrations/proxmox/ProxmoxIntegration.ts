@@ -465,7 +465,7 @@ export class ProxmoxIntegration
    */
   private mapActionToEventType(
     actionName: string
-  ): "provision" | "destroy" | "start" | "stop" | "reboot" | "suspend" | "resume" | "info" {
+  ): "provision" | "destroy" | "start" | "stop" | "reboot" | "suspend" | "resume" | "unknown" {
     switch (actionName) {
       case "create_vm":
       case "create_lxc":
@@ -485,7 +485,7 @@ export class ProxmoxIntegration
       case "resume":
         return "resume";
       default:
-        return "info";
+        return "unknown";
     }
   }
 

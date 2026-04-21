@@ -217,7 +217,7 @@ export function createJournalRouter(
           // Resolve groupId to nodeIds if provided
           let nodeIds: string[] | undefined;
           if (query.nodeIds) {
-            nodeIds = query.nodeIds.split(",");
+            nodeIds = query.nodeIds.split(",").map((s) => s.trim()).filter(Boolean);
           }
 
           if (query.groupId && deps.integrationManager) {
@@ -434,8 +434,8 @@ export function createJournalRouter(
         // Source 4: Proxmox task history (if node belongs to Proxmox)
         // Skip if source filter excludes proxmox
         const skipProxmoxBySource = query.source !== undefined && !query.source.includes("proxmox");
-        if (activeSources.includes("proxmox_tasks") && !skipProxmoxBySource) {
-          const proxmoxPlugin = deps.integrationManager!.getExecutionTool("proxmox") as ProxmoxIntegration | null;
+        if (activeSources.includes("proxmox_tasks") && !skipProxmoxBySource && deps.integrationManager) {
+          const proxmoxPlugin = deps.integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
           const client = proxmoxPlugin?.getClient();
           if (client) {
             const parts = nodeId.split(":");
@@ -456,8 +456,8 @@ export function createJournalRouter(
         // Source 5: AWS state changes (if node belongs to AWS)
         // Skip if source filter excludes aws
         const skipAwsBySource = query.source !== undefined && !query.source.includes("aws");
-        if (activeSources.includes("aws_states") && !skipAwsBySource) {
-          const awsPlugin = deps.integrationManager!.getExecutionTool("aws") as AWSPlugin | null;
+        if (activeSources.includes("aws_states") && !skipAwsBySource && deps.integrationManager) {
+          const awsPlugin = deps.integrationManager.getExecutionTool("aws") as AWSPlugin | null;
           if (awsPlugin) {
             const parts = nodeId.split(":");
             if (parts.length === 3) {
@@ -465,7 +465,21 @@ export function createJournalRouter(
               const instanceId = parts[2];
               tasks.push(
                 collectAWSStateEntry(awsPlugin as unknown as AWSServiceLike, instanceId, region, db, nodeId)
-                  .then((entries) => { send("batch", { source: "aws_states", entries }); })
+                  .then(async (entries) => {
+                    for (const entry of entries) {
+                      await journalService.recordEvent({
+                        nodeId: entry.nodeId,
+                        nodeUri: entry.nodeUri,
+                        eventType: entry.eventType,
+                        source: entry.source,
+                        action: entry.action,
+                        summary: entry.summary,
+                        details: entry.details,
+                        userId: null,
+                      });
+                    }
+                    send("batch", { source: "aws_states", entries });
+                  })
                   .catch(() => { send("source_error", { source: "aws_states", message: "Failed to load AWS state changes" }); }),
               );
             }
