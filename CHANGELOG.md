@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.1.0]
+
+### Added
+
+- Global Journal page with cross-node timeline aggregation, filtering by node, group, event type, source, and date range
+- Journal collectors for Proxmox tasks, AWS EC2 state changes, PuppetDB reports, and execution history
+- Collapsible target selector in Global Journal with node/group search and source filtering
+- Grouping of consecutive similar journal entries in the timeline for cleaner display
+- Clickable node IDs in global journal entries linking to node detail pages
+- Node name resolution in journal views — Proxmox/AWS raw IDs resolve to hostnames
+- Input sanitization middleware with null byte removal, prototype pollution prevention, and deep nesting protection
+- Cumulative login attempt counters (migration 011) for permanent lockout decisions that persist across successful logins
+- Request deduplication middleware with LRU cache for identical GET requests
+- Integration color service with consistent color coding across all integrations
+- Multi-source filtering support in journal timeline API
+- Zod-based input validation schemas for RBAC and common request types
+
+### Changed
+
+- Journal timeline component supports both per-node and global modes
+- Streaming route refined for journal event collection
+- AWS state persistence uses batched `Promise.all` mapping
+- Security hardened across integrations with secure defaults and stricter input validation
+- Version bumped to 1.1.0 across all package.json files
+
+### Fixed
+
+- Journal timeline stuck loading state resolved
+- Proxmox and AWS URIs correctly resolve to hostnames in journal views
+- Journal stream guard logic refined to prevent edge-case rendering issues
+
 ## [1.0.0]
 
 ### Added
@@ -32,13 +63,6 @@
 - Frontend API functions: `saveIntegrationConfig`, `getIntegrationConfig`, `getIntegrationConfigs`, `deleteIntegrationConfig`, `saveProxmoxConfig`, `saveAWSConfig`
 - `IntegrationConfigRecord` frontend type
 - Dead code and unused dependencies related to database-stored config overrides
-
-### Breaking Changes from 0.10.0
-
-- `/api/config/integrations` CRUD endpoints removed — all configuration is now via `.env`
-- `integration_configs` database table dropped (migration 010 runs automatically)
-- Setup guides no longer save configuration to the database
-- Test connection endpoints (`POST /api/integrations/proxmox/test`, `POST /api/integrations/aws/test`) no longer accept config in the request body
 
 ## [0.8.0]
 
