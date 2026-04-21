@@ -141,8 +141,9 @@
     if (sources && sources.length > 0) params.set('source', sources.join(','));
 
     if (mode === "node") {
+      if (!nodeId) return '';
       const qs = params.toString();
-      return `/api/journal/${encodeURIComponent(nodeId ?? '')}/stream${qs ? `?${qs}` : ''}`;
+      return `/api/journal/${encodeURIComponent(nodeId)}/stream${qs ? `?${qs}` : ''}`;
     }
     // Global mode — add target selection params
     if (nodeIds && nodeIds.length > 0) params.set('nodeIds', nodeIds.join(','));
@@ -153,6 +154,11 @@
 
   function startStream(): void {
     if (abortController) return;
+    if (mode === "node" && !nodeId) {
+      streamError = "Missing node ID for node journal stream";
+      streamComplete = true;
+      return;
+    }
 
     const url = buildStreamUrl();
     const authHeader = authManager.getAuthHeader();
@@ -371,10 +377,10 @@
             <!-- Node ID (global mode only) -->
             {#if mode === "global"}
               <a
-                href="/nodes/{encodeURIComponent(entry.nodeId)}"
+                href={`/nodes/${encodeURIComponent(entry.nodeId)}`}
                 onclick={(e) => { e.preventDefault(); e.stopPropagation(); router.navigate(`/nodes/${encodeURIComponent(entry.nodeId)}`); }}
                 class="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-mono text-primary-600 hover:text-primary-800 hover:bg-primary-50 dark:bg-gray-700 dark:text-primary-400 dark:hover:text-primary-300 dark:hover:bg-primary-900/20"
-                title="Go to node {entry.nodeId}"
+                title={`Go to node ${entry.nodeId}`}
               >{entry.nodeId}</a>
             {/if}
             <!-- Summary -->

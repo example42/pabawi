@@ -514,7 +514,7 @@ export class AWSPlugin
    */
   private mapActionToEventType(
     actionName: string
-  ): "provision" | "start" | "stop" | "reboot" | "destroy" | "info" {
+  ): "provision" | "start" | "stop" | "reboot" | "destroy" | "unknown" {
     switch (actionName) {
       case "provision":
       case "create_instance":
@@ -528,7 +528,7 @@ export class AWSPlugin
       case "terminate":
         return "destroy";
       default:
-        return "info";
+        return "unknown";
     }
   }
 

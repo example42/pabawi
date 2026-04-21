@@ -417,7 +417,10 @@ export async function collectAWSStateEntry(
   let previousState: string | undefined;
   try {
     const rows = await db.query<{ details: string }>(
-      `SELECT details FROM journal_entries WHERE nodeId = ? AND source = 'aws' ORDER BY timestamp DESC LIMIT 1`,
+      `SELECT details FROM journal_entries
+       WHERE nodeId = ? AND source = 'aws' AND action LIKE 'EC2 state change:%'
+       ORDER BY timestamp DESC
+       LIMIT 1`,
       [nodeId],
     );
     if (rows.length > 0) {
