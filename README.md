@@ -60,9 +60,12 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
 - **Event Tracking** — resource changes and failures over time
 - **Hiera Data Browser** — hierarchical configuration data and key usage analysis
 - **Node Journal** — timeline of events, actions, and notes per node
+- **Global Journal** — cross-node timeline with filtering by node, group, event type, source, and date range
 - **Real-time Streaming** — live output for command and task execution
 - **Expert Mode** — full command lines and debug output
 - **Graceful Degradation** — continues operating when individual integrations are unavailable
+- **Request Deduplication** — LRU-cached responses for identical API requests to reduce external calls
+- **Input Sanitization** — automatic null byte removal, prototype pollution prevention, and deep nesting protection
 
 ## Screenshots
 
@@ -210,6 +213,7 @@ Scheduled executions, custom dashboards, CLI tool, audit logging, Tiny Puppet in
 
 ### Version History
 
+- **v1.1.0**: Global Journal with cross-node timeline,  security hardening, docs rewrite
 - **v1.0.0**: Configuration refactor (`.env` as single source of truth), Proxmox and AWS provisioning, Node Journal, setup wizard `.env` snippet generators, Integration Status Dashboard
 - **v0.10.0**: AWS EC2 integration, integration configuration management
 - **v0.9.0**: Proxmox integration, Node Journal
