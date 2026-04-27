@@ -210,8 +210,8 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Follow the same layout pattern as the existing AWS block
     - _Requirements: 15.8_
 
-- [ ] 11. Documentation
-  - [~] 11.1 Create docs/integrations/azure.md
+- [x] 11. Documentation
+  - [x] 11.1 Create docs/integrations/azure.md
     - Follow the same structure as docs/integrations/aws.md
     - Cover prerequisites, environment variable configuration, authentication methods (Service Principal, Managed Identity, Azure CLI via DefaultAzureCredential)
     - Document all AZURE_* environment variables with descriptions and examples
@@ -220,14 +220,14 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Include troubleshooting table: invalid credentials, missing subscription ID, permission errors, unreachable API, resource group discovery failures
     - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-  - [~] 11.2 Update scripts/setup.sh with Azure section
+  - [x] 11.2 Update scripts/setup.sh with Azure section
     - Add Azure integration section in the Integrations block after the SSH section
     - Prompt for AZURE_ENABLED (default "n")
     - When enabled, prompt for AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_SUBSCRIPTION_ID, and optionally AZURE_RESOURCE_GROUPS
     - Append Azure configuration block to generated backend/.env
     - _Requirements: 14.6, 14.7_
 
-- [ ] 12. Final checkpoint — All tasks complete
+- [-] 12. Final checkpoint — All tasks complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
