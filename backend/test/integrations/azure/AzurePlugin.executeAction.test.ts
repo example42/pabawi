@@ -58,7 +58,7 @@ async function createInitializedPlugin(journalService?: JournalService) {
       subscriptionId: "sub-1",
       tenantId: "tenant-1",
       clientId: "client-1",
-      clientSecret: "secret-1", // pragma: allowlist secret
+      clientSecret: "fake-client-secret-for-testing", // pragma: allowlist secret
     },
   });
   return plugin;
@@ -364,7 +364,7 @@ describe("AzurePlugin.executeAction", () => {
             subscriptionId: "sub-1",
             tenantId: "tenant-1",
             clientId: "client-1",
-            clientSecret: "secret-1", // pragma: allowlist secret
+            clientSecret: "fake-client-secret-for-testing", // pragma: allowlist secret
           },
         }),
       ).resolves.not.toThrow();

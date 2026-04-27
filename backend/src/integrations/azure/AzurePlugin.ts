@@ -389,10 +389,10 @@ export class AzurePlugin
     const eventType = this.mapActionToEventType(action.action);
     // Normalize to canonical nodeId (azure:{subscriptionId}:{resourceGroup}:{vmName})
     // and avoid double-prefixing nodeUri
-    const canonicalNodeId = target.startsWith("azure:") ? target : `azure:${target}`;
+    const canonicalNodeRef = target.startsWith("azure:") ? target : `azure:${target}`;
     const entry: CreateJournalEntry = {
-      nodeId: canonicalNodeId,
-      nodeUri: canonicalNodeId,
+      nodeId: canonicalNodeRef,
+      nodeUri: canonicalNodeRef,
       eventType,
       source: "azure" as JournalSource,
       action: action.action,

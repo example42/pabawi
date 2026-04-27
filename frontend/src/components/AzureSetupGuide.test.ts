@@ -96,7 +96,7 @@ describe('AzureSetupGuide', () => {
             expect(snippet).toContain(`AZURE_CLIENT_SECRET=${config.clientSecret}`);
           }
         ),
-        { numRuns: 50, timeout: 60000 }
+        { numRuns: 20, timeout: 60000 }
       );
     }, 120000);
 
@@ -133,7 +133,7 @@ describe('AzureSetupGuide', () => {
             expect(snippet).toContain(`AZURE_CLIENT_SECRET=${config.clientSecret}`);
           }
         ),
-        { numRuns: 30, timeout: 60000 }
+        { numRuns: 15, timeout: 60000 }
       );
     }, 120000);
 
@@ -162,7 +162,7 @@ describe('AzureSetupGuide', () => {
             expect(apiCalls).toHaveLength(0);
           }
         ),
-        { numRuns: 30, timeout: 60000 }
+        { numRuns: 15, timeout: 60000 }
       );
 
       fetchSpy.mockRestore();

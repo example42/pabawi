@@ -245,7 +245,14 @@ export class AzureService {
     if (!publisher || !offer || !sku) return [];
 
     const resolvedLocation = location ?? (await this.getLocations())[0]?.name;
-    if (!resolvedLocation) return [];
+    if (!resolvedLocation) {
+      this.logger.warn("No Azure locations available for subscription; cannot list images", {
+        component: "AzureService",
+        operation: "getImages",
+        metadata: { subscriptionId: this.subscriptionId },
+      });
+      return [];
+    }
 
     const result = await this.computeClient.virtualMachineImages.list(resolvedLocation, publisher, offer, sku);
     const images = result.map((img) => ({ publisher, offer, sku, version: img.name }));
