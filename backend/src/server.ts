@@ -30,7 +30,9 @@ import { createRolesRouter } from "./routes/roles";
 import { createPermissionsRouter } from "./routes/permissions";
 import { createJournalRouter } from "./routes/journal";
 import { createAWSRouter } from "./routes/integrations/aws";
+import { createAzureRouter } from "./routes/integrations/azure";
 import { AWSPlugin } from "./integrations/aws/AWSPlugin";
+import { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
@@ -856,6 +858,88 @@ async function startServer(): Promise<Express> {
       operation: "initializeAWS",
     });
 
+    // Initialize Azure integration only if configured
+    let azurePlugin: AzurePlugin | undefined;
+    const azureConfig = config.integrations.azure;
+    const azureConfigured = azureConfig?.enabled === true;
+
+    logger.debug("=== Azure Integration Setup ===", {
+      component: "Server",
+      operation: "initializeAzure",
+      metadata: {
+        configured: azureConfigured,
+        enabled: azureConfig?.enabled,
+        hasSubscriptionId: !!azureConfig?.subscriptionId,
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    if (azureConfigured && azureConfig) {
+      logger.info("Initializing Azure integration...", {
+        component: "Server",
+        operation: "initializeAzure",
+      });
+      try {
+        azurePlugin = new AzurePlugin(logger, performanceMonitor);
+        logger.debug("AzurePlugin instance created", {
+          component: "Server",
+          operation: "initializeAzure",
+        });
+
+        const integrationConfig: IntegrationConfig = {
+          enabled: true,
+          name: "azure",
+          type: "both",
+          config: azureConfig as unknown as Record<string, unknown>,
+          priority: 7,
+        };
+
+        logger.debug("Registering Azure plugin", {
+          component: "Server",
+          operation: "initializeAzure",
+          metadata: { config: { ...integrationConfig, config: { subscriptionId: azureConfig.subscriptionId } } },
+        });
+        integrationManager.registerPlugin(azurePlugin, integrationConfig);
+
+        logger.info("Azure integration registered successfully", {
+          component: "Server",
+          operation: "initializeAzure",
+          metadata: {
+            enabled: true,
+            subscriptionId: azureConfig.subscriptionId,
+            hasClientCredentials: !!(azureConfig.tenantId && azureConfig.clientId),
+            resourceGroups: azureConfig.resourceGroups,
+            priority: 7,
+          },
+        });
+      } catch (error) {
+        logger.warn(`WARNING: Failed to initialize Azure integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+          component: "Server",
+          operation: "initializeAzure",
+        });
+        if (error instanceof Error && error.stack) {
+          logger.error("Azure initialization error stack", {
+            component: "Server",
+            operation: "initializeAzure",
+          }, error);
+        }
+        azurePlugin = undefined;
+      }
+    } else {
+      logger.warn("Azure integration not configured - skipping registration", {
+        component: "Server",
+        operation: "initializeAzure",
+      });
+      logger.info("Set AZURE_ENABLED=true and AZURE_SUBSCRIPTION_ID to enable Azure integration", {
+        component: "Server",
+        operation: "initializeAzure",
+      });
+    }
+    logger.debug("=== End Azure Integration Setup ===", {
+      component: "Server",
+      operation: "initializeAzure",
+    });
+
     // Initialize all registered plugins
     logger.info("=== Initializing All Integration Plugins ===", {
       component: "Server",
@@ -936,6 +1020,13 @@ async function startServer(): Promise<Express> {
     if (awsPlugin) {
       awsPlugin.setJournalService(journalService);
       logger.info("JournalService wired to AWSPlugin", {
+        component: "Server",
+        operation: "wireJournalService",
+      });
+    }
+    if (azurePlugin) {
+      azurePlugin.setJournalService(journalService);
+      logger.info("JournalService wired to AzurePlugin", {
         component: "Server",
         operation: "wireJournalService",
       });
@@ -1245,6 +1336,19 @@ async function startServer(): Promise<Express> {
         authMiddleware,
         rateLimitMiddleware,
         createAWSRouter(awsPluginInstance, integrationManager, {
+          allowDestructiveActions: config.provisioning.allowDestructiveActions,
+        }),
+      );
+    }
+
+    // Azure integration routes (conditional on plugin availability)
+    const azurePluginInstance = integrationManager.getExecutionTool("azure") as AzurePlugin | null;
+    if (azurePluginInstance) {
+      app.use(
+        "/api/integrations/azure",
+        authMiddleware,
+        rateLimitMiddleware,
+        createAzureRouter(azurePluginInstance, integrationManager, {
           allowDestructiveActions: config.provisioning.allowDestructiveActions,
         }),
       );

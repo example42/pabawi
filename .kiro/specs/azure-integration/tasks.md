@@ -156,8 +156,8 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Add "azure" to IntegrationType type
     - _Requirements: 10.1, 10.2, 10.3_
 
-- [ ] 8. API routes
-  - [~] 8.1 Create backend/src/routes/integrations/azure.ts
+- [x] 8. API routes
+  - [x] 8.1 Create backend/src/routes/integrations/azure.ts
     - Create createAzureRouter() function following the AWS router pattern
     - Accept AzurePlugin, optional IntegrationManager, and options (allowDestructiveActions)
     - Define Zod schemas for provision, lifecycle, and query parameters
@@ -168,7 +168,7 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Invalidate inventory cache on successful provision/lifecycle actions
     - _Requirements: 3.5, 7.5, 8.4, 8.5, 8.6, 11.4, 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
 
-  - [~] 8.2 Register Azure routes in backend/src/server.ts
+  - [x] 8.2 Register Azure routes in backend/src/server.ts
     - Import AzurePlugin and createAzureRouter
     - Add Azure integration initialization block following the AWS pattern
     - Check azureConfig.enabled, create AzurePlugin, register with IntegrationManager
@@ -185,7 +185,7 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Test resource discovery endpoints
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
 
-- [ ] 9. Checkpoint — Backend integration complete
+- [-] 9. Checkpoint — Backend integration complete
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 10. Frontend AzureSetupGuide component
