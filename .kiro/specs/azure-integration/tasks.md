@@ -185,11 +185,11 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Test resource discovery endpoints
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6_
 
-- [-] 9. Checkpoint — Backend integration complete
+- [x] 9. Checkpoint — Backend integration complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. Frontend AzureSetupGuide component
-  - [~] 10.1 Create frontend/src/components/AzureSetupGuide.svelte
+- [x] 10. Frontend AzureSetupGuide component
+  - [x] 10.1 Create frontend/src/components/AzureSetupGuide.svelte
     - Follow the AWSSetupGuide.svelte pattern closely
     - Provide form fields: Tenant ID, Client ID, Client Secret (password input), Subscription ID, Resource Groups (optional, comma-separated), Default Location
     - Implement generateEnvSnippet() producing AZURE_ENABLED=true and all populated AZURE_* variables
@@ -200,11 +200,11 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Instruct user to paste into backend/.env and restart — no web-based config saving
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5, 15.6_
 
-  - [~] 10.2 Export AzureSetupGuide in frontend/src/components/index.ts
+  - [x] 10.2 Export AzureSetupGuide in frontend/src/components/index.ts
     - Add `export { default as AzureSetupGuide } from "./AzureSetupGuide.svelte"` in alphabetical order
     - _Requirements: 15.7_
 
-  - [~] 10.3 Register AzureSetupGuide in IntegrationSetupPage.svelte
+  - [x] 10.3 Register AzureSetupGuide in IntegrationSetupPage.svelte
     - Import AzureSetupGuide in frontend/src/pages/IntegrationSetupPage.svelte
     - Add {:else if integration === 'azure'} block rendering AzureSetupGuide with back button and expert mode debug panel
     - Follow the same layout pattern as the existing AWS block

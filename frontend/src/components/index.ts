@@ -18,6 +18,7 @@ export { default as GlobalHieraTab } from "./GlobalHieraTab.svelte";
 export { default as HieraSetupGuide } from "./HieraSetupGuide.svelte";
 export { default as AnsibleSetupGuide } from "./AnsibleSetupGuide.svelte";
 export { default as AWSSetupGuide } from "./AWSSetupGuide.svelte";
+export { default as AzureSetupGuide } from "./AzureSetupGuide.svelte";
 export { default as IntegrationBadge } from "./IntegrationBadge.svelte";
 export { default as MultiSourceFactsViewer } from "./MultiSourceFactsViewer.svelte";
 export { default as IntegrationStatus } from "./IntegrationStatus.svelte";
