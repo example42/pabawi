@@ -90,7 +90,6 @@ export class AzureService {
       return result;
     } catch (error) {
       this.throwIfAuthError(error);
-      if (error instanceof AzureAuthenticationError) throw error;
       const message = error instanceof Error ? error.message : String(error);
       throw new AzureAuthenticationError(message);
     }
@@ -131,7 +130,6 @@ export class AzureService {
   async getNodeFacts(nodeId: string): Promise<Facts> {
     const { resourceGroup, vmName } = parseNodeId(nodeId);
     const vm = await this.computeClient.virtualMachines.get(resourceGroup, vmName);
-    if (!vm) throw new Error(`VM not found: ${vmName} in resource group ${resourceGroup}`);
     const instanceView = await this.computeClient.virtualMachines.instanceView(resourceGroup, vmName);
     return transformToFacts(nodeId, vm, instanceView, this.subscriptionId);
   }
@@ -152,7 +150,7 @@ export class AzureService {
       const adminUser = params.adminUsername as string;
       const vmDef: VirtualMachine = {
         location: params.location as string,
-        hardwareProfile: { vmSize: (params.vmSize as string) ?? "Standard_B1s" },
+        hardwareProfile: { vmSize: typeof params.vmSize === "string" ? params.vmSize : "Standard_B1s" },
         storageProfile: {
           imageReference: { ...imageRef, version: imageRef.version ?? "latest" },
           osDisk: { createOption: "FromImage", managedDisk: { storageAccountType: "Standard_LRS" } },
@@ -231,10 +229,10 @@ export class AzureService {
     const sizes: AzureVMSizeInfo[] = [];
     for await (const size of this.computeClient.virtualMachineSizes.list(location)) {
       sizes.push({
-        name: size.name ?? "unknown",
+        name: size.name,
         vCpus: size.numberOfCores ?? 0,
         memoryMB: size.memoryInMB ?? 0,
-        osDiskSizeGB: size.osDiskSizeInMB ? Math.round(size.osDiskSizeInMB / 1024) : 0,
+        osDiskSizeGB: size.osDiskSizeInMB != null ? Math.round(size.osDiskSizeInMB / 1024) : 0,
       });
     }
     this.logger.info("Azure VM sizes fetched", {
@@ -246,13 +244,13 @@ export class AzureService {
   async getImages(publisher?: string, offer?: string, sku?: string): Promise<AzureImageInfo[]> {
     if (!publisher || !offer || !sku) return [];
     const result = await this.computeClient.virtualMachineImages.list("eastus", publisher, offer, sku);
-    return result.map((img) => ({ publisher, offer, sku, version: img.name ?? "latest" }));
+    return result.map((img) => ({ publisher, offer, sku, version: img.name }));
   }
 
   async getResourceGroups(): Promise<AzureResourceGroupInfo[]> {
     const groups: AzureResourceGroupInfo[] = [];
     for await (const rg of this.resourceClient.resourceGroups.list()) {
-      groups.push({ name: rg.name ?? "", location: rg.location, tags: (rg.tags as Record<string, string>) ?? {} });
+      groups.push({ name: rg.name ?? "", location: rg.location, tags: (rg.tags as Record<string, string> | undefined) ?? {} });
     }
     this.logger.info("Azure resource groups fetched", {
       component: "AzureService", operation: "getResourceGroups", metadata: { count: groups.length },
@@ -267,7 +265,7 @@ export class AzureService {
   private throwIfAuthError(error: unknown): void {
     if (error instanceof Error) {
       const code = (error as Error & { code?: string }).code ?? "";
-      const name = (error as Error & { name?: string }).name ?? "";
+      const name = error.name;
       if (AUTH_ERROR_CODES.includes(code) || AUTH_ERROR_CODES.includes(name)) {
         throw new AzureAuthenticationError(error.message);
       }
