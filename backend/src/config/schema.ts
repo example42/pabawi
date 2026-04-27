@@ -316,6 +316,20 @@ export const AWSConfigSchema = z.object({
 export type AWSIntegrationConfig = z.infer<typeof AWSConfigSchema>;
 
 /**
+ * Azure integration configuration schema
+ */
+export const AzureConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  tenantId: z.string().optional(),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  subscriptionId: z.string().optional(),
+  resourceGroups: z.array(z.string()).optional(),
+});
+
+export type AzureIntegrationConfig = z.infer<typeof AzureConfigSchema>;
+
+/**
  * Provisioning safety configuration schema
  *
  * Controls whether destructive provisioning actions (e.g., destroy VM/LXC,
@@ -338,6 +352,7 @@ export const IntegrationsConfigSchema = z.object({
   hiera: HieraConfigSchema.optional(),
   proxmox: ProxmoxConfigSchema.optional(),
   aws: AWSConfigSchema.optional(),
+  azure: AzureConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
