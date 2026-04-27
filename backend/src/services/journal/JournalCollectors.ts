@@ -483,6 +483,139 @@ export async function collectAWSStateEntry(
 }
 
 // ============================================================================
+// Azure VM State Collector
+// ============================================================================
+
+/**
+ * Minimal interface for Azure service to avoid circular deps.
+ * Subset of AzureService — only the method we need for state collection.
+ */
+export interface AzureServiceLike {
+  getNodeFacts(nodeId: string): Promise<{
+    facts: {
+      categories?: {
+        system: {
+          powerState: string;
+          vmName?: string;
+          resourceGroup?: string;
+          location?: string;
+        };
+      };
+    };
+  }>;
+}
+
+/**
+ * Map an Azure VM power state string to a JournalEventType.
+ */
+export function mapAzurePowerStateToEventType(state: string): JournalEventType {
+  const mapping: Record<string, JournalEventType> = {
+    "VM running": "start",
+    "VM stopped": "stop",
+    "VM deallocated": "stop",
+    "VM deallocating": "stop",
+    "VM starting": "start",
+    "VM deleting": "destroy",
+  };
+  return mapping[state] ?? "unknown";
+}
+
+/**
+ * Collect Azure VM state change entry for a virtual machine.
+ * Calls getNodeFacts to get current state, compares against last recorded
+ * state in journal_entries. Returns 0 or 1 JournalEntry with deterministic ID.
+ */
+export async function collectAzureVMStateEntry(
+  azureService: AzureServiceLike,
+  vmName: string,
+  resourceGroup: string,
+  db: DatabaseAdapter,
+  nodeId: string,
+): Promise<JournalEntry[]> {
+  const logger = new LoggerService();
+
+  // 1. Get current state from Azure
+  let currentState: string;
+  try {
+    const factsResult = await azureService.getNodeFacts(nodeId);
+    const system = factsResult.facts.categories?.system;
+    if (!system?.powerState) {
+      logger.warn("Azure facts missing system powerState", {
+        component: "JournalCollectors",
+        integration: "azure",
+        operation: "collectAzureVMStateEntry",
+      });
+      return [];
+    }
+    currentState = system.powerState;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`Failed to fetch Azure facts for ${nodeId}: ${message}`, {
+      component: "JournalCollectors",
+      integration: "azure",
+      operation: "collectAzureVMStateEntry",
+    });
+    return [];
+  }
+
+  // 2. Query last recorded state from journal_entries
+  let previousState: string | undefined;
+  try {
+    const rows = await db.query<{ details: string }>(
+      `SELECT details FROM journal_entries
+       WHERE nodeId = ? AND source = 'azure' AND action LIKE 'Azure VM state change:%'
+       ORDER BY timestamp DESC
+       LIMIT 1`,
+      [nodeId],
+    );
+    if (rows.length > 0) {
+      const details = typeof rows[0].details === "string"
+        ? (JSON.parse(rows[0].details) as Record<string, unknown>)
+        : (rows[0].details as Record<string, unknown>);
+      previousState = details.currentState as string | undefined;
+    }
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`Failed to query last Azure state for ${nodeId}: ${message}`, {
+      component: "JournalCollectors",
+      integration: "azure",
+      operation: "collectAzureVMStateEntry",
+    });
+    // Treat as "no previous state known" — record the current state
+  }
+
+  // 3. If state hasn't changed, return empty
+  if (previousState === currentState) {
+    return [];
+  }
+
+  // 4. Create new journal entry for the state change
+  const eventType = mapAzurePowerStateToEventType(currentState);
+  const timestamp = new Date().toISOString();
+
+  return [
+    {
+      id: `azure:state:${vmName}:${currentState}:${timestamp}`,
+      nodeId,
+      nodeUri: `azure:${resourceGroup}:${vmName}`,
+      eventType,
+      source: "azure",
+      action: `Azure VM state change: ${previousState ?? "unknown"} → ${currentState}`,
+      summary: `Azure VM ${vmName} ${currentState}`,
+      details: {
+        vmName,
+        resourceGroup,
+        previousState: previousState ?? "unknown",
+        currentState,
+      },
+      userId: undefined,
+      timestamp,
+      isLive: true,
+    },
+  ];
+}
+
+// ============================================================================
 // Global Collectors (cross-node)
 // ============================================================================
 

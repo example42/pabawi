@@ -90,8 +90,8 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
 - [x] 4. Checkpoint — Core service complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. AzurePlugin (BasePlugin extension and registration)
-  - [~] 5.1 Create backend/src/integrations/azure/AzurePlugin.ts
+- [x] 5. AzurePlugin (BasePlugin extension and registration)
+  - [x] 5.1 Create backend/src/integrations/azure/AzurePlugin.ts
     - Extend BasePlugin with type "both" implementing InformationSourcePlugin and ExecutionToolPlugin
     - Accept optional LoggerService, PerformanceMonitorService, JournalService in constructor
     - Implement performInitialization() validating Azure config and creating AzureService
@@ -99,31 +99,31 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Log informational message when default credential chain is used
     - _Requirements: 1.1, 1.4, 1.5, 1.6, 2.6_
 
-  - [~] 5.2 Implement AzurePlugin InformationSourcePlugin methods
+  - [x] 5.2 Implement AzurePlugin InformationSourcePlugin methods
     - Implement getInventory(), getGroups(), getNodeFacts(), getNodeData() delegating to AzureService
     - Handle nodeId resolution (azure: prefix format vs plain name lookup)
     - _Requirements: 4.1, 5.1, 6.1_
 
-  - [~] 5.3 Implement AzurePlugin ExecutionToolPlugin methods
+  - [x] 5.3 Implement AzurePlugin ExecutionToolPlugin methods
     - Implement executeAction() routing based on action type: provision/create_vm → provisionVM, start/stop/restart/deallocate → lifecycle
     - Implement listCapabilities() returning start, stop, restart, deallocate
     - Implement listProvisioningCapabilities() returning create_vm
     - _Requirements: 7.1, 8.1, 8.5_
 
-  - [~] 5.4 Implement AzurePlugin health check
+  - [x] 5.4 Implement AzurePlugin health check
     - Implement performHealthCheck() using AzureService.validateCredentials()
     - Return healthy status with subscription details on success
     - Return unhealthy status with descriptive error on auth failure or connectivity issues
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
 
-  - [~] 5.5 Implement AzurePlugin journal integration
+  - [x] 5.5 Implement AzurePlugin journal integration
     - Record journal entries on provision and lifecycle action completion (success or failure)
     - Map actions to JournalEventType: provision→"provision", start→"start", stop→"stop", restart→"reboot", deallocate→"destroy"
     - Log and continue if JournalService is unavailable
     - Implement setJournalService() for alternative injection
     - _Requirements: 9.1, 9.2, 9.3_
 
-  - [~] 5.6 Implement AzurePlugin resource discovery delegation
+  - [x] 5.6 Implement AzurePlugin resource discovery delegation
     - Implement getLocations(), getVMSizes(), getImages(), getResourceGroups() delegating to AzureService
     - _Requirements: 11.1, 11.2, 11.3, 11.5_
 
@@ -136,20 +136,20 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Test error handling (AzureAuthenticationError propagation)
     - _Requirements: 1.1, 1.4, 1.5, 1.6, 3.1, 3.2, 3.3, 3.4, 13.1, 13.2_
 
-- [ ] 6. Journal integration (collector and source schema)
-  - [~] 6.1 Add "azure" to JournalSourceSchema
+- [x] 6. Journal integration (collector and source schema)
+  - [x] 6.1 Add "azure" to JournalSourceSchema
     - Update backend/src/services/journal/types.ts JournalSourceSchema enum to include "azure"
     - _Requirements: 9.6_
 
-  - [~] 6.2 Add Azure state collector to JournalCollectors.ts
+  - [x] 6.2 Add Azure state collector to JournalCollectors.ts
     - Add collectAzureVMStateEntry function in backend/src/services/journal/JournalCollectors.ts
     - Map Azure power states to JournalEventType: "VM running"→"start", "VM stopped"→"stop", "VM deallocated"→"stop", "VM deleting"→"destroy"
     - Compare current state against last recorded state in journal_entries
     - Follow the same pattern as collectAWSStateEntry
     - _Requirements: 9.4, 9.5_
 
-- [ ] 7. Integration color service entry
-  - [~] 7.1 Add "azure" to IntegrationColorService
+- [x] 7. Integration color service entry
+  - [x] 7.1 Add "azure" to IntegrationColorService
     - Add "azure" entry to IntegrationColors interface in backend/src/services/IntegrationColorService.ts
     - Use a blue-toned palette visually distinct from AWS cyan (#06B6D4) and Proxmox blue (#3B82F6)
     - Suggested: primary #8B5CF6 (violet) or #6366F1 (indigo) to differentiate

@@ -19,6 +19,7 @@ export interface IntegrationColors {
   ssh: IntegrationColorConfig;
   proxmox: IntegrationColorConfig;
   aws: IntegrationColorConfig;
+  azure: IntegrationColorConfig;
 }
 
 /**
@@ -52,6 +53,11 @@ export class IntegrationColorService {
         primary: '#06B6D4',  // Vivid cyan
         light: '#ECFEFF',
         dark: '#0891B2',
+      },
+      azure: {
+        primary: '#0078D4',  // Azure blue
+        light: '#E8F4FD',
+        dark: '#005A9E',
       },
       // Remote execution tools — vivid greens
       bolt: {
