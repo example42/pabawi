@@ -15,6 +15,12 @@
   "dependencies": {
     "@aws-sdk/client-ec2": "^3.700.0",
     "@aws-sdk/client-sts": "^3.700.0",
+    "@azure/arm-compute": "^23.3.0",
+    "@azure/arm-network": "^36.0.0",
+    "@azure/arm-resources": "^7.0.0",
+    "@azure/arm-resources-subscriptions": "^2.1.0",
+    "@azure/arm-subscriptions": "^6.0.0",
+    "@azure/identity": "^4.13.1",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

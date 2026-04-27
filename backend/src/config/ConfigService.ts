@@ -136,6 +136,14 @@ export class ConfigService {
       profile?: string;
       endpoint?: string;
     };
+    azure?: {
+      enabled: boolean;
+      tenantId?: string;
+      clientId?: string;
+      clientSecret?: string;
+      subscriptionId?: string;
+      resourceGroups?: string[];
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -497,6 +505,34 @@ export class ConfigService {
       };
     }
 
+    // Parse Azure configuration
+    if (process.env.AZURE_ENABLED === "true") {
+      // Parse resource groups from JSON array or comma-separated string
+      let resourceGroups: string[] | undefined;
+      if (process.env.AZURE_RESOURCE_GROUPS) {
+        try {
+          const parsed = JSON.parse(process.env.AZURE_RESOURCE_GROUPS) as unknown;
+          if (Array.isArray(parsed)) {
+            resourceGroups = parsed.filter(
+              (item): item is string => typeof item === "string",
+            );
+          }
+        } catch {
+          // Not JSON — treat as comma-separated
+          resourceGroups = process.env.AZURE_RESOURCE_GROUPS.split(",").map((r) => r.trim()).filter(Boolean);
+        }
+      }
+
+      integrations.azure = {
+        enabled: true,
+        tenantId: process.env.AZURE_TENANT_ID,
+        clientId: process.env.AZURE_CLIENT_ID,
+        clientSecret: process.env.AZURE_CLIENT_SECRET,
+        subscriptionId: process.env.AZURE_SUBSCRIPTION_ID,
+        resourceGroups,
+      };
+    }
+
     return integrations;
   }
 
@@ -799,6 +835,19 @@ export class ConfigService {
     const aws = this.config.integrations.aws;
     if (aws?.enabled) {
       return aws as typeof aws & { enabled: true };
+    }
+    return null;
+  }
+
+  /**
+   * Get Azure configuration if enabled
+   */
+  public getAzureConfig():
+    | (typeof this.config.integrations.azure & { enabled: true })
+    | null {
+    const azure = this.config.integrations.azure;
+    if (azure?.enabled) {
+      return azure as typeof azure & { enabled: true };
     }
     return null;
   }
