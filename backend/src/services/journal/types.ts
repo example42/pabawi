@@ -45,6 +45,7 @@ export type JournalEventType = z.infer<typeof JournalEventTypeSchema>;
 export const JournalSourceSchema = z.enum([
   "proxmox",
   "aws",
+  "azure",
   "bolt",
   "ansible",
   "ssh",
