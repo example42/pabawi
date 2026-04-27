@@ -106,6 +106,24 @@ export class AzurePlugin
         "No explicit Azure credentials configured — using default credential chain (managed identity, CLI, environment)",
         { component: "AzurePlugin", operation: "validateAzureConfig" },
       );
+    } else {
+      const hasTenantId = Boolean(config.tenantId);
+      const hasClientId = Boolean(config.clientId);
+      const hasClientSecret = Boolean(config.clientSecret);
+      const hasCompleteExplicitCredentials = hasTenantId && hasClientId && hasClientSecret;
+
+      if (!hasCompleteExplicitCredentials) {
+        const missingFields: string[] = [];
+        if (!hasTenantId) missingFields.push("tenantId");
+        if (!hasClientId) missingFields.push("clientId");
+        if (!hasClientSecret) missingFields.push("clientSecret");
+
+        throw new Error(
+          `Incomplete Azure client credential configuration: missing ${missingFields.join(", ")}. ` +
+            "Set all of tenantId, clientId, and clientSecret to use explicit client credentials, " +
+            "or leave all three unset to use the default credential chain.",
+        );
+      }
     }
 
     this.logger.debug("Azure configuration validated successfully", {
@@ -333,9 +351,13 @@ export class AzurePlugin
     target: string,
     errorMessage: string,
   ): ExecutionResult {
+    const type =
+      action.action === "provision" || action.action === "create_vm"
+        ? "task"
+        : "command";
     return {
       id: `azure-error-${String(Date.now())}`,
-      type: "command",
+      type,
       targetNodes: [target],
       action: action.action,
       status: "failed",
@@ -365,9 +387,12 @@ export class AzurePlugin
     if (!this.journalService) return;
 
     const eventType = this.mapActionToEventType(action.action);
+    // Normalize to canonical nodeId (azure:{subscriptionId}:{resourceGroup}:{vmName})
+    // and avoid double-prefixing nodeUri
+    const canonicalNodeId = target.startsWith("azure:") ? target : `azure:${target}`;
     const entry: CreateJournalEntry = {
-      nodeId: target,
-      nodeUri: `azure:${target}`,
+      nodeId: canonicalNodeId,
+      nodeUri: canonicalNodeId,
       eventType,
       source: "azure" as JournalSource,
       action: action.action,
@@ -464,9 +489,9 @@ export class AzurePlugin
     return this.service!.getVMSizes(location);
   }
 
-  async getImages(publisher?: string, offer?: string, sku?: string): Promise<AzureImageInfo[]> {
+  async getImages(location?: string, publisher?: string, offer?: string, sku?: string): Promise<AzureImageInfo[]> {
     this.ensureInitialized();
-    return this.service!.getImages(publisher, offer, sku);
+    return this.service!.getImages(location, publisher, offer, sku);
   }
 
   async getResourceGroups(): Promise<AzureResourceGroupInfo[]> {

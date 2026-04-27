@@ -241,10 +241,22 @@ export class AzureService {
     return sizes;
   }
 
-  async getImages(publisher?: string, offer?: string, sku?: string): Promise<AzureImageInfo[]> {
+  async getImages(location?: string, publisher?: string, offer?: string, sku?: string): Promise<AzureImageInfo[]> {
     if (!publisher || !offer || !sku) return [];
-    const result = await this.computeClient.virtualMachineImages.list("eastus", publisher, offer, sku);
-    return result.map((img) => ({ publisher, offer, sku, version: img.name }));
+
+    const resolvedLocation = location ?? (await this.getLocations())[0]?.name;
+    if (!resolvedLocation) return [];
+
+    const result = await this.computeClient.virtualMachineImages.list(resolvedLocation, publisher, offer, sku);
+    const images = result.map((img) => ({ publisher, offer, sku, version: img.name }));
+
+    this.logger.info("Azure VM images fetched", {
+      component: "AzureService",
+      operation: "getImages",
+      metadata: { location: resolvedLocation, publisher, offer, sku, count: images.length },
+    });
+
+    return images;
   }
 
   async getResourceGroups(): Promise<AzureResourceGroupInfo[]> {

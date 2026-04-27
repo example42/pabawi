@@ -7,7 +7,6 @@
     clientSecret: '',
     subscriptionId: '',
     resourceGroups: '',
-    defaultLocation: 'eastus',
   });
 
   let copied = $state(false);
@@ -36,10 +35,6 @@
 
     if (config.resourceGroups) {
       lines.push(`AZURE_RESOURCE_GROUPS=${config.resourceGroups}`);
-    }
-
-    if (config.defaultLocation) {
-      lines.push(`AZURE_DEFAULT_LOCATION=${config.defaultLocation}`);
     }
 
     return lines.join('\n');
@@ -199,20 +194,6 @@ az vm list --output table`
             class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Comma-separated list of resource groups to scope inventory (leave empty for all)</p>
-        </div>
-
-        <div>
-          <label for="azure-default-location" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Default Location
-          </label>
-          <input
-            id="azure-default-location"
-            type="text"
-            bind:value={config.defaultLocation}
-            placeholder="eastus"
-            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Default Azure location for provisioning (e.g., eastus, westeurope, southeastasia)</p>
         </div>
       </div>
     </div>

@@ -381,6 +381,10 @@ if [[ "$SKIP_ENV" != "true" ]]; then
     ask AZURE_CLIENT_ID "Azure Client ID (Service Principal)" ""
     ask AZURE_CLIENT_SECRET "Azure Client Secret" ""
     ask AZURE_SUBSCRIPTION_ID "Azure Subscription ID" ""
+    while [[ -z "$AZURE_SUBSCRIPTION_ID" ]]; do
+      error "Azure Subscription ID is required when Azure integration is enabled."
+      ask AZURE_SUBSCRIPTION_ID "Azure Subscription ID" ""
+    done
     ask AZURE_RESOURCE_GROUPS "Azure Resource Groups (comma-separated, leave empty for all)" ""
   fi
 
