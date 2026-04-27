@@ -37,8 +37,8 @@ export function parseNodeId(nodeId: string): { subscriptionId: string; resourceG
  * Transform an Azure VirtualMachine into a Node object
  */
 export function transformVMToNode(vm: VirtualMachine, resourceGroup: string, subscriptionId: string): Node {
-  const vmName = vm.name ?? "unknown";
-  const tags = (vm.tags as Record<string, string>) ?? {};
+  const vmName: string = vm.name ?? "unknown";
+  const tags: Record<string, string> = (vm.tags as Record<string, string> | undefined) ?? {};
   const powerState = extractPowerState(vm);
   const nodeId = `azure:${subscriptionId}:${resourceGroup}:${vmName}`;
 
@@ -52,7 +52,7 @@ export function transformVMToNode(vm: VirtualMachine, resourceGroup: string, sub
       powerState,
       vmSize: vm.hardwareProfile?.vmSize ?? "unknown",
       resourceGroup,
-      location: vm.location ?? "unknown",
+      location: vm.location,
       tags,
       provisioningState: vm.provisioningState ?? "unknown",
       osType: vm.storageProfile?.osDisk?.osType ?? "unknown",
@@ -73,10 +73,10 @@ export function transformToFacts(
   instanceView: VirtualMachineInstanceView,
   subscriptionId: string,
 ): Facts {
-  const tags = (vm.tags as Record<string, string>) ?? {};
+  const tags: Record<string, string> = (vm.tags as Record<string, string> | undefined) ?? {};
   const powerStatus = instanceView.statuses?.find((s) => s.code?.startsWith("PowerState/"));
   const powerState = powerStatus?.displayStatus ?? "unknown";
-  const osType = vm.storageProfile?.osDisk?.osType ?? "unknown";
+  const osType: string = vm.storageProfile?.osDisk?.osType ?? "unknown";
   const imageRef = vm.storageProfile?.imageReference;
 
   return {
@@ -140,9 +140,10 @@ export function transformToFacts(
 export function groupByLocation(nodes: Node[]): NodeGroup[] {
   const locationMap = new Map<string, string[]>();
   for (const node of nodes) {
-    const location = (node.config.location as string) ?? "unknown";
+    const location = typeof node.config.location === "string" ? node.config.location : "unknown";
     if (!locationMap.has(location)) locationMap.set(location, []);
-    locationMap.get(location)!.push(node.name);
+    const locationNodes = locationMap.get(location);
+    if (locationNodes) locationNodes.push(node.name);
   }
   return Array.from(locationMap.entries()).map(([location, nodeNames]) => ({
     id: `azure:location:${location}`,
@@ -161,9 +162,10 @@ export function groupByLocation(nodes: Node[]): NodeGroup[] {
 export function groupByResourceGroup(nodes: Node[]): NodeGroup[] {
   const rgMap = new Map<string, string[]>();
   for (const node of nodes) {
-    const rg = (node.config.resourceGroup as string) ?? "unknown";
+    const rg = typeof node.config.resourceGroup === "string" ? node.config.resourceGroup : "unknown";
     if (!rgMap.has(rg)) rgMap.set(rg, []);
-    rgMap.get(rg)!.push(node.name);
+    const rgNodes = rgMap.get(rg);
+    if (rgNodes) rgNodes.push(node.name);
   }
   return Array.from(rgMap.entries()).map(([rg, nodeNames]) => ({
     id: `azure:resourceGroup:${rg}`,
@@ -183,14 +185,20 @@ export function groupByTags(nodes: Node[]): NodeGroup[] {
   const tagGroups = new Map<string, Map<string, string[]>>();
 
   for (const node of nodes) {
-    const tags = (node.config.tags as Record<string, string>) ?? {};
+    const rawTags = node.config.tags;
+    const tags: Record<string, string> = typeof rawTags === "object" && rawTags !== null
+      ? rawTags as Record<string, string>
+      : {};
     for (const key of TAG_KEYS) {
       const value = tags[key];
       if (value) {
         if (!tagGroups.has(key)) tagGroups.set(key, new Map());
-        const valueMap = tagGroups.get(key)!;
-        if (!valueMap.has(value)) valueMap.set(value, []);
-        valueMap.get(value)!.push(node.name);
+        const valueMap = tagGroups.get(key);
+        if (valueMap) {
+          if (!valueMap.has(value)) valueMap.set(value, []);
+          const valueNodes = valueMap.get(value);
+          if (valueNodes) valueNodes.push(node.name);
+        }
       }
     }
   }

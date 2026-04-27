@@ -227,7 +227,7 @@ Implement Azure VM integration for Pabawi following the same plugin architecture
     - Append Azure configuration block to generated backend/.env
     - _Requirements: 14.6, 14.7_
 
-- [-] 12. Final checkpoint — All tasks complete
+- [x] 12. Final checkpoint — All tasks complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes
