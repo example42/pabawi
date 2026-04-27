@@ -369,6 +369,21 @@ if [[ "$SKIP_ENV" != "true" ]]; then
     ask_yn SSH_SUDO_ENABLED "Enable sudo for SSH commands?" "n"
   fi
 
+  # ── Azure integration ─────────────────────────────────────────────────
+  ask_yn AZURE_ENABLED "Enable Azure integration?" "n"
+  AZURE_TENANT_ID=""
+  AZURE_CLIENT_ID=""
+  AZURE_CLIENT_SECRET=""
+  AZURE_SUBSCRIPTION_ID=""
+  AZURE_RESOURCE_GROUPS=""
+  if [[ "$AZURE_ENABLED" == "true" ]]; then
+    ask AZURE_TENANT_ID "Azure Tenant ID" ""
+    ask AZURE_CLIENT_ID "Azure Client ID (Service Principal)" ""
+    ask AZURE_CLIENT_SECRET "Azure Client Secret" ""
+    ask AZURE_SUBSCRIPTION_ID "Azure Subscription ID" ""
+    ask AZURE_RESOURCE_GROUPS "Azure Resource Groups (comma-separated, leave empty for all)" ""
+  fi
+
   # ── Puppet Node SSL Certificates ────────────────────────────────────────
   PUPPET_NODE_CERTS_WRITE="false"
   PUPPET_NODE_SSL_CA=""
@@ -503,6 +518,19 @@ SSH_SUDO_PASSWORDLESS=true
 SSH_SUDO_USER=root
 EOF
     fi
+  fi
+
+  if [[ "$AZURE_ENABLED" == "true" ]]; then
+    cat >> "$ENV_FILE" <<EOF
+
+# ── Azure Integration ───────────────────────────────
+AZURE_ENABLED=true
+AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}
+EOF
+    [[ -n "$AZURE_TENANT_ID" ]]     && echo "AZURE_TENANT_ID=${AZURE_TENANT_ID}" >> "$ENV_FILE"
+    [[ -n "$AZURE_CLIENT_ID" ]]     && echo "AZURE_CLIENT_ID=${AZURE_CLIENT_ID}" >> "$ENV_FILE"
+    [[ -n "$AZURE_CLIENT_SECRET" ]] && echo "AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}" >> "$ENV_FILE"
+    [[ -n "$AZURE_RESOURCE_GROUPS" ]] && echo "AZURE_RESOURCE_GROUPS=${AZURE_RESOURCE_GROUPS}" >> "$ENV_FILE"
   fi
 
   if [[ "$PUPPET_NODE_CERTS_WRITE" == "true" ]]; then
