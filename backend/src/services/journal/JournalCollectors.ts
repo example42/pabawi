@@ -523,7 +523,8 @@ export function mapAzurePowerStateToEventType(state: string): JournalEventType {
 /**
  * Collect Azure VM state change entry for a virtual machine.
  * Calls getNodeFacts to get current state, compares against last recorded
- * state in journal_entries. Returns 0 or 1 JournalEntry with deterministic ID.
+ * state in journal_entries. Returns 0 or 1 JournalEntry. The entry ID
+ * includes a timestamp and is therefore non-deterministic per run.
  */
 export async function collectAzureVMStateEntry(
   azureService: AzureServiceLike,

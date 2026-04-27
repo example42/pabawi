@@ -27,9 +27,7 @@ const AzureProvisionSchema = z.object({
   adminUsername: z.string().min(1),
   adminPassword: z.string().optional(),
   sshPublicKey: z.string().optional(),
-  networkInterfaceId: z.string().optional(),
-  subnetId: z.string().optional(),
-  tags: z.record(z.string()).optional(),
+  networkInterfaceId: z.string().min(1, "networkInterfaceId is required for VM creation"),
 });
 
 /**
@@ -39,7 +37,6 @@ const AzureLifecycleSchema = z.object({
   vmName: z.string().min(1),
   resourceGroup: z.string().min(1),
   action: z.enum(["start", "stop", "restart", "deallocate"]),
-  subscriptionId: z.string().optional(),
 });
 
 /**
@@ -53,6 +50,7 @@ const LocationQuerySchema = z.object({
  * Zod schema for image query parameters
  */
 const ImageQuerySchema = z.object({
+  location: z.string().optional(),
   publisher: z.string().optional(),
   offer: z.string().optional(),
   sku: z.string().optional(),
@@ -219,7 +217,6 @@ export function createAzureRouter(
             resourceGroup: validatedBody.resourceGroup,
             vmName: validatedBody.vmName,
           },
-          metadata: validatedBody.subscriptionId ? { subscriptionId: validatedBody.subscriptionId } : undefined,
         });
 
         logger.info("Azure lifecycle action completed", {
@@ -399,8 +396,8 @@ export function createAzureRouter(
       });
 
       try {
-        const { publisher, offer, sku } = ImageQuerySchema.parse(req.query);
-        const images = await azurePlugin.getImages(publisher, offer, sku);
+        const { location, publisher, offer, sku } = ImageQuerySchema.parse(req.query);
+        const images = await azurePlugin.getImages(location, publisher, offer, sku);
         res.status(200).json({ images });
       } catch (error) {
         if (error instanceof ZodError) {
