@@ -96,8 +96,8 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Verify `isMcpEnabled()` returns `true` when `MCP_ENABLED=true`
     - _Requirements: 8.1_
 
-- [ ] 6. Implement MCP service user provisioning
-  - [-] 6.1 Create `backend/src/mcp/McpServiceUser.ts`
+- [x] 6. Implement MCP service user provisioning
+  - [x] 6.1 Create `backend/src/mcp/McpServiceUser.ts`
     - Export `provisionMcpServiceUser(userService, roleService, permissionService, logger)` returning `{ userId, roleId }`
     - Check if `mcp-service` user exists; if so, look up existing role and return IDs
     - If not: create user with `crypto.randomUUID()` password, `isActive: true`, `isAdmin: false`
@@ -106,13 +106,13 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Assign role to user
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7_
 
-  - [~] 6.2 Write unit tests for MCP service user provisioning
+  - [x] 6.2 Write unit tests for MCP service user provisioning
     - Mock UserService/RoleService/PermissionService, verify user+role+permissions created on first run
     - Verify idempotency — second run reuses existing user without modification
     - _Requirements: 9.1, 9.2, 9.6_
 
 - [ ] 7. Implement MCP server and tool registration
-  - [~] 7.1 Install `@modelcontextprotocol/sdk` dependency
+  - [-] 7.1 Install `@modelcontextprotocol/sdk` dependency
     - Run `npm install @modelcontextprotocol/sdk` in `backend/`
     - _Requirements: 10.2_
 

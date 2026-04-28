@@ -1,41 +1,53 @@
 openapi: 3.0.3
 info:
-  title: Pabawi - Unified Remote Execution Interface API
+  title: Pabawi API
   description: |
-    REST API for Pabawi, a web-based interface for managing Bolt automation with integrated
-    PuppetDB, Puppetserver, and Hiera support. This API provides endpoints for managing
-    inventory from multiple sources, executing commands and tasks, gathering facts,
-    running Puppet, installing packages, viewing execution history, and analyzing Hiera data.
+    REST API for Pabawi, an open source web frontend for managing classic infrastructure —
+    physical servers, VMs, and the tools that run them.
 
     ## Integration Sources
 
-    The API supports multiple integration sources:
-    - **Bolt**: Direct execution and inventory management
+    The API aggregates data from multiple integration sources:
+    - **Bolt**: Task execution, command execution, and inventory
     - **PuppetDB**: Node inventory, facts, reports, catalogs, and events
     - **Puppetserver**: CA inventory, facts, catalog compilation, and environments
-    - **Hiera**: Configuration data lookup and analysis
+    - **Hiera**: Configuration data lookup and code analysis
+    - **Ansible**: Inventory, ad-hoc commands, and playbook execution
+    - **SSH**: Direct node management without a config management tool
+    - **Proxmox**: VM and container inventory, provisioning, and lifecycle management
+    - **AWS**: EC2 instance inventory, provisioning, and lifecycle management
+    - **Azure**: VM inventory, provisioning, and lifecycle management *(v1.1.0)*
+
+    ## Authentication
+
+    When `AUTH_ENABLED=true`, most endpoints require a JWT token in the
+    `Authorization: Bearer <token>` header. Obtain a token via `POST /api/auth/login`.
 
     ## Expert Mode
 
-    Many endpoints support an "expert mode" that provides additional diagnostic information
-    when errors occur. To enable expert mode, include the `X-Expert-Mode: true` header in your
-    request. When enabled, error responses will include:
-    - Full stack traces
-    - Request IDs for correlation
-    - Execution context
-    - Raw Bolt CLI output
+    Many endpoints support an "expert mode" that provides additional diagnostic information.
+    Include the `X-Expert-Mode: true` header to enable it. Error responses will then include
+    full stack traces, request IDs, execution context, and raw CLI output.
 
     ## Streaming Execution Output
 
-    For long-running operations, you can subscribe to real-time execution output via
-    Server-Sent Events (SSE). After starting an execution, connect to the streaming
-    endpoint to receive stdout, stderr, and status updates as they occur.
+    Long-running executions stream output in real time via Server-Sent Events (SSE).
+    After starting an execution, connect to its `/stream` endpoint for live stdout/stderr
+    and status updates.
 
-  version: 0.5.0
+    ## Journal
+
+    The Journal system (v1.1.0) provides a cross-node event timeline aggregated from all
+    enabled sources. Subscribe to `/journal/global/stream` for a live SSE feed, or query
+    `/journal/{nodeId}` for a node's history.
+
+  version: 1.1.0
   contact:
     name: Pabawi Support
+    url: https://pabawi.example42.com
   license:
-    name: MIT
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
 
 servers:
   - url: http://localhost:3000/api
@@ -70,6 +82,28 @@ tags:
     description: Puppetserver integration endpoints
   - name: Hiera
     description: Hiera data lookup and analysis
+  - name: Ansible
+    description: Ansible playbook and ad-hoc command endpoints
+  - name: SSH
+    description: SSH direct execution endpoints
+  - name: Proxmox
+    description: Proxmox VM and container management
+  - name: AWS
+    description: AWS EC2 instance management
+  - name: Azure
+    description: Azure VM management (v1.1.0)
+  - name: Provisioning
+    description: Cross-integration provisioning discovery
+  - name: Journal
+    description: Cross-node event timeline (v1.1.0)
+  - name: Auth
+    description: Authentication — login, logout, current user
+  - name: RBAC
+    description: Users, roles, permissions, and groups
+  - name: Setup
+    description: Initial setup wizard
+  - name: Monitoring
+    description: Performance metrics and system journal
   - name: Debug
     description: Frontend log collection and troubleshooting
 
@@ -158,10 +192,12 @@ paths:
     get:
       summary: List all nodes from inventory sources
       description: |
-        Retrieve all nodes from configured inventory sources (Bolt, PuppetDB, Puppetserver).
+        Retrieve all nodes from all configured inventory sources (Bolt, PuppetDB, Puppetserver,
+        Ansible, SSH, Proxmox, AWS, Azure). Nodes appearing in multiple sources are linked and
+        returned as a single entry with a `sources` field.
 
         Query parameters:
-        - sources: Comma-separated list of sources (e.g., "bolt,puppetdb,puppetserver") or "all"
+        - sources: Comma-separated list of sources (e.g., "bolt,puppetdb,azure") or "all"
         - pql: PuppetDB PQL query for filtering (only applies when PuppetDB source is included)
         - sortBy: Sort field ("name" or "source")
         - sortOrder: Sort direction ("asc" or "desc")
@@ -327,7 +363,7 @@ paths:
   /integrations/colors:
     get:
       summary: Get integration colors
-      description: Return the color palette for each integration (bolt, puppetdb, puppetserver, hiera)
+      description: Return the color palette for all integrations (bolt, puppetdb, puppetserver, hiera, ansible, ssh, proxmox, aws, azure)
       tags:
         - Integrations
       responses:
@@ -2046,6 +2082,1815 @@ paths:
         '200':
           description: Frontend logs cleared successfully
 
+  /puppet/nodes/{id}/history:
+    get:
+      summary: Get Puppet run history for a node
+      description: Return daily Puppet run counts grouped by status
+      tags:
+        - Puppet
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - name: days
+          in: query
+          description: Number of days to look back (1–365)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 7
+      responses:
+        '200':
+          description: History retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodeId:
+                    type: string
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        success:
+                          type: integer
+                        failed:
+                          type: integer
+                        changed:
+                          type: integer
+                        unchanged:
+                          type: integer
+                  summary:
+                    type: object
+                    properties:
+                      totalRuns:
+                        type: integer
+                      successRate:
+                        type: number
+                      avgDuration:
+                        type: number
+                      lastRun:
+                        type: string
+                        format: date-time
+
+  /puppet/history:
+    get:
+      summary: Get aggregated Puppet run history
+      description: Return daily Puppet run counts across all nodes
+      tags:
+        - Puppet
+      parameters:
+        - name: days
+          in: query
+          description: Number of days to look back (1–365)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+            default: 7
+      responses:
+        '200':
+          description: History retrieved successfully
+
+  /playbooks:
+    get:
+      summary: List Ansible playbooks
+      description: Return available Ansible playbooks from the configured playbook path
+      tags:
+        - Ansible
+      responses:
+        '200':
+          description: Playbooks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  playbooks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        path:
+                          type: string
+        '503':
+          description: Ansible not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /nodes/{id}/playbook:
+    post:
+      summary: Run Ansible playbook on node
+      description: Execute an Ansible playbook targeting a specific node
+      tags:
+        - Ansible
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - playbook
+              properties:
+                playbook:
+                  type: string
+                  description: Playbook name or path
+                extraVars:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '202':
+          description: Playbook execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionStarted'
+        '404':
+          description: Node or playbook not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Ansible not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/provisioning:
+    get:
+      summary: List provisioning integrations
+      description: Return enabled provisioning integrations and their capabilities
+      tags:
+        - Provisioning
+      responses:
+        '200':
+          description: Provisioning integrations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        enabled:
+                          type: boolean
+                        capabilities:
+                          type: array
+                          items:
+                            type: string
+
+  /integrations/proxmox/nodes:
+    get:
+      summary: List Proxmox nodes
+      description: Return all Proxmox cluster nodes with resource usage
+      tags:
+        - Proxmox
+      responses:
+        '200':
+          description: Proxmox nodes retrieved successfully
+        '503':
+          description: Proxmox not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/proxmox/vms:
+    get:
+      summary: List Proxmox VMs
+      description: Return all virtual machines across all Proxmox nodes
+      tags:
+        - Proxmox
+      responses:
+        '200':
+          description: VMs retrieved successfully
+        '503':
+          description: Proxmox not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create Proxmox VM
+      description: Provision a new virtual machine on Proxmox
+      tags:
+        - Proxmox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                template:
+                  type: string
+                cores:
+                  type: integer
+                memory:
+                  type: integer
+                  description: Memory in MB
+                storage:
+                  type: string
+      responses:
+        '201':
+          description: VM created successfully
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/proxmox/containers:
+    get:
+      summary: List Proxmox LXC containers
+      description: Return all LXC containers across all Proxmox nodes
+      tags:
+        - Proxmox
+      responses:
+        '200':
+          description: Containers retrieved successfully
+    post:
+      summary: Create Proxmox LXC container
+      description: Provision a new LXC container on Proxmox
+      tags:
+        - Proxmox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - ostemplate
+              properties:
+                name:
+                  type: string
+                ostemplate:
+                  type: string
+                cores:
+                  type: integer
+                memory:
+                  type: integer
+                  description: Memory in MB
+      responses:
+        '201':
+          description: Container created successfully
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/proxmox/vms/{id}/action:
+    post:
+      summary: Proxmox VM lifecycle action
+      description: Execute a lifecycle action on a VM
+      tags:
+        - Proxmox
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: VM ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop, shutdown, reboot]
+      responses:
+        '200':
+          description: Action executed successfully
+        '400':
+          description: Invalid action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/proxmox/containers/{id}/action:
+    post:
+      summary: Proxmox container lifecycle action
+      description: Execute a lifecycle action on an LXC container
+      tags:
+        - Proxmox
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Container ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop, shutdown, reboot]
+      responses:
+        '200':
+          description: Action executed successfully
+
+  /integrations/proxmox/vms/{id}:
+    delete:
+      summary: Destroy Proxmox VM
+      description: Permanently delete a VM. Requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
+      tags:
+        - Proxmox
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: VM destroyed successfully
+        '403':
+          description: Destructive provisioning disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/proxmox/containers/{id}:
+    delete:
+      summary: Destroy Proxmox container
+      description: Permanently delete an LXC container. Requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
+      tags:
+        - Proxmox
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Container destroyed successfully
+        '403':
+          description: Destructive provisioning disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/aws/instances:
+    get:
+      summary: List EC2 instances
+      description: Return all EC2 instances across configured regions
+      tags:
+        - AWS
+      responses:
+        '200':
+          description: Instances retrieved successfully
+        '503':
+          description: AWS not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Launch EC2 instance
+      description: Launch a new EC2 instance
+      tags:
+        - AWS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - imageId
+                - instanceType
+              properties:
+                imageId:
+                  type: string
+                  example: ami-0abcdef1234567890
+                instanceType:
+                  type: string
+                  example: t3.micro
+                keyName:
+                  type: string
+                securityGroupIds:
+                  type: array
+                  items:
+                    type: string
+                subnetId:
+                  type: string
+                tags:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        '201':
+          description: Instance launched successfully
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/aws/instances/{id}/action:
+    post:
+      summary: EC2 instance lifecycle action
+      description: Execute a lifecycle action (start/stop/reboot) on an EC2 instance
+      tags:
+        - AWS
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Instance ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum: [start, stop, reboot]
+      responses:
+        '200':
+          description: Action executed successfully
+        '400':
+          description: Invalid action
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/aws/instances/{id}:
+    delete:
+      summary: Terminate EC2 instance
+      description: Permanently terminate an EC2 instance. Requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
+      tags:
+        - AWS
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Instance terminated successfully
+        '403':
+          description: Destructive provisioning disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/azure/inventory:
+    get:
+      summary: List Azure VMs
+      description: Return all Azure VMs across configured resource groups
+      tags:
+        - Azure
+      responses:
+        '200':
+          description: Azure VM inventory retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inventory:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AzureVm'
+        '401':
+          description: Azure authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Azure not configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/azure/provision:
+    post:
+      summary: Provision Azure VM
+      description: Create a new Azure virtual machine
+      tags:
+        - Azure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - resourceGroup
+                - vmName
+                - location
+                - imageReference
+                - adminUsername
+                - networkInterfaceId
+              properties:
+                resourceGroup:
+                  type: string
+                  example: my-rg
+                vmName:
+                  type: string
+                  example: my-vm
+                location:
+                  type: string
+                  example: eastus
+                vmSize:
+                  type: string
+                  default: Standard_B1s
+                  example: Standard_D2s_v3
+                imageReference:
+                  type: object
+                  required:
+                    - publisher
+                    - offer
+                    - sku
+                  properties:
+                    publisher:
+                      type: string
+                      example: Canonical
+                    offer:
+                      type: string
+                      example: UbuntuServer
+                    sku:
+                      type: string
+                      example: 18.04-LTS
+                    version:
+                      type: string
+                      default: latest
+                adminUsername:
+                  type: string
+                  example: azureuser
+                adminPassword:
+                  type: string
+                  description: Required if sshPublicKey is not provided
+                sshPublicKey:
+                  type: string
+                  description: SSH public key (recommended over password)
+                networkInterfaceId:
+                  type: string
+                  description: Resource ID of the network interface to attach
+      responses:
+        '201':
+          description: VM provisioned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [success, failed]
+                      vmId:
+                        type: string
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Azure authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/azure/lifecycle:
+    post:
+      summary: Azure VM lifecycle action
+      description: |
+        Execute a lifecycle action on an Azure VM.
+        `deallocate` additionally requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
+      tags:
+        - Azure
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - vmName
+                - resourceGroup
+                - action
+              properties:
+                vmName:
+                  type: string
+                resourceGroup:
+                  type: string
+                action:
+                  type: string
+                  enum: [start, stop, restart, deallocate]
+      responses:
+        '200':
+          description: Lifecycle action completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  result:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [success, failed]
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Azure authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Destructive action disabled (deallocate requires ALLOW_DESTRUCTIVE_PROVISIONING=true)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/azure/test:
+    post:
+      summary: Test Azure connection
+      description: Verify Azure credentials and connectivity
+      tags:
+        - Azure
+      responses:
+        '200':
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string
+
+  /integrations/azure/locations:
+    get:
+      summary: List Azure locations
+      description: Return all available Azure regions for the configured subscription
+      tags:
+        - Azure
+      responses:
+        '200':
+          description: Locations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  locations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: eastus
+                        displayName:
+                          type: string
+                          example: East US
+        '401':
+          description: Azure authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/azure/vm-sizes:
+    get:
+      summary: List Azure VM sizes
+      description: Return available VM sizes for a specific location
+      tags:
+        - Azure
+      parameters:
+        - name: location
+          in: query
+          required: true
+          description: Azure region name
+          schema:
+            type: string
+            example: eastus
+      responses:
+        '200':
+          description: VM sizes retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vmSizes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          example: Standard_B1s
+                        numberOfCores:
+                          type: integer
+                        memoryInMB:
+                          type: integer
+        '400':
+          description: Missing or invalid location parameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Azure authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/azure/images:
+    get:
+      summary: List Azure marketplace images
+      description: Return marketplace images, optionally filtered by publisher/offer/sku
+      tags:
+        - Azure
+      parameters:
+        - name: location
+          in: query
+          schema:
+            type: string
+        - name: publisher
+          in: query
+          schema:
+            type: string
+        - name: offer
+          in: query
+          schema:
+            type: string
+        - name: sku
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Images retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  images:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        publisher:
+                          type: string
+                        offer:
+                          type: string
+                        sku:
+                          type: string
+                        version:
+                          type: string
+        '401':
+          description: Azure authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /integrations/azure/resource-groups:
+    get:
+      summary: List Azure resource groups
+      description: Return all resource groups in the configured subscription
+      tags:
+        - Azure
+      responses:
+        '200':
+          description: Resource groups retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resourceGroups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        location:
+                          type: string
+        '401':
+          description: Azure authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /journal/search:
+    get:
+      summary: Search journal entries
+      description: Full-text search across journal entry summaries and details
+      tags:
+        - Journal
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query string
+          schema:
+            type: string
+            minLength: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Search results retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JournalEntry'
+        '400':
+          description: Missing or invalid query
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /journal/global/stream:
+    get:
+      summary: Stream global journal events (SSE)
+      description: |
+        Stream journal events across all nodes via Server-Sent Events.
+        Supports filtering by node IDs, group, event type, source, and date range.
+        Requires `journal:read` RBAC permission.
+      tags:
+        - Journal
+      parameters:
+        - name: nodeIds
+          in: query
+          description: Comma-separated node IDs to include
+          schema:
+            type: string
+        - name: groupId
+          in: query
+          description: Inventory group ID to filter by
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: ISO 8601 start datetime (inclusive)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: ISO 8601 end datetime (inclusive)
+          schema:
+            type: string
+            format: date-time
+        - name: eventType
+          in: query
+          description: Comma-separated event types to include
+          schema:
+            type: string
+        - name: source
+          in: query
+          description: Comma-separated source names to include
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE stream. Event types: `entry` (JournalEntry JSON), `complete`, `error`
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /journal/{nodeId}/stream:
+    get:
+      summary: Stream node journal events (SSE)
+      description: |
+        Stream journal events for a specific node via Server-Sent Events.
+        Requires `journal:read` RBAC permission.
+      tags:
+        - Journal
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          description: Node identifier
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: eventType
+          in: query
+          schema:
+            type: string
+        - name: source
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /journal/{nodeId}:
+    get:
+      summary: Get journal entries for a node
+      description: Return paginated journal entries for a specific node
+      tags:
+        - Journal
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          description: Node identifier
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Journal entries retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/JournalEntry'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /journal/{nodeId}/notes:
+    post:
+      summary: Add manual note to node journal
+      description: Add a manually authored journal note for a node
+      tags:
+        - Journal
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 5000
+      responses:
+        '201':
+          description: Note created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entry:
+                    $ref: '#/components/schemas/JournalEntry'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      summary: Login
+      description: Authenticate with username and password to receive a JWT token
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      username:
+                        type: string
+                      roles:
+                        type: array
+                        items:
+                          type: string
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '423':
+          description: Account locked due to too many failed attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/logout:
+    post:
+      summary: Logout
+      description: Invalidate the current JWT session
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: Logged out successfully
+
+  /auth/me:
+    get:
+      summary: Get current user
+      description: Return information about the currently authenticated user
+      tags:
+        - Auth
+      responses:
+        '200':
+          description: Current user retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      username:
+                        type: string
+                      roles:
+                        type: array
+                        items:
+                          type: string
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users:
+    post:
+      summary: Create user
+      tags:
+        - RBAC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '201':
+          description: User created successfully
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      summary: List users
+      tags:
+        - RBAC
+      responses:
+        '200':
+          description: Users retrieved successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}:
+    get:
+      summary: Get user
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User retrieved successfully
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update user
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: User updated successfully
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete user
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User deleted successfully
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}/roles:
+    post:
+      summary: Assign role to user
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleId
+              properties:
+                roleId:
+                  type: string
+      responses:
+        '200':
+          description: Role assigned successfully
+        '404':
+          description: User or role not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}/roles/{roleId}:
+    delete:
+      summary: Remove role from user
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Role removed successfully
+        '404':
+          description: User or role not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /users/{id}/sessions:
+    delete:
+      summary: Revoke user sessions
+      description: Invalidate all active sessions for a user
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sessions revoked successfully
+
+  /roles:
+    post:
+      summary: Create role
+      tags:
+        - RBAC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Role created successfully
+    get:
+      summary: List roles
+      tags:
+        - RBAC
+      responses:
+        '200':
+          description: Roles retrieved successfully
+
+  /roles/{id}:
+    get:
+      summary: Get role
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role retrieved successfully
+        '404':
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update role
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Role updated successfully
+        '404':
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      summary: Delete role
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Role deleted successfully
+        '404':
+          description: Role not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /roles/{id}/permissions:
+    post:
+      summary: Assign permission to role
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - permissionId
+              properties:
+                permissionId:
+                  type: string
+      responses:
+        '200':
+          description: Permission assigned successfully
+        '404':
+          description: Role or permission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /roles/{id}/permissions/{permId}:
+    delete:
+      summary: Remove permission from role
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: permId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Permission removed successfully
+
+  /permissions:
+    post:
+      summary: Create permission
+      tags:
+        - RBAC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - resource
+                - action
+              properties:
+                resource:
+                  type: string
+                  example: journal
+                action:
+                  type: string
+                  example: read
+      responses:
+        '201':
+          description: Permission created successfully
+    get:
+      summary: List permissions
+      tags:
+        - RBAC
+      responses:
+        '200':
+          description: Permissions retrieved successfully
+
+  /groups:
+    post:
+      summary: Create group
+      tags:
+        - RBAC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Group created successfully
+    get:
+      summary: List groups
+      tags:
+        - RBAC
+      responses:
+        '200':
+          description: Groups retrieved successfully
+
+  /groups/{id}:
+    get:
+      summary: Get group
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Group retrieved successfully
+        '404':
+          description: Group not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      summary: Update group
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Group updated successfully
+    delete:
+      summary: Delete group
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Group deleted successfully
+
+  /groups/{id}/users:
+    post:
+      summary: Add user to group
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+              properties:
+                userId:
+                  type: string
+      responses:
+        '200':
+          description: User added to group
+        '404':
+          description: Group or user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /groups/{id}/users/{userId}:
+    delete:
+      summary: Remove user from group
+      tags:
+        - RBAC
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User removed from group
+
+  /setup/status:
+    get:
+      summary: Get setup status
+      description: Return whether the initial setup wizard has been completed
+      tags:
+        - Setup
+      responses:
+        '200':
+          description: Setup status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  completed:
+                    type: boolean
+
+  /setup/complete:
+    post:
+      summary: Mark setup as complete
+      description: Mark the initial setup wizard as completed
+      tags:
+        - Setup
+      responses:
+        '200':
+          description: Setup marked as complete
+
+  /monitoring/metrics:
+    get:
+      summary: Get performance metrics
+      description: Return current performance metrics (memory, CPU, uptime)
+      tags:
+        - Monitoring
+      responses:
+        '200':
+          description: Metrics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  memory:
+                    type: object
+                    properties:
+                      heapUsed:
+                        type: integer
+                      heapTotal:
+                        type: integer
+                      rss:
+                        type: integer
+                  uptime:
+                    type: number
+                    description: Process uptime in seconds
+
+  /monitoring/journal:
+    get:
+      summary: Get system journal
+      description: Return recent system-level journal entries (process events, startup, errors)
+      tags:
+        - Monitoring
+      responses:
+        '200':
+          description: System journal retrieved successfully
+
 components:
   parameters:
     NodeId:
@@ -2527,13 +4372,90 @@ components:
         locationCount: 3
         hasLookupOptions: false
 
+    JournalEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        nodeId:
+          type: string
+        eventType:
+          type: string
+          description: Event category (e.g. puppet-run, task, provision, note)
+        source:
+          type: string
+          description: Integration source (e.g. puppetdb, proxmox, aws, azure, execution)
+        summary:
+          type: string
+          description: Short human-readable description of the event
+        details:
+          type: object
+          additionalProperties: true
+          description: Source-specific event data
+        timestamp:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [success, failed, running, unknown]
+      example:
+        id: jrn-abc123
+        nodeId: web-01.example.com
+        eventType: puppet-run
+        source: puppetdb
+        summary: Puppet run changed 3 resources
+        status: success
+        timestamp: '2026-04-28T10:00:00.000Z'
+
+    AzureVm:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Azure resource ID
+        name:
+          type: string
+        resourceGroup:
+          type: string
+        location:
+          type: string
+          example: eastus
+        vmSize:
+          type: string
+          example: Standard_D2s_v3
+        powerState:
+          type: string
+          enum: [running, stopped, deallocated, starting, stopping, deallocating, unknown]
+        osType:
+          type: string
+          enum: [Linux, Windows]
+        privateIpAddress:
+          type: string
+        publicIpAddress:
+          type: string
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        provisioningState:
+          type: string
+      example:
+        id: /subscriptions/sub-id/resourceGroups/my-rg/providers/Microsoft.Compute/virtualMachines/my-vm
+        name: my-vm
+        resourceGroup: my-rg
+        location: eastus
+        vmSize: Standard_B1s
+        powerState: running
+        osType: Linux
+
   securitySchemes:
-    # Placeholder for future authentication
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: JWT authentication (not implemented in v0.1.0)
+      description: |
+        JWT token obtained via `POST /api/auth/login`.
+        Required on all endpoints when `AUTH_ENABLED=true`.
 
-# Security is not enforced in v0.1.0
-security: []
+security:
+  - bearerAuth: []
