@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.0]
+
+### Added
+
+- Embedded MCP (Model Context Protocol) server with 8 read-only infrastructure tools over Streamable HTTP transport
+- MCP tools: `inventory_list`, `facts_get`, `reports_query`, `catalogs_get`, `hiera_lookup`, `executions_list`, `integrations_list`, `journal_query`
+- MCP service user (`mcp-service`) auto-provisioned at startup with read-only permissions
+- `MCP_ENABLED` environment variable to control MCP server activation (default: `false`)
+- `/mcp` POST endpoint for MCP Streamable HTTP protocol
+- RBAC permission enforcement on all MCP tool calls via existing PermissionService
+- Azure permissions: `azure-read`, `azure-lifecycle`, `azure-provision`, `azure-destroy`, `azure-admin`
+- Hiera permissions: `hiera-read`, `hiera-admin`
+- SSH permissions: `ssh-read`, `ssh-execute`, `ssh-admin`
+- Database migration 012 backfilling missing role-permission assignments for Viewer, Operator, Administrator, and Provisioner roles
+- CreateRoleDialog component for creating custom roles from the Role Management page
+- Frontend permission types for `azure`, `hiera`, and `ssh` resources with category grouping
+- Property-based tests for MCP tool permission enforcement, inventory search filtering, API client 204 handling, and form validation
+
+### Fixed
+
+- `fetchWithRetry` now handles HTTP 204 No Content responses without JSON parse errors
+- Viewer role missing read permissions for Proxmox, AWS, Journal, and Integration Config
+- Operator role missing lifecycle and execute permissions for Proxmox, AWS, Azure, and SSH
+- Create Role button on Role Management page now opens a functional dialog instead of a stub
+
 ## [1.1.0]
 
 ### Added

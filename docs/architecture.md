@@ -55,6 +55,8 @@ server.ts
   ├── IntegrationManager.initializePlugins()   parallel init, errors logged
   ├── IntegrationManager.startHealthCheckScheduler()   runs every 60s
   │
+  ├── MCP server (if MCP_ENABLED)    provision service user, register tools, mount /mcp
+  │
   └── Express routes mounted         server ready
 ```
 

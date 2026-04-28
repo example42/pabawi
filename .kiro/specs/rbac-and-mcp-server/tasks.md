@@ -141,20 +141,20 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - For `inventory_list`: test search filtering with specific examples
     - _Requirements: 11.1, 11.2, 12.1, 13.1, 14.1, 15.1, 16.1, 17.1, 18.1, 19.1, 19.2_
 
-- [ ] 8. Wire MCP server into Express app
-  - [-] 8.1 Update `backend/src/server.ts` to conditionally initialize MCP
+- [x] 8. Wire MCP server into Express app
+  - [x] 8.1 Update `backend/src/server.ts` to conditionally initialize MCP
     - After existing service initialization, check `configService.isMcpEnabled()`
     - If enabled: call `provisionMcpServiceUser()`, create MCP server, create `StreamableHTTPServerTransport` with `enableJsonResponse: true`
     - Connect server to transport, register `app.post("/mcp", ...)` handler
     - If disabled: skip MCP initialization entirely
     - _Requirements: 8.2, 8.3, 10.1, 10.3_
 
-  - [~] 8.2 Write integration test for MCP endpoint
+  - [x] 8.2 Write integration test for MCP endpoint
     - Start server with `MCP_ENABLED=true`, send MCP `initialize` request to `POST /mcp`, verify valid response with server name `pabawi`
     - Send `tools/list`, verify all 8 tools registered
     - _Requirements: 10.1, 10.3, 10.4_
 
-- [ ] 9. Final checkpoint — All features complete
+- [x] 9. Final checkpoint — All features complete
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

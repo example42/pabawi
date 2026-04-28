@@ -306,6 +306,27 @@ PUPPETSERVER_TOKEN=your-token-here
 
 SSH is configured per-node in the Bolt inventory file, not via env vars. See [integrations/ssh.md](./integrations/ssh.md).
 
+## MCP Server
+
+| Variable | Default | Description |
+|---|---|---|
+| `MCP_ENABLED` | `false` | Set to `true` to enable the embedded MCP server at `/mcp` |
+
+When enabled, Pabawi exposes a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `POST /mcp` using Streamable HTTP transport. This allows AI assistants (Claude, Cursor, etc.) to query infrastructure data through 8 read-only tools:
+
+| Tool | Description |
+|---|---|
+| `inventory_list` | Aggregated node inventory from all integrations |
+| `facts_get` | Node facts by certname |
+| `reports_query` | Puppet reports with filtering |
+| `catalogs_get` | Puppet catalogs by certname |
+| `hiera_lookup` | Hiera key resolution |
+| `executions_list` | Execution history |
+| `integrations_list` | Integration health status |
+| `journal_query` | Journal entries with filtering |
+
+A dedicated `mcp-service` user is auto-provisioned at startup with an `MCP Service` role containing all read permissions. All tool calls are gated by the existing RBAC permission system.
+
 ## Validation Errors
 
 If any variable fails Zod validation, the server exits immediately with:

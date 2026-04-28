@@ -576,3 +576,44 @@ Used internally by the frontend for expert mode log collection.
 |---|---|---|
 | `GET` | `/api/monitoring/metrics` | Performance metrics (memory, CPU, uptime) |
 | `GET` | `/api/monitoring/journal` | System journal entries |
+
+---
+
+## MCP (Model Context Protocol)
+
+Requires `MCP_ENABLED=true`. The MCP endpoint does not require JWT authentication — it uses a dedicated `mcp-service` system user with read-only RBAC permissions.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/mcp` | MCP Streamable HTTP endpoint |
+
+The endpoint accepts standard MCP JSON-RPC requests (`initialize`, `tools/list`, `tools/call`) and returns JSON responses.
+
+### Available Tools
+
+| Tool | Required Permission | Parameters |
+|---|---|---|
+| `inventory_list` | `ansible/read` | `search?: string` |
+| `facts_get` | `puppetdb/read` | `certname: string` |
+| `reports_query` | `puppetdb/read` | `certname?: string`, `limit?: number`, `status?: string` |
+| `catalogs_get` | `puppetdb/read` | `certname: string` |
+| `hiera_lookup` | `hiera/read` | `key: string`, `environment?: string` |
+| `executions_list` | `bolt/read` | `limit?: number`, `status?: string`, `tool?: string` |
+| `integrations_list` | `integration_config/read` | _(none)_ |
+| `journal_query` | `journal/read` | `nodeId?: string`, `eventType?: string`, `limit?: number` |
+
+All tools are read-only. If the `mcp-service` user lacks the required permission, the tool returns an error response.
+
+### MCP Client Configuration
+
+To connect an MCP client to Pabawi:
+
+```json
+{
+  "mcpServers": {
+    "pabawi": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
