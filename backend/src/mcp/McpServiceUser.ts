@@ -50,7 +50,7 @@ export async function provisionMcpServiceUser(
   });
 
   // Create user with random password (never used for login)
-  const password = randomUUID(); // pragma: allowlist secret
+  const password = `Mcp!${randomUUID()}`; // pragma: allowlist secret
   const user = await userService.createUser({
     username: MCP_USERNAME,
     email: `${MCP_USERNAME}@localhost`,
