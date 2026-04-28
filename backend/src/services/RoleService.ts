@@ -31,6 +31,7 @@ export interface RoleDTO {
 export interface CreateRoleDTO {
   name: string;
   description: string;
+  isBuiltIn?: boolean;
 }
 
 /**
@@ -118,8 +119,8 @@ export class RoleService {
     // Insert role (isBuiltIn defaults to 0 for custom roles)
     await this.db.execute(
       `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
-       VALUES (?, ?, ?, 0, ?, ?)`,
-      [roleId, data.name, data.description || '', now, now]
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [roleId, data.name, data.description || '', data.isBuiltIn ? 1 : 0, now, now]
     );
 
     // Fetch and return created role
