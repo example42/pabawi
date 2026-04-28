@@ -111,12 +111,12 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Verify idempotency — second run reuses existing user without modification
     - _Requirements: 9.1, 9.2, 9.6_
 
-- [ ] 7. Implement MCP server and tool registration
-  - [-] 7.1 Install `@modelcontextprotocol/sdk` dependency
+- [x] 7. Implement MCP server and tool registration
+  - [x] 7.1 Install `@modelcontextprotocol/sdk` dependency
     - Run `npm install @modelcontextprotocol/sdk` in `backend/`
     - _Requirements: 10.2_
 
-  - [~] 7.2 Create `backend/src/mcp/McpServer.ts` with server setup and tool registration
+  - [x] 7.2 Create `backend/src/mcp/McpServer.ts` with server setup and tool registration
     - Export `createMcpServer(deps: McpDependencies): McpServer`
     - Server name `pabawi`, version from `package.json`
     - Register all 8 tools: `inventory_list`, `facts_get`, `reports_query`, `catalogs_get`, `hiera_lookup`, `executions_list`, `integrations_list`, `journal_query`
@@ -125,24 +125,24 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Use Zod for input schemas as required by MCP SDK
     - _Requirements: 10.3, 10.4, 11.1, 11.2, 11.3, 11.4, 12.1, 12.2, 12.3, 13.1, 13.2, 13.3, 14.1, 14.2, 14.3, 15.1, 15.2, 15.3, 16.1, 16.2, 16.3, 17.1, 17.2, 18.1, 18.2, 18.3, 19.1, 19.2, 19.3, 19.4_
 
-  - [~] 7.3 Write property test for inventory_list search filtering (Property 3)
+  - [x] 7.3 Write property test for inventory_list search filtering (Property 3)
     - **Property 3: inventory_list search filtering**
     - Generate random node lists and search strings, verify filtering returns only nodes where name or certname contains the search string (case-insensitive); when search is omitted, all nodes returned
     - **Validates: Requirements 11.2**
 
-  - [~] 7.4 Write property test for universal MCP tool permission enforcement (Property 4)
+  - [x] 7.4 Write property test for universal MCP tool permission enforcement (Property 4)
     - **Property 4: Universal MCP tool permission enforcement**
     - For each tool × {true, false} permission state, verify: when permission denied, error response returned and service not called; when granted, service called and data returned
     - **Validates: Requirements 19.1, 19.2**
 
-  - [~] 7.5 Write unit tests for MCP tool handlers
+  - [x] 7.5 Write unit tests for MCP tool handlers
     - For each tool: mock permission denied, verify error response and service not called
     - For each tool: mock permission granted, mock service response, verify correct data returned
     - For `inventory_list`: test search filtering with specific examples
     - _Requirements: 11.1, 11.2, 12.1, 13.1, 14.1, 15.1, 16.1, 17.1, 18.1, 19.1, 19.2_
 
 - [ ] 8. Wire MCP server into Express app
-  - [~] 8.1 Update `backend/src/server.ts` to conditionally initialize MCP
+  - [-] 8.1 Update `backend/src/server.ts` to conditionally initialize MCP
     - After existing service initialization, check `configService.isMcpEnabled()`
     - If enabled: call `provisionMcpServiceUser()`, create MCP server, create `StreamableHTTPServerTransport` with `enableJsonResponse: true`
     - Connect server to transport, register `app.post("/mcp", ...)` handler

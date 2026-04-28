@@ -63,6 +63,12 @@ import { LoggerService } from "./services/LoggerService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
 import { JournalService } from "./services/journal/JournalService";
+import { AuthenticationService } from "./services/AuthenticationService";
+import { UserService } from "./services/UserService";
+import { RoleService } from "./services/RoleService";
+import { PermissionService } from "./services/PermissionService";
+import { provisionMcpServiceUser } from "./mcp/McpServiceUser";
+import { createMcpServer } from "./mcp/McpServer";
 
 /**
  * Initialize and start the application
@@ -1361,6 +1367,70 @@ async function startServer(): Promise<Express> {
       rbacMiddleware("debug", "admin"),
       createDebugRouter(),
     );
+
+    // Conditionally initialize MCP server
+    if (configService.isMcpEnabled()) {
+      logger.info("MCP server enabled, initializing...", {
+        component: "Server",
+        operation: "initializeMcp",
+      });
+
+      try {
+        const authService = new AuthenticationService(databaseService.getAdapter());
+        const userService = new UserService(databaseService.getAdapter(), authService);
+        const roleService = new RoleService(databaseService.getAdapter());
+        const permissionService = new PermissionService(databaseService.getAdapter());
+
+        const { userId: mcpUserId } = await provisionMcpServiceUser(
+          userService, roleService, permissionService, logger,
+        );
+
+        // Read version from package.json
+        const pkgJson = await import("../package.json");
+        const version = (pkgJson as { version?: string }).version ?? "1.0.0";
+
+        const mcpServer = createMcpServer({
+          integrationManager,
+          executionRepository,
+          journalService,
+          permissionService,
+          hieraPlugin,
+          puppetDBService,
+          puppetRunHistoryService,
+          mcpUserId,
+          logger,
+          version,
+        });
+
+        // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.
+        // The backend uses moduleResolution: "node", so we use require() for runtime compat.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
+        const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+        const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true });
+        await mcpServer.connect(transport);
+
+        app.post("/mcp", asyncHandler(async (req: Request, res: Response) => {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          await transport.handleRequest(req, res, req.body);
+        }));
+
+        logger.info("MCP server initialized, /mcp endpoint registered", {
+          component: "Server",
+          operation: "initializeMcp",
+        });
+      } catch (error) {
+        logger.error("Failed to initialize MCP server, continuing without MCP", {
+          component: "Server",
+          operation: "initializeMcp",
+        }, error instanceof Error ? error : undefined);
+      }
+    } else {
+      logger.info("MCP server disabled (MCP_ENABLED != true)", {
+        component: "Server",
+        operation: "initializeMcp",
+      });
+    }
 
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");
