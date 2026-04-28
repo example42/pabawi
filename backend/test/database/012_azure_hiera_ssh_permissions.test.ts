@@ -54,10 +54,10 @@ async function applyPrerequisites(db: sqlite3.Database): Promise<void> {
 }
 
 async function applyMigration012(db: sqlite3.Database): Promise<void> {
-  await execSQL(db, readMigration('012_azure_hiera_ssh_permissions.sql'));
+  await execSQL(db, readMigration('013_azure_hiera_ssh_permissions.sql'));
 }
 
-describe('012_azure_hiera_ssh_permissions migration', () => {
+describe('013_azure_hiera_ssh_permissions migration', () => {
   let db: sqlite3.Database;
 
   beforeEach(async () => {
