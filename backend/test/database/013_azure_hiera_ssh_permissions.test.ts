@@ -38,7 +38,7 @@ function readMigration(filename: string): string {
 }
 
 /**
- * Apply all prerequisite migrations (000 through 011) plus 013.
+ * Apply all prerequisite migrations (000, 001, 002, and 007).
  * We only need the schema and seed migrations that define the tables and
  * roles/permissions referenced by migration 013.
  */
@@ -130,8 +130,9 @@ describe('013_azure_hiera_ssh_permissions migration', () => {
     );
 
     // Original 002 seed: ansible-read, bolt-read, puppetdb-read (3)
-    // Migration 013 adds: proxmox-read, aws-read, journal-read,
-    //   integration_config-read, azure-read, hiera-read, ssh-read (7)
+    // Migration 007 backfill: proxmox-read, aws-read, journal-read,
+    //   integration_config-read (4)
+    // Migration 013 adds: azure-read, hiera-read, ssh-read (3)
     // Total: 10
     expect(perms).toHaveLength(10);
 
@@ -168,9 +169,10 @@ describe('013_azure_hiera_ssh_permissions migration', () => {
     const permSet = new Set(perms.map(p => `${p.resource}/${p.action}`));
 
     // Original from 002: ansible-read, ansible-exec, bolt-read, bolt-exec, puppetdb-read (5)
-    // Migration 013 adds: proxmox-read, aws-read, journal-read, integration_config-read,
-    //   azure-read, hiera-read, ssh-read, proxmox-lifecycle, aws-lifecycle,
-    //   azure-lifecycle, ssh-execute (11)
+    // Migration 007 backfill: proxmox-read, aws-read, journal-read, integration_config-read,
+    //   proxmox-lifecycle, aws-lifecycle (6)
+    // Migration 013 adds: azure-read, hiera-read, ssh-read, azure-lifecycle,
+    //   ssh-execute (5)
     // Total: 16
     expect(perms).toHaveLength(16);
 
