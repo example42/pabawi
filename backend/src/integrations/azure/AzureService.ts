@@ -229,7 +229,7 @@ export class AzureService {
     const sizes: AzureVMSizeInfo[] = [];
     for await (const size of this.computeClient.virtualMachineSizes.list(location)) {
       sizes.push({
-        name: size.name,
+        name: size.name ?? "",
         vCpus: size.numberOfCores ?? 0,
         memoryMB: size.memoryInMB ?? 0,
         osDiskSizeGB: size.osDiskSizeInMB != null ? Math.round(size.osDiskSizeInMB / 1024) : 0,
