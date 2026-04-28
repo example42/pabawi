@@ -1,4 +1,4 @@
--- Migration: 012_azure_hiera_ssh_permissions
+-- Migration: 013_azure_hiera_ssh_permissions
 -- Description: Add permissions for Azure, Hiera, and SSH integrations.
 --              Backfill role-permission assignments for Viewer, Operator,
 --              Administrator, and Provisioner roles.
