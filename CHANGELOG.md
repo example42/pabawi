@@ -4,6 +4,12 @@
 
 ### Added
 
+- Azure integration with VM inventory, provisioning, lifecycle management (start/stop/restart/deallocate), and health checks
+- Azure API routes for inventory, provisioning, lifecycle actions, VM sizes, locations, resource groups, and images
+- Azure setup guide component with `.env` snippet generation and sensitive value masking
+- Azure configuration schema (tenant ID, client ID, client secret, subscription ID) via ConfigService
+- Azure journal collector for VM state change tracking
+- Azure color coding in integration color service
 - Global Journal page with cross-node timeline aggregation, filtering by node, group, event type, source, and date range
 - Journal collectors for Proxmox tasks, AWS EC2 state changes, PuppetDB reports, and execution history
 - Collapsible target selector in Global Journal with node/group search and source filtering

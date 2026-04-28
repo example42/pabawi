@@ -7,7 +7,7 @@
 </td>
 <td>
   <h3>Classic Infrastructures Command &amp; Control Awesomeness</h3>
-  <p>Pabawi is a web UI for infrastructure management, inventory, and remote execution. It integrates with Puppet, Bolt, Ansible, PuppetDB, Hiera, SSH, Proxmox, and AWS — supporting both Puppet Enterprise and Open Source Puppet / OpenVox. A single interface for executing commands, browsing inventory, viewing system facts, provisioning VMs, and tracking operations across your entire environment.</p>
+  <p>Pabawi is a web UI for infrastructure management, inventory, and remote execution. It integrates with Puppet, Bolt, Ansible, PuppetDB, Hiera, SSH, Proxmox, AWS, and Azure — supporting both Puppet Enterprise and Open Source Puppet / OpenVox. A single interface for executing commands, browsing inventory, viewing system facts, provisioning VMs, and tracking operations across your entire environment.</p>
 </td>
 </tr>
 </table>
@@ -46,12 +46,13 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
 
 ## Features
 
-- **Multi-Source Inventory** — nodes from Bolt, PuppetDB, Ansible, SSH, Proxmox, AWS, with inventory groups
+- **Multi-Source Inventory** — nodes from Bolt, PuppetDB, Ansible, SSH, Proxmox, AWS, Azure, with inventory groups
 - **Command Execution** — ad-hoc commands on remote nodes with whitelist security
 - **Task Execution** — Bolt tasks with automatic parameter discovery
 - **Package Management** — install and manage packages across infrastructure
 - **Proxmox Provisioning** — VM and container management alongside config management
 - **AWS EC2 Provisioning** — cloud instance lifecycle management
+- **Azure VM Provisioning** — Azure VM inventory, provisioning, and lifecycle management (start/stop/restart/deallocate)
 - **Execution History** — track operations with re-execution capability
 - **RBAC Authentication** — role-based access control, multiple users, audit trail
 - **Node Facts** — system information from Puppet agents
@@ -161,6 +162,7 @@ Key configuration areas:
 | SSH | `SSH_*` |
 | Proxmox | `PROXMOX_*` |
 | AWS | `AWS_*` |
+| Azure | `AZURE_*` |
 | Security | `COMMAND_WHITELIST*`, `CONCURRENT_EXECUTION_LIMIT` |
 
 Full reference: [Configuration Guide](docs/configuration.md).
@@ -213,7 +215,7 @@ Scheduled executions, custom dashboards, CLI tool, audit logging, Tiny Puppet in
 
 ### Version History
 
-- **v1.1.0**: Global Journal with cross-node timeline,  security hardening, docs rewrite
+- **v1.1.0**: Azure integration, Global Journal with cross-node timeline, security hardening, docs rewrite
 - **v1.0.0**: Configuration refactor (`.env` as single source of truth), Proxmox and AWS provisioning, Node Journal, setup wizard `.env` snippet generators, Integration Status Dashboard
 - **v0.10.0**: AWS EC2 integration, integration configuration management
 - **v0.9.0**: Proxmox integration, Node Journal
@@ -241,7 +243,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 - [Bolt](docs/integrations/bolt.md) | [Ansible](docs/integrations/ansible.md) | [SSH](docs/integrations/ssh.md)
 - [PuppetDB](docs/integrations/puppetdb.md) | [Puppetserver](docs/integrations/puppetserver.md) | [Hiera](docs/integrations/hiera.md)
-- [Proxmox](docs/integrations/proxmox.md) | [AWS](docs/integrations/aws.md)
+- [Proxmox](docs/integrations/proxmox.md) | [AWS](docs/integrations/aws.md) | [Azure](docs/integrations/azure.md)
 
 **Deployment**
 
