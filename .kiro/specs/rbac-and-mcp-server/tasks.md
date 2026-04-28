@@ -46,8 +46,8 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Verify `RESOURCE_LABELS` has correct labels for all new resources
     - _Requirements: 20.1, 20.2, 20.3, 20.4, 20.5_
 
-- [ ] 3. Implement CreateRoleDialog component
-  - [-] 3.1 Create `frontend/src/components/CreateRoleDialog.svelte`
+- [x] 3. Implement CreateRoleDialog component
+  - [x] 3.1 Create `frontend/src/components/CreateRoleDialog.svelte`
     - Svelte 5 component with runes for state management
     - Props: `isOpen` (bindable), `onClose`, `onCreated` callbacks
     - Form fields: role name (3-100 chars), description (0-500 chars)
@@ -57,7 +57,7 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Accessible: use `<dialog>` element, focus trap, ESC to close
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8_
 
-  - [~] 3.2 Integrate CreateRoleDialog into RoleManagementPage
+  - [x] 3.2 Integrate CreateRoleDialog into RoleManagementPage
     - Import `CreateRoleDialog` in `frontend/src/pages/RoleManagementPage.svelte`
     - Add `isCreateDialogOpen` state variable
     - Replace `handleCreateRole()` stub with `isCreateDialogOpen = true`
@@ -65,19 +65,19 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Add `<CreateRoleDialog>` to the template
     - _Requirements: 7.1, 7.6_
 
-  - [~] 3.3 Write property test for CreateRoleDialog form validation (Property 2)
+  - [x] 3.3 Write property test for CreateRoleDialog form validation (Property 2)
     - **Property 2: CreateRoleDialog form validation**
     - Generate random strings for name (0-200 chars) and description (0-600 chars), verify validation accepts iff `name.length >= 3 && name.length <= 100 && description.length <= 500`
     - **Validates: Requirements 7.3, 7.4**
 
-  - [~] 3.4 Write unit tests for CreateRoleDialog
+  - [x] 3.4 Write unit tests for CreateRoleDialog
     - Render with `isOpen=true`, verify form fields exist
     - Submit with valid data, mock 201 response, verify dialog closes and `onCreated` called
     - Mock 409 response, verify duplicate name error shown
     - Mock 500 response, verify error shown and dialog stays open
     - _Requirements: 7.2, 7.6, 7.7, 7.8_
 
-- [ ] 4. Checkpoint — Frontend and migration complete
+- [-] 4. Checkpoint — Frontend and migration complete
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 5. Add MCP configuration to ConfigService
