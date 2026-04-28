@@ -13,7 +13,7 @@
 - Azure permissions: `azure-read`, `azure-lifecycle`, `azure-provision`, `azure-destroy`, `azure-admin`
 - Hiera permissions: `hiera-read`, `hiera-admin`
 - SSH permissions: `ssh-read`, `ssh-execute`, `ssh-admin`
-- Database migration 012 backfilling missing role-permission assignments for Viewer, Operator, Administrator, and Provisioner roles
+- Database migration 013 backfilling missing role-permission assignments for Viewer, Operator, Administrator, and Provisioner roles
 - CreateRoleDialog component for creating custom roles from the Role Management page
 - Frontend permission types for `azure`, `hiera`, and `ssh` resources with category grouping
 - Property-based tests for MCP tool permission enforcement, inventory search filtering, API client 204 handling, and form validation

@@ -38,9 +38,9 @@ function readMigration(filename: string): string {
 }
 
 /**
- * Apply all prerequisite migrations (000 through 011) plus 012.
+ * Apply all prerequisite migrations (000 through 011) plus 013.
  * We only need the schema and seed migrations that define the tables and
- * roles/permissions referenced by migration 012.
+ * roles/permissions referenced by migration 013.
  */
 async function applyPrerequisites(db: sqlite3.Database): Promise<void> {
   // 000 — initial schema (executions, revoked_tokens)
@@ -53,7 +53,7 @@ async function applyPrerequisites(db: sqlite3.Database): Promise<void> {
   await execSQL(db, readMigration('007_permissions_and_provisioner_role.sql'));
 }
 
-async function applyMigration012(db: sqlite3.Database): Promise<void> {
+async function applyMigration013(db: sqlite3.Database): Promise<void> {
   await execSQL(db, readMigration('013_azure_hiera_ssh_permissions.sql'));
 }
 
@@ -63,7 +63,7 @@ describe('013_azure_hiera_ssh_permissions migration', () => {
   beforeEach(async () => {
     db = new sqlite3.Database(':memory:');
     await applyPrerequisites(db);
-    await applyMigration012(db);
+    await applyMigration013(db);
   });
 
   afterEach(async () => {
@@ -130,7 +130,7 @@ describe('013_azure_hiera_ssh_permissions migration', () => {
     );
 
     // Original 002 seed: ansible-read, bolt-read, puppetdb-read (3)
-    // Migration 012 adds: proxmox-read, aws-read, journal-read,
+    // Migration 013 adds: proxmox-read, aws-read, journal-read,
     //   integration_config-read, azure-read, hiera-read, ssh-read (7)
     // Total: 10
     expect(perms).toHaveLength(10);
@@ -168,7 +168,7 @@ describe('013_azure_hiera_ssh_permissions migration', () => {
     const permSet = new Set(perms.map(p => `${p.resource}/${p.action}`));
 
     // Original from 002: ansible-read, ansible-exec, bolt-read, bolt-exec, puppetdb-read (5)
-    // Migration 012 adds: proxmox-read, aws-read, journal-read, integration_config-read,
+    // Migration 013 adds: proxmox-read, aws-read, journal-read, integration_config-read,
     //   azure-read, hiera-read, ssh-read, proxmox-lifecycle, aws-lifecycle,
     //   azure-lifecycle, ssh-execute (11)
     // Total: 16
@@ -245,7 +245,7 @@ describe('013_azure_hiera_ssh_permissions migration', () => {
 
   it('should be idempotent — running migration twice causes no errors', async () => {
     // Migration was already applied in beforeEach. Apply it again.
-    await expect(applyMigration012(db)).resolves.not.toThrow();
+    await expect(applyMigration013(db)).resolves.not.toThrow();
 
     // Verify counts are unchanged after second run
     const azurePerms = await queryAll(

@@ -18,7 +18,7 @@
 
   // Validation derived state
   let nameError = $derived(
-    roleName.length > 0 && roleName.length < 3
+    roleName.trim().length > 0 && roleName.trim().length < 3
       ? 'Role name must be at least 3 characters'
       : roleName.length > 100
         ? 'Role name must not exceed 100 characters'
@@ -32,7 +32,7 @@
   );
 
   let isValid = $derived(
-    roleName.length >= 3 &&
+    roleName.trim().length >= 3 &&
     roleName.length <= 100 &&
     description.length <= 500
   );
@@ -150,7 +150,7 @@
           class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
           aria-describedby={nameError ? 'name-error' : undefined}
           aria-invalid={nameError ? 'true' : undefined}
-          maxlength="101"
+          maxlength="100"
         />
         {#if nameError}
           <p id="name-error" class="mt-1 text-sm text-red-600 dark:text-red-400">{nameError}</p>
@@ -174,7 +174,7 @@
           class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
           aria-describedby={descriptionError ? 'description-error' : undefined}
           aria-invalid={descriptionError ? 'true' : undefined}
-          maxlength="501"
+          maxlength="500"
         ></textarea>
         {#if descriptionError}
           <p id="description-error" class="mt-1 text-sm text-red-600 dark:text-red-400">{descriptionError}</p>
