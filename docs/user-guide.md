@@ -1,6 +1,6 @@
 # User Guide
 
-Pabawi is a web UI for managing infrastructure through Bolt, Ansible, SSH, PuppetDB, Puppetserver, Hiera, Proxmox, and AWS. All integrations that are enabled and connected are available from the same interface.
+Pabawi is a web UI for managing infrastructure through Bolt, Ansible, SSH, PuppetDB, Puppetserver, Hiera, Proxmox, AWS, and Azure. All integrations that are enabled and connected are available from the same interface.
 
 ## Navigation
 
@@ -11,12 +11,13 @@ The top navigation bar has five sections:
 | **Home** | Integration status, aggregated Puppet run chart, system health |
 | **Inventory** | All nodes from all enabled information sources |
 | **Executions** | Full execution history with filtering |
-| **Manage** | Provisioning (Proxmox/AWS) — visible when provisioning integrations are enabled |
+| **Manage** | Provisioning (Proxmox/AWS/Azure) — visible when provisioning integrations are enabled |
+| **Journal** | Cross-node event timeline — visible when at least one journal source is enabled |
 | **Expert Mode toggle** | Adds diagnostic detail to all pages |
 
 ## Inventory
 
-The Inventory page aggregates nodes from every enabled information source (Bolt, PuppetDB, Puppetserver). Nodes that appear in multiple sources are linked and shown as one entry with a **sources** badge listing where they came from.
+The Inventory page aggregates nodes from every enabled information source (Bolt, PuppetDB, Puppetserver, Ansible, SSH, Proxmox, AWS, Azure). Nodes that appear in multiple sources are linked and shown as one entry with a **sources** badge listing where they came from.
 
 **Search and filter:** Type in the search box to filter by node name. Use the transport or source dropdown to narrow further.
 
@@ -36,8 +37,9 @@ Each integration has a color that appears on badges and tabs:
 | Hiera | Dark red (#C1272D) |
 | Ansible | Green |
 | SSH | Teal |
-| Proxmox | Yellow-orange |
-| AWS | Amber |
+| Proxmox | Blue (#3B82F6) |
+| AWS | Cyan (#06B6D4) |
+| Azure | Azure blue (#0078D4) |
 
 ## Node Detail Page
 
@@ -166,9 +168,9 @@ When Ansible is enabled, the **Execute Command** section offers Ansible as an ex
 
 For playbooks, use **Run Task** with Ansible-specific tasks if your project includes them.
 
-## Provisioning (Proxmox / AWS)
+## Provisioning (Proxmox / AWS / Azure)
 
-The **Manage** tab appears when at least one provisioning integration (Proxmox or AWS) is enabled.
+The **Manage** tab appears when at least one provisioning integration (Proxmox, AWS, or Azure) is enabled.
 
 ### Proxmox
 
@@ -195,6 +197,33 @@ Lists EC2 instances across configured regions. Actions:
 | Reboot | Restart an instance |
 | Terminate | Permanently delete — **blocked unless `ALLOW_DESTRUCTIVE_PROVISIONING=true`** |
 | Launch | Launch a new EC2 instance |
+
+### Azure
+
+Lists VMs across configured resource groups. Actions:
+
+| Action | Description |
+|---|---|
+| Start | Start a deallocated or stopped VM |
+| Stop | OS-level shutdown (billing continues) |
+| Restart | Reboot a running VM |
+| Deallocate | Stop and release compute resources — **blocked unless `ALLOW_DESTRUCTIVE_PROVISIONING=true`** |
+| Create VM | Provision a new VM from a marketplace image |
+
+## Global Journal
+
+The **Journal** page shows a cross-node event timeline aggregated from all enabled sources (PuppetDB reports, Proxmox tasks, AWS state changes, Azure state changes, and execution history).
+
+**Filter options:**
+
+- **Nodes / Groups** — click "Select Targets" to pick specific nodes or inventory groups; collapsible
+- **Event type** — filter by event category (e.g. puppet-run, task, provision)
+- **Source** — narrow to a specific integration
+- **Date range** — start and end datetime pickers
+
+Consecutive similar entries (same node, same event type) are grouped for readability. Click **+N more** to expand a group.
+
+Node IDs in journal entries are clickable and navigate to the node detail page.
 
 ## Execution History
 

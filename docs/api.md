@@ -373,9 +373,9 @@ All Puppetserver endpoints require `PUPPETSERVER_ENABLED=true`. Auth uses client
 
 ---
 
-## Provisioning (Proxmox and AWS)
+## Provisioning (Proxmox, AWS, and Azure)
 
-Require `PROXMOX_ENABLED=true` or `AWS_ENABLED=true`. Destructive actions (destroy/terminate) additionally require `ALLOW_DESTRUCTIVE_PROVISIONING=true` or return `403 DESTRUCTIVE_ACTION_DISABLED`.
+Require `PROXMOX_ENABLED=true`, `AWS_ENABLED=true`, or `AZURE_ENABLED=true`. Destructive actions (destroy/terminate/deallocate) additionally require `ALLOW_DESTRUCTIVE_PROVISIONING=true` or return `403 DESTRUCTIVE_ACTION_DISABLED`.
 
 ### Proxmox
 
@@ -403,6 +403,86 @@ Lifecycle actions: `start`, `stop`, `shutdown`, `reboot`.
 | `DELETE` | `/api/integrations/aws/instances/:id` | Terminate instance *(destructive)* |
 
 Lifecycle actions: `start`, `stop`, `reboot`.
+
+### Azure
+
+Requires `AZURE_ENABLED=true`. `deallocate` additionally requires `ALLOW_DESTRUCTIVE_PROVISIONING=true`.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/integrations/azure/inventory` | List Azure VMs |
+| `POST` | `/api/integrations/azure/provision` | Provision a new Azure VM |
+| `POST` | `/api/integrations/azure/lifecycle` | VM lifecycle action |
+| `POST` | `/api/integrations/azure/test` | Test Azure connection |
+| `GET` | `/api/integrations/azure/locations` | List available Azure locations |
+| `GET` | `/api/integrations/azure/vm-sizes` | List VM sizes for a location |
+| `GET` | `/api/integrations/azure/images` | List marketplace images |
+| `GET` | `/api/integrations/azure/resource-groups` | List resource groups |
+
+**Request body (`POST /api/integrations/azure/lifecycle`):**
+
+```json
+{
+  "vmName": "my-vm",
+  "resourceGroup": "my-rg",
+  "action": "start"
+}
+```
+
+Lifecycle actions: `start`, `stop`, `restart`, `deallocate`.
+
+**Request body (`POST /api/integrations/azure/provision`):**
+
+```json
+{
+  "resourceGroup": "my-rg",
+  "vmName": "my-vm",
+  "location": "eastus",
+  "vmSize": "Standard_B1s",
+  "imageReference": {
+    "publisher": "Canonical",
+    "offer": "UbuntuServer",
+    "sku": "18.04-LTS",
+    "version": "latest"
+  },
+  "adminUsername": "azureuser",
+  "sshPublicKey": "ssh-rsa AAAA...",
+  "networkInterfaceId": "/subscriptions/.../networkInterfaces/my-nic"
+}
+```
+
+**Query params (`GET /api/integrations/azure/vm-sizes`):** `location` (required).
+
+**Query params (`GET /api/integrations/azure/images`):** `location`, `publisher`, `offer`, `sku` (all optional).
+
+---
+
+## Journal
+
+Requires `AUTH_ENABLED=true` and the `journal:read` permission. Events are streamed via SSE.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/journal/global/stream` | Stream journal events across all nodes (SSE) |
+| `GET` | `/api/journal/:nodeId/stream` | Stream journal events for a specific node (SSE) |
+| `GET` | `/api/journal/:nodeId` | Get journal entries for a node |
+| `GET` | `/api/journal/search` | Search journal entries |
+| `POST` | `/api/journal/:nodeId/notes` | Add a manual note to a node's journal |
+
+**Query params (`GET /api/journal/global/stream`):**
+
+| Param | Description |
+|---|---|
+| `nodeIds` | Comma-separated node IDs to filter |
+| `groupId` | Inventory group ID to filter |
+| `startDate` | ISO 8601 datetime (inclusive) |
+| `endDate` | ISO 8601 datetime (inclusive) |
+| `eventType` | Comma-separated event types |
+| `source` | Comma-separated source names |
+
+The per-node stream (`/api/journal/:nodeId/stream`) accepts the same `startDate`, `endDate`, `eventType`, and `source` params.
+
+Both stream endpoints return `text/event-stream`. Each event has `type` (`entry` / `complete` / `error`) and JSON data.
 
 ---
 
