@@ -77,27 +77,27 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Mock 500 response, verify error shown and dialog stays open
     - _Requirements: 7.2, 7.6, 7.7, 7.8_
 
-- [-] 4. Checkpoint — Frontend and migration complete
+- [x] 4. Checkpoint — Frontend and migration complete
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 5. Add MCP configuration to ConfigService
-  - [~] 5.1 Update `backend/src/config/schema.ts` with `mcpEnabled` field
+- [x] 5. Add MCP configuration to ConfigService
+  - [x] 5.1 Update `backend/src/config/schema.ts` with `mcpEnabled` field
     - Add `mcpEnabled: z.boolean().default(false)` to `AppConfigSchema`
     - _Requirements: 8.1_
 
-  - [~] 5.2 Update `ConfigService` to parse `MCP_ENABLED` env var and expose `isMcpEnabled()`
+  - [x] 5.2 Update `ConfigService` to parse `MCP_ENABLED` env var and expose `isMcpEnabled()`
     - Add `mcpEnabled: process.env.MCP_ENABLED === 'true'` to `loadConfiguration()` raw config
     - Add `public isMcpEnabled(): boolean` method returning `this.config.mcpEnabled`
     - Update `backend/.env.example` with `MCP_ENABLED=false`
     - _Requirements: 8.1, 8.2, 8.3_
 
-  - [~] 5.3 Write unit tests for MCP config
+  - [x] 5.3 Write unit tests for MCP config
     - Verify `isMcpEnabled()` returns `false` by default
     - Verify `isMcpEnabled()` returns `true` when `MCP_ENABLED=true`
     - _Requirements: 8.1_
 
 - [ ] 6. Implement MCP service user provisioning
-  - [~] 6.1 Create `backend/src/mcp/McpServiceUser.ts`
+  - [-] 6.1 Create `backend/src/mcp/McpServiceUser.ts`
     - Export `provisionMcpServiceUser(userService, roleService, permissionService, logger)` returning `{ userId, roleId }`
     - Check if `mcp-service` user exists; if so, look up existing role and return IDs
     - If not: create user with `crypto.randomUUID()` password, `isActive: true`, `isAdmin: false`
