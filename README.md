@@ -241,7 +241,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 **Documentation**
 
 - [Architecture](docs/architecture.md) | [Configuration](docs/configuration.md) | [User Guide](docs/user-guide.md) | [API Reference](docs/api.md)
-- [Permissions & RBAC](docs/permissions-rbac.md) | [Troubleshooting](docs/troubleshooting.md) | [Development](docs/development.md)
+- [Permissions & RBAC](docs/permissions-rbac.md) | [MCP Server](docs/mcp.md) | [Troubleshooting](docs/troubleshooting.md) | [Development](docs/development.md)
 
 **Integrations**
 
