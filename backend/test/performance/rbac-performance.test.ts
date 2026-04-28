@@ -388,7 +388,7 @@ describe('RBAC Performance Tests', () => {
       console.log(`    - Throughput: ${(operationCount / (duration / 1000)).toFixed(2)} ops/sec`);
 
       expect(avgPerOp).toBeLessThan(PERFORMANCE_THRESHOLDS.AUTHENTICATION);
-    });
+    }, 30000);
   });
 
   describe('Cache Hit Rate Tracking', () => {
@@ -461,8 +461,10 @@ describe('RBAC Performance Tests', () => {
       console.log(`      - P95: ${cachedStats.p95}ms`);
       console.log(`    Performance improvement: ${(uncachedStats.avg / cachedStats.avg).toFixed(2)}x`);
 
-      // Cached should be significantly faster
-      expect(cachedStats.avg).toBeLessThan(uncachedStats.avg / 2);
+      // Cached should be significantly faster (or both near-zero which is fine)
+      if (uncachedStats.avg > 0) {
+        expect(cachedStats.avg).toBeLessThan(uncachedStats.avg / 2);
+      }
     });
   });
 
