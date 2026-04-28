@@ -1,6 +1,6 @@
 # MCP Server
 
-Pabawi includes an embedded [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that exposes read-only infrastructure tools over Streamable HTTP. This lets AI assistants like Claude, Cursor, Kiro, and other MCP-compatible clients query your infrastructure data directly.
+Pabawi includes an embedded [Model Context Protocol](https://modelcontextprotocol.io) (MCP) server that exposes read-only (by default) infrastructure tools over Streamable HTTP. This lets AI assistants like Claude Desktop, Claude Code, Kiro, Cursor, Gemini CLI, OpenAI Codex CLI, and other MCP-compatible clients query your infrastructure data directly.
 
 ## Enabling the MCP Server
 
@@ -74,6 +74,43 @@ Add to your Cursor MCP settings:
   }
 }
 ```
+
+### Claude Code
+
+Run from your project directory:
+
+```bash
+claude mcp add --transport http pabawi http://localhost:3000/mcp
+```
+
+This stores the server in your local Claude Code config. To verify it's connected, run `/mcp` inside Claude Code.
+
+### Gemini CLI
+
+Add to `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "pabawi": {
+      "httpUrl": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+Restart Gemini CLI and run `/mcp` to verify the connection.
+
+### OpenAI Codex CLI
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.pabawi]
+url = "http://localhost:3000/mcp"
+```
+
+Run `codex mcp list` to verify the server is configured.
 
 ### Any MCP Client
 

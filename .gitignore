@@ -58,3 +58,4 @@ samples/stresstest/ansible/inventory/
 samples/stresstest/bolt/inventory.yaml
 
 .claude
+.kiro/settings/mcp.json
