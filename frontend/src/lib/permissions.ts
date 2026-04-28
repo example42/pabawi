@@ -12,11 +12,14 @@ import { authManager } from './auth.svelte';
 export type PermissionResource =
   | 'proxmox'
   | 'aws'
+  | 'azure'
   | 'journal'
   | 'integration_config'
   | 'ansible'
   | 'bolt'
   | 'puppetdb'
+  | 'hiera'
+  | 'ssh'
   | 'users'
   | 'groups'
   | 'roles';
@@ -42,7 +45,7 @@ export type PermissionAction =
 export const RESOURCE_CATEGORIES: Record<string, { label: string; resources: PermissionResource[] }> = {
   infrastructure: {
     label: 'Infrastructure',
-    resources: ['proxmox', 'aws'],
+    resources: ['proxmox', 'aws', 'azure'],
   },
   operations: {
     label: 'Operations',
@@ -50,11 +53,11 @@ export const RESOURCE_CATEGORIES: Record<string, { label: string; resources: Per
   },
   configuration: {
     label: 'Configuration',
-    resources: ['integration_config'],
+    resources: ['integration_config', 'hiera'],
   },
   system: {
     label: 'System',
-    resources: ['users', 'groups', 'roles', 'ansible', 'bolt', 'puppetdb'],
+    resources: ['users', 'groups', 'roles', 'ansible', 'bolt', 'puppetdb', 'ssh'],
   },
 };
 
@@ -64,11 +67,14 @@ export const RESOURCE_CATEGORIES: Record<string, { label: string; resources: Per
 export const RESOURCE_LABELS: Record<PermissionResource, string> = {
   proxmox: 'Proxmox',
   aws: 'AWS',
+  azure: 'Azure',
   journal: 'Journal',
   integration_config: 'Integration Config',
   ansible: 'Ansible',
   bolt: 'Bolt',
   puppetdb: 'PuppetDB',
+  hiera: 'Hiera',
+  ssh: 'SSH',
   users: 'Users',
   groups: 'Groups',
   roles: 'Roles',
