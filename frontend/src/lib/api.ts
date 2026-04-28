@@ -410,6 +410,20 @@ export async function fetchWithRetry<T = unknown>(
 
         // If response is OK, parse and return data
         if (response.ok) {
+          if (response.status === 204) {
+            const totalDuration = performance.now() - requestStartTime;
+
+            logger.info('API', 'fetch', `Request completed successfully (No Content)`, {
+              url,
+              status: response.status,
+              duration: totalDuration,
+              attempts: attempt + 1,
+            });
+
+            logger.clearCorrelationId();
+            return undefined as T;
+          }
+
           const data = await response.json() as T;
           const totalDuration = performance.now() - requestStartTime;
 
