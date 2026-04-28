@@ -55,6 +55,7 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
 - **Azure VM Provisioning** — Azure VM inventory, provisioning, and lifecycle management (start/stop/restart/deallocate)
 - **Execution History** — track operations with re-execution capability
 - **RBAC Authentication** — role-based access control, multiple users, audit trail
+- **MCP Server** — embedded Model Context Protocol server with read-only infrastructure tools for AI assistants
 - **Node Facts** — system information from Puppet agents
 - **Puppet Reports** — run reports with metrics and resource changes
 - **Catalog Inspection** — compiled catalogs, resource relationships, cross-environment diff
@@ -164,6 +165,7 @@ Key configuration areas:
 | AWS | `AWS_*` |
 | Azure | `AZURE_*` |
 | Security | `COMMAND_WHITELIST*`, `CONCURRENT_EXECUTION_LIMIT` |
+| MCP | `MCP_ENABLED` |
 
 Full reference: [Configuration Guide](docs/configuration.md).
 
@@ -180,6 +182,7 @@ pabawi/
 │   └── src/
 │       ├── integrations/      # Plugin system (Bolt, PuppetDB, SSH, ...)
 │       ├── services/          # ExecutionQueue, RBAC, streaming, auth
+│       ├── mcp/              # Embedded MCP server and tool handlers
 │       ├── routes/            # Express route handlers
 │       ├── middleware/        # JWT, RBAC, rate limiting, security headers
 │       ├── database/          # SQLite + migrations
@@ -215,6 +218,7 @@ Scheduled executions, custom dashboards, CLI tool, audit logging, Tiny Puppet in
 
 ### Version History
 
+- **v1.2.0**: Embedded MCP server with 8 read-only tools, RBAC permission gaps fixed, CreateRoleDialog, new Azure/Hiera/SSH permissions
 - **v1.1.0**: Azure integration, Global Journal with cross-node timeline, security hardening, docs rewrite
 - **v1.0.0**: Configuration refactor (`.env` as single source of truth), Proxmox and AWS provisioning, Node Journal, setup wizard `.env` snippet generators, Integration Status Dashboard
 - **v0.10.0**: AWS EC2 integration, integration configuration management

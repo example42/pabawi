@@ -24,24 +24,62 @@ Full access. Permission: `*:*:*`
 
 ### Operator
 
-Provision and manage resources. Cannot destroy. Cannot configure integrations.
+Read, execute, and lifecycle access to all integrations. Cannot destroy or configure.
+
+Includes all Viewer permissions plus:
 
 | Permission | Description |
 |---|---|
-| `*:provision:*` | Create VMs, containers, EC2 instances |
-| `*:lifecycle:*` | Start, stop, reboot — but **not** destroy |
-| `*:inventory:read` | View inventory and facts |
+| `ansible/execute` | Execute Ansible playbooks |
+| `bolt/execute` | Execute Bolt tasks and commands |
+| `proxmox/lifecycle` | Start/stop/reboot Proxmox VMs |
+| `aws/lifecycle` | Start/stop/reboot AWS instances |
+| `azure/lifecycle` | Start/stop/reboot Azure VMs |
+| `ssh/execute` | Execute SSH commands |
 
 ### Viewer
 
-Read-only.
+Read-only access to all integrations.
 
 | Permission | Description |
 |---|---|
-| `*:inventory:read` | View inventory |
-| `*:facts:read` | View node facts |
+| `ansible/read` | View Ansible inventory |
+| `bolt/read` | View Bolt inventory |
+| `puppetdb/read` | View PuppetDB data |
+| `proxmox/read` | View Proxmox resources |
+| `aws/read` | View AWS resources |
+| `azure/read` | View Azure resources |
+| `journal/read` | View journal entries |
+| `integration_config/read` | View integration status |
+| `hiera/read` | View Hiera data |
+| `ssh/read` | View SSH connections |
 
 ## Permission Reference
+
+### Azure
+
+| Permission | Grants |
+|---|---|
+| `azure/read` | View Azure resources |
+| `azure/lifecycle` | Start/stop/reboot Azure VMs |
+| `azure/provision` | Create new Azure resources |
+| `azure/destroy` | Terminate Azure resources |
+| `azure/admin` | Full Azure management |
+
+### Hiera
+
+| Permission | Grants |
+|---|---|
+| `hiera/read` | View Hiera data |
+| `hiera/admin` | Manage Hiera configuration |
+
+### SSH
+
+| Permission | Grants |
+|---|---|
+| `ssh/read` | View SSH connections |
+| `ssh/execute` | Execute SSH commands |
+| `ssh/admin` | Full SSH management |
 
 ### Provisioning
 
@@ -145,3 +183,16 @@ proxmox:lifecycle:*
 ```
 
 Also requires `ALLOW_DESTRUCTIVE_PROVISIONING=true` for destroy to work.
+
+## MCP Service User
+
+When `MCP_ENABLED=true`, Pabawi auto-provisions a `mcp-service` system user at startup with an `MCP Service` built-in role. This role is assigned all permissions with action `read`, giving the MCP server read-only access to all integrations.
+
+The `mcp-service` user:
+
+- Is visible in the Users management page
+- Has a random password (cannot be used for login)
+- Cannot be deleted (built-in role)
+- Is reused on subsequent restarts (idempotent provisioning)
+
+To grant additional permissions to MCP tools, assign more permissions to the `MCP Service` role via the Role Management page or API.
