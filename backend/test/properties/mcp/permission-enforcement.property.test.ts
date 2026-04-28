@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as fc from 'fast-check';
 import { TOOL_PERMISSIONS } from '../../../src/mcp/McpServer';
+import { registerAllTools } from '../../../src/mcp/McpToolHandlers';
+import type { McpDependencies, McpServerInstance } from '../../../src/mcp/McpServer';
 
 /**
  * Property 4: Universal MCP tool permission enforcement
@@ -16,45 +18,58 @@ import { TOOL_PERMISSIONS } from '../../../src/mcp/McpServer';
 
 const TOOL_NAMES = Object.keys(TOOL_PERMISSIONS);
 
-interface ToolCallResult {
-  content: { type: string; text: string }[];
-  isError?: boolean;
+/** Minimal valid input args for each tool handler. */
+const TOOL_DEFAULT_ARGS: Record<string, Record<string, unknown>> = {
+  inventory_list: {},
+  facts_get: { certname: 'test.example.com' },
+  reports_query: {},
+  catalogs_get: { certname: 'test.example.com' },
+  hiera_lookup: { key: 'test::key' },
+  executions_list: {},
+  integrations_list: {},
+  journal_query: {},
+};
+
+type ToolResult = { content: { type: string; text: string }[]; isError?: boolean };
+
+/**
+ * Creates a capturing McpServerInstance that stores registered handlers so
+ * they can be invoked directly in tests.
+ */
+function createCapturingServer(): {
+  server: McpServerInstance;
+  handlers: Map<string, (args: Record<string, unknown>) => Promise<ToolResult>>;
+} {
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<ToolResult>>();
+  const server: McpServerInstance = {
+    registerTool: (name, _config, cb) => {
+      handlers.set(name, cb as (args: Record<string, unknown>) => Promise<ToolResult>);
+    },
+    connect: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  };
+  return { server, handlers };
 }
 
 /**
- * Creates a mock deps object with controllable permission responses.
- * Service methods are spied to verify they are/aren't called.
+ * Creates mock dependencies with controllable permission responses.
+ * All service methods are tracked via vi.fn() spies.
  */
-function createMockDeps(permissionGranted: boolean): {
-  deps: Record<string, unknown>;
-  serviceCalls: Map<string, ReturnType<typeof vi.fn>>;
-} {
-  const serviceCalls = new Map<string, ReturnType<typeof vi.fn>>();
-
+function createMockDeps(permissionGranted: boolean) {
+  const hasPermission = vi.fn().mockResolvedValue(permissionGranted);
   const getAggregatedInventory = vi.fn().mockResolvedValue({ nodes: [] });
   const getNodeData = vi.fn().mockResolvedValue({ facts: {} });
+  const healthCheckAll = vi.fn().mockResolvedValue(new Map());
   const getNodeReports = vi.fn().mockResolvedValue([]);
   const getAllReports = vi.fn().mockResolvedValue([]);
   const getNodeCatalog = vi.fn().mockResolvedValue({ certname: 'test', resources: [], edges: [] });
   const resolveKey = vi.fn().mockResolvedValue({ key: 'test', found: true });
   const findAll = vi.fn().mockResolvedValue([]);
-  const healthCheckAll = vi.fn().mockResolvedValue(new Map());
   const getNodeTimeline = vi.fn().mockResolvedValue([]);
   const searchEntries = vi.fn().mockResolvedValue([]);
 
-  serviceCalls.set('inventory_list', getAggregatedInventory);
-  serviceCalls.set('facts_get', getNodeData);
-  serviceCalls.set('reports_query', getAllReports);
-  serviceCalls.set('catalogs_get', getNodeCatalog);
-  serviceCalls.set('hiera_lookup', resolveKey);
-  serviceCalls.set('executions_list', findAll);
-  serviceCalls.set('integrations_list', healthCheckAll);
-  serviceCalls.set('journal_query', searchEntries);
-
-  const deps = {
-    permissionService: {
-      hasPermission: vi.fn().mockResolvedValue(permissionGranted),
-    },
+  return {
+    permissionService: { hasPermission },
     integrationManager: { getAggregatedInventory, getNodeData, healthCheckAll },
     puppetDBService: { getNodeReports, getAllReports, getNodeCatalog },
     hieraPlugin: { resolveKey },
@@ -65,69 +80,60 @@ function createMockDeps(permissionGranted: boolean): {
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
     version: '1.0.0',
   };
-
-  return { deps, serviceCalls };
 }
 
+type MockDeps = ReturnType<typeof createMockDeps>;
+
 /**
- * Simulates calling a tool handler with the same logic as McpToolHandlers.
- * We import and call createMcpServer to get the real registered handlers.
+ * Returns the primary service spy for a given tool so we can assert it was
+ * (or was not) called depending on permission state.
  */
-async function callTool(
-  toolName: string,
-  permissionGranted: boolean,
-): Promise<{ result: ToolCallResult; serviceCalled: boolean }> {
-  const { deps, serviceCalls } = createMockDeps(permissionGranted);
-
-  // We test the permission check + service call pattern directly
-  // rather than going through the full MCP server, since the MCP SDK
-  // require() is tested in unit tests.
-  const perm = TOOL_PERMISSIONS[toolName];
-  const allowed = permissionGranted;
-
-  if (!allowed) {
-    return {
-      result: {
-        content: [{ type: 'text', text: `Insufficient permissions: requires ${perm.resource}/${perm.action}` }],
-        isError: true,
-      },
-      serviceCalled: false,
-    };
+function getServiceSpy(toolName: string, deps: MockDeps): ReturnType<typeof vi.fn> | undefined {
+  switch (toolName) {
+    case 'inventory_list': return deps.integrationManager.getAggregatedInventory;
+    case 'facts_get': return deps.integrationManager.getNodeData;
+    case 'reports_query': return deps.puppetDBService.getAllReports;
+    case 'catalogs_get': return deps.puppetDBService.getNodeCatalog;
+    case 'hiera_lookup': return deps.hieraPlugin.resolveKey;
+    case 'executions_list': return deps.executionRepository.findAll;
+    case 'integrations_list': return deps.integrationManager.healthCheckAll;
+    case 'journal_query': return deps.journalService.searchEntries;
+    default: return undefined;
   }
-
-  // Simulate calling the service
-  const serviceCall = serviceCalls.get(toolName);
-  if (serviceCall) {
-    await serviceCall();
-  }
-
-  // Verify the permission service was conceptually checked
-  expect(deps.permissionService.hasPermission).not.toHaveBeenCalled();
-
-  return {
-    result: { content: [{ type: 'text', text: '[]' }] },
-    serviceCalled: serviceCall ? serviceCall.mock.calls.length > 0 : false,
-  };
 }
 
 const toolNameArb = fc.constantFrom(...TOOL_NAMES);
 const permissionArb = fc.boolean();
 
 describe('Property 4: Universal MCP tool permission enforcement', () => {
-  it('denied permission returns error and does not call service', () => {
-    fc.assert(
-      fc.property(toolNameArb, (_toolName) => {
-        // For denied case, we test synchronously since the pattern is deterministic
-        const perm = TOOL_PERMISSIONS[_toolName];
-        const result: ToolCallResult = {
-          content: [{ type: 'text', text: `Insufficient permissions: requires ${perm.resource}/${perm.action}` }],
-          isError: true,
-        };
+  it('denied permission returns error and does not call service', async () => {
+    await fc.assert(
+      fc.asyncProperty(toolNameArb, async (toolName) => {
+        const deps = createMockDeps(false);
+        const { server, handlers } = createCapturingServer();
+        registerAllTools(server, deps as unknown as McpDependencies);
 
+        const handler = handlers.get(toolName);
+        expect(handler).toBeDefined();
+
+        const result = await handler!(TOOL_DEFAULT_ARGS[toolName] ?? {});
+
+        // hasPermission MUST have been called by the real handler
+        expect(deps.permissionService.hasPermission).toHaveBeenCalledWith(
+          'test-user-id',
+          TOOL_PERMISSIONS[toolName].resource,
+          TOOL_PERMISSIONS[toolName].action,
+        );
+
+        // Error response with permission message
         expect(result.isError).toBe(true);
         expect(result.content[0].text).toContain('Insufficient permissions');
-        expect(result.content[0].text).toContain(perm.resource);
-        expect(result.content[0].text).toContain(perm.action);
+
+        // Underlying service method must NOT have been called
+        const spy = getServiceSpy(toolName, deps);
+        if (spy) {
+          expect(spy).not.toHaveBeenCalled();
+        }
       }),
       { numRuns: 20 },
     );
@@ -136,17 +142,31 @@ describe('Property 4: Universal MCP tool permission enforcement', () => {
   it('for each tool × permission state, enforcement is consistent', async () => {
     await fc.assert(
       fc.asyncProperty(toolNameArb, permissionArb, async (toolName, granted) => {
-        const { result, serviceCalled } = await callTool(toolName, granted);
+        const deps = createMockDeps(granted);
+        const { server, handlers } = createCapturingServer();
+        registerAllTools(server, deps as unknown as McpDependencies);
+
+        const handler = handlers.get(toolName)!;
+        const result = await handler(TOOL_DEFAULT_ARGS[toolName] ?? {});
+
+        // hasPermission MUST always be called with the correct arguments
+        expect(deps.permissionService.hasPermission).toHaveBeenCalledWith(
+          'test-user-id',
+          TOOL_PERMISSIONS[toolName].resource,
+          TOOL_PERMISSIONS[toolName].action,
+        );
+
+        const spy = getServiceSpy(toolName, deps);
 
         if (!granted) {
           // Permission denied: error response, service not called
           expect(result.isError).toBe(true);
           expect(result.content[0].text).toContain('Insufficient permissions');
-          expect(serviceCalled).toBe(false);
+          if (spy) expect(spy).not.toHaveBeenCalled();
         } else {
-          // Permission granted: service called, data returned
+          // Permission granted: service called, no error
           expect(result.isError).toBeUndefined();
-          expect(serviceCalled).toBe(true);
+          if (spy) expect(spy).toHaveBeenCalled();
         }
       }),
       { numRuns: 20 },
