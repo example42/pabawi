@@ -51,7 +51,7 @@ function clearIntegrationEnv(): void {
     "DATABASE_PATH", "CORS_ALLOWED_ORIGINS", "COMMAND_WHITELIST",
     "STREAMING_", "CACHE_", "CONCURRENT_EXECUTION_LIMIT",
     "MAX_QUEUE_SIZE", "UI_SHOW_HOME_PAGE_RUN_CHART",
-    "ALLOW_DESTRUCTIVE_PROVISIONING",
+    "ALLOW_DESTRUCTIVE_PROVISIONING", "MCP_ENABLED",
   ];
   for (const key of Object.keys(process.env)) {
     if (prefixes.some((p) => key.startsWith(p))) {
@@ -897,6 +897,32 @@ describe("ConfigService", () => {
       expect(configService.get("port")).toBe(configService.getPort());
       expect(configService.get("host")).toBe(configService.getHost());
       expect(configService.get("logLevel")).toBe(configService.getLogLevel());
+    });
+  });
+
+  // ─── Unit Tests: MCP configuration ───────────────────────────────────────
+  describe("MCP Configuration", () => {
+    it("should return false for isMcpEnabled() by default", () => {
+      const configService = new ConfigService();
+      expect(configService.isMcpEnabled()).toBe(false);
+    });
+
+    it("should return true for isMcpEnabled() when MCP_ENABLED=true", () => {
+      process.env.MCP_ENABLED = "true"; // pragma: allowlist secret
+      const configService = new ConfigService();
+      expect(configService.isMcpEnabled()).toBe(true);
+    });
+
+    it("should return false for isMcpEnabled() when MCP_ENABLED is any non-true value", () => {
+      process.env.MCP_ENABLED = "false"; // pragma: allowlist secret
+      const configService = new ConfigService();
+      expect(configService.isMcpEnabled()).toBe(false);
+    });
+
+    it("should expose mcpEnabled via getConfig()", () => {
+      process.env.MCP_ENABLED = "true"; // pragma: allowlist secret
+      const configService = new ConfigService();
+      expect(configService.getConfig().mcpEnabled).toBe(true);
     });
   });
 });

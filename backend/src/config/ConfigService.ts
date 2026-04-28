@@ -647,6 +647,7 @@ export class ConfigService {
         integrations,
         provisioning,
         ui,
+        mcpEnabled: process.env.MCP_ENABLED === "true",
       };
 
       // Validate with Zod schema
@@ -765,6 +766,13 @@ export class ConfigService {
    */
   public isDestructiveProvisioningAllowed(): boolean {
     return this.config.provisioning.allowDestructiveActions;
+  }
+
+  /**
+   * Check whether the embedded MCP server is enabled
+   */
+  public isMcpEnabled(): boolean {
+    return this.config.mcpEnabled;
   }
 
   /**
