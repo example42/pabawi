@@ -6,6 +6,7 @@
   import { router } from '../lib/router.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import RoleDetailDialog from '../components/RoleDetailDialog.svelte';
+  import CreateRoleDialog from '../components/CreateRoleDialog.svelte';
 
   interface RoleDTO {
     id: string;
@@ -39,6 +40,7 @@
   let isLoading = $state(false);
   let searchQuery = $state('');
   let isRoleDialogOpen = $state(false);
+  let isCreateDialogOpen = $state(false);
   let selectedRoleId = $state<string | null>(null);
   let filteredRoles = $derived(
     searchQuery.trim() === ''
@@ -126,8 +128,7 @@
   }
 
   function handleCreateRole(): void {
-    // TODO: Open create role dialog (will be implemented in future task)
-    showError('Not implemented', 'Role creation dialog will be implemented in a future task');
+    isCreateDialogOpen = true;
   }
 
   function handleEditRole(roleId: string): void {
@@ -404,4 +405,11 @@
   roleId={selectedRoleId}
   onClose={handleRoleDialogClose}
   onSaved={handleRoleSaved}
+/>
+
+<!-- Create Role Dialog -->
+<CreateRoleDialog
+  bind:isOpen={isCreateDialogOpen}
+  onClose={() => { isCreateDialogOpen = false; }}
+  onCreated={() => { loadRoles(); }}
 />

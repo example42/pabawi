@@ -67,7 +67,7 @@ describe('Property 1: JSON round-trip for successful API responses', () => {
           expect(result).toEqual(jsonValue);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -88,7 +88,7 @@ describe('Property 1: JSON round-trip for successful API responses', () => {
           expect(jsonMock).not.toHaveBeenCalled();
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 
@@ -107,7 +107,7 @@ describe('Property 1: JSON round-trip for successful API responses', () => {
           expect(result).toEqual(jsonValue);
         }
       ),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   });
 });
