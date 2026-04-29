@@ -124,7 +124,7 @@ The endpoint accepts standard MCP Streamable HTTP requests at `POST /mcp`. No au
 | `facts_get` | Get system facts for a node | `certname` — node certname |
 | `reports_query` | Query Puppet run reports | `certname?`, `limit?`, `status?` |
 | `catalogs_get` | Get compiled Puppet catalog for a node | `certname` — node certname |
-| `hiera_lookup` | Look up a Hiera key value | `key`, `environment?` (default: production) |
+| `hiera_lookup` | Look up a Hiera key value for a node | `key`, `node?` (certname for hierarchy resolution), `environment?` (default: production) |
 | `executions_list` | List execution history | `limit?`, `status?`, `tool?` |
 | `integrations_list` | List integrations and health status | _(none)_ |
 | `journal_query` | Search journal entries | `nodeId?`, `eventType?`, `limit?` |
@@ -218,11 +218,12 @@ certname: "web-01.example.com"
 
 ### hiera_lookup
 
-Resolves a Hiera key for a given environment. Requires Hiera integration.
+Resolves a Hiera key for a node. When a `node` is provided, the service fetches the node's facts from PuppetDB and uses them to resolve hierarchy paths (e.g. `nodes/%{facts.networking.fqdn}.yaml`, `os/%{facts.os.family}.yaml`). Without a node, only static hierarchy levels like `common.yaml` are checked.
 
 ```
 key: "ntp::servers"
-environment: "staging"  →  defaults to "production" if omitted
+node: "web01.example.com"  →  resolve using this node's facts (optional)
+environment: "staging"      →  defaults to "production" if omitted
 ```
 
 ### executions_list

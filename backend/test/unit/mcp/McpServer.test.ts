@@ -256,6 +256,16 @@ describe('MCP Tool Handlers', () => {
       expect(deps.hieraPlugin!.resolveKey).toHaveBeenCalledWith('default', 'ntp::servers', 'staging');
     });
 
+    it('hiera_lookup resolves with node for hierarchy resolution', async () => {
+      await callTool('hiera_lookup', { key: 'ntp::servers', node: 'web01.example.com' });
+      expect(deps.hieraPlugin!.resolveKey).toHaveBeenCalledWith('web01.example.com', 'ntp::servers', 'production');
+    });
+
+    it('hiera_lookup uses node and environment together', async () => {
+      await callTool('hiera_lookup', { key: 'ntp::servers', node: 'web01.example.com', environment: 'staging' });
+      expect(deps.hieraPlugin!.resolveKey).toHaveBeenCalledWith('web01.example.com', 'ntp::servers', 'staging');
+    });
+
     it('executions_list returns executions', async () => {
       const r = await callTool('executions_list', {});
       expect(r.isError).toBeUndefined();
