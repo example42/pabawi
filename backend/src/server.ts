@@ -1389,33 +1389,73 @@ async function startServer(): Promise<Express> {
         const pkgJson = await import("../package.json");
         const version = (pkgJson as { version?: string }).version ?? "1.0.0";
 
-        const mcpServer = createMcpServer({
-          integrationManager,
-          executionRepository,
-          journalService,
-          permissionService,
-          hieraPlugin,
-          puppetDBService,
-          puppetRunHistoryService,
-          mcpUserId,
-          logger,
-          version,
-        });
-
         // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.
         // The backend uses moduleResolution: "node", so we use require() for runtime compat.
         // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
         const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
-        const transport = new StreamableHTTPServerTransport({ enableJsonResponse: true });
-        await mcpServer.connect(transport);
+        // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
+        const { randomUUID } = require("node:crypto");
+
+        // Session-based transport registry for Streamable HTTP protocol
+        const mcpSessions = new Map<string, unknown>();
+
+        // Dependencies captured for creating per-session MCP server instances
+        const mcpDeps = {
+          integrationManager, executionRepository, journalService,
+          permissionService, hieraPlugin, puppetDBService,
+          puppetRunHistoryService, mcpUserId, logger, version,
+        };
 
         app.post("/mcp", asyncHandler(async (req: Request, res: Response) => {
+          const sessionId = req.headers["mcp-session-id"] as string | undefined;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let transport: any;
+
+          if (sessionId && mcpSessions.has(sessionId)) {
+            transport = mcpSessions.get(sessionId);
+          } else if (!sessionId) {
+            // New session — create transport + server per session
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
+            transport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: (): string => randomUUID() as string,
+              onsessioninitialized: (id: string): void => {
+                mcpSessions.set(id, transport);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+                transport.onclose = (): void => { mcpSessions.delete(id); };
+              },
+            });
+            const sessionServer = createMcpServer(mcpDeps);
+            await sessionServer.connect(transport);
+          } else {
+            res.status(400).json({ error: "Invalid or missing session" });
+            return;
+          }
+
           // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           await transport.handleRequest(req, res, req.body);
         }));
 
-        logger.info("MCP server initialized, /mcp endpoint registered", {
+        app.get("/mcp", asyncHandler(async (req: Request, res: Response) => {
+          const sessionId = req.headers["mcp-session-id"] as string | undefined;
+          if (!sessionId || !mcpSessions.has(sessionId)) {
+            res.status(400).json({ error: "Invalid or missing session" });
+            return;
+          }
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const transport = mcpSessions.get(sessionId) as any;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+          await transport.handleRequest(req, res);
+        }));
+
+        app.delete("/mcp", (req: Request, res: Response) => {
+          const sessionId = req.headers["mcp-session-id"] as string | undefined;
+          if (sessionId) {
+            mcpSessions.delete(sessionId);
+          }
+          res.sendStatus(200);
+        });
+
+        logger.info("MCP server initialized, /mcp endpoint registered (session-based)", {
           component: "Server",
           operation: "initializeMcp",
         });
