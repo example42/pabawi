@@ -1,7 +1,7 @@
 {
   "name": "KiroGraph Sync on Delete",
   "version": "1.0.0",
-  "description": "Remove deleted files from the KiroGraph index.",
+  "description": "Remove deleted files from the KiroGraph index immediately.",
   "when": {
     "type": "fileDeleted",
     "patterns": [
@@ -15,11 +15,14 @@
       "**/*.java",
       "**/*.cs",
       "**/*.rb",
-      "**/*.php"
+      "**/*.php",
+      "**/*.swift",
+      "**/*.kt",
+      "**/*.dart"
     ]
   },
   "then": {
     "type": "runCommand",
-    "command": "kirograph sync --quiet 2>/dev/null || true"
+    "command": "kirograph sync-if-dirty 2>/dev/null || true"
   }
 }

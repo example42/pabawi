@@ -43,7 +43,22 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install --omit=dev --no-audit
 
-# Stage 3: Production image with Node.js and Bolt CLI
+# Stage 3: Install Bolt CLI gems in a builder stage
+FROM ubuntu:24.04 AS bolt-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ruby \
+    ruby-dev \
+    build-essential \
+    && gem install openbolt -v 5.1.0 --no-document \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Stage 4: Production image
 FROM ubuntu:24.04
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -61,34 +76,34 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Set shell to bash with pipefail option
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Install Node.js, Puppet, and Bolt from upstream packages
+# Install Node.js and runtime dependencies only
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     gnupg \
-    wget \
     && mkdir -p /etc/apt/keyrings \
     # Add NodeSource repository for Node.js 20
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
-    # Add Puppet repository
-    && curl -fsSL -o openvox8-release-ubuntu24.04.deb https://apt.voxpupuli.org/openvox8-release-ubuntu24.04.deb \
-    && dpkg -i openvox8-release-ubuntu24.04.deb \
-    && rm openvox8-release-ubuntu24.04.deb \
     && apt-get update && \
     apt-get install -y --no-install-recommends \
     nodejs \
-    openvox-agent \
+    ruby \
     bash \
     openssh-client \
     git \
     coreutils \
-    ruby \
-    && gem install openbolt -v 5.1.0 --no-document \
-    && ln -s /opt/puppetlabs/bin/bolt /usr/local/bin/bolt \
+    ansible \
+    # Remove packages only needed for repo setup
+    && apt-get purge -y --auto-remove gnupg curl \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Copy pre-built Bolt gems from builder stage
+COPY --from=bolt-builder /var/lib/gems /var/lib/gems
+COPY --from=bolt-builder /usr/local/bin/bolt /usr/local/bin/bolt
 
 # Create non-root user
 RUN groupadd -g 1001 pabawi && \

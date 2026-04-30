@@ -43,7 +43,18 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install --omit=dev --no-audit
 
-# Stage 3: Production image with Node.js and Bolt CLI
+# Stage 3: Install Bolt CLI gems in a builder stage
+FROM node:20-alpine3.21 AS bolt-builder
+
+# hadolint ignore=DL3018
+RUN apk add --no-cache \
+    ruby \
+    ruby-dev \
+    build-base \
+    linux-headers \
+    && gem install openbolt -v 5.1.0 --no-document
+
+# Stage 4: Production image
 FROM node:20-alpine3.21
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
@@ -55,19 +66,19 @@ LABEL org.opencontainers.image.version="1.2.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
-# Install Bolt CLI and dependencies
+# Install only runtime dependencies — no build tools in the final image
 # hadolint ignore=DL3018
 RUN apk add --no-cache \
     ruby \
-    ruby-dev \
-    build-base \
     bash \
     openssh-client \
     git \
-    coreutils \
-    linux-headers \
-    && gem install openbolt -v 5.1.0 --no-document \
-    && apk del build-base linux-headers
+    coreutils
+
+# Copy pre-built Bolt gems from builder stage (avoids build-base in final image)
+COPY --from=bolt-builder /usr/lib/ruby/gems /usr/lib/ruby/gems
+COPY --from=bolt-builder /usr/local/bundle /usr/local/bundle
+COPY --from=bolt-builder /usr/bin/bolt /usr/bin/bolt
 
 # Create non-root user
 RUN addgroup -g 1001 -S pabawi && \
@@ -96,21 +107,6 @@ RUN mkdir -p /opt/pabawi/data \
              /opt/pabawi/ssh \
     && chown -R pabawi:pabawi /opt/pabawi
 
-# Create facter configuration to help Puppet detect Alpine
-RUN mkdir -p /etc/puppetlabs/facter/facts.d && \
-    # Legacy facts (text format)
-    echo 'operatingsystem=Alpine' > /etc/puppetlabs/facter/facts.d/legacy.txt && \
-    echo 'osfamily=Linux' >> /etc/puppetlabs/facter/facts.d/legacy.txt && \
-    echo 'kernel=Linux' >> /etc/puppetlabs/facter/facts.d/legacy.txt && \
-    echo 'operatingsystemmajrelease=3' >> /etc/puppetlabs/facter/facts.d/legacy.txt && \
-    # Modern structured facts (JSON format)
-    echo '{"os":{"name":"Alpine","family":"Linux","release":{"major":"3","minor":"20","full":"3.20"}}}' > /etc/puppetlabs/facter/facts.d/os.json && \
-    # Facter configuration
-    mkdir -p /etc/puppetlabs/facter && \
-    echo 'facts : {' > /etc/puppetlabs/facter/facter.conf && \
-    echo '  blocklist : [],' >> /etc/puppetlabs/facter/facter.conf && \
-    echo '}' >> /etc/puppetlabs/facter/facter.conf
-
 # Copy entrypoint script (shared across all Dockerfiles)
 COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
@@ -133,10 +129,6 @@ ENV NODE_ENV=production \
     ANSIBLE_PROJECT_PATH=/opt/pabawi/ansible \
     SSH_CONFIG_PATH=/opt/pabawi/ssh/config \
     SSH_DEFAULT_KEY=/opt/pabawi/ssh/id_rsa \
-    FACTER_operatingsystem=Alpine \
-    FACTER_osfamily=Linux \
-    FACTER_kernel=Linux \
-    PUPPET_SKIP_OS_CHECK=true \
     # Integration settings (disabled by default)
     PUPPETDB_ENABLED=false \
     PUPPETSERVER_ENABLED=false \

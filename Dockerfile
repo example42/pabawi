@@ -43,8 +43,22 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install --omit=dev --no-audit
 
-# Stage 3: Production image with Node.js and Bolt CLI
-FROM ubuntu:24.04
+# Stage 3: Install Bolt CLI gems in a builder stage
+FROM node:20-bookworm-slim AS bolt-builder
+
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ruby \
+    ruby-dev \
+    build-essential \
+    && gem install openbolt -v 5.1.0 --no-document \
+    && apt-get purge -y --auto-remove build-essential ruby-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Stage 4: Production image
+FROM node:20-bookworm-slim
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -55,41 +69,23 @@ LABEL org.opencontainers.image.version="1.2.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 
-# Prevent interactive prompts during package installation
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Set shell to bash with pipefail option
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-# Install Node.js, Puppet, and Bolt from upstream packages
+# Install only runtime dependencies
+# hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    gnupg \
-    && mkdir -p /etc/apt/keyrings \
-    # Add NodeSource repository for Node.js 20
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
-    # Add Puppet repository
-    && curl -fsSL -o openvox8-release-ubuntu24.04.deb https://apt.voxpupuli.org/openvox8-release-ubuntu24.04.deb \
-    && dpkg -i openvox8-release-ubuntu24.04.deb \
-    && rm openvox8-release-ubuntu24.04.deb \
-    && apt-get update && \
-    apt-get install -y --no-install-recommends \
-    nodejs \
-    openvox-agent \
+    ruby \
     bash \
     openssh-client \
     git \
     coreutils \
-    ruby \
-    ruby-dev \
-    build-essential \
     ansible \
-    openbolt \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Copy pre-built Bolt gems from builder stage
+COPY --from=bolt-builder /usr/local/lib/ruby /usr/local/lib/ruby
+COPY --from=bolt-builder /var/lib/gems /var/lib/gems
+COPY --from=bolt-builder /usr/local/bin/bolt /usr/local/bin/bolt
 
 # Create non-root user
 RUN groupadd -g 1001 pabawi && \
@@ -100,7 +96,6 @@ WORKDIR /app
 
 # Copy built backend
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/dist ./dist
-
 COPY --from=backend-deps --chown=pabawi:pabawi /app/backend/node_modules ./node_modules
 COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
 
@@ -120,7 +115,6 @@ RUN mkdir -p /opt/pabawi/data \
              /opt/pabawi/ssh \
     && chown -R pabawi:pabawi /opt/pabawi
 
-# Create entrypoint script to handle permissions
 # Copy entrypoint script
 COPY scripts/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh

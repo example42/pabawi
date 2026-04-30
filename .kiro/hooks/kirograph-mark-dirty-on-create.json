@@ -1,7 +1,7 @@
 {
-  "name": "KiroGraph Sync on Create",
+  "name": "KiroGraph Mark Dirty on Create",
   "version": "1.0.0",
-  "description": "Index newly created source files.",
+  "description": "Mark the KiroGraph index as dirty when source files are created.",
   "when": {
     "type": "fileCreated",
     "patterns": [
@@ -15,11 +15,14 @@
       "**/*.java",
       "**/*.cs",
       "**/*.rb",
-      "**/*.php"
+      "**/*.php",
+      "**/*.swift",
+      "**/*.kt",
+      "**/*.dart"
     ]
   },
   "then": {
     "type": "runCommand",
-    "command": "kirograph sync --quiet 2>/dev/null || true"
+    "command": "kirograph mark-dirty 2>/dev/null || true"
   }
 }

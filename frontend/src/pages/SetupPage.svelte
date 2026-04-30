@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { router } from '../lib/router.svelte';
   import { showError, showSuccess } from '../lib/toast.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import { post } from '../lib/api';
@@ -125,9 +124,9 @@
 
       showSuccess('Setup complete', 'Your administrator account has been created. You can now log in.');
 
-      // Use setTimeout to ensure the success message is shown before navigation
+      // Full page reload so App.svelte re-checks setup status from the API
       setTimeout(() => {
-        router.navigate('/');
+        window.location.href = '/';
       }, 100);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Setup failed';

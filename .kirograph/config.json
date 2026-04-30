@@ -1,6 +1,7 @@
 {
   "version": 1,
   "languages": [],
+  "include": [],
   "exclude": [
     "node_modules/**",
     "dist/**",
@@ -11,5 +12,20 @@
   ],
   "maxFileSize": 1048576,
   "extractDocstrings": true,
-  "trackCallSites": true
+  "trackCallSites": true,
+  "enableEmbeddings": true,
+  "embeddingModel": "nomic-ai/nomic-embed-text-v1.5",
+  "embeddingDim": 768,
+  "useVecIndex": false,
+  "semanticEngine": "pglite",
+  "typesenseDashboard": false,
+  "qdrantDashboard": false,
+  "minLogLevel": "warn",
+  "frameworkHints": [
+    "express",
+    "svelte"
+  ],
+  "fuzzyResolutionThreshold": 0.5,
+  "enableArchitecture": true,
+  "cavemanMode": "lite"
 }
