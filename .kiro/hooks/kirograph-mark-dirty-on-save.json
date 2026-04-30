@@ -1,7 +1,7 @@
 {
-  "name": "KiroGraph Sync on Save",
+  "name": "KiroGraph Mark Dirty on Save",
   "version": "1.0.0",
-  "description": "Incrementally sync the KiroGraph index when source files are saved.",
+  "description": "Mark the KiroGraph index as dirty when source files are saved. Sync is deferred to agent idle.",
   "when": {
     "type": "fileEdited",
     "patterns": [
@@ -15,11 +15,14 @@
       "**/*.java",
       "**/*.cs",
       "**/*.rb",
-      "**/*.php"
+      "**/*.php",
+      "**/*.swift",
+      "**/*.kt",
+      "**/*.dart"
     ]
   },
   "then": {
     "type": "runCommand",
-    "command": "kirograph sync --quiet 2>/dev/null || true"
+    "command": "kirograph mark-dirty 2>/dev/null || true"
   }
 }
