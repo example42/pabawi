@@ -4,7 +4,7 @@
 
 This design covers three related workstreams:
 
-1. **RBAC gap fixes** — Migration 012 adds missing permissions for Azure, Hiera, and SSH integrations, and backfills role-permission assignments for Viewer, Operator, Administrator, and Provisioner roles.
+1. **RBAC gap fixes** — Migration 013 adds missing permissions for Azure, Hiera, and SSH integrations, and backfills role-permission assignments for Viewer, Operator, Administrator, and Provisioner roles.
 2. **Frontend bug fixes** — Fix the `fetchWithRetry` function to handle HTTP 204 No Content responses without JSON parse errors, implement the stub `CreateRoleDialog` component, and update `permissions.ts` types to include the new resources.
 3. **Embedded MCP server** — An MCP server running inside the Express backend process, exposing read-only infrastructure tools over Streamable HTTP transport, gated by the existing RBAC permission system via a dedicated `mcp-service` user.
 
@@ -68,7 +68,7 @@ sequenceDiagram
 
 ## Components and Interfaces
 
-### 1. Migration 012 (`backend/src/database/migrations/012_azure_hiera_ssh_permissions.sql`)
+### 1. Migration 013 (`backend/src/database/migrations/013_azure_hiera_ssh_permissions.sql`)
 
 A SQL migration that:
 
@@ -329,7 +329,7 @@ All tools follow this same permission-check-then-execute pattern. All tools are 
 
 ## Data Models
 
-### New Permissions (Migration 012)
+### New Permissions (Migration 013)
 
 | ID | Resource | Action | Description |
 |---|---|---|---|
@@ -344,7 +344,7 @@ All tools follow this same permission-check-then-execute pattern. All tools are 
 | `ssh-execute-001` | `ssh` | `execute` | Execute SSH commands |
 | `ssh-admin-001` | `ssh` | `admin` | Full SSH management |
 
-### Role-Permission Assignments (Migration 012)
+### Role-Permission Assignments (Migration 013)
 
 **Viewer** (`role-viewer-001`): `proxmox-read-001`, `aws-read-001`, `journal-read-001`, `integration_config-read-001`, `azure-read-001`, `hiera-read-001`, `ssh-read-001`
 
@@ -401,7 +401,7 @@ All tools follow this same permission-check-then-execute pattern. All tools are 
 
 ## Error Handling
 
-### Migration 012
+### Migration 013
 
 - Uses `INSERT OR IGNORE` (SQLite) / `ON CONFLICT DO NOTHING` (Postgres) — silently skips if rows already exist. No runtime errors expected.
 
@@ -435,7 +435,7 @@ All tools follow this same permission-check-then-execute pattern. All tools are 
 
 ### Unit Tests
 
-**Migration 012:**
+**Migration 013:**
 
 - Run migration against in-memory SQLite, verify all permissions and role-permission assignments exist
 - Run migration twice to verify idempotency
