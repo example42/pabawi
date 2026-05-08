@@ -6,8 +6,8 @@ Three workstreams implemented in dependency order: (1) database migration for mi
 
 ## Tasks
 
-- [x] 1. Create migration 012 for Azure, Hiera, and SSH permissions
-  - [x] 1.1 Create `backend/src/database/migrations/012_azure_hiera_ssh_permissions.sql`
+- [x] 1. Create migration 013 for Azure, Hiera, and SSH permissions
+  - [x] 1.1 Create `backend/src/database/migrations/013_azure_hiera_ssh_permissions.sql`
     - Add Azure permissions: `azure-read-001`, `azure-lifecycle-001`, `azure-provision-001`, `azure-destroy-001`, `azure-admin-001`
     - Add Hiera permissions: `hiera-read-001`, `hiera-admin-001`
     - Add SSH permissions: `ssh-read-001`, `ssh-execute-001`, `ssh-admin-001`
@@ -18,7 +18,7 @@ Three workstreams implemented in dependency order: (1) database migration for mi
     - Assign Azure provisioning + Hiera read to Provisioner role
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4, 4.1, 4.2, 4.3, 5.1, 5.2_
 
-  - [x] 1.2 Write unit test for migration 012 idempotency
+  - [x] 1.2 Write unit test for migration 013 idempotency
     - Run migration against in-memory SQLite, verify all permissions and role-permission assignments exist
     - Run migration twice to verify idempotency (no errors on second run)
     - _Requirements: 1.4, 2.3_
@@ -162,5 +162,5 @@ Three workstreams implemented in dependency order: (1) database migration for mi
 - Tasks marked with `*` are optional and can be skipped for faster MVP
 - Each task references specific requirement acceptance criteria for traceability
 - Property tests use `fast-check` and run minimum 100 iterations each
-- Migration 012 must run before frontend permission types are meaningful in the UI
+- Migration 013 must run before frontend permission types are meaningful in the UI
 - The MCP server depends on the migration (for permission IDs) and ConfigService update (for `MCP_ENABLED`)

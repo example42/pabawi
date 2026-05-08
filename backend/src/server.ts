@@ -1385,19 +1385,41 @@ async function startServer(): Promise<Express> {
           userService, roleService, permissionService, logger,
         );
 
-        // Read version from package.json
-        const pkgJson = await import("../package.json");
-        const version = (pkgJson as { version?: string }).version ?? "1.0.0";
+        // Read version from package.json using require() for CJS compatibility
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const pkgJson = require("../package.json") as { version?: string };
+        const version = pkgJson.version ?? "1.0.0";
 
         // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.
         // The backend uses moduleResolution: "node", so we use require() for runtime compat.
         // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
         const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
-        // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-        const { randomUUID } = require("node:crypto");
+        // Cast the require result to type the randomUUID function for safe calling
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { randomUUID } = require("node:crypto") as { randomUUID: () => string };
 
-        // Session-based transport registry for Streamable HTTP protocol
-        const mcpSessions = new Map<string, unknown>();
+        // Session-based transport registry for Streamable HTTP protocol.
+        // Limited to MCP_MAX_SESSIONS active sessions; stale sessions are evicted
+        // after MCP_SESSION_TTL_MS to prevent unbounded memory growth.
+        const MCP_MAX_SESSIONS = 100;
+        const MCP_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+        interface McpSessionEntry {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          transport: any;
+          createdAt: number;
+        }
+
+        const mcpSessions = new Map<string, McpSessionEntry>();
+
+        function evictExpiredMcpSessions(): void {
+          const now = Date.now();
+          for (const [id, session] of mcpSessions) {
+            if (now - session.createdAt > MCP_SESSION_TTL_MS) {
+              mcpSessions.delete(id);
+            }
+          }
+        }
 
         // Dependencies captured for creating per-session MCP server instances
         const mcpDeps = {
@@ -1412,14 +1434,22 @@ async function startServer(): Promise<Express> {
           let transport: any;
 
           if (sessionId && mcpSessions.has(sessionId)) {
-            transport = mcpSessions.get(sessionId);
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+            transport = mcpSessions.get(sessionId)?.transport;
           } else if (!sessionId) {
+            // Evict stale sessions and enforce session limit before creating a new one
+            evictExpiredMcpSessions();
+            if (mcpSessions.size >= MCP_MAX_SESSIONS) {
+              res.status(503).json({ error: "Maximum MCP session limit reached" });
+              return;
+            }
             // New session — create transport + server per session
             // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
             transport = new StreamableHTTPServerTransport({
-              sessionIdGenerator: (): string => randomUUID() as string,
+              sessionIdGenerator: (): string => randomUUID(),
               onsessioninitialized: (id: string): void => {
-                mcpSessions.set(id, transport);
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                mcpSessions.set(id, { transport, createdAt: Date.now() });
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
                 transport.onclose = (): void => { mcpSessions.delete(id); };
               },
@@ -1437,12 +1467,13 @@ async function startServer(): Promise<Express> {
 
         app.get("/mcp", asyncHandler(async (req: Request, res: Response) => {
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
-          if (!sessionId || !mcpSessions.has(sessionId)) {
+          const session = sessionId ? mcpSessions.get(sessionId) : undefined;
+          if (!session) {
             res.status(400).json({ error: "Invalid or missing session" });
             return;
           }
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const transport = mcpSessions.get(sessionId) as any;
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          const transport = session.transport;
           // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           await transport.handleRequest(req, res);
         }));
@@ -1450,7 +1481,12 @@ async function startServer(): Promise<Express> {
         app.delete("/mcp", (req: Request, res: Response) => {
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
           if (sessionId) {
+            const session = mcpSessions.get(sessionId);
             mcpSessions.delete(sessionId);
+            if (session) {
+              // Explicitly close the transport to release any held resources
+              (session.transport as { close?: () => void }).close?.();
+            }
           }
           res.sendStatus(200);
         });

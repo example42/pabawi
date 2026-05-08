@@ -30,10 +30,10 @@ This spec covers three related areas that strengthen Pabawi's access control and
 
 #### Acceptance Criteria
 
-1. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL create Azure permissions: `azure-read`, `azure-lifecycle`, `azure-provision`, `azure-destroy`, and `azure-admin` with appropriate descriptions.
-2. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL create Hiera permissions: `hiera-read` and `hiera-admin` with appropriate descriptions.
-3. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL create SSH permissions: `ssh-read`, `ssh-execute`, and `ssh-admin` with appropriate descriptions.
-4. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL use `INSERT OR IGNORE` (SQLite) or `ON CONFLICT DO NOTHING` (Postgres) to ensure idempotent execution if permissions already exist.
+1. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL create Azure permissions: `azure-read`, `azure-lifecycle`, `azure-provision`, `azure-destroy`, and `azure-admin` with appropriate descriptions.
+2. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL create Hiera permissions: `hiera-read` and `hiera-admin` with appropriate descriptions.
+3. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL create SSH permissions: `ssh-read`, `ssh-execute`, and `ssh-admin` with appropriate descriptions.
+4. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL use `INSERT OR IGNORE` (SQLite) or `ON CONFLICT DO NOTHING` (Postgres) to ensure idempotent execution if permissions already exist.
 
 ### Requirement 2: Fix Viewer Role Default Permissions
 
@@ -41,9 +41,9 @@ This spec covers three related areas that strengthen Pabawi's access control and
 
 #### Acceptance Criteria
 
-1. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign `proxmox-read-001`, `aws-read-001`, `journal-read-001`, and `integration_config-read-001` to role `role-viewer-001`.
-2. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign the new `azure-read`, `hiera-read`, and `ssh-read` permissions to role `role-viewer-001`.
-3. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL use conflict-safe INSERT to avoid errors if assignments already exist.
+1. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign `proxmox-read-001`, `aws-read-001`, `journal-read-001`, and `integration_config-read-001` to role `role-viewer-001`.
+2. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign the new `azure-read`, `hiera-read`, and `ssh-read` permissions to role `role-viewer-001`.
+3. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL use conflict-safe INSERT to avoid errors if assignments already exist.
 
 ### Requirement 3: Fix Operator Role Default Permissions
 
@@ -51,10 +51,10 @@ This spec covers three related areas that strengthen Pabawi's access control and
 
 #### Acceptance Criteria
 
-1. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign `proxmox-read-001`, `aws-read-001`, `journal-read-001`, and `integration_config-read-001` to role `role-operator-001`.
-2. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign the new `azure-read`, `hiera-read`, `ssh-read`, and `ssh-execute` permissions to role `role-operator-001`.
-3. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign `proxmox-lifecycle-001` and `aws-lifecycle-001` to role `role-operator-001` for lifecycle operations.
-4. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign `azure-lifecycle` to role `role-operator-001`.
+1. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign `proxmox-read-001`, `aws-read-001`, `journal-read-001`, and `integration_config-read-001` to role `role-operator-001`.
+2. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign the new `azure-read`, `hiera-read`, `ssh-read`, and `ssh-execute` permissions to role `role-operator-001`.
+3. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign `proxmox-lifecycle-001` and `aws-lifecycle-001` to role `role-operator-001` for lifecycle operations.
+4. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign `azure-lifecycle` to role `role-operator-001`.
 
 ### Requirement 4: Complete Administrator Role Permissions
 
@@ -62,9 +62,9 @@ This spec covers three related areas that strengthen Pabawi's access control and
 
 #### Acceptance Criteria
 
-1. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign all new Azure permissions (`azure-read`, `azure-lifecycle`, `azure-provision`, `azure-destroy`, `azure-admin`) to role `role-admin-001`.
-2. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign all new Hiera permissions (`hiera-read`, `hiera-admin`) to role `role-admin-001`.
-3. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign all new SSH permissions (`ssh-read`, `ssh-execute`, `ssh-admin`) to role `role-admin-001`.
+1. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign all new Azure permissions (`azure-read`, `azure-lifecycle`, `azure-provision`, `azure-destroy`, `azure-admin`) to role `role-admin-001`.
+2. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign all new Hiera permissions (`hiera-read`, `hiera-admin`) to role `role-admin-001`.
+3. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign all new SSH permissions (`ssh-read`, `ssh-execute`, `ssh-admin`) to role `role-admin-001`.
 
 ### Requirement 5: Update Provisioner Role Permissions
 
@@ -72,8 +72,8 @@ This spec covers three related areas that strengthen Pabawi's access control and
 
 #### Acceptance Criteria
 
-1. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign `azure-read`, `azure-lifecycle`, `azure-provision`, and `azure-destroy` to role `role-provisioner-001`.
-2. WHEN the Migration_Runner executes migration 012, THE RBAC_System SHALL assign `hiera-read` to role `role-provisioner-001`.
+1. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign `azure-read`, `azure-lifecycle`, `azure-provision`, and `azure-destroy` to role `role-provisioner-001`.
+2. WHEN the Migration_Runner executes migration 013, THE RBAC_System SHALL assign `hiera-read` to role `role-provisioner-001`.
 
 ### Requirement 6: Fix API Client 204 No Content Handling
 
