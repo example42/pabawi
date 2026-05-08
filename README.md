@@ -19,11 +19,7 @@
 
 ## Sponsors
 
-<a href="https://www.ams-ix.net/">
-  <img src="docs/images/ams-ix-logo.png" alt="AMS-IX" width="200">
-</a>
-
-Pabawi's main sponsor is [AMS-IX](https://www.ams-ix.net/) — the Amsterdam Internet Exchange, one of the largest Internet Exchanges in the world.
+Pabawi's main sponsor is [AMS-IX](https://www.ams-ix.net/) — the Amsterdam Internet Exchange, one of the largest Internet Exchanges in the world. &nbsp;&nbsp; <a href="https://www.ams-ix.net/"><img src="docs/images/ams-ix-logo.png" alt="AMS-IX" width="160" align="middle"></a>
 
 ## Who is this for?
 
