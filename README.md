@@ -17,6 +17,14 @@
 [![Docker Image](https://img.shields.io/docker/v/example42/pabawi?label=docker&color=2496ed)](https://hub.docker.com/r/example42/pabawi)
 [![GitHub Stars](https://img.shields.io/github/stars/example42/pabawi?style=social)](https://github.com/example42/pabawi/stargazers)
 
+## Sponsors
+
+<a href="https://www.ams-ix.net/">
+  <img src="docs/images/ams-ix-logo.png" alt="AMS-IX" width="200">
+</a>
+
+Pabawi's main sponsor is [AMS-IX](https://www.ams-ix.net/) — the Amsterdam Internet Exchange, one of the largest Internet Exchanges in the world.
+
 ## Who is this for?
 
 - **Sysadmins and DevOps teams** using Puppet, Bolt, Ansible, or SSH to manage physical servers and VMs
@@ -28,6 +36,7 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
 
 ## Table of Contents
 
+- [Sponsors](#sponsors)
 - [Features](#features)
 - [Screenshots](#screenshots)
 - [Prerequisites](#prerequisites)
