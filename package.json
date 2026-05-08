@@ -43,9 +43,24 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@lavamoat/allow-scripts": "^2.5.1",
     "@playwright/test": "^1.56.1",
     "eslint": "^9.39.1",
     "markdownlint-cli2": "^0.22.0",
     "typescript-eslint": "^8.18.2"
+  },
+  "dependencies": {
+    "@lavamoat/preinstall-always-fail": "^1.0.3"
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "@lavamoat/preinstall-always-fail": false,
+      "bcrypt": true,
+      "cpu-features": true,
+      "esbuild": true,
+      "fsevents": true,
+      "sqlite3": true,
+      "ssh2": true
+    }
   }
 }
