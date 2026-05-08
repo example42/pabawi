@@ -43,17 +43,19 @@ WORKDIR /app/backend
 COPY backend/package*.json ./
 RUN npm install --omit=dev --no-audit
 
-# Stage 3: Install Bolt CLI gems in a builder stage
+# Stage 3: Install OpenBolt from OpenVox upstream packages
 FROM node:20-bookworm-slim AS bolt-builder
 
 # hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    ruby \
-    ruby-dev \
-    build-essential \
-    && gem install openbolt -v 5.1.0 --no-document \
-    && apt-get purge -y --auto-remove build-essential ruby-dev \
+    ca-certificates \
+    curl \
+    && curl -sO https://apt.voxpupuli.org/openvox8-release-debian12.deb \
+    && dpkg -i openvox8-release-debian12.deb \
+    && rm openvox8-release-debian12.deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends openbolt \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -73,7 +75,6 @@ LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 # hadolint ignore=DL3008
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    ruby \
     bash \
     openssh-client \
     git \
@@ -82,10 +83,9 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Copy pre-built Bolt gems from builder stage
-COPY --from=bolt-builder /usr/local/lib/ruby /usr/local/lib/ruby
-COPY --from=bolt-builder /var/lib/gems /var/lib/gems
-COPY --from=bolt-builder /usr/local/bin/bolt /usr/local/bin/bolt
+# Copy Bolt installation from upstream package builder stage
+COPY --from=bolt-builder /opt/puppetlabs /opt/puppetlabs
+RUN ln -s /opt/puppetlabs/bolt/bin/bolt /usr/local/bin/bolt
 
 # Create non-root user
 RUN groupadd -g 1001 pabawi && \
