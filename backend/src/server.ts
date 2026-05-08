@@ -1417,6 +1417,7 @@ async function startServer(): Promise<Express> {
           for (const [id, session] of mcpSessions) {
             if (now - session.createdAt > MCP_SESSION_TTL_MS) {
               mcpSessions.delete(id);
+              (session.transport as { close?: () => void }).close?.();
             }
           }
         }
