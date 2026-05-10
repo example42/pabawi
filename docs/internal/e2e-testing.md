@@ -53,6 +53,7 @@ Playwright and its dependencies are installed as part of the project setup:
 
 ```bash
 npm install
+npm rebuild --ignore-scripts=false
 ```
 
 To install Playwright browsers:
@@ -241,8 +242,9 @@ test.describe('My Feature', () => {
 To run E2E tests in CI/CD pipelines:
 
 ```bash
-# Install Playwright and browsers
+# Install and rebuild native modules
 npm install
+npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false
 npx playwright install --with-deps chromium
 
 # Run tests
@@ -253,7 +255,9 @@ CI=true npm run test:e2e
 
 ```yaml
 - name: Install dependencies
-  run: npm install
+  run: |
+    npm install
+    npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false
 
 - name: Install Playwright browsers
   run: npx playwright install --with-deps chromium

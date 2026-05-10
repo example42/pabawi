@@ -181,7 +181,6 @@ Azure integration for Pabawi, providing VM provisioning, lifecycle management, i
 3. WHEN the Azure SDK returns a resource-not-found error, THE Azure_Service SHALL throw an Error with a message identifying the missing resource
 4. THE Azure_Plugin SHALL log all errors using LoggerService with structured metadata including component "AzurePlugin" or "AzureService", operation name, and relevant context (resourceGroup, vmName, subscriptionId)
 
-
 ### Requirement 14: Setup Instructions and Documentation
 
 **User Story:** As a Pabawi administrator, I want comprehensive setup instructions for the Azure integration, so that I can configure Azure credentials, subscription, and resource groups through environment variables following the same documentation patterns as other integrations.

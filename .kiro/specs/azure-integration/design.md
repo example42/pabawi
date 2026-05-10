@@ -491,6 +491,7 @@ azure:{groupType}:{groupValue}
 ```
 
 Examples:
+
 - `azure:location:eastus`
 - `azure:resourceGroup:my-rg`
 - `azure:tag:Environment:production`
@@ -625,8 +626,6 @@ sequenceDiagram
     R->>IM: clearInventoryCache()
     R-->>UI: { result: ExecutionResult }
 ```
-
-
 
 ## Correctness Properties
 

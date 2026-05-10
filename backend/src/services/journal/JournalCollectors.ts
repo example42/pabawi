@@ -151,19 +151,35 @@ export async function collectExecutionEntries(
   db: DatabaseAdapter,
   nodeId: string | string[],
   limit = 50,
+  filters?: {
+    startDate?: string;
+    endDate?: string;
+  },
 ): Promise<JournalEntry[]> {
   const ids = Array.isArray(nodeId) ? nodeId : [nodeId];
   const primaryId = ids[0];
 
   // Use LIKE filter on target_nodes JSON array — OR across all IDs
   const likeConditions = ids.map(() => "target_nodes LIKE ?").join(" OR ");
+  const conditions: string[] = [`(${likeConditions})`];
+  const likeParams: unknown[] = ids.map((id) => `%"${id}"%`);
+
+  if (filters?.startDate) {
+    conditions.push("started_at >= ?");
+    likeParams.push(filters.startDate);
+  }
+  if (filters?.endDate) {
+    conditions.push("started_at <= ?");
+    likeParams.push(filters.endDate);
+  }
+
   const sql = `
     SELECT * FROM executions
-    WHERE (${likeConditions})
+    WHERE ${conditions.join(" AND ")}
     ORDER BY started_at DESC
     LIMIT ?
   `;
-  const likeParams = ids.map((id) => `%"${id}"%`);
+  likeParams.push(limit);
   const rows = await db.query<{
     id: string;
     type: string;
@@ -184,7 +200,7 @@ export async function collectExecutionEntries(
     execution_tool: string | null;
     batch_id: string | null;
     batch_position: number | null;
-  }>(sql, [...likeParams, limit]);
+  }>(sql, likeParams);
 
   const idSet = new Set(ids);
 

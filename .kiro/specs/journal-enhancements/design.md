@@ -84,6 +84,7 @@ async function collectProxmoxTaskEntries(
 ```
 
 Task type mapping:
+
 | Proxmox type | JournalEventType |
 |---|---|
 | `qmstart`, `vzstart` | `start` |
@@ -119,6 +120,7 @@ async function collectAWSStateEntry(
 ```
 
 EC2 state mapping:
+
 | EC2 state | JournalEventType |
 |---|---|
 | `running` | `start` |
@@ -195,12 +197,14 @@ interface JournalTimelineProps {
 ```
 
 Key behavioral differences by mode:
+
 - `"node"`: connects to `/api/journal/{nodeId}/stream`, shows "Add a Note" form
 - `"global"`: connects to `/api/journal/global/stream` with filter query params, hides note form, shows node identifier on each entry
 
 ### Frontend: GlobalJournalPage
 
 New page component at `/journal` route:
+
 - Filter bar: node/group selector, date range picker, event type dropdown, source dropdown
 - Renders `<JournalTimeline mode="global" ...filters />` below the filter bar
 - Requires authentication
@@ -214,6 +218,7 @@ The existing entry display in JournalTimeline is refactored to a single-line com
 ```
 
 Components on the compact line:
+
 1. Color-coded status dot (green/red/yellow/blue/gray)
 2. Timestamp
 3. Source icon (emoji from existing `sourceConfig`)
@@ -263,7 +268,6 @@ const GlobalStreamQuerySchema = z.object({
 
 No database schema changes are required. The existing `journal_entries` table supports all new data through the flexible `details` JSON column and existing columns.
 
-
 ## Correctness Properties
 
 *A property is a characteristic or behavior that should hold true across all valid executions of a system — essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
@@ -271,6 +275,7 @@ No database schema changes are required. The existing `journal_entries` table su
 ### Property 1: Proxmox task record transformation preserves required fields
 
 *For any* valid Proxmox task record (with any task type, status, UPID, node, and starttime), converting it via `collectProxmoxTaskEntries` SHALL produce a JournalEntry where:
+
 - `eventType` matches the defined task type mapping (e.g., qmstart→start, vzstop→stop, vzdump→info)
 - `source` equals `"proxmox"`
 - `timestamp` is derived from the task's `starttime` epoch field
@@ -287,6 +292,7 @@ No database schema changes are required. The existing `journal_entries` table su
 ### Property 3: AWS state change transformation preserves required fields
 
 *For any* EC2 instance state change (where current state differs from previous state), converting it via `collectAWSStateEntry` SHALL produce a JournalEntry where:
+
 - `eventType` matches the defined EC2 state mapping (running→start, stopped→stop, terminated→destroy, pending→provision)
 - `source` equals `"aws"`
 - `details` contains the keys `instanceId`, `region`, `previousState`, `currentState`, and `stateTransitionReason`
@@ -302,6 +308,7 @@ No database schema changes are required. The existing `journal_entries` table su
 ### Property 5: Global timeline filter correctness
 
 *For any* combination of active filters (nodeIds, eventType, source, startDate, endDate) applied to `getGlobalTimeline`, every returned JournalEntry SHALL satisfy all active filter conditions simultaneously:
+
 - If `nodeIds` is set, `entry.nodeId` is in the nodeIds set
 - If `eventType` is set, `entry.eventType` equals the filter value
 - If `source` is set, `entry.source` equals the filter value

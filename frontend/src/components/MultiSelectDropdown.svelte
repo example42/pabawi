@@ -80,19 +80,23 @@
       {/if}
       <div class="max-h-48 overflow-y-auto py-1">
         {#each options as opt (opt.value)}
-          <label
+          <div
             class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 dark:hover:bg-gray-600"
             role="option"
             aria-selected={selected.includes(opt.value)}
+            onclick={() => toggle(opt.value)}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(opt.value); } }}
+            tabindex="0"
           >
             <input
               type="checkbox"
               checked={selected.includes(opt.value)}
               onchange={() => toggle(opt.value)}
+              tabindex="-1"
               class="h-3.5 w-3.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:border-gray-500"
             />
             <span class="text-gray-800 dark:text-gray-200">{opt.label}</span>
-          </label>
+          </div>
         {/each}
       </div>
     </div>

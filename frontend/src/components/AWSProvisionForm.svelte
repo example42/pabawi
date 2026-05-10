@@ -728,9 +728,9 @@
 
   <!-- Security Groups (depends on VPC, multi-select) -->
   <div>
-    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+    <span id="aws-security-groups-label" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
       Security Groups
-    </label>
+    </span>
     {#if !selectedVPC}
       <p class="text-sm text-gray-500 dark:text-gray-400">Select a VPC first to load security groups</p>
     {:else if loadingSecurityGroups}
@@ -738,7 +738,7 @@
     {:else if securityGroups.length === 0}
       <p class="text-sm text-gray-500 dark:text-gray-400">No security groups found for this VPC</p>
     {:else}
-      <div class="space-y-2 max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-700">
+      <div class="space-y-2 max-h-48 overflow-y-auto border border-gray-300 dark:border-gray-600 rounded-md p-3 bg-white dark:bg-gray-700" role="group" aria-labelledby="aws-security-groups-label">
         {#each securityGroups as sg}
           <label class="flex items-center gap-2 cursor-pointer">
             <input

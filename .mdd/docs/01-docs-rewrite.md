@@ -31,7 +31,7 @@ phase: all
 known_issues: []
 ---
 
-# 01 — Documentation Rewrite
+## 01 — Documentation Rewrite
 
 ## Purpose
 

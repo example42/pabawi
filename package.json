@@ -8,7 +8,7 @@
     "backend"
   ],
   "scripts": {
-    "install:all": "npm install && npm install --workspace=frontend && npm install --workspace=backend",
+    "install:all": "npm install && npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false && npm install --workspace=frontend && npm install --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:fullstack": "npm run build:frontend && npm run copy:frontend && npm run dev:backend",

@@ -41,7 +41,7 @@
     }
   },
 
-  "postCreateCommand": "npm install && cd backend && npm install && cd ../frontend && npm install",
+  "postCreateCommand": "npm install && npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false && cd backend && npm install && cd ../frontend && npm install",
 
   "remoteUser": "node",
 
