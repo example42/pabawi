@@ -58,7 +58,7 @@ inclusion: always
 ## Common Commands
 
 ```bash
-# Install all dependencies
+# Install all dependencies (runs npm rebuild for native modules)
 npm run install:all
 
 # Development

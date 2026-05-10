@@ -177,6 +177,7 @@ kirograph_architecture(includeFiles: true)  // add file→package assignments
 ### `kirograph_coupling` — stability metrics per package
 
 Returns Ca (afferent — depended on by), Ce (efferent — depends on), and instability (Ce/(Ca+Ce)).
+
 - High Ca + low instability = load-bearing, safe to depend on, risky to change interface.
 - High Ce + high instability = depends on many things, safe to refactor internals.
 
@@ -200,24 +201,28 @@ kirograph_package(package: "src/services", includeFiles: false)
 ## Workflows
 
 **Bug fix or feature:**
+
 1. `kirograph_context` — orient, find entry points.
 2. `kirograph_node` with `includeCode: true` — read the relevant symbol.
 3. `kirograph_callers` / `kirograph_callees` — trace the call flow.
 4. `kirograph_impact` — check blast radius before editing.
 
 **Refactor planning:**
+
 1. `kirograph_hotspots` — identify the most-connected symbols; changing these is risky.
 2. `kirograph_surprising` — surface hidden coupling that will break.
 3. `kirograph_impact` on specific targets — confirm blast radius.
 4. `kirograph_diff` after the refactor — verify the structural change matches intent.
 
 **Architectural review:**
+
 1. `kirograph_architecture` — get the package and layer map.
 2. `kirograph_coupling` — find the most stable (high Ca) and most volatile (high instability) packages.
 3. `kirograph_package` — drill into any package of interest.
 4. `kirograph_circular_deps` — check for import cycles.
 
 **Code cleanup:**
+
 1. `kirograph_dead_code` — find unreferenced unexported symbols.
 2. `kirograph_circular_deps` — find import cycles to untangle.
 3. `kirograph_surprising` — find unexpected coupling to decouple.

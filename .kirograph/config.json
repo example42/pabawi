@@ -1,14 +1,14 @@
 {
-  "version": 1,
+  "version": 2,
   "languages": [],
   "include": [],
   "exclude": [
-    "node_modules/**",
-    "dist/**",
-    "build/**",
-    ".git/**",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.git/**",
     "*.min.js",
-    ".kirograph/**"
+    "**/.kirograph/**"
   ],
   "maxFileSize": 1048576,
   "extractDocstrings": true,

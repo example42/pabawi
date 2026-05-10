@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — chore: supply-chain security, journal date filter, a11y</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: #1a1b26; color: #c0caf5; line-height: 1.6; padding: 2rem; max-width: 1000px; margin: 0 auto; }
+  h1 { color: #7aa2f7; margin-bottom: 0.5rem; font-size: 1.5rem; }
+  h2 { color: #bb9af7; margin: 2rem 0 0.75rem; font-size: 1.2rem; border-bottom: 1px solid #3b4261; padding-bottom: 0.4rem; }
+  h3 { color: #9ece6a; margin: 1.2rem 0 0.5rem; font-size: 1rem; }
+  code { background: #24283b; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.85rem; color: #73daca; }
+  pre { background: #24283b; padding: 1rem; border-radius: 6px; overflow-x: auto; margin: 0.5rem 0; }
+  pre code { padding: 0; background: none; }
+  a { color: #7dcfff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ul, ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+  li { margin: 0.3rem 0; }
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border: 1px solid #3b4261; }
+  th { background: #24283b; color: #7aa2f7; }
+  tr:nth-child(even) { background: #1f2335; }
+  .badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: bold; }
+  .badge-m { background: #e0af68; color: #1a1b26; }
+  .badge-a { background: #9ece6a; color: #1a1b26; }
+  .badge-d { background: #f7768e; color: #1a1b26; }
+  .stat { display: inline-block; margin-right: 1.5rem; }
+  .stat-value { color: #7aa2f7; font-weight: bold; font-size: 1.1rem; }
+  .section { background: #1f2335; border: 1px solid #3b4261; border-radius: 8px; padding: 1.25rem; margin: 1rem 0; }
+  .tag { display: inline-block; background: #3b4261; color: #a9b1d6; padding: 0.1rem 0.5rem; border-radius: 3px; font-size: 0.75rem; margin-right: 0.4rem; }
+</style>
+</head>
+<body>
+
+<h1>📋 Commit Report</h1>
+<p style="color:#565f89; margin-bottom:1.5rem;">Generated: 2026-05-10 12:00 — Branch: <code>120</code></p>
+
+<h2>Commit Message</h2>
+<div class="section">
+<pre><code>chore: supply-chain security, journal date filter, a11y
+
+- Add .npmrc with ignore-scripts=true for supply-chain security
+- Update install:all to rebuild native modules (bcrypt, sqlite3, ssh2)
+- Add npm rebuild step to CI workflow and devcontainer
+- Add date range filtering to journal timeline (PuppetDB, Proxmox, executions)
+- Fix accessibility: proper ARIA roles, button elements, tabindex in
+  AWSProvisionForm, GroupActionModal, ManageTab, MultiSelectDropdown
+- Update docs and steering to reflect install:all changes
+- Update .kirograph/config.json glob patterns to use ** prefix
+- Update pre-commit hook to v2 with HTML report generation</code></pre>
+</div>
+
+<h2>Files Changed</h2>
+<table>
+<tr><th>Status</th><th>File</th><th>+/-</th></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>.devcontainer/devcontainer.json</code></td><td>+1 / -1</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>.github/copilot-instructions.md</code></td><td>+1 / -1</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>.github/workflows/ci.yml</code></td><td>+3 / -0</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>.kiro/hooks/pre-commit-and-commit.kiro.hook</code></td><td>+3 / -3</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>.kiro/steering/tech.md</code></td><td>+1 / -1</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>.kirograph/config.json</code></td><td>+6 / -6</td></tr>
+<tr><td><span class="badge badge-a">A</span></td><td><code>.npmrc</code></td><td>+1 / -0</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>CLAUDE.md</code></td><td>+1 / -1</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>README.md</code></td><td>+2 / -2</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>backend/src/routes/journal.ts</code></td><td>+30 / -4</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>backend/src/services/journal/JournalCollectors.ts</code></td><td>+16 / -4</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>docs/development.md</code></td><td>+1 / -1</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>docs/internal/e2e-testing.md</code></td><td>+5 / -2</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>docs/troubleshooting.md</code></td><td>+2 / -1</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>frontend/src/components/AWSProvisionForm.svelte</code></td><td>+3 / -3</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>frontend/src/components/GroupActionModal.svelte</code></td><td>+1 / -1</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>frontend/src/components/ManageTab.svelte</code></td><td>+4 / -5</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>frontend/src/components/MultiSelectDropdown.svelte</code></td><td>+6 / -2</td></tr>
+<tr><td><span class="badge badge-m">M</span></td><td><code>package.json</code></td><td>+1 / -1</td></tr>
+</table>
+
+<h2>Pages Affected</h2>
+<div class="section">
+<ul>
+  <li><a href="http://localhost:5173/journal">http://localhost:5173/journal</a> — Journal timeline date filtering (backend route + collectors)</li>
+  <li><a href="http://localhost:5173/provision">http://localhost:5173/provision</a> — AWSProvisionForm accessibility fix (ARIA group + labelledby)</li>
+  <li><a href="http://localhost:5173/groups">http://localhost:5173/groups</a> — GroupActionModal tabindex fix</li>
+  <li><a href="http://localhost:5173/nodes/:id">http://localhost:5173/nodes/:id</a> — ManageTab modal overlay converted to button, MultiSelectDropdown ARIA fix</li>
+  <li><span class="tag">infra</span> All pages — <code>package.json</code> install script, CI workflow, devcontainer changes affect build/deploy pipeline</li>
+</ul>
+</div>
+
+<h2>What to Check</h2>
+<div class="section">
+<h3>Journal Date Filtering</h3>
+<ul>
+  <li>Open the journal page and apply a date range filter</li>
+  <li>Verify PuppetDB entries are filtered by the selected date range</li>
+  <li>Verify execution entries respect start/end date parameters</li>
+  <li>Verify Proxmox task entries are filtered correctly</li>
+  <li>Test with no date filter — all entries should still appear</li>
+</ul>
+
+<h3>Accessibility</h3>
+<ul>
+  <li>AWSProvisionForm: Security groups section should be announced as a group by screen readers</li>
+  <li>GroupActionModal: Target nodes list should not be focusable via Tab (tabindex=-1)</li>
+  <li>ManageTab: Confirm dialog overlay should be a proper button (clickable to dismiss)</li>
+  <li>MultiSelectDropdown: Options should be keyboard-navigable (Enter/Space to toggle)</li>
+</ul>
+
+<h3>Supply-Chain Security</h3>
+<ul>
+  <li>Run <code>npm run install:all</code> from a clean state — native modules should rebuild</li>
+  <li>Verify <code>npm install</code> alone does NOT run lifecycle scripts (due to .npmrc)</li>
+  <li>CI pipeline should pass with the new rebuild step</li>
+</ul>
+</div>
+
+<h2>Impact Analysis</h2>
+<div class="section">
+<p><strong>Journal date filtering</strong> — Isolated to <code>createJournalRouter</code> and <code>collectExecutionEntries</code>. The new <code>filterEntriesByDate</code> helper is called in 3 places within the journal router. No other routes or services are affected. Blast radius: <strong>low</strong>.</p>
+
+<p><strong>Accessibility fixes</strong> — Component-level changes only. No shared state or API changes. Each fix is self-contained within its component. Blast radius: <strong>low</strong>.</p>
+
+<p><strong>Supply-chain security (.npmrc + install:all)</strong> — Cross-cutting change affecting the install pipeline. All developers and CI will use the new flow. Risk: if <code>.npmrc</code> is missing or <code>npm rebuild</code> fails, native modules won't load. Blast radius: <strong>medium</strong> (affects onboarding and CI).</p>
+</div>
+
+<h2>Codebase Stats</h2>
+<div class="section">
+<p>
+  <span class="stat"><span class="stat-value">19</span> files changed</span>
+  <span class="stat"><span class="stat-value">+96</span> lines added</span>
+  <span class="stat"><span class="stat-value">-39</span> lines removed</span>
+</p>
+<p>
+  <span class="tag">backend</span>
+  <span class="tag">frontend</span>
+  <span class="tag">docs</span>
+  <span class="tag">ci</span>
+  <span class="tag">config</span>
+</p>
+<p style="margin-top:0.5rem;">Workspaces: <strong>both</strong> (frontend + backend)</p>
+<p>Integrations touched: <strong>journal</strong> (PuppetDB collector, Proxmox collector, execution collector)</p>
+</div>
+
+</body>
+</html>

@@ -105,7 +105,7 @@ The interactive setup script will:
 
 1. **Check prerequisites** — Node.js, npm, and optionally Bolt, Ansible, Puppet/OpenVox CLIs
 2. **Generate `backend/.env`** — core settings and integrations with smart defaults based on detected tools and SSL certs
-3. **Install dependencies** — `npm run install:all`
+3. **Install dependencies** — `npm run install:all` (installs packages and rebuilds native modules with `--ignore-scripts=false`)
 4. **Start the application** — development mode, full-stack build, or exit
 
 ### Manual Setup
@@ -114,7 +114,7 @@ The interactive setup script will:
 git clone https://github.com/example42/pabawi
 cd pabawi
 
-# Install dependencies
+# Install dependencies (rebuilds native modules like bcrypt, sqlite3)
 npm run install:all
 
 # Create your configuration

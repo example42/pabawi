@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild native modules
+        run: npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false
+
       - name: Run ESLint
         run: npm run lint
 

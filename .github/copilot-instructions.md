@@ -49,7 +49,7 @@ pabawi/
 ### Setup & Running
 
 ```bash
-# Install all dependencies (frontend + backend)
+# Install all dependencies (frontend + backend, rebuilds native modules)
 npm run install:all
 
 # Development: Run both servers separately

@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Install all dependencies (root + workspaces)
+# Install all dependencies (root + workspaces, rebuilds native modules)
 npm run install:all
 
 # Development

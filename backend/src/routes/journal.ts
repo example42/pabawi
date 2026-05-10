@@ -15,7 +15,7 @@ import {
 } from "../services/journal/JournalCollectors";
 import type { ProxmoxIntegration } from "../integrations/proxmox/ProxmoxIntegration";
 import type { AWSPlugin } from "../integrations/aws/AWSPlugin";
-import { JournalEventTypeSchema, JournalSourceSchema } from "../services/journal/types";
+import { JournalEventTypeSchema, JournalSourceSchema, type JournalEntry } from "../services/journal/types";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { DatabaseService } from "../database/DatabaseService";
 import { LoggerService } from "../services/LoggerService";
@@ -24,6 +24,23 @@ import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
 
 const logger = new LoggerService();
+
+/**
+ * Filter journal entries by date range (post-collection).
+ * Used for sources that don't support date filtering natively (PuppetDB, Proxmox).
+ */
+function filterEntriesByDate(
+  entries: JournalEntry[],
+  startDate?: string,
+  endDate?: string,
+): JournalEntry[] {
+  if (!startDate && !endDate) return entries;
+  return entries.filter((entry) => {
+    if (startDate && entry.timestamp < startDate) return false;
+    if (endDate && entry.timestamp > endDate) return false;
+    return true;
+  });
+}
 
 /**
  * Zod schema for timeline query parameters
@@ -285,7 +302,10 @@ export function createJournalRouter(
           if (deps.puppetdb?.isInitialized() && !skipPuppetBySource && !skipPuppetByType) {
             tasks.push(
               collectGlobalPuppetDBEntries(deps.puppetdb, nodeIds, 50)
-                .then((entries) => { send("batch", { source: "puppetdb", entries }); })
+                .then((entries) => {
+                  const filtered = filterEntriesByDate(entries, query.startDate, query.endDate);
+                  send("batch", { source: "puppetdb", entries: filtered });
+                })
                 .catch(() => { send("source_error", { source: "puppetdb", message: "Failed to load PuppetDB reports" }); }),
             );
           }
@@ -444,7 +464,10 @@ export function createJournalRouter(
 
         if (!skipExecBySource && !skipExecByType) {
           tasks.push(
-            collectExecutionEntries(db, allNodeIds, 50)
+            collectExecutionEntries(db, allNodeIds, 50, {
+              startDate: query.startDate,
+              endDate: query.endDate,
+            })
               .then((entries) => { send("batch", { source: "executions", entries }); })
               .catch(() => { send("source_error", { source: "executions", message: "Failed to load execution history" }); }),
           );
@@ -458,7 +481,10 @@ export function createJournalRouter(
         if (deps.puppetdb?.isInitialized() && !skipPuppetBySource && !skipPuppetByType) {
           tasks.push(
             collectPuppetDBEntries(deps.puppetdb, nodeId, 25)
-              .then((entries) => { send("batch", { source: "puppetdb", entries }); })
+              .then((entries) => {
+                const filtered = filterEntriesByDate(entries, query.startDate, query.endDate);
+                send("batch", { source: "puppetdb", entries: filtered });
+              })
               .catch(() => { send("source_error", { source: "puppetdb", message: "Failed to load PuppetDB reports" }); }),
           );
         }
@@ -480,7 +506,10 @@ export function createJournalRouter(
               if (!isNaN(vmid)) {
                 tasks.push(
                   collectProxmoxTaskEntries(client, pveNode, vmid, nodeId)
-                    .then((entries) => { send("batch", { source: "proxmox_tasks", entries }); })
+                    .then((entries) => {
+                      const filtered = filterEntriesByDate(entries, query.startDate, query.endDate);
+                      send("batch", { source: "proxmox_tasks", entries: filtered });
+                    })
                     .catch(() => { send("source_error", { source: "proxmox_tasks", message: "Failed to load Proxmox task history" }); }),
                 );
               }

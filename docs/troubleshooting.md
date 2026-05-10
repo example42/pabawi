@@ -117,7 +117,7 @@ color: false
 | 403 on VM operations | Token lacks required privileges | See [integrations/proxmox.md](./integrations/proxmox.md) for required permissions |
 | Terminate blocked (403) | `ALLOW_DESTRUCTIVE_PROVISIONING=false` | Set `ALLOW_DESTRUCTIVE_PROVISIONING=true` |
 | VM creation fails | Template doesn't exist or wrong node | Verify `template_id` is a valid VM/template on the target Proxmox node |
-| LXC creation fails | Template incompatible or kernel missing | Use official Proxmox templates. Check `lsmod | grep overlay` |
+| LXC creation fails | Template incompatible or kernel missing | Use official Proxmox templates. Check `lsmod \| grep overlay` |
 | No VMs in inventory | Wrong `PROXMOX_NODE` or API scope | Verify node name and that the token has access to the correct cluster/node |
 
 ---
@@ -141,7 +141,8 @@ color: false
 | `ENOENT: no such file or directory` | Check `BOLT_PROJECT_PATH` and other path env vars. Create missing directories |
 | `EACCES: permission denied` | Fix permissions: `chmod 644 <file>`. For Docker data dir: `chown -R 1001:1001 ./data` |
 | `EADDRINUSE: address already in use :::3000` | `lsof -i :3000`, kill the process, or change `PORT` |
-| `Cannot find module 'express'` | Run `npm run install:all` from the repo root |
+| `Cannot find module 'express'` | Run `npm run install:all` from the repo root (rebuilds native modules) |
+| `@lavamoat/preinstall-always-fail` error during `npm install` | The project uses `ignore-scripts=true` in `.npmrc` for supply-chain security. Ensure `.npmrc` exists at the repo root. Use `npm run install:all` which handles the install and rebuilds native modules (bcrypt, sqlite3, ssh2) with `--ignore-scripts=false` |
 
 ---
 

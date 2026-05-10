@@ -44,11 +44,11 @@ docker run -d \
   example42/pabawi:latest
 ```
 
-Access the UI at http://localhost:3000
+Access the UI at <http://localhost:3000>
 
 ## Documentation
 
-Full documentation, configuration reference and integration guides: 👉 https://pabawi.example42.com
+Full documentation, configuration reference and integration guides: 👉 <https://pabawi.example42.com>
 
 ## License
 

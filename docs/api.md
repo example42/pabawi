@@ -599,7 +599,7 @@ The endpoint accepts standard MCP JSON-RPC requests (`initialize`, `tools/list`,
 | `catalogs_get` | `puppetdb/read` | `certname: string` |
 | `hiera_lookup` | `hiera/read` | `key: string`, `environment?: string` |
 | `executions_list` | `bolt/read` | `limit?: number`, `status?: string`, `tool?: string` |
-| `integrations_list` | `integration_config/read` | _(none)_ |
+| `integrations_list` | `integration_config/read` | *(none)* |
 | `journal_query` | `journal/read` | `nodeId?: string`, `eventType?: string`, `limit?: number` |
 
 All tools are read-only. If the `mcp-service` user lacks the required permission, the tool returns an error response.

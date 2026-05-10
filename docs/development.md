@@ -5,7 +5,7 @@
 ```bash
 git clone git@github.com:example42/pabawi.git
 cd pabawi
-npm run install:all   # installs root + backend + frontend dependencies
+npm run install:all   # installs root + backend + frontend deps, rebuilds native modules
 ```
 
 Copy `.env.example` to `backend/.env` and configure at minimum `BOLT_PROJECT_PATH`.
