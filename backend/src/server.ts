@@ -731,7 +731,7 @@ async function startServer(): Promise<Express> {
           enabled: true,
           name: "proxmox",
           type: "both",
-          config: proxmoxConfig as unknown as Record<string, unknown>,
+          config: proxmoxConfig,
           // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           priority: proxmoxConfig.priority ?? 7, // Default 7: between Bolt/PuppetDB (10) and Hiera (6)
         };
@@ -821,7 +821,7 @@ async function startServer(): Promise<Express> {
           enabled: true,
           name: "aws",
           type: "both",
-          config: awsConfig as unknown as Record<string, unknown>,
+          config: awsConfig,
           priority: 7,
         };
 
@@ -904,7 +904,7 @@ async function startServer(): Promise<Express> {
           enabled: true,
           name: "azure",
           type: "both",
-          config: azureConfig as unknown as Record<string, unknown>,
+          config: azureConfig,
           priority: 7,
         };
 
@@ -1342,7 +1342,7 @@ async function startServer(): Promise<Express> {
         puppetDBService,
         puppetserverService,
         databaseService.getAdapter(),
-        undefined, // JWT secret is read from environment by AuthenticationService
+        configService.getJwtSecret(),
         { allowDestructiveProvisioning: config.provisioning.allowDestructiveActions },
         container,
       ),

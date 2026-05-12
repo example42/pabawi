@@ -34,8 +34,8 @@ Structural refactoring addressing 11 code review findings. Implementation follow
 - [~] 2. Checkpoint - Verify DI container integration
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 3. Centralise JWT and Lifecycle Secrets in ConfigService
-  - [~] 3.1 Add secret fields to AppConfigSchema and ConfigService accessors
+- [x] 3. Centralise JWT and Lifecycle Secrets in ConfigService
+  - [x] 3.1 Add secret fields to AppConfigSchema and ConfigService accessors
     - Add `jwtSecret` (z.string().min(1)) and `lifecycleToken` (z.string().min(1)) to schema
     - Add `getJwtSecret()` and `getLifecycleToken()` accessor methods to ConfigService
     - Update `loadConfiguration()` to read `JWT_SECRET` and `PABAWI_LIFECYCLE_TOKEN` from env
@@ -51,7 +51,7 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - **Validates: Requirements 1.2**
     - Use fast-check to generate arbitrary non-empty strings and verify getJwtSecret() returns exact value
 
-  - [~] 3.4 Migrate route handlers from process.env to ConfigService
+  - [x] 3.4 Migrate route handlers from process.env to ConfigService
     - Update `auth.ts`, `users.ts`, `groups.ts`, `roles.ts`, `setup.ts`, `permissions.ts`, `inventory.ts` to use `configService.getJwtSecret()`
     - Update lifecycle token consumers to use `configService.getLifecycleToken()`
     - Verify zero occurrences of `process.env.JWT_SECRET` / `process.env.PABAWI_LIFECYCLE_TOKEN` outside ConfigService

@@ -8,6 +8,8 @@ export default defineConfig({
     exclude: ['node_modules', 'dist'],
     env: {
       NODE_ENV: 'test',
+      JWT_SECRET: 'test-jwt-secret-for-vitest', // pragma: allowlist secret
+      PABAWI_LIFECYCLE_TOKEN: 'test-lifecycle-token', // pragma: allowlist secret
     },
   },
 });

@@ -106,24 +106,22 @@ export class AuthenticationService {
     this.db = db;
     this.auditLogger = auditLogger;
 
-    const resolvedSecret = jwtSecret ?? process.env.JWT_SECRET;
-
-    if (!resolvedSecret) {
+    if (!jwtSecret) {
       const logger = new LoggerService();
       if (process.env.NODE_ENV === 'production') {
-        logger.error('FATAL: JWT_SECRET is not set. Refusing to start in production without a stable JWT secret.', {
+        logger.error('FATAL: JWT secret not provided. Refusing to start in production without a stable JWT secret.', {
           component: 'AuthenticationService',
           operation: 'constructor',
         });
-        throw new Error('JWT_SECRET environment variable is required in production. Set it to a random string of at least 32 characters.');
+        throw new Error('JWT secret is required in production. Provide it via ConfigService.');
       }
-      logger.warn('WARNING: No JWT_SECRET provided. Using generated ephemeral secret. All sessions will be invalidated on restart. Set JWT_SECRET for production use.', {
+      logger.warn('WARNING: No JWT secret provided. Using generated ephemeral secret. All sessions will be invalidated on restart.', {
         component: 'AuthenticationService',
         operation: 'constructor',
       });
       this.jwtSecret = this.generateDefaultSecret();
     } else {
-      this.jwtSecret = resolvedSecret;
+      this.jwtSecret = jwtSecret;
     }
   }
 

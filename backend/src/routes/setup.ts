@@ -63,7 +63,8 @@ export function createSetupRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
-  const jwtSecret = process.env.JWT_SECRET;
+  const configService = container.resolve("config");
+  const jwtSecret = configService.getJwtSecret();
   const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret, auditLogger);
   const userService = new UserService(databaseService.getAdapter(), authService);
