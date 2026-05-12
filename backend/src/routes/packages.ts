@@ -5,9 +5,8 @@ import type { ExecutionRepository } from "../database/ExecutionRepository";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
 import { PackageNameSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Request body schema for package installation
@@ -50,9 +49,11 @@ export function createPackagesRouter(
   executionRepository: ExecutionRepository,
   packageTasks: PackageTaskConfig[],
   streamingManager?: StreamingExecutionManager,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * GET /api/package-tasks
@@ -60,7 +61,6 @@ export function createPackagesRouter(
    */
   router.get("/package-tasks", (req: Request, res: Response) => {
     const startTime = Date.now();
-    const expertModeService = new ExpertModeService();
     const requestId = req.id ?? expertModeService.generateRequestId();
 
     // Create debug info once at the start if expert mode is enabled
@@ -121,7 +121,6 @@ export function createPackagesRouter(
     "/:id/install-package",
     asyncHandler(async (req: Request, res: Response) => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled

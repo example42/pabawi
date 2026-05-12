@@ -18,12 +18,10 @@ import type { AWSPlugin } from "../integrations/aws/AWSPlugin";
 import { JournalEventTypeSchema, JournalSourceSchema, type JournalEntry } from "../services/journal/types";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { DatabaseService } from "../database/DatabaseService";
-import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Filter journal entries by date range (post-collection).
@@ -118,6 +116,7 @@ export interface JournalRouterDeps {
   integrationManager?: IntegrationManager;
 }
 
+
 /**
  * Create journal routes
  *
@@ -126,8 +125,10 @@ export interface JournalRouterDeps {
 export function createJournalRouter(
   databaseService: DatabaseService,
   deps: JournalRouterDeps = {},
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
+  const logger = container.resolve("logger");
   const journalService = new JournalService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter());
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());

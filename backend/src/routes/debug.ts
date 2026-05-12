@@ -8,7 +8,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { asyncHandler } from './asyncHandler';
-import { LoggerService } from '../services/LoggerService';
+import type { DIContainer } from '../container/DIContainer';
 
 /**
  * Zod schema for frontend log entry validation
@@ -121,9 +121,9 @@ setInterval(cleanupOldLogs, 60 * 1000);
 /**
  * Create debug router
  */
-export function createDebugRouter(): Router {
+export function createDebugRouter(container: DIContainer): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
 
   /**
    * POST /api/debug/frontend-logs

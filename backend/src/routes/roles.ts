@@ -4,13 +4,11 @@ import { asyncHandler } from "./asyncHandler";
 import { RoleService } from "../services/RoleService";
 import { PermissionService } from "../services/PermissionService";
 import type { DatabaseService } from "../database/DatabaseService";
-import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Zod schema for pagination query parameters
@@ -36,13 +34,16 @@ const UpdateRoleSchema = z.object({
   description: z.string().max(500).optional(),
 }).strict();
 
+
 /**
  * Create roles management router
  */
 export function createRolesRouter(
-  databaseService: DatabaseService
+  databaseService: DatabaseService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
+  const logger = container.resolve("logger");
   const jwtSecret = process.env.JWT_SECRET;
   const roleService = new RoleService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());

@@ -13,23 +13,22 @@ import {
   ReportParamsSchema,
   PQLQuerySchema,
   ReportsQuerySchema,
-  createLogger,
 } from "./utils";
-import { ExpertModeService } from "../../services/ExpertModeService";
 import { ReportFilterService, type ReportFilters } from "../../services/ReportFilterService";
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 /**
  * Create PuppetDB router for all PuppetDB-related routes
  */
-export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router {
+export function createPuppetDBRouter(puppetDBService?: PuppetDBService, container: DIContainer = createDefaultContainer()): Router {
   const router = Router();
-  const logger = createLogger();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   router.get(
     "/nodes",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -330,7 +329,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/nodes/:certname",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -623,7 +621,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/nodes/:certname/facts",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -960,7 +957,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/reports/summary",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info at the start if expert mode is enabled
@@ -1269,7 +1265,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     requestDeduplication,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1641,7 +1636,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/nodes/:certname/reports",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1959,7 +1953,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/nodes/:certname/reports/:hash",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2327,7 +2320,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/nodes/:certname/catalog",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2708,7 +2700,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/nodes/:certname/resources",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -3030,7 +3021,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/nodes/:certname/events",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -3378,7 +3368,6 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService): Router 
     "/admin/summary-stats",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled

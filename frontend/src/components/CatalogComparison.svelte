@@ -2,6 +2,7 @@
   import { post } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { logger } from '../lib/logger.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import EnvironmentSelector from './EnvironmentSelector.svelte';
 
@@ -102,11 +103,12 @@
     if (!environment1 || !environment2) return;
 
     if (expertMode.enabled) {
-      console.log('[CatalogComparison] Comparing catalogs');
-      console.log('[CatalogComparison] Certname:', certname);
-      console.log('[CatalogComparison] Environment 1:', environment1);
-      console.log('[CatalogComparison] Environment 2:', environment2);
-      console.log('[CatalogComparison] API endpoint: POST /api/integrations/puppetserver/catalog/compare');
+      logger.debug('CatalogComparison', 'compareCatalogs', 'Comparing catalogs', {
+        certname,
+        environment1,
+        environment2,
+        endpoint: 'POST /api/integrations/puppetserver/catalog/compare',
+      });
     }
 
     try {
@@ -129,12 +131,13 @@
       catalogDiff = result.diff;
 
       if (expertMode.enabled) {
-        console.log('[CatalogComparison] Comparison complete');
-        console.log('[CatalogComparison] Response time:', Math.round(endTime - startTime), 'ms');
-        console.log('[CatalogComparison] Added:', result.diff?.added?.length ?? 0);
-        console.log('[CatalogComparison] Removed:', result.diff?.removed?.length ?? 0);
-        console.log('[CatalogComparison] Modified:', result.diff?.modified?.length ?? 0);
-        console.log('[CatalogComparison] Unchanged:', result.diff?.unchanged?.length ?? 0);
+        logger.debug('CatalogComparison', 'compareCatalogs', 'Comparison complete', {
+          responseTimeMs: Math.round(endTime - startTime),
+          added: result.diff?.added?.length ?? 0,
+          removed: result.diff?.removed?.length ?? 0,
+          modified: result.diff?.modified?.length ?? 0,
+          unchanged: result.diff?.unchanged?.length ?? 0,
+        });
       }
       showSuccess('Catalogs compared', `Successfully compared ${environment1} and ${environment2}`);
     } catch (err) {

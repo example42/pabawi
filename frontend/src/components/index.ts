@@ -35,6 +35,7 @@ export { default as PuppetDBAdmin } from "./PuppetDBAdmin.svelte";
 export { default as PuppetOutputViewer } from "./PuppetOutputViewer.svelte";
 export { default as PuppetReportsSummary } from "./PuppetReportsSummary.svelte";
 export { default as PuppetRunInterface } from "./PuppetRunInterface.svelte";
+export { default as RunPuppetForm } from "./RunPuppetForm.svelte";
 export { default as PuppetserverSetupGuide } from "./PuppetserverSetupGuide.svelte";
 export { default as PuppetdbSetupGuide } from "./PuppetdbSetupGuide.svelte";
 export { default as BoltSetupGuide } from "./BoltSetupGuide.svelte";

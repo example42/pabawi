@@ -5,10 +5,8 @@ import { asyncHandler } from "../asyncHandler";
 import type { AzurePlugin } from "../../integrations/azure/AzurePlugin";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import { AzureAuthenticationError } from "../../integrations/azure/types";
-import { LoggerService } from "../../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../../utils/errorHandling";
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 /**
  * Zod schema for provisioning request body
@@ -65,8 +63,10 @@ export function createAzureRouter(
   azurePlugin: AzurePlugin,
   integrationManager?: IntegrationManager,
   options?: { allowDestructiveActions?: boolean },
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
+  const logger = container.resolve("logger");
 
   /**
    * GET /api/integrations/azure/inventory

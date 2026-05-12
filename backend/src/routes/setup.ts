@@ -6,7 +6,6 @@ import { AuthenticationService } from "../services/AuthenticationService";
 import { SetupService } from "../services/SetupService";
 import { AuditLoggingService } from "../services/AuditLoggingService";
 import type { DatabaseService } from "../database/DatabaseService";
-import { LoggerService } from "../services/LoggerService";
 import {
   sendValidationError,
   ERROR_CODES,
@@ -18,8 +17,7 @@ import {
   extractDuplicateField
 } from "../utils/errorHandling";
 import { ZodError } from "zod";
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Zod schema for initial setup
@@ -55,13 +53,16 @@ const InitialSetupSchema = z.object({
   defaultNewUserRole: z.string().nullable(), // Role ID or null
 });
 
+
 /**
  * Create setup router
  */
 export function createSetupRouter(
-  databaseService: DatabaseService
+  databaseService: DatabaseService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
+  const logger = container.resolve("logger");
   const jwtSecret = process.env.JWT_SECRET;
   const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret, auditLogger);

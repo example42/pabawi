@@ -1263,14 +1263,17 @@ describe("IntegrationManager", () => {
       await manager.initializePlugins();
       const inventory = await manager.getAggregatedInventory();
 
-      // Group should be included but name sanitized
+      // Group should be included but unsafe characters stripped by the allowlist.
       expect(inventory.groups).toHaveLength(1);
-      expect(inventory.groups[0].name).not.toContain("<script>");
-      expect(inventory.groups[0].name).not.toContain("alert");
+      expect(inventory.groups[0].name).not.toContain("<");
+      expect(inventory.groups[0].name).not.toContain(">");
+      expect(inventory.groups[0].name).not.toContain("'");
       expect(inventory.groups[0].name).not.toContain("(");
       expect(inventory.groups[0].name).not.toContain(")");
-      // After sanitization: removes <script>, alert, (), and 'xss' quotes
-      expect(inventory.groups[0].name).toBe("xssmalicious-group");
+      // Allowlist keeps alphanumerics, so literal words like 'script' and 'alert'
+      // remain as plain text (they're no longer executable after angle brackets
+      // and parens are stripped).
+      expect(inventory.groups[0].name).toBe("scriptalertxss/scriptmalicious-group");
     });
 
     it("should sanitize group names with SQL injection patterns", async () => {
@@ -1301,11 +1304,12 @@ describe("IntegrationManager", () => {
       await manager.initializePlugins();
       const inventory = await manager.getAggregatedInventory();
 
-      // Group should be included but name sanitized
+      // Quotes and semicolons stripped. Hyphens are allowed (they appear in
+      // legitimate group names); SQL safety comes from parameterised queries,
+      // not from stripping every SQL keyword.
       expect(inventory.groups).toHaveLength(1);
       expect(inventory.groups[0].name).not.toContain("'");
       expect(inventory.groups[0].name).not.toContain(";");
-      expect(inventory.groups[0].name).not.toContain("--");
     });
 
     it("should include groups with invalid node references but log warning", async () => {

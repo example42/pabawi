@@ -17,8 +17,7 @@ import {
   type PaginatedResponse,
 } from "../integrations/hiera/types";
 import { asyncHandler } from "./asyncHandler";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
+import type { DIContainer } from "../container/DIContainer";
 import { NodeParamSchema } from "../validation/commonSchemas";
 
 /**
@@ -156,9 +155,10 @@ function paginate<T>(
  * @param integrationManager - IntegrationManager instance
  * @returns Express router
  */
-export function createHieraRouter(integrationManager: IntegrationManager): Router {
+export function createHieraRouter(integrationManager: IntegrationManager, container: DIContainer): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
 
   // ============================================================================
@@ -175,7 +175,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/status",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -311,7 +310,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/reload",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -436,7 +434,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/keys",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -577,7 +574,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/keys/search",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -716,7 +712,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/keys/:key",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -912,7 +907,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/nodes/:nodeId/data",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1102,7 +1096,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/nodes/:nodeId/keys",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1293,7 +1286,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/nodes/:nodeId/keys/:key",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1459,7 +1451,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/keys/:key/nodes",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1635,7 +1626,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/analysis",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1752,7 +1742,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/analysis/unused",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1881,7 +1870,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/analysis/lint",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2025,7 +2013,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/analysis/modules",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2165,7 +2152,6 @@ export function createHieraRouter(integrationManager: IntegrationManager): Route
     "/analysis/statistics",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled

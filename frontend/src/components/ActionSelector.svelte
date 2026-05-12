@@ -16,7 +16,7 @@
    * ```
    */
 
-  type ActionType = 'install-software' | 'execute-playbook' | 'execute-command' | 'execute-task';
+  type ActionType = 'install-software' | 'execute-playbook' | 'execute-command' | 'execute-task' | 'run-puppet';
 
   interface ActionOption {
     id: ActionType;
@@ -68,7 +68,7 @@
     selectedActions = $bindable<ActionType[]>([]),
     onActionSelect,
     onActionsSelect,
-    availableActions = ['install-software', 'execute-playbook', 'execute-command', 'execute-task'],
+    availableActions = ['install-software', 'execute-playbook', 'execute-command', 'execute-task', 'run-puppet'],
     disabled = false,
   }: Props = $props();
 
@@ -96,6 +96,12 @@
       label: 'Execute Task',
       description: 'Run Bolt tasks',
       icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
+    },
+    'run-puppet': {
+      id: 'run-puppet',
+      label: 'Run Puppet',
+      description: 'Run Puppet agent on target nodes',
+      icon: 'M13 10V3L4 14h7v7l9-11h-7z',
     },
   };
 

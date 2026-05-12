@@ -3,6 +3,7 @@
   import type { DebugInfo } from '../lib/api';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { logger } from '../lib/logger.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
 
   interface EnvironmentSettings {
@@ -46,8 +47,9 @@
   // Load environments
   async function loadEnvironments(): Promise<void> {
     if (expertMode.enabled) {
-      console.log('[EnvironmentSelector] Loading environments');
-      console.log('[EnvironmentSelector] API endpoint: GET /api/integrations/puppetserver/environments');
+      logger.debug('EnvironmentSelector', 'loadEnvironments', 'Loading environments', {
+        endpoint: 'GET /api/integrations/puppetserver/environments',
+      });
     }
 
     try {
@@ -65,9 +67,10 @@
       }
 
       if (expertMode.enabled) {
-        console.log('[EnvironmentSelector] Loaded', environments.length, 'environments');
-        console.log('[EnvironmentSelector] Response time:', Math.round(endTime - startTime), 'ms');
-        console.log('[EnvironmentSelector] Data:', data);
+        logger.debug('EnvironmentSelector', 'loadEnvironments', 'Loaded environments', {
+          count: environments.length,
+          responseTimeMs: Math.round(endTime - startTime),
+        });
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load environments';
@@ -99,8 +102,10 @@
   // Flush environment cache
   async function flushEnvironmentCache(environmentName: string): Promise<void> {
     if (expertMode.enabled) {
-      console.log('[EnvironmentSelector] Flushing cache for environment:', environmentName);
-      console.log('[EnvironmentSelector] API endpoint: DELETE /api/integrations/puppetserver/environments/' + environmentName + '/cache');
+      logger.debug('EnvironmentSelector', 'flushEnvironmentCache', 'Flushing environment cache', {
+        environmentName,
+        endpoint: `DELETE /api/integrations/puppetserver/environments/${environmentName}/cache`,
+      });
     }
 
     try {
@@ -110,8 +115,10 @@
       const endTime = performance.now();
 
       if (expertMode.enabled) {
-        console.log('[EnvironmentSelector] Environment cache flushed successfully');
-        console.log('[EnvironmentSelector] Response time:', Math.round(endTime - startTime), 'ms');
+        logger.debug('EnvironmentSelector', 'flushEnvironmentCache', 'Cache flushed', {
+          environmentName,
+          responseTimeMs: Math.round(endTime - startTime),
+        });
       }
 
       showSuccess('Cache flushed', `Successfully flushed cache for environment: ${environmentName}`);
@@ -120,7 +127,7 @@
       const message = err instanceof Error ? err.message : 'Failed to flush environment cache';
 
       if (expertMode.enabled) {
-        console.error('[EnvironmentSelector] Flush failed:', err);
+        logger.error('EnvironmentSelector', 'flushEnvironmentCache', 'Flush failed', err instanceof Error ? err : new Error(String(err)));
       }
 
       showError('Failed to flush environment cache', message);

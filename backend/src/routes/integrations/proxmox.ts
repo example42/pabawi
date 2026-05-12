@@ -4,8 +4,7 @@ import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import type { ProxmoxIntegration } from "../../integrations/proxmox/ProxmoxIntegration";
 import type { VMCreateParams, LXCCreateParams } from "../../integrations/proxmox/types";
 import { asyncHandler } from "../asyncHandler";
-import { ExpertModeService } from "../../services/ExpertModeService";
-import { createLogger } from "./utils";
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 /**
  * Validation schemas for Proxmox API routes
@@ -56,9 +55,11 @@ const DestroyParamsSchema = z.object({
 export function createProxmoxRouter(
   integrationManager: IntegrationManager,
   options?: { allowDestructiveActions?: boolean },
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = createLogger();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * Helper function to get Proxmox integration
@@ -224,7 +225,6 @@ export function createProxmoxRouter(
     "/provision/vm",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -428,7 +428,6 @@ export function createProxmoxRouter(
     "/provision/lxc",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       const debugInfo = req.expertMode
@@ -639,7 +638,6 @@ export function createProxmoxRouter(
       }
 
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       const debugInfo = req.expertMode
@@ -878,7 +876,6 @@ export function createProxmoxRouter(
     "/action",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       const debugInfo = req.expertMode

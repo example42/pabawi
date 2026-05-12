@@ -21,7 +21,7 @@
 
 <table><tr>
 <td>Pabawi's main sponsor is <a href="https://www.ams-ix.net/">AMS-IX</a> — the Amsterdam Internet Exchange, one of the largest Internet Exchanges in the world.</td>
-<td><a href="https://www.ams-ix.net/"><img src="docs/images/ams-ix-logo.png" alt="AMS-IX" width="160"></a></td>
+<td><a href="https://www.ams-ix.net/"><img src="docs/images/ams-ix-logo.svg" alt="AMS-IX" width="160"></a></td>
 </tr></table>
 
 ## Who is this for?

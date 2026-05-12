@@ -6,6 +6,7 @@
   import InstallSoftwareForm from './InstallSoftwareForm.svelte';
   import ExecutePlaybookForm from './ExecutePlaybookForm.svelte';
   import ExecuteTaskForm from './ExecuteTaskForm.svelte';
+  import RunPuppetForm from './RunPuppetForm.svelte';
   import { get, post } from '../lib/api';
 
   interface Node {
@@ -49,7 +50,7 @@
   let previousActiveElement = $state<HTMLElement | null>(null);
 
   // State for action configuration
-  type ActionType = 'install-software' | 'execute-playbook' | 'execute-command' | 'execute-task';
+  type ActionType = 'install-software' | 'execute-playbook' | 'execute-command' | 'execute-task' | 'run-puppet';
   let selectedAction = $state<ActionType>('execute-command');
   let actionFormData = $state<Record<string, unknown> | null>(null);
 
@@ -311,18 +312,53 @@
         requestBody.parameters = params;
       }
 
-      // Send POST request to batch execution endpoint
-      const response = await post<{ batchId: string; executionIds: string[]; targetCount: number; expandedNodeIds: string[] }>(
-        '/api/executions/batch',
-        requestBody
-      );
+      // Handle run-puppet action type separately (uses dedicated endpoint)
+      if (selectedAction === 'run-puppet') {
+        const puppetData = formData as {
+          tool?: 'bolt' | 'ansible' | 'ssh';
+          environment?: string;
+          noop?: boolean;
+          noNoop?: boolean;
+          debug?: boolean;
+          tags?: string[];
+          splay?: boolean;
+          splayLimit?: number;
+        };
 
-      // Success - display batch ID and call onSuccess callback
-      console.log('[GroupActionModal] Batch execution created:', response.batchId, 'Targets:', response.targetCount);
+        const puppetPayload: Record<string, unknown> = {
+          targetNodeIds: targetNodeIds,
+          ...(puppetData.tool ? { tool: puppetData.tool } : {}),
+          ...(puppetData.environment ? { environment: puppetData.environment } : {}),
+          ...(puppetData.noop ? { noop: true } : {}),
+          ...(puppetData.noNoop ? { noNoop: true } : {}),
+          ...(puppetData.debug ? { debug: true } : {}),
+          ...(puppetData.tags && puppetData.tags.length > 0 ? { tags: puppetData.tags } : {}),
+          ...(puppetData.splay ? { splay: true, splayLimit: puppetData.splayLimit } : {}),
+        };
 
-      resetForm();
-      onSuccess(response.batchId);
-      onClose();
+        const response = await post<{ executionIds: string[]; targetCount: number }>(
+          '/api/puppet-run',
+          puppetPayload
+        );
+
+        console.log('[GroupActionModal] Puppet run started:', response.executionIds.length, 'Targets:', response.targetCount);
+
+        resetForm();
+        onSuccess(response.executionIds[0] ?? '');
+        onClose();
+      } else {
+        // Send POST request to batch execution endpoint
+        const response = await post<{ batchId: string; executionIds: string[]; targetCount: number; expandedNodeIds: string[] }>(
+          '/api/executions/batch',
+          requestBody
+        );
+
+        console.log('[GroupActionModal] Batch execution created:', response.batchId, 'Targets:', response.targetCount);
+
+        resetForm();
+        onSuccess(response.batchId);
+        onClose();
+      }
     } catch (err) {
       // Handle error responses
       if (err instanceof Error) {
@@ -526,6 +562,13 @@
                   />
                 {:else if selectedAction === 'execute-task'}
                   <ExecuteTaskForm
+                    multiNode={true}
+                    executing={loading}
+                    onSubmit={handleActionFormSubmit}
+                  />
+                {:else if selectedAction === 'run-puppet'}
+                  <RunPuppetForm
+                    availableTools={availableExecutionTools}
                     multiNode={true}
                     executing={loading}
                     onSubmit={handleActionFormSubmit}

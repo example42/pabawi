@@ -3,13 +3,11 @@ import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { PermissionService } from "../services/PermissionService";
 import type { DatabaseService } from "../database/DatabaseService";
-import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Zod schema for pagination query parameters
@@ -28,13 +26,16 @@ const CreatePermissionSchema = z.object({
   description: z.string().max(500),
 }).strict();
 
+
 /**
  * Create permissions management router
  */
 export function createPermissionsRouter(
-  databaseService: DatabaseService
+  databaseService: DatabaseService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
+  const logger = container.resolve("logger");
   const jwtSecret = process.env.JWT_SECRET;
   const permissionService = new PermissionService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);

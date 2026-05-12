@@ -60,6 +60,49 @@ export const PackageNameSchema = z.string()
   .regex(PACKAGE_NAME_PATTERN, "Package name contains invalid characters");
 
 /**
+ * Strict regex for Puppet environment names.
+ * Per Puppet spec: lowercase alphanumeric and underscores only.
+ * Rejects any shell metacharacters to prevent command injection when the
+ * environment is passed via `puppet agent --environment <name>`.
+ *
+ * @see https://www.puppet.com/docs/puppet/latest/environments_about.html
+ */
+const PUPPET_ENVIRONMENT_PATTERN = /^[a-z0-9_]+$/;
+
+/**
+ * Zod schema for validated Puppet environment names.
+ */
+export const PuppetEnvironmentSchema = z.string()
+  .min(1, "Environment name is required")
+  .max(64, "Environment name too long")
+  .regex(
+    PUPPET_ENVIRONMENT_PATTERN,
+    "Environment name must contain only lowercase letters, digits, and underscores",
+  );
+
+/**
+ * Strict regex for Puppet tag names.
+ * Per Puppet source: lowercase alphanumeric, underscores, colons, dots, and hyphens.
+ * Must start with an alphanumeric or underscore.
+ * Rejects any shell metacharacters to prevent command injection when tags are
+ * joined and passed via `puppet agent --tags <csv>`.
+ *
+ * @see https://github.com/puppetlabs/puppet/blob/main/lib/puppet/util/tagging.rb
+ */
+const PUPPET_TAG_PATTERN = /^[a-z0-9_][a-z0-9_:.-]*$/;
+
+/**
+ * Zod schema for validated Puppet tags.
+ */
+export const PuppetTagSchema = z.string()
+  .min(1, "Tag is required")
+  .max(128, "Tag too long")
+  .regex(
+    PUPPET_TAG_PATTERN,
+    "Tag must contain only lowercase letters, digits, underscores, colons, dots, and hyphens",
+  );
+
+/**
  * Strict regex for Unix usernames.
  * POSIX: start with lowercase letter or underscore, then lowercase, digits, hyphens, underscores.
  */
