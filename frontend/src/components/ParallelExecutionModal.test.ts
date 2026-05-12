@@ -38,7 +38,7 @@ describe('ParallelExecutionModal Component', () => {
           },
         });
       }
-      if (url === '/api/package-tasks') {
+      if (url === '/api/packages/package-tasks') {
         return Promise.resolve({
           tasks: [
             {
