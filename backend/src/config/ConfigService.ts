@@ -631,6 +631,8 @@ export class ConfigService {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
         host: process.env.HOST,
         boltProjectPath: process.env.BOLT_PROJECT_PATH,
+        jwtSecret: process.env.JWT_SECRET,
+        lifecycleToken: process.env.PABAWI_LIFECYCLE_TOKEN,
         commandWhitelist,
         executionTimeout: process.env.BOLT_EXECUTION_TIMEOUT
           ? parseInt(process.env.BOLT_EXECUTION_TIMEOUT, 10)
@@ -689,6 +691,20 @@ export class ConfigService {
    */
   public getHost(): string {
     return this.config.host;
+  }
+
+  /**
+   * Get JWT secret for authentication token signing/verification
+   */
+  public getJwtSecret(): string {
+    return this.config.jwtSecret;
+  }
+
+  /**
+   * Get lifecycle token for inventory webhook authentication
+   */
+  public getLifecycleToken(): string {
+    return this.config.lifecycleToken;
   }
 
   /**

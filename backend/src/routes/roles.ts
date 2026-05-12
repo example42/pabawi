@@ -44,7 +44,8 @@ export function createRolesRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
-  const jwtSecret = process.env.JWT_SECRET;
+  const configService = container.resolve("config");
+  const jwtSecret = configService.getJwtSecret();
   const roleService = new RoleService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);

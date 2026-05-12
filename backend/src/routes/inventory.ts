@@ -14,40 +14,40 @@ import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
- * Middleware enforcing authentication/authorization for lifecycle actions.
+ * Create middleware enforcing authentication/authorization for lifecycle actions.
  *
  * This uses a simple bearer token check so that protection travels with the
  * endpoint instead of relying solely on how the router is mounted.
  *
- * Configure the shared secret via the PABAWI_LIFECYCLE_TOKEN environment variable.
+ * The lifecycle token is obtained from ConfigService.
  */
-function requireLifecycleAuth(req: Request, res: Response, next: () => void): void {
-  const token = process.env.PABAWI_LIFECYCLE_TOKEN;
+function createLifecycleAuth(lifecycleToken: string): (req: Request, res: Response, next: () => void) => void {
+  return (req: Request, res: Response, next: () => void): void => {
+    if (!lifecycleToken) {
+      res.status(500).json({
+        error: {
+          code: "LIFECYCLE_AUTH_MISCONFIGURED",
+          message: "Lifecycle authentication is not configured on the server",
+        },
+      });
+      return;
+    }
 
-  if (!token) {
-    res.status(500).json({
-      error: {
-        code: "LIFECYCLE_AUTH_MISCONFIGURED",
-        message: "Lifecycle authentication is not configured on the server",
-      },
-    });
-    return;
-  }
+    const authHeader = req.headers.authorization;
+    const expectedHeader = `Bearer ${lifecycleToken}`;
 
-  const authHeader = req.headers.authorization;
-  const expectedHeader = `Bearer ${token}`;
+    if (authHeader !== expectedHeader) {
+      res.status(401).json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Unauthorized to perform lifecycle actions",
+        },
+      });
+      return;
+    }
 
-  if (authHeader !== expectedHeader) {
-    res.status(401).json({
-      error: {
-        code: "UNAUTHORIZED",
-        message: "Unauthorized to perform lifecycle actions",
-      },
-    });
-    return;
-  }
-
-  next();
+    next();
+  };
 }
 
 const InventoryQuerySchema = z.object({
@@ -69,6 +69,8 @@ export function createInventoryRouter(
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
+  const configService = container.resolve("config");
+  const requireLifecycleAuth = createLifecycleAuth(configService.getLifecycleToken());
 
   /**
    * GET /api/inventory

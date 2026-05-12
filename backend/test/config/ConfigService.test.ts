@@ -52,12 +52,16 @@ function clearIntegrationEnv(): void {
     "STREAMING_", "CACHE_", "CONCURRENT_EXECUTION_LIMIT",
     "MAX_QUEUE_SIZE", "UI_SHOW_HOME_PAGE_RUN_CHART",
     "ALLOW_DESTRUCTIVE_PROVISIONING", "MCP_ENABLED",
+    "JWT_SECRET", "PABAWI_LIFECYCLE_TOKEN",
   ];
   for (const key of Object.keys(process.env)) {
     if (prefixes.some((p) => key.startsWith(p))) {
       delete process.env[key];
     }
   }
+  // Set required secrets for test isolation
+  process.env.JWT_SECRET = "test-jwt-secret-for-unit-tests"; // pragma: allowlist secret
+  process.env.PABAWI_LIFECYCLE_TOKEN = "test-lifecycle-token"; // pragma: allowlist secret
 }
 
 // ─── Generators ──────────────────────────────────────────────────────────────

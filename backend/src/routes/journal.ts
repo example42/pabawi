@@ -82,7 +82,7 @@ function csvToEnumArray<T extends z.ZodEnum<[string, ...string[]]>>(
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid value: ${item}` });
         return z.NEVER;
       }
-      results.push(parsed.data as z.infer<T>);
+      results.push(parsed.data);
     }
     return results;
   });
@@ -129,8 +129,9 @@ export function createJournalRouter(
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
+  const configService = container.resolve("config");
   const journalService = new JournalService(databaseService.getAdapter());
-  const authMiddleware = createAuthMiddleware(databaseService.getAdapter());
+  const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), configService.getJwtSecret());
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
   const db = databaseService.getAdapter();
 
