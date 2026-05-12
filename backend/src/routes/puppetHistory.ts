@@ -9,9 +9,8 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import type { PuppetRunHistoryService } from "../services/PuppetRunHistoryService";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 const DaysQuerySchema = z.object({
   days: z.string().optional().transform((val) => {
@@ -29,9 +28,11 @@ const DaysQuerySchema = z.object({
  */
 export function createPuppetHistoryRouter(
   puppetRunHistoryService: PuppetRunHistoryService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * GET /api/puppet/nodes/:id/history
@@ -49,7 +50,6 @@ export function createPuppetHistoryRouter(
     "/nodes/:id/history",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Processing node run history request", {
@@ -258,7 +258,6 @@ export function createPuppetHistoryRouter(
     "/history",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Processing aggregated run history request", {

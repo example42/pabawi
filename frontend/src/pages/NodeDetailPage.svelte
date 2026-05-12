@@ -1902,6 +1902,11 @@
             <AnsiblePlaybookInterface nodeId={nodeId} onExecutionComplete={fetchExecutions} />
           </div>
 
+          <!-- Puppet Run Section -->
+          <div>
+            <PuppetRunInterface nodeId={nodeId} onExecutionComplete={fetchExecutions} />
+          </div>
+
           <!-- Task Execution Section -->
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <button

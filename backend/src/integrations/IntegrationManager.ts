@@ -1228,49 +1228,33 @@ export class IntegrationManager {
   }
 
   /**
-   * Sanitize group name to prevent injection attacks
+   * Sanitize group name using a strict allowlist.
    *
-   * Removes or escapes potentially malicious characters including:
-   * - HTML tags
-   * - SQL injection patterns
-   * - Script injection attempts
-   * - Control characters
+   * Group names are display labels and lookup keys — they never flow into
+   * shell commands, and SQL access is always parameterised. The only real
+   * attack surface is XSS when the name is rendered as HTML in the frontend,
+   * plus log-injection noise.
+   *
+   * An allowlist is preferred over a deny-list because deny-lists are always
+   * incomplete (can be bypassed with encoding, token splitting, or unknown
+   * synonyms). Only characters typical of inventory group naming conventions
+   * are allowed; all others are stripped.
+   *
+   * Allowed: alphanumeric, space, hyphen, underscore, dot, colon, slash.
    *
    * @param name - Group name to sanitize
-   * @returns Sanitized group name
+   * @returns Sanitized group name (falls back to 'sanitized_group' if empty)
    */
   private sanitizeGroupName(name: string): string {
-      // Remove HTML tags
-      let sanitized = name.replace(/<[^>]*>/g, '');
+    // Strip anything outside the allowlist (which also excludes control characters).
+    const sanitized = name.replace(/[^a-zA-Z0-9 _.:/-]/g, '').trim();
 
-      // Remove script-related keywords (case-insensitive) - more aggressive
-      sanitized = sanitized.replace(/\b(script|javascript|onerror|onload|eval|expression|alert|prompt|confirm)\b/gi, '');
-
-      // Remove SQL injection patterns (basic patterns)
-      sanitized = sanitized.replace(/['";\\]/g, '');
-
-      // Remove SQL comment patterns
-      sanitized = sanitized.replace(/--/g, '');
-      sanitized = sanitized.replace(/\/\*/g, '');
-      sanitized = sanitized.replace(/\*\//g, '');
-
-      // Remove control characters and non-printable characters
-      // eslint-disable-next-line no-control-regex -- intentionally removing control characters
-      sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '');
-
-      // Remove parentheses that might be used in injection
-      sanitized = sanitized.replace(/[()]/g, '');
-
-      // Trim whitespace
-      sanitized = sanitized.trim();
-
-      // If sanitization resulted in empty string, use a placeholder
-      if (sanitized.length === 0) {
-        sanitized = 'sanitized_group';
-      }
-
-      return sanitized;
+    if (sanitized.length === 0) {
+      return 'sanitized_group';
     }
+
+    return sanitized;
+  }
 
 
 

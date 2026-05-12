@@ -1,162 +1,201 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import type { BoltService } from "../integrations/bolt/BoltService";
-import type { ExecutionRepository } from "../database/ExecutionRepository";
-import { BoltInventoryNotFoundError } from "../integrations/bolt/types";
+import type { ExecutionRepository, ExecutionTool } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
-import { NodeIdParamSchema } from "../validation/commonSchemas";
+import type { IntegrationManager } from "../integrations/IntegrationManager";
+import type { JournalService } from "../services/journal/JournalService";
+import type { CreateJournalEntry } from "../services/journal/types";
+import type { LoggerService } from "../services/LoggerService";
+import { NodeIdParamSchema, PuppetEnvironmentSchema, PuppetTagSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 const PuppetRunBodySchema = z.object({
-  tags: z.array(z.string()).optional(),
-  environment: z.string().optional(),
+  tags: z.array(PuppetTagSchema).optional(),
+  environment: PuppetEnvironmentSchema.optional(),
   noop: z.boolean().optional(),
   noNoop: z.boolean().optional(),
   debug: z.boolean().optional(),
+  splay: z.boolean().optional(),
+  splayLimit: z.number().int().min(1).max(600).optional(),
   expertMode: z.boolean().optional(),
+  tool: z.enum(["bolt", "ansible", "ssh"]).optional(),
 });
 
 type PuppetRunBody = z.infer<typeof PuppetRunBodySchema>;
+
+const MultiNodePuppetRunBodySchema = z.object({
+  targetNodeIds: z.array(z.string().min(1)).min(1, "At least one target node is required"),
+  tags: z.array(PuppetTagSchema).optional(),
+  environment: PuppetEnvironmentSchema.optional(),
+  noop: z.boolean().optional(),
+  noNoop: z.boolean().optional(),
+  debug: z.boolean().optional(),
+  splay: z.boolean().optional(),
+  splayLimit: z.number().int().min(1).max(600).optional(),
+  expertMode: z.boolean().optional(),
+  tool: z.enum(["bolt", "ansible", "ssh"]).optional(),
+});
+
+/**
+ * Build the puppet agent command string from configuration options.
+ * Uses `env` to set PATH so that puppet is found even when executed via sudo,
+ * since `sudo` does not pass inline variable assignments to the command.
+ */
+function buildPuppetCommand(config: PuppetRunBody): string {
+  const parts = ["env", "PATH=/opt/puppetlabs/bin:$PATH", "puppet", "agent", "-t"];
+
+  if (config.noop) {
+    parts.push("--noop");
+  }
+
+  if (config.noNoop) {
+    parts.push("--no-noop");
+  }
+
+  if (config.environment) {
+    parts.push("--environment", config.environment);
+  }
+
+  if (config.tags && config.tags.length > 0) {
+    parts.push("--tags", config.tags.join(","));
+  }
+
+  if (config.debug) {
+    parts.push("--debug");
+  }
+
+  if (config.splay && config.splayLimit) {
+    const splaySeconds = Math.floor(Math.random() * config.splayLimit);
+    parts.push("--splay", "--splaylimit", String(splaySeconds));
+  }
+
+  return parts.join(" ");
+}
+
+/**
+ * Record a puppet run journal entry for a node.
+ */
+async function recordPuppetJournal(
+  journalService: JournalService | undefined,
+  nodeId: string,
+  tool: string,
+  config: PuppetRunBody,
+  status: "success" | "failed" | "partial",
+  error?: string,
+  userId?: string,
+  logger?: LoggerService,
+): Promise<void> {
+  if (!journalService) return;
+
+  const entry: CreateJournalEntry = {
+    nodeId,
+    nodeUri: `${tool}:${nodeId}`,
+    eventType: "puppet_run",
+    source: tool as "bolt" | "ansible" | "ssh",
+    action: "puppet_agent",
+    summary: status === "success"
+      ? `Puppet agent run succeeded on ${nodeId}`
+      : `Puppet agent run failed on ${nodeId}${error ? `: ${error}` : ""}`,
+    details: {
+      status,
+      tool,
+      ...(config.environment ? { environment: config.environment } : {}),
+      ...(config.noop ? { noop: true } : {}),
+      ...(config.noNoop ? { noNoop: true } : {}),
+      ...(config.debug ? { debug: true } : {}),
+      ...(config.tags && config.tags.length > 0 ? { tags: config.tags } : {}),
+      ...(config.splay ? { splay: true, splayLimit: config.splayLimit } : {}),
+      ...(error ? { error } : {}),
+    },
+    userId: userId ?? null,
+  };
+
+  try {
+    await journalService.recordEvent(entry);
+  } catch (err) {
+    logger?.error("Failed to record puppet run journal entry", {
+      component: "PuppetRouter",
+      operation: "recordJournal",
+      metadata: { nodeId, error: err instanceof Error ? err.message : String(err) },
+    });
+  }
+}
 
 /**
  * Create Puppet router
  */
 export function createPuppetRouter(
-  boltService: BoltService,
+  integrationManager: IntegrationManager,
   executionRepository: ExecutionRepository,
+  journalService?: JournalService,
   streamingManager?: StreamingExecutionManager,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
-   * Helper function for expert mode responses
+   * Select the best available execution tool.
    */
-  const handleExpertModeResponse = (
-    req: Request,
-    res: Response,
-    responseData: unknown,
-    operation: string,
-    duration: number,
-    integration: string,
-    additionalMetadata?: Record<string, unknown>
-  ): void => {
-    if (req.expertMode) {
-      const expertModeService = new ExpertModeService();
-      const requestId = expertModeService.generateRequestId();
-      const debugInfo = expertModeService.createDebugInfo(operation, requestId, duration);
-
-      expertModeService.setIntegration(debugInfo, integration);
-
-      if (additionalMetadata) {
-        Object.entries(additionalMetadata).forEach(([key, value]) => {
-          expertModeService.addMetadata(debugInfo, key, value);
-        });
-      }
-
-      // Add performance metrics
-      debugInfo.performance = expertModeService.collectPerformanceMetrics();
-
-      // Add request context
-      debugInfo.context = expertModeService.collectRequestContext(req);
-
-      res.status(202).json(expertModeService.attachDebugInfo(responseData, debugInfo));
-    } else {
-      res.status(202).json(responseData);
+  function selectTool(requested?: string): ExecutionTool | null {
+    if (requested && integrationManager.getExecutionTool(requested)) {
+      return requested as ExecutionTool;
     }
-  };
+    // Fallback priority: bolt > ansible > ssh
+    for (const tool of ["bolt", "ansible", "ssh"] as const) {
+      if (integrationManager.getExecutionTool(tool)) {
+        return tool;
+      }
+    }
+    return null;
+  }
 
   /**
    * POST /api/nodes/:id/puppet-run
-   * Execute Puppet run on a node
+   * Execute Puppet run on a single node
    */
   router.post(
     "/:id/puppet-run",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Processing Puppet run request", {
         component: "PuppetRouter",
-        integration: "bolt",
         operation: "puppet-run",
         metadata: { nodeId: req.params.id },
       });
 
-      // Capture info in expert mode
-      if (req.expertMode) {
-        const debugInfo = expertModeService.createDebugInfo(
-          'POST /api/nodes/:id/puppet-run',
-          requestId,
-          Date.now() - startTime
-        );
-        expertModeService.addInfo(debugInfo, {
-          message: "Processing Puppet run request",
-          context: JSON.stringify({ nodeId: req.params.id }),
-          level: 'info',
-        });
-      }
-
       try {
-        // Validate request parameters and body
-        logger.debug("Validating request parameters", {
-          component: "PuppetRouter",
-          integration: "bolt",
-          operation: "puppet-run",
-          metadata: { params: req.params, body: req.body },
-        });
-
-        // Capture debug in expert mode
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'POST /api/nodes/:id/puppet-run',
-            requestId,
-            Date.now() - startTime
-          );
-          expertModeService.addDebug(debugInfo, {
-            message: "Validating request parameters",
-            context: JSON.stringify({ params: req.params, body: req.body as unknown }),
-            level: 'debug',
-          });
-        }
-
         const params = NodeIdParamSchema.parse(req.params);
         const body: PuppetRunBody = PuppetRunBodySchema.parse(req.body);
         const nodeId = params.id;
+        const expertMode = body.expertMode ?? false;
 
-        // Verify node exists in inventory
-        logger.debug("Verifying node exists in inventory", {
-          component: "PuppetRouter",
-          integration: "bolt",
-          operation: "puppet-run",
-          metadata: { nodeId },
-        });
-
-        // Capture debug in expert mode
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'POST /api/nodes/:id/puppet-run',
-            requestId,
-            Date.now() - startTime
-          );
-          expertModeService.addDebug(debugInfo, {
-            message: "Verifying node exists in inventory",
-            context: JSON.stringify({ nodeId }),
-            level: 'debug',
+        // Select execution tool
+        const selectedTool = selectTool(body.tool);
+        if (!selectedTool) {
+          res.status(503).json({
+            error: {
+              code: "EXECUTION_TOOL_NOT_AVAILABLE",
+              message: "No execution tool available for puppet run",
+            },
           });
+          return;
         }
 
-        const nodes = await boltService.getInventory();
-        const node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
+        // Verify node exists in inventory
+        const aggregatedInventory = await integrationManager.getAggregatedInventory();
+        const node = aggregatedInventory.nodes.find(
+          (n) => n.id === nodeId || n.name === nodeId,
+        );
 
         if (!node) {
           const duration = Date.now() - startTime;
           logger.warn("Node not found in inventory", {
             component: "PuppetRouter",
-            integration: "bolt",
             operation: "puppet-run",
             metadata: { nodeId },
           });
@@ -168,21 +207,18 @@ export function createPuppetRouter(
             },
           };
 
-          // Capture warning and attach debug info in expert mode
           if (req.expertMode) {
             const debugInfo = expertModeService.createDebugInfo(
-              'POST /api/nodes/:id/puppet-run',
+              "POST /api/nodes/:id/puppet-run",
               requestId,
-              duration
+              duration,
             );
             expertModeService.addWarning(debugInfo, {
-              message: "Node not found in inventory",
-              context: `Node '${nodeId}' not found in inventory`,
-              level: 'warn',
+              message: `Node '${nodeId}' not found in inventory`,
+              level: "warn",
             });
             debugInfo.performance = expertModeService.collectPerformanceMetrics();
             debugInfo.context = expertModeService.collectRequestContext(req);
-
             res.status(404).json(expertModeService.attachDebugInfo(errorResponse, debugInfo));
           } else {
             res.status(404).json(errorResponse);
@@ -190,175 +226,78 @@ export function createPuppetRouter(
           return;
         }
 
-        // Build Puppet run configuration
-        const config = {
-          tags: body.tags,
-          environment: body.environment,
-          noop: body.noop,
-          noNoop: body.noNoop,
-          debug: body.debug,
-        };
-        const expertMode = body.expertMode ?? false;
-
-        logger.debug("Creating execution record", {
-          component: "PuppetRouter",
-          integration: "bolt",
-          operation: "puppet-run",
-          metadata: { nodeId, config, expertMode },
-        });
-
-        // Capture debug in expert mode
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'POST /api/nodes/:id/puppet-run',
-            requestId,
-            Date.now() - startTime
-          );
-          expertModeService.addDebug(debugInfo, {
-            message: "Creating execution record",
-            context: JSON.stringify({ nodeId, config, expertMode }),
-            level: 'debug',
-          });
-        }
+        // Build puppet command for display/logging
+        const puppetCommand = buildPuppetCommand(body);
 
         // Create initial execution record
         const executionId = await executionRepository.create({
           type: "puppet",
           targetNodes: [nodeId],
-          action: "psick::puppet_agent",
-          parameters: config,
+          action: "puppet_agent",
+          parameters: {
+            ...(body.tags ? { tags: body.tags } : {}),
+            ...(body.environment ? { environment: body.environment } : {}),
+            ...(body.noop ? { noop: true } : {}),
+            ...(body.noNoop ? { noNoop: true } : {}),
+            ...(body.debug ? { debug: true } : {}),
+            ...(body.splay ? { splay: true, splayLimit: body.splayLimit } : {}),
+          },
           status: "running",
           startedAt: new Date().toISOString(),
           results: [],
           expertMode,
+          executionTool: selectedTool,
+          command: puppetCommand,
         });
 
         logger.info("Execution record created, starting Puppet run", {
           component: "PuppetRouter",
-          integration: "bolt",
           operation: "puppet-run",
-          metadata: { executionId, nodeId },
+          metadata: { executionId, nodeId, tool: selectedTool },
         });
 
-        // Capture info in expert mode
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'POST /api/nodes/:id/puppet-run',
-            requestId,
-            Date.now() - startTime
-          );
-          expertModeService.addInfo(debugInfo, {
-            message: "Execution record created, starting Puppet run",
-            context: JSON.stringify({ executionId, nodeId }),
-            level: 'info',
-          });
-        }
+        // Get user ID from request (set by auth middleware)
+        const userId: string = req.user?.userId ?? "unknown";
 
-        // Execute Puppet run asynchronously
-        // We don't await here to return immediately with execution ID
+        // Execute puppet run asynchronously
         void (async (): Promise<void> => {
           try {
-            logger.debug("Setting up streaming callback", {
-              component: "PuppetRouter",
-              integration: "bolt",
-              operation: "puppet-run",
-              metadata: { executionId, expertMode, hasStreamingManager: !!streamingManager },
-            });
-
-            // Capture debug in expert mode
-            if (expertMode) {
-              const asyncExpertModeService = new ExpertModeService();
-              const asyncRequestId = requestId;
-              const debugInfo = asyncExpertModeService.createDebugInfo(
-                'POST /api/nodes/:id/puppet-run',
-                asyncRequestId,
-                Date.now() - startTime
-              );
-              asyncExpertModeService.addDebug(debugInfo, {
-                message: "Setting up streaming callback",
-                context: JSON.stringify({ executionId, expertMode, hasStreamingManager: !!streamingManager }),
-                level: 'debug',
-              });
-            }
-
             const streamingCallback = streamingManager?.createStreamingCallback(
               executionId,
-              expertMode
+              expertMode,
             );
 
-            logger.debug("Executing Puppet agent run", {
-              component: "PuppetRouter",
-              integration: "bolt",
-              operation: "puppet-run",
-              metadata: { executionId, nodeId, config },
+            // All tools use command execution with puppet agent -t
+            const result = await integrationManager.executeAction(selectedTool, {
+              type: "command",
+              target: nodeId,
+              action: puppetCommand,
+              parameters: { sudo: true },
+              metadata: { streamingCallback },
             });
-
-            // Capture debug in expert mode
-            if (expertMode) {
-              const asyncExpertModeService = new ExpertModeService();
-              const asyncRequestId = requestId;
-              const debugInfo = asyncExpertModeService.createDebugInfo(
-                'POST /api/nodes/:id/puppet-run',
-                asyncRequestId,
-                Date.now() - startTime
-              );
-              asyncExpertModeService.addDebug(debugInfo, {
-                message: "Executing Puppet agent run",
-                context: JSON.stringify({ executionId, nodeId, config }),
-                level: 'debug',
-              });
-            }
-
-            const result = await boltService.runPuppetAgent(
-              nodeId,
-              config,
-              streamingCallback,
-            );
-
-            logger.info("Puppet run completed successfully", {
-              component: "PuppetRouter",
-              integration: "bolt",
-              operation: "puppet-run",
-              metadata: {
-                executionId,
-                nodeId,
-                status: result.status,
-                duration: result.results[0]?.duration,
-              },
-            });
-
-            // Capture info in expert mode
-            if (expertMode) {
-              const asyncExpertModeService = new ExpertModeService();
-              const asyncRequestId = requestId;
-              const debugInfo = asyncExpertModeService.createDebugInfo(
-                'POST /api/nodes/:id/puppet-run',
-                asyncRequestId,
-                Date.now() - startTime
-              );
-              asyncExpertModeService.addInfo(debugInfo, {
-                message: "Puppet run completed successfully",
-                context: JSON.stringify({
-                  executionId,
-                  nodeId,
-                  status: result.status,
-                  duration: result.results[0]?.duration,
-                }),
-                level: 'info',
-              });
-            }
 
             // Update execution record with results
-            // Include stdout/stderr when expert mode is enabled
             await executionRepository.update(executionId, {
               status: result.status,
               completedAt: result.completedAt,
               results: result.results,
               error: result.error,
-              command: result.command,
+              command: result.command ?? puppetCommand,
               stdout: expertMode ? result.stdout : undefined,
               stderr: expertMode ? result.stderr : undefined,
             });
+
+            // Record journal entry
+            await recordPuppetJournal(
+              journalService,
+              nodeId,
+              selectedTool,
+              body,
+              result.status === "success" ? "success" : "failed",
+              result.error,
+              userId,
+              logger,
+            );
 
             // Emit completion event if streaming
             if (streamingManager) {
@@ -367,46 +306,36 @@ export function createPuppetRouter(
           } catch (error) {
             logger.error("Error executing Puppet run", {
               component: "PuppetRouter",
-              integration: "bolt",
               operation: "puppet-run",
               metadata: { executionId, nodeId },
             }, error instanceof Error ? error : undefined);
 
-            // Capture error in expert mode
-            if (expertMode) {
-              const asyncExpertModeService = new ExpertModeService();
-              const asyncRequestId = requestId;
-              const debugInfo = asyncExpertModeService.createDebugInfo(
-                'POST /api/nodes/:id/puppet-run',
-                asyncRequestId,
-                Date.now() - startTime
-              );
-              asyncExpertModeService.addError(debugInfo, {
-                message: "Error executing Puppet run",
-                stack: error instanceof Error ? error.stack : undefined,
-                level: 'error',
-              });
-            }
+            const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
-            const errorMessage =
-              error instanceof Error ? error.message : "Unknown error";
-
-            // Update execution record with error
             await executionRepository.update(executionId, {
               status: "failed",
               completedAt: new Date().toISOString(),
-              results: [
-                {
-                  nodeId,
-                  status: "failed",
-                  error: errorMessage,
-                  duration: 0,
-                },
-              ],
+              results: [{
+                nodeId,
+                status: "failed",
+                error: errorMessage,
+                duration: 0,
+              }],
               error: errorMessage,
             });
 
-            // Emit error event if streaming
+            // Record failure in journal
+            await recordPuppetJournal(
+              journalService,
+              nodeId,
+              selectedTool,
+              body,
+              "failed",
+              errorMessage,
+              userId,
+              logger,
+            );
+
             if (streamingManager) {
               streamingManager.emitError(executionId, errorMessage);
             }
@@ -415,67 +344,39 @@ export function createPuppetRouter(
 
         const duration = Date.now() - startTime;
 
-        logger.info("Puppet run request accepted", {
-          component: "PuppetRouter",
-          integration: "bolt",
-          operation: "puppet-run",
-          metadata: { executionId, nodeId, duration },
-        });
-
-        // Capture info in expert mode
-        if (req.expertMode) {
-          const debugInfo = expertModeService.createDebugInfo(
-            'POST /api/nodes/:id/puppet-run',
-            requestId,
-            duration
-          );
-          expertModeService.addInfo(debugInfo, {
-            message: "Puppet run request accepted",
-            context: JSON.stringify({ executionId, nodeId, duration }),
-            level: 'info',
-          });
-        }
-
-        // Return execution ID and initial status immediately
         const responseData = {
           executionId,
           status: "running",
           message: "Puppet run started",
+          tool: selectedTool,
         };
 
-        handleExpertModeResponse(
-          req,
-          res,
-          responseData,
-          'POST /api/nodes/:id/puppet-run',
-          duration,
-          'bolt',
-          { executionId, nodeId, config }
-        );
+        if (req.expertMode) {
+          const debugInfo = expertModeService.createDebugInfo(
+            "POST /api/nodes/:id/puppet-run",
+            requestId,
+            duration,
+          );
+          expertModeService.setIntegration(debugInfo, selectedTool);
+          expertModeService.addMetadata(debugInfo, "executionId", executionId);
+          expertModeService.addMetadata(debugInfo, "nodeId", nodeId);
+          expertModeService.addMetadata(debugInfo, "command", puppetCommand);
+          expertModeService.addMetadata(debugInfo, "tool", selectedTool);
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+          res.status(202).json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.status(202).json(responseData);
+        }
       } catch (error) {
         const duration = Date.now() - startTime;
 
         if (error instanceof z.ZodError) {
           logger.warn("Request validation failed", {
             component: "PuppetRouter",
-            integration: "bolt",
             operation: "puppet-run",
             metadata: { errors: error.errors },
           });
-
-          // Capture warning in expert mode
-          if (req.expertMode) {
-            const debugInfo = expertModeService.createDebugInfo(
-              'POST /api/nodes/:id/puppet-run',
-              requestId,
-              duration
-            );
-            expertModeService.addWarning(debugInfo, {
-              message: "Request validation failed",
-              context: JSON.stringify(error.errors),
-              level: 'warn',
-            });
-          }
 
           res.status(400).json({
             error: {
@@ -487,57 +388,231 @@ export function createPuppetRouter(
           return;
         }
 
-        if (error instanceof BoltInventoryNotFoundError) {
-          logger.error("Bolt configuration missing", {
-            component: "PuppetRouter",
-            integration: "bolt",
-            operation: "puppet-run",
-          }, error);
+        logger.error("Unexpected error processing Puppet run request", {
+          component: "PuppetRouter",
+          operation: "puppet-run",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
 
-          // Capture error in expert mode
-          if (req.expertMode) {
-            const debugInfo = expertModeService.createDebugInfo(
-              'POST /api/nodes/:id/puppet-run',
-              requestId,
-              duration
-            );
-            expertModeService.addError(debugInfo, {
-              message: "Bolt configuration missing",
-              stack: error.stack,
-              level: 'error',
-            });
-          }
+        res.status(500).json({
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to process Puppet run request",
+          },
+        });
+      }
+    }),
+  );
 
-          res.status(404).json({
+  /**
+   * POST /api/puppet-run
+   * Execute Puppet run on multiple nodes (global action)
+   */
+  router.post(
+    "/",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      logger.info("Processing multi-node Puppet run request", {
+        component: "PuppetRouter",
+        operation: "puppet-run-multi",
+      });
+
+      try {
+        const body = MultiNodePuppetRunBodySchema.parse(req.body);
+        const expertMode = body.expertMode ?? false;
+
+        // Select execution tool
+        const selectedTool = selectTool(body.tool);
+        if (!selectedTool) {
+          res.status(503).json({
             error: {
-              code: "BOLT_CONFIG_MISSING",
-              message: error.message,
+              code: "EXECUTION_TOOL_NOT_AVAILABLE",
+              message: "No execution tool available for puppet run",
             },
           });
           return;
         }
 
-        // Unknown error
-        logger.error("Unexpected error processing Puppet run request", {
-          component: "PuppetRouter",
-          integration: "bolt",
-          operation: "puppet-run",
-          metadata: { duration },
-        }, error instanceof Error ? error : undefined);
+        // Validate all nodes exist
+        const aggregatedInventory = await integrationManager.getAggregatedInventory();
+        const validNodeIds = new Set(aggregatedInventory.nodes.map((n) => n.id));
+        const invalidIds = body.targetNodeIds.filter((id) => !validNodeIds.has(id));
 
-        // Capture error in expert mode
+        if (invalidIds.length > 0) {
+          res.status(400).json({
+            error: {
+              code: "INVALID_NODE_IDS",
+              message: `Invalid node IDs: ${invalidIds.join(", ")}`,
+            },
+          });
+          return;
+        }
+
+        const puppetCommand = buildPuppetCommand(body);
+        const userId: string = req.user?.userId ?? "unknown";
+
+        // Create execution records for each node
+        const executionIds: string[] = [];
+        for (const nodeId of body.targetNodeIds) {
+          const executionId = await executionRepository.create({
+            type: "puppet",
+            targetNodes: [nodeId],
+            action: "puppet_agent",
+            parameters: {
+              ...(body.tags ? { tags: body.tags } : {}),
+              ...(body.environment ? { environment: body.environment } : {}),
+              ...(body.noop ? { noop: true } : {}),
+              ...(body.noNoop ? { noNoop: true } : {}),
+              ...(body.debug ? { debug: true } : {}),
+              ...(body.splay ? { splay: true, splayLimit: body.splayLimit } : {}),
+            },
+            status: "running",
+            startedAt: new Date().toISOString(),
+            results: [],
+            expertMode,
+            executionTool: selectedTool,
+            command: puppetCommand,
+          });
+          executionIds.push(executionId);
+        }
+
+        // Execute puppet runs asynchronously for each node
+        for (let i = 0; i < body.targetNodeIds.length; i++) {
+          const nodeId = body.targetNodeIds[i];
+          const executionId = executionIds[i];
+
+          void (async (): Promise<void> => {
+            try {
+              const streamingCallback = streamingManager?.createStreamingCallback(
+                executionId,
+                expertMode,
+              );
+
+              // All tools use command execution with puppet agent -t
+              const result = await integrationManager.executeAction(selectedTool, {
+                type: "command",
+                target: nodeId,
+                action: puppetCommand,
+                parameters: { sudo: true },
+                metadata: { streamingCallback },
+              });
+
+              await executionRepository.update(executionId, {
+                status: result.status,
+                completedAt: result.completedAt,
+                results: result.results,
+                error: result.error,
+                command: result.command ?? puppetCommand,
+                stdout: expertMode ? result.stdout : undefined,
+                stderr: expertMode ? result.stderr : undefined,
+              });
+
+              await recordPuppetJournal(
+                journalService,
+                nodeId,
+                selectedTool,
+                body,
+                result.status === "success" ? "success" : "failed",
+                result.error,
+                userId,
+                logger,
+              );
+
+              if (streamingManager) {
+                streamingManager.emitComplete(executionId, result);
+              }
+            } catch (error) {
+              logger.error("Error executing Puppet run on node", {
+                component: "PuppetRouter",
+                operation: "puppet-run-multi",
+                metadata: { executionId, nodeId },
+              }, error instanceof Error ? error : undefined);
+
+              const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+              await executionRepository.update(executionId, {
+                status: "failed",
+                completedAt: new Date().toISOString(),
+                results: [{
+                  nodeId,
+                  status: "failed",
+                  error: errorMessage,
+                  duration: 0,
+                }],
+                error: errorMessage,
+              });
+
+              await recordPuppetJournal(
+                journalService,
+                nodeId,
+                selectedTool,
+                body,
+                "failed",
+                errorMessage,
+                userId,
+                logger,
+              );
+
+              if (streamingManager) {
+                streamingManager.emitError(executionId, errorMessage);
+              }
+            }
+          })();
+        }
+
+        const duration = Date.now() - startTime;
+
+        const responseData = {
+          executionIds,
+          targetCount: body.targetNodeIds.length,
+          status: "running",
+          message: `Puppet run started on ${String(body.targetNodeIds.length)} node(s)`,
+          tool: selectedTool,
+        };
+
         if (req.expertMode) {
           const debugInfo = expertModeService.createDebugInfo(
-            'POST /api/nodes/:id/puppet-run',
+            "POST /api/puppet-run",
             requestId,
-            duration
+            duration,
           );
-          expertModeService.addError(debugInfo, {
-            message: "Unexpected error processing Puppet run request",
-            stack: error instanceof Error ? error.stack : undefined,
-            level: 'error',
-          });
+          expertModeService.setIntegration(debugInfo, selectedTool);
+          expertModeService.addMetadata(debugInfo, "targetCount", body.targetNodeIds.length);
+          expertModeService.addMetadata(debugInfo, "tool", selectedTool);
+          expertModeService.addMetadata(debugInfo, "command", puppetCommand);
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+          res.status(202).json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.status(202).json(responseData);
         }
+      } catch (error) {
+        const duration = Date.now() - startTime;
+
+        if (error instanceof z.ZodError) {
+          logger.warn("Request validation failed", {
+            component: "PuppetRouter",
+            operation: "puppet-run-multi",
+            metadata: { errors: error.errors },
+          });
+
+          res.status(400).json({
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Request validation failed",
+              details: error.errors,
+            },
+          });
+          return;
+        }
+
+        logger.error("Unexpected error processing multi-node Puppet run", {
+          component: "PuppetRouter",
+          operation: "puppet-run-multi",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
 
         res.status(500).json({
           error: {

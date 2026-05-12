@@ -10,9 +10,8 @@ import type {
 import { type ExecutionFilters } from "../database/ExecutionRepository";
 import type { ExecutionQueue } from "../services/ExecutionQueue";
 import { asyncHandler } from "./asyncHandler";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
 import type { BatchExecutionService } from "../services/BatchExecutionService";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Request validation schemas
@@ -59,9 +58,11 @@ export function createExecutionsRouter(
   executionRepository: ExecutionRepository,
   executionQueue?: ExecutionQueue,
   batchExecutionService?: BatchExecutionService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * GET /api/executions
@@ -71,7 +72,6 @@ export function createExecutionsRouter(
     "/",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching executions list", {
@@ -232,7 +232,6 @@ export function createExecutionsRouter(
     "/:id",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching execution details", {
@@ -396,7 +395,6 @@ export function createExecutionsRouter(
     "/:id/original",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching original execution", {
@@ -593,7 +591,6 @@ export function createExecutionsRouter(
     "/:id/re-executions",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching re-executions", {
@@ -760,7 +757,6 @@ export function createExecutionsRouter(
     "/:id/re-execute",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Creating re-execution", {
@@ -971,7 +967,6 @@ export function createExecutionsRouter(
     "/queue/status",
     asyncHandler((_req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = _req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching queue status", {
@@ -1113,7 +1108,6 @@ export function createExecutionsRouter(
     "/:id/output",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching execution output", {
@@ -1290,7 +1284,6 @@ export function createExecutionsRouter(
     "/:id/cancel",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Cancelling execution", {
@@ -1569,7 +1562,6 @@ export function createExecutionsRouter(
     "/batch",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Creating batch execution", {
@@ -1652,7 +1644,7 @@ export function createExecutionsRouter(
         const batchRequest = validationResult.data;
 
         // Get user ID from request (set by auth middleware)
-        const userId: string = (req as unknown as { user?: { id?: string } }).user?.id ?? "unknown";
+        const userId: string = req.user?.userId ?? "unknown";
 
         logger.debug("Processing batch execution request", {
           component: "ExecutionsRouter",
@@ -1817,7 +1809,6 @@ export function createExecutionsRouter(
     "/batch/:batchId",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching batch execution status", {
@@ -1982,7 +1973,6 @@ export function createExecutionsRouter(
     "/batch/:batchId/cancel",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Cancelling batch execution", {

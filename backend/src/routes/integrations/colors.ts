@@ -1,16 +1,16 @@
 import { Router, type Request, type Response } from "express";
 import { asyncHandler } from "../asyncHandler";
 import { IntegrationColorService } from "../../services/IntegrationColorService";
-import { ExpertModeService } from "../../services/ExpertModeService";
-import { createLogger } from "./utils";
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 /**
  * Create colors router for integration color configuration
  */
-export function createColorsRouter(): Router {
+export function createColorsRouter(container: DIContainer = createDefaultContainer()): Router {
   const router = Router();
   const colorService = new IntegrationColorService();
-  const logger = createLogger();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * GET /api/integrations/colors
@@ -24,7 +24,6 @@ export function createColorsRouter(): Router {
     "/",
     asyncHandler((req: Request, res: Response): void => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info at the start if expert mode is enabled

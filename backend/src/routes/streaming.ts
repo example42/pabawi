@@ -4,8 +4,7 @@ import crypto from "crypto";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Request validation schemas
@@ -75,9 +74,11 @@ export function streamAuthMiddleware(
 export function createStreamingRouter(
   streamingManager: StreamingExecutionManager,
   executionRepository: ExecutionRepository,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * POST /api/executions/:id/stream-ticket
@@ -138,7 +139,6 @@ export function createStreamingRouter(
     "/:id/stream",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -325,7 +325,6 @@ export function createStreamingRouter(
     "/stats",
     asyncHandler((req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled

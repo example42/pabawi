@@ -4,13 +4,11 @@ import { asyncHandler } from "./asyncHandler";
 import { GroupService } from "../services/GroupService";
 import { PermissionService } from "../services/PermissionService";
 import type { DatabaseService } from "../database/DatabaseService";
-import { LoggerService } from "../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Zod schema for pagination query parameters
@@ -40,9 +38,11 @@ const UpdateGroupSchema = z.object({
  * Create groups management router
  */
 export function createGroupsRouter(
-  databaseService: DatabaseService
+  databaseService: DatabaseService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
+  const logger = container.resolve("logger");
   const jwtSecret = process.env.JWT_SECRET;
   const groupService = new GroupService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());

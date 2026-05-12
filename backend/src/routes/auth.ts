@@ -6,7 +6,6 @@ import { AuthenticationService } from "../services/AuthenticationService";
 import { SetupService } from "../services/SetupService";
 import { AuditLoggingService } from "../services/AuditLoggingService";
 import type { DatabaseService } from "../database/DatabaseService";
-import { LoggerService } from "../services/LoggerService";
 import {
   sendValidationError,
   ERROR_CODES,
@@ -20,8 +19,7 @@ import {
 } from "../utils/errorHandling";
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Zod schema for user registration
@@ -70,9 +68,11 @@ const LoginSchema = z.object({
  * Create authentication router
  */
 export function createAuthRouter(
-  databaseService: DatabaseService
+  databaseService: DatabaseService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
+  const logger = container.resolve("logger");
   const jwtSecret = process.env.JWT_SECRET; // Use same secret for both
   const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret, auditLogger);

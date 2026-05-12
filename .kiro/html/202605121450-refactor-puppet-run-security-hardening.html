@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — refactor(puppet,security): multi-node puppet run + input validation hardening</title>
+<style>
+  :root { --bg: #1a1b26; --surface: #24283b; --border: #414868; --text: #c0caf5; --text-dim: #565f89; --accent: #7aa2f7; --green: #9ece6a; --red: #f7768e; --yellow: #e0af68; --purple: #bb9af7; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; background: var(--bg); color: var(--text); padding: 2rem; line-height: 1.6; }
+  h1 { color: var(--accent); font-size: 1.4rem; margin-bottom: 0.5rem; }
+  h2 { color: var(--purple); font-size: 1.1rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  h3 { color: var(--yellow); font-size: 0.95rem; margin: 1rem 0 0.5rem; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .commit-msg { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; margin: 1rem 0; }
+  .commit-msg .title { color: var(--green); font-size: 1rem; font-weight: bold; }
+  .commit-msg .body { color: var(--text-dim); margin-top: 0.6rem; white-space: pre-wrap; font-size: 0.85rem; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; }
+  th { text-align: left; color: var(--text-dim); padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  .status-A { color: var(--green); } .status-M { color: var(--yellow); } .status-D { color: var(--red); }
+  .stat { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; margin: 0.2rem; }
+  .stat-green { background: rgba(158,206,106,0.15); color: var(--green); }
+  .stat-red { background: rgba(247,118,142,0.15); color: var(--red); }
+  .stat-blue { background: rgba(122,162,247,0.15); color: var(--accent); }
+  ul { padding-left: 1.2rem; margin: 0.4rem 0; }
+  li { margin: 0.3rem 0; font-size: 0.88rem; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: bold; }
+  .badge-fe { background: rgba(187,154,247,0.2); color: var(--purple); }
+  .badge-be { background: rgba(122,162,247,0.2); color: var(--accent); }
+  .badge-both { background: rgba(224,175,104,0.2); color: var(--yellow); }
+  .check-item { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 1rem; margin: 0.4rem 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>📋 Commit Report</h1>
+<p style="color: var(--text-dim); font-size: 0.85rem;">Branch: <code>120</code> · 2025-05-12 14:50</p>
+
+<h2>Commit Message</h2>
+<div class="commit-msg">
+  <div class="title">refactor(puppet,security): multi-node puppet run + input validation hardening</div>
+  <div class="body">
+- Refactor puppet.ts route to accept IntegrationManager (removes global cast)
+- Add multi-node puppet run support via /api/puppet-run endpoint
+- Add PuppetEnvironmentSchema and PuppetTagSchema for input validation
+- Harden BoltService: parse JSON output on non-zero exit, extract _error from value
+- Add TTL expiry to BoltService task list cache (5 min)
+- Replace deny-list sanitizeGroupName with strict allowlist regex
+- Extract RunPuppetForm.svelte component for group/node puppet actions
+- Extend PuppetRunInterface to support multi-node execution and tool selection
+- Add puppet run action to GroupActionModal
+- Fix README logo path typo (.png → .svg)
+- Add code-review-fixes spec (requirements, design, tasks)
+- Update IntegrationManager tests for allowlist sanitization behaviour</div>
+</div>
+
+<h2>Files Changed</h2>
+<p><span class="stat stat-blue">23 files</span> <span class="stat stat-green">+2455 lines</span> <span class="stat stat-red">−536 lines</span></p>
+<table>
+<tr><th>Status</th><th>File</th><th>+/−</th></tr>
+<tr><td class="status-A">A</td><td>.kiro/specs/code-review-fixes/.config.kiro</td><td>+1</td></tr>
+<tr><td class="status-A">A</td><td>.kiro/specs/code-review-fixes/design.md</td><td>+634</td></tr>
+<tr><td class="status-A">A</td><td>.kiro/specs/code-review-fixes/requirements.md</td><td>+160</td></tr>
+<tr><td class="status-A">A</td><td>.kiro/specs/code-review-fixes/tasks.md</td><td>+222</td></tr>
+<tr><td class="status-A">A</td><td>.kiro/todo/code-review.md</td><td>+189</td></tr>
+<tr><td class="status-M">M</td><td>README.md</td><td>+1 / −1</td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/IntegrationManager.ts</td><td>+34 / −50</td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/bolt/BoltService.ts</td><td>+77</td></tr>
+<tr><td class="status-M">M</td><td>backend/src/routes/executions.ts</td><td>+1 / −1</td></tr>
+<tr><td class="status-M">M</td><td>backend/src/routes/puppet.ts</td><td>+426 / −353</td></tr>
+<tr><td class="status-M">M</td><td>backend/src/server.ts</td><td>+9 / −4</td></tr>
+<tr><td class="status-M">M</td><td>backend/src/validation/commonSchemas.ts</td><td>+43</td></tr>
+<tr><td class="status-M">M</td><td>backend/test/integrations/IntegrationManager.test.ts</td><td>+11 / −7</td></tr>
+<tr><td class="status-A">A</td><td>docs/images/ams-ix-logo.svg</td><td>+1</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/ActionSelector.svelte</td><td>+5 / −5</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/CatalogComparison.svelte</td><td>+15 / −10</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/EnvironmentSelector.svelte</td><td>+17 / −10</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/GroupActionModal.svelte</td><td>+50 / −15</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/ParallelExecutionModal.svelte</td><td>+50 / −25</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/PuppetRunInterface.svelte</td><td>+230 / −85</td></tr>
+<tr><td class="status-A">A</td><td>frontend/src/components/RunPuppetForm.svelte</td><td>+271</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/index.ts</td><td>+1</td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/pages/NodeDetailPage.svelte</td><td>+5</td></tr>
+</table>
+
+<h2>Pages Affected</h2>
+<ul>
+  <li><a href="http://localhost:5173/inventory">Inventory</a> — GroupActionModal now supports puppet run action</li>
+  <li><a href="http://localhost:5173/nodes/test-node">Node Detail</a> — PuppetRunInterface added to node page, multi-node support</li>
+  <li><a href="http://localhost:5173/puppet">Puppet</a> — puppet.ts route fully refactored, environment/catalog components updated</li>
+  <li><a href="http://localhost:5173/executions">Executions</a> — userId extraction fix in batch endpoint</li>
+  <li><a href="http://localhost:5173/">All pages</a> — server.ts routing changes, validation schemas added (infrastructure)</li>
+</ul>
+
+<h2>What to Check</h2>
+<div class="check-item">✅ <strong>Puppet run on single node</strong> — Open a node detail page → expand PuppetRunInterface → trigger a puppet run. Verify streaming output works and execution completes.</div>
+<div class="check-item">✅ <strong>Multi-node puppet run</strong> — Select multiple nodes in inventory → open GroupActionModal → choose "Run Puppet" → verify the form renders and submits to /api/puppet-run.</div>
+<div class="check-item">✅ <strong>Environment selector</strong> — On Puppet page, verify environment dropdown still loads and filters correctly (CatalogComparison, EnvironmentSelector updated).</div>
+<div class="check-item">✅ <strong>Bolt command/task execution</strong> — Run a bolt command on a node. Verify that non-zero exit codes with valid JSON output are now parsed correctly (no false "execution failed" errors).</div>
+<div class="check-item">✅ <strong>Group sanitization</strong> — If you have groups with special characters in inventory sources, verify they appear with only alphanumeric/hyphen/underscore/dot/colon/slash characters.</div>
+<div class="check-item">✅ <strong>Batch execution</strong> — Trigger a batch execution from ParallelExecutionModal. Verify userId is correctly extracted (was using wrong property path).</div>
+
+<h2>Impact Analysis</h2>
+<h3>High-impact changes</h3>
+<ul>
+  <li><strong>puppet.ts refactor (426+/353−)</strong> — Major rewrite. <code>createPuppetRouter</code> signature changed (now takes IntegrationManager instead of BoltService). Only caller is <code>startServer</code> in server.ts. Blast radius: contained to puppet execution paths.</li>
+  <li><strong>sanitizeGroupName allowlist</strong> — Behaviour change: previously stripped specific patterns (SQL keywords, script tags); now strips everything outside <code>[a-zA-Z0-9 _.:/-]</code>. More restrictive. Affects all inventory group names flowing through IntegrationManager. Tests updated to match.</li>
+  <li><strong>BoltService JSON parsing on non-zero exit</strong> — Changes error handling semantics: commands that fail remotely but produce valid JSON are now treated as successful parse (with error info in result) rather than throwing BoltExecutionError. Affects all bolt command and task execution paths.</li>
+</ul>
+<h3>Low-impact changes</h3>
+<ul>
+  <li>Frontend component additions (RunPuppetForm) — new code, no existing behaviour changed</li>
+  <li>Validation schemas (PuppetEnvironmentSchema, PuppetTagSchema) — additive, no existing consumers broken</li>
+  <li>README logo path fix — cosmetic</li>
+  <li>Spec files — documentation only, no runtime impact</li>
+</ul>
+
+<h2>Codebase Stats</h2>
+<table>
+<tr><td>Files changed</td><td>23</td></tr>
+<tr><td>Lines added</td><td>+2,455</td></tr>
+<tr><td>Lines removed</td><td>−536</td></tr>
+<tr><td>Workspaces</td><td><span class="badge badge-both">frontend + backend</span></td></tr>
+<tr><td>Integrations touched</td><td>Bolt, Puppet (IntegrationManager)</td></tr>
+<tr><td>New components</td><td>RunPuppetForm.svelte</td></tr>
+<tr><td>New validation schemas</td><td>PuppetEnvironmentSchema, PuppetTagSchema</td></tr>
+</table>
+
+</div>
+</body>
+</html>

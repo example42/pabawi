@@ -4,8 +4,7 @@ import type { PuppetDBService } from "../../integrations/puppetdb/PuppetDBServic
 import type { PuppetserverService } from "../../integrations/puppetserver/PuppetserverService";
 import { asyncHandler } from "../asyncHandler";
 import { requestDeduplication } from "../../middleware/deduplication";
-import { ExpertModeService } from "../../services/ExpertModeService";
-import { createLogger } from "./utils";
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 /**
  * Create status router for integration health status
@@ -14,9 +13,11 @@ export function createStatusRouter(
   integrationManager: IntegrationManager,
   puppetDBService?: PuppetDBService,
   puppetserverService?: PuppetserverService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = createLogger();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * GET /api/integrations/status
@@ -37,7 +38,6 @@ export function createStatusRouter(
     requestDeduplication,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
       const refresh = req.query.refresh === "true";
 
@@ -80,7 +80,6 @@ export function createStatusRouter(
 
               // Capture warning in expert mode
               if (req.expertMode) {
-                const expertModeService = new ExpertModeService();
                 const requestId = req.id ?? expertModeService.generateRequestId();
                 const debugInfo = expertModeService.createDebugInfo(
                   'GET /api/integrations/status',
@@ -104,7 +103,6 @@ export function createStatusRouter(
 
               // Capture error in expert mode
               if (req.expertMode) {
-                const expertModeService = new ExpertModeService();
                 const requestId = req.id ?? expertModeService.generateRequestId();
                 const debugInfo = expertModeService.createDebugInfo(
                   'GET /api/integrations/status',
@@ -307,7 +305,6 @@ export function createStatusRouter(
 
         // Capture error in expert mode
         if (req.expertMode) {
-          const expertModeService = new ExpertModeService();
           const requestId = req.id ?? expertModeService.generateRequestId();
           const debugInfo = expertModeService.createDebugInfo(
             'GET /api/integrations/status',

@@ -7,9 +7,8 @@ import { BoltInventoryNotFoundError } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 const CommandExecutionBodySchema = z.object({
   command: z.string().min(1, "Command is required"),
@@ -25,9 +24,11 @@ export function createCommandsRouter(
   executionRepository: ExecutionRepository,
   commandWhitelistService: CommandWhitelistService,
   streamingManager?: StreamingExecutionManager,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * POST /api/nodes/:id/command
@@ -37,7 +38,6 @@ export function createCommandsRouter(
     "/:id/command",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled

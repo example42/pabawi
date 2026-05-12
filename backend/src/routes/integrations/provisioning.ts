@@ -4,7 +4,7 @@ import type { ProxmoxIntegration } from "../../integrations/proxmox/ProxmoxInteg
 import type { AWSPlugin } from "../../integrations/aws/AWSPlugin";
 import type { ProvisioningCapability } from "../../integrations/types";
 import { asyncHandler } from "../asyncHandler";
-import { createLogger } from "./utils";
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 interface ProvisioningIntegration {
   name: string;
@@ -23,10 +23,11 @@ interface ListIntegrationsResponse {
  * Validates Requirements: 2.1, 2.2, 13.1, 13.3
  */
 export function createProvisioningRouter(
-  integrationManager: IntegrationManager
+  integrationManager: IntegrationManager,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = createLogger();
+  const logger = container.resolve("logger");
 
   /**
    * GET /api/integrations/provisioning

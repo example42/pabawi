@@ -1,7 +1,8 @@
 import { type Request, type Response } from "express";
 import { z } from "zod";
-import { ExpertModeService } from "../../services/ExpertModeService";
-import { LoggerService } from "../../services/LoggerService";
+import type { ExpertModeService } from "../../services/ExpertModeService";
+import type { LoggerService } from "../../services/LoggerService";
+import type { DIContainer } from "../../container/DIContainer";
 
 /**
  * EXPERT MODE PATTERN - CORRECT IMPLEMENTATION
@@ -138,10 +139,10 @@ export const handleExpertModeResponse = (
   operation: string,
   duration: number,
   integration?: string,
-  additionalMetadata?: Record<string, unknown>
+  additionalMetadata?: Record<string, unknown>,
+  expertModeService?: ExpertModeService,
 ): void => {
-  if (req.expertMode) {
-    const expertModeService = new ExpertModeService();
+  if (req.expertMode && expertModeService) {
     const requestId = req.id ?? expertModeService.generateRequestId();
     const debugInfo = expertModeService.createDebugInfo(operation, requestId, duration);
 
@@ -185,11 +186,7 @@ export const captureError = (
 ): void => {
   // This function is broken by design - it creates debug info but doesn't return it
   // Routes using this will NOT have debug info in error responses
-  const logger = new LoggerService();
-  logger.warn('DEPRECATED: captureError() is broken. Use direct ExpertModeService calls.', {
-    component: "IntegrationUtils",
-    operation: "captureError",
-  });
+  // DEPRECATED: Use direct ExpertModeService calls instead.
 };
 
 /**
@@ -210,16 +207,13 @@ export const captureWarning = (
 ): void => {
   // This function is broken by design - it creates debug info but doesn't return it
   // Routes using this will NOT have debug info in error responses
-  const logger = new LoggerService();
-  logger.warn('DEPRECATED: captureWarning() is broken. Use direct ExpertModeService calls.', {
-    component: "IntegrationUtils",
-    operation: "captureWarning",
-  });
+  // DEPRECATED: Use direct ExpertModeService calls instead.
 };
 
 /**
  * Create a logger instance for routes
+ * @deprecated Use container.resolve("logger") instead
  */
-export const createLogger = (): LoggerService => {
-  return new LoggerService();
+export const createLogger = (container?: DIContainer): LoggerService | undefined => {
+  return container?.resolve("logger");
 };

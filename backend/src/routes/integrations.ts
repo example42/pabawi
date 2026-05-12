@@ -12,6 +12,7 @@ import { createProvisioningRouter } from "./integrations/provisioning";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
 import { asyncHandler } from "./asyncHandler";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Create integrations router
@@ -23,17 +24,19 @@ export function createIntegrationsRouter(
   db?: DatabaseAdapter,
   jwtSecret?: string,
   options?: { allowDestructiveProvisioning?: boolean },
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
 
   // Mount colors router
-  router.use("/colors", createColorsRouter());
+  router.use("/colors", createColorsRouter(container));
 
   // Mount status router
   router.use("/status", createStatusRouter(
     integrationManager,
     puppetDBService,
-    puppetserverService
+    puppetserverService,
+    container
   ));
 
   // Mount PuppetDB router with authentication and RBAC (Requirements 11.1, 11.2, 11.3, 11.4)
@@ -46,20 +49,20 @@ export function createIntegrationsRouter(
       "/puppetdb",
       asyncHandler(authMiddleware),
       asyncHandler(rbacMiddleware('puppetdb', 'read')),
-      createPuppetDBRouter(puppetDBService)
+      createPuppetDBRouter(puppetDBService, container)
     );
   } else {
     // Fallback for cases where database is not available (e.g., tests)
-    router.use("/puppetdb", createPuppetDBRouter(puppetDBService));
+    router.use("/puppetdb", createPuppetDBRouter(puppetDBService, container));
   }
 
   // Mount Puppetserver router (handles not configured case internally)
-  router.use("/puppetserver", createPuppetserverRouter(puppetserverService, puppetDBService));
+  router.use("/puppetserver", createPuppetserverRouter(puppetserverService, puppetDBService, container));
 
   // Mount Proxmox router
   router.use("/proxmox", createProxmoxRouter(integrationManager, {
     allowDestructiveActions: options?.allowDestructiveProvisioning ?? true,
-  }));
+  }, container));
 
   // Mount Provisioning router (integration discovery) with authentication
   // Validates Requirements: 1.3, 2.1, 9.1, 9.2
@@ -71,11 +74,11 @@ export function createIntegrationsRouter(
       "/provisioning",
       asyncHandler(authMiddleware),
       asyncHandler(rbacMiddleware('provisioning', 'read')),
-      createProvisioningRouter(integrationManager)
+      createProvisioningRouter(integrationManager, container)
     );
   } else {
     // Fallback for cases where database is not available (e.g., tests)
-    router.use("/provisioning", createProvisioningRouter(integrationManager));
+    router.use("/provisioning", createProvisioningRouter(integrationManager, container));
   }
 
   return router;

@@ -4,9 +4,8 @@ import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import { asyncHandler } from "./asyncHandler";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Regex for safe playbook paths:
@@ -33,15 +32,16 @@ export function createPlaybooksRouter(
   integrationManager: IntegrationManager,
   executionRepository: ExecutionRepository,
   streamingManager?: StreamingExecutionManager,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   router.post(
     "/:id/playbook",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       const debugInfo = req.expertMode

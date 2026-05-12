@@ -43,12 +43,15 @@ interface CacheEntry<T> {
 export class BoltService {
   private readonly defaultTimeout: number;
   private readonly boltProjectPath: string;
-  private taskListCache: Task[] | null = null;
+  private taskListCache: CacheEntry<Task[]> | null = null;
   private logger: LoggerService;
 
   // Cache configuration
   private readonly inventoryTtl: number;
   private readonly factsTtl: number;
+  // Task list TTL: shorter than facts (5m) because operators deploy new tasks
+  // and expect them visible without restarting the process.
+  private readonly taskListTtl: number = 300000; // 5 minutes
 
   // Cache storage
   private inventoryCache: CacheEntry<Node[]> | null = null;
@@ -744,6 +747,28 @@ export class BoltService {
       // Execute command and capture raw output
       const boltResult = await this.executeCommand(args, {}, streamingCallback);
 
+      // Bolt exits non-zero when the remote command fails, but still produces
+      // valid JSON output. Attempt to parse JSON regardless of exit code.
+      if (!boltResult.success && boltResult.stdout) {
+        try {
+          const jsonOutput = this.parseJsonOutput(boltResult.stdout);
+          const endTime = Date.now();
+          const result = this.transformCommandOutput(
+            executionId,
+            nodeId,
+            command,
+            jsonOutput,
+            startTime,
+            endTime,
+            { stdout: boltResult.stdout, stderr: boltResult.stderr },
+          );
+          result.command = commandString;
+          return result;
+        } catch {
+          // JSON parsing failed — fall through to error handling below
+        }
+      }
+
       if (!boltResult.success) {
         throw new BoltExecutionError(
           boltResult.error ?? "Bolt command failed",
@@ -867,10 +892,21 @@ export class BoltService {
             exitCode:
               typeof value.exit_code === "number" ? value.exit_code : undefined,
           };
+
+          // Extract error from value._error (Bolt nests error inside value for commands)
+          if (typeof value._error === "object" && value._error !== null) {
+            const errorObj = value._error as Record<string, unknown>;
+            nodeResult.error =
+              typeof errorObj.msg === "string"
+                ? errorObj.msg
+                : typeof errorObj.message === "string"
+                  ? errorObj.message
+                  : "Command execution failed";
+          }
         }
 
-        // Extract error message if present
-        if (typeof itemObj.error === "object" && itemObj.error !== null) {
+        // Extract error message from top-level error field if present (fallback)
+        if (!nodeResult.error && typeof itemObj.error === "object" && itemObj.error !== null) {
           const errorObj = itemObj.error as Record<string, unknown>;
           nodeResult.error =
             typeof errorObj.msg === "string"
@@ -961,6 +997,29 @@ export class BoltService {
     try {
       // Execute task and capture raw output
       const boltResult = await this.executeCommand(args, {}, streamingCallback);
+
+      // Bolt exits non-zero when the remote task fails, but still produces
+      // valid JSON output. Attempt to parse JSON regardless of exit code.
+      if (!boltResult.success && boltResult.stdout) {
+        try {
+          const jsonOutput = this.parseJsonOutput(boltResult.stdout);
+          const endTime = Date.now();
+          const result = this.transformTaskOutput(
+            executionId,
+            nodeId,
+            taskName,
+            parameters,
+            jsonOutput,
+            startTime,
+            endTime,
+            { stdout: boltResult.stdout, stderr: boltResult.stderr },
+          );
+          result.command = commandString;
+          return result;
+        } catch {
+          // JSON parsing failed — fall through to error handling below
+        }
+      }
 
       if (!boltResult.success) {
         throw new BoltExecutionError(
@@ -1291,9 +1350,13 @@ export class BoltService {
    * @throws BoltParseError if JSON parsing fails
    */
   public async listTasks(): Promise<Task[]> {
-    // Return cached result if available
+    // Return cached result if still fresh
     if (this.taskListCache !== null) {
-      return this.taskListCache;
+      const age = Date.now() - this.taskListCache.timestamp;
+      if (age < this.taskListTtl) {
+        return this.taskListCache.data;
+      }
+      this.taskListCache = null;
     }
 
     const jsonOutput = await this.executeCommandWithJsonOutput([
@@ -1314,8 +1377,8 @@ export class BoltService {
       }),
     );
 
-    // Cache the result
-    this.taskListCache = detailedTasks;
+    // Cache the result with timestamp for TTL expiry
+    this.taskListCache = { data: detailedTasks, timestamp: Date.now() };
 
     return detailedTasks;
   }

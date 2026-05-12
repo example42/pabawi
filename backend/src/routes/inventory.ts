@@ -9,10 +9,9 @@ import {
 } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
-import { ExpertModeService } from "../services/ExpertModeService";
-import { LoggerService } from "../services/LoggerService";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Middleware enforcing authentication/authorization for lifecycle actions.
@@ -65,9 +64,11 @@ export function createInventoryRouter(
   boltService: BoltService,
   integrationManager?: IntegrationManager,
   options?: { allowDestructiveActions?: boolean },
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * GET /api/inventory
@@ -82,7 +83,6 @@ export function createInventoryRouter(
     requestDeduplication,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -661,7 +661,6 @@ export function createInventoryRouter(
     "/sources",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching inventory sources", {
@@ -874,7 +873,6 @@ export function createInventoryRouter(
     "/:id",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       logger.info("Fetching node details", {
@@ -1035,7 +1033,6 @@ export function createInventoryRouter(
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        const expertModeService = new ExpertModeService();
         const requestId = req.id ?? expertModeService.generateRequestId();
 
         if (error instanceof z.ZodError) {

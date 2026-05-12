@@ -12,9 +12,8 @@ import {
 } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { BoltPlugin } from "../integrations/bolt/BoltPlugin";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 const TaskExecutionBodySchema = z.object({
   taskName: z.string().min(1, "Task name is required"),
@@ -29,9 +28,11 @@ export function createTasksRouter(
   integrationManager: IntegrationManager,
   executionRepository: ExecutionRepository,
   streamingManager?: StreamingExecutionManager,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * GET /api/tasks
@@ -41,7 +42,6 @@ export function createTasksRouter(
     "/",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -251,7 +251,6 @@ export function createTasksRouter(
     "/by-module",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -461,7 +460,6 @@ export function createTasksRouter(
     "/:id/task",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled

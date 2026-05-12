@@ -8,18 +8,19 @@ import {
   BoltInventoryNotFoundError,
 } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
-import { LoggerService } from "../services/LoggerService";
-import { ExpertModeService } from "../services/ExpertModeService";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
  * Create facts router
  */
 export function createFactsRouter(
   integrationManager: IntegrationManager,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = new LoggerService();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   /**
    * POST /api/nodes/:id/facts
@@ -29,7 +30,6 @@ export function createFactsRouter(
     "/:id/facts",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled

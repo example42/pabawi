@@ -5,13 +5,16 @@
   import CommandOutput from './CommandOutput.svelte';
   import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
   import PuppetOutputViewer from './PuppetOutputViewer.svelte';
-  import { post } from '../lib/api';
+  import IntegrationBadge from './IntegrationBadge.svelte';
+  import { post, get } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { logger } from '../lib/logger.svelte';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
-    nodeId: string;
+    nodeId?: string;
+    nodeIds?: string[];
     onExecutionComplete?: () => void;
   }
 
@@ -21,6 +24,9 @@
     noop?: boolean;
     noNoop?: boolean;
     debug?: boolean;
+    splay?: boolean;
+    splayLimit?: number;
+    tool?: 'bolt' | 'ansible' | 'ssh';
   }
 
   interface ExecutionResult {
@@ -50,7 +56,13 @@
     duration: number;
   }
 
-  let { nodeId, onExecutionComplete }: Props = $props();
+  interface IntegrationStatus {
+    name: string;
+    status: 'connected' | 'degraded' | 'not_configured' | 'error' | 'disconnected';
+    type: 'execution' | 'information' | 'both';
+  }
+
+  let { nodeId, nodeIds, onExecutionComplete }: Props = $props();
 
   // State
   let expanded = $state(false);
@@ -59,17 +71,56 @@
   let result = $state<ExecutionResult | null>(null);
   let executionStream = $state<ExecutionStream | null>(null);
 
+  // Available execution tools
+  let availableTools = $state<Array<'bolt' | 'ansible' | 'ssh'>>(['bolt']);
+  let toolsLoaded = $state(false);
+
   // Configuration state
   let tagsInput = $state('');
   let environment = $state('');
   let noop = $state(false);
   let noNoop = $state(false);
   let debug = $state(false);
-  let showAdvanced = $state(false);
+  let splay = $state(false);
+  let splayLimit = $state(30);
+  let selectedTool = $state<'bolt' | 'ansible' | 'ssh'>('bolt');
+
+  // Determine if this is a multi-node execution
+  const isMultiNode = $derived(!nodeId && nodeIds && nodeIds.length > 0);
+  const targetCount = $derived(isMultiNode ? (nodeIds?.length ?? 0) : 1);
+
+  // Fetch available execution tools when expanded
+  async function fetchExecutionTools(): Promise<void> {
+    if (toolsLoaded) return;
+    try {
+      const data = await get<{ integrations: IntegrationStatus[] }>('/api/integrations/status', {
+        maxRetries: 1,
+      });
+
+      const executionIntegrations = data.integrations.filter(
+        (integration) => (integration.type === 'execution' || integration.type === 'both')
+          && (integration.status === 'connected' || integration.status === 'degraded')
+          && (integration.name === 'bolt' || integration.name === 'ansible' || integration.name === 'ssh'),
+      ) as Array<IntegrationStatus & { name: 'bolt' | 'ansible' | 'ssh' }>;
+
+      if (executionIntegrations.length > 0) {
+        availableTools = executionIntegrations.map((i) => i.name);
+        if (!availableTools.includes(selectedTool)) {
+          selectedTool = availableTools[0];
+        }
+      }
+    } catch {
+      availableTools = ['bolt'];
+    }
+    toolsLoaded = true;
+  }
 
   // Toggle expanded state
   function toggleExpanded(): void {
     expanded = !expanded;
+    if (expanded) {
+      void fetchExecutionTools();
+    }
   }
 
   // Handle noop toggle - ensure noop and noNoop are mutually exclusive
@@ -88,11 +139,6 @@
     }
   }
 
-  // Handle debug toggle
-  function handleDebugToggle(): void {
-    debug = !debug;
-  }
-
   // Execute Puppet run
   async function executePuppetRun(event: Event): Promise<void> {
     event.preventDefault();
@@ -103,7 +149,8 @@
     executionStream = null;
 
     try {
-      showInfo('Running Puppet agent...');
+      const targetLabel = isMultiNode ? `${String(targetCount)} node(s)` : 'node';
+      showInfo(`Running Puppet agent on ${targetLabel}...`);
 
       // Build configuration
       const config: PuppetRunConfig = {};
@@ -128,45 +175,77 @@
         config.debug = true;
       }
 
-      // Execute Puppet run
-      const data = await post<{ executionId: string }>(
-        `/api/nodes/${nodeId}/puppet-run`,
-        config,
-        { maxRetries: 0 }
-      );
+      if (splay) {
+        config.splay = true;
+        config.splayLimit = splayLimit;
+      }
 
-      const executionId = data.executionId;
+      config.tool = selectedTool;
 
-      // If expert mode is enabled, create a stream for real-time output
-      if (expertMode.enabled) {
-        executionStream = useExecutionStream(executionId, {
-          onComplete: (result) => {
-            // Fetch final execution result
-            pollExecutionResult(executionId);
-            showSuccess('Puppet run completed');
-            // Notify parent component
-            if (onExecutionComplete) {
-              onExecutionComplete();
-            }
-          },
-          onError: (error) => {
-            error = error;
-            showError('Puppet run failed', error);
-          },
-        });
-        executionStream.connect();
-      } else {
-        // Poll for execution result (non-streaming)
-        await pollExecutionResult(executionId);
-        showSuccess('Puppet run completed');
-        // Notify parent component
+      if (isMultiNode) {
+        // Multi-node execution
+        const payload = {
+          targetNodeIds: nodeIds,
+          ...config,
+          expertMode: expertMode.enabled,
+        };
+
+        const data = await post<{ executionIds: string[] }>(
+          '/api/puppet-run',
+          payload,
+          { maxRetries: 0 }
+        );
+
+        showSuccess(`Puppet run started on ${String(data.executionIds.length)} node(s)`);
+
+        if (data.executionIds.length > 0) {
+          await pollExecutionResult(data.executionIds[0]);
+        }
+
         if (onExecutionComplete) {
           onExecutionComplete();
+        }
+      } else {
+        // Single-node execution
+        const payload = {
+          ...config,
+          expertMode: expertMode.enabled,
+        };
+
+        const data = await post<{ executionId: string }>(
+          `/api/nodes/${nodeId}/puppet-run`,
+          payload,
+          { maxRetries: 0 }
+        );
+
+        const executionId = data.executionId;
+
+        if (expertMode.enabled) {
+          executionStream = useExecutionStream(executionId, {
+            onComplete: () => {
+              pollExecutionResult(executionId);
+              showSuccess('Puppet run completed');
+              if (onExecutionComplete) {
+                onExecutionComplete();
+              }
+            },
+            onError: (streamError) => {
+              error = streamError;
+              showError('Puppet run failed', streamError);
+            },
+          });
+          executionStream.connect();
+        } else {
+          await pollExecutionResult(executionId);
+          showSuccess('Puppet run completed');
+          if (onExecutionComplete) {
+            onExecutionComplete();
+          }
         }
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error executing Puppet run:', err);
+      logger.error('PuppetRunInterface', 'executePuppetRun', 'Error executing Puppet run', err instanceof Error ? err : new Error(String(err)));
       showError('Puppet run failed', error);
     } finally {
       executing = false;
@@ -175,7 +254,7 @@
 
   // Poll for execution result
   async function pollExecutionResult(executionId: string): Promise<void> {
-    const maxAttempts = 120; // 2 minutes max (Puppet runs can take longer)
+    const maxAttempts = 120;
     let attempts = 0;
 
     while (attempts < maxAttempts) {
@@ -187,22 +266,19 @@
           const execution = data.execution;
 
           if (execution.status !== 'running') {
-            // Execution completed
             result = execution;
             return;
           }
         }
 
-        // Wait 1 second before next poll
         await new Promise(resolve => setTimeout(resolve, 1000));
         attempts++;
       } catch (err) {
-        console.error('Error polling execution result:', err);
+        logger.error('PuppetRunInterface', 'pollExecutionResult', 'Error polling execution result', err instanceof Error ? err : new Error(String(err)));
         break;
       }
     }
 
-    // Timeout
     error = 'Execution timed out';
   }
 
@@ -240,7 +316,15 @@
           d="M13 10V3L4 14h7v7l9-11h-7z"
         />
       </svg>
-      <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Run Puppet</h2>
+      <h2 class="text-xl font-semibold text-gray-900 dark:text-white">
+        Run Puppet
+        {#if isMultiNode}
+          <span class="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
+            ({targetCount} nodes)
+          </span>
+        {/if}
+      </h2>
+      <IntegrationBadge integration={selectedTool} variant="badge" size="sm" />
     </div>
     <svg
       class="h-5 w-5 text-gray-500 transition-transform dark:text-gray-400"
@@ -257,6 +341,35 @@
   {#if expanded}
     <div class="border-t border-gray-200 p-6 dark:border-gray-700">
       <form onsubmit={executePuppetRun} class="space-y-4">
+        <!-- Execution Tool Selection (buttons) -->
+        {#if availableTools.length > 1}
+          <div>
+            <div class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Execution Tool
+            </div>
+            <div class="flex gap-2" role="group" aria-label="Execution Tool">
+              {#each availableTools as tool}
+                <button
+                  type="button"
+                  onclick={() => selectedTool = tool}
+                  class="flex items-center gap-2 rounded-lg border-2 px-4 py-2 text-sm font-medium transition-all {selectedTool === tool
+                    ? 'border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+                    : 'border-gray-300 bg-white text-gray-700 hover:border-purple-300 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-purple-400 dark:hover:bg-gray-700'}"
+                  disabled={executing}
+                >
+                  <IntegrationBadge integration={tool} variant="dot" size="md" />
+                  <span class="capitalize">{tool}</span>
+                  {#if selectedTool === tool}
+                    <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                    </svg>
+                  {/if}
+                </button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
         <!-- Environment Input -->
         <div>
           <label for="puppet-environment" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -272,6 +385,24 @@
           />
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Optional: Specify Puppet environment
+          </p>
+        </div>
+
+        <!-- Tags Input -->
+        <div>
+          <label for="puppet-tags" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+            Tags (comma-separated)
+          </label>
+          <input
+            id="puppet-tags"
+            type="text"
+            bind:value={tagsInput}
+            placeholder="e.g., webserver, database"
+            class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
+            disabled={executing}
+          />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Optional: Limit Puppet run to specific tags
           </p>
         </div>
 
@@ -343,7 +474,7 @@
             role="switch"
             aria-checked={debug}
             aria-label="Toggle debug mode (verbose output)"
-            onclick={handleDebugToggle}
+            onclick={() => debug = !debug}
             disabled={executing}
             class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {debug ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
           >
@@ -353,36 +484,50 @@
           </button>
         </div>
 
-        <!-- Advanced Options Toggle -->
-        <button
-          type="button"
-          class="text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
-          onclick={() => showAdvanced = !showAdvanced}
-          aria-label={showAdvanced ? 'Hide advanced options' : 'Show advanced options'}
-          aria-expanded={showAdvanced}
-        >
-          {showAdvanced ? 'Hide' : 'Show'} advanced options
-        </button>
+        <!-- Splay Toggle -->
+        <div class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/50">
+          <div class="flex-1">
+            <label for="puppet-splay-toggle" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Splay (randomized delay)
+            </label>
+            <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+              Add a random delay before running to avoid thundering herd
+            </p>
+          </div>
+          <button
+            type="button"
+            id="puppet-splay-toggle"
+            role="switch"
+            aria-checked={splay}
+            aria-label="Toggle splay (randomized delay)"
+            onclick={() => splay = !splay}
+            disabled={executing}
+            class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed {splay ? 'bg-purple-600' : 'bg-gray-200 dark:bg-gray-700'}"
+          >
+            <span
+              class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out {splay ? 'translate-x-5' : 'translate-x-0'}"
+            ></span>
+          </button>
+        </div>
 
-        {#if showAdvanced}
-          <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3 dark:border-gray-700 dark:bg-gray-900/50">
-            <!-- Tags Input -->
-            <div>
-              <label for="puppet-tags" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Tags (comma-separated)
-              </label>
-              <input
-                id="puppet-tags"
-                type="text"
-                bind:value={tagsInput}
-                placeholder="e.g., webserver, database"
-                class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
-                disabled={executing}
-              />
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Optional: Limit Puppet run to specific tags
-              </p>
-            </div>
+        <!-- Splay Limit (shown when splay is enabled) -->
+        {#if splay}
+          <div>
+            <label for="puppet-splay-limit" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Splay limit (seconds)
+            </label>
+            <input
+              id="puppet-splay-limit"
+              type="number"
+              bind:value={splayLimit}
+              min="1"
+              max="600"
+              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+              disabled={executing}
+            />
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Maximum random delay in seconds (1-600)
+            </p>
           </div>
         {/if}
 
@@ -392,7 +537,13 @@
           class="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={executing}
         >
-          {executing ? 'Running...' : 'Run Puppet'}
+          {#if executing}
+            Running...
+          {:else if isMultiNode}
+            Run Puppet on {targetCount} nodes
+          {:else}
+            Run Puppet
+          {/if}
         </button>
       </form>
 
@@ -400,7 +551,7 @@
       {#if executing}
         <div class="mt-4 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <LoadingSpinner size="sm" />
-          <span>Running Puppet agent...</span>
+          <span>Running Puppet agent{isMultiNode ? ` on ${String(targetCount)} nodes` : ''}...</span>
         </div>
       {/if}
 
@@ -452,7 +603,7 @@
                 </div>
               {/if}
 
-              <!-- Show Bolt command if available -->
+              <!-- Show command if available -->
               {#if result.command}
                 <div class="mt-2">
                   <CommandOutput boltCommand={result.command} />

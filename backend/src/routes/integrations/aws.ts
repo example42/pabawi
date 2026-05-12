@@ -5,11 +5,8 @@ import { asyncHandler } from "../asyncHandler";
 import type { AWSPlugin } from "../../integrations/aws/AWSPlugin";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import { AWSAuthenticationError } from "../../integrations/aws/types";
-import { LoggerService } from "../../services/LoggerService";
 import { sendValidationError, ERROR_CODES } from "../../utils/errorHandling";
-
-
-const logger = new LoggerService();
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 /**
  * Zod schema for region query parameter
@@ -60,8 +57,9 @@ const LifecycleSchema = z.object({
  *
  * Requirements: 8.1, 9.1, 10.1, 11.1, 13.1-13.7, 27.2
  */
-export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: IntegrationManager, options?: { allowDestructiveActions?: boolean }): Router {
+export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: IntegrationManager, options?: { allowDestructiveActions?: boolean }, container: DIContainer = createDefaultContainer()): Router {
   const router = Router();
+  const logger = container.resolve("logger");
 
   /**
    * GET /api/integrations/aws/inventory

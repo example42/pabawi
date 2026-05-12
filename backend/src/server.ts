@@ -60,7 +60,9 @@ import { loadSSHConfig } from "./integrations/ssh/config";
 import { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
 import type { IntegrationConfig } from "./integrations/types";
 import { LoggerService } from "./services/LoggerService";
+import { ExpertModeService } from "./services/ExpertModeService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
+import { DIContainer } from "./container/DIContainer";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
 import { JournalService } from "./services/journal/JournalService";
 import { AuthenticationService } from "./services/AuthenticationService";
@@ -99,6 +101,12 @@ async function startServer(): Promise<Express> {
         commandWhitelistCount: config.commandWhitelist.whitelist.length,
       },
     });
+
+    // Initialize DI container with shared service instances
+    const container = new DIContainer();
+    container.register("config", configService);
+    container.register("logger", logger);
+    container.register("expertMode", new ExpertModeService());
 
     // Validate Bolt configuration (non-blocking)
     logger.info("Validating Bolt configuration...", {
@@ -1038,9 +1046,6 @@ async function startServer(): Promise<Express> {
       });
     }
 
-    // Make integration manager available globally for cross-service access
-    (global as Record<string, unknown>).integrationManager = integrationManager;
-
     // Initialize PuppetRunHistoryService if PuppetDB is available
     let puppetRunHistoryService: PuppetRunHistoryService | undefined;
     if (puppetDBService) {
@@ -1129,11 +1134,11 @@ async function startServer(): Promise<Express> {
     });
 
     // Setup routes (no authentication required - only accessible when setup is incomplete)
-    app.use("/api/setup", createSetupRouter(databaseService));
+    app.use("/api/setup", createSetupRouter(databaseService, container));
 
     // Authentication routes with stricter rate limiting
     const authRateLimitMiddleware = createAuthRateLimitMiddleware();
-    app.use("/api/auth", authRateLimitMiddleware, createAuthRouter(databaseService));
+    app.use("/api/auth", authRateLimitMiddleware, createAuthRouter(databaseService, container));
 
     // Create authentication and RBAC middleware instances
     // Wrap async middleware with asyncHandler to satisfy Express's void return expectation
@@ -1161,22 +1166,22 @@ async function startServer(): Promise<Express> {
     app.use("/api/config", authMiddleware, configRouter);
 
     // User management routes
-    app.use("/api/users", authMiddleware, rateLimitMiddleware, createUsersRouter(databaseService));
+    app.use("/api/users", authMiddleware, rateLimitMiddleware, createUsersRouter(databaseService, container));
 
     // Group management routes
-    app.use("/api/groups", authMiddleware, rateLimitMiddleware, createGroupsRouter(databaseService));
+    app.use("/api/groups", authMiddleware, rateLimitMiddleware, createGroupsRouter(databaseService, container));
 
     // Role management routes
-    app.use("/api/roles", authMiddleware, rateLimitMiddleware, createRolesRouter(databaseService));
+    app.use("/api/roles", authMiddleware, rateLimitMiddleware, createRolesRouter(databaseService, container));
 
     // Permission management routes
-    app.use("/api/permissions", authMiddleware, rateLimitMiddleware, createPermissionsRouter(databaseService));
+    app.use("/api/permissions", authMiddleware, rateLimitMiddleware, createPermissionsRouter(databaseService, container));
 
     // Journal routes
     app.use("/api/journal", authMiddleware, rateLimitMiddleware, createJournalRouter(databaseService, {
       puppetdb: puppetDBService,
       integrationManager,
-    }));
+    }, container));
 
     // Monitoring routes (performance metrics)
     app.use("/api/monitoring", authMiddleware, rateLimitMiddleware, monitoringRouter);
@@ -1189,7 +1194,7 @@ async function startServer(): Promise<Express> {
       rbacMiddleware('ansible', 'read'),
       createInventoryRouter(boltService, integrationManager, {
         allowDestructiveActions: config.provisioning.allowDestructiveActions,
-      }),
+      }, container),
     );
     app.use(
       "/api/nodes",
@@ -1198,14 +1203,14 @@ async function startServer(): Promise<Express> {
       rbacMiddleware('ansible', 'read'),
       createInventoryRouter(boltService, integrationManager, {
         allowDestructiveActions: config.provisioning.allowDestructiveActions,
-      }),
+      }, container),
     );
     app.use(
       "/api/nodes",
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('bolt', 'read'),
-      createFactsRouter(integrationManager),
+      createFactsRouter(integrationManager, container),
     );
     app.use(
       "/api/nodes",
@@ -1217,6 +1222,7 @@ async function startServer(): Promise<Express> {
         executionRepository,
         commandWhitelistService,
         streamingManager,
+        container,
       ),
     );
     app.use(
@@ -1228,6 +1234,7 @@ async function startServer(): Promise<Express> {
         integrationManager,
         executionRepository,
         streamingManager,
+        container,
       ),
     );
     app.use(
@@ -1239,6 +1246,7 @@ async function startServer(): Promise<Express> {
         integrationManager,
         executionRepository,
         streamingManager,
+        container,
       ),
     );
     app.use(
@@ -1246,7 +1254,15 @@ async function startServer(): Promise<Express> {
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('bolt', 'execute'),
-      createPuppetRouter(boltService, executionRepository, streamingManager),
+      createPuppetRouter(integrationManager, executionRepository, journalService, streamingManager, container),
+    );
+    // Multi-node puppet run endpoint (global action)
+    app.use(
+      "/api/puppet-run",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('bolt', 'execute'),
+      createPuppetRouter(integrationManager, executionRepository, journalService, streamingManager, container),
     );
     // Add puppet history routes if PuppetDB is available
     if (puppetRunHistoryService) {
@@ -1254,7 +1270,7 @@ async function startServer(): Promise<Express> {
         "/api/puppet",
         authMiddleware,
         rateLimitMiddleware,
-        createPuppetHistoryRouter(puppetRunHistoryService),
+        createPuppetHistoryRouter(puppetRunHistoryService, container),
       );
     }
     app.use(
@@ -1268,6 +1284,7 @@ async function startServer(): Promise<Express> {
         executionRepository,
         config.packageTasks,
         streamingManager,
+        container,
       ),
     );
     app.use(
@@ -1281,6 +1298,7 @@ async function startServer(): Promise<Express> {
         executionRepository,
         config.packageTasks,
         streamingManager,
+        container,
       ),
     );
     app.use(
@@ -1292,27 +1310,28 @@ async function startServer(): Promise<Express> {
         integrationManager,
         executionRepository,
         streamingManager,
+        container,
       ),
     );
     app.use(
       "/api/executions",
       authMiddleware,
       rateLimitMiddleware,
-      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService),
+      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService, container),
     );
     app.use(
       "/api/executions",
       streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
       authMiddleware,
       rateLimitMiddleware,
-      createStreamingRouter(streamingManager, executionRepository),
+      createStreamingRouter(streamingManager, executionRepository, container),
     );
     app.use(
       "/api/streaming",
       streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
       authMiddleware,
       rateLimitMiddleware,
-      createStreamingRouter(streamingManager, executionRepository),
+      createStreamingRouter(streamingManager, executionRepository, container),
     );
     app.use(
       "/api/integrations",
@@ -1325,13 +1344,14 @@ async function startServer(): Promise<Express> {
         databaseService.getAdapter(),
         undefined, // JWT secret is read from environment by AuthenticationService
         { allowDestructiveProvisioning: config.provisioning.allowDestructiveActions },
+        container,
       ),
     );
     app.use(
       "/api/integrations/hiera",
       authMiddleware,
       rateLimitMiddleware,
-      createHieraRouter(integrationManager),
+      createHieraRouter(integrationManager, container),
     );
 
     // AWS integration routes (conditional on plugin availability)
@@ -1343,7 +1363,7 @@ async function startServer(): Promise<Express> {
         rateLimitMiddleware,
         createAWSRouter(awsPluginInstance, integrationManager, {
           allowDestructiveActions: config.provisioning.allowDestructiveActions,
-        }),
+        }, container),
       );
     }
 
@@ -1356,7 +1376,7 @@ async function startServer(): Promise<Express> {
         rateLimitMiddleware,
         createAzureRouter(azurePluginInstance, integrationManager, {
           allowDestructiveActions: config.provisioning.allowDestructiveActions,
-        }),
+        }, container),
       );
     }
 
@@ -1365,7 +1385,7 @@ async function startServer(): Promise<Express> {
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware("debug", "admin"),
-      createDebugRouter(),
+      createDebugRouter(container),
     );
 
     // Conditionally initialize MCP server

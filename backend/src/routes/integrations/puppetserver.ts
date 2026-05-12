@@ -14,9 +14,8 @@ import {
   CatalogParamsSchema,
   CatalogCompareSchema,
   EnvironmentParamSchema,
-  createLogger,
 } from "./utils";
-import { ExpertModeService } from "../../services/ExpertModeService";
+import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
 /**
  * Create Puppetserver router for all Puppetserver-related routes
@@ -24,15 +23,16 @@ import { ExpertModeService } from "../../services/ExpertModeService";
 export function createPuppetserverRouter(
   puppetserverService?: PuppetserverService,
   puppetDBService?: PuppetDBService,
+  container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
-  const logger = createLogger();
+  const logger = container.resolve("logger");
+  const expertModeService = container.resolve("expertMode");
 
   router.get(
     "/nodes",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -255,7 +255,6 @@ export function createPuppetserverRouter(
     "/nodes/:certname",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -537,7 +536,6 @@ export function createPuppetserverRouter(
     "/nodes/:certname/status",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -921,7 +919,6 @@ export function createPuppetserverRouter(
     "/nodes/:certname/facts",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1183,7 +1180,6 @@ export function createPuppetserverRouter(
     "/catalog/:certname/:environment",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1456,7 +1452,6 @@ export function createPuppetserverRouter(
     "/catalog/compare",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1732,7 +1727,6 @@ export function createPuppetserverRouter(
     "/environments",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -1946,7 +1940,6 @@ export function createPuppetserverRouter(
     "/environments/:name",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2217,7 +2210,6 @@ export function createPuppetserverRouter(
     "/environments/:name/deploy",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2440,7 +2432,6 @@ export function createPuppetserverRouter(
     "/environments/:name/cache",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2699,7 +2690,6 @@ export function createPuppetserverRouter(
     "/status/services",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -2906,7 +2896,6 @@ export function createPuppetserverRouter(
     "/status/simple",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -3113,7 +3102,6 @@ export function createPuppetserverRouter(
     "/admin-api",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
@@ -3326,7 +3314,6 @@ export function createPuppetserverRouter(
     "/metrics",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
-      const expertModeService = new ExpertModeService();
       const requestId = req.id ?? expertModeService.generateRequestId();
 
       // Create debug info once at the start if expert mode is enabled
