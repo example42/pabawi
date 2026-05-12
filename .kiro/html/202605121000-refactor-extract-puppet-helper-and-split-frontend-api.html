@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — refactor: extract puppet helper and split frontend API</title>
+<style>
+  :root { --bg: #1a1b26; --surface: #24283b; --border: #414868; --text: #c0caf5; --text-dim: #565f89; --accent: #7aa2f7; --green: #9ece6a; --red: #f7768e; --yellow: #e0af68; --orange: #ff9e64; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; max-width: 1000px; margin: 0 auto; }
+  h1 { color: var(--accent); font-size: 1.4rem; margin-bottom: 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.1rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 0.95rem; margin: 1rem 0 0.5rem; }
+  p, li { font-size: 0.85rem; }
+  .commit-msg { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+  .commit-msg .title { color: var(--green); font-weight: bold; font-size: 1rem; }
+  .commit-msg .body { color: var(--text-dim); margin-top: 0.5rem; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.8rem; }
+  th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-dim); font-weight: normal; text-transform: uppercase; font-size: 0.7rem; }
+  .status-m { color: var(--yellow); } .status-a { color: var(--green); } .status-d { color: var(--red); }
+  .added { color: var(--green); } .removed { color: var(--red); }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  ul { padding-left: 1.2rem; } li { margin: 0.3rem 0; }
+  .tag { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 0.1rem 0.4rem; font-size: 0.7rem; margin-right: 0.3rem; }
+  .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
+  .stat { background: var(--surface); border-radius: 4px; padding: 0.5rem 0.8rem; }
+  .stat-value { font-size: 1.2rem; font-weight: bold; color: var(--accent); }
+  .stat-label { font-size: 0.7rem; color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<h1>Commit Report</h1>
+<p style="color: var(--text-dim);">Generated: 2026-05-12 10:00 — Branch: 120</p>
+
+<h2>Commit Message</h2>
+<div class="commit-msg">
+  <div class="title">refactor: extract puppet helper and split frontend API</div>
+  <div class="body">
+- Extract shared `runPuppetOn` helper and `PuppetExecutionContext`
+  interface in puppet.ts, replacing duplicated execution logic in
+  both single-node and multi-node handlers (task 7.1, 7.2)
+
+- Split frontend api.ts into domain-specific modules:
+  - proxmoxApi.ts (Proxmox provisioning functions)
+  - awsApi.ts (AWS provisioning functions)
+  - azureApi.ts (Azure provisioning functions)
+  api.ts now retains only HTTP infrastructure (task 8.1, 8.2)
+
+- Harden localStorage access in expertMode.svelte.ts and
+  logger.svelte.ts with try/catch and capability checks to
+  prevent crashes in sandboxed/test environments
+
+- Add vitest global setup file providing an in-memory
+  localStorage mock for frontend tests
+
+- Update all affected test files to import from new API modules
+
+- Mark tasks 2, 5, 7, 8 as complete in spec tasks.md</div>
+</div>
+
+<h2>Codebase Stats</h2>
+<div class="stats">
+  <div class="stat"><div class="stat-value">23</div><div class="stat-label">Files changed</div></div>
+  <div class="stat"><div class="stat-value"><span class="added">+890</span></div><div class="stat-label">Lines added</div></div>
+  <div class="stat"><div class="stat-value"><span class="removed">-783</span></div><div class="stat-label">Lines removed</div></div>
+  <div class="stat"><div class="stat-value">Both</div><div class="stat-label">Workspaces</div></div>
+</div>
+
+<h2>Files Changed</h2>
+<table>
+  <thead><tr><th>Status</th><th>File</th><th>+/-</th></tr></thead>
+  <tbody>
+    <tr><td class="status-m">M</td><td>.kiro/specs/code-review-fixes/tasks.md</td><td><span class="added">+8</span> <span class="removed">-8</span></td></tr>
+    <tr><td class="status-m">M</td><td>backend/src/routes/puppet.ts</td><td><span class="added">+113</span> <span class="removed">-177</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/components/AWSProvisionForm.svelte</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/components/ActionSelector.test.ts</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/components/ManageTab.svelte</td><td><span class="added">+2</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/components/ManageTab.test.ts</td><td><span class="added">+22</span> <span class="removed">-17</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/components/ProxmoxLXCProvisionForm.svelte</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/components/ProxmoxProvisionForm.test.ts</td><td><span class="added">+22</span> <span class="removed">-22</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/components/ProxmoxVMProvisionForm.svelte</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/lib/api-provisioning.test.ts</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/lib/api.ts</td><td><span class="added">+0</span> <span class="removed">-513</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/lib/aws-api.test.ts</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/lib/expertMode.svelte.ts</td><td><span class="added">+20</span> <span class="removed">-7</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/lib/logger.svelte.ts</td><td><span class="added">+12</span> <span class="removed">-7</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/pages/IntegrationConfigPage.svelte</td><td><span class="added">+2</span> <span class="removed">-2</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/pages/IntegrationConfigPage.test.ts</td><td><span class="added">+24</span> <span class="removed">-12</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/pages/ProvisionPage.svelte</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/src/pages/ProvisionPage.test.ts</td><td><span class="added">+30</span> <span class="removed">-33</span></td></tr>
+    <tr><td class="status-m">M</td><td>frontend/vitest.config.ts</td><td><span class="added">+1</span> <span class="removed">-0</span></td></tr>
+    <tr><td class="status-a">A</td><td>frontend/src/__tests__/setup.ts</td><td><span class="added">+44</span></td></tr>
+    <tr><td class="status-a">A</td><td>frontend/src/lib/awsApi.ts</td><td><span class="added">+246</span></td></tr>
+    <tr><td class="status-a">A</td><td>frontend/src/lib/azureApi.ts</td><td><span class="added">+42</span></td></tr>
+    <tr><td class="status-a">A</td><td>frontend/src/lib/proxmoxApi.ts</td><td><span class="added">+272</span></td></tr>
+  </tbody>
+</table>
+
+<h2>Pages Affected</h2>
+<ul>
+  <li><a href="http://localhost:5173/provision">Provision Page</a> — proxmoxApi.ts extracted, ProvisionPage imports updated</li>
+  <li><a href="http://localhost:5173/integrations/config">Integration Config Page</a> — testProxmoxConnection/testAWSConnection moved to new modules</li>
+  <li><a href="http://localhost:5173/nodes/example">Node Detail Page (Manage Tab)</a> — executeNodeAction, destroyNode, fetchLifecycleActions moved to proxmoxApi</li>
+  <li><a href="http://localhost:5173/puppet">Puppet Page</a> — backend runPuppetOn refactor affects execution flow</li>
+  <li><a href="http://localhost:5173/executions">Executions Page</a> — puppet execution results flow through refactored helper</li>
+  <li>All pages — expertMode.svelte.ts and logger.svelte.ts are shared infrastructure</li>
+</ul>
+
+<h2>What to Check</h2>
+<ul>
+  <li>Trigger a single-node Puppet run and verify streaming output + execution record are correct</li>
+  <li>Trigger a multi-node Puppet run and verify all nodes execute independently</li>
+  <li>Open Provision page — verify Proxmox and AWS forms load and submit correctly</li>
+  <li>Open Integration Config page — test Proxmox and AWS connection test buttons</li>
+  <li>Open a node detail page → Manage tab — verify lifecycle actions load and execute</li>
+  <li>Toggle Expert Mode on/off — verify it persists across page reload</li>
+  <li>Run <code>npm test</code> — all frontend and backend tests should pass</li>
+</ul>
+
+<h2>Impact Analysis</h2>
+<h3>Backend: puppet.ts refactor</h3>
+<p>The <code>runPuppetOn</code> helper is a pure extraction — no behavioral change. It's called from within <code>createPuppetRouter</code>, which is consumed only by <code>startServer</code>. Blast radius is contained to the puppet execution path. The interface is exported for future testability but has no external consumers yet.</p>
+
+<h3>Frontend: API module split</h3>
+<p>This is a cross-cutting change affecting 15+ frontend files. All provisioning-related functions moved from <code>api.ts</code> to <code>proxmoxApi.ts</code>, <code>awsApi.ts</code>, and <code>azureApi.ts</code>. The HTTP infrastructure (<code>get</code>, <code>post</code>, <code>put</code>, <code>del</code>) remains in <code>api.ts</code> and is imported by the new modules. Any component that previously imported provisioning functions from <code>api.ts</code> must now import from the correct domain module.</p>
+
+<h3>Frontend: localStorage hardening</h3>
+<p>Isolated to <code>expertMode.svelte.ts</code> and <code>logger.svelte.ts</code>. These are singletons used across all pages, but the change is defensive (adds try/catch around localStorage access). No behavioral change in normal browser environments.</p>
+
+<h3>Test infrastructure</h3>
+<p>The new <code>setup.ts</code> provides a working localStorage mock for all frontend tests via vitest <code>setupFiles</code>. This eliminates a class of test failures in Node.js 20+ where the built-in localStorage global has non-functional methods.</p>
+
+</body>
+</html>

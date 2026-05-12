@@ -31,7 +31,7 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Target: zero `new LoggerService()` / `new ExpertModeService()` outside container init and test setup
     - _Requirements: 6.3, 6.4, 6.5, 6.6_
 
-- [~] 2. Checkpoint - Verify DI container integration
+- [x] 2. Checkpoint - Verify DI container integration
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 3. Centralise JWT and Lifecycle Secrets in ConfigService
@@ -77,7 +77,7 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - **Validates: Requirements 2.3**
     - Use fast-check to generate subsets of enabled plugins and verify registration count matches
 
-- [~] 5. Checkpoint - Verify core infrastructure changes
+- [x] 5. Checkpoint - Verify core infrastructure changes
   - Ensure all tests pass, ask the user if questions arise.
 
 - [x] 6. Remove Duplicate Router Mounts
@@ -88,28 +88,28 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Update any test files referencing removed paths
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 7. Extract Shared Puppet Execution Helper
-  - [~] 7.1 Define PuppetExecutionContext interface and runPuppetOn helper
+- [x] 7. Extract Shared Puppet Execution Helper
+  - [x] 7.1 Define PuppetExecutionContext interface and runPuppetOn helper
     - Create `PuppetExecutionContext` interface in `puppet.ts`
     - Implement `runPuppetOn` async function handling: execution, record update, journal entry, streaming emission
     - Implement error path: failed status update, failed journal entry, error streaming event
     - _Requirements: 4.1, 4.4, 4.5_
 
-  - [~] 7.2 Refactor single-node and multi-node handlers to use runPuppetOn
+  - [x] 7.2 Refactor single-node and multi-node handlers to use runPuppetOn
     - Replace duplicated execution logic in single-node handler with `runPuppetOn` call
     - Replace duplicated execution logic in multi-node handler with `runPuppetOn` loop
     - Verify no duplicated execution logic remains between handlers
     - _Requirements: 4.2, 4.3, 4.6_
 
-- [ ] 8. Split Frontend API Module
-  - [~] 8.1 Extract Proxmox API functions into proxmoxApi.ts
+- [x] 8. Split Frontend API Module
+  - [x] 8.1 Extract Proxmox API functions into proxmoxApi.ts
     - Create `frontend/src/lib/proxmoxApi.ts`
     - Move all `getProxmox*`, `createProxmox*`, `destroyNode`, `executeNodeAction`, `fetchLifecycleActions`, `testProxmoxConnection` from `api.ts`
     - Import `{ get, post, put, del }` from `./api`
     - Update all consumer imports
     - _Requirements: 5.1, 5.2, 5.4_
 
-  - [~] 8.2 Extract AWS and Azure API functions into separate modules
+  - [x] 8.2 Extract AWS and Azure API functions into separate modules
     - Create `frontend/src/lib/awsApi.ts` with all AWS-specific functions
     - Create `frontend/src/lib/azureApi.ts` with all Azure-specific functions
     - Update all consumer imports to reference new modules

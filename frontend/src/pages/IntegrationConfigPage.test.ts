@@ -14,6 +14,8 @@ import '@testing-library/jest-dom/vitest';
 import fc from 'fast-check';
 import IntegrationConfigPage from './IntegrationConfigPage.svelte';
 import * as api from '../lib/api';
+import * as proxmoxApi from '../lib/proxmoxApi';
+import * as awsApi from '../lib/awsApi';
 
 // Mock the API module
 vi.mock('../lib/api', async (importOriginal) => {
@@ -21,8 +23,24 @@ vi.mock('../lib/api', async (importOriginal) => {
   return {
     ...actual,
     get: vi.fn(),
-    testProxmoxConnection: vi.fn(),
+  };
+});
+
+// Mock the AWS API module
+vi.mock('../lib/awsApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/awsApi')>();
+  return {
+    ...actual,
     testAWSConnection: vi.fn(),
+  };
+});
+
+// Mock the Proxmox API module
+vi.mock('../lib/proxmoxApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/proxmoxApi')>();
+  return {
+    ...actual,
+    testProxmoxConnection: vi.fn(),
   };
 });
 
@@ -344,7 +362,7 @@ describe('IntegrationConfigPage', () => {
     });
 
     it('calls testProxmoxConnection when Proxmox test button is clicked', async () => {
-      vi.mocked(api.testProxmoxConnection).mockResolvedValue({
+      vi.mocked(proxmoxApi.testProxmoxConnection).mockResolvedValue({
         success: true,
         message: 'Connected to Proxmox VE 8.0',
       });
@@ -362,12 +380,12 @@ describe('IntegrationConfigPage', () => {
       await fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
 
       await waitFor(() => {
-        expect(api.testProxmoxConnection).toHaveBeenCalledTimes(1);
+        expect(proxmoxApi.testProxmoxConnection).toHaveBeenCalledTimes(1);
       });
     });
 
     it('calls testAWSConnection when AWS test button is clicked', async () => {
-      vi.mocked(api.testAWSConnection).mockResolvedValue({
+      vi.mocked(awsApi.testAWSConnection).mockResolvedValue({
         success: true,
         message: 'Connected to AWS us-east-1',
       });
@@ -385,12 +403,12 @@ describe('IntegrationConfigPage', () => {
       await fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
 
       await waitFor(() => {
-        expect(api.testAWSConnection).toHaveBeenCalledTimes(1);
+        expect(awsApi.testAWSConnection).toHaveBeenCalledTimes(1);
       });
     });
 
     it('displays success message after successful connection test', async () => {
-      vi.mocked(api.testProxmoxConnection).mockResolvedValue({
+      vi.mocked(proxmoxApi.testProxmoxConnection).mockResolvedValue({
         success: true,
         message: 'Connected to Proxmox VE 8.0',
       });
@@ -413,7 +431,7 @@ describe('IntegrationConfigPage', () => {
     });
 
     it('displays error message after failed connection test', async () => {
-      vi.mocked(api.testProxmoxConnection).mockResolvedValue({
+      vi.mocked(proxmoxApi.testProxmoxConnection).mockResolvedValue({
         success: false,
         message: 'Connection refused',
       });
@@ -436,7 +454,7 @@ describe('IntegrationConfigPage', () => {
     });
 
     it('displays error message when test connection throws', async () => {
-      vi.mocked(api.testProxmoxConnection).mockRejectedValue(new Error('Network timeout'));
+      vi.mocked(proxmoxApi.testProxmoxConnection).mockRejectedValue(new Error('Network timeout'));
 
       mockStatusResponse([
         { name: 'Proxmox', type: 'proxmox', status: 'connected', healthy: true },
@@ -457,7 +475,7 @@ describe('IntegrationConfigPage', () => {
 
     it('disables test button while testing is in progress', async () => {
       // Mock to never resolve so we can check the disabled state
-      vi.mocked(api.testProxmoxConnection).mockImplementation(
+      vi.mocked(proxmoxApi.testProxmoxConnection).mockImplementation(
         () => new Promise(() => {})
       );
 

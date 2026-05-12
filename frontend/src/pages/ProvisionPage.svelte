@@ -6,7 +6,7 @@
   import ProxmoxVMProvisionForm from '../components/ProxmoxVMProvisionForm.svelte';
   import ProxmoxLXCProvisionForm from '../components/ProxmoxLXCProvisionForm.svelte';
   import AWSProvisionForm from '../components/AWSProvisionForm.svelte';
-  import { getProvisioningIntegrations } from '../lib/api';
+  import { getProvisioningIntegrations } from '../lib/proxmoxApi';
   import type { ProvisioningIntegration } from '../lib/types/provisioning';
 
   const pageTitle = 'Provision - Pabawi';

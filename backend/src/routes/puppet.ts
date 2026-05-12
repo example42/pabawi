@@ -123,6 +123,106 @@ async function recordPuppetJournal(
 }
 
 /**
+ * Context for a single puppet execution against one node.
+ * Used by `runPuppetOn` to encapsulate all dependencies needed for the
+ * execute → update → journal → stream cycle.
+ */
+export interface PuppetExecutionContext {
+  executionId: string;
+  nodeId: string;
+  puppetCommand: string;
+  tool: ExecutionTool;
+  body: PuppetRunBody;
+  expertMode: boolean;
+  userId: string;
+  integrationManager: IntegrationManager;
+  executionRepository: ExecutionRepository;
+  journalService?: JournalService;
+  streamingManager?: StreamingExecutionManager;
+  logger?: LoggerService;
+}
+
+/**
+ * Execute a puppet agent run on a single node, updating the execution record,
+ * recording a journal entry, and emitting streaming events.
+ *
+ * Handles both success and failure paths:
+ * - Success: updates record with result, records success/failed journal, emits complete.
+ * - Error: updates record with failed status, records failed journal, emits error event.
+ */
+export async function runPuppetOn(ctx: PuppetExecutionContext): Promise<void> {
+  try {
+    const streamingCallback = ctx.streamingManager?.createStreamingCallback(
+      ctx.executionId,
+      ctx.expertMode,
+    );
+
+    const result = await ctx.integrationManager.executeAction(ctx.tool, {
+      type: "command",
+      target: ctx.nodeId,
+      action: ctx.puppetCommand,
+      parameters: { sudo: true },
+      metadata: { streamingCallback },
+    });
+
+    await ctx.executionRepository.update(ctx.executionId, {
+      status: result.status,
+      completedAt: result.completedAt,
+      results: result.results,
+      error: result.error,
+      command: result.command ?? ctx.puppetCommand,
+      stdout: ctx.expertMode ? result.stdout : undefined,
+      stderr: ctx.expertMode ? result.stderr : undefined,
+    });
+
+    await recordPuppetJournal(
+      ctx.journalService,
+      ctx.nodeId,
+      ctx.tool,
+      ctx.body,
+      result.status === "success" ? "success" : "failed",
+      result.error,
+      ctx.userId,
+      ctx.logger,
+    );
+
+    if (ctx.streamingManager) {
+      ctx.streamingManager.emitComplete(ctx.executionId, result);
+    }
+  } catch (error) {
+    ctx.logger?.error("Error executing Puppet run", {
+      component: "PuppetRouter",
+      operation: "runPuppetOn",
+      metadata: { executionId: ctx.executionId, nodeId: ctx.nodeId },
+    }, error instanceof Error ? error : undefined);
+
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    await ctx.executionRepository.update(ctx.executionId, {
+      status: "failed",
+      completedAt: new Date().toISOString(),
+      results: [{ nodeId: ctx.nodeId, status: "failed", error: errorMessage, duration: 0 }],
+      error: errorMessage,
+    });
+
+    await recordPuppetJournal(
+      ctx.journalService,
+      ctx.nodeId,
+      ctx.tool,
+      ctx.body,
+      "failed",
+      errorMessage,
+      ctx.userId,
+      ctx.logger,
+    );
+
+    if (ctx.streamingManager) {
+      ctx.streamingManager.emitError(ctx.executionId, errorMessage);
+    }
+  }
+}
+
+/**
  * Create Puppet router
  */
 export function createPuppetRouter(
@@ -259,88 +359,21 @@ export function createPuppetRouter(
         // Get user ID from request (set by auth middleware)
         const userId: string = req.user?.userId ?? "unknown";
 
-        // Execute puppet run asynchronously
-        void (async (): Promise<void> => {
-          try {
-            const streamingCallback = streamingManager?.createStreamingCallback(
-              executionId,
-              expertMode,
-            );
-
-            // All tools use command execution with puppet agent -t
-            const result = await integrationManager.executeAction(selectedTool, {
-              type: "command",
-              target: nodeId,
-              action: puppetCommand,
-              parameters: { sudo: true },
-              metadata: { streamingCallback },
-            });
-
-            // Update execution record with results
-            await executionRepository.update(executionId, {
-              status: result.status,
-              completedAt: result.completedAt,
-              results: result.results,
-              error: result.error,
-              command: result.command ?? puppetCommand,
-              stdout: expertMode ? result.stdout : undefined,
-              stderr: expertMode ? result.stderr : undefined,
-            });
-
-            // Record journal entry
-            await recordPuppetJournal(
-              journalService,
-              nodeId,
-              selectedTool,
-              body,
-              result.status === "success" ? "success" : "failed",
-              result.error,
-              userId,
-              logger,
-            );
-
-            // Emit completion event if streaming
-            if (streamingManager) {
-              streamingManager.emitComplete(executionId, result);
-            }
-          } catch (error) {
-            logger.error("Error executing Puppet run", {
-              component: "PuppetRouter",
-              operation: "puppet-run",
-              metadata: { executionId, nodeId },
-            }, error instanceof Error ? error : undefined);
-
-            const errorMessage = error instanceof Error ? error.message : "Unknown error";
-
-            await executionRepository.update(executionId, {
-              status: "failed",
-              completedAt: new Date().toISOString(),
-              results: [{
-                nodeId,
-                status: "failed",
-                error: errorMessage,
-                duration: 0,
-              }],
-              error: errorMessage,
-            });
-
-            // Record failure in journal
-            await recordPuppetJournal(
-              journalService,
-              nodeId,
-              selectedTool,
-              body,
-              "failed",
-              errorMessage,
-              userId,
-              logger,
-            );
-
-            if (streamingManager) {
-              streamingManager.emitError(executionId, errorMessage);
-            }
-          }
-        })();
+        // Execute puppet run asynchronously via shared helper
+        void runPuppetOn({
+          executionId,
+          nodeId,
+          puppetCommand,
+          tool: selectedTool,
+          body,
+          expertMode,
+          userId,
+          integrationManager,
+          executionRepository,
+          journalService,
+          streamingManager,
+          logger,
+        });
 
         const duration = Date.now() - startTime;
 
@@ -478,88 +511,25 @@ export function createPuppetRouter(
           executionIds.push(executionId);
         }
 
-        // Execute puppet runs asynchronously for each node
+        // Execute puppet runs asynchronously for each node via shared helper
         for (let i = 0; i < body.targetNodeIds.length; i++) {
           const nodeId = body.targetNodeIds[i];
           const executionId = executionIds[i];
 
-          void (async (): Promise<void> => {
-            try {
-              const streamingCallback = streamingManager?.createStreamingCallback(
-                executionId,
-                expertMode,
-              );
-
-              // All tools use command execution with puppet agent -t
-              const result = await integrationManager.executeAction(selectedTool, {
-                type: "command",
-                target: nodeId,
-                action: puppetCommand,
-                parameters: { sudo: true },
-                metadata: { streamingCallback },
-              });
-
-              await executionRepository.update(executionId, {
-                status: result.status,
-                completedAt: result.completedAt,
-                results: result.results,
-                error: result.error,
-                command: result.command ?? puppetCommand,
-                stdout: expertMode ? result.stdout : undefined,
-                stderr: expertMode ? result.stderr : undefined,
-              });
-
-              await recordPuppetJournal(
-                journalService,
-                nodeId,
-                selectedTool,
-                body,
-                result.status === "success" ? "success" : "failed",
-                result.error,
-                userId,
-                logger,
-              );
-
-              if (streamingManager) {
-                streamingManager.emitComplete(executionId, result);
-              }
-            } catch (error) {
-              logger.error("Error executing Puppet run on node", {
-                component: "PuppetRouter",
-                operation: "puppet-run-multi",
-                metadata: { executionId, nodeId },
-              }, error instanceof Error ? error : undefined);
-
-              const errorMessage = error instanceof Error ? error.message : "Unknown error";
-
-              await executionRepository.update(executionId, {
-                status: "failed",
-                completedAt: new Date().toISOString(),
-                results: [{
-                  nodeId,
-                  status: "failed",
-                  error: errorMessage,
-                  duration: 0,
-                }],
-                error: errorMessage,
-              });
-
-              await recordPuppetJournal(
-                journalService,
-                nodeId,
-                selectedTool,
-                body,
-                "failed",
-                errorMessage,
-                userId,
-                logger,
-              );
-
-              if (streamingManager) {
-                streamingManager.emitError(executionId, errorMessage);
-              }
-            }
-          })();
+          void runPuppetOn({
+            executionId,
+            nodeId,
+            puppetCommand,
+            tool: selectedTool,
+            body,
+            expertMode,
+            userId,
+            integrationManager,
+            executionRepository,
+            journalService,
+            streamingManager,
+            logger,
+          });
         }
 
         const duration = Date.now() - startTime;
