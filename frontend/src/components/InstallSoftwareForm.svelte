@@ -164,7 +164,7 @@
   async function fetchPackageTasks(): Promise<void> {
     tasksLoading = true;
     try {
-      const data = await get<{ tasks: PackageTask[] }>('/api/package-tasks', {
+      const data = await get<{ tasks: PackageTask[] }>('/api/packages/package-tasks', {
         maxRetries: 2,
       });
       availableTasks = data.tasks || [];

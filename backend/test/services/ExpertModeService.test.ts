@@ -1536,7 +1536,7 @@ describe('ExpertModeService', () => {
         count: 2,
       };
 
-      const debugInfo = service.createDebugInfo('GET /api/nodes', 'req_success_456', 150);
+      const debugInfo = service.createDebugInfo('GET /api/inventory', 'req_success_456', 150);
       service.setIntegration(debugInfo, 'puppetdb');
 
       service.addInfo(debugInfo, {

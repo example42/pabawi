@@ -921,7 +921,7 @@ describe('ExpertModeDebugPanel Component', () => {
       const debugInfoWithContext: DebugInfo = {
         ...mockDebugInfo,
         context: {
-          url: '/api/nodes?filter=active',
+          url: '/api/inventory?filter=active',
           method: 'POST',
           headers: {},
           query: {},
@@ -944,7 +944,7 @@ describe('ExpertModeDebugPanel Component', () => {
       await fireEvent.click(contextButton);
 
       expect(screen.getByText('URL')).toBeTruthy();
-      expect(screen.getByText('/api/nodes?filter=active')).toBeTruthy();
+      expect(screen.getByText('/api/inventory?filter=active')).toBeTruthy();
       expect(screen.getByText('Method')).toBeTruthy();
       expect(screen.getByText('POST')).toBeTruthy();
     });

@@ -81,7 +81,7 @@
   async function fetchPackageTasks(): Promise<void> {
     tasksLoading = true;
     try {
-      const data = await get<{ tasks: PackageTask[] }>('/api/package-tasks', {
+      const data = await get<{ tasks: PackageTask[] }>('/api/packages/package-tasks', {
         maxRetries: 2,
       });
       availableTasks = data.tasks || [];
@@ -178,7 +178,7 @@
       }
 
       const data = await post<{ executionId: string }>(
-        `/api/nodes/${nodeId}/install-package`,
+        `/api/packages/${nodeId}/install-package`,
         parameters,
         { maxRetries: 0 }
       );

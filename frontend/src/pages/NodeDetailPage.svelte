@@ -307,7 +307,7 @@
     error = null;
 
     try {
-      const url = nocache ? `/api/nodes/${nodeId}?nocache=1` : `/api/nodes/${nodeId}`;
+      const url = nocache ? `/api/inventory/${nodeId}?nocache=1` : `/api/inventory/${nodeId}`;
       const data = await get<{ node: Node; _debug?: DebugInfo }>(url, {
         maxRetries: 2,
         timeout: 20000, // 20s timeout to avoid indefinite hang

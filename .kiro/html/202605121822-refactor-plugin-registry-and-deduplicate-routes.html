@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — refactor(backend): plugin registry loop &amp; deduplicate routes</title>
+<style>
+  :root { --bg: #1a1b26; --surface: #24283b; --border: #414868; --text: #c0caf5; --muted: #565f89; --accent: #7aa2f7; --green: #9ece6a; --red: #f7768e; --yellow: #e0af68; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: var(--bg); color: var(--text); padding: 2rem; line-height: 1.6; }
+  h1 { color: var(--accent); font-size: 1.4rem; margin-bottom: 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.1rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 0.95rem; margin: 1rem 0 0.5rem; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .commit-msg { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .commit-msg .title { font-weight: bold; color: var(--green); font-size: 1rem; }
+  .commit-msg .body { color: var(--muted); margin-top: 0.5rem; font-size: 0.85rem; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; }
+  .status-A { color: var(--green); } .status-M { color: var(--yellow); } .status-D { color: var(--red); }
+  .added { color: var(--green); } .removed { color: var(--red); }
+  ul { padding-left: 1.25rem; margin: 0.4rem 0; }
+  li { margin: 0.3rem 0; font-size: 0.88rem; }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0.75rem 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.5rem 1rem; }
+  .stat .label { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; }
+  .stat .value { color: var(--text); font-size: 1.1rem; font-weight: bold; }
+  .tag { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.5rem; font-size: 0.75rem; color: var(--muted); margin-right: 0.3rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Commit Report</h1>
+<p style="color: var(--muted); font-size: 0.8rem;">2025-05-12 18:22 · Branch: 120</p>
+
+<h2>Commit Message</h2>
+<div class="commit-msg">
+  <div class="title">refactor(backend): plugin registry loop &amp; deduplicate routes</div>
+  <div class="body">
+Replace nine copy-pasted plugin initialisation blocks in server.ts with a
+declarative pluginRegistry array and a single for...of loop. This reduces
+server.ts by ~660 lines and makes adding new integrations a one-entry change.
+
+Remove duplicate router mounts:
+- /api/nodes inventory mount (keep /api/inventory)
+- /api/nodes packages mount (keep /api/packages)
+
+Update all frontend consumers to use canonical API paths:
+- /api/nodes/:id → /api/inventory/:id
+- /api/nodes/:id/lifecycle-actions → /api/inventory/:id/lifecycle-actions
+- /api/package-tasks → /api/packages/package-tasks
+- /api/nodes/:id/install-package → /api/packages/:id/install-package
+
+Update affected tests to match new paths.
+
+Implements spec tasks 4.1, 4.2, 6.1.</div>
+</div>
+
+<h2>Codebase Stats</h2>
+<div class="stats">
+  <div class="stat"><div class="label">Files Changed</div><div class="value">11</div></div>
+  <div class="stat"><div class="label">Lines Added</div><div class="value added">+305</div></div>
+  <div class="stat"><div class="label">Lines Removed</div><div class="value removed">-720</div></div>
+  <div class="stat"><div class="label">Net</div><div class="value removed">-415</div></div>
+  <div class="stat"><div class="label">Workspaces</div><div class="value">Both</div></div>
+</div>
+
+<h2>Files Changed</h2>
+<table>
+  <tr><th>Status</th><th>File</th><th>+</th><th>−</th></tr>
+  <tr><td class="status-A">A</td><td>backend/src/plugins/registry.ts</td><td class="added">242</td><td class="removed">0</td></tr>
+  <tr><td class="status-M">M</td><td>backend/src/server.ts</td><td class="added">45</td><td class="removed">702</td></tr>
+  <tr><td class="status-M">M</td><td>backend/src/routes/packages.ts</td><td class="added">4</td><td class="removed">4</td></tr>
+  <tr><td class="status-M">M</td><td>backend/test/services/ExpertModeService.test.ts</td><td class="added">1</td><td class="removed">1</td></tr>
+  <tr><td class="status-M">M</td><td>frontend/src/components/ExpertModeDebugPanel.test.ts</td><td class="added">2</td><td class="removed">2</td></tr>
+  <tr><td class="status-M">M</td><td>frontend/src/components/InstallSoftwareForm.svelte</td><td class="added">1</td><td class="removed">1</td></tr>
+  <tr><td class="status-M">M</td><td>frontend/src/components/PackageInstallInterface.svelte</td><td class="added">2</td><td class="removed">2</td></tr>
+  <tr><td class="status-M">M</td><td>frontend/src/components/ParallelExecutionModal.test.ts</td><td class="added">1</td><td class="removed">1</td></tr>
+  <tr><td class="status-M">M</td><td>frontend/src/lib/api.ts</td><td class="added">1</td><td class="removed">1</td></tr>
+  <tr><td class="status-M">M</td><td>frontend/src/pages/NodeDetailPage.svelte</td><td class="added">1</td><td class="removed">1</td></tr>
+  <tr><td class="status-M">M</td><td>.kiro/specs/code-review-fixes/tasks.md</td><td class="added">5</td><td class="removed">5</td></tr>
+</table>
+
+<h2>Pages Affected</h2>
+<ul>
+  <li><a href="http://localhost:5173/inventory">Inventory</a> — route path changed from /api/nodes to /api/inventory</li>
+  <li><a href="http://localhost:5173/nodes/test-node">Node Detail</a> — node fetch and lifecycle-actions paths updated</li>
+  <li><a href="http://localhost:5173/executions">Executions</a> — package install triggers from node detail affected</li>
+  <li><a href="http://localhost:5173/">Home / Dashboard</a> — infrastructure change (server.ts plugin init)</li>
+  <li><a href="http://localhost:5173/puppet">Puppet</a> — PuppetDB/Puppetserver plugin init path changed</li>
+  <li><a href="http://localhost:5173/integrations/config">Integration Config</a> — all integrations now init via registry</li>
+</ul>
+
+<h2>What to Check</h2>
+<ul>
+  <li><strong>Inventory page loads</strong> — verify node list fetches correctly via /api/inventory</li>
+  <li><strong>Node detail page</strong> — open a node, confirm facts/packages/lifecycle-actions load</li>
+  <li><strong>Package installation</strong> — verify "Install Software" form fetches tasks and submits via /api/packages/*</li>
+  <li><strong>All integrations initialise</strong> — check server startup logs for each plugin registering (bolt, ansible, puppetdb, puppetserver, hiera, ssh, proxmox, aws, azure)</li>
+  <li><strong>Graceful degradation</strong> — disable an integration in .env and confirm others still load</li>
+  <li><strong>Puppet page</strong> — verify reports/catalogs/hiera still work (puppetdb/puppetserver/hiera plugins)</li>
+  <li><strong>Provisioning</strong> — verify Proxmox/AWS/Azure provisioning pages still function</li>
+</ul>
+
+<h2>Impact Analysis</h2>
+<h3>Blast Radius</h3>
+<ul>
+  <li><strong>server.ts</strong> — major structural change but behaviour-preserving. All plugin init logic moved to registry.ts; the loop produces identical IntegrationManager state.</li>
+  <li><strong>Route deduplication</strong> — /api/nodes mounts removed. Any external client or bookmark using /api/nodes/:id will get 404. Frontend paths updated to /api/inventory.</li>
+  <li><strong>Plugin retrieval</strong> — downstream code now uses integrationManager.getExecutionTool() / getInformationSource() instead of local variables. Type-safe but changes the lookup path.</li>
+</ul>
+<h3>Risk Assessment</h3>
+<ul>
+  <li><span class="tag">LOW</span> Registry loop — declarative, each entry isolated, failure in one doesn't block others</li>
+  <li><span class="tag">MEDIUM</span> Route path changes — breaking change for any external API consumers using /api/nodes</li>
+  <li><span class="tag">LOW</span> Frontend path updates — straightforward string replacements, covered by tests</li>
+</ul>
+
+<h2>Integrations Touched</h2>
+<p>All 9 integrations affected by init path change: <span class="tag">bolt</span> <span class="tag">ansible</span> <span class="tag">puppetdb</span> <span class="tag">puppetserver</span> <span class="tag">hiera</span> <span class="tag">ssh</span> <span class="tag">proxmox</span> <span class="tag">aws</span> <span class="tag">azure</span></p>
+
+</div>
+</body>
+</html>

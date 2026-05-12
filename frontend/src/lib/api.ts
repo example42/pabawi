@@ -959,7 +959,7 @@ export async function fetchLifecycleActions(
   nodeId: string,
 ): Promise<{ provider: string; actions: LifecycleAction[] }> {
   const response = await get<{ provider: string; actions: LifecycleAction[] }>(
-    `/api/nodes/${nodeId}/lifecycle-actions`,
+    `/api/inventory/${nodeId}/lifecycle-actions`,
     { maxRetries: 2 },
   );
 

@@ -56,7 +56,7 @@ export function createPackagesRouter(
   const expertModeService = container.resolve("expertMode");
 
   /**
-   * GET /api/package-tasks
+   * GET /api/packages/package-tasks
    * Get available package installation tasks
    */
   router.get("/package-tasks", (req: Request, res: Response) => {
@@ -65,7 +65,7 @@ export function createPackagesRouter(
 
     // Create debug info once at the start if expert mode is enabled
     const debugInfo = req.expertMode
-      ? expertModeService.createDebugInfo('GET /api/package-tasks', requestId, 0)
+      ? expertModeService.createDebugInfo('GET /api/packages/package-tasks', requestId, 0)
       : null;
 
     logger.info("Fetching available package tasks", {
@@ -114,7 +114,7 @@ export function createPackagesRouter(
   });
 
   /**
-   * POST /api/nodes/:id/install-package
+   * POST /api/packages/:id/install-package
    * Install a package on a target node
    */
   router.post(
@@ -125,7 +125,7 @@ export function createPackagesRouter(
 
       // Create debug info once at the start if expert mode is enabled
       const debugInfo = req.expertMode
-        ? expertModeService.createDebugInfo('POST /api/nodes/:id/install-package', requestId, 0)
+        ? expertModeService.createDebugInfo('POST /api/packages/:id/install-package', requestId, 0)
         : null;
 
       const nodeId = req.params.id;

@@ -57,14 +57,14 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Verify zero occurrences of `process.env.JWT_SECRET` / `process.env.PABAWI_LIFECYCLE_TOKEN` outside ConfigService
     - _Requirements: 1.4, 1.5_
 
-- [ ] 4. Replace Plugin Initialisation with Registry Loop
-  - [~] 4.1 Create plugin registry module
+- [x] 4. Replace Plugin Initialisation with Registry Loop
+  - [x] 4.1 Create plugin registry module
     - Create `backend/src/plugins/registry.ts` with `PluginRegistryEntry` interface and `PluginDeps` type
     - Define `pluginRegistry` array with entries for all 9 integrations (bolt, ansible, puppetdb, puppetserver, hiera, ssh, proxmox, aws, azure)
     - Preserve priority order matching current implementation
     - _Requirements: 2.1, 2.5_
 
-  - [~] 4.2 Replace nine copy-pasted blocks with registry loop in server.ts
+  - [x] 4.2 Replace nine copy-pasted blocks with registry loop in server.ts
     - Remove the nine try/catch plugin init blocks from `server.ts`
     - Add single `for...of` loop iterating `pluginRegistry` with one try/catch
     - Log skip/success/failure per entry
@@ -80,8 +80,8 @@ Structural refactoring addressing 11 code review findings. Implementation follow
 - [~] 5. Checkpoint - Verify core infrastructure changes
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Remove Duplicate Router Mounts
-  - [~] 6.1 Remove duplicate mounts from server.ts and update frontend paths
+- [x] 6. Remove Duplicate Router Mounts
+  - [x] 6.1 Remove duplicate mounts from server.ts and update frontend paths
     - Remove `/api/nodes` mount for inventory router (keep `/api/inventory`)
     - Remove duplicate packages router mount (keep `/api/packages`)
     - Update frontend components referencing `/api/nodes` to use canonical paths

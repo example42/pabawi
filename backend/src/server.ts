@@ -31,8 +31,8 @@ import { createPermissionsRouter } from "./routes/permissions";
 import { createJournalRouter } from "./routes/journal";
 import { createAWSRouter } from "./routes/integrations/aws";
 import { createAzureRouter } from "./routes/integrations/azure";
-import { AWSPlugin } from "./integrations/aws/AWSPlugin";
-import { AzurePlugin } from "./integrations/azure/AzurePlugin";
+import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
+import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
@@ -49,16 +49,11 @@ import {
   additionalSecurityHeaders,
 } from "./middleware/securityMiddleware";
 import { IntegrationManager } from "./integrations/IntegrationManager";
-import { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
-import { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
-import { HieraPlugin } from "./integrations/hiera/HieraPlugin";
-import { BoltPlugin } from "./integrations/bolt/BoltPlugin";
-import { AnsibleService } from "./integrations/ansible/AnsibleService";
-import { AnsiblePlugin } from "./integrations/ansible/AnsiblePlugin";
-import { SSHPlugin } from "./integrations/ssh/SSHPlugin";
-import { loadSSHConfig } from "./integrations/ssh/config";
-import { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
-import type { IntegrationConfig } from "./integrations/types";
+import type { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
+import type { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
+import type { HieraPlugin } from "./integrations/hiera/HieraPlugin";
+import type { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
+import { pluginRegistry } from "./plugins/registry";
 import { LoggerService } from "./services/LoggerService";
 import { ExpertModeService } from "./services/ExpertModeService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
@@ -270,688 +265,51 @@ async function startServer(): Promise<Express> {
       operation: "startServer",
     });
 
-    // Initialize Bolt integration only if configured
-    let boltPlugin: BoltPlugin | undefined;
-    const boltProjectPath = config.boltProjectPath;
-
-    // Check if Bolt is properly configured by looking for project files
-    let boltConfigured = false;
-    if (boltProjectPath && boltProjectPath !== '.') {
-      const fs = await import("fs");
-      const path = await import("path");
-
-      const inventoryYaml = path.join(boltProjectPath, "inventory.yaml");
-      const inventoryYml = path.join(boltProjectPath, "inventory.yml");
-      const boltProjectYaml = path.join(boltProjectPath, "bolt-project.yaml");
-      const boltProjectYml = path.join(boltProjectPath, "bolt-project.yml");
-
-      const hasInventory = fs.existsSync(inventoryYaml) || fs.existsSync(inventoryYml);
-      const hasBoltProject = fs.existsSync(boltProjectYaml) || fs.existsSync(boltProjectYml);
-
-      boltConfigured = hasInventory || hasBoltProject;
-    }
-
-    logger.info("=== Bolt Integration Setup ===", {
+    // Register all integration plugins via declarative registry
+    logger.info("=== Plugin Registry Initialisation ===", {
       component: "Server",
-      operation: "initializeBolt",
-      metadata: {
-        configured: boltConfigured,
-        projectPath: boltProjectPath || 'not set',
-      },
+      operation: "initializePlugins",
     });
 
-    if (boltConfigured) {
-      logger.info("Registering Bolt integration...", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
+    for (const entry of pluginRegistry) {
+      const entryConfig = entry.resolveConfig(configService);
+      if (!entryConfig) {
+        logger.warn(`${entry.name} integration not configured — skipping`, {
+          component: "Server",
+          operation: "initializePlugins",
+        });
+        continue;
+      }
       try {
-        boltPlugin = new BoltPlugin(boltService, logger, performanceMonitor);
-        const boltConfig: IntegrationConfig = {
+        const plugin = await entry.create({
+          configService,
+          logger,
+          performanceMonitor,
+          integrationManager,
+          boltService,
+        });
+        integrationManager.registerPlugin(plugin, {
           enabled: true,
-          name: "bolt",
-          type: "both",
-          config: {
-            projectPath: config.boltProjectPath,
-          },
-          priority: 5, // Lower priority than PuppetDB
-        };
-        integrationManager.registerPlugin(boltPlugin, boltConfig);
-        logger.info("Bolt integration registered successfully", {
-          component: "Server",
-          operation: "initializeBolt",
-          metadata: { projectPath: config.boltProjectPath },
+          name: entry.name,
+          type: entry.type,
+          config: entryConfig,
+          priority: entry.priority,
         });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Bolt integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
+        logger.info(`${entry.name} integration registered`, {
           component: "Server",
-          operation: "initializeBolt",
+          operation: "initializePlugins",
         });
-        boltPlugin = undefined;
+      } catch (err) {
+        logger.warn(`${entry.name} integration failed to initialise: ${(err as Error).message}`, {
+          component: "Server",
+          operation: "initializePlugins",
+        });
       }
-    } else {
-      logger.warn("Bolt integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
-      logger.info("Set BOLT_PROJECT_PATH to a valid project directory to enable Bolt integration", {
-        component: "Server",
-        operation: "initializeBolt",
-      });
     }
 
-    // Initialize Ansible integration only if configured
-    let ansiblePlugin: AnsiblePlugin | undefined;
-    const ansibleConfig = config.integrations.ansible;
-    const ansibleConfigured = ansibleConfig?.enabled === true;
-
-    if (ansibleConfigured) {
-      logger.info("Initializing Ansible integration...", {
-        component: "Server",
-        operation: "initializeAnsible",
-      });
-
-      try {
-        const ansibleService = new AnsibleService(
-          ansibleConfig.projectPath,
-          ansibleConfig.inventoryPath,
-          ansibleConfig.timeout,
-        );
-
-        ansiblePlugin = new AnsiblePlugin(ansibleService, logger, performanceMonitor);
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: true,
-          name: "ansible",
-          type: "both",
-          config: {
-            projectPath: ansibleConfig.projectPath,
-            inventoryPath: ansibleConfig.inventoryPath,
-            timeout: ansibleConfig.timeout,
-          },
-          priority: 5,
-        };
-
-        integrationManager.registerPlugin(ansiblePlugin, integrationConfig);
-
-        logger.info("Ansible integration registered successfully", {
-          component: "Server",
-          operation: "initializeAnsible",
-          metadata: {
-            projectPath: ansibleConfig.projectPath,
-            inventoryPath: ansibleConfig.inventoryPath,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Ansible integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeAnsible",
-        });
-        ansiblePlugin = undefined;
-      }
-    } else {
-      logger.warn("Ansible integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeAnsible",
-      });
-    }
-
-    // Initialize PuppetDB integration only if configured
-    let puppetDBService: PuppetDBService | undefined;
-    const puppetDBConfig = config.integrations.puppetdb;
-    const puppetDBConfigured = !!puppetDBConfig?.serverUrl;
-
-    if (puppetDBConfigured) {
-      logger.info("Initializing PuppetDB integration...", {
-        component: "Server",
-        operation: "initializePuppetDB",
-      });
-      try {
-        puppetDBService = new PuppetDBService(logger, performanceMonitor);
-        const integrationConfig: IntegrationConfig = {
-          enabled: puppetDBConfig.enabled,
-          name: "puppetdb",
-          type: "information",
-          config: puppetDBConfig,
-          priority: 10, // Higher priority than Bolt
-        };
-
-        integrationManager.registerPlugin(puppetDBService, integrationConfig);
-
-        logger.info("PuppetDB integration registered and enabled", {
-          component: "Server",
-          operation: "initializePuppetDB",
-          metadata: {
-            serverUrl: puppetDBConfig.serverUrl,
-            sslEnabled: puppetDBConfig.ssl?.enabled ?? false,
-            hasAuthentication: !!puppetDBConfig.token,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize PuppetDB integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializePuppetDB",
-        });
-        puppetDBService = undefined;
-      }
-    } else {
-      logger.warn("PuppetDB integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializePuppetDB",
-      });
-    }
-
-    // Initialize Puppetserver integration only if configured
-    let puppetserverService: PuppetserverService | undefined;
-    const puppetserverConfig = config.integrations.puppetserver;
-    const puppetserverConfigured = !!puppetserverConfig?.serverUrl;
-
-    logger.debug("=== Puppetserver Integration Setup ===", {
+    logger.info("=== End Plugin Registry Initialisation ===", {
       component: "Server",
-      operation: "initializePuppetserver",
-      metadata: {
-        configured: puppetserverConfigured,
-        config: puppetserverConfig,
-      },
-    });
-
-    if (puppetserverConfigured) {
-      logger.info("Initializing Puppetserver integration...", {
-        component: "Server",
-        operation: "initializePuppetserver",
-      });
-      try {
-        puppetserverService = new PuppetserverService(logger, performanceMonitor);
-        logger.debug("PuppetserverService instance created", {
-          component: "Server",
-          operation: "initializePuppetserver",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: puppetserverConfig.enabled,
-          name: "puppetserver",
-          type: "information",
-          config: puppetserverConfig,
-          priority: 8, // Lower priority than PuppetDB (10), higher than Bolt (5)
-        };
-
-        logger.debug("Registering Puppetserver plugin", {
-          component: "Server",
-          operation: "initializePuppetserver",
-          metadata: { config: integrationConfig },
-        });
-        integrationManager.registerPlugin(
-          puppetserverService,
-          integrationConfig,
-        );
-
-        logger.info("Puppetserver integration registered successfully", {
-          component: "Server",
-          operation: "initializePuppetserver",
-          metadata: {
-            enabled: puppetserverConfig.enabled,
-            serverUrl: puppetserverConfig.serverUrl,
-            port: puppetserverConfig.port,
-            sslEnabled: puppetserverConfig.ssl?.enabled ?? false,
-            hasAuthentication: !!puppetserverConfig.token,
-            priority: 8,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Puppetserver integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializePuppetserver",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("Puppetserver initialization error stack", {
-            component: "Server",
-            operation: "initializePuppetserver",
-          }, error);
-        }
-        puppetserverService = undefined;
-      }
-    } else {
-      logger.warn("Puppetserver integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializePuppetserver",
-      });
-    }
-    logger.debug("=== End Puppetserver Integration Setup ===", {
-      component: "Server",
-      operation: "initializePuppetserver",
-    });
-
-    // Initialize Hiera integration only if configured
-    let hieraPlugin: HieraPlugin | undefined;
-    const hieraConfig = config.integrations.hiera;
-    const hieraConfigured = !!hieraConfig?.controlRepoPath;
-
-    logger.debug("=== Hiera Integration Setup ===", {
-      component: "Server",
-      operation: "initializeHiera",
-      metadata: {
-        configured: hieraConfigured,
-        config: hieraConfig,
-      },
-    });
-
-    if (hieraConfigured) {
-      logger.info("Initializing Hiera integration...", {
-        component: "Server",
-        operation: "initializeHiera",
-      });
-      try {
-        hieraPlugin = new HieraPlugin(logger, performanceMonitor);
-        hieraPlugin.setIntegrationManager(integrationManager);
-        logger.debug("HieraPlugin instance created", {
-          component: "Server",
-          operation: "initializeHiera",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: hieraConfig.enabled,
-          name: "hiera",
-          type: "information",
-          config: hieraConfig,
-          priority: 6, // Lower priority than Puppetserver (8), higher than Bolt (5)
-        };
-
-        logger.debug("Registering Hiera plugin", {
-          component: "Server",
-          operation: "initializeHiera",
-          metadata: { config: integrationConfig },
-        });
-        integrationManager.registerPlugin(
-          hieraPlugin,
-          integrationConfig,
-        );
-
-        logger.info("Hiera integration registered successfully", {
-          component: "Server",
-          operation: "initializeHiera",
-          metadata: {
-            enabled: hieraConfig.enabled,
-            controlRepoPath: hieraConfig.controlRepoPath,
-            hieraConfigPath: hieraConfig.hieraConfigPath,
-            priority: 6,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Hiera integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeHiera",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("Hiera initialization error stack", {
-            component: "Server",
-            operation: "initializeHiera",
-          }, error);
-        }
-        hieraPlugin = undefined;
-      }
-    } else {
-      logger.warn("Hiera integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeHiera",
-      });
-      logger.info("Set HIERA_CONTROL_REPO_PATH to a valid control repository to enable Hiera integration", {
-        component: "Server",
-        operation: "initializeHiera",
-      });
-    }
-    logger.debug("=== End Hiera Integration Setup ===", {
-      component: "Server",
-      operation: "initializeHiera",
-    });
-
-    // Initialize SSH integration only if configured
-    let sshPlugin: SSHPlugin | undefined;
-    let sshConfig;
-
-    try {
-      sshConfig = loadSSHConfig();
-    } catch (error) {
-      logger.warn(`Failed to load SSH configuration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-        component: "Server",
-        operation: "initializeSSH",
-      });
-      sshConfig = null;
-    }
-
-    const sshConfigured = sshConfig?.enabled === true;
-
-    logger.debug("=== SSH Integration Setup ===", {
-      component: "Server",
-      operation: "initializeSSH",
-      metadata: {
-        configured: sshConfigured,
-        enabled: sshConfig?.enabled,
-        hasConfigPath: !!sshConfig?.configPath,
-      },
-    });
-
-    if (sshConfigured && sshConfig) {
-      logger.info("Initializing SSH integration...", {
-        component: "Server",
-        operation: "initializeSSH",
-      });
-      try {
-        sshPlugin = new SSHPlugin(logger, performanceMonitor);
-        logger.debug("SSHPlugin instance created", {
-          component: "Server",
-          operation: "initializeSSH",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: true,
-          name: "ssh",
-          type: "both",
-          config: sshConfig as unknown as Record<string, unknown>,
-          priority: sshConfig.priority,
-        };
-
-        logger.debug("Registering SSH plugin", {
-          component: "Server",
-          operation: "initializeSSH",
-          metadata: { config: integrationConfig },
-        });
-        integrationManager.registerPlugin(
-          sshPlugin,
-          integrationConfig,
-        );
-
-        logger.info("SSH integration registered successfully", {
-          component: "Server",
-          operation: "initializeSSH",
-          metadata: {
-            enabled: true,
-            configPath: sshConfig.configPath,
-            defaultUser: sshConfig.defaultUser,
-            defaultPort: sshConfig.defaultPort,
-            priority: sshConfig.priority,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize SSH integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeSSH",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("SSH initialization error stack", {
-            component: "Server",
-            operation: "initializeSSH",
-          }, error);
-        }
-        sshPlugin = undefined;
-      }
-    } else {
-      logger.warn("SSH integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeSSH",
-      });
-      logger.info("Set SSH_ENABLED=true and SSH_DEFAULT_USER to enable SSH integration", {
-        component: "Server",
-        operation: "initializeSSH",
-      });
-    }
-    logger.debug("=== End SSH Integration Setup ===", {
-      component: "Server",
-      operation: "initializeSSH",
-    });
-
-    // Initialize Proxmox integration only if configured
-    let proxmoxPlugin: ProxmoxIntegration | undefined;
-    const proxmoxConfig = config.integrations.proxmox;
-    const proxmoxConfigured = proxmoxConfig?.enabled === true;
-
-    logger.debug("=== Proxmox Integration Setup ===", {
-      component: "Server",
-      operation: "initializeProxmox",
-      metadata: {
-        configured: proxmoxConfigured,
-        enabled: proxmoxConfig?.enabled,
-        hasHost: !!proxmoxConfig?.host,
-      },
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (proxmoxConfigured && proxmoxConfig) {
-      logger.info("Initializing Proxmox integration...", {
-        component: "Server",
-        operation: "initializeProxmox",
-      });
-      try {
-        proxmoxPlugin = new ProxmoxIntegration(logger, performanceMonitor);
-        logger.debug("ProxmoxIntegration instance created", {
-          component: "Server",
-          operation: "initializeProxmox",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: true,
-          name: "proxmox",
-          type: "both",
-          config: proxmoxConfig,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          priority: proxmoxConfig.priority ?? 7, // Default 7: between Bolt/PuppetDB (10) and Hiera (6)
-        };
-
-        logger.debug("Registering Proxmox plugin", {
-          component: "Server",
-          operation: "initializeProxmox",
-          metadata: { config: integrationConfig },
-        });
-        integrationManager.registerPlugin(
-          proxmoxPlugin,
-          integrationConfig,
-        );
-
-        logger.info("Proxmox integration registered successfully", {
-          component: "Server",
-          operation: "initializeProxmox",
-          metadata: {
-            enabled: true,
-            host: proxmoxConfig.host,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-            port: proxmoxConfig.port ?? 8006,
-            hasToken: !!proxmoxConfig.token,
-            hasPassword: !!proxmoxConfig.password,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-            priority: proxmoxConfig.priority ?? 7,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Proxmox integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeProxmox",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("Proxmox initialization error stack", {
-            component: "Server",
-            operation: "initializeProxmox",
-          }, error);
-        }
-        proxmoxPlugin = undefined;
-      }
-    } else {
-      logger.warn("Proxmox integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeProxmox",
-      });
-      logger.info("Set PROXMOX_ENABLED=true and PROXMOX_HOST to enable Proxmox integration", {
-        component: "Server",
-        operation: "initializeProxmox",
-      });
-    }
-    logger.debug("=== End Proxmox Integration Setup ===", {
-      component: "Server",
-      operation: "initializeProxmox",
-    });
-
-    // Initialize AWS integration only if configured
-    let awsPlugin: AWSPlugin | undefined;
-    const awsConfig = config.integrations.aws;
-    const awsConfigured = awsConfig?.enabled === true;
-
-    logger.debug("=== AWS Integration Setup ===", {
-      component: "Server",
-      operation: "initializeAWS",
-      metadata: {
-        configured: awsConfigured,
-        enabled: awsConfig?.enabled,
-        hasAccessKey: !!awsConfig?.accessKeyId,
-        region: awsConfig?.region,
-      },
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (awsConfigured && awsConfig) {
-      logger.info("Initializing AWS integration...", {
-        component: "Server",
-        operation: "initializeAWS",
-      });
-      try {
-        awsPlugin = new AWSPlugin(logger, performanceMonitor);
-        logger.debug("AWSPlugin instance created", {
-          component: "Server",
-          operation: "initializeAWS",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: true,
-          name: "aws",
-          type: "both",
-          config: awsConfig,
-          priority: 7,
-        };
-
-        logger.debug("Registering AWS plugin", {
-          component: "Server",
-          operation: "initializeAWS",
-          metadata: { config: { ...integrationConfig, config: { region: awsConfig.region } } },
-        });
-        integrationManager.registerPlugin(awsPlugin, integrationConfig);
-
-        logger.info("AWS integration registered successfully", {
-          component: "Server",
-          operation: "initializeAWS",
-          metadata: {
-            enabled: true,
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-            region: awsConfig.region ?? "us-east-1",
-            regions: awsConfig.regions,
-            hasAccessKey: !!awsConfig.accessKeyId,
-            priority: 7,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize AWS integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeAWS",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("AWS initialization error stack", {
-            component: "Server",
-            operation: "initializeAWS",
-          }, error);
-        }
-        awsPlugin = undefined;
-      }
-    } else {
-      logger.warn("AWS integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeAWS",
-      });
-      logger.info("Set AWS_ENABLED=true and AWS_ACCESS_KEY_ID to enable AWS integration", {
-        component: "Server",
-        operation: "initializeAWS",
-      });
-    }
-    logger.debug("=== End AWS Integration Setup ===", {
-      component: "Server",
-      operation: "initializeAWS",
-    });
-
-    // Initialize Azure integration only if configured
-    let azurePlugin: AzurePlugin | undefined;
-    const azureConfig = config.integrations.azure;
-    const azureConfigured = azureConfig?.enabled === true;
-
-    logger.debug("=== Azure Integration Setup ===", {
-      component: "Server",
-      operation: "initializeAzure",
-      metadata: {
-        configured: azureConfigured,
-        enabled: azureConfig?.enabled,
-        hasSubscriptionId: !!azureConfig?.subscriptionId,
-      },
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (azureConfigured && azureConfig) {
-      logger.info("Initializing Azure integration...", {
-        component: "Server",
-        operation: "initializeAzure",
-      });
-      try {
-        azurePlugin = new AzurePlugin(logger, performanceMonitor);
-        logger.debug("AzurePlugin instance created", {
-          component: "Server",
-          operation: "initializeAzure",
-        });
-
-        const integrationConfig: IntegrationConfig = {
-          enabled: true,
-          name: "azure",
-          type: "both",
-          config: azureConfig,
-          priority: 7,
-        };
-
-        logger.debug("Registering Azure plugin", {
-          component: "Server",
-          operation: "initializeAzure",
-          metadata: { config: { ...integrationConfig, config: { subscriptionId: azureConfig.subscriptionId } } },
-        });
-        integrationManager.registerPlugin(azurePlugin, integrationConfig);
-
-        logger.info("Azure integration registered successfully", {
-          component: "Server",
-          operation: "initializeAzure",
-          metadata: {
-            enabled: true,
-            subscriptionId: azureConfig.subscriptionId,
-            hasClientCredentials: !!(azureConfig.tenantId && azureConfig.clientId),
-            resourceGroups: azureConfig.resourceGroups,
-            priority: 7,
-          },
-        });
-      } catch (error) {
-        logger.warn(`WARNING: Failed to initialize Azure integration: ${error instanceof Error ? error.message : "Unknown error"}`, {
-          component: "Server",
-          operation: "initializeAzure",
-        });
-        if (error instanceof Error && error.stack) {
-          logger.error("Azure initialization error stack", {
-            component: "Server",
-            operation: "initializeAzure",
-          }, error);
-        }
-        azurePlugin = undefined;
-      }
-    } else {
-      logger.warn("Azure integration not configured - skipping registration", {
-        component: "Server",
-        operation: "initializeAzure",
-      });
-      logger.info("Set AZURE_ENABLED=true and AZURE_SUBSCRIPTION_ID to enable Azure integration", {
-        component: "Server",
-        operation: "initializeAzure",
-      });
-    }
-    logger.debug("=== End Azure Integration Setup ===", {
-      component: "Server",
-      operation: "initializeAzure",
+      operation: "initializePlugins",
     });
 
     // Initialize all registered plugins
@@ -1024,6 +382,7 @@ async function startServer(): Promise<Express> {
 
     // Create shared JournalService and wire it to plugins
     const journalService = new JournalService(databaseService.getAdapter());
+    const proxmoxPlugin = integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
     if (proxmoxPlugin) {
       proxmoxPlugin.setJournalService(journalService);
       logger.info("JournalService wired to ProxmoxIntegration", {
@@ -1031,6 +390,7 @@ async function startServer(): Promise<Express> {
         operation: "wireJournalService",
       });
     }
+    const awsPlugin = integrationManager.getExecutionTool("aws") as AWSPlugin | null;
     if (awsPlugin) {
       awsPlugin.setJournalService(journalService);
       logger.info("JournalService wired to AWSPlugin", {
@@ -1038,6 +398,7 @@ async function startServer(): Promise<Express> {
         operation: "wireJournalService",
       });
     }
+    const azurePlugin = integrationManager.getExecutionTool("azure") as AzurePlugin | null;
     if (azurePlugin) {
       azurePlugin.setJournalService(journalService);
       logger.info("JournalService wired to AzurePlugin", {
@@ -1045,6 +406,11 @@ async function startServer(): Promise<Express> {
         operation: "wireJournalService",
       });
     }
+
+    // Retrieve specific plugin instances needed by downstream consumers
+    const puppetDBService = (integrationManager.getInformationSource("puppetdb") ?? undefined) as PuppetDBService | undefined;
+    const puppetserverService = (integrationManager.getInformationSource("puppetserver") ?? undefined) as PuppetserverService | undefined;
+    const hieraPlugin = (integrationManager.getInformationSource("hiera") ?? undefined) as HieraPlugin | undefined;
 
     // Initialize PuppetRunHistoryService if PuppetDB is available
     let puppetRunHistoryService: PuppetRunHistoryService | undefined;
@@ -1186,18 +552,9 @@ async function startServer(): Promise<Express> {
     // Monitoring routes (performance metrics)
     app.use("/api/monitoring", authMiddleware, rateLimitMiddleware, monitoringRouter);
 
-    // API Routes - Ansible inventory routes (protected with RBAC)
+    // API Routes - Inventory routes (protected with RBAC)
     app.use(
       "/api/inventory",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('ansible', 'read'),
-      createInventoryRouter(boltService, integrationManager, {
-        allowDestructiveActions: config.provisioning.allowDestructiveActions,
-      }, container),
-    );
-    app.use(
-      "/api/nodes",
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('ansible', 'read'),
@@ -1274,24 +631,10 @@ async function startServer(): Promise<Express> {
       );
     }
     app.use(
-      "/api",
+      "/api/packages",
       authMiddleware,
       rateLimitMiddleware,
       rbacMiddleware('bolt', 'read'),
-      createPackagesRouter(
-        integrationManager,
-        boltService,
-        executionRepository,
-        config.packageTasks,
-        streamingManager,
-        container,
-      ),
-    );
-    app.use(
-      "/api/nodes",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'execute'),
       createPackagesRouter(
         integrationManager,
         boltService,
