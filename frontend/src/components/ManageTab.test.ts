@@ -10,16 +10,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import ManageTab from './ManageTab.svelte';
 import * as api from '../lib/api';
+import * as proxmoxApi from '../lib/proxmoxApi';
 import * as toast from '../lib/toast.svelte';
 
 import type { LifecycleAction } from '../lib/types/provisioning';
 
 // Mock the API functions
 vi.mock('../lib/api', () => ({
+  get: vi.fn(),
+}));
+
+// Mock the Proxmox API functions
+vi.mock('../lib/proxmoxApi', () => ({
   executeNodeAction: vi.fn(),
   destroyNode: vi.fn(),
   fetchLifecycleActions: vi.fn(),
-  get: vi.fn(),
 }));
 
 // Mock the toast functions
@@ -44,7 +49,7 @@ describe('ManageTab Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Default mock: fetchLifecycleActions returns actions for proxmox
-    vi.mocked(api.fetchLifecycleActions).mockResolvedValue({
+    vi.mocked(proxmoxApi.fetchLifecycleActions).mockResolvedValue({
       provider: 'proxmox',
       actions: defaultActions,
     });
@@ -323,7 +328,7 @@ describe('ManageTab Component', () => {
 
     it('shows no actions message when no actions are available', async () => {
       // Mock fetchLifecycleActions to return empty actions
-      vi.mocked(api.fetchLifecycleActions).mockResolvedValue({
+      vi.mocked(proxmoxApi.fetchLifecycleActions).mockResolvedValue({
         provider: 'proxmox',
         actions: [],
       });
@@ -344,7 +349,7 @@ describe('ManageTab Component', () => {
 
   describe('Action Execution Handlers (Validates Requirements 6.4, 6.5, 6.6)', () => {
     it('calls executeNodeAction when Start button is clicked', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
       mockExecuteNodeAction.mockResolvedValue({
         success: true,
         taskId: 'task-123',
@@ -372,7 +377,7 @@ describe('ManageTab Component', () => {
     });
 
     it('calls executeNodeAction when Stop button is clicked', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
       mockExecuteNodeAction.mockResolvedValue({
         success: true,
         taskId: 'task-123',
@@ -400,7 +405,7 @@ describe('ManageTab Component', () => {
     });
 
     it('shows success toast when action succeeds', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
       const mockShowSuccess = vi.mocked(toast.showSuccess);
 
       mockExecuteNodeAction.mockResolvedValue({
@@ -433,7 +438,7 @@ describe('ManageTab Component', () => {
     });
 
     it('shows error toast when action fails', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
       const mockShowError = vi.mocked(toast.showError);
 
       mockExecuteNodeAction.mockResolvedValue({
@@ -466,7 +471,7 @@ describe('ManageTab Component', () => {
     });
 
     it('calls onStatusChange callback after successful action', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
       const mockOnStatusChange = vi.fn();
 
       mockExecuteNodeAction.mockResolvedValue({
@@ -497,7 +502,7 @@ describe('ManageTab Component', () => {
     });
 
     it('handles API errors gracefully', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
       const mockShowError = vi.mocked(toast.showError);
 
       mockExecuteNodeAction.mockRejectedValue(new Error('Network error'));
@@ -620,7 +625,7 @@ describe('ManageTab Component', () => {
     });
 
     it('calls destroyNode when Confirm is clicked', async () => {
-      const mockDestroyNode = vi.mocked(api.destroyNode);
+      const mockDestroyNode = vi.mocked(proxmoxApi.destroyNode);
       mockDestroyNode.mockResolvedValue({
         success: true,
         taskId: 'task-123',
@@ -655,7 +660,7 @@ describe('ManageTab Component', () => {
     });
 
     it('does not call destroyNode when Cancel is clicked', async () => {
-      const mockDestroyNode = vi.mocked(api.destroyNode);
+      const mockDestroyNode = vi.mocked(proxmoxApi.destroyNode);
 
       render(ManageTab, {
         props: {
@@ -704,7 +709,7 @@ describe('ManageTab Component', () => {
     });
 
     it('closes confirmation dialog after successful destroy', async () => {
-      const mockDestroyNode = vi.mocked(api.destroyNode);
+      const mockDestroyNode = vi.mocked(proxmoxApi.destroyNode);
       mockDestroyNode.mockResolvedValue({
         success: true,
         taskId: 'task-123',
@@ -759,7 +764,7 @@ describe('ManageTab Component', () => {
     });
 
     it('disables all action buttons when an action is in progress', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
 
       // Delay the response to test loading state
       mockExecuteNodeAction.mockImplementation(() =>
@@ -801,7 +806,7 @@ describe('ManageTab Component', () => {
     });
 
     it('shows action in progress indicator', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
 
       mockExecuteNodeAction.mockImplementation(() =>
         new Promise(resolve =>
@@ -834,7 +839,7 @@ describe('ManageTab Component', () => {
     });
 
     it('re-enables buttons after action completes', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
 
       mockExecuteNodeAction.mockResolvedValue({
         success: true,
@@ -870,7 +875,7 @@ describe('ManageTab Component', () => {
     });
 
     it('shows info toast when action starts', async () => {
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
       const mockShowInfo = vi.mocked(toast.showInfo);
 
       mockExecuteNodeAction.mockResolvedValue({
@@ -983,7 +988,7 @@ describe('ManageTab Component', () => {
 
     it('logs errors to console', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const mockExecuteNodeAction = vi.mocked(api.executeNodeAction);
+      const mockExecuteNodeAction = vi.mocked(proxmoxApi.executeNodeAction);
 
       mockExecuteNodeAction.mockRejectedValue(new Error('Network error'));
 

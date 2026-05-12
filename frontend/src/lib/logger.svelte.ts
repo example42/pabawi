@@ -69,9 +69,14 @@ class FrontendLogger {
 
   constructor() {
     // Load config from localStorage
-    const stored = typeof window !== 'undefined'
-      ? localStorage.getItem('pabawi_logger_config')
-      : null;
+    let stored: string | null = null;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.getItem === 'function') {
+        stored = window.localStorage.getItem('pabawi_logger_config');
+      }
+    } catch {
+      // localStorage unavailable (sandboxed iframe, test env, etc.)
+    }
 
     this.config = stored ? { ...DEFAULT_CONFIG, ...(JSON.parse(stored) as Partial<LoggerConfig>) } : DEFAULT_CONFIG;
 
@@ -90,8 +95,12 @@ class FrontendLogger {
    * Save configuration to localStorage
    */
   private saveConfig(): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('pabawi_logger_config', JSON.stringify(this.config));
+    try {
+      if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.setItem === 'function') {
+        window.localStorage.setItem('pabawi_logger_config', JSON.stringify(this.config));
+      }
+    } catch {
+      // localStorage unavailable
     }
   }
 

@@ -2,28 +2,41 @@
 
 const STORAGE_KEY = "pabawi_expert_mode";
 
+function getStorage(): Storage | null {
+  try {
+    if (typeof window !== "undefined" && window.localStorage && typeof window.localStorage.getItem === "function") {
+      return window.localStorage;
+    }
+  } catch {
+    // SecurityError in sandboxed iframes or restricted contexts
+  }
+  return null;
+}
+
 class ExpertModeStore {
   enabled = $state(false);
 
   constructor() {
-    // Load from localStorage on initialization
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem(STORAGE_KEY);
+    const storage = getStorage();
+    if (storage) {
+      const stored = storage.getItem(STORAGE_KEY);
       this.enabled = stored === "true";
     }
   }
 
   toggle(): void {
     this.enabled = !this.enabled;
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, String(this.enabled));
+    const storage = getStorage();
+    if (storage) {
+      storage.setItem(STORAGE_KEY, String(this.enabled));
     }
   }
 
   setEnabled(value: boolean): void {
     this.enabled = value;
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, String(value));
+    const storage = getStorage();
+    if (storage) {
+      storage.setItem(STORAGE_KEY, String(value));
     }
   }
 }

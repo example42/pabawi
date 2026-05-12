@@ -10,17 +10,16 @@ import { render, screen, waitFor, cleanup, within } from '@testing-library/svelt
 import '@testing-library/jest-dom/vitest';
 import fc from 'fast-check';
 import ProvisionPage from './ProvisionPage.svelte';
-import * as api from '../lib/api';
+import * as proxmoxApi from '../lib/proxmoxApi';
 import type { ProvisioningIntegration } from '../lib/types/provisioning';
 import { integrationArbitrary } from '../__tests__/generators';
 
-// Mock the API module
-vi.mock('../lib/api', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../lib/api')>();
+// Mock the Proxmox API module
+vi.mock('../lib/proxmoxApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/proxmoxApi')>();
   return {
     ...actual,
     getProvisioningIntegrations: vi.fn(),
-    getErrorGuidance: actual.getErrorGuidance,
   };
 });
 
@@ -36,7 +35,7 @@ describe('ProvisionPage', () => {
   describe('Loading State', () => {
     it('displays loading spinner while fetching integrations', async () => {
       // Mock API to delay response
-      vi.mocked(api.getProvisioningIntegrations).mockImplementation(
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockImplementation(
         () => new Promise(() => {}) // Never resolves
       );
 
@@ -48,7 +47,7 @@ describe('ProvisionPage', () => {
     });
 
     it('shows loading state initially before API call completes', () => {
-      vi.mocked(api.getProvisioningIntegrations).mockImplementation(
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockImplementation(
         () => new Promise((resolve) => setTimeout(() => resolve({ integrations: [] }), 100))
       );
 
@@ -79,7 +78,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -121,7 +120,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -170,7 +169,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -204,7 +203,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -248,7 +247,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -266,7 +265,7 @@ describe('ProvisionPage', () => {
   describe('Error Handling', () => {
     it('displays error message when API call fails', async () => {
       const errorMessage = 'Network connection failed';
-      vi.mocked(api.getProvisioningIntegrations).mockRejectedValue(
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockRejectedValue(
         new Error(errorMessage)
       );
 
@@ -285,7 +284,7 @@ describe('ProvisionPage', () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const errorMessage = 'API Error';
 
-      vi.mocked(api.getProvisioningIntegrations).mockRejectedValue(
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockRejectedValue(
         new Error(errorMessage)
       );
 
@@ -306,7 +305,7 @@ describe('ProvisionPage', () => {
 
     it('provides retry functionality on error', async () => {
       let callCount = 0;
-      vi.mocked(api.getProvisioningIntegrations).mockImplementation(() => {
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockImplementation(() => {
         callCount++;
         if (callCount === 1) {
           return Promise.reject(new Error('Network error'));
@@ -353,7 +352,7 @@ describe('ProvisionPage', () => {
     });
 
     it('handles non-Error objects thrown by API', async () => {
-      vi.mocked(api.getProvisioningIntegrations).mockRejectedValue('String error');
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockRejectedValue('String error');
 
       render(ProvisionPage);
 
@@ -368,7 +367,7 @@ describe('ProvisionPage', () => {
 
   describe('Empty State', () => {
     it('displays empty state when no integrations are available', async () => {
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: [],
       });
 
@@ -401,7 +400,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -416,7 +415,7 @@ describe('ProvisionPage', () => {
     });
 
     it('provides link to setup page in empty state', async () => {
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: [],
       });
 
@@ -466,7 +465,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -503,7 +502,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -550,7 +549,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -578,7 +577,7 @@ describe('ProvisionPage', () => {
 
   describe('Page Title', () => {
     it('sets the correct page title', () => {
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: [],
       });
 
@@ -608,7 +607,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -641,7 +640,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -675,7 +674,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -709,7 +708,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -749,7 +748,7 @@ describe('ProvisionPage', () => {
         },
       ];
 
-      vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
         integrations: mockIntegrations,
       });
 
@@ -791,7 +790,7 @@ describe('ProvisionPage', () => {
             }));
 
             // Mock API to return the generated integrations
-            vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+            vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
               integrations,
             });
 
@@ -874,7 +873,7 @@ describe('ProvisionPage', () => {
             }
 
             // Mock API to return the new integration
-            vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+            vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
               integrations: [newIntegration],
             });
 
@@ -968,7 +967,7 @@ describe('ProvisionPage', () => {
             });
 
             // Mock API to return multiple integrations
-            vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+            vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
               integrations,
             });
 
@@ -1028,7 +1027,7 @@ describe('ProvisionPage', () => {
             }));
 
             // Mock API to return integrations with no capabilities
-            vi.mocked(api.getProvisioningIntegrations).mockResolvedValue({
+            vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({
               integrations,
             });
 

@@ -14,7 +14,7 @@ import {
   getAWSKeyPairs,
   provisionAWSInstance,
   executeAWSLifecycle,
-} from './api';
+} from './awsApi';
 
 // Mock fetch globally
 const mockFetch = vi.fn();

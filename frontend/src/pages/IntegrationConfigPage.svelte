@@ -3,9 +3,9 @@
   import { router } from '../lib/router.svelte';
   import {
     get,
-    testProxmoxConnection,
-    testAWSConnection,
   } from '../lib/api';
+  import { testAWSConnection } from '../lib/awsApi';
+  import { testProxmoxConnection } from '../lib/proxmoxApi';
   import { showSuccess, showError } from '../lib/toast.svelte';
 
   /**

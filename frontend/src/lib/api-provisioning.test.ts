@@ -11,7 +11,7 @@ import {
   executeNodeAction,
   destroyNode,
   testProxmoxConnection,
-} from './api';
+} from './proxmoxApi';
 import type {
   ProxmoxVMParams,
   ProxmoxLXCParams,

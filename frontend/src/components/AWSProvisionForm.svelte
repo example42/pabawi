@@ -15,7 +15,7 @@
     type AWSSecurityGroupInfo,
     type AWSKeyPairInfo,
     type AWSProvisionParams,
-  } from '../lib/api';
+  } from '../lib/awsApi';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { logger } from '../lib/logger.svelte';
   import { validateRequired } from '../lib/validation';

@@ -3,7 +3,8 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
-  import { fetchLifecycleActions, executeNodeAction, destroyNode, get } from '../lib/api';
+  import { fetchLifecycleActions, executeNodeAction, destroyNode } from '../lib/proxmoxApi';
+  import { get } from '../lib/api';
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import type { LifecycleAction, ProvisioningResult } from '../lib/types/provisioning';
 

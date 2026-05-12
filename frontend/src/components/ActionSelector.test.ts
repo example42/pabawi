@@ -98,7 +98,7 @@ describe('ActionSelector', () => {
       render(ActionSelector, { props: { mode: 'multiple' } });
 
       const checkboxes = screen.getAllByRole('checkbox');
-      expect(checkboxes).toHaveLength(4);
+      expect(checkboxes).toHaveLength(5);
     });
 
     it('allows selecting multiple actions', async () => {

@@ -9,11 +9,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import ProxmoxProvisionForm from './ProxmoxProvisionForm.svelte';
-import * as api from '../lib/api';
+import * as proxmoxApi from '../lib/proxmoxApi';
 
-// Mock the API module — return types must match the real function signatures
+// Mock the Proxmox API module — return types must match the real function signatures
 // (e.g. getProxmoxNodes returns PVENode[], not { nodes: PVENode[] })
-vi.mock('../lib/api', () => ({
+vi.mock('../lib/proxmoxApi', () => ({
   createProxmoxVM: vi.fn(),
   createProxmoxLXC: vi.fn(),
   getProxmoxNodes: vi.fn().mockResolvedValue([{ node: 'pve', status: 'online' }]),
@@ -657,12 +657,12 @@ describe('Form Submission (Task 5.4)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Re-setup default mocks after clearAllMocks
-    vi.mocked(api.getProxmoxNodes).mockResolvedValue([{ node: 'pve', status: 'online' }]);
-    vi.mocked(api.getProxmoxNextVMID).mockResolvedValue(100);
-    vi.mocked(api.getProxmoxISOs).mockResolvedValue([]);
-    vi.mocked(api.getProxmoxTemplates).mockResolvedValue([]);
-    vi.mocked(api.getProxmoxStorages).mockResolvedValue([]);
-    vi.mocked(api.getProxmoxNetworks).mockResolvedValue([]);
+    vi.mocked(proxmoxApi.getProxmoxNodes).mockResolvedValue([{ node: 'pve', status: 'online' }]);
+    vi.mocked(proxmoxApi.getProxmoxNextVMID).mockResolvedValue(100);
+    vi.mocked(proxmoxApi.getProxmoxISOs).mockResolvedValue([]);
+    vi.mocked(proxmoxApi.getProxmoxTemplates).mockResolvedValue([]);
+    vi.mocked(proxmoxApi.getProxmoxStorages).mockResolvedValue([]);
+    vi.mocked(proxmoxApi.getProxmoxNetworks).mockResolvedValue([]);
   });
 
   async function fillVMForm(): Promise<void> {
@@ -680,7 +680,7 @@ describe('Form Submission (Task 5.4)', () => {
 
   describe('VM Form Submission', () => {
     it('submits VM form with valid data', async () => {
-      vi.mocked(api.createProxmoxVM).mockResolvedValue({
+      vi.mocked(proxmoxApi.createProxmoxVM).mockResolvedValue({
         success: true,
         taskId: 'task-123',
         vmid: 100,
@@ -694,12 +694,12 @@ describe('Form Submission (Task 5.4)', () => {
       await fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(api.createProxmoxVM).toHaveBeenCalled();
+        expect(proxmoxApi.createProxmoxVM).toHaveBeenCalled();
       });
     });
 
     it('disables submit button during submission', async () => {
-      vi.mocked(api.createProxmoxVM).mockImplementation(() =>
+      vi.mocked(proxmoxApi.createProxmoxVM).mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve({
           success: true,
           taskId: 'task-123',
@@ -722,12 +722,12 @@ describe('Form Submission (Task 5.4)', () => {
 
       // Wait for submission to complete
       await waitFor(() => {
-        expect(api.createProxmoxVM).toHaveBeenCalled();
+        expect(proxmoxApi.createProxmoxVM).toHaveBeenCalled();
       }, { timeout: 500 });
     });
 
     it('shows loading spinner during submission', async () => {
-      vi.mocked(api.createProxmoxVM).mockImplementation(() =>
+      vi.mocked(proxmoxApi.createProxmoxVM).mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve({
           success: true,
           taskId: 'task-123',
@@ -750,7 +750,7 @@ describe('Form Submission (Task 5.4)', () => {
     });
 
     it('resets form after successful submission', async () => {
-      vi.mocked(api.createProxmoxVM).mockResolvedValue({
+      vi.mocked(proxmoxApi.createProxmoxVM).mockResolvedValue({
         success: true,
         taskId: 'task-123',
         vmid: 100,
@@ -769,7 +769,7 @@ describe('Form Submission (Task 5.4)', () => {
     });
 
     it('includes optional fields in submission', async () => {
-      vi.mocked(api.createProxmoxVM).mockResolvedValue({
+      vi.mocked(proxmoxApi.createProxmoxVM).mockResolvedValue({
         success: true,
         taskId: 'task-123',
         vmid: 100,
@@ -790,7 +790,7 @@ describe('Form Submission (Task 5.4)', () => {
       await fireEvent.click(submitButton);
 
       await waitFor(() => {
-        const callArgs = vi.mocked(api.createProxmoxVM).mock.calls[0][0];
+        const callArgs = vi.mocked(proxmoxApi.createProxmoxVM).mock.calls[0][0];
         expect(callArgs.cores).toBe(4);
         expect(callArgs.memory).toBe(2048);
       });
@@ -799,7 +799,7 @@ describe('Form Submission (Task 5.4)', () => {
 
   describe('LXC Form Submission', () => {
     it('submits LXC form with valid data', async () => {
-      vi.mocked(api.createProxmoxLXC).mockResolvedValue({
+      vi.mocked(proxmoxApi.createProxmoxLXC).mockResolvedValue({
         success: true,
         taskId: 'task-456',
         vmid: 200,
@@ -834,12 +834,12 @@ describe('Form Submission (Task 5.4)', () => {
       await fireEvent.click(submitButton);
 
       await waitFor(() => {
-        expect(api.createProxmoxLXC).toHaveBeenCalled();
+        expect(proxmoxApi.createProxmoxLXC).toHaveBeenCalled();
       });
     });
 
     it('disables submit button during LXC submission', async () => {
-      vi.mocked(api.createProxmoxLXC).mockImplementation(() =>
+      vi.mocked(proxmoxApi.createProxmoxLXC).mockImplementation(() =>
         new Promise(resolve => setTimeout(() => resolve({
           success: true,
           taskId: 'task-456',
@@ -880,12 +880,12 @@ describe('Form Submission (Task 5.4)', () => {
 
       // Wait for submission to complete
       await waitFor(() => {
-        expect(api.createProxmoxLXC).toHaveBeenCalled();
+        expect(proxmoxApi.createProxmoxLXC).toHaveBeenCalled();
       }, { timeout: 500 });
     });
 
     it('resets LXC form after successful submission', async () => {
-      vi.mocked(api.createProxmoxLXC).mockResolvedValue({
+      vi.mocked(proxmoxApi.createProxmoxLXC).mockResolvedValue({
         success: true,
         taskId: 'task-456',
         vmid: 200,
