@@ -34,7 +34,7 @@ export class JournalService {
 
   constructor(db: DatabaseAdapter, liveSources?: Map<string, LiveSource>) {
     this.db = db;
-    this.liveSources = liveSources ?? new Map();
+    this.liveSources = liveSources ?? new Map<string, LiveSource>();
   }
 
   /**
@@ -48,7 +48,7 @@ export class JournalService {
 
     const id = randomUUID();
     const timestamp = new Date().toISOString();
-    const detailsJson = JSON.stringify(validated.details ?? {});
+    const detailsJson = JSON.stringify(validated.details);
 
     const sql = `
       INSERT INTO journal_entries (
@@ -147,7 +147,7 @@ export class JournalService {
 
     return rows.map((row) => ({
       ...row,
-      details: typeof row.details === "string" ? JSON.parse(row.details) as Record<string, unknown> : row.details ?? {},
+      details: (JSON.parse(row.details) as Record<string, unknown>),
       isLive: false,
     }));
   }
@@ -177,7 +177,7 @@ export class JournalService {
 
     return rows.map((row) => ({
       ...row,
-      details: typeof row.details === "string" ? JSON.parse(row.details) as Record<string, unknown> : row.details ?? {},
+      details: (JSON.parse(row.details) as Record<string, unknown>),
       isLive: false,
     }));
   }
@@ -267,7 +267,7 @@ export class JournalService {
 
     return rows.map((row) => ({
       ...row,
-      details: typeof row.details === "string" ? JSON.parse(row.details) as Record<string, unknown> : row.details ?? {},
+      details: (JSON.parse(row.details) as Record<string, unknown>),
       isLive: false,
     }));
   }

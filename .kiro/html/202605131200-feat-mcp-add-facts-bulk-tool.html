@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report: feat(mcp): add facts_bulk tool and bulk facts endpoint</title>
+<style>
+  :root { --bg: #1a1b26; --surface: #24283b; --border: #414868; --text: #c0caf5; --text-muted: #565f89; --accent: #7aa2f7; --green: #9ece6a; --red: #f7768e; --yellow: #e0af68; --purple: #bb9af7; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; max-width: 1100px; margin: 0 auto; }
+  h1 { color: var(--accent); font-size: 1.5rem; margin-bottom: 0.5rem; }
+  h2 { color: var(--purple); font-size: 1.2rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  h3 { color: var(--yellow); font-size: 1rem; margin: 1rem 0 0.5rem; }
+  .commit-msg { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; margin: 1rem 0; }
+  .commit-msg .title { font-weight: bold; color: var(--green); font-size: 1.1rem; }
+  .commit-msg .body { margin-top: 0.75rem; color: var(--text-muted); white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.9rem; }
+  th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-muted); font-weight: 600; }
+  .status-M { color: var(--yellow); } .status-A { color: var(--green); } .status-D { color: var(--red); }
+  .stat-add { color: var(--green); } .stat-del { color: var(--red); }
+  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+  .tag { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; margin-right: 0.4rem; }
+  .tag-backend { background: #1e3a5f; color: #7aa2f7; } .tag-frontend { background: #1e3f2e; color: #9ece6a; } .tag-docs { background: #3f2e1e; color: #e0af68; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin: 0.75rem 0; }
+  ul { padding-left: 1.5rem; } li { margin: 0.3rem 0; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
+  .stat-card .value { font-size: 1.5rem; font-weight: bold; color: var(--accent); }
+  .stat-card .label { font-size: 0.8rem; color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<h1>📋 Commit Report</h1>
+<p style="color: var(--text-muted);">Branch: <code>120</code> &middot; Date: 2026-05-13</p>
+
+<h2>Commit Message</h2>
+<div class="commit-msg">
+  <div class="title">feat(mcp): add facts_bulk tool and bulk facts endpoint</div>
+  <div class="body">Add a new `facts_bulk` MCP tool and corresponding REST endpoint
+(`GET /api/integrations/puppetdb/facts/bulk`) that retrieves specific
+facts across all nodes in a single PuppetDB query. This eliminates
+N+1 per-node requests that triggered 429 rate limiting.
+
+Frontend changes:
+- Refactor GlobalFactsTab to use the bulk endpoint instead of
+  per-node fact fetching, reducing requests from N to 1
+- Simplify loading/error state from per-node maps to single booleans
+
+Backend fixes:
+- Add eslint-disable comments for legitimate runtime guards
+  (window.localStorage checks in non-standard environments)
+- Narrow error types in Promise.reject and Object.entries calls
+- Remove redundant String() wraps and nullish coalescing on
+  values already guaranteed by types
+- Add eslint-disable for non-null assertions in MCP transport
+  callbacks where the SDK guarantees the value exists</div>
+</div>
+
+<h2>Codebase Stats</h2>
+<div class="stats-grid">
+  <div class="stat-card"><div class="value">28</div><div class="label">Files Changed</div></div>
+  <div class="stat-card"><div class="value">+496</div><div class="label">Lines Added</div></div>
+  <div class="stat-card"><div class="value">-122</div><div class="label">Lines Removed</div></div>
+  <div class="stat-card"><div class="value">Both</div><div class="label">Workspaces</div></div>
+</div>
+
+<h2>Files Changed</h2>
+<table>
+<tr><th>Status</th><th>File</th><th>+/-</th></tr>
+<tr><td class="status-M">M</td><td>backend/src/config/ConfigService.ts</td><td><span class="stat-add">+1</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/aws/AWSPlugin.ts</td><td><span class="stat-add">+1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/aws/AWSService.ts</td><td><span class="stat-add">+3</span> <span class="stat-del">-3</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/azure/AzurePlugin.ts</td><td><span class="stat-add">+1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/hiera/HieraParser.ts</td><td><span class="stat-add">+4</span> <span class="stat-del">-4</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/hiera/HieraResolver.ts</td><td><span class="stat-add">+1</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/proxmox/ProxmoxClient.ts</td><td><span class="stat-add">+2</span> <span class="stat-del">-2</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/proxmox/ProxmoxIntegration.ts</td><td><span class="stat-add">+2</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/puppetdb/PuppetDBService.ts</td><td><span class="stat-add">+90</span> <span class="stat-del">-6</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/puppetserver/PuppetserverService.ts</td><td><span class="stat-add">+3</span> <span class="stat-del">-3</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/mcp/McpServer.ts</td><td><span class="stat-add">+2</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/mcp/McpToolHandlers.ts</td><td><span class="stat-add">+43</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/routes/integrations/puppetdb.ts</td><td><span class="stat-add">+227</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/server.ts</td><td><span class="stat-add">+4</span> <span class="stat-del">-4</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/services/IntegrationColorService.ts</td><td><span class="stat-add">+1</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/services/journal/JournalService.ts</td><td><span class="stat-add">+5</span> <span class="stat-del">-5</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/test/integration/mcp-endpoint.test.ts</td><td><span class="stat-add">+2</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/test/unit/mcp/McpServer.test.ts</td><td><span class="stat-add">+2</span> <span class="stat-del">-2</span></td></tr>
+<tr><td class="status-M">M</td><td>docs/mcp.md</td><td><span class="stat-add">+10</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/__tests__/setup.ts</td><td><span class="stat-add">+1</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/components/GlobalFactsTab.svelte</td><td><span class="stat-add">+72</span> <span class="stat-del">-86</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/lib/executionStream.property.test.ts</td><td><span class="stat-add">+1</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/lib/executionStream.svelte.ts</td><td><span class="stat-add">+2</span> <span class="stat-del">-2</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/lib/executionStream.test.ts</td><td><span class="stat-add">+2</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/lib/expertMode.svelte.ts</td><td><span class="stat-add">+1</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/lib/logger.svelte.ts</td><td><span class="stat-add">+2</span></td></tr>
+<tr><td class="status-M">M</td><td>frontend/src/lib/reportFilters.svelte.ts</td><td><span class="stat-add">+1</span> <span class="stat-del">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>.kiro/security-assessment-2026-05-13.md</td><td><span class="stat-add">+3</span> <span class="stat-del">-2</span></td></tr>
+</table>
+
+<h2>Pages Affected</h2>
+<div class="card">
+<h3>Directly Affected</h3>
+<ul>
+  <li><a href="http://localhost:5173/puppet">Puppet Page</a> — GlobalFactsTab refactored to use bulk endpoint; new PuppetDB route</li>
+  <li><a href="http://localhost:5173/nodes/example">Node Detail Page</a> — PuppetDB facts route changes</li>
+</ul>
+<h3>Indirectly Affected (infrastructure changes)</h3>
+<ul>
+  <li><a href="http://localhost:5173/">All Pages</a> — shared lib changes (expertMode, logger, executionStream, reportFilters), service-layer type fixes (JournalService, IntegrationColorService), server.ts MCP transport changes</li>
+  <li><a href="http://localhost:5173/executions">Executions Page</a> — executionStream.svelte.ts stdout/stderr handling simplified</li>
+</ul>
+</div>
+
+<h2>What to Check</h2>
+<div class="card">
+<h3>Critical Path (new feature)</h3>
+<ul>
+  <li>Navigate to Puppet → Global Facts tab. Add facts (e.g., "os.name", "networking.ip"). Verify the table populates with data for all nodes in a single load cycle (no per-row spinners).</li>
+  <li>Test the MCP tool: call <code>facts_bulk</code> with <code>fact_names: ["os", "memory"]</code> via an MCP client. Verify it returns a map of certname → facts.</li>
+  <li>Test <code>GET /api/integrations/puppetdb/facts/bulk?names=os,networking</code> directly — verify 200 response with correct structure.</li>
+</ul>
+<h3>Regression Checks</h3>
+<ul>
+  <li>Execution streaming (stdout/stderr) still works — run a command and verify real-time output.</li>
+  <li>Expert mode toggle persists across page reloads.</li>
+  <li>Journal entries display correctly (details field parsing changed).</li>
+  <li>Puppet reports page filters still work (reportFilters type change).</li>
+  <li>Integration colors render correctly (Object.entries type assertion added).</li>
+  <li>MCP endpoint still lists all 9 tools and responds to existing tools.</li>
+</ul>
+</div>
+
+<h2>Impact Analysis</h2>
+<div class="card">
+<p><strong>New surface area:</strong> <code>PuppetDBService.getBulkFacts()</code> is called by both the MCP tool handler and the REST route. If PuppetDB is unavailable, both paths return appropriate errors.</p>
+<p><strong>Blast radius of type fixes:</strong> Low. The changes are narrowing types (removing <code>any</code> inference, adding explicit generics) and adding eslint-disable comments for known-safe patterns. No runtime behavior changes.</p>
+<p><strong>GlobalFactsTab refactor:</strong> Medium. The component's data flow changed from per-node Maps to a single bulk object. The loading UX is simpler (one spinner vs per-cell spinners). If the bulk endpoint fails, the entire table shows an error rather than individual cell errors.</p>
+<p><strong>Integrations touched:</strong> PuppetDB (new method + route), Proxmox (type fix), AWS (type fix), Azure (type fix), Hiera (type fix), Puppetserver (type fix). Only PuppetDB has functional changes; the rest are type-safety improvements.</p>
+</div>
+
+</body>
+</html>

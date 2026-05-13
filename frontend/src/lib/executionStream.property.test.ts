@@ -34,7 +34,7 @@ class MockEventSource {
 
   url: string;
   readyState = 0; // CONNECTING
-  private listeners: Map<string, EventSourceListener[]> = new Map();
+  private listeners = new Map<string, EventSourceListener[]>();
 
   constructor(url: string) {
     this.url = url;

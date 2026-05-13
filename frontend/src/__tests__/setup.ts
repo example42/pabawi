@@ -17,7 +17,7 @@ function createLocalStorageMock(): Storage {
       return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null;
     },
     setItem(key: string, value: string): void {
-      store[key] = String(value);
+      store[key] = value;
     },
     removeItem(key: string): void {
       delete store[key];

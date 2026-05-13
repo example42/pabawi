@@ -60,7 +60,7 @@ class ReportFilterStore {
           const parsed: unknown = JSON.parse(stored);
           // Validate the parsed data structure
           if (typeof parsed === 'object' && parsed !== null) {
-            this.filters = parsed as ReportFilters;
+            this.filters = parsed;
           }
         } catch (error) {
           // If parsing fails, start with empty filters

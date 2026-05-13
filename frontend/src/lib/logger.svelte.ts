@@ -71,6 +71,7 @@ class FrontendLogger {
     // Load config from localStorage
     let stored: string | null = null;
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for non-standard environments
       if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.getItem === 'function') {
         stored = window.localStorage.getItem('pabawi_logger_config');
       }
@@ -96,6 +97,7 @@ class FrontendLogger {
    */
   private saveConfig(): void {
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for non-standard environments
       if (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.setItem === 'function') {
         window.localStorage.setItem('pabawi_logger_config', JSON.stringify(this.config));
       }

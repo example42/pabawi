@@ -162,6 +162,7 @@ The endpoint accepts standard MCP Streamable HTTP requests at `POST /mcp`. All r
 |---|---|---|
 | `inventory_list` | List nodes from all active integrations | `search?` — filter by name or certname |
 | `facts_get` | Get system facts for a node | `certname` — node certname |
+| `facts_bulk` | Get specific facts across all nodes in one query | `fact_names` — array of top-level fact names, `include_all?` |
 | `reports_query` | Query Puppet run reports | `certname?`, `limit?`, `status?` |
 | `catalogs_get` | Get compiled Puppet catalog for a node | `certname` — node certname |
 | `hiera_lookup` | Look up a Hiera key value for a node | `key`, `node?` (certname for hierarchy resolution), `environment?` (default: production) |
@@ -236,6 +237,15 @@ Returns facts gathered from all sources for a specific node. Facts are keyed by 
 
 ```
 certname: "web-01.example.com"
+```
+
+### facts_bulk
+
+Returns specific facts across all nodes in a single PuppetDB query. Much more efficient than calling `facts_get` per node when you need the same facts for many nodes.
+
+```
+fact_names: ["os", "networking", "memory"]   →  get OS, networking, and memory facts for all nodes
+include_all: false                           →  filter to essential sub-keys only
 ```
 
 ### reports_query

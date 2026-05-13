@@ -24,7 +24,7 @@ import type {
  */
 class MockEventSource {
   url: string;
-  private listeners: Map<string, ((e: MessageEvent) => void)[]> = new Map();
+  private listeners = new Map<string, ((e: MessageEvent) => void)[]>();
 
   constructor(url: string) {
     this.url = url;
@@ -139,6 +139,7 @@ describe("executionStream handleEvent processes all event types", () => {
     vi.stubGlobal("EventSource", class extends MockEventSource {
       constructor(url: string) {
         super(url);
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         lastMockEventSource = this;
       }
     });

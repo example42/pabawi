@@ -245,7 +245,7 @@ export function useExecutionStream(
       case "stdout": {
         const stdoutData = event.data as StdoutEventData | undefined;
         if (stdoutData && "output" in stdoutData) {
-          state.stdout += String(stdoutData.output);
+          state.stdout += stdoutData.output;
         }
         break;
       }
@@ -253,7 +253,7 @@ export function useExecutionStream(
       case "stderr": {
         const stderrData = event.data as StderrEventData | undefined;
         if (stderrData && "output" in stderrData) {
-          state.stderr += String(stderrData.output);
+          state.stderr += stderrData.output;
         }
         break;
       }

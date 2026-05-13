@@ -178,7 +178,7 @@ export class IntegrationColorService {
     }
 
     // Validate default color as well
-    for (const [variant, color] of Object.entries(this.defaultColor)) {
+    for (const [variant, color] of Object.entries(this.defaultColor) as [string, string][]) {
       if (!hexColorRegex.test(color)) {
         throw new Error(
           `Invalid default color format for ${variant}: "${color}". Expected hex format (e.g., #6B7280)`

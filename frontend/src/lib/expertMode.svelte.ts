@@ -4,6 +4,7 @@ const STORAGE_KEY = "pabawi_expert_mode";
 
 function getStorage(): Storage | null {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- runtime guard for non-standard environments
     if (typeof window !== "undefined" && window.localStorage && typeof window.localStorage.getItem === "function") {
       return window.localStorage;
     }

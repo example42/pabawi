@@ -175,6 +175,7 @@ describe('MCP Endpoint Integration Tests', () => {
     const expectedTools = [
       'inventory_list',
       'facts_get',
+      'facts_bulk',
       'reports_query',
       'catalogs_get',
       'hiera_lookup',
@@ -183,7 +184,7 @@ describe('MCP Endpoint Integration Tests', () => {
       'journal_query',
     ];
 
-    expect(toolNames).toHaveLength(8);
+    expect(toolNames).toHaveLength(9);
     for (const tool of expectedTools) {
       expect(toolNames).toContain(tool);
     }

@@ -3595,6 +3595,233 @@ export function createPuppetDBRouter(puppetDBService?: PuppetDBService, containe
   );
 
   /**
+   * GET /api/integrations/puppetdb/facts/bulk
+   * Return specific facts for all nodes in a single query
+   *
+   * Query params:
+   * - names: comma-separated list of top-level fact names (e.g., "os,networking,memory")
+   *
+   * This endpoint queries PuppetDB once for all requested facts across all nodes,
+   * avoiding N+1 queries that trigger 429 rate limiting.
+   */
+  router.get(
+    "/facts/bulk",
+    requestDeduplication,
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const startTime = Date.now();
+      const requestId = req.id ?? expertModeService.generateRequestId();
+
+      const debugInfo = req.expertMode
+        ? expertModeService.createDebugInfo('GET /api/integrations/puppetdb/facts/bulk', requestId, 0)
+        : null;
+
+      if (!puppetDBService) {
+        const errorResponse = {
+          error: {
+            code: "PUPPETDB_NOT_CONFIGURED",
+            message: "PuppetDB integration is not configured",
+          },
+        };
+        res.status(503).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+        return;
+      }
+
+      if (!puppetDBService.isInitialized()) {
+        const errorResponse = {
+          error: {
+            code: "PUPPETDB_NOT_INITIALIZED",
+            message: "PuppetDB integration is not initialized",
+          },
+        };
+        res.status(503).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+        return;
+      }
+
+      try {
+        // Validate query parameters
+        const namesParam = req.query.names;
+        if (!namesParam || typeof namesParam !== 'string' || namesParam.trim().length === 0) {
+          const errorResponse = {
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Query parameter 'names' is required (comma-separated fact names)",
+            },
+          };
+          res.status(400).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+          return;
+        }
+
+        // Parse and validate fact names
+        const factNames = namesParam.split(',')
+          .map(n => n.trim())
+          .filter(n => n.length > 0);
+
+        if (factNames.length === 0) {
+          const errorResponse = {
+            error: {
+              code: "INVALID_REQUEST",
+              message: "At least one fact name is required",
+            },
+          };
+          res.status(400).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+          return;
+        }
+
+        // Cap at 50 fact names to prevent abuse
+        if (factNames.length > 50) {
+          const errorResponse = {
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Maximum 50 fact names allowed per request",
+            },
+          };
+          res.status(400).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+          return;
+        }
+
+        logger.info("Fetching bulk facts from PuppetDB", {
+          component: "PuppetDBRouter",
+          integration: "puppetdb",
+          operation: "getBulkFacts",
+          metadata: { factCount: factNames.length, factNames },
+        });
+
+        if (debugInfo) {
+          expertModeService.addInfo(debugInfo, {
+            message: `Fetching bulk facts: ${factNames.join(', ')}`,
+            level: 'info',
+          });
+        }
+
+        // Get bulk facts from PuppetDB (single query)
+        const factsMap = await puppetDBService.getBulkFacts(factNames);
+        const duration = Date.now() - startTime;
+        const nodeCount = Object.keys(factsMap).length;
+
+        logger.info("Successfully fetched bulk facts from PuppetDB", {
+          component: "PuppetDBRouter",
+          integration: "puppetdb",
+          operation: "getBulkFacts",
+          metadata: { factCount: factNames.length, nodeCount, duration },
+        });
+
+        const responseData = {
+          facts: factsMap,
+          source: "puppetdb",
+          factNames,
+          nodeCount,
+        };
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.addMetadata(debugInfo, 'factCount', factNames.length);
+          expertModeService.addMetadata(debugInfo, 'nodeCount', nodeCount);
+          expertModeService.addInfo(debugInfo, {
+            message: `Successfully fetched ${String(factNames.length)} facts for ${String(nodeCount)} nodes`,
+            level: 'info',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+          res.json(expertModeService.attachDebugInfo(responseData, debugInfo));
+        } else {
+          res.json(responseData);
+        }
+      } catch (error: unknown) {
+        const duration = Date.now() - startTime;
+
+        if (error instanceof PuppetDBConnectionError) {
+          logger.error("PuppetDB connection error during bulk facts", {
+            component: "PuppetDBRouter",
+            integration: "puppetdb",
+            operation: "getBulkFacts",
+          }, error);
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'puppetdb');
+            expertModeService.addError(debugInfo, {
+              message: `PuppetDB connection error: ${error.message}`,
+              stack: error.stack,
+              level: 'error',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
+            error: {
+              code: "PUPPETDB_CONNECTION_ERROR",
+              message: error.message,
+            },
+          };
+
+          res.status(503).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+          return;
+        }
+
+        if (error instanceof PuppetDBQueryError) {
+          logger.error("PuppetDB query error during bulk facts", {
+            component: "PuppetDBRouter",
+            integration: "puppetdb",
+            operation: "getBulkFacts",
+          }, error);
+
+          if (debugInfo) {
+            debugInfo.duration = duration;
+            expertModeService.setIntegration(debugInfo, 'puppetdb');
+            expertModeService.addError(debugInfo, {
+              message: `PuppetDB query error: ${error.message}`,
+              stack: error.stack,
+              level: 'error',
+            });
+            debugInfo.performance = expertModeService.collectPerformanceMetrics();
+            debugInfo.context = expertModeService.collectRequestContext(req);
+          }
+
+          const errorResponse = {
+            error: {
+              code: "PUPPETDB_QUERY_ERROR",
+              message: error.message,
+            },
+          };
+
+          res.status(400).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+          return;
+        }
+
+        logger.error("Error fetching bulk facts from PuppetDB", {
+          component: "PuppetDBRouter",
+          integration: "puppetdb",
+          operation: "getBulkFacts",
+          metadata: { duration },
+        }, error instanceof Error ? error : undefined);
+
+        if (debugInfo) {
+          debugInfo.duration = duration;
+          expertModeService.setIntegration(debugInfo, 'puppetdb');
+          expertModeService.addError(debugInfo, {
+            message: `Error fetching bulk facts: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            stack: error instanceof Error ? error.stack : undefined,
+            level: 'error',
+          });
+          debugInfo.performance = expertModeService.collectPerformanceMetrics();
+          debugInfo.context = expertModeService.collectRequestContext(req);
+        }
+
+        const errorResponse = {
+          error: {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to fetch bulk facts from PuppetDB",
+          },
+        };
+
+        res.status(500).json(debugInfo ? expertModeService.attachDebugInfo(errorResponse, debugInfo) : errorResponse);
+      }
+    }),
+  );
+
+  /**
    * GET /api/integrations/puppetserver/nodes
    * Return all nodes from Puppetserver CA inventory
    *

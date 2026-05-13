@@ -651,7 +651,7 @@ export class ConfigService {
         provisioning,
         ui,
         mcpEnabled: process.env.MCP_ENABLED === "true",
-        mcpAuthToken: process.env.MCP_AUTH_TOKEN || undefined,
+        mcpAuthToken: process.env.MCP_AUTH_TOKEN ?? undefined,
       };
 
       // Validate with Zod schema

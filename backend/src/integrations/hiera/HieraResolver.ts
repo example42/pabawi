@@ -496,7 +496,7 @@ export class HieraResolver {
     if (Array.isArray(base) && Array.isArray(override)) {
       if (mergeOptions?.mergeHashArrays) {
         // Merge arrays element by element
-        const result: unknown[] = [...base];
+        const result: unknown[] = [...(base as unknown[])];
         for (const item of override) {
           if (knockoutPrefix && typeof item === "string" && item.startsWith(knockoutPrefix)) {
             const knockedOut = item.slice(knockoutPrefix.length);

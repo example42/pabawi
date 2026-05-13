@@ -66,6 +66,7 @@ interface PermissionCheck {
 export const TOOL_PERMISSIONS: Record<string, PermissionCheck> = {
   inventory_list: { resource: 'ansible', action: 'read' },
   facts_get: { resource: 'puppetdb', action: 'read' },
+  facts_bulk: { resource: 'puppetdb', action: 'read' },
   reports_query: { resource: 'puppetdb', action: 'read' },
   catalogs_get: { resource: 'puppetdb', action: 'read' },
   hiera_lookup: { resource: 'hiera', action: 'read' },
@@ -85,7 +86,7 @@ export function createMcpServer(deps: McpDependencies): McpServerInstance {
 
   registerAllTools(server, deps);
 
-  deps.logger.info('MCP server created with 8 tools', {
+  deps.logger.info('MCP server created with 9 tools', {
     component: LOG_COMPONENT,
     operation: 'createMcpServer',
   });

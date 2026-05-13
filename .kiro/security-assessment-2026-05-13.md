@@ -67,6 +67,7 @@ app.delete("/mcp", (req: Request, res: Response) => { ... });
 ```
 
 Any client that can reach the port — including unauthenticated, anonymous network clients — can:
+
 1. `POST /mcp` without `mcp-session-id` to create a new MCP session.
 2. Use that session to invoke any of the 8 read-only tools (`inventory_list`, `facts_get`, `reports_query`, `catalogs_get`, `hiera_lookup`, `executions_list`, `integrations_list`, `journal_query`) under the provisioned `mcp-service` user's permissions.
 
@@ -199,7 +200,7 @@ Remove the `?token=` fallback. If a transition window is necessary, emit a `warn
 `fast-uri` is a runtime production dependency pulled in by `@modelcontextprotocol/sdk`. Risk is partially mitigated by the current deployment scope (read-only tools, session-based transport), but the dependency is live in production. Risk increases as MCP exposure is broadened — and is compounded by SA-00 (unauthenticated MCP endpoints).
 
 **Recommendation**:  
-Upgrade `@modelcontextprotocol/sdk` once a version ships that depends on `fast-uri >=3.1.2`. Track: https://github.com/advisories/GHSA-q3j6-qgpj-74h6. Resolving SA-00 reduces the exploitable attack surface in the interim.
+Upgrade `@modelcontextprotocol/sdk` once a version ships that depends on `fast-uri >=3.1.2`. Track: <https://github.com/advisories/GHSA-q3j6-qgpj-74h6>. Resolving SA-00 reduces the exploitable attack surface in the interim.
 
 ---
 
@@ -216,6 +217,7 @@ An attacker who knows a valid username can cause permanent lockout with 10 reque
 Targeted DoS against specific accounts. Elevated risk when usernames are predictable (e.g., `admin`, email-pattern).
 
 **Recommendation**:  
+
 1. Proactively alert on permanent lockout (journal entry + log alert).
 2. Consider resetting the cumulative counter on successful authentication, or basing it on a rolling time window rather than cumulative-forever.
 
@@ -229,6 +231,7 @@ Targeted DoS against specific accounts. Elevated risk when usernames are predict
 Express is not configured to trust `X-Forwarded-For` headers from a reverse proxy. When deployed behind nginx, caddy, or a cloud load balancer, `req.ip` resolves to the proxy's IP address rather than the client's.
 
 This breaks two controls:
+
 1. **Auth rate limiting** (`securityMiddleware.ts:93-116`) — all clients appear to share the same IP. 10 failed login attempts by any user trips the per-IP rate limit for every user behind that proxy; conversely, distributed attacks from many IPs are not rate-limited unless the proxy IP itself is banned.
 2. **Audit log IP attribution** — `AuditLoggingService` and `AuthenticationService` record `req.ip` for authentication events. All events will show the proxy IP, making forensics after a breach useless.
 
