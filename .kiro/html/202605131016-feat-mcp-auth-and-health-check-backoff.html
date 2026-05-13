@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — feat(mcp): add static token auth and adaptive health check scheduling</title>
+<style>
+  :root { --bg: #1a1b26; --surface: #24283b; --border: #414868; --text: #c0caf5; --text-dim: #565f89; --accent: #7aa2f7; --green: #9ece6a; --red: #f7768e; --yellow: #e0af68; --orange: #ff9e64; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace; background: var(--bg); color: var(--text); line-height: 1.6; padding: 2rem; max-width: 900px; margin: 0 auto; }
+  h1 { color: var(--accent); font-size: 1.4rem; margin-bottom: 0.5rem; }
+  h2 { color: var(--accent); font-size: 1.1rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h3 { color: var(--yellow); font-size: 0.95rem; margin: 1rem 0 0.5rem; }
+  p, li { font-size: 0.88rem; }
+  ul { padding-left: 1.2rem; }
+  li { margin-bottom: 0.3rem; }
+  .commit-msg { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1rem 0; white-space: pre-wrap; font-size: 0.85rem; }
+  .file-table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.82rem; }
+  .file-table th { text-align: left; color: var(--text-dim); font-weight: 500; padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  .file-table td { padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); }
+  .file-table .status-M { color: var(--yellow); }
+  .file-table .status-A { color: var(--green); }
+  .added { color: var(--green); }
+  .removed { color: var(--red); }
+  .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 3px; font-size: 0.75rem; font-weight: 600; }
+  .badge-backend { background: #1e3a5f; color: var(--accent); }
+  .badge-docs { background: #2d3a1e; color: var(--green); }
+  .badge-kiro { background: #3a2d1e; color: var(--orange); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .stats { display: flex; gap: 1.5rem; flex-wrap: wrap; margin: 0.75rem 0; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 1rem; }
+  .stat-value { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; }
+  .check-list li { margin-bottom: 0.5rem; }
+  .section { margin-bottom: 1.5rem; }
+</style>
+</head>
+<body>
+
+<h1>Commit Report</h1>
+<p style="color: var(--text-dim); font-size: 0.8rem;">2026-05-13 10:16 · Branch: 120</p>
+
+<h2>Commit Message</h2>
+<div class="commit-msg"><strong>feat(mcp): add static token auth and adaptive health check scheduling</strong>
+
+- Add MCP_AUTH_TOKEN env var for static bearer token authentication on /mcp
+- Create mcpAuthMiddleware: checks static token first, falls through to JWT
+- Mount auth middleware on all MCP HTTP routes (POST/GET/DELETE /mcp)
+- Refactor health check scheduler from fixed-interval to adaptive backoff:
+  uses shorter retry interval (60s) when plugins are unhealthy, normal
+  interval (5min) when all healthy
+- Downgrade noisy credential-validation logs from INFO to DEBUG in
+  AWS, Azure, and Proxmox services
+- Update docs/mcp.md with authentication section, client config examples,
+  and troubleshooting for 401 errors
+- Add AGENTS.md (root-level agent guidance file)
+- Add security assessment (.kiro/security-assessment-2026-05-13.md)
+
+Resolves SA-00 from security assessment (critical: unauthenticated MCP endpoints).</div>
+
+<h2>Codebase Stats</h2>
+<div class="stats">
+  <div class="stat"><div class="stat-value">13</div><div class="stat-label">Files Changed</div></div>
+  <div class="stat"><div class="stat-value added">+280</div><div class="stat-label">Lines Added</div></div>
+  <div class="stat"><div class="stat-value removed">-24</div><div class="stat-label">Lines Removed</div></div>
+  <div class="stat"><div class="stat-value">Backend + Docs</div><div class="stat-label">Workspaces</div></div>
+</div>
+
+<h2>Files Changed</h2>
+<table class="file-table">
+<tr><th>Status</th><th>File</th><th>+/-</th></tr>
+<tr><td class="status-A">A</td><td>backend/src/middleware/mcpAuthMiddleware.ts</td><td><span class="added">+51</span></td></tr>
+<tr><td class="status-A">A</td><td>AGENTS.md</td><td><span class="added">+112</span></td></tr>
+<tr><td class="status-A">A</td><td>.kiro/security-assessment-2026-05-13.md</td><td><span class="added">+393</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/server.ts</td><td><span class="added">+11</span> <span class="removed">-3</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/IntegrationManager.ts</td><td><span class="added">+43</span> <span class="removed">-11</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/config/ConfigService.ts</td><td><span class="added">+8</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/config/schema.ts</td><td><span class="added">+1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/aws/AWSService.ts</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/azure/AzureService.ts</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/src/integrations/proxmox/ProxmoxService.ts</td><td><span class="added">+1</span> <span class="removed">-1</span></td></tr>
+<tr><td class="status-M">M</td><td>backend/.env.example</td><td><span class="added">+3</span></td></tr>
+<tr><td class="status-M">M</td><td>docs/mcp.md</td><td><span class="added">+54</span> <span class="removed">-7</span></td></tr>
+<tr><td class="status-M">M</td><td>docs/configuration.md</td><td><span class="added">+1</span></td></tr>
+</table>
+
+<h2>Pages Affected</h2>
+<ul>
+  <li><strong>All pages</strong> (infrastructure change) — middleware and server.ts modified</li>
+  <li><a href="http://localhost:5173/integrations/config">Integration Config</a> — ConfigService schema change (new <code>mcpAuthToken</code> field)</li>
+</ul>
+<p style="color: var(--text-dim); font-size: 0.8rem; margin-top: 0.5rem;">No frontend component changes — impact is backend-only. Pages are affected only if they depend on backend startup succeeding.</p>
+
+<h2>What to Check</h2>
+<ul class="check-list">
+  <li><strong>MCP auth with static token</strong>: Set <code>MCP_AUTH_TOKEN=test123</code> in .env, restart backend, verify <code>curl -X POST http://localhost:3000/mcp -H "Authorization: Bearer test123"</code> returns MCP protocol response (not 401)</li>
+  <li><strong>MCP auth without token</strong>: Remove <code>MCP_AUTH_TOKEN</code>, restart, verify JWT auth still works on /mcp</li>
+  <li><strong>MCP auth rejection</strong>: Send request with wrong bearer token → expect 401</li>
+  <li><strong>Health check adaptive scheduling</strong>: With an unhealthy integration (e.g., bad PuppetDB URL), verify logs show retry interval (60s) being used. With all healthy, verify 5-minute interval.</li>
+  <li><strong>Log noise reduction</strong>: Verify AWS/Azure/Proxmox credential validation no longer logs at INFO during health checks (only at DEBUG)</li>
+  <li><strong>Backend startup</strong>: Verify clean startup with <code>MCP_ENABLED=true</code> and both with/without <code>MCP_AUTH_TOKEN</code></li>
+</ul>
+
+<h2>Impact Analysis</h2>
+<h3>MCP Authentication (new middleware)</h3>
+<p>Isolated to <code>/mcp</code> routes only. The middleware is mounted exclusively on POST/GET/DELETE /mcp — no other routes are affected. Falls through to existing JWT auth when static token is not configured or doesn't match, so existing JWT-based MCP usage continues to work.</p>
+
+<h3>Health Check Scheduler (IntegrationManager)</h3>
+<p>Changed from <code>setInterval</code> (fixed cadence) to recursive <code>setTimeout</code> (adaptive). Blast radius is limited to <code>IntegrationManager</code> class — no callers change. The scheduler is started once in <code>server.ts</code> after plugin init. Behavioral change: unhealthy plugins now get rechecked every 60s instead of every 5min, reducing time-to-recovery detection.</p>
+
+<h3>Log level downgrades (AWS/Azure/Proxmox)</h3>
+<p>Purely cosmetic — reduces log noise during periodic health checks. No functional impact.</p>
+
+<h3>Config schema addition</h3>
+<p><code>mcpAuthToken</code> is optional with no default. Existing deployments without the env var are unaffected — the field resolves to <code>undefined</code> and the middleware falls through to JWT.</p>
+
+</body>
+</html>

@@ -389,6 +389,7 @@ export const AppConfigSchema = z.object({
   provisioning: ProvisioningConfigSchema.default({ allowDestructiveActions: false }),
   ui: UIConfigSchema.default({ showHomePageRunChart: true }),
   mcpEnabled: z.boolean().default(false),
+  mcpAuthToken: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

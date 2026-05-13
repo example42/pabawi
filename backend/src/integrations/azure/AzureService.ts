@@ -83,7 +83,7 @@ export class AzureService {
         subscriptionId: response.subscriptionId ?? this.subscriptionId,
         tenantId: response.tenantId ?? "",
       };
-      this.logger.info("Azure credentials validated", {
+      this.logger.debug("Azure credentials validated", {
         component: "AzureService", operation: "validateCredentials",
         metadata: { subscriptionName: result.subscriptionName },
       });

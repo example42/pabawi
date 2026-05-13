@@ -113,6 +113,7 @@ export class IntegrationManager {
   private healthCheckCache = new Map<string, HealthCheckCacheEntry>();
   private healthCheckInterval?: NodeJS.Timeout;
   private healthCheckIntervalMs: number;
+  private healthCheckRetryMs: number;
   private healthCheckCacheTTL: number;
 
   // Inventory caching (nodes and groups)
@@ -124,12 +125,14 @@ export class IntegrationManager {
 
   constructor(options?: {
     healthCheckIntervalMs?: number;
+    healthCheckRetryMs?: number;
     healthCheckCacheTTL?: number;
     inventoryCacheTTL?: number;
     logger?: LoggerService;
   }) {
-    this.healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 60000; // Default: 1 minute
-    this.healthCheckCacheTTL = options?.healthCheckCacheTTL ?? 300000; // Default: 5 minutes
+    this.healthCheckIntervalMs = options?.healthCheckIntervalMs ?? 300000; // Default: 5 minutes
+    this.healthCheckRetryMs = options?.healthCheckRetryMs ?? 60000; // Default: 60 seconds (retry on failure)
+    this.healthCheckCacheTTL = options?.healthCheckCacheTTL ?? 600000; // Default: 10 minutes
     this.inventoryCacheTTL = options?.inventoryCacheTTL ?? 300000; // Default: 5 minutes (same as health check)
     this.logger = options?.logger ?? new LoggerService();
     this.nodeLinkingService = new NodeLinkingService(this);
@@ -873,24 +876,22 @@ export class IntegrationManager {
     }
 
     this.logger.info(
-      `Starting health check scheduler (interval: ${String(this.healthCheckIntervalMs)}ms, TTL: ${String(this.healthCheckCacheTTL)}ms)`,
+      `Starting health check scheduler (interval: ${String(this.healthCheckIntervalMs)}ms, retry: ${String(this.healthCheckRetryMs)}ms, TTL: ${String(this.healthCheckCacheTTL)}ms)`,
       {
         component: "IntegrationManager",
         operation: "startHealthCheckScheduler",
         metadata: {
           intervalMs: this.healthCheckIntervalMs,
+          retryMs: this.healthCheckRetryMs,
           cacheTTL: this.healthCheckCacheTTL,
         },
       }
     );
 
-    // Run initial health check
-    void this.healthCheckAll(false);
-
-    // Schedule periodic health checks
-    this.healthCheckInterval = setInterval(() => {
-      void this.healthCheckAll(false);
-    }, this.healthCheckIntervalMs);
+    // Run initial health check then schedule the next one
+    void this.healthCheckAll(false).then((results) => {
+      this.scheduleNextHealthCheck(results);
+    });
 
     this.logger.info("Health check scheduler started", {
       component: "IntegrationManager",
@@ -899,11 +900,42 @@ export class IntegrationManager {
   }
 
   /**
+   * Schedule the next health check based on current health status.
+   *
+   * Uses the shorter retry interval if any plugin is unhealthy,
+   * otherwise uses the normal interval.
+   */
+  private scheduleNextHealthCheck(lastResults: Map<string, HealthStatus>): void {
+    const hasUnhealthy = Array.from(lastResults.values()).some((s) => !s.healthy);
+    const delay = hasUnhealthy ? this.healthCheckRetryMs : this.healthCheckIntervalMs;
+
+    if (hasUnhealthy) {
+      const unhealthyNames = Array.from(lastResults.entries())
+        .filter(([, s]) => !s.healthy)
+        .map(([name]) => name);
+      this.logger.debug(
+        `Unhealthy plugins detected, using retry interval (${String(delay)}ms)`,
+        {
+          component: "IntegrationManager",
+          operation: "scheduleNextHealthCheck",
+          metadata: { unhealthy: unhealthyNames, delayMs: delay },
+        }
+      );
+    }
+
+    this.healthCheckInterval = setTimeout(() => {
+      void this.healthCheckAll(false).then((results) => {
+        this.scheduleNextHealthCheck(results);
+      });
+    }, delay);
+  }
+
+  /**
    * Stop periodic health check scheduling
    */
   stopHealthCheckScheduler(): void {
     if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
+      clearTimeout(this.healthCheckInterval);
       this.healthCheckInterval = undefined;
       this.logger.info("Health check scheduler stopped", {
         component: "IntegrationManager",
