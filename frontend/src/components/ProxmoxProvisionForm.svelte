@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ProxmoxVMParams, ProxmoxLXCParams, PVENode, StorageContent, PVEStorage, PVENetwork } from '../lib/types/provisioning';
   import { validateVMID, validateHostname, validateMemory, validateRequired, validateNumericRange } from '../lib/validation';
-  import { createProxmoxVM, createProxmoxLXC, getProxmoxNodes, getProxmoxNextVMID, getProxmoxISOs, getProxmoxTemplates, getProxmoxStorages, getProxmoxNetworks } from '../lib/api';
+  import { createProxmoxVM, createProxmoxLXC, getProxmoxNodes, getProxmoxNextVMID, getProxmoxISOs, getProxmoxTemplates, getProxmoxStorages, getProxmoxNetworks } from '../lib/proxmoxApi';
   import { showSuccess, showError } from '../lib/toast.svelte';
   import { logger } from '../lib/logger.svelte';
 

@@ -178,8 +178,7 @@ export class IntegrationColorService {
     }
 
     // Validate default color as well
-    const defaultConfig = this.defaultColor as unknown as Record<string, string>;
-    for (const [variant, color] of Object.entries(defaultConfig)) {
+    for (const [variant, color] of Object.entries(this.defaultColor)) {
       if (!hexColorRegex.test(color)) {
         throw new Error(
           `Invalid default color format for ${variant}: "${color}". Expected hex format (e.g., #6B7280)`

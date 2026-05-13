@@ -5,6 +5,7 @@ import {
   type WhitelistConfig,
 } from "./schema";
 import { z } from "zod";
+import { parseJson } from "../utils/json";
 
 /**
  * Configuration service to load and validate application settings
@@ -325,7 +326,7 @@ export class ConfigService {
       let environments: string[] | undefined;
       if (process.env.HIERA_ENVIRONMENTS) {
         try {
-          const parsed = JSON.parse(process.env.HIERA_ENVIRONMENTS) as unknown;
+          const parsed = parseJson(process.env.HIERA_ENVIRONMENTS);
           if (Array.isArray(parsed)) {
             environments = parsed.filter(
               (item): item is string => typeof item === "string",
@@ -403,9 +404,9 @@ export class ConfigService {
         let exclusionPatterns: string[] | undefined;
         if (process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS) {
           try {
-            const parsed = JSON.parse(
+            const parsed = parseJson(
               process.env.HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS,
-            ) as unknown;
+            );
             if (Array.isArray(parsed)) {
               exclusionPatterns = parsed.filter(
                 (item): item is string => typeof item === "string",
@@ -481,7 +482,7 @@ export class ConfigService {
       let regions: string[] | undefined;
       if (process.env.AWS_REGIONS) {
         try {
-          const parsed = JSON.parse(process.env.AWS_REGIONS) as unknown;
+          const parsed = parseJson(process.env.AWS_REGIONS);
           if (Array.isArray(parsed)) {
             regions = parsed.filter(
               (item): item is string => typeof item === "string",
@@ -511,7 +512,7 @@ export class ConfigService {
       let resourceGroups: string[] | undefined;
       if (process.env.AZURE_RESOURCE_GROUPS) {
         try {
-          const parsed = JSON.parse(process.env.AZURE_RESOURCE_GROUPS) as unknown;
+          const parsed = parseJson(process.env.AZURE_RESOURCE_GROUPS);
           if (Array.isArray(parsed)) {
             resourceGroups = parsed.filter(
               (item): item is string => typeof item === "string",
@@ -545,7 +546,7 @@ export class ConfigService {
       let commandWhitelist: WhitelistConfig;
       try {
         const whitelistJson = process.env.COMMAND_WHITELIST ?? "[]";
-        const parsedWhitelist = JSON.parse(whitelistJson) as unknown;
+        const parsedWhitelist = parseJson(whitelistJson);
         const whitelistArray: string[] = Array.isArray(parsedWhitelist)
           ? parsedWhitelist.filter(
               (item): item is string => typeof item === "string",
@@ -570,7 +571,7 @@ export class ConfigService {
       let packageTasks: unknown;
       if (process.env.BOLT_PACKAGE_TASKS) {
         try {
-          packageTasks = JSON.parse(process.env.BOLT_PACKAGE_TASKS) as unknown;
+          packageTasks = parseJson(process.env.BOLT_PACKAGE_TASKS);
         } catch (error) {
           throw new Error(
             `Failed to parse BOLT_PACKAGE_TASKS: ${error instanceof Error ? error.message : "Unknown error"}`,

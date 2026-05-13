@@ -575,16 +575,14 @@ export class AWSService {
       metadata: { imageId: params.imageId, instanceType: params.instanceType },
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    const region = (params.region as string) ?? this.region;
+    const region = (params.region as string | undefined) ?? this.region;
     const client = this.getClientForRegion(region);
 
     try {
       const response = await client.send(
         new RunInstancesCommand({
           ImageId: params.imageId as string,
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-          InstanceType: ((params.instanceType as string) ?? "t2.micro") as RunInstancesCommandInput["InstanceType"],
+          InstanceType: ((params.instanceType as string | undefined) ?? "t2.micro") as RunInstancesCommandInput["InstanceType"],
           MinCount: 1,
           MaxCount: 1,
           KeyName: params.keyName as string | undefined,
@@ -701,7 +699,6 @@ export class AWSService {
    */
   private throwIfAuthError(error: unknown): void {
     if (error instanceof Error) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       const name = (error as Error & { name?: string }).name ?? "";
       const code = (error as Error & { Code?: string }).Code ?? "";
       const authErrors = [
@@ -814,7 +811,6 @@ export class AWSService {
           release: { full: "unknown", major: "unknown" },
         },
         processors: {
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
           count: instance.CpuOptions?.CoreCount != null && instance.CpuOptions?.ThreadsPerCore != null
             ? instance.CpuOptions.CoreCount * instance.CpuOptions.ThreadsPerCore
             : 0,
@@ -935,13 +931,11 @@ export class AWSService {
     const regionMap = new Map<string, string[]>();
 
     for (const node of nodes) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const region = (node.config.region as string) ?? this.region;
+      const region = (node.config.region as string | undefined) ?? this.region;
       if (!regionMap.has(region)) {
         regionMap.set(region, []);
       }
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      regionMap.get(region)!.push(node.name);
+      regionMap.get(region)?.push(node.name);
     }
 
     return Array.from(regionMap.entries()).map(([region, nodeIds]) => ({
@@ -962,13 +956,11 @@ export class AWSService {
     const vpcMap = new Map<string, string[]>();
 
     for (const node of nodes) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const vpcId = (node.config.vpcId as string) ?? "no-vpc";
+      const vpcId = (node.config.vpcId as string | undefined) ?? "no-vpc";
       if (!vpcMap.has(vpcId)) {
         vpcMap.set(vpcId, []);
       }
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      vpcMap.get(vpcId)!.push(node.name);
+      vpcMap.get(vpcId)?.push(node.name);
     }
 
     return Array.from(vpcMap.entries()).map(([vpcId, nodeIds]) => ({
@@ -991,21 +983,18 @@ export class AWSService {
     const tagGroups = new Map<string, Map<string, string[]>>();
 
     for (const node of nodes) {
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      const tags = (node.config.tags as Record<string, string>) ?? {};
+      const tags = (node.config.tags as Record<string, string> | undefined) ?? {};
       for (const key of tagKeys) {
         const value = tags[key];
         if (value) {
           if (!tagGroups.has(key)) {
             tagGroups.set(key, new Map());
           }
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const valueMap = tagGroups.get(key)!;
           if (!valueMap.has(value)) {
             valueMap.set(value, []);
           }
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-          valueMap.get(value)!.push(node.name);
+          valueMap.get(value)?.push(node.name);
         }
       }
     }

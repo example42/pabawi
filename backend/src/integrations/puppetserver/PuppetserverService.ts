@@ -267,7 +267,7 @@ export class PuppetserverService
           hasTokenAuth: this.client.hasTokenAuthentication(),
           hasCertAuth: this.client.hasCertificateAuthentication(),
           hasSSL: this.client.hasSSL(),
-        } as Record<string, unknown>,
+        },
       };
     }
 
@@ -305,16 +305,19 @@ export class PuppetserverService
    *
    * @returns Empty array of nodes
    */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getInventory(): Promise<Node[]> {
+  getInventory(): Promise<Node[]> {
     this.log("=== PuppetserverService.getInventory() called ===");
     this.log("Certificate management has been removed - returning empty inventory");
 
-    this.ensureInitialized();
+    try {
+      this.ensureInitialized();
+    } catch (err) {
+      return Promise.reject(err);
+    }
 
     // Return empty array since certificate management has been removed
     // Node inventory should come from PuppetDB instead
-    return [];
+    return Promise.resolve([]);
   }
 
   /**
@@ -326,11 +329,14 @@ export class PuppetserverService
    * @param certname - Node certname
    * @returns null (certificate management removed)
    */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getNode(certname: string): Promise<Node | null> {
-    this.ensureInitialized();
+  getNode(certname: string): Promise<Node | null> {
+    try {
+      this.ensureInitialized();
+    } catch (err) {
+      return Promise.reject(err);
+    }
     this.log(`Certificate management removed - getNode('${certname}') returning null`);
-    return null;
+    return Promise.resolve(null);
   }
 
   /**
@@ -521,18 +527,21 @@ export class PuppetserverService
    * @param nodeId - Node identifier
    * @returns Basic node status
    */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getNodeStatus(nodeId: string): Promise<NodeStatus> {
-    this.ensureInitialized();
+  getNodeStatus(nodeId: string): Promise<NodeStatus> {
+    try {
+      this.ensureInitialized();
+    } catch (err) {
+      return Promise.reject(err);
+    }
     this.log(`Certificate management removed - getNodeStatus('${nodeId}') returning basic status`);
-    return {
+    return Promise.resolve({
       certname: nodeId,
       catalog_environment: "production",
       report_environment: "production",
       report_timestamp: undefined,
       catalog_timestamp: undefined,
       facts_timestamp: undefined,
-    };
+    });
   }
 
   /**
@@ -1590,7 +1599,7 @@ export class PuppetserverService
     } else if (
       typeof error === "object" &&
       "message" in error &&
-      typeof (error as { message: unknown }).message === "string"
+      typeof (error).message === "string"
     ) {
       errorMessage = (error as { message: string }).message;
     }

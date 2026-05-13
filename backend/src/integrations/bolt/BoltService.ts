@@ -3,6 +3,7 @@ import {
   type BoltExecutionResult,
   type BoltExecutionOptions,
   type BoltJsonOutput,
+  type BoltJsonError,
   type Node,
   type Facts,
   type ExecutionResult,
@@ -56,6 +57,19 @@ export class BoltService {
   // Cache storage
   private inventoryCache: CacheEntry<Node[]> | null = null;
   private factsCache = new Map<string, CacheEntry<Facts>>();
+
+  /**
+   * Mapping from Bolt `_error.kind` values to application error categories.
+   * Used by categoriseError to deterministically classify structured JSON errors.
+   */
+  private static readonly ERROR_KIND_MAP: Record<string, string> = {
+    "puppetlabs.tasks/connect-error": "connection",
+    "puppetlabs.tasks/task-error": "execution",
+    "puppetlabs.tasks/not-found-error": "not_found",
+    "puppetlabs.tasks/validation-error": "validation",
+    "bolt/connect-error": "connection",
+    "bolt/run-failure": "execution",
+  };
 
   constructor(
     boltProjectPath: string,
@@ -353,9 +367,8 @@ export class BoltService {
    */
   public async getInventory(): Promise<Node[]> {
     // Check cache first
-    if (this.isCacheValid(this.inventoryCache, this.inventoryTtl)) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      return this.inventoryCache!.data;
+    if (this.inventoryCache && this.isCacheValid(this.inventoryCache, this.inventoryTtl)) {
+      return this.inventoryCache.data;
     }
 
     try {
@@ -379,12 +392,8 @@ export class BoltService {
     } catch (error) {
       // Check if error is due to missing inventory file
       if (error instanceof BoltExecutionError && error.stderr) {
-        const errorMessage = error.stderr.toLowerCase();
-        if (
-          errorMessage.includes("inventory file") ||
-          errorMessage.includes("could not find") ||
-          errorMessage.includes("no such file")
-        ) {
+        const { category } = this.categoriseError(error.stderr);
+        if (category === "inventory_not_found" || category === "task_not_found") {
           throw new BoltInventoryNotFoundError(
             "Bolt inventory file not found. Ensure inventory.yaml exists in the Bolt project directory.",
           );
@@ -521,9 +530,8 @@ export class BoltService {
   public async gatherFacts(nodeId: string): Promise<Facts> {
     // Check cache first
     const cachedFacts = this.factsCache.get(nodeId);
-    if (this.isCacheValid(cachedFacts ?? null, this.factsTtl)) {
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      return cachedFacts!.data;
+    if (cachedFacts && this.isCacheValid(cachedFacts, this.factsTtl)) {
+      return cachedFacts.data;
     }
 
     const args = [
@@ -553,15 +561,8 @@ export class BoltService {
     } catch (error) {
       // Check if error is due to node being unreachable
       if (error instanceof BoltExecutionError && error.stderr) {
-        const errorMessage = error.stderr.toLowerCase();
-        if (
-          errorMessage.includes("unreachable") ||
-          errorMessage.includes("connection") ||
-          errorMessage.includes("could not connect") ||
-          errorMessage.includes("timed out") ||
-          errorMessage.includes("connection refused") ||
-          errorMessage.includes("no route to host")
-        ) {
+        const { category } = this.categoriseError(error.stderr);
+        if (category === "connection") {
           throw new BoltNodeUnreachableError(
             `Node ${nodeId} is unreachable`,
             nodeId,
@@ -796,15 +797,8 @@ export class BoltService {
 
       // Check if error is due to node being unreachable
       if (error instanceof BoltExecutionError && error.stderr) {
-        const errorMessage = error.stderr.toLowerCase();
-        if (
-          errorMessage.includes("unreachable") ||
-          errorMessage.includes("connection") ||
-          errorMessage.includes("could not connect") ||
-          errorMessage.includes("timed out") ||
-          errorMessage.includes("connection refused") ||
-          errorMessage.includes("no route to host")
-        ) {
+        const { category } = this.categoriseError(error.stderr);
+        if (category === "connection") {
           throw new BoltNodeUnreachableError(
             `Node ${nodeId} is unreachable`,
             nodeId,
@@ -950,6 +944,96 @@ export class BoltService {
   }
 
   /**
+   * Type guard to check if a value is a structured Bolt JSON error.
+   *
+   * @param value - Unknown value to check
+   * @returns true if value conforms to BoltJsonError shape
+   */
+  public isBoltJsonError(value: unknown): value is BoltJsonError {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      "_error" in value &&
+      typeof (value as Record<string, unknown>)._error === "object" &&
+      (value as Record<string, unknown>)._error !== null &&
+      "kind" in ((value as Record<string, unknown>)._error as object) &&
+      "msg" in ((value as Record<string, unknown>)._error as object)
+    );
+  }
+
+  /**
+   * Get the error kind mapping for use in error categorisation.
+   */
+  public static getErrorKindMap(): Record<string, string> {
+    return BoltService.ERROR_KIND_MAP;
+  }
+
+  /**
+   * Categorise an error string using a JSON-first strategy.
+   *
+   * Attempts to parse stderr as structured Bolt JSON (with `_error.kind`)
+   * and maps the kind to an application error category. Falls back to
+   * substring matching only when JSON parsing fails or `_error.kind` is absent.
+   *
+   * @param stderr - Raw stderr output from a Bolt execution
+   * @returns Object with `category` and `message` fields
+   */
+  public categoriseError(stderr: string): { category: string; message: string } {
+    // Attempt structured JSON parse first
+    try {
+      const parsed: unknown = JSON.parse(stderr);
+      if (this.isBoltJsonError(parsed)) {
+        const kind = parsed._error.kind;
+        const category = BoltService.ERROR_KIND_MAP[kind] ?? "unknown";
+        return { category, message: parsed._error.msg };
+      }
+    } catch {
+      // Not JSON — fall through to substring matching
+    }
+
+    // Fallback: existing substring matching
+    const lower = stderr.toLowerCase();
+
+    if (
+      lower.includes("unreachable") ||
+      lower.includes("connection") ||
+      lower.includes("could not connect") ||
+      lower.includes("timed out") ||
+      lower.includes("connection refused") ||
+      lower.includes("no route to host")
+    ) {
+      return { category: "connection", message: stderr };
+    }
+
+    if (
+      lower.includes("could not find") ||
+      lower.includes("task not found") ||
+      lower.includes("no such task") ||
+      lower.includes("unknown task")
+    ) {
+      return { category: "task_not_found", message: stderr };
+    }
+
+    if (
+      lower.includes("inventory file") ||
+      lower.includes("no such file")
+    ) {
+      return { category: "inventory_not_found", message: stderr };
+    }
+
+    if (
+      lower.includes("parameter") ||
+      lower.includes("invalid") ||
+      lower.includes("required") ||
+      lower.includes("missing")
+    ) {
+      return { category: "validation", message: stderr };
+    }
+
+    return { category: "unknown", message: stderr };
+  }
+
+  /**
    * Execute a task on a target node
    *
    * Executes `bolt task run <task> --targets <node> --params <json> --format json`
@@ -1047,29 +1131,18 @@ export class BoltService {
     } catch (error) {
       const endTime = Date.now();
 
-      // Check if error is due to task not found
+      // Categorise error using JSON-first strategy
       if (error instanceof BoltExecutionError && error.stderr) {
-        const errorMessage = error.stderr.toLowerCase();
+        const { category } = this.categoriseError(error.stderr);
 
-        if (
-          errorMessage.includes("could not find") ||
-          errorMessage.includes("task not found") ||
-          errorMessage.includes("no such task") ||
-          errorMessage.includes("unknown task")
-        ) {
+        if (category === "task_not_found") {
           throw new BoltTaskNotFoundError(
             `Task '${taskName}' not found in Bolt modules`,
             taskName,
           );
         }
 
-        // Check for parameter validation errors
-        if (
-          errorMessage.includes("parameter") ||
-          errorMessage.includes("invalid") ||
-          errorMessage.includes("required") ||
-          errorMessage.includes("missing")
-        ) {
+        if (category === "validation") {
           const paramErrors = this.extractParameterErrors(error.stderr);
           throw new BoltTaskParameterError(
             `Invalid parameters for task '${taskName}'`,
@@ -1078,15 +1151,7 @@ export class BoltService {
           );
         }
 
-        // Check if error is due to node being unreachable
-        if (
-          errorMessage.includes("unreachable") ||
-          errorMessage.includes("connection") ||
-          errorMessage.includes("could not connect") ||
-          errorMessage.includes("timed out") ||
-          errorMessage.includes("connection refused") ||
-          errorMessage.includes("no route to host")
-        ) {
+        if (category === "connection") {
           throw new BoltNodeUnreachableError(
             `Node ${nodeId} is unreachable`,
             nodeId,
@@ -1515,15 +1580,15 @@ export class BoltService {
    * @returns Object with module names as keys and arrays of tasks as values
    */
   private groupTasksByModule(tasks: Task[]): Record<string, Task[]> {
-    return tasks.reduce<Record<string, Task[]>>((acc, task) => {
+    const result: Record<string, Task[]> = {};
+    for (const task of tasks) {
       const module = task.module;
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-      if (!acc[module]) {
-        acc[module] = [];
+      if (!(module in result)) {
+        result[module] = [];
       }
-      acc[module].push(task);
-      return acc;
-    }, {});
+      result[module].push(task);
+    }
+    return result;
   }
 
   /**

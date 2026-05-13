@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 /**
  * Proxmox Integration Plugin
  *
@@ -44,6 +43,11 @@ export class ProxmoxIntegration
   private service?: ProxmoxService;
   private journalService?: JournalService;
 
+  /** Type-safe accessor for the Proxmox-specific config */
+  private get proxmoxConfig(): ProxmoxConfig {
+    return this.config.config as unknown as ProxmoxConfig;
+  }
+
   /**
    * Create a new ProxmoxIntegration instance
    *
@@ -79,7 +83,7 @@ export class ProxmoxIntegration
     });
 
     // Extract and validate Proxmox configuration
-    const config = this.config.config as unknown as ProxmoxConfig;
+    const config = this.proxmoxConfig;
     this.validateProxmoxConfig(config);
 
     // Initialize service with configuration
@@ -202,8 +206,7 @@ export class ProxmoxIntegration
    * @throws Error if service is not initialized or API call fails
    */
   async getInventory(computeType?: "qemu" | "lxc"): Promise<Node[]> {
-    this.ensureInitialized();
-    return await this.service!.getInventory(computeType);
+    return await this.svc.getInventory(computeType);
   }
 
   /**
@@ -218,8 +221,7 @@ export class ProxmoxIntegration
    * @throws Error if service is not initialized or API call fails
    */
   async getGroups(): Promise<NodeGroup[]> {
-    this.ensureInitialized();
-    return await this.service!.getGroups();
+    return await this.svc.getGroups();
   }
 
   /**
@@ -235,8 +237,7 @@ export class ProxmoxIntegration
    * @throws Error if service is not initialized, nodeId format is invalid, or guest doesn't exist
    */
   async getNodeFacts(nodeId: string): Promise<Facts> {
-    this.ensureInitialized();
-    return await this.service!.getNodeFacts(nodeId);
+    return await this.svc.getNodeFacts(nodeId);
   }
 
   /**
@@ -249,13 +250,12 @@ export class ProxmoxIntegration
    * @param dataType - Type of data to retrieve
    * @returns null (no additional data types supported)
    */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
+  getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
     this.ensureInitialized();
 
     // Proxmox integration doesn't support additional data types beyond facts
     // Return null to indicate no data available for the requested type
-    return null;
+    return Promise.resolve(null);
   }
 
   // ========================================
@@ -281,7 +281,7 @@ export class ProxmoxIntegration
     const target = Array.isArray(action.target) ? action.target[0] : action.target;
 
     try {
-      const result = await this.service!.executeAction(action);
+      const result = await this.svc.executeAction(action);
       await this.recordJournal(action, target, result);
       return result;
     } catch (error) {
@@ -301,8 +301,7 @@ export class ProxmoxIntegration
    * @returns Array of Capability objects
    */
   listCapabilities(): Capability[] {
-    this.ensureInitialized();
-    return this.service!.listCapabilities();
+    return this.svc.listCapabilities();
   }
 
   /**
@@ -316,50 +315,43 @@ export class ProxmoxIntegration
    * @returns Array of ProvisioningCapability objects
    */
   listProvisioningCapabilities(): ProvisioningCapability[] {
-    this.ensureInitialized();
-    return this.service!.listProvisioningCapabilities();
+    return this.svc.listProvisioningCapabilities();
   }
 
   /**
    * Get list of PVE nodes in the cluster
    */
   async getNodes(): Promise<{ node: string; status: string; maxcpu?: number; maxmem?: number }[]> {
-    this.ensureInitialized();
-    return this.service!.getNodes();
+    return this.svc.getNodes();
   }
 
   /**
    * Get the next available VMID
    */
   async getNextVMID(): Promise<number> {
-    this.ensureInitialized();
-    return this.service!.getNextVMID();
+    return this.svc.getNextVMID();
   }
 
   /**
    * Get ISO images available on a node
    */
   async getISOImages(node: string, storage?: string): Promise<{ volid: string; format: string; size: number }[]> {
-    this.ensureInitialized();
-    return this.service!.getISOImages(node, storage);
+    return this.svc.getISOImages(node, storage);
   }
 
   /**
    * Get OS templates available on a node
    */
   async getTemplates(node: string, storage?: string): Promise<{ volid: string; format: string; size: number }[]> {
-    this.ensureInitialized();
-    return this.service!.getTemplates(node, storage);
+    return this.svc.getTemplates(node, storage);
   }
 
   async getStorages(node: string, contentType?: string): Promise<{ storage: string; type: string; content: string; active: number; total?: number; used?: number; avail?: number }[]> {
-    this.ensureInitialized();
-    return this.service!.getStorages(node, contentType);
+    return this.svc.getStorages(node, contentType);
   }
 
   async getNetworkBridges(node: string, type?: string): Promise<{ iface: string; type: string; active: number; address?: string; cidr?: string; bridge_ports?: string }[]> {
-    this.ensureInitialized();
-    return this.service!.getNetworkBridges(node, type);
+    return this.svc.getNetworkBridges(node, type);
   }
 
   // ========================================
@@ -503,5 +495,10 @@ export class ProxmoxIntegration
     if (!this.initialized || !this.service) {
       throw new Error("Proxmox integration is not initialized");
     }
+  }
+
+  private get svc(): ProxmoxService {
+    this.ensureInitialized();
+    return this.service as ProxmoxService;
   }
 }

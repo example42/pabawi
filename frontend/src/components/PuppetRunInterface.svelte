@@ -199,11 +199,8 @@
         showSuccess(`Puppet run started on ${String(data.executionIds.length)} node(s)`);
 
         if (data.executionIds.length > 0) {
-          await pollExecutionResult(data.executionIds[0]);
-        }
-
-        if (onExecutionComplete) {
-          onExecutionComplete();
+          // SSE-first: subscribe to the first execution's stream
+          subscribeToExecution(data.executionIds[0]);
         }
       } else {
         // Single-node execution
@@ -218,68 +215,50 @@
           { maxRetries: 0 }
         );
 
-        const executionId = data.executionId;
-
-        if (expertMode.enabled) {
-          executionStream = useExecutionStream(executionId, {
-            onComplete: () => {
-              pollExecutionResult(executionId);
-              showSuccess('Puppet run completed');
-              if (onExecutionComplete) {
-                onExecutionComplete();
-              }
-            },
-            onError: (streamError) => {
-              error = streamError;
-              showError('Puppet run failed', streamError);
-            },
-          });
-          executionStream.connect();
-        } else {
-          await pollExecutionResult(executionId);
-          showSuccess('Puppet run completed');
-          if (onExecutionComplete) {
-            onExecutionComplete();
-          }
-        }
+        // SSE-first: subscribe regardless of expert mode
+        subscribeToExecution(data.executionId);
       }
     } catch (err) {
       error = err instanceof Error ? err.message : 'An unknown error occurred';
       logger.error('PuppetRunInterface', 'executePuppetRun', 'Error executing Puppet run', err instanceof Error ? err : new Error(String(err)));
       showError('Puppet run failed', error);
-    } finally {
       executing = false;
     }
   }
 
-  // Poll for execution result
-  async function pollExecutionResult(executionId: string): Promise<void> {
-    const maxAttempts = 120;
-    let attempts = 0;
-
-    while (attempts < maxAttempts) {
-      try {
-        const response = await fetch(`/api/executions/${executionId}`);
-
-        if (response.ok) {
-          const data = await response.json();
-          const execution = data.execution;
-
-          if (execution.status !== 'running') {
-            result = execution;
-            return;
-          }
+  // Subscribe to execution via SSE with single-fetch fallback
+  function subscribeToExecution(executionId: string): void {
+    executionStream = useExecutionStream(executionId, {
+      onComplete: (streamResult) => {
+        result = streamResult as unknown as ExecutionResult;
+        executing = false;
+        showSuccess('Puppet run completed');
+        if (onExecutionComplete) {
+          onExecutionComplete();
         }
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        attempts++;
-      } catch (err) {
-        logger.error('PuppetRunInterface', 'pollExecutionResult', 'Error polling execution result', err instanceof Error ? err : new Error(String(err)));
-        break;
-      }
-    }
-
-    error = 'Execution timed out';
+      },
+      onError: async (streamError) => {
+        // SSE failed — single fallback fetch (not a polling loop)
+        try {
+          const data = await get<{ execution: ExecutionResult }>(`/api/executions/${executionId}`);
+          result = data.execution;
+          if (result.status === 'failed') {
+            error = result.error ?? streamError;
+            showError('Puppet run failed', error);
+          } else {
+            showSuccess('Puppet run completed');
+          }
+        } catch (fetchErr) {
+          error = streamError;
+          showError('Puppet run failed', streamError);
+        }
+        executing = false;
+        if (onExecutionComplete) {
+          onExecutionComplete();
+        }
+      },
+    });
+    executionStream.connect();
   }
 
   // Format duration

@@ -269,7 +269,7 @@ export class AzureService {
   async getResourceGroups(): Promise<AzureResourceGroupInfo[]> {
     const groups: AzureResourceGroupInfo[] = [];
     for await (const rg of this.resourceClient.resourceGroups.list()) {
-      groups.push({ name: rg.name ?? "", location: rg.location, tags: (rg.tags as Record<string, string> | undefined) ?? {} });
+      groups.push({ name: rg.name ?? "", location: rg.location, tags: (rg.tags) ?? {} });
     }
     this.logger.info("Azure resource groups fetched", {
       component: "AzureService", operation: "getResourceGroups", metadata: { count: groups.length },

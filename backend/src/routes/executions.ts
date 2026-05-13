@@ -3,7 +3,6 @@ import { z } from "zod";
 import type {
   ExecutionRepository,
   ExecutionType,
-  ExecutionStatus,
   NodeResult,
   ExecutionRecord,
 } from "../database/ExecutionRepository";
@@ -773,8 +772,7 @@ export function createExecutionsRouter(
         logger.debug("Processing re-execution request", {
           component: "ExecutionsRouter",
           operation: "createReExecution",
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-          metadata: { executionId, hasModifications: Object.keys(req.body).length > 0 },
+          metadata: { executionId, hasModifications: Object.keys(req.body as Record<string, unknown>).length > 0 },
         });
 
         // Get the original execution
@@ -824,7 +822,7 @@ export function createExecutionsRouter(
           action: (modifications.action ?? originalExecution.action),
 
           parameters: (modifications.parameters ?? originalExecution.parameters),
-          status: "running" as ExecutionStatus,
+          status: "running",
           startedAt: new Date().toISOString(),
           results: [] as NodeResult[],
           command: (modifications.command ?? originalExecution.command),

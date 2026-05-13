@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-non-null-assertion */
+/* eslint-disable @typescript-eslint/no-non-null-assertion */
 /**
  * Proxmox Service
  *
@@ -317,7 +317,7 @@ export class ProxmoxService {
    */
   private transformGuestToNode(guest: ProxmoxGuest): Node {
     // Node ID format: proxmox:{node}:{vmid}
-    const nodeId = `proxmox:${guest.node}:${guest.vmid}`;
+    const nodeId = `proxmox:${guest.node}:${String(guest.vmid)}`;
 
     // Build metadata object
     const metadata: Record<string, unknown> = {
@@ -345,7 +345,7 @@ export class ProxmoxService {
     const node: Node = {
       id: nodeId,
       name: guest.name,
-      uri: `proxmox://${guest.node}/${guest.vmid}`,
+      uri: `proxmox://${guest.node}/${String(guest.vmid)}`,
       transport: "ssh" as const, // Default transport, can be overridden
       config: {},
       source: "proxmox",
@@ -361,10 +361,7 @@ export class ProxmoxService {
     (node as Node & { computeType?: string }).computeType = computeType;
 
     // Add status if available (map to a custom field since Node doesn't have status)
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    if (guest.status) {
-      (node as Node & { status?: string }).status = guest.status;
-    }
+    (node as Node & { status?: string }).status = guest.status;
 
     this.logger.debug("Transformed guest to node", {
       component: "ProxmoxService",
@@ -657,16 +654,16 @@ export class ProxmoxService {
       // Fetch configuration
       const configEndpoint =
         guestType === "lxc"
-          ? `/api2/json/nodes/${node}/lxc/${vmid}/config`
-          : `/api2/json/nodes/${node}/qemu/${vmid}/config`;
+          ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/config`
+          : `/api2/json/nodes/${node}/qemu/${String(vmid)}/config`;
 
       const config = await this.client.get(configEndpoint);
 
       // Fetch current status
       const statusEndpoint =
         guestType === "lxc"
-          ? `/api2/json/nodes/${node}/lxc/${vmid}/status/current`
-          : `/api2/json/nodes/${node}/qemu/${vmid}/status/current`;
+          ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/status/current`
+          : `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/current`;
 
       const status = await this.client.get(statusEndpoint);
 
@@ -774,18 +771,17 @@ export class ProxmoxService {
     }
 
     // Find the guest by node and vmid
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const guest = resources.find(
-      (r: ProxmoxGuest) => r.node === node && r.vmid === vmid
+    const guest = (resources as ProxmoxGuest[]).find(
+      (r) => r.node === node && r.vmid === vmid
     );
 
     if (!guest) {
       throw new Error(
-        `Guest with VMID ${vmid} not found on node ${node}`
+        `Guest with VMID ${String(vmid)} not found on node ${node}`
       );
     }
 
-    return (guest as ProxmoxGuest).type;
+    return guest.type;
   }
 
   /**
@@ -920,7 +916,7 @@ export class ProxmoxService {
     const sizes = ["B", "KB", "MB", "GB", "TB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+    return `${String(parseFloat((bytes / Math.pow(k, i)).toFixed(2)))} ${sizes[i]}`;
   }
 
   /**
@@ -1310,42 +1306,42 @@ export class ProxmoxService {
       switch (action) {
         case "start":
           endpoint = guestType === "lxc"
-            ? `/api2/json/nodes/${node}/lxc/${vmid}/status/start`
-            : `/api2/json/nodes/${node}/qemu/${vmid}/status/start`;
+            ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/status/start`
+            : `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/start`;
           break;
         case "stop":
           endpoint = guestType === "lxc"
-            ? `/api2/json/nodes/${node}/lxc/${vmid}/status/stop`
-            : `/api2/json/nodes/${node}/qemu/${vmid}/status/stop`;
+            ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/status/stop`
+            : `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/stop`;
           break;
         case "shutdown":
           endpoint = guestType === "lxc"
-            ? `/api2/json/nodes/${node}/lxc/${vmid}/status/shutdown`
-            : `/api2/json/nodes/${node}/qemu/${vmid}/status/shutdown`;
+            ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/status/shutdown`
+            : `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/shutdown`;
           break;
         case "reboot":
           endpoint = guestType === "lxc"
-            ? `/api2/json/nodes/${node}/lxc/${vmid}/status/reboot`
-            : `/api2/json/nodes/${node}/qemu/${vmid}/status/reboot`;
+            ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/status/reboot`
+            : `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/reboot`;
           break;
         case "suspend":
           if (guestType === "lxc") {
             throw new Error("Suspend action is not supported for LXC containers");
           }
-          endpoint = `/api2/json/nodes/${node}/qemu/${vmid}/status/suspend`;
+          endpoint = `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/suspend`;
           break;
         case "resume":
           if (guestType === "lxc") {
             throw new Error("Resume action is not supported for LXC containers");
           }
-          endpoint = `/api2/json/nodes/${node}/qemu/${vmid}/status/resume`;
+          endpoint = `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/resume`;
           break;
         case "snapshot": {
           // Snapshot requires special handling with a name parameter
-          const snapshotName = `snapshot-${Date.now()}`;
+          const snapshotName = `snapshot-${String(Date.now())}`;
           endpoint = guestType === "lxc"
-            ? `/api2/json/nodes/${node}/lxc/${vmid}/snapshot`
-            : `/api2/json/nodes/${node}/qemu/${vmid}/snapshot`;
+            ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/snapshot`
+            : `/api2/json/nodes/${node}/qemu/${String(vmid)}/snapshot`;
 
           // For snapshot, we need to POST with a snapname parameter
           const taskId = await this.client!.post(endpoint, { snapname: snapshotName });
@@ -1448,7 +1444,7 @@ export class ProxmoxService {
 
       // Return ExecutionResult with error
       return {
-        id: `error-${Date.now()}`,
+        id: `error-${String(Date.now())}`,
         type: "task",
         targetNodes: [target],
         action,
@@ -1565,7 +1561,7 @@ export class ProxmoxService {
       // Validate VMID is unique
       const exists = await this.guestExists(params.node, params.vmid);
       if (exists) {
-        const errorMessage = `VM with VMID ${params.vmid} already exists on node ${params.node}`;
+        const errorMessage = `VM with VMID ${String(params.vmid)} already exists on node ${params.node}`;
         this.logger.warn(errorMessage, {
           component: "ProxmoxService",
           operation: "createVM",
@@ -1574,9 +1570,9 @@ export class ProxmoxService {
 
         complete({ error: errorMessage });
         return {
-          id: `error-${Date.now()}`,
+          id: `error-${String(Date.now())}`,
           type: "task",
-          targetNodes: [`proxmox:${params.node}:${params.vmid}`],
+          targetNodes: [`proxmox:${params.node}:${String(params.vmid)}`],
           action: "create_vm",
           status: "failed",
           startedAt,
@@ -1619,17 +1615,17 @@ export class ProxmoxService {
       return {
         id: taskId,
         type: "task",
-        targetNodes: [`proxmox:${params.node}:${params.vmid}`],
+        targetNodes: [`proxmox:${params.node}:${String(params.vmid)}`],
         action: "create_vm",
         status: "success",
         startedAt,
         completedAt,
         results: [
           {
-            nodeId: `proxmox:${params.node}:${params.vmid}`,
+            nodeId: `proxmox:${params.node}:${String(params.vmid)}`,
             status: "success",
             output: {
-              stdout: `VM ${params.vmid} created successfully`,
+              stdout: `VM ${String(params.vmid)} created successfully`,
             },
             duration: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
           },
@@ -1652,9 +1648,9 @@ export class ProxmoxService {
       complete({ error: errorMessage });
 
       return {
-        id: `error-${Date.now()}`,
+        id: `error-${String(Date.now())}`,
         type: "task",
-        targetNodes: [`proxmox:${params.node}:${params.vmid}`],
+        targetNodes: [`proxmox:${params.node}:${String(params.vmid)}`],
         action: "create_vm",
         status: "failed",
         startedAt,
@@ -1694,7 +1690,7 @@ export class ProxmoxService {
       // Validate VMID is unique
       const exists = await this.guestExists(params.node, params.vmid);
       if (exists) {
-        const errorMessage = `Container with VMID ${params.vmid} already exists on node ${params.node}`;
+        const errorMessage = `Container with VMID ${String(params.vmid)} already exists on node ${params.node}`;
         this.logger.warn(errorMessage, {
           component: "ProxmoxService",
           operation: "createLXC",
@@ -1703,9 +1699,9 @@ export class ProxmoxService {
 
         complete({ error: errorMessage });
         return {
-          id: `error-${Date.now()}`,
+          id: `error-${String(Date.now())}`,
           type: "task",
-          targetNodes: [`proxmox:${params.node}:${params.vmid}`],
+          targetNodes: [`proxmox:${params.node}:${String(params.vmid)}`],
           action: "create_lxc",
           status: "failed",
           startedAt,
@@ -1748,17 +1744,17 @@ export class ProxmoxService {
       return {
         id: taskId,
         type: "task",
-        targetNodes: [`proxmox:${params.node}:${params.vmid}`],
+        targetNodes: [`proxmox:${params.node}:${String(params.vmid)}`],
         action: "create_lxc",
         status: "success",
         startedAt,
         completedAt,
         results: [
           {
-            nodeId: `proxmox:${params.node}:${params.vmid}`,
+            nodeId: `proxmox:${params.node}:${String(params.vmid)}`,
             status: "success",
             output: {
-              stdout: `Container ${params.vmid} created successfully`,
+              stdout: `Container ${String(params.vmid)} created successfully`,
             },
             duration: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
           },
@@ -1781,9 +1777,9 @@ export class ProxmoxService {
       complete({ error: errorMessage });
 
       return {
-        id: `error-${Date.now()}`,
+        id: `error-${String(Date.now())}`,
         type: "task",
-        targetNodes: [`proxmox:${params.node}:${params.vmid}`],
+        targetNodes: [`proxmox:${params.node}:${String(params.vmid)}`],
         action: "create_lxc",
         status: "failed",
         startedAt,
@@ -1818,13 +1814,13 @@ export class ProxmoxService {
 
     const complete = this.performanceMonitor.startTimer("proxmox:destroyGuest");
     const startedAt = new Date().toISOString();
-    const nodeId = `proxmox:${node}:${vmid}`;
+    const nodeId = `proxmox:${node}:${String(vmid)}`;
 
     try {
       // Check if guest exists
       const exists = await this.guestExists(node, vmid);
       if (!exists) {
-        const errorMessage = `Guest ${vmid} not found on node ${node}`;
+        const errorMessage = `Guest ${String(vmid)} not found on node ${node}`;
         this.logger.warn(errorMessage, {
           component: "ProxmoxService",
           operation: "destroyGuest",
@@ -1833,7 +1829,7 @@ export class ProxmoxService {
 
         complete({ error: errorMessage });
         return {
-          id: `error-${Date.now()}`,
+          id: `error-${String(Date.now())}`,
           type: "task",
           targetNodes: [nodeId],
           action: "destroy_guest",
@@ -1850,8 +1846,8 @@ export class ProxmoxService {
 
       // Check if guest is running and stop it first
       const statusEndpoint = guestType === "lxc"
-        ? `/api2/json/nodes/${node}/lxc/${vmid}/status/current`
-        : `/api2/json/nodes/${node}/qemu/${vmid}/status/current`;
+        ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/status/current`
+        : `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/current`;
 
       const status = await this.client.get(statusEndpoint) as ProxmoxGuestStatus;
 
@@ -1863,8 +1859,8 @@ export class ProxmoxService {
         });
 
         const stopEndpoint = guestType === "lxc"
-          ? `/api2/json/nodes/${node}/lxc/${vmid}/status/stop`
-          : `/api2/json/nodes/${node}/qemu/${vmid}/status/stop`;
+          ? `/api2/json/nodes/${node}/lxc/${String(vmid)}/status/stop`
+          : `/api2/json/nodes/${node}/qemu/${String(vmid)}/status/stop`;
 
         const stopTaskId = await this.client.post(stopEndpoint, {});
         await this.client.waitForTask(node, stopTaskId);
@@ -1878,8 +1874,8 @@ export class ProxmoxService {
 
       // Delete guest
       const deleteEndpoint = guestType === "lxc"
-        ? `/api2/json/nodes/${node}/lxc/${vmid}`
-        : `/api2/json/nodes/${node}/qemu/${vmid}`;
+        ? `/api2/json/nodes/${node}/lxc/${String(vmid)}`
+        : `/api2/json/nodes/${node}/qemu/${String(vmid)}`;
 
       const deleteTaskId = await this.client.delete(deleteEndpoint);
       await this.client.waitForTask(node, deleteTaskId);
@@ -1912,7 +1908,7 @@ export class ProxmoxService {
             nodeId,
             status: "success",
             output: {
-              stdout: `Guest ${vmid} destroyed successfully`,
+              stdout: `Guest ${String(vmid)} destroyed successfully`,
             },
             duration: new Date(completedAt).getTime() - new Date(startedAt).getTime(),
           },
@@ -1935,7 +1931,7 @@ export class ProxmoxService {
       complete({ error: errorMessage });
 
       return {
-        id: `error-${Date.now()}`,
+        id: `error-${String(Date.now())}`,
         type: "task",
         targetNodes: [nodeId],
         action: "destroy_guest",

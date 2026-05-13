@@ -2,16 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { ErrorHandlingService, type ExecutionContext } from "../errors/ErrorHandlingService";
 import { LoggerService } from "../services/LoggerService";
 
-// Extend Express Request to include custom properties
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      id?: string;
-      boltCommand?: string;
-    }
-  }
-}
+// Express.Request.id and boltCommand augmentation is defined in src/types/express.d.ts
 
 /**
  * Global error handling middleware with expert mode support

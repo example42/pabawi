@@ -6,6 +6,7 @@
  */
 
 import type { Node } from '../bolt/types';
+import { parseJson } from '../../utils/json';
 
 /**
  * Error thrown when inventory file parsing fails
@@ -34,7 +35,7 @@ export function parseInventoryFile(content: string, format: 'yaml' | 'json'): No
     let data: unknown;
 
     if (format === 'json') {
-      data = JSON.parse(content) as unknown;
+      data = parseJson(content);
     } else {
       // For YAML, attempt JSON parse as a fallback since
       // a proper YAML parser would be added as a dependency

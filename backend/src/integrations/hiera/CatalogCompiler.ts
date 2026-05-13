@@ -240,7 +240,7 @@ export class CatalogCompiler {
     nodeId: string,
     environment: string
   ): Promise<unknown> {
-    // Check if the service has a compileCatalog method
+    // Check if the service has a compileCatalog method (duck-typing)
     const service = puppetserver as unknown as {
       compileCatalog?: (certname: string, environment: string) => Promise<unknown>;
     };

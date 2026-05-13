@@ -13,7 +13,7 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Export container type for use by consumers
     - _Requirements: 6.1_
 
-  - [x]* 1.2 Write property tests for DI container singleton guarantee
+  - [x] 1.2 Write property tests for DI container singleton guarantee
     - **Property 5: DI container singleton guarantee**
     - **Validates: Requirements 6.1**
     - Use fast-check to verify `resolve(key)` returns same reference across multiple calls
@@ -41,12 +41,12 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Update `loadConfiguration()` to read `JWT_SECRET` and `PABAWI_LIFECYCLE_TOKEN` from env
     - _Requirements: 1.1, 1.2, 1.3_
 
-  - [ ]* 3.2 Write property tests for secret validation
+  - [x] 3.2 Write property tests for secret validation
     - **Property 1: Secret validation rejects missing or empty values**
     - **Validates: Requirements 1.1, 1.3**
     - Use fast-check to generate empty/whitespace strings and verify ZodError is thrown
 
-  - [ ]* 3.3 Write property test for secret round-trip
+  - [x] 3.3 Write property test for secret round-trip
     - **Property 2: Secret round-trip through ConfigService**
     - **Validates: Requirements 1.2**
     - Use fast-check to generate arbitrary non-empty strings and verify getJwtSecret() returns exact value
@@ -70,7 +70,7 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Log skip/success/failure per entry
     - _Requirements: 2.2, 2.3, 2.4_
 
-  - [ ]* 4.3 Write property tests for plugin registry behaviour
+  - [x] 4.3 Write property tests for plugin registry behaviour
     - **Property 3: Plugin registry produces correct registrations**
     - **Validates: Requirements 2.2, 2.5**
     - **Property 4: Failed plugin does not prevent subsequent registrations**
@@ -116,29 +116,29 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Verify `api.ts` retains only HTTP infrastructure
     - _Requirements: 5.1, 5.3, 5.4, 5.5, 5.6_
 
-- [ ] 9. Add MCP SDK Type Declaration
-  - [~] 9.1 Create type declaration and update import site
+- [x] 9. Add MCP SDK Type Declaration
+  - [x] 9.1 Create type declaration and update import site
     - Create `backend/src/types/mcp-sdk.d.ts` declaring `StreamableHTTPServerTransport` class and options interface
     - Update `require()` site in `server.ts` to use declared types without `as any` / `as unknown`
     - Remove `@typescript-eslint/no-unsafe-assignment` and `@typescript-eslint/no-explicit-any` suppressions from MCP block
     - Verify `tsconfig.json` remains at `moduleResolution: "node"`
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-- [ ] 10. Parse Bolt Structured JSON Errors
-  - [~] 10.1 Add BoltJsonError interface and error kind mapping
+- [x] 10. Parse Bolt Structured JSON Errors
+  - [x] 10.1 Add BoltJsonError interface and error kind mapping
     - Create/extend `backend/src/integrations/bolt/types.ts` with `BoltJsonError` interface
     - Add `ERROR_KIND_MAP` static mapping in BoltService
     - Implement `isBoltJsonError` type guard
     - _Requirements: 8.4, 8.1_
 
-  - [~] 10.2 Implement categoriseError method with JSON-first strategy
+  - [x] 10.2 Implement categoriseError method with JSON-first strategy
     - Add `categoriseError(stderr: string)` method attempting JSON parse first
     - Extract `_error.kind` and map to application error category
     - Fall back to existing substring matching only when JSON parse fails or `_error.kind` absent
     - Replace existing inline substring checks with calls to `categoriseError`
     - _Requirements: 8.1, 8.2, 8.3, 8.5_
 
-  - [ ]* 10.3 Write property tests for Bolt error categorisation
+  - [x] 10.3 Write property tests for Bolt error categorisation
     - **Property 6: Bolt JSON error categorisation is deterministic**
     - **Validates: Requirements 8.1, 8.2, 8.5**
     - **Property 7: Bolt error fallback for non-JSON input**
@@ -146,50 +146,50 @@ Structural refactoring addressing 11 code review findings. Implementation follow
     - Use fast-check to generate valid BoltJsonError JSON and verify mapped category returned
     - Use fast-check to generate arbitrary non-JSON strings and verify no throw
 
-- [ ] 11. Promote SSE as Default Execution Transport
-  - [~] 11.1 Refactor PuppetRunInterface to use SSE-first with single-fetch fallback
+- [x] 11. Promote SSE as Default Execution Transport
+  - [x] 11.1 Refactor PuppetRunInterface to use SSE-first with single-fetch fallback
     - Replace `pollExecutionResult` with `useExecutionStream` subscription for all execution modes
     - Add single `GET /api/executions/:id` fallback on SSE connection failure (not a polling loop)
     - Remove `pollExecutionResult` function and all `setInterval`/`setTimeout` polling patterns
     - _Requirements: 9.1, 9.2, 9.3, 9.5_
 
-  - [~] 11.2 Ensure SSEClient handles all event types with typed interfaces
+  - [x] 11.2 Ensure SSEClient handles all event types with typed interfaces
     - Verify/add typed event interfaces for: start, stdout, stderr, status, complete, error, command
     - Ensure `handleEvent` processes all event types without throwing
     - Update tests to reflect SSE-first behaviour
     - _Requirements: 9.4, 9.6_
 
-  - [ ]* 11.3 Write property test for SSE event handling
+  - [x] 11.3 Write property test for SSE event handling
     - **Property 8: SSE client handles all event types without error**
     - **Validates: Requirements 9.4**
     - Use fast-check to generate arbitrary valid StreamingEvent types and verify no throw
 
-- [~] 12. Checkpoint - Verify independent changes
+- [x] 12. Checkpoint - Verify independent changes
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 13. Eliminate Type Suppressions at Integration Boundaries
-  - [~] 13.1 Define typed interfaces for Bolt JSON output and Express request extensions
+- [x] 13. Eliminate Type Suppressions at Integration Boundaries
+  - [x] 13.1 Define typed interfaces for Bolt JSON output and Express request extensions
     - Create/extend `backend/src/integrations/bolt/types.ts` with `BoltJsonOutput` interface
     - Create/extend `backend/src/types/express.d.ts` with proper `Express.Request` augmentation (user, expertMode)
     - Type `McpSessionEntry` transport field in `server.ts`
     - _Requirements: 10.1_
 
-  - [~] 13.2 Replace type suppressions with proper types across backend
+  - [x] 13.2 Replace type suppressions with proper types across backend
     - Replace `as any` / `as unknown as` casts at Bolt JSON parse sites with typed assertions
     - Replace `(req as unknown as { user? })` patterns with typed `req.user`
     - Remove corresponding `eslint-disable` comments
     - Target: ≤28 remaining suppressions (down from 108 baseline)
     - _Requirements: 10.2, 10.3, 10.4, 10.5_
 
-- [ ] 14. Fix All Currently Broken Tests
-  - [~] 14.1 Run test suite and fix structural failures
+- [x] 14. Fix All Currently Broken Tests
+  - [x] 14.1 Run test suite and fix structural failures
     - Execute `npm test` and categorise all failures
     - Fix failures caused by moved imports, renamed functions, changed signatures from this feature
     - Fix pre-existing bugs by correcting test or code under test
     - No tests skipped or deleted
     - _Requirements: 11.1, 11.2, 11.3, 11.4_
 
-- [~] 15. Final checkpoint - Full test suite green
+- [ ] 15. Final checkpoint - Full test suite green
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

@@ -479,7 +479,7 @@ export class HieraPlugin extends BasePlugin implements InformationSourcePlugin {
       details: {
         ...healthStatus.details,
         controlRepoPath: this.hieraConfig.controlRepoPath,
-      } as Record<string, unknown>,
+      },
     };
   }
 

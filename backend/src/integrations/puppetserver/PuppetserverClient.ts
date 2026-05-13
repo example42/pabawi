@@ -18,6 +18,7 @@ import {
 import { CircuitBreaker } from "../puppetdb/CircuitBreaker";
 import { withRetry, type RetryConfig } from "../puppetdb/RetryLogic";
 import { LoggerService } from "../../services/LoggerService";
+import { parseJson } from "../../utils/json";
 
 /**
  * Query parameters for Puppetserver API requests
@@ -1165,7 +1166,7 @@ export class PuppetserverClient {
               },
             },
             text: () => Promise.resolve(data),
-            json: () => Promise.resolve(JSON.parse(data) as unknown),
+            json: () => Promise.resolve(parseJson(data)),
           } as unknown as Response;
 
           resolve(response);

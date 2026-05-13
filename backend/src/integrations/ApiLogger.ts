@@ -10,7 +10,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { LoggerService, type LogLevel } from "../services/LoggerService";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Log level for API logging
@@ -88,7 +88,7 @@ export class ApiLogger {
   constructor(integration: string, logLevel: ApiLogLevel = "info") {
     this.integration = integration;
     this.logLevel = logLevel;
-    this.logger = new LoggerService(logLevel as LogLevel);
+    this.logger = new LoggerService(logLevel);
   }
 
   /**

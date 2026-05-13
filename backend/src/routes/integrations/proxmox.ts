@@ -2,7 +2,6 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import type { ProxmoxIntegration } from "../../integrations/proxmox/ProxmoxIntegration";
-import type { VMCreateParams, LXCCreateParams } from "../../integrations/proxmox/types";
 import { asyncHandler } from "../asyncHandler";
 import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
 
@@ -327,7 +326,7 @@ export function createProxmoxRouter(
         return;
       }
 
-      const params = validation.data as VMCreateParams;
+      const params = validation.data;
 
       if (debugInfo) {
         expertModeService.addDebug(debugInfo, {
@@ -527,7 +526,7 @@ export function createProxmoxRouter(
         return;
       }
 
-      const params = validation.data as LXCCreateParams;
+      const params = validation.data;
 
       if (debugInfo) {
         expertModeService.addDebug(debugInfo, {

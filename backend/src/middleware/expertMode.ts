@@ -1,16 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ExpertModeService } from '../services/ExpertModeService';
 
-// Extend Express Request to include expert mode flag and correlation ID
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      expertMode?: boolean;
-      correlationId?: string;
-    }
-  }
-}
+// Express.Request.expertMode and correlationId augmentation is defined in src/types/express.d.ts
 
 /**
  * Expert Mode Middleware

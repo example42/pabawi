@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 /**
  * Azure Integration Plugin
  *
@@ -22,7 +21,7 @@ import type { Node, Facts, ExecutionResult } from "../bolt/types";
 import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 import type { JournalService } from "../../services/journal/JournalService";
-import type { CreateJournalEntry, JournalSource } from "../../services/journal/types";
+import type { CreateJournalEntry } from "../../services/journal/types";
 import type {
   AzureConfig,
   AzureLocationInfo,
@@ -53,6 +52,11 @@ export class AzurePlugin
   private service?: AzureService;
   private journalService?: JournalService;
 
+  /** Type-safe accessor for the Azure-specific config */
+  private get azureConfig(): AzureConfig {
+    return this.config.config as unknown as AzureConfig;
+  }
+
   constructor(
     logger?: LoggerService,
     performanceMonitor?: PerformanceMonitorService,
@@ -71,14 +75,13 @@ export class AzurePlugin
   // Initialization
   // ========================================
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  protected async performInitialization(): Promise<void> {
+  protected performInitialization(): Promise<void> {
     this.logger.info("Initializing Azure integration", {
       component: "AzurePlugin",
       operation: "performInitialization",
     });
 
-    const config = this.config.config as unknown as AzureConfig;
+    const config = this.azureConfig;
     this.validateAzureConfig(config);
 
     this.service = new AzureService(config, this.logger);
@@ -87,6 +90,8 @@ export class AzurePlugin
       component: "AzurePlugin",
       operation: "performInitialization",
     });
+
+    return Promise.resolve();
   }
 
   private validateAzureConfig(config: AzureConfig): void {
@@ -143,7 +148,7 @@ export class AzurePlugin
 
     try {
       const info = await this.service.validateCredentials();
-      const config = this.config.config as unknown as AzureConfig;
+      const config = this.azureConfig;
 
       return {
         healthy: true,
@@ -204,10 +209,9 @@ export class AzurePlugin
     return this.service!.getNodeFacts(nodeId);
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
+  getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
     this.ensureInitialized();
-    return null;
+    return Promise.resolve(null);
   }
 
   // ========================================
@@ -258,8 +262,7 @@ export class AzurePlugin
     startedAt: string,
     target: string,
   ): Promise<ExecutionResult> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    const params = action.parameters ?? action.metadata! ?? {};
+    const params = action.parameters ?? action.metadata ?? {};
     const resourceId = await this.service!.provisionVM(params);
     const completedAt = new Date().toISOString();
 
@@ -394,7 +397,7 @@ export class AzurePlugin
       nodeId: canonicalNodeRef,
       nodeUri: canonicalNodeRef,
       eventType,
-      source: "azure" as JournalSource,
+      source: "azure",
       action: action.action,
       summary:
         result.status === "success"

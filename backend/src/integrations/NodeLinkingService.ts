@@ -135,8 +135,7 @@ export class NodeLinkingService {
 
         // Use the first node's name as the primary identifier
         // (all related nodes should have the same name)
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-        const primaryName = node.name?.trim() || node.id || node.uri;
+        const primaryName = node.name.trim() || node.id || node.uri;
 
         // Determine the primary source deterministically by priority so that
         // the result is stable across runs regardless of iteration order.

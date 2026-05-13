@@ -14,15 +14,52 @@ export interface BoltExecutionResult {
 }
 
 /**
- * Parsed JSON output from Bolt CLI
+ * A single item in the Bolt JSON output `items` array.
+ * Each item represents the result of executing against one target node.
  */
-export type BoltJsonOutput = Record<string, unknown> & {
+export interface BoltJsonOutputItem {
+  target: string;
+  status: "success" | "failure";
+  value?: {
+    stdout?: string;
+    stderr?: string;
+    exit_code?: number;
+    _error?: {
+      kind?: string;
+      msg?: string;
+      message?: string;
+      details?: Record<string, unknown>;
+    };
+    [key: string]: unknown;
+  };
+  error?: {
+    kind?: string;
+    msg?: string;
+    message?: string;
+    details?: Record<string, unknown>;
+  };
+  [key: string]: unknown;
+}
+
+/**
+ * Parsed JSON output from Bolt CLI.
+ *
+ * Bolt returns structured JSON with an `items` array containing per-node results
+ * for command/task executions, or `inventory`/`targets` for inventory queries.
+ */
+export interface BoltJsonOutput {
+  /** Per-node execution results (commands, tasks, plans) */
+  items?: BoltJsonOutputItem[];
+  /** Inventory query results */
   inventory?: {
     targets?: unknown[];
     [key: string]: unknown;
   };
+  /** Direct targets array (alternative inventory format) */
   targets?: unknown[];
-};
+  /** Allow additional Bolt-specific fields */
+  [key: string]: unknown;
+}
 
 /**
  * Options for executing Bolt commands
@@ -247,4 +284,19 @@ export class BoltTaskParameterError extends Error {
     super(message);
     this.name = "BoltTaskParameterError";
   }
+}
+
+/**
+ * Structured JSON error format returned by Bolt CLI
+ *
+ * Bolt emits errors as JSON objects with an `_error` field containing
+ * a `kind` (namespaced error type), `msg` (human-readable message),
+ * and optional `details` object.
+ */
+export interface BoltJsonError {
+  _error: {
+    kind: string;
+    msg: string;
+    details?: Record<string, unknown>;
+  };
 }

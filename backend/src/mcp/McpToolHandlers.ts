@@ -101,7 +101,7 @@ function registerInventoryList(server: McpServerInstance, deps: McpDependencies)
           n.name.toLowerCase().includes(q) || n.id.toLowerCase().includes(q),
         );
       }
-      return jsonResult(nodes.map((n) => summariseNode(n as unknown as Record<string, unknown>)));
+      return jsonResult(nodes.map((n) => summariseNode(n)));
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : String(err));
     }
@@ -154,7 +154,7 @@ function registerReportsQuery(server: McpServerInstance, deps: McpDependencies):
         : await deps.puppetDBService.getAllReports(limit ?? 10);
       const filtered = status ? reports.filter((r) => r.status === status) : reports;
       const summarised = filtered.map((r) =>
-        summariseReport(r as unknown as Record<string, unknown>, include_details === true),
+        summariseReport(r, include_details === true),
       );
       return jsonResult(summarised);
     } catch (err) {
@@ -179,7 +179,7 @@ function registerCatalogsGet(server: McpServerInstance, deps: McpDependencies): 
       const catalog = await deps.puppetDBService.getNodeCatalog(certname);
       if (!catalog) return errorResult(`No catalog found for node: ${certname}`);
       const summarised = summariseCatalog(
-        catalog as unknown as Record<string, unknown>,
+        catalog,
         include_parameters === true,
       );
       return jsonResult(summarised);
@@ -234,7 +234,7 @@ function registerExecutionsList(server: McpServerInstance, deps: McpDependencies
         filters, { page: 1, pageSize: limit ?? 50 },
       );
       const summarised = executions.map((e) =>
-        summariseExecution(e as unknown as Record<string, unknown>, include_output === true),
+        summariseExecution(e, include_output === true),
       );
       return jsonResult(summarised);
     } catch (err) {
@@ -282,13 +282,13 @@ function registerJournalQuery(server: McpServerInstance, deps: McpDependencies):
         });
         const filtered = eventType ? entries.filter((e) => e.eventType === eventType) : entries;
         return jsonResult(filtered.map((e) =>
-          summariseJournalEntry(e as unknown as Record<string, unknown>),
+          summariseJournalEntry(e),
         ));
       }
       const entries = await deps.journalService.searchEntries('', { limit: limit ?? 50 });
       const filtered = eventType ? entries.filter((e) => e.eventType === eventType) : entries;
       return jsonResult(filtered.map((e) =>
-        summariseJournalEntry(e as unknown as Record<string, unknown>),
+        summariseJournalEntry(e),
       ));
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : String(err));

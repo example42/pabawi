@@ -182,7 +182,7 @@ export class PuppetDBService
           hasAuth: client.hasAuthentication(),
           hasSSL: client.hasSSL(),
           circuitState: circuitBreaker.getState(),
-        } as Record<string, unknown>,
+        },
       };
     } catch (error) {
       const errorMessage =
@@ -2380,7 +2380,7 @@ export class PuppetDBService
 
         // First element should be an operator (string)
         if (typeof parsed[0] !== "string") {
-          const firstElement = parsed[0] as unknown;
+          const firstElement = parsed[0];
           throw new PuppetDBQueryError(
             "PQL query must start with an operator",
             pqlQuery,

@@ -7,6 +7,19 @@
  */
 
 /* ------------------------------------------------------------------ */
+/*  Type utility                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Safely converts a typed object to Record<string, unknown> for generic
+ * field access in summarisation functions. This is safe because all inputs
+ * are plain data objects from service calls (no class instances with methods).
+ */
+function toRecord(obj: object): Record<string, unknown> {
+  return obj as Record<string, unknown>;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Facts summarisation                                                */
 /* ------------------------------------------------------------------ */
 
@@ -122,9 +135,10 @@ function compactEvent(event: Record<string, unknown>): Record<string, unknown> {
  * what changed or broke without wading through 30+ noop entries.
  */
 export function summariseReport(
-  report: Record<string, unknown>,
+  reportObj: object,
   includeDetails: boolean,
 ): Record<string, unknown> {
+  const report = toRecord(reportObj);
   if (includeDetails) return report;
 
   const {
@@ -155,8 +169,8 @@ export function summariseReport(
   const noopCount = allEvents.filter((e) => e.status === 'noop').length;
   const skippedCount = allEvents.filter((e) => e.status === 'skipped').length;
 
-  (summary as Record<string, unknown>).resource_events = actionable;
-  (summary as Record<string, unknown>).event_counts = {
+  (summary).resource_events = actionable;
+  (summary).event_counts = {
     total: allEvents.length,
     failure: actionable.filter((e) => e.status === 'failure').length,
     success: actionable.filter((e) => e.status === 'success').length,
@@ -166,7 +180,7 @@ export function summariseReport(
 
   // Log count only — full logs are still stripped (mostly noise)
   const logs = Array.isArray(_logs) ? _logs as Record<string, unknown>[] : [];
-  (summary as Record<string, unknown>).log_count = logs.length;
+  (summary).log_count = logs.length;
 
   return summary;
 }
@@ -177,9 +191,10 @@ export function summariseReport(
 
 /** Summarise a catalog — strip resource parameters by default. */
 export function summariseCatalog(
-  catalog: Record<string, unknown>,
+  catalogObj: object,
   includeParameters: boolean,
 ): Record<string, unknown> {
+  const catalog = toRecord(catalogObj);
   if (includeParameters) return catalog;
 
   const result = { ...catalog };
@@ -202,7 +217,8 @@ export function summariseCatalog(
 /* ------------------------------------------------------------------ */
 
 /** Summarise an inventory node — strip config (connection details). */
-export function summariseNode(node: Record<string, unknown>): Record<string, unknown> {
+export function summariseNode(nodeObj: object): Record<string, unknown> {
+  const node = toRecord(nodeObj);
   return {
     id: node.id,
     name: node.name,
@@ -219,9 +235,10 @@ export function summariseNode(node: Record<string, unknown>): Record<string, unk
 
 /** Summarise an execution record — strip per-node results and raw output. */
 export function summariseExecution(
-  exec: Record<string, unknown>,
+  execObj: object,
   includeOutput: boolean,
 ): Record<string, unknown> {
+  const exec = toRecord(execObj);
   if (includeOutput) return exec;
 
   const {
@@ -236,7 +253,7 @@ export function summariseExecution(
     const results = rawResults as { status?: string }[];
     const succeeded = results.filter((r) => r.status === 'success').length;
     const failed = results.filter((r) => r.status === 'failed').length;
-    (summary as Record<string, unknown>).result_summary = {
+    (summary).result_summary = {
       total: results.length,
       succeeded,
       failed,
@@ -251,13 +268,14 @@ export function summariseExecution(
 /* ------------------------------------------------------------------ */
 
 /** Summarise a journal entry — strip verbose details. */
-export function summariseJournalEntry(entry: Record<string, unknown>): Record<string, unknown> {
+export function summariseJournalEntry(entryObj: object): Record<string, unknown> {
+  const entry = toRecord(entryObj);
   const { details: _details, ...summary } = entry;
 
   if (_details && typeof _details === 'object') {
     const d = _details as Record<string, unknown>;
     if (d.status) {
-      (summary as Record<string, unknown>).status = d.status;
+      (summary).status = d.status;
     }
   }
 

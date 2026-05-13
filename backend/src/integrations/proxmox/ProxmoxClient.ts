@@ -389,7 +389,6 @@ export class ProxmoxClient {
       const params = new URLSearchParams();
       for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
         if (value !== undefined && value !== null) {
-          // eslint-disable-next-line @typescript-eslint/no-base-to-string
           params.append(key, String(value));
         }
       }
