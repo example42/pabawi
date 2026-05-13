@@ -188,10 +188,12 @@ pabawi/
 │       └── lib/               # Utilities and rune-based state
 ├── backend/                   # Node.js + Express + TypeScript
 │   └── src/
+│       ├── container/         # DI container (ServiceRegistry)
+│       ├── plugins/           # Declarative plugin registry
 │       ├── integrations/      # Plugin system (Bolt, PuppetDB, SSH, ...)
 │       ├── services/          # ExecutionQueue, RBAC, streaming, auth
-│       ├── mcp/              # Embedded MCP server and tool handlers
-│       ├── routes/            # Express route handlers
+│       ├── mcp/               # Embedded MCP server and tool handlers
+│       ├── routes/            # Express route factories
 │       ├── middleware/        # JWT, RBAC, rate limiting, security headers
 │       ├── database/          # SQLite + migrations
 │       ├── errors/            # Typed error classes

@@ -102,8 +102,8 @@ Every integration is a plugin. To add one:
    - `<Name>Service.ts` — business logic (API calls, CLI spawning)
 2. Add config schema to `backend/src/config/schema.ts`
 3. Parse env vars in `backend/src/config/ConfigService.ts`
-4. Register the plugin in `backend/src/server.ts`
-5. Add routes in `backend/src/routes/` (optional)
+4. Add a `PluginRegistryEntry` to `backend/src/plugins/registry.ts`
+5. Add routes in `backend/src/routes/` as a factory function receiving the DI container (optional)
 6. Add tests in `backend/test/unit/`
 7. Add a doc in `docs/integrations/<name>.md`
 
@@ -113,13 +113,14 @@ Follow the patterns in `integrations/ansible/` or `integrations/ssh/` for a clea
 
 | Rule | Detail |
 |---|---|
-| Config | Never read `process.env` directly — use `ConfigService` |
-| Logging | Use `LoggerService`, never `console.log` |
+| Config | Never read `process.env` directly — use `ConfigService` via DI container |
+| Logging | Use `LoggerService` from container, never `console.log` |
 | DB access | Use the shared `DatabaseService` singleton — never create connections in individual files |
 | Async | Use `Promise.all` for independent `await` calls |
-| Routes | Wrap all async route handlers with `asyncHandler()` |
+| Routes | Export factory functions (`createXxxRouter(container)`) — resolve services from container |
 | Error types | Use typed errors from `backend/src/errors/` |
 | Svelte state | Use `$state()`, `$effect()`, `$derived()` — no stores |
+| Plugins | Declare in `plugins/registry.ts` — never add init blocks to `server.ts` |
 
 ## Code Quality Gates
 

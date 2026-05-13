@@ -20,7 +20,7 @@ import { createStreamingRouter, streamAuthMiddleware } from "./routes/streaming"
 import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
-import configRouter from "./routes/config";
+import { createConfigRouter } from "./routes/config";
 import { asyncHandler } from "./routes/asyncHandler";
 import { createAuthRouter } from "./routes/auth";
 import { createSetupRouter } from "./routes/setup";
@@ -508,7 +508,7 @@ async function startServer(): Promise<Express> {
 
     // Create authentication and RBAC middleware instances
     // Wrap async middleware with asyncHandler to satisfy Express's void return expectation
-    const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getAdapter()));
+    const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getAdapter(), configService.getJwtSecret()));
     const rawRbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
     const rbacMiddleware = (resource: string, action: string): express.RequestHandler =>
       asyncHandler(rawRbacMiddleware(resource, action));
@@ -529,7 +529,7 @@ async function startServer(): Promise<Express> {
     });
 
     // Config routes (UI settings — requires authentication)
-    app.use("/api/config", authMiddleware, configRouter);
+    app.use("/api/config", authMiddleware, createConfigRouter(container));
 
     // User management routes
     app.use("/api/users", authMiddleware, rateLimitMiddleware, createUsersRouter(databaseService, container));

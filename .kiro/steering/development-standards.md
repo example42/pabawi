@@ -16,9 +16,10 @@ inclusion: always
 ## Backend-Specific Patterns
 
 - All async Express route handlers must be wrapped with `asyncHandler()` from `utils/`
+- All route files export factory functions (`createXxxRouter(container)`) — resolve services from the DI container, never instantiate `LoggerService` or `ExpertModeService` directly
 - All database access must go through `DatabaseService` (shared instance, never create new connections per file)
 - Use typed error classes from `errors/` — never throw generic `Error` when a typed subclass exists
-- Integration plugins extend `BasePlugin` and register with `IntegrationManager` — never bypass this
+- Integration plugins are declared in `plugins/registry.ts` and registered via a single loop in `server.ts`
 - Routes delegate to services; services use integrations or repositories — no business logic in route handlers
 
 ## Async Performance
