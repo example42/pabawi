@@ -22,6 +22,7 @@ const TOOL_NAMES = Object.keys(TOOL_PERMISSIONS);
 const TOOL_DEFAULT_ARGS: Record<string, Record<string, unknown>> = {
   inventory_list: {},
   facts_get: { certname: 'test.example.com' },
+  facts_bulk: { fact_names: ['os', 'memory'] },
   reports_query: {},
   catalogs_get: { certname: 'test.example.com' },
   hiera_lookup: { key: 'test::key' },
@@ -71,7 +72,7 @@ function createMockDeps(permissionGranted: boolean) {
   return {
     permissionService: { hasPermission },
     integrationManager: { getAggregatedInventory, getNodeData, healthCheckAll },
-    puppetDBService: { getNodeReports, getAllReports, getNodeCatalog },
+    puppetDBService: { getNodeReports, getAllReports, getNodeCatalog, getBulkFacts: vi.fn().mockResolvedValue({}) },
     hieraPlugin: { resolveKey },
     executionRepository: { findAll },
     journalService: { getNodeTimeline, searchEntries },
@@ -92,6 +93,7 @@ function getServiceSpy(toolName: string, deps: MockDeps): ReturnType<typeof vi.f
   switch (toolName) {
     case 'inventory_list': return deps.integrationManager.getAggregatedInventory;
     case 'facts_get': return deps.integrationManager.getNodeData;
+    case 'facts_bulk': return deps.puppetDBService.getBulkFacts;
     case 'reports_query': return deps.puppetDBService.getAllReports;
     case 'catalogs_get': return deps.puppetDBService.getNodeCatalog;
     case 'hiera_lookup': return deps.hieraPlugin.resolveKey;
