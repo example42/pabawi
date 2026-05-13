@@ -116,7 +116,7 @@ export class ProxmoxService {
 
       const version = await this.client.get("/api2/json/version");
 
-      this.logger.info("Health check successful", {
+      this.logger.debug("Health check successful", {
         component: "ProxmoxService",
         operation: "healthCheck",
         metadata: { version },

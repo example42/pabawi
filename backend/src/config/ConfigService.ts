@@ -651,6 +651,7 @@ export class ConfigService {
         provisioning,
         ui,
         mcpEnabled: process.env.MCP_ENABLED === "true",
+        mcpAuthToken: process.env.MCP_AUTH_TOKEN || undefined,
       };
 
       // Validate with Zod schema
@@ -790,6 +791,13 @@ export class ConfigService {
    */
   public isMcpEnabled(): boolean {
     return this.config.mcpEnabled;
+  }
+
+  /**
+   * Get the static MCP authentication token (if configured)
+   */
+  public getMcpAuthToken(): string | undefined {
+    return this.config.mcpAuthToken;
   }
 
   /**

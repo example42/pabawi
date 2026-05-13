@@ -40,6 +40,7 @@ import { BatchExecutionService } from "./services/BatchExecutionService";
 import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
 import { expertModeMiddleware } from "./middleware/expertMode";
 import { createAuthMiddleware } from "./middleware/authMiddleware";
+import { createMcpAuthMiddleware } from "./middleware/mcpAuthMiddleware";
 import { createRbacMiddleware } from "./middleware/rbacMiddleware";
 import {
   helmetMiddleware,
@@ -790,7 +791,14 @@ async function startServer(): Promise<Express> {
           puppetRunHistoryService, mcpUserId, logger, version,
         };
 
-        app.post("/mcp", asyncHandler(async (req: Request, res: Response) => {
+        // MCP-scoped auth: accepts MCP_AUTH_TOKEN (static) or falls through to JWT
+        const mcpAuth = createMcpAuthMiddleware(
+          configService.getMcpAuthToken(),
+          mcpUserId,
+          authMiddleware,
+        );
+
+        app.post("/mcp", mcpAuth, asyncHandler(async (req: Request, res: Response) => {
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
           let transport: InstanceType<typeof StreamableHTTPServerTransport> | undefined;
 
@@ -821,7 +829,7 @@ async function startServer(): Promise<Express> {
           await transport!.handleRequest(req, res, req.body);
         }));
 
-        app.get("/mcp", asyncHandler(async (req: Request, res: Response) => {
+        app.get("/mcp", mcpAuth, asyncHandler(async (req: Request, res: Response) => {
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
           const session = sessionId ? mcpSessions.get(sessionId) : undefined;
           if (!session) {
@@ -831,7 +839,7 @@ async function startServer(): Promise<Express> {
           await session.transport.handleRequest(req, res);
         }));
 
-        app.delete("/mcp", (req: Request, res: Response) => {
+        app.delete("/mcp", mcpAuth, (req: Request, res: Response) => {
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
           if (sessionId) {
             const session = mcpSessions.get(sessionId);

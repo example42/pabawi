@@ -318,6 +318,7 @@ SSH is configured per-node in the Bolt inventory file, not via env vars. See [in
 | Variable | Default | Description |
 |---|---|---|
 | `MCP_ENABLED` | `false` | Set to `true` to enable the embedded MCP server at `/mcp` |
+| `MCP_AUTH_TOKEN` | _(none)_ | Static bearer token for MCP client authentication. Generate with `openssl rand -hex 32`. When set, MCP clients can authenticate with this token instead of a JWT. Scoped to `/mcp` only. |
 
 When enabled, Pabawi exposes a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `POST /mcp` using Streamable HTTP transport. This allows AI assistants (Claude, Cursor, etc.) to query infrastructure data through 8 read-only tools:
 

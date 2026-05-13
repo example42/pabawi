@@ -151,7 +151,7 @@ export class AWSService {
         userId: response.UserId ?? "",
       };
 
-      this.logger.info("AWS credentials validated", {
+      this.logger.debug("AWS credentials validated", {
         component: "AWSService",
         operation: "validateCredentials",
         metadata: { account: result.account },

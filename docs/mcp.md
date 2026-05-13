@@ -29,7 +29,31 @@ When enabled, Pabawi:
 3. Assigns the role to the service user
 4. Starts the MCP server and registers the `/mcp` endpoint
 
-All tool calls go through the same RBAC permission system as the REST API. The MCP server calls services directly (no HTTP round-trips) since it runs inside the backend process.
+All MCP endpoints require JWT authentication — the same `Authorization: Bearer <token>` header used by the REST API. Once authenticated, tool calls go through the same RBAC permission system as the REST API. The MCP server calls services directly (no HTTP round-trips) since it runs inside the backend process.
+
+## Authentication
+
+The MCP endpoint requires authentication. Two methods are supported:
+
+### Static token (recommended for MCP clients)
+
+Set `MCP_AUTH_TOKEN` in `backend/.env`:
+
+```bash
+MCP_AUTH_TOKEN=your-secure-random-token-here
+```
+
+Generate a strong token:
+
+```bash
+openssl rand -hex 32
+```
+
+Use this token as the `Authorization: Bearer <token>` header in your MCP client configuration. It does not expire and is scoped exclusively to the `/mcp` endpoint — it cannot be used to access other API routes.
+
+### JWT authentication
+
+Alternatively, any valid Pabawi JWT (obtained via `POST /api/auth/login`) is accepted on the MCP endpoint. This is useful for browser-based or short-lived integrations but requires periodic token renewal.
 
 ## Client Configuration
 
@@ -41,7 +65,10 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 {
   "mcpServers": {
     "pabawi": {
-      "url": "http://localhost:3000/mcp"
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+      }
     }
   }
 }
@@ -55,7 +82,10 @@ Add to `.kiro/settings/mcp.json` in your workspace:
 {
   "mcpServers": {
     "pabawi": {
-      "url": "http://localhost:3000/mcp"
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+      }
     }
   }
 }
@@ -69,7 +99,10 @@ Add to your Cursor MCP settings:
 {
   "mcpServers": {
     "pabawi": {
-      "url": "http://localhost:3000/mcp"
+      "url": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+      }
     }
   }
 }
@@ -80,7 +113,8 @@ Add to your Cursor MCP settings:
 Run from your project directory:
 
 ```bash
-claude mcp add --transport http pabawi http://localhost:3000/mcp
+claude mcp add --transport http pabawi http://localhost:3000/mcp \
+  --header "Authorization: Bearer <MCP_AUTH_TOKEN>"
 ```
 
 This stores the server in your local Claude Code config. To verify it's connected, run `/mcp` inside Claude Code.
@@ -93,7 +127,10 @@ Add to `~/.gemini/settings.json`:
 {
   "mcpServers": {
     "pabawi": {
-      "httpUrl": "http://localhost:3000/mcp"
+      "httpUrl": "http://localhost:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer <MCP_AUTH_TOKEN>"
+      }
     }
   }
 }
@@ -108,13 +145,16 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.pabawi]
 url = "http://localhost:3000/mcp"
+
+[mcp_servers.pabawi.headers]
+Authorization = "Bearer <MCP_AUTH_TOKEN>"
 ```
 
 Run `codex mcp list` to verify the server is configured.
 
 ### Any MCP Client
 
-The endpoint accepts standard MCP Streamable HTTP requests at `POST /mcp`. No authentication headers are needed — the MCP server uses its own service user internally.
+The endpoint accepts standard MCP Streamable HTTP requests at `POST /mcp`. All requests require a bearer token in the `Authorization` header — either the static `MCP_AUTH_TOKEN` or a valid JWT from `POST /api/auth/login`.
 
 ## Available Tools
 
@@ -257,6 +297,13 @@ limit: 20              →  last 20 entries
 - Verify `MCP_ENABLED=true` is set in `backend/.env`
 - Restart the backend after changing the setting
 - Check logs for "MCP server initialized" message
+
+### MCP endpoint returning 401 Unauthorized
+
+- If using `MCP_AUTH_TOKEN`: verify the token in your client config matches the value in `backend/.env` exactly
+- If using JWT: tokens expire — re-authenticate via `POST /api/auth/login` to get a fresh token
+- Ensure the `Authorization: Bearer <token>` header is being sent
+- Verify the user account is not locked or disabled (JWT path only)
 
 ### Tools returning permission errors
 
