@@ -1,38 +1,48 @@
 import { Router } from "express";
-import { ConfigService } from "../config/ConfigService";
+import type { DIContainer } from "../container/DIContainer";
+import { createDefaultContainer } from "../container/DIContainer";
 import { asyncHandler } from "./asyncHandler";
 
-const router = Router();
-const configService = new ConfigService();
-
 /**
- * GET /api/config/ui
- * Get UI configuration settings
+ * Create config router with DI container
  */
-router.get(
-  "/ui",
-  asyncHandler((_req, res) => {
-    const uiConfig = configService.getUIConfig();
+export function createConfigRouter(
+  container: DIContainer = createDefaultContainer(),
+): Router {
+  const router = Router();
+  const configService = container.resolve("config");
 
-    res.json({
-      ui: uiConfig,
-    });
-  }),
-);
+  /**
+   * GET /api/config/ui
+   * Get UI configuration settings
+   */
+  router.get(
+    "/ui",
+    asyncHandler((_req, res) => {
+      const uiConfig = configService.getUIConfig();
 
-/**
- * GET /api/config/provisioning
- * Get provisioning safety configuration
- */
-router.get(
-  "/provisioning",
-  asyncHandler((_req, res) => {
-    res.json({
-      provisioning: {
-        allowDestructiveActions: configService.isDestructiveProvisioningAllowed(),
-      },
-    });
-  }),
-);
+      res.json({
+        ui: uiConfig,
+      });
+    }),
+  );
 
-export default router;
+  /**
+   * GET /api/config/provisioning
+   * Get provisioning safety configuration
+   */
+  router.get(
+    "/provisioning",
+    asyncHandler((_req, res) => {
+      res.json({
+        provisioning: {
+          allowDestructiveActions: configService.isDestructiveProvisioningAllowed(),
+        },
+      });
+    }),
+  );
+
+  return router;
+}
+
+export default createConfigRouter;

@@ -365,7 +365,7 @@ export const AppConfigSchema = z.object({
   host: z.string().default("localhost"),
   boltProjectPath: z.string().default(process.cwd()),
   jwtSecret: z.string().min(1, "JWT_SECRET is required"),
-  lifecycleToken: z.string().min(1, "PABAWI_LIFECYCLE_TOKEN is required"),
+  lifecycleToken: z.string().default(""),
   commandWhitelist: WhitelistConfigSchema,
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes
   logLevel: z.enum(["error", "warn", "info", "debug"]).default("info"),

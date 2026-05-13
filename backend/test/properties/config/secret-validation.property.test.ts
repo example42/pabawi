@@ -8,15 +8,12 @@ import { AppConfigSchema } from '../../../src/config/schema';
  *
  * **Validates: Requirements 1.1, 1.3**
  *
- * Property 1: Secret validation rejects missing or empty values
+ * Property 1: Secret validation rejects missing or empty jwtSecret
  * ∀ config ∈ Configs:
- *   (config.jwtSecret = "" ∨ config.lifecycleToken = "") ⟹
- *     AppConfigSchema.parse(config) throws ZodError
+ *   (config.jwtSecret = "") ⟹ AppConfigSchema.parse(config) throws ZodError
  *
- * This property validates that:
- * - Empty strings for jwtSecret cause validation failure
- * - Empty strings for lifecycleToken cause validation failure
- * - Whitespace-only strings for secrets cause validation failure (min(1) rejects after trim-like behaviour)
+ * lifecycleToken is optional (defaults to empty string) — validated at runtime by
+ * createLifecycleAuth which returns 500 when unconfigured.
  */
 describe('Secret Validation Properties', () => {
   /**
@@ -63,19 +60,12 @@ describe('Secret Validation Properties', () => {
   });
 
   /**
-   * For any empty string used as lifecycleToken, AppConfigSchema.parse() throws ZodError.
+   * lifecycleToken is optional (defaults to empty string).
+   * Empty string is accepted — the runtime handles the empty case gracefully.
    */
-  it('should reject empty lifecycleToken values', () => {
-    fc.assert(
-      fc.property(
-        fc.constantFrom(''),
-        (emptyValue) => {
-          const config = buildBaseConfig({ lifecycleToken: emptyValue });
-          expect(() => AppConfigSchema.parse(config)).toThrow(ZodError);
-        }
-      ),
-      { numRuns: 10 }
-    );
+  it('should accept empty lifecycleToken values (optional field)', () => {
+    const config = buildBaseConfig({ lifecycleToken: '' });
+    expect(() => AppConfigSchema.parse(config)).not.toThrow();
   });
 
   /**
@@ -96,27 +86,19 @@ describe('Secret Validation Properties', () => {
   });
 
   /**
-   * For any config where lifecycleToken is undefined (missing), AppConfigSchema.parse() throws ZodError.
+   * lifecycleToken is optional — missing (undefined) uses default empty string.
    */
-  it('should reject missing lifecycleToken (undefined)', () => {
-    fc.assert(
-      fc.property(
-        fc.constant(undefined),
-        () => {
-          const config = buildBaseConfig();
-          delete (config as Record<string, unknown>)['lifecycleToken'];
-          expect(() => AppConfigSchema.parse(config)).toThrow(ZodError);
-        }
-      ),
-      { numRuns: 5 }
-    );
+  it('should accept missing lifecycleToken (undefined) using default', () => {
+    const config = buildBaseConfig();
+    delete (config as Record<string, unknown>)['lifecycleToken'];
+    expect(() => AppConfigSchema.parse(config)).not.toThrow();
   });
 
   /**
-   * For any config where both secrets are empty, AppConfigSchema.parse() throws ZodError.
-   * This tests the combined case.
+   * When jwtSecret is empty, validation fails regardless of lifecycleToken value.
+   * lifecycleToken alone being empty does NOT cause failure (it's optional).
    */
-  it('should reject when both secrets are empty simultaneously', () => {
+  it('should reject when jwtSecret is empty (lifecycleToken empty is allowed)', () => {
     fc.assert(
       fc.property(
         fc.constant(null),

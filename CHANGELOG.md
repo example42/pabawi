@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.2.0]
+## [1.2.0] - Unreleased
 
 ### Added
 
@@ -17,6 +17,23 @@
 - CreateRoleDialog component for creating custom roles from the Role Management page
 - Frontend permission types for `azure`, `hiera`, and `ssh` resources with category grouping
 - Property-based tests for MCP tool permission enforcement, inventory search filtering, API client 204 handling, and form validation
+- DI container (`backend/src/container/DIContainer.ts`) with typed `ServiceRegistry` for LoggerService, ConfigService, ExpertModeService
+- Declarative plugin registry (`backend/src/plugins/registry.ts`) replacing per-plugin init blocks in server.ts
+- Shared Puppet execution helper (`runPuppetOn`) eliminating duplicated execution logic between single-node and multi-node handlers
+- MCP SDK type declaration (`backend/src/types/mcp-sdk.d.ts`) removing type suppressions from MCP integration
+- Bolt structured JSON error parsing with `categoriseError()` method and `ERROR_KIND_MAP`
+- Frontend API module split: `proxmoxApi.ts`, `awsApi.ts`, `azureApi.ts` extracted from monolithic `api.ts`
+- Property-based tests for DI container singleton guarantee, plugin registry behaviour, Bolt error categorisation, and SSE event handling
+
+### Changed
+
+- All route files converted to factory functions (`createXxxRouter(container)`) resolving services from DI container
+- JWT secret and lifecycle token centralised in ConfigService — no direct `process.env` access for secrets
+- `PABAWI_LIFECYCLE_TOKEN` changed from required to optional (defaults to empty string; endpoint returns 500 when unconfigured)
+- Plugin initialisation in server.ts replaced with single `for...of` loop over plugin registry
+- Execution streaming refactored to SSE-first with single-fetch fallback (polling removed)
+- Duplicate router mounts removed (`/api/nodes` alias for inventory, duplicate packages mount)
+- Type suppressions reduced across backend (typed Express request augmentation, typed Bolt JSON output, typed MCP session entries)
 
 ### Fixed
 
@@ -24,8 +41,10 @@
 - Viewer role missing read permissions for Proxmox, AWS, Journal, and Integration Config
 - Operator role missing lifecycle and execute permissions for Proxmox, AWS, Azure, and SSH
 - Create Role button on Role Management page now opens a functional dialog instead of a stub
+- Global auth middleware now receives JWT secret from ConfigService (was using ephemeral random secret, causing "Invalid token signature" after login)
+- Config route (`/api/config/ui`, `/api/config/provisioning`) converted from module-level `new ConfigService()` to DI container factory (was crashing on startup when `PABAWI_LIFECYCLE_TOKEN` was unset)
 
-## [1.1.0]
+## [1.1.0] - 2026-04-28
 
 ### Added
 
@@ -62,7 +81,7 @@
 - Proxmox and AWS URIs correctly resolve to hostnames in journal views
 - Journal stream guard logic refined to prevent edge-case rendering issues
 
-## [1.0.0]
+## [1.0.0] - 2026-04-12
 
 ### Added
 
@@ -95,7 +114,7 @@
 - `IntegrationConfigRecord` frontend type
 - Dead code and unused dependencies related to database-stored config overrides
 
-## [0.8.0]
+## [0.8.0] - 2026-03-05
 
 ### Added
 
@@ -113,7 +132,7 @@
 - Enhanced type safety in performance metrics
 - Updated secrets baseline with comprehensive test coverage
 
-## [0.7.0]
+## [0.7.0] - 2026-02-23
 
 ### Added
 
@@ -136,7 +155,7 @@
 - Unit tests and linting issues
 - Package lock file updates
 
-## [0.6.0] - 2026
+## [0.6.0] - 2026-02-03
 
 ### Added
 
@@ -155,7 +174,7 @@
 - Removed unnecessary type arguments
 - Documentation consistency and table of contents
 
-## [0.5.0] - 2026
+## [0.5.0] - 2026-01-25
 
 ### Added
 
@@ -175,7 +194,7 @@
 - Interface improvements
 - Multiple lint fixes
 
-## [0.4.0] - 2026
+## [0.4.0] - 2026-01-12
 
 ### Added
 
@@ -192,7 +211,7 @@
 - Tests and lints
 - CI fixes
 
-## [0.3.0] - 2025
+## [0.3.0] - 2025-12-18
 
 ### Added
 
@@ -214,7 +233,7 @@
 - Type comparison issues
 - Multiple lint fixes
 
-## [0.2.0] - 2025
+## [0.2.0] - 2025-12-03
 
 ### Added
 
@@ -249,7 +268,7 @@
 - CI/CD workflows and publish scripts
 - Multiple lint and test fixes
 
-## [0.1.0] - 2025
+## [0.1.0] - 2025-11-23
 
 ### Added
 

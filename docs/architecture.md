@@ -37,10 +37,10 @@ BasePlugin (abstract class, implements IntegrationPlugin)
 All configuration comes from environment variables. There are no database-stored config overrides.
 
 ```
-backend/.env → ConfigService (Zod validation) → IntegrationManager → Plugins
+backend/.env → ConfigService (Zod validation) → DIContainer → Route factories / Plugins
 ```
 
-`ConfigService` is the only place `process.env` is read. Every other file imports from `ConfigService`.
+`ConfigService` is the only place `process.env` is read. Every other file resolves it from the DI container or receives it as a constructor argument. Secrets (`JWT_SECRET` required, `PABAWI_LIFECYCLE_TOKEN` optional) are accessed via `configService.getJwtSecret()` and `configService.getLifecycleToken()`.
 
 ## Startup Sequence
 
@@ -48,16 +48,19 @@ backend/.env → ConfigService (Zod validation) → IntegrationManager → Plugi
 server.ts
   │
   ├── ConfigService.load()           parse + validate all env vars
+  ├── DIContainer.register()         config, logger, expertMode
   ├── DatabaseService.initialize()   run migrations (SQLite)
-  ├── IntegrationManager.new()       create registry
   │
-  ├── register plugins               one per enabled integration
+  ├── pluginRegistry loop            iterate plugins/registry.ts entries
+  │     ├── entry.resolveConfig()    skip if not configured
+  │     └── entry.create()           instantiate + register with IntegrationManager
+  │
   ├── IntegrationManager.initializePlugins()   parallel init, errors logged
   ├── IntegrationManager.startHealthCheckScheduler()   runs every 60s
   │
   ├── MCP server (if MCP_ENABLED)    provision service user, register tools, mount /mcp
   │
-  └── Express routes mounted         server ready
+  └── Route factories mounted        createXxxRouter(container) for each domain
 ```
 
 Plugin init failures don't crash the server. The failed plugin is marked unhealthy and other integrations continue working.
@@ -128,7 +131,9 @@ GET /api/integrations/status
 
 ```
 backend/src/
-├── server.ts                      Express app, plugin registration, route wiring
+├── server.ts                      Express app, route factory wiring, plugin registry loop
+├── container/                     DIContainer — typed service registry (logger, config, expertMode)
+├── plugins/                       Declarative plugin registry (PluginRegistryEntry[])
 ├── config/                        ConfigService — Zod schemas for all env vars
 ├── integrations/
 │   ├── BasePlugin.ts
@@ -142,7 +147,8 @@ backend/src/
 │   ├── ansible/
 │   ├── ssh/
 │   ├── proxmox/
-│   └── aws/
+│   ├── aws/
+│   └── azure/
 ├── services/
 │   ├── ExecutionQueue.ts           concurrency limit, FIFO
 │   ├── StreamingExecutionManager.ts  SSE real-time output
@@ -154,12 +160,13 @@ backend/src/
 │   ├── RoleService.ts
 │   ├── PermissionService.ts
 │   └── GroupService.ts
-├── routes/                         Express route handlers (all wrapped in asyncHandler)
+├── routes/                         Express route factories (all wrapped in asyncHandler)
 ├── middleware/                     JWT auth, RBAC, error handler, rate limit, security headers
 ├── database/
 │   ├── DatabaseService.ts
 │   ├── ExecutionRepository.ts
 │   └── migrations/*.sql            schema-first, sequential migration files
+├── types/                          Shared type declarations (express.d.ts, mcp-sdk.d.ts)
 ├── errors/                         typed error classes
 └── validation/                     Zod schemas for request bodies
 ```
@@ -174,7 +181,10 @@ frontend/src/
 └── lib/
     ├── router.svelte.ts            client-side router (Svelte 5 runes)
     ├── auth.svelte.ts              JWT auth state
-    ├── api.ts                      HTTP client with error handling
+    ├── api.ts                      HTTP infrastructure (get, post, put, del, error handling)
+    ├── proxmoxApi.ts               Proxmox provisioning API functions
+    ├── awsApi.ts                   AWS EC2 API functions
+    ├── azureApi.ts                 Azure VM API functions
     ├── executionStream.svelte.ts   SSE client for real-time output
     ├── expertMode.svelte.ts        debug info toggle
     ├── integrationColors.svelte.ts per-integration color constants

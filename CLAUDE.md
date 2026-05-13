@@ -46,24 +46,29 @@ Pabawi is an infrastructure management web UI — a monorepo with a **Node.js/Ex
 
 ### Plugin-based integration system
 
-All infrastructure integrations (Bolt, PuppetDB, Puppetserver, Hiera, Ansible, SSH, AWS, Azure, Proxmox) are plugins registered in `backend/src/integrations/`. Every plugin:
+All infrastructure integrations (Bolt, PuppetDB, Puppetserver, Hiera, Ansible, SSH, AWS, Azure, Proxmox) are plugins declared in `backend/src/plugins/registry.ts`. Every plugin:
 
 - Extends `BasePlugin` (`integrations/BasePlugin.ts`) and implements `isEnabled()`, `initialize()`, `healthCheck()`
 - Optionally implements `ExecutionToolPlugin` (can run commands) or `InformationSourcePlugin` (provides inventory/facts)
 - Is registered with `IntegrationManager` (`integrations/IntegrationManager.ts`), which handles lifecycle, health aggregation, and routes data requests to the correct plugin
 
-`IntegrationManager` is the central registry. When inventory or facts are requested, it fans out to all enabled `InformationSourcePlugin`s and merges results using a priority system (SSH: 50, Bolt/PuppetDB: 10, Puppetserver: 20, Ansible: 8, Hiera: 6). When executing commands, it dispatches to the correct `ExecutionToolPlugin`. AWS (`AWSPlugin` + `AWSService`), Azure (`AzurePlugin` + `AzureService`), and Proxmox (`ProxmoxService`) follow the same plugin pattern and add integration-specific routes under `routes/integrations/`.
+The plugin registry (`plugins/registry.ts`) is a declarative array of `PluginRegistryEntry` objects. `server.ts` iterates this array in a single loop — no per-plugin init blocks. Each entry has `resolveConfig()` (returns null to skip) and `create()` (factory).
+
+`IntegrationManager` is the central registry. When inventory or facts are requested, it fans out to all enabled `InformationSourcePlugin`s and merges results using a priority system (SSH: 50, Bolt: 5, PuppetDB: 10, Puppetserver: 8, Ansible: 5, Hiera: 6, Proxmox/AWS/Azure: 7). When executing commands, it dispatches to the correct `ExecutionToolPlugin`.
 
 ### Backend (`backend/src/`)
 
-- **`server.ts`** — Express app init, plugin registration, middleware wiring, route mounting
-- **`config/`** — `ConfigService` wraps all env vars with Zod validation; always use this, never `process.env` directly
+- **`server.ts`** — Express app init, DI container setup, plugin registry loop, middleware wiring, route factory mounting
+- **`container/`** — `DIContainer` class with typed `ServiceRegistry` interface (logger, config, expertMode). Route factories receive the container and resolve services from it
+- **`plugins/`** — `registry.ts` declares all integration plugins as a `PluginRegistryEntry[]` array with `resolveConfig()` and `create()` per entry
+- **`config/`** — `ConfigService` wraps all env vars with Zod validation; always use this, never `process.env` directly. Secrets: `JWT_SECRET` (required), `PABAWI_LIFECYCLE_TOKEN` (optional, defaults to empty) <!-- pragma: allowlist secret -->
 - **`integrations/<name>/`** — One directory per integration: `<Name>Plugin.ts` (lifecycle + routing) and `<Name>Service.ts` (business logic, CLI spawning, API calls)
 - **`mcp/`** — MCP (Model Context Protocol) server: read-only infrastructure query interface for LLM clients. `McpServer.ts` (factory + RBAC gates), `McpToolHandlers.ts` (8 tools: `inventory_list`, `facts_get`, `reports_query`, `catalogs_get`, `hiera_lookup`, `executions_list`, `integrations_list`, `journal_query`), `McpOutputSummariser.ts` (strips verbose fields for LLM-friendly output), `McpServiceUser.ts` (idempotent provisioning of the `mcp-service` user). Enabled via `MCP_ENABLED=true`; session-based HTTP transport at `POST/GET/DELETE /mcp`.
 - **`services/`** — Cross-cutting services: `ExecutionQueue` (concurrent limiting, FIFO), `StreamingExecutionManager` (SSE real-time output), `CommandWhitelistService` (security), `DatabaseService`, `AuthenticationService`, `BatchExecutionService`, `JournalService` (audit trail of infrastructure events), `AuditLoggingService` (user-action audit log), `PuppetRunHistoryService` (persists Puppet run history), `NodeLinkingService` (correlates the same node across integration sources), `ExpertModeService` (debug/verbose UI toggle), and RBAC services (`UserService`, `RoleService`, `PermissionService`, `GroupService`)
-- **`routes/`** — Express route handlers. All async handlers must be wrapped with `asyncHandler()` from `utils/`
+- **`routes/`** — Express route factories. All export `createXxxRouter(container)` functions. All async handlers wrapped with `asyncHandler()` from `utils/`
 - **`middleware/`** — Auth (JWT), RBAC, error handler, rate limiting, security headers, `deduplication.ts` (request deduplication)
 - **`database/`** — `DatabaseService.ts` (migration-first approach), `ExecutionRepository.ts` (CRUD for execution history). All schema in `migrations/*.sql`. Multi-database support via adapter pattern: `DatabaseAdapter.ts` (interface), `SQLiteAdapter.ts` (default), `PostgresAdapter.ts` (optional), `AdapterFactory.ts` (selects adapter from config) — use `DatabaseService`, never instantiate adapters directly.
+- **`types/`** — Shared type declarations (`express.d.ts` for request augmentation, `mcp-sdk.d.ts` for MCP SDK types)
 - **`errors/`** — Typed error classes extending base classes; use these instead of generic `Error`
 - **`validation/`** — Zod schemas for request body validation
 
@@ -77,8 +82,11 @@ Bolt command output is parsed from JSON; both `_output` and `_error` fields must
 - **`lib/`** — Core utilities and reactive state:
   - `router.svelte.ts` — Client-side router using Svelte 5 runes (`$state`)
   - `auth.svelte.ts` — JWT auth state
-  - `api.ts` — Centralized HTTP client with error handling
-  - `executionStream.svelte.ts` — SSE client for real-time command output
+  - `api.ts` — HTTP infrastructure (get, post, put, del) with retry logic and error handling
+  - `proxmoxApi.ts` — Proxmox provisioning API functions
+  - `awsApi.ts` — AWS EC2 API functions
+  - `azureApi.ts` — Azure VM API functions
+  - `executionStream.svelte.ts` — SSE client for real-time command output (SSE-first, single-fetch fallback)
   - `expertMode.svelte.ts` — Debug info toggle
   - `integrationColors.svelte.ts` — Per-integration color constants
   - `toast.svelte.ts` — Notification system
@@ -87,7 +95,7 @@ The frontend uses **Svelte 5 runes** throughout (`$state()`, `$effect()`, `$deri
 
 ### Configuration
 
-All configuration is via `backend/.env`. Run `scripts/setup.sh` for interactive setup. Key variable groups: `PORT/HOST/LOG_LEVEL`, `JWT_SECRET/AUTH_ENABLED`, `BOLT_*`, `PUPPETDB_*`, `PUPPETSERVER_*`, `HIERA_*`, `ANSIBLE_*`, `SSH_*`, `AWS_*`, `AZURE_*`, `PROXMOX_*`, `COMMAND_WHITELIST*`, `CACHE_*`, `CONCURRENT_EXECUTION_LIMIT`, `MCP_ENABLED`.
+All configuration is via `backend/.env`. Run `scripts/setup.sh` for interactive setup. Key variable groups: `PORT/HOST/LOG_LEVEL`, `JWT_SECRET` (required), `PABAWI_LIFECYCLE_TOKEN` (optional), `BOLT_*`, `PUPPETDB_*`, `PUPPETSERVER_*`, `HIERA_*`, `ANSIBLE_*`, `SSH_*`, `AWS_*`, `AZURE_*`, `PROXMOX_*`, `COMMAND_WHITELIST*`, `CACHE_*`, `CONCURRENT_EXECUTION_LIMIT`, `MCP_ENABLED`.
 
 See `docs/configuration.md` for the full reference. Other useful docs: `docs/mcp.md` (MCP setup and tools), `docs/permissions-rbac.md` (RBAC model), `docs/architecture.md` (system overview), `docs/api.md` (REST API reference), `docs/integrations/` (per-integration guides).
 

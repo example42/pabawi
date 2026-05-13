@@ -7,7 +7,7 @@
  * This file is automatically included via tsconfig include glob.
  */
 
- 
+
 declare namespace Express {
   interface Request {
     /** Authenticated user payload attached by authMiddleware */

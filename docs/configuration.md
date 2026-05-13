@@ -23,6 +23,13 @@ Run `scripts/setup.sh` for interactive setup that generates a complete `.env` fi
 | `DATABASE_PATH` | `./data/pabawi.db` | SQLite database file path (directory must exist and be writable) |
 | `CORS_ALLOWED_ORIGINS` | _(none)_ | Comma-separated list of allowed origins (e.g. `http://localhost:5173`) |
 
+## Authentication & Secrets
+
+| Variable | Default | Description |
+|---|---|---|
+| `JWT_SECRET` | **required** | Secret key for JWT token signing. Must be non-empty |
+| `PABAWI_LIFECYCLE_TOKEN` | _(empty)_ | Bearer token for inventory lifecycle webhook endpoint. Optional — endpoint returns 500 if unconfigured |
+
 ## Bolt
 
 | Variable | Default | Description |
