@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * MCP Server Module
  *
@@ -16,12 +15,15 @@ import type { HieraPlugin } from '../integrations/hiera/HieraPlugin';
 import type { PuppetDBService } from '../integrations/puppetdb/PuppetDBService';
 import type { PuppetRunHistoryService } from '../services/PuppetRunHistoryService';
 import type { LoggerService } from '../services/LoggerService';
+import type { ZodTypeAny } from 'zod';
 import { registerAllTools } from './McpToolHandlers';
 
 // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.
 // The backend uses moduleResolution: "node", so we use require() for runtime compat.
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { McpServer: McpServerClass } = require('@modelcontextprotocol/sdk/server/mcp.js') as {
+  McpServer: new (info: { name: string; version: string }, opts: { capabilities: { tools: Record<string, unknown> } }) => McpServerInstance;
+};
 
 const LOG_COMPONENT = 'McpServer';
 
@@ -31,12 +33,13 @@ export interface McpServerInstance {
     config: {
       title?: string;
       description?: string;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      inputSchema?: any;
+      inputSchema?: ZodTypeAny;
       annotations?: { readOnlyHint?: boolean };
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cb: (...args: any[]) => Promise<unknown>,
+    // The MCP SDK passes parsed Zod output to the callback; the exact shape
+    // depends on the inputSchema provided above. We use a permissive signature
+    // here to avoid coupling the interface to every possible schema shape.
+    cb: (args: never) => Promise<unknown>,
   ) => void;
   connect: (transport: unknown) => Promise<void>;
   close: () => Promise<void>;
@@ -74,13 +77,11 @@ export const TOOL_PERMISSIONS: Record<string, PermissionCheck> = {
 /**
  * Creates and configures the MCP server with all read-only tools.
  */
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export function createMcpServer(deps: McpDependencies) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-  const server = new McpServer(
+export function createMcpServer(deps: McpDependencies): McpServerInstance {
+  const server = new McpServerClass(
     { name: 'pabawi', version: deps.version },
     { capabilities: { tools: {} } },
-  ) as McpServerInstance;
+  );
 
   registerAllTools(server, deps);
 

@@ -755,9 +755,8 @@ async function startServer(): Promise<Express> {
 
         // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.
         // The backend uses moduleResolution: "node", so we use require() for runtime compat.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-assignment
-        const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
-        // Cast the require result to type the randomUUID function for safe calling
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js") as typeof import("@modelcontextprotocol/sdk/server/streamableHttp.js");
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { randomUUID } = require("node:crypto") as { randomUUID: () => string };
 
@@ -768,8 +767,7 @@ async function startServer(): Promise<Express> {
         const MCP_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
         interface McpSessionEntry {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          transport: any;
+          transport: InstanceType<typeof StreamableHTTPServerTransport>;
           createdAt: number;
         }
 
@@ -780,7 +778,7 @@ async function startServer(): Promise<Express> {
           for (const [id, session] of mcpSessions) {
             if (now - session.createdAt > MCP_SESSION_TTL_MS) {
               mcpSessions.delete(id);
-              (session.transport as { close?: () => void }).close?.();
+              session.transport.close();
             }
           }
         }
@@ -794,11 +792,9 @@ async function startServer(): Promise<Express> {
 
         app.post("/mcp", asyncHandler(async (req: Request, res: Response) => {
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          let transport: any;
+          let transport: InstanceType<typeof StreamableHTTPServerTransport> | undefined;
 
           if (sessionId && mcpSessions.has(sessionId)) {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
             transport = mcpSessions.get(sessionId)?.transport;
           } else if (!sessionId) {
             // Evict stale sessions and enforce session limit before creating a new one
@@ -808,14 +804,11 @@ async function startServer(): Promise<Express> {
               return;
             }
             // New session — create transport + server per session
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: (): string => randomUUID(),
               onsessioninitialized: (id: string): void => {
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                mcpSessions.set(id, { transport, createdAt: Date.now() });
-                // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-                transport.onclose = (): void => { mcpSessions.delete(id); };
+                mcpSessions.set(id, { transport: transport!, createdAt: Date.now() });
+                transport!.onclose = (): void => { mcpSessions.delete(id); };
               },
             });
             const sessionServer = createMcpServer(mcpDeps);
@@ -825,8 +818,7 @@ async function startServer(): Promise<Express> {
             return;
           }
 
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-          await transport.handleRequest(req, res, req.body);
+          await transport!.handleRequest(req, res, req.body);
         }));
 
         app.get("/mcp", asyncHandler(async (req: Request, res: Response) => {
@@ -836,10 +828,7 @@ async function startServer(): Promise<Express> {
             res.status(400).json({ error: "Invalid or missing session" });
             return;
           }
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          const transport = session.transport;
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-          await transport.handleRequest(req, res);
+          await session.transport.handleRequest(req, res);
         }));
 
         app.delete("/mcp", (req: Request, res: Response) => {
@@ -848,8 +837,7 @@ async function startServer(): Promise<Express> {
             const session = mcpSessions.get(sessionId);
             mcpSessions.delete(sessionId);
             if (session) {
-              // Explicitly close the transport to release any held resources
-              (session.transport as { close?: () => void }).close?.();
+              session.transport.close();
             }
           }
           res.sendStatus(200);

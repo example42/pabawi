@@ -498,7 +498,7 @@ export function createFactsRouter(
               clearTimeout(timeoutHandle);
             }
             if (nodeFacts && typeof nodeFacts === "object") {
-              const raw = nodeFacts as unknown as Record<string, unknown>;
+              const raw = nodeFacts as Record<string, unknown>;
               const factsObj =
                 "facts" in raw && typeof raw.facts === "object" && raw.facts !== null
                   ? (raw.facts as Record<string, unknown>)

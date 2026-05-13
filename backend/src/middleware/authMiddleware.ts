@@ -3,21 +3,7 @@ import { AuthenticationService } from "../services/AuthenticationService";
 import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import { ERROR_CODES, sendAuthenticationError, sendDatabaseError, isDatabaseConnectionError } from "../utils/errorHandling";
 
-// Extend Express Request to include user payload
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      user?: {
-        userId: string;
-        username: string;
-        roles: string[];
-        iat: number;
-        exp: number;
-      };
-    }
-  }
-}
+// Express.Request.user augmentation is defined in src/types/express.d.ts
 
 /**
  * Authentication middleware that verifies JWT tokens

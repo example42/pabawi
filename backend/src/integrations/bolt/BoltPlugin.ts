@@ -501,7 +501,7 @@ export class BoltPlugin
       }
 
       if (typeof groupData.config === "object" && groupData.config !== null) {
-        metadata.config = groupData.config as Record<string, unknown>;
+        metadata.config = groupData.config;
       }
 
       if (typeof groupData.description === "string") {

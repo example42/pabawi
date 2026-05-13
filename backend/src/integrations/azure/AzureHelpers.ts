@@ -38,7 +38,7 @@ export function parseNodeId(nodeId: string): { subscriptionId: string; resourceG
  */
 export function transformVMToNode(vm: VirtualMachine, resourceGroup: string, subscriptionId: string): Node {
   const vmName: string = vm.name ?? "unknown";
-  const tags: Record<string, string> = (vm.tags as Record<string, string> | undefined) ?? {};
+  const tags: Record<string, string> = (vm.tags) ?? {};
   const powerState = extractPowerState(vm);
   const nodeId = `azure:${subscriptionId}:${resourceGroup}:${vmName}`;
 
@@ -73,7 +73,7 @@ export function transformToFacts(
   instanceView: VirtualMachineInstanceView,
   subscriptionId: string,
 ): Facts {
-  const tags: Record<string, string> = (vm.tags as Record<string, string> | undefined) ?? {};
+  const tags: Record<string, string> = (vm.tags) ?? {};
   const powerStatus = instanceView.statuses?.find((s) => s.code?.startsWith("PowerState/"));
   const powerState = powerStatus?.displayStatus ?? "unknown";
   const osType: string = vm.storageProfile?.osDisk?.osType ?? "unknown";

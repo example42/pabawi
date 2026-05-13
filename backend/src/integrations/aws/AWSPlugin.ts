@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 /**
  * AWS Integration Plugin
  *
@@ -57,6 +56,11 @@ export class AWSPlugin
   private service?: AWSService;
   private journalService?: JournalService;
 
+  /** Type-safe accessor for the AWS-specific config */
+  private get awsConfig(): AWSConfig {
+    return this.config.config;
+  }
+
   /**
    * Create a new AWSPlugin instance
    *
@@ -85,14 +89,13 @@ export class AWSPlugin
    *
    * @throws Error if configuration is invalid
    */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  protected async performInitialization(): Promise<void> {
+  protected performInitialization(): Promise<void> {
     this.logger.info("Initializing AWS integration", {
       component: "AWSPlugin",
       operation: "performInitialization",
     });
 
-    const config = this.config.config as unknown as AWSConfig;
+    const config = this.awsConfig;
     this.validateAWSConfig(config);
 
     // Create AWSService instance wrapping the EC2 client
@@ -102,6 +105,8 @@ export class AWSPlugin
       component: "AWSPlugin",
       operation: "performInitialization",
     });
+
+    return Promise.resolve();
   }
 
   /**
@@ -159,7 +164,7 @@ export class AWSPlugin
 
     try {
       const identity = await this.service.validateCredentials();
-      const config = this.config.config as unknown as AWSConfig;
+      const config = this.awsConfig;
 
       return {
         healthy: true,
@@ -177,7 +182,7 @@ export class AWSPlugin
       };
     } catch (error) {
       if (error instanceof AWSAuthenticationError) {
-        const config = this.config.config as unknown as AWSConfig;
+        const config = this.awsConfig;
         return {
           healthy: false,
           message: "AWS authentication failed",
@@ -191,7 +196,7 @@ export class AWSPlugin
         };
       }
 
-      const config = this.config.config as unknown as AWSConfig;
+      const config = this.awsConfig;
       return {
         healthy: false,
         message: error instanceof Error ? error.message : "AWS health check failed",
@@ -266,10 +271,9 @@ export class AWSPlugin
    * @param _dataType - Type of data to retrieve
    * @returns null (no additional data types supported yet)
    */
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
+  getNodeData(_nodeId: string, _dataType: string): Promise<unknown> {
     this.ensureInitialized();
-    return null;
+    return Promise.resolve(null);
   }
 
   // ========================================
@@ -339,8 +343,7 @@ export class AWSPlugin
     startedAt: string,
     target: string
   ): Promise<ExecutionResult> {
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-    const params = action.parameters ?? (action.metadata!) ?? {};
+    const params = action.parameters ?? action.metadata ?? {};
     const instanceId = await this.service!.provisionInstance(params);
     const completedAt = new Date().toISOString();
 

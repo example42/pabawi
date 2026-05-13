@@ -21,13 +21,61 @@ export type StreamingEventType =
   | "command";
 
 /**
+ * Typed event data interfaces for each streaming event type
+ */
+export interface StartEventData {
+  executionId: string;
+  startedAt?: string;
+}
+
+export interface StdoutEventData {
+  output: string;
+}
+
+export interface StderrEventData {
+  output: string;
+}
+
+export interface StatusEventData {
+  status: string;
+}
+
+export interface CompleteEventData {
+  status: string;
+  results?: unknown[];
+  completedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface ErrorEventData {
+  error: string;
+  code?: string;
+}
+
+export interface CommandEventData {
+  command: string;
+}
+
+/**
+ * Union of all typed event data payloads
+ */
+export type StreamingEventData =
+  | StartEventData
+  | StdoutEventData
+  | StderrEventData
+  | StatusEventData
+  | CompleteEventData
+  | ErrorEventData
+  | CommandEventData;
+
+/**
  * Streaming event data structure
  */
 export interface StreamingEvent {
   type: StreamingEventType;
   executionId: string;
   timestamp: string;
-  data?: unknown;
+  data?: StreamingEventData;
 }
 
 /**
@@ -179,52 +227,44 @@ export function useExecutionStream(
     // Call event callback
     options.onEvent?.(event);
 
-    // Update state based on event type
+    // Update state based on event type — handles all types without throwing
     switch (event.type) {
       case "start":
         setStatus("connected");
         reconnectAttempts = 0; // Reset reconnect counter on successful connection
         break;
 
-      case "command":
-        if (
-          event.data &&
-          typeof event.data === "object" &&
-          "command" in event.data
-        ) {
-          state.command = String(event.data.command);
+      case "command": {
+        const cmdData = event.data as CommandEventData | undefined;
+        if (cmdData && "command" in cmdData) {
+          state.command = cmdData.command;
         }
         break;
+      }
 
-      case "stdout":
-        if (
-          event.data &&
-          typeof event.data === "object" &&
-          "output" in event.data
-        ) {
-          state.stdout += String(event.data.output);
+      case "stdout": {
+        const stdoutData = event.data as StdoutEventData | undefined;
+        if (stdoutData && "output" in stdoutData) {
+          state.stdout += String(stdoutData.output);
         }
         break;
+      }
 
-      case "stderr":
-        if (
-          event.data &&
-          typeof event.data === "object" &&
-          "output" in event.data
-        ) {
-          state.stderr += String(event.data.output);
+      case "stderr": {
+        const stderrData = event.data as StderrEventData | undefined;
+        if (stderrData && "output" in stderrData) {
+          state.stderr += String(stderrData.output);
         }
         break;
+      }
 
-      case "status":
-        if (
-          event.data &&
-          typeof event.data === "object" &&
-          "status" in event.data
-        ) {
-          state.executionStatus = String(event.data.status);
+      case "status": {
+        const statusData = event.data as StatusEventData | undefined;
+        if (statusData && "status" in statusData) {
+          state.executionStatus = statusData.status;
         }
         break;
+      }
 
       case "complete":
         state.result = event.data
@@ -238,19 +278,17 @@ export function useExecutionStream(
         disconnect(); // Clean disconnect on completion
         break;
 
-      case "error":
-        if (
-          event.data &&
-          typeof event.data === "object" &&
-          "error" in event.data
-        ) {
-          state.error = String(event.data.error);
+      case "error": {
+        const errorData = event.data as ErrorEventData | undefined;
+        if (errorData && "error" in errorData) {
+          state.error = errorData.error;
           state.executionStatus = "failed";
         }
         setStatus("error");
         options.onError?.(state.error ?? "Unknown error");
         disconnect(); // Clean disconnect on error
         break;
+      }
     }
   }
 

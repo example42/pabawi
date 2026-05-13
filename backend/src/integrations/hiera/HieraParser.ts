@@ -211,7 +211,7 @@ export class HieraParser {
     // Parse hierarchy levels
     const hierarchy: HierarchyLevel[] = [];
     for (let i = 0; i < config.hierarchy.length; i++) {
-      const level = config.hierarchy[i] as unknown;
+      const level = config.hierarchy[i];
       const parsedLevel = this.parseHierarchyLevel(level, i, filePath);
       if (!parsedLevel.success) {
         return {
@@ -325,9 +325,9 @@ export class HieraParser {
 
     // Parse mapped_paths
     if (Array.isArray(rawLevel.mapped_paths) && rawLevel.mapped_paths.length === 3) {
-      const var1 = rawLevel.mapped_paths[0] as unknown;
-      const var2 = rawLevel.mapped_paths[1] as unknown;
-      const template = rawLevel.mapped_paths[2] as unknown;
+      const var1 = rawLevel.mapped_paths[0];
+      const var2 = rawLevel.mapped_paths[1];
+      const template = rawLevel.mapped_paths[2];
       if (typeof var1 === "string" && typeof var2 === "string" && typeof template === "string") {
         hierarchyLevel.mapped_paths = [var1, var2, template];
       }
@@ -640,7 +640,7 @@ export class HieraParser {
         return undefined;
       }
       // Use Object.hasOwn to prevent prototype pollution
-      if (!Object.hasOwn(current as Record<string, unknown>, part)) {
+      if (!Object.hasOwn(current, part)) {
         return undefined;
       }
       current = (current as Record<string, unknown>)[part];

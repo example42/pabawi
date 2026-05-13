@@ -179,7 +179,7 @@ export const pluginRegistry: PluginRegistryEntry[] = [
         if (!sshConfig.enabled) {
           return null;
         }
-        return sshConfig as unknown as Record<string, unknown>;
+        return { ...sshConfig };
       } catch {
         return null;
       }

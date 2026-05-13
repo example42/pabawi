@@ -263,7 +263,7 @@ export class HieraResolver {
         return undefined;
       }
       // Use Object.hasOwn to prevent prototype pollution
-      if (!Object.hasOwn(current as Record<string, unknown>, part)) {
+      if (!Object.hasOwn(current, part)) {
         return undefined;
       }
       current = (current as Record<string, unknown>)[part];
@@ -496,7 +496,7 @@ export class HieraResolver {
     if (Array.isArray(base) && Array.isArray(override)) {
       if (mergeOptions?.mergeHashArrays) {
         // Merge arrays element by element
-        const result = Array.isArray(base) ? [...(base as unknown[])] : [];
+        const result: unknown[] = [...base];
         for (const item of override) {
           if (knockoutPrefix && typeof item === "string" && item.startsWith(knockoutPrefix)) {
             const knockedOut = item.slice(knockoutPrefix.length);
@@ -826,7 +826,7 @@ export class HieraResolver {
         return undefined;
       }
       // Use Object.hasOwn to prevent prototype pollution
-      if (!Object.hasOwn(current as Record<string, unknown>, part)) {
+      if (!Object.hasOwn(current, part)) {
         return undefined;
       }
       current = (current as Record<string, unknown>)[part];

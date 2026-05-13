@@ -55,8 +55,7 @@ export class PostgresAdapter implements DatabaseAdapter {
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Unknown connection error";
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      await this._pool.end().catch(() => {});
+      await this._pool.end().catch(() => { /* intentional no-op */ });
       this._pool = null;
       throw new DatabaseConnectionError(
         `Failed to connect to PostgreSQL: ${message}`,

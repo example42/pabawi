@@ -8,6 +8,7 @@
 import https from "https";
 import fs from "fs";
 import type { PuppetDBConfig } from "../../config/schema";
+import { parseJson } from "../../utils/json";
 
 /**
  * Query parameters for PuppetDB API requests
@@ -340,7 +341,7 @@ export class PuppetDBClient {
             statusText: res.statusMessage ?? "Unknown",
             headers: res.headers,
             text: () => Promise.resolve(data),
-            json: () => Promise.resolve(JSON.parse(data) as unknown),
+            json: () => Promise.resolve(parseJson(data)),
           } as unknown as Response;
 
           resolve(response);

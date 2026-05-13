@@ -26,7 +26,7 @@ const TEST_NODES = [
 const TEST_NODE_NAMES = TEST_NODES.map(n => n.node);
 
 // Mock API functions — provide nodes so the <select> has options
-vi.mock('../lib/api', () => ({
+vi.mock('../lib/proxmoxApi', () => ({
   createProxmoxVM: vi.fn(),
   createProxmoxLXC: vi.fn(),
   getProxmoxNodes: vi.fn().mockResolvedValue([

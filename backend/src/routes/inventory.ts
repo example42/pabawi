@@ -9,6 +9,8 @@ import {
 } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
+import type { PuppetDBService } from "../integrations/puppetdb/PuppetDBService";
+import type { ExecutionToolPlugin } from "../integrations/types";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
@@ -216,10 +218,7 @@ export function createInventoryRouter(
             if (puppetdbSource) {
               try {
                 // Query PuppetDB with PQL filter using the queryInventory method
-                // Cast to PuppetDBService to access the queryInventory method
-                const puppetdbService = puppetdbSource as unknown as {
-                  queryInventory: (pql: string) => Promise<Node[]>;
-                };
+                const puppetdbService = puppetdbSource as unknown as Pick<PuppetDBService, "queryInventory">;
                 const pqlNodes = await puppetdbService.queryInventory(
                   query.pql,
                 );
@@ -1202,7 +1201,7 @@ export function createInventoryRouter(
   function getExecutionToolForNode(
     nodeId: string,
     res: Response,
-  ): { tool: import("../integrations/types").ExecutionToolPlugin; provider: string } | null { // eslint-disable-line @typescript-eslint/consistent-type-imports
+  ): { tool: ExecutionToolPlugin; provider: string } | null {
     if (!integrationManager?.isInitialized()) {
       res.status(503).json({
         error: { code: "INTEGRATION_NOT_AVAILABLE", message: "Integration manager is not available" },
@@ -1242,8 +1241,7 @@ export function createInventoryRouter(
    */
   router.get(
     "/:id/lifecycle-actions",
-    // eslint-disable-next-line @typescript-eslint/require-await
-    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+    asyncHandler((req: Request, res: Response): void => {
       const params = NodeIdParamSchema.parse(req.params);
       const nodeId = params.id;
 
