@@ -74,6 +74,7 @@ async function checkPermission(
 export function registerAllTools(server: McpServerInstance, deps: McpDependencies): void {
   registerInventoryList(server, deps);
   registerFactsGet(server, deps);
+  registerFactsBulk(server, deps);
   registerReportsQuery(server, deps);
   registerCatalogsGet(server, deps);
   registerHieraLookup(server, deps);
@@ -126,6 +127,48 @@ function registerFactsGet(server: McpServerInstance, deps: McpDependencies): voi
         include_all === true,
       );
       return jsonResult(summarised);
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err));
+    }
+  });
+}
+
+function registerFactsBulk(server: McpServerInstance, deps: McpDependencies): void {
+  server.registerTool('facts_bulk', {
+    description: 'Retrieve specific facts across all nodes in a single query. Returns a map of certname to fact values. Much more efficient than calling facts_get per node.',
+    inputSchema: z.object({
+      fact_names: z.array(z.string()).min(1).max(50).describe('Top-level fact names to retrieve (e.g. ["os", "networking", "memory"]). Max 50.'),
+      include_all: z.boolean().optional().describe('Include all sub-keys of each fact (default: true for bulk). Set false to get only essential keys.'),
+    }),
+    annotations: { readOnlyHint: true },
+  }, async ({ fact_names, include_all }: { fact_names: string[]; include_all?: boolean }) => {
+    const denied = await checkPermission(deps, 'facts_bulk');
+    if (denied) return permissionError(denied.resource, denied.action);
+    try {
+      if (!deps.puppetDBService) return errorResult('PuppetDB service is not available');
+      const factsMap = await deps.puppetDBService.getBulkFacts(fact_names);
+      const nodeCount = Object.keys(factsMap).length;
+
+      // If include_all is explicitly false, filter to essential keys only
+      if (include_all === false) {
+        const essentialKeys = new Set([
+          'os', 'processors', 'memory', 'networking', 'kernel',
+          'system_uptime', 'virtual', 'is_virtual', 'identity',
+          'timezone', 'architecture', 'fqdn', 'hostname',
+        ]);
+        for (const certname of Object.keys(factsMap)) {
+          const nodeFacts = factsMap[certname];
+          const filtered: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(nodeFacts)) {
+            if (essentialKeys.has(key)) {
+              filtered[key] = value;
+            }
+          }
+          factsMap[certname] = filtered;
+        }
+      }
+
+      return jsonResult({ facts: factsMap, nodeCount, factNames: fact_names });
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : String(err));
     }

@@ -699,7 +699,7 @@ export class AWSService {
    */
   private throwIfAuthError(error: unknown): void {
     if (error instanceof Error) {
-      const name = (error as Error & { name?: string }).name ?? "";
+      const name = (error as Error & { name?: string }).name ?? ""; // eslint-disable-line @typescript-eslint/no-unnecessary-condition
       const code = (error as Error & { Code?: string }).Code ?? "";
       const authErrors = [
         "AuthFailure",
@@ -811,7 +811,7 @@ export class AWSService {
           release: { full: "unknown", major: "unknown" },
         },
         processors: {
-          count: instance.CpuOptions?.CoreCount != null && instance.CpuOptions?.ThreadsPerCore != null
+          count: instance.CpuOptions?.CoreCount != null && instance.CpuOptions?.ThreadsPerCore != null // eslint-disable-line @typescript-eslint/no-unnecessary-condition
             ? instance.CpuOptions.CoreCount * instance.CpuOptions.ThreadsPerCore
             : 0,
           models: [],
@@ -990,7 +990,7 @@ export class AWSService {
           if (!tagGroups.has(key)) {
             tagGroups.set(key, new Map());
           }
-          const valueMap = tagGroups.get(key)!;
+          const valueMap = tagGroups.get(key)!; // eslint-disable-line @typescript-eslint/no-non-null-assertion
           if (!valueMap.has(value)) {
             valueMap.set(value, []);
           }

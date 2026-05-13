@@ -499,6 +499,7 @@ export class ProxmoxIntegration
 
   private get svc(): ProxmoxService {
     this.ensureInitialized();
-    return this.service as ProxmoxService;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    return this.service!;
   }
 }

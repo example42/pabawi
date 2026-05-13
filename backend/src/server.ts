@@ -757,7 +757,7 @@ async function startServer(): Promise<Express> {
         // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.
         // The backend uses moduleResolution: "node", so we use require() for runtime compat.
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js") as typeof import("@modelcontextprotocol/sdk/server/streamableHttp.js");
+        const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js") as typeof import("@modelcontextprotocol/sdk/server/streamableHttp.js"); // eslint-disable-line @typescript-eslint/consistent-type-imports
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { randomUUID } = require("node:crypto") as { randomUUID: () => string };
 
@@ -815,8 +815,8 @@ async function startServer(): Promise<Express> {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: (): string => randomUUID(),
               onsessioninitialized: (id: string): void => {
-                mcpSessions.set(id, { transport: transport!, createdAt: Date.now() });
-                transport!.onclose = (): void => { mcpSessions.delete(id); };
+                mcpSessions.set(id, { transport: transport!, createdAt: Date.now() }); // eslint-disable-line @typescript-eslint/no-non-null-assertion
+                transport!.onclose = (): void => { mcpSessions.delete(id); }; // eslint-disable-line @typescript-eslint/no-non-null-assertion
               },
             });
             const sessionServer = createMcpServer(mcpDeps);
@@ -826,7 +826,7 @@ async function startServer(): Promise<Express> {
             return;
           }
 
-          await transport!.handleRequest(req, res, req.body);
+          await transport!.handleRequest(req, res, req.body); // eslint-disable-line @typescript-eslint/no-non-null-assertion
         }));
 
         app.get("/mcp", mcpAuth, asyncHandler(async (req: Request, res: Response) => {

@@ -12,9 +12,12 @@
     source?: string;
   }
 
-  interface NodeFacts {
-    certname: string;
-    facts: Record<string, unknown>;
+  interface BulkFactsResponse {
+    facts: Record<string, Record<string, unknown>>;
+    source: string;
+    factNames: string[];
+    nodeCount: number;
+    _debug?: DebugInfo;
   }
 
   interface Props {
@@ -51,24 +54,10 @@
   let customFactInput = $state('');
   let nodeSearchQuery = $state('');
 
-  let factsData = $state<Map<string, Record<string, unknown>>>(new Map());
-  let factsLoading = $state<Set<string>>(new Set());
-  let factsErrors = $state<Map<string, string>>(new Map());
-
-  // Helper to check if facts are loading for a node
-  function isFactsLoading(certname: string): boolean {
-    return factsLoading.has(certname);
-  }
-
-  // Helper to check if there's an error for a node
-  function hasFactsError(certname: string): boolean {
-    return factsErrors.has(certname);
-  }
-
-  // Helper to get error message
-  function getFactsError(certname: string): string | undefined {
-    return factsErrors.get(certname);
-  }
+  // Bulk facts data: certname -> { topLevelFactName -> factValue }
+  let bulkFactsData = $state<Record<string, Record<string, unknown>>>({});
+  let factsLoading = $state(false);
+  let factsError = $state<string | null>(null);
 
   // Fetch all nodes from PuppetDB only
   async function fetchNodes(): Promise<void> {
@@ -86,47 +75,54 @@
       }
     } catch (err) {
       nodesError = err instanceof Error ? err.message : 'Failed to load nodes';
-      console.error('Error fetching nodes:', err);
       showError('Failed to load nodes', nodesError);
     } finally {
       nodesLoading = false;
     }
   }
 
-  // Fetch facts for a specific node
-  async function fetchNodeFacts(certname: string): Promise<void> {
-    if (factsData.has(certname)) return; // Already loaded
+  /**
+   * Extract the set of top-level fact names needed for the selected facts.
+   * e.g., "os.name" -> "os", "networking.ip" -> "networking", "virtual" -> "virtual"
+   */
+  function getTopLevelFactNames(facts: string[]): string[] {
+    const topLevel = new Set<string>();
+    for (const fact of facts) {
+      const dotIndex = fact.indexOf('.');
+      topLevel.add(dotIndex > 0 ? fact.substring(0, dotIndex) : fact);
+    }
+    return [...topLevel];
+  }
 
-    factsLoading = new Set(factsLoading).add(certname); // Create new Set for reactivity
+  /**
+   * Fetch facts in bulk from PuppetDB (single query for all nodes)
+   */
+  async function fetchBulkFacts(): Promise<void> {
+    if (selectedFacts.length === 0) return;
+
+    factsLoading = true;
+    factsError = null;
 
     try {
-      // Use PuppetDB only (Puppetserver would be too slow)
-      const data = await get<{ facts: Record<string, unknown>; _debug?: DebugInfo }>(
-        `/api/integrations/puppetdb/nodes/${certname}/facts`,
-        { maxRetries: 1, showRetryNotifications: false }
+      const topLevelNames = getTopLevelFactNames(selectedFacts);
+      const namesParam = topLevelNames.join(',');
+
+      const data = await get<BulkFactsResponse>(
+        `/api/integrations/puppetdb/facts/bulk?names=${encodeURIComponent(namesParam)}`,
+        { maxRetries: 2 }
       );
 
-      // Create new Map for reactivity
-      factsData = new Map(factsData).set(certname, data.facts || {});
+      bulkFactsData = data.facts || {};
 
       // Pass debug info to parent
       if (onDebugInfo && data._debug) {
         onDebugInfo(data._debug);
       }
-
-      // Remove from errors if it was there
-      if (factsErrors.has(certname)) {
-        factsErrors = new Map(factsErrors);
-        factsErrors.delete(certname);
-      }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load facts';
-
-      // Create new Map for reactivity
-      factsErrors = new Map(factsErrors).set(certname, errorMsg);
+      factsError = err instanceof Error ? err.message : 'Failed to load facts';
+      showError('Failed to load facts', factsError);
     } finally {
-      // Remove from loading set
-      factsLoading = new Set([...factsLoading].filter(id => id !== certname));
+      factsLoading = false;
     }
   }
 
@@ -137,16 +133,15 @@
       selectedFacts = [...selectedFacts, trimmed];
       customFactInput = '';
 
-      // Fetch facts for all nodes (not just filtered ones)
-      nodes.forEach(node => {
-        void fetchNodeFacts(node.id);
-      });
+      // Fetch bulk facts (single request for all nodes)
+      void fetchBulkFacts();
     }
   }
 
   // Remove a fact from the selection
   function removeFact(factName: string): void {
     selectedFacts = selectedFacts.filter(f => f !== factName);
+    // No need to re-fetch — data is already loaded for remaining facts
   }
 
   // Add custom fact from input
@@ -163,29 +158,26 @@
     }
   }
 
-  // Get fact value for a node (supports nested facts like os.name)
+  /**
+   * Get fact value for a node from bulk data.
+   * Supports nested paths like "os.name" by traversing the structured fact value.
+   */
   function getFactValue(certname: string, factName: string): string {
-    const data = factsData.get(certname);
+    const nodeData = bulkFactsData[certname];
+    if (!nodeData) return '-';
 
-    if (!data) {
-      return '-';
-    }
-
-    // The facts are nested inside a "facts" property
-    const facts = (data as { facts?: Record<string, unknown> }).facts;
-
-    if (!facts) {
-      return '-';
-    }
-
-    // Handle nested facts (e.g., "os.name" -> facts.os.name)
+    // Split the fact path: "os.name" -> ["os", "name"]
     const parts = factName.split('.');
-    let value: unknown = facts;
+    const topLevelName = parts[0];
 
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (value && typeof value === 'object' && part in value) {
-        value = (value as Record<string, unknown>)[part];
+    // Get the top-level fact value
+    let value: unknown = nodeData[topLevelName];
+    if (value === undefined || value === null) return '-';
+
+    // Traverse nested path if needed
+    for (let i = 1; i < parts.length; i++) {
+      if (value && typeof value === 'object' && parts[i] in (value as Record<string, unknown>)) {
+        value = (value as Record<string, unknown>)[parts[i]];
       } else {
         return '-';
       }
@@ -327,9 +319,9 @@
       </div>
 
       <!-- Loading State -->
-      {#if nodesLoading}
+      {#if nodesLoading || factsLoading}
         <div class="flex justify-center py-12">
-          <LoadingSpinner size="lg" message="Loading nodes..." />
+          <LoadingSpinner size="lg" message={nodesLoading ? "Loading nodes..." : "Loading facts..."} />
         </div>
       {:else if nodesError}
         <div class="p-4">
@@ -337,6 +329,14 @@
             message="Failed to load nodes"
             details={nodesError}
             onRetry={fetchNodes}
+          />
+        </div>
+      {:else if factsError}
+        <div class="p-4">
+          <ErrorAlert
+            message="Failed to load facts"
+            details={factsError}
+            onRetry={fetchBulkFacts}
           />
         </div>
       {:else if filteredNodes.length === 0}
@@ -383,23 +383,9 @@
                   </td>
                   {#each selectedFacts as fact}
                     <td class="px-4 py-3 text-gray-700 dark:text-gray-300">
-                      {#if isFactsLoading(node.id)}
-                        <div class="flex items-center gap-2">
-                          <svg class="h-4 w-4 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span class="text-xs text-gray-400">Loading...</span>
-                        </div>
-                      {:else if hasFactsError(node.id)}
-                        <span class="text-xs text-red-600 dark:text-red-400" title={getFactsError(node.id)}>
-                          Error
-                        </span>
-                      {:else}
-                        <span class="truncate" title={getFactValue(node.id, fact)}>
-                          {getFactValue(node.id, fact)}
-                        </span>
-                      {/if}
+                      <span class="truncate" title={getFactValue(node.id, fact)}>
+                        {getFactValue(node.id, fact)}
+                      </span>
                     </td>
                   {/each}
                 </tr>

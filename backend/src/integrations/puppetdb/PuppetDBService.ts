@@ -2380,7 +2380,7 @@ export class PuppetDBService
 
         // First element should be an operator (string)
         if (typeof parsed[0] !== "string") {
-          const firstElement = parsed[0];
+          const firstElement = String(parsed[0]);
           throw new PuppetDBQueryError(
             "PQL query must start with an operator",
             pqlQuery,
@@ -2981,6 +2981,100 @@ export class PuppetDBService
       return counts;
     } catch (error) {
       this.logError(`Failed to get report counts for node '${certname}'`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get specific facts for all nodes in a single PuppetDB query
+   *
+   * Instead of querying facts per-node (N requests), this queries the /facts endpoint
+   * with a name filter to get specific facts across all nodes in one request.
+   * This avoids 429 rate limiting when many nodes exist.
+   *
+   * @param factNames - Array of top-level fact names to retrieve (e.g., ["os", "networking", "memory"])
+   * @returns Map of certname -> { factName -> factValue }
+   */
+  async getBulkFacts(factNames: string[]): Promise<Record<string, Record<string, unknown>>> {
+    const complete = this.performanceMonitor.startTimer('puppetdb:getBulkFacts');
+    this.ensureInitialized();
+
+    if (factNames.length === 0) {
+      complete({ cached: false, factCount: 0 });
+      return {};
+    }
+
+    try {
+      // Generate cache key based on sorted fact names
+      const sortedNames = [...factNames].sort();
+      const cacheKey = `bulk-facts:${sortedNames.join(',')}`;
+
+      // Check cache first
+      const cached = this.cache.get(cacheKey);
+      if (cached !== undefined && typeof cached === 'object' && cached !== null) {
+        this.log(`Returning cached bulk facts for ${String(factNames.length)} fact names`);
+        complete({ cached: true, factCount: factNames.length });
+        return cached as Record<string, Record<string, unknown>>;
+      }
+
+      const client = this.client;
+      if (!client) {
+        complete({ error: 'client not initialized' });
+        throw new PuppetDBConnectionError(
+          "PuppetDB client not initialized. Ensure initialize() was called successfully.",
+        );
+      }
+
+      // Build PQL query to get multiple facts by name for all nodes
+      // Use "or" with multiple "=" conditions for compatibility
+      let pqlQuery: string;
+      if (factNames.length === 1) {
+        pqlQuery = JSON.stringify(["=", "name", factNames[0]]);
+      } else {
+        // ["or", ["=", "name", "os"], ["=", "name", "networking"], ...]
+        const conditions = factNames.map(name => ["=", "name", name]);
+        pqlQuery = JSON.stringify(["or", ...conditions]);
+      }
+
+      this.log(`Querying PuppetDB for bulk facts: ${sortedNames.join(', ')}`);
+
+      const result = await this.executeWithResilience(async () => {
+        return await client.query("pdb/query/v4/facts", pqlQuery);
+      });
+
+      if (!Array.isArray(result)) {
+        this.log("Unexpected response format from PuppetDB facts endpoint", "warn");
+        complete({ cached: false, factCount: 0 });
+        return {};
+      }
+
+      this.log(`Received ${String(result.length)} fact entries from PuppetDB`);
+
+      // Transform results into a map: certname -> { factName -> factValue }
+      const factsMap: Record<string, Record<string, unknown>> = {};
+
+      for (const entry of result) {
+        const fact = entry as { certname: string; name: string; value: unknown };
+        const existing = factsMap[fact.certname] as Record<string, unknown> | undefined;
+        if (!existing) {
+          factsMap[fact.certname] = { [fact.name]: fact.value };
+        } else {
+          existing[fact.name] = fact.value;
+        }
+      }
+
+      const nodeCount = Object.keys(factsMap).length;
+      this.log(`Organized bulk facts for ${String(nodeCount)} nodes`);
+
+      // Cache the result
+      this.cache.set(cacheKey, factsMap, this.cacheTTL);
+      this.log(`Cached bulk facts for ${String(this.cacheTTL)}ms`);
+
+      complete({ cached: false, factCount: factNames.length, nodeCount });
+      return factsMap;
+    } catch (error) {
+      this.logError("Failed to get bulk facts from PuppetDB", error);
+      complete({ error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }

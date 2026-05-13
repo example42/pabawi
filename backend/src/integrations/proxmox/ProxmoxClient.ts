@@ -388,7 +388,9 @@ export class ProxmoxClient {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
       const params = new URLSearchParams();
       for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-        if (value !== undefined && value !== null) {
+        if (value != null) {
+          // Proxmox API values are always primitives (string/number/boolean)
+          // eslint-disable-next-line @typescript-eslint/no-base-to-string
           params.append(key, String(value));
         }
       }

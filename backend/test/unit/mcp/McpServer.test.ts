@@ -118,12 +118,12 @@ describe('MCP Tool Handlers', () => {
     registerAllTools(server, deps);
   });
 
-  it('registers all 8 tools', () => {
+  it('registers all 9 tools', () => {
     const expectedTools = Object.keys(TOOL_PERMISSIONS);
     for (const name of expectedTools) {
       expect(registeredTools.has(name)).toBe(true);
     }
-    expect(registeredTools.size).toBe(8);
+    expect(registeredTools.size).toBe(9);
   });
 
   it('all tools have readOnlyHint annotation', () => {

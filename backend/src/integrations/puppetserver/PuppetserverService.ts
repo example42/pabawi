@@ -312,7 +312,7 @@ export class PuppetserverService
     try {
       this.ensureInitialized();
     } catch (err) {
-      return Promise.reject(err);
+      return Promise.reject(err instanceof Error ? err : new Error(String(err)));
     }
 
     // Return empty array since certificate management has been removed
@@ -333,7 +333,7 @@ export class PuppetserverService
     try {
       this.ensureInitialized();
     } catch (err) {
-      return Promise.reject(err);
+      return Promise.reject(err instanceof Error ? err : new Error(String(err)));
     }
     this.log(`Certificate management removed - getNode('${certname}') returning null`);
     return Promise.resolve(null);
@@ -531,7 +531,7 @@ export class PuppetserverService
     try {
       this.ensureInitialized();
     } catch (err) {
-      return Promise.reject(err);
+      return Promise.reject(err instanceof Error ? err : new Error(String(err)));
     }
     this.log(`Certificate management removed - getNodeStatus('${nodeId}') returning basic status`);
     return Promise.resolve({
