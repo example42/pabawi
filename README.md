@@ -7,7 +7,7 @@
 </td>
 <td>
   <h3>Classic Infrastructures Command &amp; Control Awesomeness</h3>
-  <p>Pabawi is a web UI for infrastructure management, inventory, and remote execution. It integrates with Puppet, Bolt, Ansible, PuppetDB, Hiera, SSH, Proxmox, AWS, and Azure — supporting both Puppet Enterprise and Open Source Puppet / OpenVox. A single interface for executing commands, browsing inventory, viewing system facts, provisioning VMs, and tracking operations across your entire environment.</p>
+  <p>Pabawi is a web UI for infrastructure management, inventory, and remote execution.</br>It integrates with Puppet, Bolt, Ansible, PuppetDB, Hiera, SSH, Proxmox, AWS, and Azure providing a single interface for executing commands, browsing inventory, viewing system facts, provisioning VMs, and tracking operations across your entire environment.</br>Icing on the cake, all the information you see on Pabawi is exposed with an embedded MCP server usable by your favouring AI agents.</p>
 </td>
 </tr>
 </table>
@@ -20,7 +20,7 @@
 ## Sponsors
 
 <table><tr>
-<td>Pabawi's main sponsor is <a href="https://www.ams-ix.net/">AMS-IX</a> — the Amsterdam Internet Exchange, one of the largest Internet Exchanges in the world.</td>
+<td>Pabawi's main sponsor is <a href="https://www.ams-ix.net/">AMS-IX</a></td>
 <td><a href="https://www.ams-ix.net/"><img src="docs/images/ams-ix-logo.svg" alt="AMS-IX" width="160"></a></td>
 </tr></table>
 
@@ -80,6 +80,8 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
 ## Screenshots
 
 <img src="docs/screenshots/pabawi-screenshots.png" alt="Pabawi Screenshots" width="1024">
+
+Check this [recording](https://asciinema.org/a/1073835) for a sample MCP session.
 
 ## Prerequisites
 
