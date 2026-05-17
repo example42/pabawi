@@ -110,3 +110,7 @@ See `docs/configuration.md` for the full reference. Other useful docs: `docs/mcp
 ### Logging
 
 Use `LoggerService` everywhere — never `console.log`. Pass structured metadata: `{ component, integration, operation }`.
+
+## KiroGraph
+
+@.kirograph/claude.md

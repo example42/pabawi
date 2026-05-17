@@ -640,127 +640,129 @@
     />
   {:else}
     <!-- Filters and Controls -->
-    <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <!-- Search -->
-      <div class="flex-1 max-w-md">
-        <label for="search" class="sr-only">Search nodes</label>
-        <div class="relative">
-          <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+    <div class="mb-6 space-y-3">
+      <!-- Row 1: Search, Transport, Sort, View Toggle -->
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <!-- Search -->
+        <div class="flex-1 max-w-md">
+          <label for="search" class="sr-only">Search nodes</label>
+          <div class="relative">
+            <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              id="search"
+              type="text"
+              placeholder="Search by name or URI..."
+              class="block w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-3 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
+              oninput={handleSearch}
+            />
           </div>
-          <input
-            id="search"
-            type="text"
-            placeholder="Search by name or URI..."
-            class="block w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-3 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder-gray-500"
-            oninput={handleSearch}
-          />
         </div>
-      </div>
 
-      <!-- Filters -->
-      <div class="flex items-center gap-4 flex-wrap">
-        <!-- Source Filter Buttons -->
-        <div class="flex items-center gap-2">
-          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Source:</span>
-          <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-3 flex-wrap">
+          <!-- Transport Filter -->
+          <div class="flex items-center gap-2">
+            <label for="transport-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Transport:
+            </label>
+            <select
+              id="transport-filter"
+              bind:value={transportFilter}
+              class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="all">All</option>
+              <option value="ssh">SSH</option>
+              <option value="winrm">WinRM</option>
+              <option value="docker">Docker</option>
+              <option value="local">Local</option>
+            </select>
+          </div>
+
+          <!-- Sort By -->
+          <div class="flex items-center gap-2">
+            <label for="sort-by" class="text-sm font-medium text-gray-700 dark:text-gray-300">
+              Sort:
+            </label>
+            <select
+              id="sort-by"
+              bind:value={sortBy}
+              class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+            >
+              <option value="name">Name</option>
+              <option value="source">Source</option>
+              {#if nodes.some(n => n.lastCheckIn)}
+                <option value="lastCheckIn">Last Check-in</option>
+              {/if}
+            </select>
             <button
               type="button"
-              onclick={() => sourceFilter = 'all'}
-              class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors {sourceFilter === 'all' ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+              onclick={() => toggleSort(sortBy)}
+              class="rounded-lg border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+              aria-label="Toggle sort order"
             >
-              All ({nodes.length})
+              {#if sortOrder === 'asc'}
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                </svg>
+              {:else}
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+                </svg>
+              {/if}
             </button>
-            {#each Object.keys(nodeCountsBySource).sort() as source}
-              <button
-                type="button"
-                onclick={() => sourceFilter = sourceFilter === source ? 'all' : source}
-                class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors {sourceFilter === source ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-900' : 'hover:opacity-80'}"
-              >
-                <IntegrationBadge integration={source as import('../lib/integrationColors.svelte').IntegrationType} variant="badge" size="sm" />
-                <span class="text-gray-600 dark:text-gray-300">({nodeCountsBySource[source]})</span>
-              </button>
-            {/each}
           </div>
-        </div>
 
-        <!-- Transport Filter -->
-        <div class="flex items-center gap-2">
-          <label for="transport-filter" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Transport:
-          </label>
-          <select
-            id="transport-filter"
-            bind:value={transportFilter}
-            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-          >
-            <option value="all">All</option>
-            <option value="ssh">SSH</option>
-            <option value="winrm">WinRM</option>
-            <option value="docker">Docker</option>
-            <option value="local">Local</option>
-          </select>
-        </div>
-
-        <!-- Sort By (Requirement 11.5) -->
-        <div class="flex items-center gap-2">
-          <label for="sort-by" class="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Sort:
-          </label>
-          <select
-            id="sort-by"
-            bind:value={sortBy}
-            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-          >
-            <option value="name">Name</option>
-            <option value="source">Source</option>
-            {#if nodes.some(n => n.lastCheckIn)}
-              <option value="lastCheckIn">Last Check-in</option>
-            {/if}
-          </select>
-          <button
-            type="button"
-            onclick={() => toggleSort(sortBy)}
-            class="rounded-lg border border-gray-300 bg-white p-2 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
-            aria-label="Toggle sort order"
-          >
-            {#if sortOrder === 'asc'}
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+          <!-- View Toggle -->
+          <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
+            <button
+              type="button"
+              aria-label="Grid view"
+              class="px-3 py-2 text-sm font-medium {viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'} rounded-l-lg"
+              onclick={() => viewMode = 'grid'}
+            >
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
               </svg>
-            {:else}
-              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="List view"
+              class="px-3 py-2 text-sm font-medium {viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'} rounded-r-lg border-l border-gray-300 dark:border-gray-600"
+              onclick={() => viewMode = 'list'}
+            >
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
-            {/if}
-          </button>
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- View Toggle -->
-      <div class="flex rounded-lg border border-gray-300 dark:border-gray-600">
-        <button
-          type="button"
-          aria-label="Grid view"
-          class="px-3 py-2 text-sm font-medium {viewMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'} rounded-l-lg"
-          onclick={() => viewMode = 'grid'}
-        >
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          aria-label="List view"
-          class="px-3 py-2 text-sm font-medium {viewMode === 'list' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'} rounded-r-lg border-l border-gray-300 dark:border-gray-600"
-          onclick={() => viewMode = 'list'}
-        >
-          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
+      <!-- Row 2: Source Filter Badges -->
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Source:</span>
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onclick={() => sourceFilter = 'all'}
+            class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors {sourceFilter === 'all' ? 'bg-gray-800 text-white dark:bg-white dark:text-gray-900' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+          >
+            All ({nodes.length})
+          </button>
+          {#each Object.keys(nodeCountsBySource).sort() as source}
+            <button
+              type="button"
+              onclick={() => sourceFilter = sourceFilter === source ? 'all' : source}
+              class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors {sourceFilter === source ? 'ring-2 ring-offset-1 ring-blue-500 dark:ring-offset-gray-900' : 'hover:opacity-80'}"
+            >
+              <IntegrationBadge integration={source as import('../lib/integrationColors.svelte').IntegrationType} variant="badge" size="sm" />
+              <span class="text-gray-600 dark:text-gray-300">({nodeCountsBySource[source]})</span>
+            </button>
+          {/each}
+        </div>
       </div>
     </div>
 

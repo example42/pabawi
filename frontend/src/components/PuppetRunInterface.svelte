@@ -10,6 +10,7 @@
   import { showError, showSuccess, showInfo } from '../lib/toast.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { logger } from '../lib/logger.svelte';
+  import { ansiToHtml } from '../lib/ansiToHtml';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
   interface Props {
@@ -577,7 +578,7 @@
                     Error Output
                   </h4>
                   <div class="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/50 dark:bg-red-900/20">
-                    <pre class="whitespace-pre-wrap text-xs text-red-800 dark:text-red-200">{nodeResult.output.stderr}</pre>
+                    <pre class="whitespace-pre-wrap text-xs text-red-800 dark:text-red-200">{@html ansiToHtml(nodeResult.output.stderr)}</pre>
                   </div>
                 </div>
               {/if}

@@ -40,7 +40,7 @@ const LXCCreateParamsSchema = z.object({
 // Action parameters schema
 const ActionParamsSchema = z.object({
   nodeId: z.string().regex(/^proxmox:[^:]+:\d+$/),
-  action: z.enum(["start", "stop", "shutdown", "reboot", "suspend", "resume"]),
+  action: z.enum(["start", "stop", "shutdown", "reboot", "suspend", "resume", "snapshot"]),
 });
 
 // Destroy parameters schema
