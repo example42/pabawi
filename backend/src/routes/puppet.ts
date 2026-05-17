@@ -9,6 +9,7 @@ import type { CreateJournalEntry } from "../services/journal/types";
 import type { LoggerService } from "../services/LoggerService";
 import { NodeIdParamSchema, PuppetEnvironmentSchema, PuppetTagSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import type { ExecutionResult } from "../integrations/bolt/types";
 
 const PuppetRunBodySchema = z.object({
   tags: z.array(PuppetTagSchema).optional(),
@@ -150,6 +151,48 @@ export interface PuppetExecutionContext {
  * - Success: updates record with result, records success/failed journal, emits complete.
  * - Error: updates record with failed status, records failed journal, emits error event.
  */
+
+/**
+ * Puppet agent exit codes:
+ *   0 = run succeeded, no changes applied
+ *   1 = run failed (compilation error, resource failure, etc.)
+ *   2 = run succeeded, changes were applied
+ *   4 = run succeeded with failures (some resources failed)
+ *   6 = run succeeded with changes and failures
+ *
+ * Exit code 2 is NOT a failure — it indicates a successful run that made changes.
+ * This function mutates the result in-place, promoting exit-code-2 node results
+ * from "failed" to "success" and clearing spurious error messages.
+ */
+function normalizePuppetExitCodes(result: ExecutionResult): void {
+  let anyNormalized = false;
+
+  for (const nodeResult of result.results) {
+    if (
+      nodeResult.status === "failed"
+      && nodeResult.output?.exitCode === 2
+    ) {
+      nodeResult.status = "success";
+      // Clear the error that was generated solely from the non-zero exit code
+      if (nodeResult.error && /exit code 2/i.test(nodeResult.error)) {
+        nodeResult.error = undefined;
+      }
+      anyNormalized = true;
+    }
+  }
+
+  if (anyNormalized) {
+    // Recalculate overall status
+    const failedCount = result.results.filter(r => r.status === "failed").length;
+    if (failedCount === 0) {
+      result.status = "success";
+      result.error = undefined;
+    } else if (failedCount < result.results.length) {
+      result.status = "partial";
+    }
+  }
+}
+
 export async function runPuppetOn(ctx: PuppetExecutionContext): Promise<void> {
   try {
     const streamingCallback = ctx.streamingManager?.createStreamingCallback(
@@ -164,6 +207,10 @@ export async function runPuppetOn(ctx: PuppetExecutionContext): Promise<void> {
       parameters: { sudo: true },
       metadata: { streamingCallback },
     });
+
+    // Puppet agent exit code 2 means "run succeeded with changes applied".
+    // Normalize this to success so it is not reported as a failure.
+    normalizePuppetExitCodes(result);
 
     await ctx.executionRepository.update(ctx.executionId, {
       status: result.status,

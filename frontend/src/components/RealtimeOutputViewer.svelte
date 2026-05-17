@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { expertMode } from '../lib/expertMode.svelte';
+  import { ansiToHtml } from '../lib/ansiToHtml';
   import type { ExecutionStream } from '../lib/executionStream.svelte';
   import StatusBadge from './StatusBadge.svelte';
 
@@ -382,7 +383,7 @@
         bind:this={stdoutContainer}
         class="max-h-96 overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900"
       >
-        <pre class="font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words">{effectiveStdout}</pre>
+        <pre class="font-mono text-sm text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words">{@html ansiToHtml(effectiveStdout)}</pre>
       </div>
     </div>
   {:else if isRunning}
@@ -409,7 +410,7 @@
         bind:this={stderrContainer}
         class="max-h-96 overflow-y-auto rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20"
       >
-        <pre class="font-mono text-sm text-red-900 dark:text-red-100 whitespace-pre-wrap break-words">{effectiveStderr}</pre>
+        <pre class="font-mono text-sm text-red-900 dark:text-red-100 whitespace-pre-wrap break-words">{@html ansiToHtml(effectiveStderr)}</pre>
       </div>
     </div>
   {/if}

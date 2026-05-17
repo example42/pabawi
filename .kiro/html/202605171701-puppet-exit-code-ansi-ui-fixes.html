@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — feat: puppet exit code normalization, ANSI rendering, UI layout</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1b26; color: #c0caf5; line-height: 1.6; padding: 2rem; max-width: 1000px; margin: 0 auto; }
+  h1 { color: #7aa2f7; margin-bottom: 0.5rem; font-size: 1.5rem; }
+  h2 { color: #bb9af7; margin: 2rem 0 1rem; font-size: 1.2rem; border-bottom: 1px solid #3b4261; padding-bottom: 0.5rem; }
+  h3 { color: #7dcfff; margin: 1rem 0 0.5rem; font-size: 1rem; }
+  code { background: #24283b; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; color: #9ece6a; }
+  pre { background: #24283b; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 0.5rem 0; }
+  a { color: #7aa2f7; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .badge { display: inline-block; padding: 0.15em 0.6em; border-radius: 4px; font-size: 0.8em; font-weight: 600; }
+  .badge-m { background: #e0af68; color: #1a1b26; }
+  .badge-a { background: #9ece6a; color: #1a1b26; }
+  .badge-d { background: #f7768e; color: #1a1b26; }
+  .file-list { list-style: none; }
+  .file-list li { padding: 0.4rem 0; border-bottom: 1px solid #292e42; display: flex; align-items: center; gap: 0.75rem; }
+  .file-list li:last-child { border-bottom: none; }
+  .stats { color: #73daca; font-size: 0.85em; }
+  .section { background: #24283b; border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; }
+  .tag { display: inline-block; background: #3b4261; color: #a9b1d6; padding: 0.2em 0.5em; border-radius: 4px; font-size: 0.8em; margin-right: 0.4em; }
+  .check-item { padding: 0.3rem 0; }
+  .check-item::before { content: "→ "; color: #e0af68; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .summary-card { background: #292e42; border-radius: 8px; padding: 1rem; text-align: center; }
+  .summary-card .number { font-size: 1.8rem; font-weight: 700; color: #7aa2f7; }
+  .summary-card .label { font-size: 0.85rem; color: #a9b1d6; }
+</style>
+</head>
+<body>
+
+<h1>Commit Report</h1>
+<p style="color: #a9b1d6; margin-bottom: 2rem;">Generated: 2025-05-17 17:01 — Branch: <code>120</code></p>
+
+<div class="section">
+<h2>Commit Message</h2>
+<pre><code>feat(puppet,ui): normalize exit code 2, add ANSI rendering, refactor filter layout
+
+- Treat Puppet agent exit code 2 (changes applied) as success, not failure
+- Add ANSI escape code rendering across all output viewers
+- Refactor inventory/home filter controls into two-row layout
+  (search+transport+sort on row 1, source badges on row 2)
+- Add "snapshot" action to Proxmox VM action schema
+- Add KiroGraph codex sections to AGENTS.md and CLAUDE.md</code></pre>
+</div>
+
+<div class="section">
+<h2>Files Changed</h2>
+<div class="summary-grid">
+  <div class="summary-card"><div class="number">11</div><div class="label">Files Changed</div></div>
+  <div class="summary-card"><div class="number">+294</div><div class="label">Lines Added</div></div>
+  <div class="summary-card"><div class="number">-198</div><div class="label">Lines Removed</div></div>
+  <div class="summary-card"><div class="number">Both</div><div class="label">Workspaces</div></div>
+</div>
+
+<ul class="file-list">
+  <li><span class="badge badge-m">M</span> <code>backend/src/routes/puppet.ts</code> <span class="stats">+47</span></li>
+  <li><span class="badge badge-m">M</span> <code>backend/src/routes/integrations/proxmox.ts</code> <span class="stats">+1 -1</span></li>
+  <li><span class="badge badge-m">M</span> <code>frontend/src/components/CommandOutput.svelte</code> <span class="stats">+13 -6</span></li>
+  <li><span class="badge badge-m">M</span> <code>frontend/src/components/PuppetOutputViewer.svelte</code> <span class="stats">+3 -1</span></li>
+  <li><span class="badge badge-m">M</span> <code>frontend/src/components/PuppetRunInterface.svelte</code> <span class="stats">+2 -1</span></li>
+  <li><span class="badge badge-m">M</span> <code>frontend/src/components/RealtimeOutputViewer.svelte</code> <span class="stats">+3 -2</span></li>
+  <li><span class="badge badge-m">M</span> <code>frontend/src/pages/HomePage.svelte</code> <span class="stats">+82 -80</span></li>
+  <li><span class="badge badge-m">M</span> <code>frontend/src/pages/InventoryPage.svelte</code> <span class="stats">+107 -105</span></li>
+  <li><span class="badge badge-m">M</span> <code>AGENTS.md</code> <span class="stats">+29</span></li>
+  <li><span class="badge badge-m">M</span> <code>CLAUDE.md</code> <span class="stats">+4</span></li>
+  <li><span class="badge badge-m">M</span> <code>.kirograph/config.json</code> <span class="stats">+3 -2</span></li>
+</ul>
+</div>
+
+<div class="section">
+<h2>Pages Affected</h2>
+<ul class="file-list">
+  <li><span class="tag">page</span> <a href="http://localhost:5173/">Home</a> — filter layout refactored</li>
+  <li><span class="tag">page</span> <a href="http://localhost:5173/inventory">Inventory</a> — filter layout refactored</li>
+  <li><span class="tag">page</span> <a href="http://localhost:5173/puppet">Puppet</a> — exit code normalization, ANSI rendering in output</li>
+  <li><span class="tag">page</span> <a href="http://localhost:5173/executions">Executions</a> — ANSI rendering in command output and realtime viewer</li>
+  <li><span class="tag">page</span> <a href="http://localhost:5173/nodes/test">Node Detail</a> — ANSI rendering in command output</li>
+  <li><span class="tag">page</span> <a href="http://localhost:5173/provision">Provision</a> — Proxmox snapshot action added</li>
+</ul>
+</div>
+
+<div class="section">
+<h2>What to Check</h2>
+<div class="check-item">Run a Puppet agent on a node that applies changes — verify it shows as <strong>success</strong> (green) not failure</div>
+<div class="check-item">Check command output with ANSI color codes renders colored text (not raw escape sequences)</div>
+<div class="check-item">Verify the search/highlight feature in CommandOutput still works correctly with ANSI stripping</div>
+<div class="check-item">Confirm the Inventory page filter layout: source badges on a separate row below search/transport/sort</div>
+<div class="check-item">Confirm the Home page filter layout matches the same two-row pattern</div>
+<div class="check-item">Verify Proxmox VM actions dropdown includes "snapshot" option</div>
+<div class="check-item">Check realtime streaming output renders ANSI colors during live execution</div>
+</div>
+
+<div class="section">
+<h2>Impact Analysis</h2>
+<h3>Puppet Exit Code Normalization</h3>
+<p>The <code>normalizePuppetExitCodes()</code> function is called in <code>runPuppetOn()</code> which is the single entry point for all Puppet agent runs. It mutates the <code>ExecutionResult</code> in-place before persisting to the database. This affects:</p>
+<ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+  <li>Execution history records (status field)</li>
+  <li>Journal entries (success vs failed)</li>
+  <li>SSE streaming events (complete event status)</li>
+</ul>
+<p style="margin-top: 0.5rem;">Blast radius: <strong>moderate</strong> — changes how Puppet run results are classified system-wide.</p>
+
+<h3>ANSI Rendering</h3>
+<p>Uses <code>ansiToHtml()</code> from <code>frontend/src/lib/ansiToHtml.ts</code> with <code>{@html}</code> rendering. The function must sanitize HTML entities before inserting ANSI spans to prevent XSS. Four components affected — all output display paths.</p>
+<p style="margin-top: 0.5rem;">Blast radius: <strong>contained</strong> — purely visual, no data flow changes.</p>
+
+<h3>Filter Layout Refactor</h3>
+<p>Pure layout restructuring in HomePage and InventoryPage. Source filter badges moved from inline with other controls to a dedicated second row. No logic changes — same state variables, same filtering behavior.</p>
+<p style="margin-top: 0.5rem;">Blast radius: <strong>minimal</strong> — visual only.</p>
+
+<h3>Proxmox Snapshot Action</h3>
+<p>Adds "snapshot" to the Zod enum in the route validation schema. The backend handler dispatches to <code>ProxmoxService</code> which must already support this action for it to work end-to-end.</p>
+<p style="margin-top: 0.5rem;">Blast radius: <strong>minimal</strong> — additive schema change.</p>
+</div>
+
+<div class="section">
+<h2>Codebase Stats</h2>
+<table style="width: 100%; border-collapse: collapse;">
+  <tr><td style="padding: 0.3rem 0; color: #a9b1d6;">Files changed</td><td style="text-align: right;">11</td></tr>
+  <tr><td style="padding: 0.3rem 0; color: #a9b1d6;">Lines added</td><td style="text-align: right; color: #9ece6a;">+294</td></tr>
+  <tr><td style="padding: 0.3rem 0; color: #a9b1d6;">Lines removed</td><td style="text-align: right; color: #f7768e;">-198</td></tr>
+  <tr><td style="padding: 0.3rem 0; color: #a9b1d6;">Net change</td><td style="text-align: right;">+96</td></tr>
+  <tr><td style="padding: 0.3rem 0; color: #a9b1d6;">Workspaces</td><td style="text-align: right;">frontend, backend</td></tr>
+  <tr><td style="padding: 0.3rem 0; color: #a9b1d6;">Integrations touched</td><td style="text-align: right;">Puppet (Bolt), Proxmox</td></tr>
+</table>
+</div>
+
+</body>
+</html>

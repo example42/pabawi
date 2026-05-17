@@ -17,7 +17,7 @@
   "embeddingModel": "nomic-ai/nomic-embed-text-v1.5",
   "embeddingDim": 768,
   "useVecIndex": false,
-  "semanticEngine": "pglite",
+  "semanticEngine": "cosine",
   "typesenseDashboard": false,
   "qdrantDashboard": false,
   "minLogLevel": "warn",
@@ -27,5 +27,6 @@
   ],
   "fuzzyResolutionThreshold": 0.5,
   "enableArchitecture": true,
-  "cavemanMode": "lite"
+  "cavemanMode": "off",
+  "syncWarningThreshold": 10
 }

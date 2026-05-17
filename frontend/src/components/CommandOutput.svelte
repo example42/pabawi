@@ -1,5 +1,6 @@
 <script lang="ts">
   import { expertMode } from '../lib/expertMode.svelte';
+  import { ansiToHtml } from '../lib/ansiToHtml';
 
   interface Props {
     stdout?: string;
@@ -50,12 +51,18 @@
       .replace(/'/g, '&#039;');
   }
 
+  // Strip ANSI escape codes from text
+  function stripAnsi(text: string): string {
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1b\[[0-9;]*m/g, '').replace(/\\u001b\[[0-9;]*m/g, '');
+  }
+
   // Highlight search matches in text with HTML sanitization
   function highlightMatches(text: string, query: string): string {
-    if (!query) return escapeHtml(text);
+    if (!query) return escapeHtml(stripAnsi(text));
 
-    // First escape HTML entities in the original text to prevent XSS
-    const sanitizedText = escapeHtml(text);
+    // First strip ANSI codes, then escape HTML entities to prevent XSS
+    const sanitizedText = escapeHtml(stripAnsi(text));
 
     // Also escape the query for regex, but also escape HTML entities
     // so we can match against the sanitized text
@@ -146,7 +153,7 @@
       <div class="flex items-center gap-2">
         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Exit Code:</span>
         <span
-          class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {exitCode === 0
+          class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {exitCode === 0 || exitCode === 2
             ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
             : 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400'}"
         >
@@ -220,7 +227,7 @@
           {#if expertMode.enabled && searchActive && searchQuery}
             <pre class="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100">{@html highlightedStdout}</pre>
           {:else}
-            <pre class="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100">{stdout}</pre>
+            <pre class="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100">{@html ansiToHtml(stdout ?? '')}</pre>
           {/if}
         </div>
       </div>
@@ -236,7 +243,7 @@
           {#if expertMode.enabled && searchActive && searchQuery}
             <pre class="whitespace-pre-wrap break-words font-mono text-sm text-red-900 dark:text-red-100">{@html highlightedStderr}</pre>
           {:else}
-            <pre class="whitespace-pre-wrap break-words font-mono text-sm text-red-900 dark:text-red-100">{stderr}</pre>
+            <pre class="whitespace-pre-wrap break-words font-mono text-sm text-red-900 dark:text-red-100">{@html ansiToHtml(stderr ?? '')}</pre>
           {/if}
         </div>
       </div>
