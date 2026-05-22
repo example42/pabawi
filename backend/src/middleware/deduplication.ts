@@ -66,11 +66,13 @@ export class RequestDeduplicationMiddleware {
     // for non-expert mode requests and vice versa
     const expertMode = req.expertMode ? 'expert' : 'normal';
     // Include caller identity to prevent cross-user cache poisoning / leakage.
-    // userId alone is sufficient — authz scope is bound to the user.
+    // Admin requests can have broader visibility than non-admin requests, so
+    // keep them in separate cache buckets even for the same user ID.
     const userId = req.user?.userId ?? 'anon';
+    const isAdmin = req.user?.roles.includes('Administrator') ? 'admin' : 'non-admin';
 
     // Create a deterministic string representation of the request
-    const requestString = `${method}:${path}:${query}:${expertMode}:${userId}`;
+    const requestString = `${method}:${path}:${query}:${expertMode}:${userId}:${isAdmin}`;
 
     // Use cryptographic hash to generate cache key
     return crypto

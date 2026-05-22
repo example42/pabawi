@@ -184,6 +184,7 @@ export function useExecutionStream(
   let eventSource: EventSource | null = null;
   let reconnectAttempts = 0;
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+  let connectInFlight: Promise<void> | null = null;
   let isManualDisconnect = false;
 
   /**
@@ -319,14 +320,16 @@ export function useExecutionStream(
    */
   function connect(): void {
     // Prevent multiple connections
-    if (eventSource) {
+    if (eventSource || connectInFlight) {
       return;
     }
 
     isManualDisconnect = false;
     setStatus("connecting");
 
-    void connectAsync();
+    connectInFlight = connectAsync().finally(() => {
+      connectInFlight = null;
+    });
   }
 
   async function connectAsync(): Promise<void> {
@@ -335,6 +338,7 @@ export function useExecutionStream(
       if (!ticket) {
         setStatus("error");
         state.error = "Failed to obtain stream ticket";
+        options.onError?.(state.error);
         return;
       }
 
@@ -409,6 +413,7 @@ export function useExecutionStream(
       setStatus("error");
       state.error =
         error instanceof Error ? error.message : "Failed to connect";
+      options.onError?.(state.error);
     }
   }
 

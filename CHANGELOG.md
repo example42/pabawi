@@ -74,7 +74,7 @@
   (application SQL uses `?` placeholders, rewritten to `$n` for PostgreSQL).
   `docker-compose.yml` gains a profile-gated `postgres` service. See
   [docs/configuration.md](docs/configuration.md#database).
-- `POST /api/users/:id/admin-status` — gated by `users:admin`, refuses
+- `PUT /api/users/:id/admin-status` — gated by `users:admin`, refuses
   self-modification.
 - `POST /api/users/:id/unlock` — clears temporary lockout + cumulative
   counter, audit-logged.
