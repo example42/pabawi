@@ -117,9 +117,9 @@ export class SetupService {
     try {
       await this.db.execute(
         `INSERT INTO config (key, value, updatedAt)
-         VALUES (?, ?, datetime('now'))
-         ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = datetime('now')`,
-        [key, value, value]
+         VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt`,
+        [key, value, new Date().toISOString()]
       );
     } catch (err) {
       logger.error("Failed to set config value", {

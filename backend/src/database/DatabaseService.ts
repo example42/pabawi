@@ -8,9 +8,17 @@ import { MigrationRunner } from "./MigrationRunner";
 export class DatabaseService {
   private adapter: DatabaseAdapter | null = null;
   private databasePath: string;
+  private dbType: "sqlite" | "postgres";
+  private databaseUrl?: string;
 
-  constructor(databasePath: string) {
+  constructor(
+    databasePath: string,
+    dbType: "sqlite" | "postgres" = "sqlite",
+    databaseUrl?: string,
+  ) {
     this.databasePath = databasePath;
+    this.dbType = dbType;
+    this.databaseUrl = databaseUrl;
   }
 
   /**
@@ -20,7 +28,11 @@ export class DatabaseService {
     try {
       // Create adapter via factory and initialize (the SQLite adapter creates
       // its parent directory internally; Postgres does not need filesystem setup)
-      this.adapter = await createDatabaseAdapter({ databasePath: this.databasePath });
+      this.adapter = await createDatabaseAdapter({
+        databasePath: this.databasePath,
+        dbType: this.dbType,
+        databaseUrl: this.databaseUrl,
+      });
       await this.adapter.initialize();
 
       // Initialize schema

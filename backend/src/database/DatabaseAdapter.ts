@@ -34,9 +34,12 @@ export interface DatabaseAdapter {
   /** Returns true if the database connection is open. */
   isConnected(): boolean;
 
-  /** Returns the SQL dialect of this adapter. */
+  /**
+   * Returns the SQL dialect of this adapter.
+   *
+   * Parameter placeholders are always written as `?`; PostgresAdapter rewrites
+   * them to `$n` at query time. Use this only for genuine dialect divergences
+   * (e.g. `LIKE` vs `ILIKE`).
+   */
   getDialect(): "sqlite" | "postgres";
-
-  /** Returns the parameter placeholder for the given 1-based index. */
-  getPlaceholder(index: number): string;
 }

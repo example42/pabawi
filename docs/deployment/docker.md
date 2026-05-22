@@ -71,6 +71,26 @@ services:
       - ./data:/opt/pabawi/data
 ```
 
+### PostgreSQL backend
+
+The repository's `docker-compose.yml` includes a profile-gated `postgres`
+service. It stays off by default; enable it with the `postgres` profile:
+
+```bash
+docker compose --profile postgres up
+```
+
+Then point the app at it in `.env`:
+
+```bash
+DB_TYPE=postgres
+DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
+```
+
+Service credentials default to `pabawi` and are overridable via `POSTGRES_USER`,
+`POSTGRES_PASSWORD`, `POSTGRES_DB`, and `POSTGRES_PORT`. See
+[configuration.md](../configuration.md#database) for details.
+
 ## Example `.env` for Docker
 
 ```bash

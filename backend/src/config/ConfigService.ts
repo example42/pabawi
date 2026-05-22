@@ -640,6 +640,8 @@ export class ConfigService {
           : undefined,
         logLevel: process.env.LOG_LEVEL,
         databasePath: process.env.DATABASE_PATH,
+        dbType: process.env.DB_TYPE,
+        databaseUrl: process.env.DATABASE_URL,
         corsAllowedOrigins: process.env.CORS_ALLOWED_ORIGINS
           ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean)
           : undefined,

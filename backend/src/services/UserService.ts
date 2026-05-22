@@ -373,8 +373,11 @@ export class UserService {
       // Escape SQL LIKE wildcards so user-supplied `%` and `_` don't match anything
       const escaped = filters.search.replace(/[\\%_]/g, '\\$&');
       const searchPattern = `%${escaped}%`;
+      // SQLite LIKE is case-insensitive for ASCII; Postgres LIKE is not.
+      // Use ILIKE on Postgres so search stays case-insensitive on both backends.
+      const like = this.db.getDialect() === 'postgres' ? 'ILIKE' : 'LIKE';
       conditions.push(
-        "(username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR firstName LIKE ? ESCAPE '\\' OR lastName LIKE ? ESCAPE '\\')",
+        `(username ${like} ? ESCAPE '\\' OR email ${like} ? ESCAPE '\\' OR firstName ${like} ? ESCAPE '\\' OR lastName ${like} ? ESCAPE '\\')`,
       );
       params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }

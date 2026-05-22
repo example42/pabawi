@@ -37,6 +37,34 @@ services:
     networks:
       - pabawi-network
 
+  # PostgreSQL backend (optional). Started only with the "postgres" profile:
+  #   docker compose --profile postgres up
+  # To make the app use it, set in .env:
+  #   DB_TYPE=postgres
+  #   DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
+  postgres:
+    image: postgres:16-alpine
+    container_name: pabawi-postgres
+    profiles:
+      - postgres
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-pabawi}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pabawi}"
+      POSTGRES_DB: "${POSTGRES_DB:-pabawi}"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pabawi} -d ${POSTGRES_DB:-pabawi}"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - pabawi-network
+
 networks:
   pabawi-network:
     driver: bridge

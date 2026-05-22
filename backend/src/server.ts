@@ -91,6 +91,7 @@ async function startServer(): Promise<Express> {
         host: config.host,
         port: config.port,
         boltProjectPath: config.boltProjectPath,
+        dbType: config.dbType,
         databasePath: config.databasePath,
         executionTimeout: config.executionTimeout,
         commandWhitelistAllowAll: config.commandWhitelist.allowAll,
@@ -147,7 +148,11 @@ async function startServer(): Promise<Express> {
       component: "Server",
       operation: "startServer",
     });
-    const databaseService = new DatabaseService(config.databasePath);
+    const databaseService = new DatabaseService(
+      config.databasePath,
+      config.dbType,
+      config.databaseUrl,
+    );
     await databaseService.initialize();
     logger.info("Database initialized successfully", {
       component: "Server",

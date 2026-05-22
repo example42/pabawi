@@ -197,7 +197,7 @@ pabawi/
 │       ├── mcp/               # Embedded MCP server and tool handlers
 │       ├── routes/            # Express route factories
 │       ├── middleware/        # JWT, RBAC, rate limiting, security headers
-│       ├── database/          # SQLite + migrations
+│       ├── database/          # SQLite / PostgreSQL adapters + migrations
 │       ├── errors/            # Typed error classes
 │       └── validation/        # Zod request schemas
 ├── docs/                      # Documentation
@@ -269,4 +269,4 @@ For help: enable expert mode for diagnostics, or [open a GitHub issue](https://g
 
 ## Acknowledgments
 
-Pabawi builds on: [Puppet/OpenVox](https://puppet.com), [Bolt](https://puppet.com/docs/bolt), [PuppetDB](https://puppet.com/docs/puppetdb), [Svelte 5](https://svelte.dev), [Node.js](https://nodejs.org), [TypeScript](https://www.typescriptlang.org), [SQLite](https://sqlite.org). Thanks to all contributors and the Puppet community.
+Pabawi builds on: [Puppet/OpenVox](https://puppet.com), [Bolt](https://puppet.com/docs/bolt), [PuppetDB](https://puppet.com/docs/puppetdb), [Svelte 5](https://svelte.dev), [Node.js](https://nodejs.org), [TypeScript](https://www.typescriptlang.org), [SQLite](https://sqlite.org), [PostgreSQL](https://www.postgresql.org). Thanks to all contributors and the Puppet community.

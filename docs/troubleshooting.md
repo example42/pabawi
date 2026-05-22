@@ -150,10 +150,12 @@ color: false
 
 | Problem | Fix |
 |---|---|
-| "Database locked" | Pabawi uses SQLite — only one process may write. Kill duplicate instances |
-| "Migration failed" | Check backend logs. Delete `pabawi.db` to start fresh (loses all data) |
+| "Database locked" | On SQLite (`DB_TYPE=sqlite`) only one process may write. Kill duplicate instances, or switch to PostgreSQL |
+| "Migration failed" | Check backend logs. On SQLite, delete `pabawi.db` to start fresh (loses all data) |
 | Database file not found on startup | Ensure `DATABASE_PATH` directory exists and is writable. Docker: check volume mount |
 | Execution history missing after restart | Expected if using in-memory SQLite (`DATABASE_PATH=:memory:`) |
+| "DATABASE_URL is required when DB_TYPE is 'postgres'" | Set `DATABASE_URL`, or set `DB_TYPE=sqlite` |
+| PostgreSQL connection refused / timeout at startup | Verify the `DATABASE_URL` host, port, and credentials and that the server is reachable. With docker-compose, start the DB via `docker compose --profile postgres up` |
 
 ---
 

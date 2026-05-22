@@ -156,7 +156,7 @@ export class ExecutionRepository {
       record.batchPosition ?? null,
     ];
 
-    const placeholders = params.map((_, i) => this.db.getPlaceholder(i + 1)).join(", ");
+    const placeholders = params.map(() => "?").join(", ");
     const sql = `
       INSERT INTO executions (
         id, type, target_nodes, action, parameters, status,
@@ -202,7 +202,7 @@ export class ExecutionRepository {
     Object.entries(updates).forEach(([key, value]) => {
       if (allowedFields.includes(key)) {
         const columnName = this.camelToSnake(key);
-        updateFields.push(`${columnName} = ${this.db.getPlaceholder(params.length + 1)}`);
+        updateFields.push(`${columnName} = ?`);
 
         if (key === "results" && value) {
           params.push(JSON.stringify(value));
@@ -221,7 +221,7 @@ export class ExecutionRepository {
     }
 
     params.push(id);
-    const sql = `UPDATE executions SET ${updateFields.join(", ")} WHERE id = ${this.db.getPlaceholder(params.length)}`;
+    const sql = `UPDATE executions SET ${updateFields.join(", ")} WHERE id = ?`;
 
     try {
       await this.db.execute(sql, params);
@@ -245,7 +245,7 @@ export class ExecutionRepository {
    * Find execution by ID
    */
   public async findById(id: string): Promise<ExecutionRecord | null> {
-    const sql = `SELECT * FROM executions WHERE id = ${this.db.getPlaceholder(1)}`;
+    const sql = `SELECT * FROM executions WHERE id = ?`;
 
     try {
       const row = await this.db.queryOne<DbRow>(sql, [id]);
@@ -268,27 +268,27 @@ export class ExecutionRepository {
     const params: unknown[] = [];
 
     if (filters.type) {
-      conditions.push(`type = ${this.db.getPlaceholder(params.length + 1)}`);
+      conditions.push("type = ?");
       params.push(filters.type);
     }
 
     if (filters.status) {
-      conditions.push(`status = ${this.db.getPlaceholder(params.length + 1)}`);
+      conditions.push("status = ?");
       params.push(filters.status);
     }
 
     if (filters.targetNode) {
-      conditions.push(`target_nodes LIKE ${this.db.getPlaceholder(params.length + 1)}`);
+      conditions.push("target_nodes LIKE ?");
       params.push(`%"${filters.targetNode}"%`);
     }
 
     if (filters.startDate) {
-      conditions.push(`started_at >= ${this.db.getPlaceholder(params.length + 1)}`);
+      conditions.push("started_at >= ?");
       params.push(filters.startDate);
     }
 
     if (filters.endDate) {
-      conditions.push(`started_at <= ${this.db.getPlaceholder(params.length + 1)}`);
+      conditions.push("started_at <= ?");
       params.push(filters.endDate);
     }
 
@@ -300,7 +300,7 @@ export class ExecutionRepository {
       SELECT * FROM executions
       ${whereClause}
       ORDER BY started_at DESC
-      LIMIT ${this.db.getPlaceholder(params.length + 1)} OFFSET ${this.db.getPlaceholder(params.length + 2)}
+      LIMIT ? OFFSET ?
     `;
 
     params.push(pagination.pageSize, offset);
@@ -325,7 +325,7 @@ export class ExecutionRepository {
     const sql = `
       SELECT original.* FROM executions original
       INNER JOIN executions reexec ON original.id = reexec.original_execution_id
-      WHERE reexec.id = ${this.db.getPlaceholder(1)}
+      WHERE reexec.id = ?
     `;
 
     try {
@@ -347,7 +347,7 @@ export class ExecutionRepository {
   ): Promise<ExecutionRecord[]> {
     const sql = `
       SELECT * FROM executions
-      WHERE original_execution_id = ${this.db.getPlaceholder(1)}
+      WHERE original_execution_id = ?
       ORDER BY started_at DESC
     `;
 
