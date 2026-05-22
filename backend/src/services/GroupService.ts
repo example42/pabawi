@@ -257,8 +257,9 @@ export class GroupService {
     const params: unknown[] = [];
 
     if (filters?.search) {
-      conditions.push('(name LIKE ? OR description LIKE ?)');
-      const searchPattern = `%${filters.search}%`;
+      const escaped = filters.search.replace(/[\\%_]/g, '\\$&');
+      const searchPattern = `%${escaped}%`;
+      conditions.push("(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')");
       params.push(searchPattern, searchPattern);
     }
 

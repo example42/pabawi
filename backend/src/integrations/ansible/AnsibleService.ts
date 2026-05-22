@@ -1,8 +1,8 @@
 import { randomUUID } from "crypto";
 import { spawn, type ChildProcess } from "child_process";
-import { writeFileSync, unlinkSync, mkdtempSync } from "fs";
+import { writeFileSync, rmSync, mkdtempSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import type { ExecutionResult, Node } from "../bolt/types";
 import type { NodeGroup } from "../types";
 
@@ -612,17 +612,17 @@ ${hostname} ansible_connection=ssh ansible_user=${user}
   }
 
   /**
-   * Clean up a temporary inventory file
-   * @param inventoryPath - Path to the temporary inventory file
+   * Clean up a temporary inventory file and its enclosing temp directory in
+   * one call. `rmSync(..., { recursive, force })` handles the file + dir at
+   * once and silently no-ops if either is already gone — replaces the prior
+   * pattern that called `unlinkSync` on a directory and relied on try/catch
+   * to swallow the inevitable EISDIR error.
    */
   private cleanupTempInventory(inventoryPath: string): void {
     try {
-      unlinkSync(inventoryPath);
-      // Also try to remove the temp directory
-      const tempDir = join(inventoryPath, '..');
-      unlinkSync(tempDir);
+      rmSync(dirname(inventoryPath), { recursive: true, force: true });
     } catch {
-      // Ignore cleanup errors
+      // Ignore cleanup errors — temp dir cleanup must never break the caller
     }
   }
 }

@@ -60,7 +60,7 @@ function clearIntegrationEnv(): void {
     }
   }
   // Set required secrets for test isolation
-  process.env.JWT_SECRET = "test-jwt-secret-for-unit-tests"; // pragma: allowlist secret
+  process.env.JWT_SECRET = "test-jwt-secret-for-unit-tests-with-32"; // pragma: allowlist secret (>= 32 chars per C8 hardening)
   process.env.PABAWI_LIFECYCLE_TOKEN = "test-lifecycle-token"; // pragma: allowlist secret
 }
 

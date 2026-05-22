@@ -59,6 +59,25 @@ export class BoltService {
   private factsCache = new Map<string, CacheEntry<Facts>>();
 
   /**
+   * Final defensive check before assembling Bolt argv: reject any user-controlled
+   * positional that starts with `-`. The upstream Zod/whitelist validators are
+   * the primary defence (this should never trigger); this assert is a last-line
+   * guard so that *any* future path that reaches the spawn site without proper
+   * validation cannot smuggle a CLI flag (e.g. `--modulepath=/tmp/evil`) into
+   * `bolt`'s argv.
+   */
+  private assertNoLeadingDash(value: string, fieldName: string): void {
+    if (value.length === 0 || value.startsWith("-")) {
+      throw new BoltExecutionError(
+        `Refusing to pass ${fieldName}=${JSON.stringify(value)} to bolt: leading '-' would be parsed as a flag`,
+        -1,
+        "",
+        "",
+      );
+    }
+  }
+
+  /**
    * Mapping from Bolt `_error.kind` values to application error categories.
    * Used by categoriseError to deterministically classify structured JSON errors.
    */
@@ -534,6 +553,7 @@ export class BoltService {
       return cachedFacts.data;
     }
 
+    this.assertNoLeadingDash(nodeId, "nodeId");
     const args = [
       "task",
       "run",
@@ -733,6 +753,8 @@ export class BoltService {
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
+    this.assertNoLeadingDash(command, "command");
+    this.assertNoLeadingDash(nodeId, "nodeId");
     const args = [
       "command",
       "run",
@@ -1059,6 +1081,9 @@ export class BoltService {
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
+
+    this.assertNoLeadingDash(taskName, "taskName");
+    this.assertNoLeadingDash(nodeId, "nodeId");
 
     // Build command arguments
     const args = [
@@ -1830,8 +1855,11 @@ export class BoltService {
       const enumMatch = /^Enum\[(.+)\]$/.exec(baseType);
       if (enumMatch) {
         // Extract enum values from "Enum[value1, value2, value3]"
+        // or "Enum['quoted-value', 'another']"
         const enumString = enumMatch[1];
-        enumValues = enumString.split(",").map((v) => v.trim());
+        enumValues = enumString
+          .split(",")
+          .map((v) => v.trim().replace(/^['"](.+)['"]$/, "$1"));
         type = "String"; // Enums are treated as strings with restricted values
       } else {
         // Extract the base type name (before any brackets)

@@ -6,6 +6,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Mock the auth manager — tests need a valid auth header so obtainStreamTicket
+// can POST to /stream-ticket (C4 — no more ?token= in URL).
+vi.mock("./auth.svelte", () => ({
+  authManager: {
+    getAuthHeader: () => "Bearer fake-jwt",
+  },
+}));
 import type {
   StreamingEvent,
   StreamingEventType,
@@ -133,6 +141,20 @@ describe("executionStream SSE-first architecture", () => {
   });
 });
 
+/**
+ * After connect() the EventSource is created asynchronously because the
+ * client first fetches a single-use ticket from /stream-ticket (C4 — we no
+ * longer accept ?token= in the URL). Helper to wait until the mocked
+ * EventSource appears so test assertions can interact with it.
+ */
+async function waitForEventSource(): Promise<MockEventSource> {
+  for (let i = 0; i < 50; i++) {
+    if (lastMockEventSource) return lastMockEventSource;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error("EventSource was never created");
+}
+
 describe("executionStream handleEvent processes all event types", () => {
   beforeEach(() => {
     lastMockEventSource = null;
@@ -143,6 +165,19 @@ describe("executionStream handleEvent processes all event types", () => {
         lastMockEventSource = this;
       }
     });
+
+    // Mock auth header so obtainStreamTicket sends an Authorization
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => (k === "token" ? "fake-jwt" : null),
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+
+    // Mock fetch so /stream-ticket returns a ticket
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ticket: "fake-stream-ticket" }),
+    }));
   });
 
   afterEach(() => {
@@ -154,6 +189,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const stream = useExecutionStream("test-exec-id");
     stream.connect();
+    await waitForEventSource();
 
     expect(lastMockEventSource).not.toBeNull();
     const registeredTypes = lastMockEventSource!.getRegisteredTypes();
@@ -173,6 +209,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const onEvent = vi.fn();
     const stream = useExecutionStream("test-exec-id", { onEvent });
     stream.connect();
+    await waitForEventSource();
 
     const startEvent: StreamingEvent = {
       type: "start",
@@ -193,6 +230,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const stream = useExecutionStream("test-exec-id");
     stream.connect();
+    await waitForEventSource();
 
     const stdoutEvent: StreamingEvent = {
       type: "stdout",
@@ -210,6 +248,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const stream = useExecutionStream("test-exec-id");
     stream.connect();
+    await waitForEventSource();
 
     const stderrEvent: StreamingEvent = {
       type: "stderr",
@@ -227,6 +266,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const stream = useExecutionStream("test-exec-id");
     stream.connect();
+    await waitForEventSource();
 
     const statusEvent: StreamingEvent = {
       type: "status",
@@ -245,6 +285,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const onComplete = vi.fn();
     const stream = useExecutionStream("test-exec-id", { onComplete });
     stream.connect();
+    await waitForEventSource();
 
     const completeEvent: StreamingEvent = {
       type: "complete",
@@ -263,6 +304,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const onError = vi.fn();
     const stream = useExecutionStream("test-exec-id", { onError });
     stream.connect();
+    await waitForEventSource();
 
     const errorEvent: StreamingEvent = {
       type: "error",
@@ -286,6 +328,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const stream = useExecutionStream("test-exec-id");
     stream.connect();
+    await waitForEventSource();
 
     const commandEvent: StreamingEvent = {
       type: "command",
@@ -303,6 +346,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const stream = useExecutionStream("test-exec-id");
     stream.connect();
+    await waitForEventSource();
 
     // Simulate malformed JSON — the handler should catch and not throw
     expect(() => {
@@ -316,6 +360,7 @@ describe("executionStream handleEvent processes all event types", () => {
     const { useExecutionStream } = await import("./executionStream.svelte");
     const stream = useExecutionStream("test-exec-id");
     stream.connect();
+    await waitForEventSource();
 
     const lines = ["line 1\n", "line 2\n", "line 3\n"];
     for (const line of lines) {

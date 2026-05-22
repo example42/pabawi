@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
-import type { CommandWhitelistService } from "../validation/CommandWhitelistService";
-import { CommandNotAllowedError } from "../validation/CommandWhitelistService";
+import type { BoltCommandWhitelistService } from "../validation/CommandWhitelistService";
+import { BoltCommandNotAllowedError } from "../validation/CommandWhitelistService";
 import { BoltInventoryNotFoundError } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
@@ -22,7 +22,7 @@ const CommandExecutionBodySchema = z.object({
 export function createCommandsRouter(
   integrationManager: IntegrationManager,
   executionRepository: ExecutionRepository,
-  commandWhitelistService: CommandWhitelistService,
+  commandWhitelistService: BoltCommandWhitelistService,
   streamingManager?: StreamingExecutionManager,
   container: DIContainer = createDefaultContainer(),
 ): Router {
@@ -147,7 +147,7 @@ export function createCommandsRouter(
         try {
           commandWhitelistService.validateCommand(command);
         } catch (error) {
-          if (error instanceof CommandNotAllowedError) {
+          if (error instanceof BoltCommandNotAllowedError) {
             logger.warn("Command not allowed", {
               component: "CommandsRouter",
               integration: "bolt",

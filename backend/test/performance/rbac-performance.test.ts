@@ -87,7 +87,7 @@ describe('RBAC Performance Tests', () => {
     await initializeSchema(db);
 
     // Initialize services
-    authService = new AuthenticationService(db, 'test-secret-key');
+    authService = new AuthenticationService(db, 'test-secret-key-for-route-tests-32chars');
     permissionService = new PermissionService(db);
     userService = new UserService(db, authService);
     roleService = new RoleService(db);

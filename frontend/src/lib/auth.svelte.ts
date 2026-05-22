@@ -168,14 +168,19 @@ class AuthManager {
       userId: this._user?.id,
     });
 
-    // Call logout endpoint to revoke tokens
+    // Call logout endpoint to revoke tokens — pass both access + refresh so
+    // the backend can revoke them as a pair (C1 refresh-token rotation).
     if (this._token) {
       try {
         await fetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${this._token}`,
+            'Content-Type': 'application/json',
           },
+          body: this._refreshToken
+            ? JSON.stringify({ refreshToken: this._refreshToken })
+            : undefined,
         });
       } catch (error) {
         logger.warn('Auth', 'logout', 'Logout API call failed', {

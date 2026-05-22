@@ -199,10 +199,20 @@ describe("Feature: code-review-fixes, Property 8: SSE client handles all event t
     // Install mock EventSource
     (globalThis as Record<string, unknown>).EventSource =
       MockEventSource as unknown as typeof EventSource;
+
+    // Mock fetch for the /stream-ticket call (C4 — ticket replaces ?token=).
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ ticket: "fake-stream-ticket" }),
+      }),
+    );
   });
 
   afterEach(() => {
     (globalThis as Record<string, unknown>).EventSource = originalEventSource;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 

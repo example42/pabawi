@@ -43,7 +43,11 @@ describe("Property 2: Secret round-trip through ConfigService", () => {
   it("getJwtSecret() returns the exact value set in JWT_SECRET env var", () => {
     fc.assert(
       fc.property(
-        fc.string({ minLength: 1 }).filter((s) => s.trim().length > 0),
+        // JWT_SECRET must be ≥ 32 chars and not match the placeholder regexes (per C8 hardening).
+        fc
+          .string({ minLength: 32 })
+          .filter((s) => s.trim().length >= 32)
+          .filter((s) => !/your-secure-random-secret-here/i.test(s) && !/change[-_ ]?me/i.test(s)),
         (secret) => {
           process.env.JWT_SECRET = secret;
           process.env.PABAWI_LIFECYCLE_TOKEN = "placeholder-token";
@@ -69,7 +73,7 @@ describe("Property 2: Secret round-trip through ConfigService", () => {
       fc.property(
         fc.string({ minLength: 1 }).filter((s) => s.trim().length > 0),
         (token) => {
-          process.env.JWT_SECRET = "placeholder-secret"; // pragma: allowlist secret
+          process.env.JWT_SECRET = "placeholder-secret-padded-for-tests-32"; // pragma: allowlist secret (>= 32 chars per C8 hardening)
           process.env.PABAWI_LIFECYCLE_TOKEN = token;
 
           const configService = new ConfigService();

@@ -370,8 +370,12 @@ export class UserService {
     }
 
     if (filters?.search) {
-      conditions.push('(username LIKE ? OR email LIKE ? OR firstName LIKE ? OR lastName LIKE ?)');
-      const searchPattern = `%${filters.search}%`;
+      // Escape SQL LIKE wildcards so user-supplied `%` and `_` don't match anything
+      const escaped = filters.search.replace(/[\\%_]/g, '\\$&');
+      const searchPattern = `%${escaped}%`;
+      conditions.push(
+        "(username LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR firstName LIKE ? ESCAPE '\\' OR lastName LIKE ? ESCAPE '\\')",
+      );
       params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 

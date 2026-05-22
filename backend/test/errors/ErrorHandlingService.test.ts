@@ -42,17 +42,27 @@ describe("ErrorHandlingService", () => {
   });
 
   describe("formatError", () => {
-    it("should format basic error without expert mode", () => {
+    it("should format basic error without expert mode and redact raw message", () => {
       const error = new Error("Test error");
       const result = service.formatError(error, false);
 
-      expect(result.error.message).toBe("Test error");
+      // Per D1: raw `error.message` is hidden from non-expert callers (it
+      // routinely leaks paths, env values, external stderr). Only the
+      // actionableMessage is exposed in the `message` field.
+      expect(result.error.message).toBe(result.error.actionableMessage);
+      expect(result.error.message).not.toBe("Test error");
       expect(result.error.code).toBe("INTERNAL_SERVER_ERROR");
       expect(result.error.type).toBe("unknown");
       expect(result.error.actionableMessage).toBeDefined();
       expect(result.error.troubleshooting).toBeDefined();
       expect(result.error.stackTrace).toBeUndefined();
       expect(result.error.executionContext).toBeUndefined();
+    });
+
+    it("should include raw message in expert mode", () => {
+      const error = new Error("Test error");
+      const result = service.formatError(error, true);
+      expect(result.error.message).toBe("Test error");
     });
 
     it("should include stack trace in expert mode", () => {

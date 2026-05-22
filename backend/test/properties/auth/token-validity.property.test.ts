@@ -77,7 +77,7 @@ describe('Token Validity Properties', () => {
             jti: 'test-token-id'
           };
 
-          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256' });
+          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           if (expiryOffset <= 0) {
             // Property: Expired or immediately expiring tokens should be rejected
@@ -128,7 +128,7 @@ describe('Token Validity Properties', () => {
           };
 
           // Sign with wrong secret
-          const token = jwt.sign(payload, wrongSecret, { algorithm: 'HS256' });
+          const token = jwt.sign(payload, wrongSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Property: Token with invalid signature should be rejected
           await expect(authService.verifyToken(token)).rejects.toThrow();
@@ -167,7 +167,7 @@ describe('Token Validity Properties', () => {
             jti: 'test-token-id'
           };
 
-          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256' });
+          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Verify token is valid before revocation
           const verifiedBefore = await authService.verifyToken(token);
@@ -212,7 +212,7 @@ describe('Token Validity Properties', () => {
             jti: 'test-token-id'
           };
 
-          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256' });
+          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Property: Expired token should be rejected
           await expect(authService.verifyToken(token)).rejects.toThrow();
@@ -250,7 +250,7 @@ describe('Token Validity Properties', () => {
             jti: 'test-token-id'
           };
 
-          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256' });
+          const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Verify multiple times
           const verified1 = await authService.verifyToken(token);

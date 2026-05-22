@@ -31,16 +31,19 @@ describe("Input Sanitization Middleware", () => {
       expect(req.body.query).toBe("SELECT * FROM users WHERE id = 1; DROP TABLE users;");
     });
 
-    it("should remove null bytes that could bypass SQL filters", () => {
+    it("should remove null bytes that could bypass SQL filters in non-password fields", () => {
       req.body = {
         username: "admin\0--",
+        // Note: per C6 hardening, password-shaped fields are exempt from
+        // sanitisation — trimming/truncating them produces silent auth failures.
         password: "pass\0word",  // pragma: allowlist secret
       };
 
       inputSanitizationMiddleware(req as Request, res as Response, next);
 
       expect(req.body.username).toBe("admin--");
-      expect(req.body.password).toBe("password");
+      // Password passes through unchanged
+      expect(req.body.password).toBe("pass\0word");
     });
   });
 

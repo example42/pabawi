@@ -27,8 +27,8 @@ Run `scripts/setup.sh` for interactive setup that generates a complete `.env` fi
 
 | Variable | Default | Description |
 |---|---|---|
-| `JWT_SECRET` | **required** | Secret key for JWT token signing. Must be non-empty |
-| `PABAWI_LIFECYCLE_TOKEN` | _(empty)_ | Bearer token for inventory lifecycle webhook endpoint. Optional — endpoint returns 500 if unconfigured |
+| `JWT_SECRET` | **required** | Secret key for JWT token signing. Must be ≥ 32 chars of random entropy and not a placeholder (e.g. `your-secure-random-secret-here`, `change-me`). Generate with `openssl rand -base64 32`. The server refuses to start otherwise. Tokens are issued/verified with `iss=pabawi` / `aud=pabawi`. |
+| `PABAWI_LIFECYCLE_TOKEN` | _(empty)_ | Bearer token required for inventory lifecycle endpoints (`POST /api/nodes/:id/action`, `DELETE /api/inventory/:id`). When unset, those endpoints return 500 (`LIFECYCLE_AUTH_MISCONFIGURED`). |
 
 ## Bolt
 

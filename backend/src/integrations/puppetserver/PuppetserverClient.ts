@@ -232,8 +232,12 @@ export class PuppetserverClient {
     }
 
     try {
+      // Encode certname before stitching into the URL path. Upstream Zod
+      // schema already rejects unsafe characters, but encoding here defends
+      // against any future direct caller bypassing the route validation.
+      const safeCertname = encodeURIComponent(certname);
       // Call Puppetserver API (requirement 5.1, 5.2)
-      const result = await this.get(`/puppet/v3/status/${certname}`);
+      const result = await this.get(`/puppet/v3/status/${safeCertname}`);
 
       // Log successful response (requirement 5.5)
       if (result === null) {
@@ -394,8 +398,10 @@ export class PuppetserverClient {
         },
       } : undefined;
 
+      // Encode certname before stitching into the URL path
+      const safeCertname = encodeURIComponent(certname);
       const result = await this.post(
-        `/puppet/v3/catalog/${certname}?environment=${encodeURIComponent(environment)}`,
+        `/puppet/v3/catalog/${safeCertname}?environment=${encodeURIComponent(environment)}`,
         requestBody,
       );
 
@@ -527,7 +533,8 @@ export class PuppetserverClient {
     }
 
     try {
-      const result = await this.get(`/puppet/v3/facts/${certname}`);
+      const safeCertname = encodeURIComponent(certname);
+      const result = await this.get(`/puppet/v3/facts/${safeCertname}`);
 
       // Log successful response
       if (result === null) {

@@ -103,10 +103,14 @@ export class ErrorHandlingService {
     // Generate troubleshooting guidance
     const troubleshooting = this.generateTroubleshooting(error, type);
 
-    // Build basic error response
+    // Build basic error response. Raw `error.message` often leaks file paths,
+    // env-var contents, or external command stderr — fine for an admin debugging
+    // in expert mode, dangerous for a non-expert caller. Default-redact and
+    // only restore the raw message when expert mode is on (same gate that
+    // already protects stackTrace and rawResponse).
     const errorResponse: DetailedErrorResponse = {
       code,
-      message: error.message || "An unexpected error occurred",
+      message: actionableMessage,
       type,
       actionableMessage,
       troubleshooting,
@@ -119,6 +123,9 @@ export class ErrorHandlingService {
 
     // Add expert mode fields if enabled
     if (expertMode) {
+      errorResponse.message = this.sanitizeSensitiveData(
+        error.message || "An unexpected error occurred",
+      ) as string;
       errorResponse.stackTrace = this.captureStackTrace(error);
 
       if (context) {

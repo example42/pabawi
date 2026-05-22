@@ -125,7 +125,7 @@ describe('AuthenticationService - Brute Force Protection', () => {
     `);
 
     // Create test user
-    authService = new AuthenticationService(db, 'test-secret-key');
+    authService = new AuthenticationService(db, 'test-secret-key-for-route-tests-32chars');
     const passwordHash = await authService.hashPassword(testPassword);
     const userId = randomUUID();
     const now = new Date().toISOString();
@@ -177,22 +177,17 @@ describe('AuthenticationService - Brute Force Protection', () => {
     expect(result.error).toContain('temporarily locked');
   });
 
-  it('should apply permanent lockout after 10 failed attempts', async () => {
-    // Make 10 failed attempts
+  it('should NOT apply permanent lockout — only temporary (C2)', async () => {
+    // Per C2, permanent lockout was removed (it created a trivial self-service
+    // DoS against any legitimate user). 10 attempts → still only a temporary
+    // lockout from the first 5 attempts in the 15min window.
     for (let i = 0; i < 10; i++) {
       await authService.authenticate(testUsername, wrongPassword);
     }
 
-    // Check lockout status
     const lockoutStatus = await authService.getAccountLockoutStatus(testUsername);
     expect(lockoutStatus).not.toBeNull();
-    expect(lockoutStatus?.lockoutType).toBe('permanent');
-    expect(lockoutStatus?.failedAttempts).toBe(10);
-
-    // Try to authenticate - should be permanently locked
-    const result = await authService.authenticate(testUsername, testPassword);
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('permanently locked');
+    expect(lockoutStatus?.lockoutType).toBe('temporary');
   });
 
   it('should clear failed attempts on successful authentication', async () => {
@@ -214,16 +209,16 @@ describe('AuthenticationService - Brute Force Protection', () => {
     expect(attempts.length).toBe(0);
   });
 
-  it('should allow admin to unlock account', async () => {
-    // Apply permanent lockout
-    for (let i = 0; i < 10; i++) {
+  it('should allow admin to unlock a temporarily-locked account', async () => {
+    // Per C2, only temporary lockout remains. Trigger it with 5 failed attempts.
+    for (let i = 0; i < 5; i++) {
       await authService.authenticate(testUsername, wrongPassword);
     }
 
     // Verify account is locked
     let result = await authService.authenticate(testUsername, testPassword);
     expect(result.success).toBe(false);
-    expect(result.error).toContain('permanently locked');
+    expect(result.error).toContain('temporarily locked');
 
     // Unlock account
     await authService.unlockAccount(testUsername);

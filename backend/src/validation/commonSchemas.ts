@@ -4,7 +4,27 @@ import { z } from "zod";
  * Regex for valid hostnames, IPs, and Bolt target URIs.
  * Allows alphanumeric, dots, hyphens, underscores, colons (IPv6/port), and ssh:// prefix.
  */
-const NODE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/;
+export const NODE_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/;
+
+/**
+ * Reusable Zod string for Puppet certnames. Same charset as node IDs, capped
+ * at 255 chars (Puppet's documented limit). Centralised so PuppetDB/Puppetserver
+ * route params validate identically and reject command/injection payloads.
+ */
+export const CertnameStringSchema = z
+  .string()
+  .min(1, "Certname is required")
+  .max(255, "Certname too long")
+  .regex(NODE_ID_PATTERN, "Certname contains invalid characters");
+
+/**
+ * Reusable Zod string for PuppetDB report/catalog hashes — hex digests, 40
+ * (SHA-1) to 128 (SHA-512) chars. Anything else is rejected before it can be
+ * interpolated into a PQL query or URL path.
+ */
+export const PuppetHashStringSchema = z
+  .string()
+  .regex(/^[a-f0-9]{40,128}$/i, "Invalid Puppet hash (expected 40–128 hex chars)");
 
 export const NodeIdParamSchema = z.object({
   id: z.string()

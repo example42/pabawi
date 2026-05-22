@@ -107,10 +107,11 @@ describe('PuppetDBService - Reports with href metrics', () => {
     // Call getNodeReports
     const reports = await service.getNodeReports('test-node.example.com', 10);
 
-    // Verify query was called
+    // Verify query was called. Per B4, PQL is built via JSON.stringify which
+    // emits no spaces inside the array.
     expect(mockClient.query).toHaveBeenCalledWith(
       'pdb/query/v4/reports',
-      '["=", "certname", "test-node.example.com"]',
+      '["=","certname","test-node.example.com"]',
       {
         limit: 10,
         offset: 0,

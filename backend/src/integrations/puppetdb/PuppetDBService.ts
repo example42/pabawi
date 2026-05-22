@@ -584,27 +584,24 @@ export class PuppetDBService
         );
       }
 
+      // Build PQL via JSON.stringify so any quoting characters inside nodeId are
+      // safely escaped rather than concatenated into the query template.
+      const nodeQuery = JSON.stringify(["=", "certname", nodeId]);
       const result = await this.executeWithResilience(async () => {
-        return await client.query(
-          "pdb/query/v4/nodes",
-          `["=", "certname", "${nodeId}"]`,
-        );
+        return await client.query("pdb/query/v4/nodes", nodeQuery);
       });
 
       if (!Array.isArray(result) || result.length === 0) {
         throw new PuppetDBQueryError(
           `Node '${nodeId}' not found in PuppetDB`,
-          `["=", "certname", "${nodeId}"]`,
+          nodeQuery,
           { nodeId, resultType: typeof result },
         );
       }
 
       // Get detailed facts
       const factsResult = await this.executeWithResilience(async () => {
-        return await client.query(
-          "pdb/query/v4/facts",
-          `["=", "certname", "${nodeId}"]`,
-        );
+        return await client.query("pdb/query/v4/facts", nodeQuery);
       });
 
       const facts = this.transformFacts(nodeId, factsResult);
@@ -852,8 +849,8 @@ export class PuppetDBService
         );
       }
 
-      // Build PQL query to get report by hash
-      const pqlQuery = `["=", "hash", "${reportHash}"]`;
+      // Build PQL via JSON.stringify so any quoting in reportHash is safely escaped
+      const pqlQuery = JSON.stringify(["=", "hash", reportHash]);
 
       const result = await this.executeWithResilience(async () => {
         return await client.query("pdb/query/v4/reports", pqlQuery);
@@ -875,15 +872,18 @@ export class PuppetDBService
       // PuppetDB returns logs as {"href": "/pdb/query/v4/reports/<hash>/logs", "data": [...]}
       // or just {"href": "..."} without data
       const logsObj = firstResult.logs as Record<string, unknown> | undefined;
+      // Sanitise reportHash before stitching into the URL path. Upstream validation
+      // already enforces a hex-only schema, but encoding here is cheap insurance.
+      const safeReportHash = encodeURIComponent(reportHash);
       if (!logsObj || (logsObj.href && !Array.isArray(logsObj.data))) {
         try {
           this.log(`Fetching logs for report '${reportHash}' from dedicated endpoint`);
           const logsData = await this.executeWithResilience(async () => {
-            return await client.get(`/pdb/query/v4/reports/${reportHash}/logs`);
+            return await client.get(`/pdb/query/v4/reports/${safeReportHash}/logs`);
           });
 
           if (Array.isArray(logsData)) {
-            firstResult.logs = { data: logsData, href: `/pdb/query/v4/reports/${reportHash}/logs` };
+            firstResult.logs = { data: logsData, href: `/pdb/query/v4/reports/${safeReportHash}/logs` };
             this.log(`Successfully fetched ${String(logsData.length)} logs for report '${reportHash}'`);
           } else {
             this.log(`Unexpected logs data format from endpoint: ${typeof logsData}`, "warn");
@@ -901,11 +901,11 @@ export class PuppetDBService
         try {
           this.log(`Fetching metrics for report '${reportHash}' from dedicated endpoint`);
           const metricsData = await this.executeWithResilience(async () => {
-            return await client.get(`/pdb/query/v4/reports/${reportHash}/metrics`);
+            return await client.get(`/pdb/query/v4/reports/${safeReportHash}/metrics`);
           });
 
           if (Array.isArray(metricsData)) {
-            firstResult.metrics = { data: metricsData, href: `/pdb/query/v4/reports/${reportHash}/metrics` };
+            firstResult.metrics = { data: metricsData, href: `/pdb/query/v4/reports/${safeReportHash}/metrics` };
             this.log(`Successfully fetched ${String(metricsData.length)} metrics for report '${reportHash}'`);
           } else {
             this.log(`Unexpected metrics data format from endpoint: ${typeof metricsData}`, "warn");
@@ -927,7 +927,7 @@ export class PuppetDBService
         try {
           this.log(`Fetching events for report '${reportHash}' from dedicated endpoint`);
           const eventsData = await this.executeWithResilience(async () => {
-            return await client.get(`/pdb/query/v4/reports/${reportHash}/events`);
+            return await client.get(`/pdb/query/v4/reports/${safeReportHash}/events`);
           });
 
           if (Array.isArray(eventsData)) {
@@ -1001,9 +1001,9 @@ export class PuppetDBService
         );
       }
 
-      // Build PQL query to get reports for this node
+      // Build PQL via JSON.stringify so any quoting in nodeId is safely escaped
       // Order by producer_timestamp descending to get newest first
-      const pqlQuery = `["=", "certname", "${nodeId}"]`;
+      const pqlQuery = JSON.stringify(["=", "certname", nodeId]);
 
       this.log(
         `Querying PuppetDB reports for node '${nodeId}' with limit ${String(limit)}, offset ${String(offset)}`,
@@ -1191,8 +1191,8 @@ export class PuppetDBService
         );
       }
 
-      // Build PQL query to get catalog for this node
-      const pqlQuery = `["=", "certname", "${nodeId}"]`;
+      // Build PQL via JSON.stringify so any quoting in nodeId is safely escaped
+      const pqlQuery = JSON.stringify(["=", "certname", nodeId]);
 
       this.log(`Querying PuppetDB catalogs for node '${nodeId}'`);
       this.log(`PQL Query: ${pqlQuery}`);
@@ -1385,9 +1385,8 @@ export class PuppetDBService
         );
       }
 
-      // Build PQL query to get events for this node
-      // Start with certname filter
-      const queryParts: string[] = [`["=", "certname", "${nodeId}"]`];
+      // Build PQL query to get events for this node — safely-escaped via JSON.stringify
+      const queryParts: string[] = [JSON.stringify(["=", "certname", nodeId])];
 
       // Add status filter if specified (requirement 5.5)
       if (filters?.status) {
@@ -3155,8 +3154,8 @@ export class PuppetDBService
         );
       }
 
-      // Build PQL query to get resources for this node
-      const pqlQuery = `["=", "certname", "${certname}"]`;
+      // Build PQL via JSON.stringify so any quoting in certname is safely escaped
+      const pqlQuery = JSON.stringify(["=", "certname", certname]);
 
       this.log(`Querying PuppetDB resources for node '${certname}'`);
       this.log(`PQL Query: ${pqlQuery}`);

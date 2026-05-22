@@ -367,6 +367,22 @@ export function createAuthRouter(
         // Revoke the access token
         await authService.revokeToken(token);
 
+        // Also revoke the refresh token if the client passed one — otherwise the
+        // session continues to be usable via /refresh even after logout.
+        const bodyRefreshToken = (req.body as { refreshToken?: unknown } | undefined)?.refreshToken;
+        if (typeof bodyRefreshToken === "string" && bodyRefreshToken.length > 0) {
+          try {
+            await authService.revokeToken(bodyRefreshToken);
+          } catch (revokeErr) {
+            // Best-effort: refresh-token revocation must not fail the logout.
+            logger.warn("Failed to revoke refresh token at logout", {
+              component: "AuthRouter",
+              operation: "logout",
+              metadata: { userId: req.user?.userId, error: revokeErr instanceof Error ? revokeErr.message : String(revokeErr) },
+            });
+          }
+        }
+
         logger.info("User logged out successfully", {
           component: "AuthRouter",
           operation: "logout",
@@ -471,9 +487,10 @@ export function createAuthRouter(
           metadata: { userId: authResult.user?.id },
         });
 
-        // Return 200 OK with new access token and user DTO
+        // Return 200 OK with rotated access + refresh tokens and user DTO
         res.status(200).json({
           token: authResult.token,
+          refreshToken: authResult.refreshToken,
           user: authResult.user,
         });
       } catch (error) {
@@ -595,6 +612,22 @@ export function createAuthRouter(
             operation: "change-password",
             metadata: { userId: req.user.userId },
           });
+          // Feed the brute-force pipeline so /change-password can't be used as
+          // an unrate-limited oracle to discover the password.
+          const lockoutStatus = await authService.recordPasswordVerificationFailure(
+            user.username,
+            "Invalid currentPassword on /change-password",
+            req.ip ?? req.socket.remoteAddress,
+          );
+          if (lockoutStatus.isLocked) {
+            res.status(423).json({
+              error: {
+                code: "ACCOUNT_LOCKED",
+                message: lockoutStatus.reason ?? "Account temporarily locked",
+              },
+            });
+            return;
+          }
           res.status(401).json({
             error: {
               code: "INCORRECT_PASSWORD",

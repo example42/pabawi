@@ -51,8 +51,10 @@ export class RequestDeduplicationMiddleware {
   }
 
   /**
-   * Generate a unique cache key from request method, path, query parameters, and expert mode
-   * Uses SHA-256 hash to prevent key collisions and ensure consistent key length
+   * Generate a unique cache key from request method, path, query, expert mode,
+   * and caller identity. The caller's userId + admin flag MUST be part of the
+   * key, otherwise a response cached for user A can leak to user B with
+   * different authz scope.
    */
   generateKey(req: Request): string {
     const method = req.method;
@@ -63,9 +65,12 @@ export class RequestDeduplicationMiddleware {
     // Include expert mode in cache key to prevent caching expert mode responses
     // for non-expert mode requests and vice versa
     const expertMode = req.expertMode ? 'expert' : 'normal';
+    // Include caller identity to prevent cross-user cache poisoning / leakage.
+    // userId alone is sufficient — authz scope is bound to the user.
+    const userId = req.user?.userId ?? 'anon';
 
     // Create a deterministic string representation of the request
-    const requestString = `${method}:${path}:${query}:${expertMode}`;
+    const requestString = `${method}:${path}:${query}:${expertMode}:${userId}`;
 
     // Use cryptographic hash to generate cache key
     return crypto

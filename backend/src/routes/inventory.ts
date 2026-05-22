@@ -13,6 +13,7 @@ import type { PuppetDBService } from "../integrations/puppetdb/PuppetDBService";
 import type { ExecutionToolPlugin } from "../integrations/types";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import { tokensEqual } from "../utils/tokensEqual";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
@@ -38,7 +39,7 @@ function createLifecycleAuth(lifecycleToken: string): (req: Request, res: Respon
     const authHeader = req.headers.authorization;
     const expectedHeader = `Bearer ${lifecycleToken}`;
 
-    if (authHeader !== expectedHeader) {
+    if (typeof authHeader !== "string" || !tokensEqual(authHeader, expectedHeader)) {
       res.status(401).json({
         error: {
           code: "UNAUTHORIZED",
@@ -71,8 +72,17 @@ export function createInventoryRouter(
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
-  const configService = container.resolve("config");
-  const requireLifecycleAuth = createLifecycleAuth(configService.getLifecycleToken());
+  // ConfigService may be unregistered in unit tests that don't set JWT_SECRET.
+  // Fall back to an empty lifecycle token in that case — createLifecycleAuth
+  // then returns 500 (LIFECYCLE_AUTH_MISCONFIGURED) on any protected route,
+  // which is the safe behaviour for a misconfigured deployment too.
+  let lifecycleTokenValue = "";
+  try {
+    lifecycleTokenValue = container.resolve("config").getLifecycleToken();
+  } catch {
+    // No config — protected lifecycle routes will refuse all requests.
+  }
+  const requireLifecycleAuth = createLifecycleAuth(lifecycleTokenValue);
 
   /**
    * GET /api/inventory
@@ -1432,11 +1442,14 @@ export function createInventoryRouter(
    * Destroy a node (permanently delete VM, container, or cloud instance).
    * Provider-agnostic: routes to the correct integration based on node ID prefix.
    *
-   * Note: RBAC middleware should be applied at the route mounting level in server.ts
-   * Required permission: lifecycle:destroy
+   * Authentication is enforced explicitly via requireLifecycleAuth — protection
+   * travels with the endpoint instead of relying solely on mount-level RBAC.
+   * Additional RBAC middleware may still be applied at the mount point.
+   * Required permission: <provider>:destroy
    */
   router.delete(
     "/:id",
+    requireLifecycleAuth,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
@@ -1446,6 +1459,17 @@ export function createInventoryRouter(
       });
 
       try {
+        // Guard: reject destruction when destructive actions are disabled
+        if (options?.allowDestructiveActions === false) {
+          res.status(403).json({
+            error: {
+              code: "DESTRUCTIVE_ACTION_DISABLED",
+              message: "Destructive provisioning actions are disabled by configuration (ALLOW_DESTRUCTIVE_PROVISIONING=false)",
+            },
+          });
+          return;
+        }
+
         const params = NodeIdParamSchema.parse(req.params);
         const nodeId = params.id;
 
