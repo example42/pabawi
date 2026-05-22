@@ -22,28 +22,6 @@ describe("PostgresAdapter", () => {
     });
   });
 
-  describe("getPlaceholder", () => {
-    it("returns $1 for index 1", () => {
-      const adapter = new PostgresAdapter("postgresql://localhost:5432/test");
-      expect(adapter.getPlaceholder(1)).toBe("$1");
-    });
-
-    it("returns $2 for index 2", () => {
-      const adapter = new PostgresAdapter("postgresql://localhost:5432/test");
-      expect(adapter.getPlaceholder(2)).toBe("$2");
-    });
-
-    it("returns $99 for index 99", () => {
-      const adapter = new PostgresAdapter("postgresql://localhost:5432/test");
-      expect(adapter.getPlaceholder(99)).toBe("$99");
-    });
-
-    it("throws for index 0 (Postgres placeholders are 1-based)", () => {
-      const adapter = new PostgresAdapter("postgresql://localhost:5432/test");
-      expect(() => adapter.getPlaceholder(0)).toThrow("Invalid placeholder index");
-    });
-  });
-
   describe("initialize", () => {
     it("throws DatabaseConnectionError when server is unreachable", async () => {
       const adapter = new PostgresAdapter(

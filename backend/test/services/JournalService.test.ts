@@ -16,7 +16,6 @@ function createMockDb(): DatabaseAdapter {
     close: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
     getDialect: vi.fn().mockReturnValue("sqlite" as const),
-    getPlaceholder: vi.fn((_i: number) => "?"),
   };
 }
 

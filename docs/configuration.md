@@ -20,8 +20,50 @@ Run `scripts/setup.sh` for interactive setup that generates a complete `.env` fi
 | `PORT` | `3000` | HTTP port |
 | `HOST` | `localhost` | Bind address (`0.0.0.0` for all interfaces) |
 | `LOG_LEVEL` | `info` | `error` / `warn` / `info` / `debug` |
-| `DATABASE_PATH` | `./data/pabawi.db` | SQLite database file path (directory must exist and be writable) |
 | `CORS_ALLOWED_ORIGINS` | _(none)_ | Comma-separated list of allowed origins (e.g. `http://localhost:5173`) |
+
+## Database
+
+Pabawi runs on SQLite by default and supports PostgreSQL as an alternative
+backend. The same schema and code path serve both — application SQL is written
+with `?` placeholders and translated to PostgreSQL's `$n` form at query time.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DB_TYPE` | `sqlite` | Database backend: `sqlite` or `postgres` |
+| `DATABASE_PATH` | `./data/pabawi.db` | SQLite database file path, used when `DB_TYPE=sqlite` (directory must exist and be writable) |
+| `DATABASE_URL` | _(none)_ | PostgreSQL connection URL, **required** when `DB_TYPE=postgres` (e.g. `postgres://user:pass@host:5432/pabawi`) |
+
+Invalid combinations are rejected at startup: `DB_TYPE=postgres` without a
+`DATABASE_URL` fails fast with a descriptive error.
+
+### Using PostgreSQL
+
+Point `DATABASE_URL` at any reachable PostgreSQL instance. Migrations run
+automatically on startup against whichever backend is configured.
+
+`docker-compose.yml` ships a profile-gated `postgres` service for convenience:
+
+```bash
+docker compose --profile postgres up
+```
+
+Its credentials are read from these variables (compose-only, with the defaults
+shown):
+
+| Variable | Default | Description |
+|---|---|---|
+| `POSTGRES_USER` | `pabawi` | PostgreSQL role for the compose service |
+| `POSTGRES_PASSWORD` | `pabawi` | Password for that role |
+| `POSTGRES_DB` | `pabawi` | Database name created on first start |
+| `POSTGRES_PORT` | `5432` | Host port mapped to the container |
+
+To make the app use that service, set in `.env`:
+
+```bash
+DB_TYPE=postgres
+DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
+```
 
 ## Authentication & Secrets
 

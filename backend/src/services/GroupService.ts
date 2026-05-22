@@ -259,7 +259,10 @@ export class GroupService {
     if (filters?.search) {
       const escaped = filters.search.replace(/[\\%_]/g, '\\$&');
       const searchPattern = `%${escaped}%`;
-      conditions.push("(name LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')");
+      // SQLite LIKE is case-insensitive for ASCII; Postgres LIKE is not.
+      // Use ILIKE on Postgres so search stays case-insensitive on both backends.
+      const like = this.db.getDialect() === 'postgres' ? 'ILIKE' : 'LIKE';
+      conditions.push(`(name ${like} ? ESCAPE '\\' OR description ${like} ? ESCAPE '\\')`);
       params.push(searchPattern, searchPattern);
     }
 

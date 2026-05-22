@@ -1,6 +1,7 @@
 import pg from "pg";
 import type { DatabaseAdapter } from "./DatabaseAdapter";
 import { DatabaseQueryError, DatabaseConnectionError } from "./errors";
+import { rewritePlaceholders } from "./rewritePlaceholders";
 
 /**
  * PostgresAdapter implementing DatabaseAdapter using the pg package.
@@ -77,46 +78,44 @@ export class PostgresAdapter implements DatabaseAdapter {
     this._connected = false;
   }
 
-  async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
+  /**
+   * Single chokepoint to pg: resolves the active client (transaction or pool),
+   * normalises `?` placeholders to `$n`, runs the query and wraps failures.
+   *
+   * Every statement reaching pg goes through here, so the `?`→`$n` rewrite
+   * happens exactly once. The thrown error carries the rewritten SQL — that is
+   * what pg actually rejected.
+   */
+  private async raw(
+    sql: string,
+    params?: unknown[],
+  ): Promise<pg.QueryResult> {
     const client = this._txClient ?? this._pool;
     if (!client) {
       throw new DatabaseQueryError("Database not connected", sql, params);
     }
+    const text = rewritePlaceholders(sql);
     try {
-      const result = await client.query(sql, params);
-      return result.rows as T[];
+      return await client.query(text, params);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Query failed";
-      throw new DatabaseQueryError(message, sql, params);
+      throw new DatabaseQueryError(message, text, params);
     }
+  }
+
+  async query<T>(sql: string, params?: unknown[]): Promise<T[]> {
+    const result = await this.raw(sql, params);
+    return result.rows as T[];
   }
 
   async queryOne<T>(sql: string, params?: unknown[]): Promise<T | null> {
-    const client = this._txClient ?? this._pool;
-    if (!client) {
-      throw new DatabaseQueryError("Database not connected", sql, params);
-    }
-    try {
-      const result = await client.query(sql, params);
-      return (result.rows[0] as T) ?? null;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Query failed";
-      throw new DatabaseQueryError(message, sql, params);
-    }
+    const result = await this.raw(sql, params);
+    return (result.rows[0] as T) ?? null;
   }
 
   async execute(sql: string, params?: unknown[]): Promise<{ changes: number }> {
-    const client = this._txClient ?? this._pool;
-    if (!client) {
-      throw new DatabaseQueryError("Database not connected", sql, params);
-    }
-    try {
-      const result = await client.query(sql, params);
-      return { changes: result.rowCount ?? 0 };
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Query failed";
-      throw new DatabaseQueryError(message, sql, params);
-    }
+    const result = await this.raw(sql, params);
+    return { changes: result.rowCount ?? 0 };
   }
 
   async beginTransaction(): Promise<void> {
@@ -197,14 +196,5 @@ export class PostgresAdapter implements DatabaseAdapter {
 
   getDialect(): "sqlite" | "postgres" {
     return "postgres";
-  }
-
-  getPlaceholder(index: number): string {
-    if (!Number.isInteger(index) || index < 1) {
-      throw new Error(
-        `Invalid placeholder index ${String(index)} for Postgres; parameter positions are 1-based.`,
-      );
-    }
-    return "$" + String(index);
   }
 }

@@ -376,6 +376,8 @@ export const AppConfigSchema = z.object({
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes
   logLevel: z.enum(["error", "warn", "info", "debug"]).default("info"),
   databasePath: z.string().default("./data/pabawi.db"),
+  dbType: z.enum(["sqlite", "postgres"]).default("sqlite"),
+  databaseUrl: z.string().optional(),
   corsAllowedOrigins: z.array(z.string().url()).default([]),
   packageTasks: z.array(PackageTaskConfigSchema).default([
     {

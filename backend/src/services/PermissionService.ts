@@ -183,7 +183,10 @@ export class PermissionService {
     }
 
     if (filters?.search) {
-      conditions.push('(resource LIKE ? OR action LIKE ? OR description LIKE ?)');
+      // SQLite LIKE is case-insensitive for ASCII; Postgres LIKE is not.
+      // Use ILIKE on Postgres so search stays case-insensitive on both backends.
+      const like = this.db.getDialect() === 'postgres' ? 'ILIKE' : 'LIKE';
+      conditions.push(`(resource ${like} ? OR action ${like} ? OR description ${like} ?)`);
       const searchPattern = `%${filters.search}%`;
       params.push(searchPattern, searchPattern, searchPattern);
     }

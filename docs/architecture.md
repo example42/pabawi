@@ -195,7 +195,9 @@ The frontend uses Svelte 5 runes (`$state()`, `$effect()`, `$derived()`) through
 
 ## Database
 
-SQLite. Schema managed by sequential migration files in `database/migrations/`. `DatabaseService` is a shared singleton — never create connections in individual files.
+SQLite by default, with PostgreSQL as an alternative backend (`DB_TYPE`/`DATABASE_URL` — see [configuration.md](configuration.md#database)). Both are reached through a single `DatabaseAdapter` interface (`SQLiteAdapter` / `PostgresAdapter`, selected by `AdapterFactory`); `DatabaseService` is a shared singleton — never create connections in individual files. Application SQL is written with `?` placeholders; `PostgresAdapter` rewrites them to `$n` at query time, so services are dialect-agnostic. Genuine dialect differences (e.g. `LIKE` vs `ILIKE`) branch on `adapter.getDialect()`.
+
+Schema is managed by sequential migration files in `database/migrations/`. A migration is shared (`NNN_name.sql`) or dialect-specific (`NNN_name.sqlite.sql` / `NNN_name.postgres.sql`); when both exist for an ID, the dialect-specific file wins.
 
 | Migration | Content |
 |---|---|

@@ -194,8 +194,4 @@ export class SQLiteAdapter implements DatabaseAdapter {
   getDialect(): "sqlite" | "postgres" {
     return "sqlite";
   }
-
-  getPlaceholder(_index: number): string {
-    return "?";
-  }
 }

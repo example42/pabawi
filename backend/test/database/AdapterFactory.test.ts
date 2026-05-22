@@ -1,48 +1,34 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { DatabaseQueryError, DatabaseConnectionError } from "../../src/database/errors";
+import { createDatabaseAdapter } from "../../src/database/AdapterFactory";
 
 describe("AdapterFactory", () => {
-  const originalEnv = process.env;
-
-  beforeEach(() => {
-    process.env = { ...originalEnv };
-  });
-
-  afterEach(() => {
-    process.env = originalEnv;
-  });
-
-  it("returns SQLiteAdapter when DB_TYPE is unset", async () => {
-    delete process.env.DB_TYPE;
-    const { createDatabaseAdapter } = await import("../../src/database/AdapterFactory");
-    const adapter = await createDatabaseAdapter({ databasePath: ":memory:" });
-    expect(adapter.getDialect()).toBe("sqlite");
-    expect(adapter.getPlaceholder(1)).toBe("?");
-  });
-
-  it("returns SQLiteAdapter when DB_TYPE is 'sqlite'", async () => {
-    process.env.DB_TYPE = "sqlite";
-    const { createDatabaseAdapter } = await import("../../src/database/AdapterFactory");
+  it("returns SQLiteAdapter when dbType is omitted", async () => {
     const adapter = await createDatabaseAdapter({ databasePath: ":memory:" });
     expect(adapter.getDialect()).toBe("sqlite");
   });
 
-  it("throws when DB_TYPE is 'postgres' without DATABASE_URL", async () => {
-    process.env.DB_TYPE = "postgres";
-    delete process.env.DATABASE_URL;
-    const { createDatabaseAdapter } = await import("../../src/database/AdapterFactory");
-    await expect(createDatabaseAdapter({ databasePath: "" })).rejects.toThrow(
-      "DATABASE_URL environment variable is required"
-    );
+  it("returns SQLiteAdapter when dbType is 'sqlite'", async () => {
+    const adapter = await createDatabaseAdapter({
+      databasePath: ":memory:",
+      dbType: "sqlite",
+    });
+    expect(adapter.getDialect()).toBe("sqlite");
   });
 
-  it("returns PostgresAdapter when DB_TYPE is 'postgres' with DATABASE_URL", async () => {
-    process.env.DB_TYPE = "postgres";
-    process.env.DATABASE_URL = "postgres://localhost/test";
-    const { createDatabaseAdapter } = await import("../../src/database/AdapterFactory");
-    const adapter = await createDatabaseAdapter({ databasePath: "" });
+  it("throws when dbType is 'postgres' without a databaseUrl", async () => {
+    await expect(
+      createDatabaseAdapter({ databasePath: "", dbType: "postgres" }),
+    ).rejects.toThrow("DATABASE_URL is required");
+  });
+
+  it("returns PostgresAdapter when dbType is 'postgres' with a databaseUrl", async () => {
+    const adapter = await createDatabaseAdapter({
+      databasePath: "",
+      dbType: "postgres",
+      databaseUrl: "postgres://localhost/test",
+    });
     expect(adapter.getDialect()).toBe("postgres");
-    expect(adapter.getPlaceholder(3)).toBe("$3");
   });
 });
 

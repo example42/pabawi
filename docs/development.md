@@ -137,3 +137,15 @@ All of these must pass before a PR is merged:
 Backend tests use in-memory SQLite and don't read `.env`. The test environment is set via `NODE_ENV=test` (handled by Vitest configuration).
 
 For E2E tests, create `backend/.env.test` with a complete configuration pointing to a test Bolt project.
+
+### PostgreSQL integration tests
+
+`test/database/postgres-integration.test.ts` exercises `PostgresAdapter` against a real PostgreSQL server. It is **skipped unless `TEST_DATABASE_URL` is set**, so the default test run is unaffected. To run it:
+
+```bash
+docker compose --profile postgres up -d postgres
+TEST_DATABASE_URL=postgres://pabawi:pabawi@localhost:5432/pabawi \
+  npm test --workspace=backend -- postgres-integration
+```
+
+Point `TEST_DATABASE_URL` at a throwaway database — the suite creates and drops tables and runs the full migration set.

@@ -50,14 +50,9 @@ describe("SQLiteAdapter", () => {
     });
   });
 
-  describe("getDialect / getPlaceholder", () => {
+  describe("getDialect", () => {
     it("returns sqlite dialect", () => {
       expect(adapter.getDialect()).toBe("sqlite");
-    });
-
-    it("returns ? for any index", () => {
-      expect(adapter.getPlaceholder(1)).toBe("?");
-      expect(adapter.getPlaceholder(99)).toBe("?");
     });
   });
 

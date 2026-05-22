@@ -69,6 +69,11 @@
 
 ### Added
 
+- **PostgreSQL backend support.** Set `DB_TYPE=postgres` and `DATABASE_URL`
+  to run on PostgreSQL instead of SQLite; both share one schema and code path
+  (application SQL uses `?` placeholders, rewritten to `$n` for PostgreSQL).
+  `docker-compose.yml` gains a profile-gated `postgres` service. See
+  [docs/configuration.md](docs/configuration.md#database).
 - `POST /api/users/:id/admin-status` — gated by `users:admin`, refuses
   self-modification.
 - `POST /api/users/:id/unlock` — clears temporary lockout + cumulative
