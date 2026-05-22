@@ -81,6 +81,32 @@ describe('RequestDeduplicationMiddleware', () => {
       expect(key1).not.toBe(key2);
     });
 
+    it('should generate different keys for same user when admin flag differs', () => {
+      const req1 = {
+        method: 'GET',
+        path: '/api/test',
+        originalUrl: '/api/test',
+        url: '/api/test',
+        query: {},
+        expertMode: false,
+        user: { userId: 'same-user', username: 'same-user', roles: ['Operator'], iat: 0, exp: 0 },
+      } as Request;
+      const req2 = {
+        method: 'GET',
+        path: '/api/test',
+        originalUrl: '/api/test',
+        url: '/api/test',
+        query: {},
+        expertMode: false,
+        user: { userId: 'same-user', username: 'same-user', roles: ['Administrator'], iat: 0, exp: 0 },
+      } as Request;
+
+      const key1 = middleware.generateKey(req1);
+      const key2 = middleware.generateKey(req2);
+
+      expect(key1).not.toBe(key2);
+    });
+
     it('should generate SHA-256 hash as cache key', () => {
       const req = { method: 'GET', path: '/api/test', originalUrl: '/api/test', url: '/api/test', query: {}, expertMode: false } as Request;
       const key = middleware.generateKey(req);

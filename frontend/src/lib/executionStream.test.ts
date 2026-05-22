@@ -65,6 +65,7 @@ class MockEventSource {
 }
 
 let lastMockEventSource: MockEventSource | null = null;
+let createdEventSources: MockEventSource[] = [];
 
 describe("executionStream typed event interfaces", () => {
   it("defines all 7 streaming event types", async () => {
@@ -158,11 +159,13 @@ async function waitForEventSource(): Promise<MockEventSource> {
 describe("executionStream handleEvent processes all event types", () => {
   beforeEach(() => {
     lastMockEventSource = null;
+    createdEventSources = [];
     vi.stubGlobal("EventSource", class extends MockEventSource {
       constructor(url: string) {
         super(url);
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         lastMockEventSource = this;
+        createdEventSources.push(this);
       }
     });
 
@@ -202,6 +205,50 @@ describe("executionStream handleEvent processes all event types", () => {
     expect(registeredTypes).toContain("command");
 
     stream.disconnect();
+  });
+
+  it("ignores repeated connect() calls while ticket fetch is still in flight", async () => {
+    let resolveTicket: ((value: { ok: boolean; json: () => Promise<{ ticket: string }> }) => void) | null = null;
+    const pendingTicket = new Promise<{ ok: boolean; json: () => Promise<{ ticket: string }> }>((resolve) => {
+      resolveTicket = resolve;
+    });
+    const fetchMock = vi.fn().mockImplementation(() => pendingTicket);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { useExecutionStream } = await import("./executionStream.svelte");
+    const stream = useExecutionStream("test-exec-id");
+    stream.connect();
+    stream.connect();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(createdEventSources).toHaveLength(0);
+
+    resolveTicket?.({
+      ok: true,
+      json: async () => ({ ticket: "fake-stream-ticket" }),
+    });
+    await waitForEventSource();
+
+    expect(createdEventSources).toHaveLength(1);
+    stream.disconnect();
+  });
+
+  it("calls onError when stream ticket cannot be obtained", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+    }));
+
+    const { useExecutionStream } = await import("./executionStream.svelte");
+    const onError = vi.fn();
+    const stream = useExecutionStream("test-exec-id", { onError });
+
+    stream.connect();
+    await new Promise((resolve) => setTimeout(resolve, 15));
+
+    expect(onError).toHaveBeenCalledWith("Failed to obtain stream ticket");
+    expect(createdEventSources).toHaveLength(0);
+    expect(stream.status).toBe("error");
   });
 
   it("handles start event without throwing", async () => {

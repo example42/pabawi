@@ -556,8 +556,8 @@ export function createUsersRouter(
 
   /**
    * POST /api/users/:id/unlock
-   * Admin-only: clear any active account lockout + cumulative failure counter
-   * for the target user. Audit-logged.
+   * Admin-only: clear account lockouts and recent failed-login history for the
+   * target user. Does not reset the cumulative failure counter. Audit-logged.
    */
   router.post(
     "/:id/unlock",
@@ -582,7 +582,10 @@ export function createUsersRouter(
           metadata: { userId: req.user?.userId, targetUserId: targetId, targetUsername: target.username },
         });
 
-        res.status(200).json({ message: "Account unlocked", username: target.username });
+        res.status(200).json({
+          message: "Account lockouts and recent failed-login history cleared",
+          username: target.username,
+        });
       } catch (error) {
         logger.error("Unlock account failed", {
           component: "UsersRouter",
