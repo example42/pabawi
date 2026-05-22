@@ -3,22 +3,31 @@ import type { WhitelistConfig } from "../config/schema";
 /**
  * Error thrown when a command is not allowed by the whitelist
  */
-export class CommandNotAllowedError extends Error {
+export class BoltCommandNotAllowedError extends Error {
   constructor(
     message: string,
     public readonly command: string,
     public readonly reason: string,
   ) {
     super(message);
-    this.name = "CommandNotAllowedError";
+    this.name = "BoltCommandNotAllowedError";
   }
 }
 
+/** @deprecated Use {@link BoltCommandNotAllowedError}. Kept as alias to avoid breaking existing imports. */
+export { BoltCommandNotAllowedError as CommandNotAllowedError };
+
 /**
- * Service for validating commands against a configurable whitelist
- * Supports exact and prefix match modes
+ * Service for validating shell commands forwarded to **Bolt** (`bolt command run …`).
+ *
+ * SCOPE: this whitelist applies ONLY to `POST /api/nodes/:id/command`, which
+ * spawns the remote shell command via Bolt. It does NOT apply to Ansible,
+ * SSH-plugin, MCP, or other execution paths. Those have their own validators.
+ *
+ * Supports exact and prefix match modes; always blocks shell metacharacters
+ * and commands beginning with `-` regardless of `allowAll`.
  */
-export class CommandWhitelistService {
+export class BoltCommandWhitelistService {
   private config: WhitelistConfig;
 
   constructor(config: WhitelistConfig) {
@@ -42,10 +51,19 @@ export class CommandWhitelistService {
     // Trim the command for consistent matching
     const trimmedCommand = command.trim();
 
+    // Always block commands that start with `-`. Even with the `--` argv
+    // separator in place at the Bolt callsite, a leading-dash command is
+    // never something a legitimate operator wants to execute on a remote
+    // host, and blocking it here is a defence-in-depth belt against any
+    // future spawn site that forgets the separator.
+    if (trimmedCommand.startsWith("-")) {
+      return false;
+    }
+
     // Always block shell metacharacters — even in allowAll mode.
     // These characters are interpreted by remote shells on target nodes
     // and could enable command injection regardless of local shell safety.
-    if (CommandWhitelistService.SHELL_META_PATTERN.test(trimmedCommand)) {
+    if (BoltCommandWhitelistService.SHELL_META_PATTERN.test(trimmedCommand)) {
       return false;
     }
 
@@ -79,7 +97,7 @@ export class CommandWhitelistService {
   public validateCommand(command: string): void {
     if (!this.isCommandAllowed(command)) {
       const reason = this.getValidationFailureReason();
-      throw new CommandNotAllowedError(
+      throw new BoltCommandNotAllowedError(
         `Command not allowed: ${command}`,
         command,
         reason,
@@ -135,3 +153,6 @@ export class CommandWhitelistService {
     }
   }
 }
+
+/** @deprecated Use {@link BoltCommandWhitelistService}. Kept as alias to avoid breaking existing imports. */
+export { BoltCommandWhitelistService as CommandWhitelistService };

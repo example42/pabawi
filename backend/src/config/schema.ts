@@ -364,7 +364,13 @@ export const AppConfigSchema = z.object({
   port: z.number().int().positive().default(3000),
   host: z.string().default("localhost"),
   boltProjectPath: z.string().default(process.cwd()),
-  jwtSecret: z.string().min(1, "JWT_SECRET is required"),
+  jwtSecret: z
+    .string()
+    .min(32, "JWT_SECRET must be at least 32 characters of random entropy")
+    .refine(
+      (s) => !/your-secure-random-secret-here/i.test(s) && !/change[-_ ]?me/i.test(s),
+      "JWT_SECRET must not be a placeholder string (e.g. 'your-secure-random-secret-here', 'change-me')",
+    ),
   lifecycleToken: z.string().default(""),
   commandWhitelist: WhitelistConfigSchema,
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes

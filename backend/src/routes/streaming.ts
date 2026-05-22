@@ -45,28 +45,26 @@ streamTicketPurgeInterval.unref();
 /**
  * Pre-auth middleware for SSE streaming routes.
  *
- * Converts a ?ticket= or ?token= query parameter into an Authorization header
- * so that the standard authMiddleware can verify it without modification.
- * Must be placed BEFORE authMiddleware in the route chain.
+ * Converts a `?ticket=` query parameter into an Authorization header so that
+ * the standard authMiddleware can verify it without modification. Must be
+ * placed BEFORE authMiddleware in the route chain.
+ *
+ * The legacy `?token=` fallback (full JWT in URL) was removed in C4 — it
+ * leaked long-lived JWTs into access logs, browser history, and proxy
+ * caches. Clients must use POST /stream-ticket to obtain a single-use ticket.
  */
 export function streamAuthMiddleware(
   req: Request,
   _res: Response,
   next: NextFunction,
 ): void {
-  if (!req.headers.authorization) {
-    if (typeof req.query.ticket === "string") {
-      const ticketData = streamTickets.get(req.query.ticket);
-      if (ticketData && ticketData.expiresAt >= Date.now()) {
-        streamTickets.delete(req.query.ticket); // single-use
-        req.headers.authorization = `Bearer ${ticketData.bearerToken}`;
-      }
-      delete (req.query as Record<string, unknown>).ticket;
-    } else if (typeof req.query.token === "string") {
-      // Legacy fallback — JWT in URL (kept for backward compatibility)
-      req.headers.authorization = `Bearer ${req.query.token}`;
-      delete (req.query as Record<string, unknown>).token;
+  if (!req.headers.authorization && typeof req.query.ticket === "string") {
+    const ticketData = streamTickets.get(req.query.ticket);
+    if (ticketData && ticketData.expiresAt >= Date.now()) {
+      streamTickets.delete(req.query.ticket); // single-use
+      req.headers.authorization = `Bearer ${ticketData.bearerToken}`;
     }
+    delete (req.query as Record<string, unknown>).ticket;
   }
   next();
 }

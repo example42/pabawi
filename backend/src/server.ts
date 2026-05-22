@@ -6,7 +6,7 @@ import { DatabaseService } from "./database/DatabaseService";
 import { BoltValidator, BoltValidationError } from "./validation/BoltValidator";
 import { BoltService } from "./integrations/bolt/BoltService";
 import { ExecutionRepository } from "./database/ExecutionRepository";
-import { CommandWhitelistService } from "./validation/CommandWhitelistService";
+import { BoltCommandWhitelistService } from "./validation/CommandWhitelistService";
 import { createInventoryRouter } from "./routes/inventory";
 import { createFactsRouter } from "./routes/facts";
 import { createCommandsRouter } from "./routes/commands";
@@ -201,8 +201,8 @@ async function startServer(): Promise<Express> {
       databaseService.getAdapter(),
     );
 
-    // Initialize command whitelist service
-    const commandWhitelistService = new CommandWhitelistService(
+    // Initialize Bolt command whitelist service (applies only to POST /api/nodes/:id/command)
+    const commandWhitelistService = new BoltCommandWhitelistService(
       config.commandWhitelist,
     );
 

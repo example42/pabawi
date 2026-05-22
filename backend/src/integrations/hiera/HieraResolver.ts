@@ -861,16 +861,28 @@ export class HieraResolver {
   }
 
   /**
-   * Resolve a path relative to the control repository
+   * Resolve a path relative to the control repository, with a path-traversal
+   * guard symmetric to FactService.getLocalFactsPath. Facts/catalog vars are
+   * interpolated into hiera path templates upstream — a malicious fact like
+   * `"../../etc/passwd"` could otherwise resolve outside the control repo.
    *
-   * @param filePath - Path to resolve
-   * @returns Absolute path
+   * @param filePath - Path to resolve (relative to controlRepoPath or absolute)
+   * @returns Absolute path, guaranteed to be inside controlRepoPath
+   * @throws Error if the resolved path would escape controlRepoPath
    */
   private resolvePath(filePath: string): string {
-    if (path.isAbsolute(filePath)) {
-      return filePath;
+    const repoRoot = path.resolve(this.controlRepoPath) + path.sep;
+    const resolved = path.isAbsolute(filePath)
+      ? path.resolve(filePath)
+      : path.resolve(this.controlRepoPath, filePath);
+
+    if (!resolved.startsWith(repoRoot) && resolved + path.sep !== repoRoot) {
+      throw new Error(
+        `Path traversal detected: resolved hiera path "${resolved}" escapes control repo root "${this.controlRepoPath}"`,
+      );
     }
-    return path.join(this.controlRepoPath, filePath);
+
+    return resolved;
   }
 
   /**

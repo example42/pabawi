@@ -6,6 +6,7 @@
  */
 
 import type { Request } from 'express';
+import { randomUUID } from 'crypto';
 
 /**
  * Information about an API call made during request processing
@@ -403,9 +404,7 @@ export class ExpertModeService {
    * @returns Unique request ID
    */
   public generateRequestId(): string {
-    const timestamp = Date.now().toString();
-    const random = Math.random().toString(36).substring(2, 11);
-    return `req_${timestamp}_${random}`;
+    return `req_${Date.now().toString()}_${randomUUID()}`;
   }
 
   /**

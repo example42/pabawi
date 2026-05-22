@@ -15,8 +15,24 @@ import type { BoltPlugin } from "../integrations/bolt/BoltPlugin";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
+/**
+ * Puppet task name grammar: `module::task` or `module::sub::task`.
+ *
+ * Locks the task name to lowercase identifiers + `::` separators so callers
+ * cannot smuggle Bolt CLI flags (e.g. `--modulepath=/tmp/evil`) through the
+ * `taskName` body field into the argv we pass to `spawn("bolt", …)`.
+ */
+const TaskNameSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(
+    /^[a-z][a-z0-9_]*(::[a-z][a-z0-9_]*)*$/,
+    "Invalid task name (expected lowercase identifiers separated by '::')",
+  );
+
 const TaskExecutionBodySchema = z.object({
-  taskName: z.string().min(1, "Task name is required"),
+  taskName: TaskNameSchema,
   parameters: z.record(z.unknown()).optional(),
   expertMode: z.boolean().optional(),
 });

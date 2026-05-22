@@ -24,7 +24,7 @@ describe("Journal Router", () => {
     databaseService = new DatabaseService(":memory:");
     await databaseService.initialize();
 
-    const jwtSecret = "test-secret-key"; // pragma: allowlist secret
+    const jwtSecret = "test-secret-key-for-route-tests-32chars"; // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);

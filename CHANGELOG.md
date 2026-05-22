@@ -1,5 +1,91 @@
 # Changelog
 
+## [Unreleased] - security remediation
+
+### Security — breaking for operators
+
+**Action required before upgrade:**
+
+- **`JWT_SECRET` must be ≥ 32 characters and not a placeholder.** The schema
+  now rejects strings shorter than 32 chars and matches the documented
+  placeholders (`your-secure-random-secret-here`, `change-me`, etc.). Servers
+  with an invalid secret refuse to boot. Rotate with
+  `JWT_SECRET=$(openssl rand -base64 32)` if you are still on a placeholder.
+- **`DELETE /api/inventory/:id` now requires the lifecycle bearer token.**
+  Any non-Pabawi client (custom scripts, cron jobs) calling the destroy
+  endpoint must pass `Authorization: Bearer <PABAWI_LIFECYCLE_TOKEN>`.
+- **SSE `?token=` URL fallback removed.** Any non-Pabawi SSE client (custom
+  dashboards, scripts) must obtain a single-use ticket via
+  `POST /api/executions/:id/stream-ticket` and pass it as `?ticket=…` instead.
+  The full JWT in the URL was the leak: it landed in access logs, browser
+  history, and proxy caches.
+- **Refresh-token rotation is now enforced.** Every successful
+  `POST /api/auth/refresh` invalidates the inbound refresh token and returns
+  a new one. Presenting a previously-used refresh token triggers family
+  revocation (all the user's tokens are killed) — clients must always store
+  and use the latest `refreshToken` from the most recent response.
+- **Permanent account lockout removed.** Only the temporary 15-min lockout
+  remains. The previous "permanent after 10 attempts" path was a trivial
+  self-service DoS against any legitimate user. The `users:admin` permission
+  can unlock a temporarily-locked account via the new
+  `POST /api/users/:id/unlock` endpoint.
+
+### Security — non-breaking
+
+- `isAdmin` removed from the `POST /api/users` and `PUT /api/users/:id` body
+  schemas. Elevation now goes through the dedicated
+  `PUT /api/users/:id/admin-status` endpoint, gated by `users:admin`; admins
+  cannot change their own admin status.
+- `users:write` (without `users:admin`) is now restricted to `email`/`isActive`
+  changes on non-admin targets. Password and name changes on another user
+  require `users:admin`.
+- Strict task-name and command-shape validation on Bolt-targeted argv
+  (`POST /api/tasks`, `POST /api/nodes/:id/command`). Leading `-` and unsafe
+  identifiers are rejected upstream and again at the spawn boundary.
+- PuppetDB/Puppetserver routes now validate `certname` (NODE_ID pattern) and
+  `hash` (40–128 hex chars). PQL is composed via `JSON.stringify`; URL paths
+  are wrapped in `encodeURIComponent`.
+- Bearer-token equality checks switched to constant-time comparisons (MCP +
+  lifecycle).
+- Dedup middleware cache key now includes `userId` to prevent cross-user
+  cache leakage on shared GET routes.
+- Password fields (`password`, `currentPassword`, `newPassword`,
+  `confirmPassword`) bypass the central input sanitizer — trimming/truncating
+  them silently produced auth failures.
+- `/change-password`'s `currentPassword` mis-match feeds the brute-force
+  pipeline (5 wrong attempts → temporary lockout) so it can't be used as an
+  un-rate-limited oracle.
+- JWT tokens now carry `iss=pabawi` / `aud=pabawi` and verification refuses
+  tokens missing those claims.
+- Hiera path resolution rejects fact-driven `..` escapes outside the control
+  repo root.
+- Search filters (UserService, RoleService, GroupService) escape LIKE
+  wildcards in user input.
+- `POST /api/setup/initialize` is rate-limited (10 req / 15min / IP) and now
+  detects post-creation duplicate admins from a concurrent race.
+- Error responses redact raw `error.message` for non-expert callers (paths,
+  env values, external stderr no longer leak).
+- `crypto.randomUUID()` for expert-mode correlation IDs.
+
+### Added
+
+- `POST /api/users/:id/admin-status` — gated by `users:admin`, refuses
+  self-modification.
+- `POST /api/users/:id/unlock` — clears temporary lockout + cumulative
+  counter, audit-logged.
+- `BoltCommandWhitelistService` (renamed; old `CommandWhitelistService`
+  remains as a deprecated alias).
+- Regression test suite at
+  `backend/test/security/jazzy-launching-wombat-regressions.test.ts` pinning
+  the contracts for A2, B1, B2, B4, C3, C7, C8.
+
+### Deferred (separate PRs)
+
+- Refresh-token move to `HttpOnly` cookie + CSRF (H4).
+- `sqlite3 → better-sqlite3` migration or `tar` override (M10).
+- Operator action: rotate AWS access key, Proxmox token, `JWT_SECRET`, and
+  `MCP_AUTH_TOKEN` that were transmitted during the review.
+
 ## [1.2.0] - 2026-05-17
 
 ### Added

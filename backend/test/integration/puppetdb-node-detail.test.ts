@@ -28,19 +28,19 @@ describe("PuppetDB Node Detail Route", () => {
         },
       ],
       getReport: async (hash: string) => {
-        if (hash === "test-report-hash-1") {
+        if (hash === "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1") {
           return {
             certname: "test-node-1",
-            hash: "test-report-hash-1",
+            hash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
             status: "changed",
             timestamp: "2024-01-19T10:00:00Z",
             duration: 45.5,
           };
         }
-        if (hash === "test-report-hash-2") {
+        if (hash === "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2") {
           return {
             certname: "test-node-2",
-            hash: "test-report-hash-2",
+            hash: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2",
             status: "unchanged",
             timestamp: "2024-01-19T10:00:00Z",
             duration: 30.2,
@@ -123,19 +123,19 @@ describe("PuppetDB Node Detail Route", () => {
   describe("GET /api/integrations/puppetdb/nodes/:certname/reports/:hash", () => {
     it("should return report details when report exists", async () => {
       const response = await request(app)
-        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/test-report-hash-1")
+        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
         .expect(200);
 
       expect(response.body).toBeDefined();
       expect(response.body.report).toBeDefined();
       expect(response.body.report.certname).toBe("test-node-1");
-      expect(response.body.report.hash).toBe("test-report-hash-1");
+      expect(response.body.report.hash).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1");
       expect(response.body.source).toBe("puppetdb");
     });
 
     it("should return 404 when report does not exist", async () => {
       const response = await request(app)
-        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/non-existent-hash")
+        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/cccccccccccccccccccccccccccccccccccccccc")
         .expect(404);
 
       expect(response.body).toBeDefined();
@@ -145,7 +145,7 @@ describe("PuppetDB Node Detail Route", () => {
 
     it("should return 404 when report belongs to different node", async () => {
       const response = await request(app)
-        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/test-report-hash-2")
+        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
         .expect(404);
 
       expect(response.body).toBeDefined();
@@ -156,7 +156,7 @@ describe("PuppetDB Node Detail Route", () => {
 
     it("should include debug info when expert mode is enabled", async () => {
       const response = await request(app)
-        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/test-report-hash-1")
+        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
         .set("X-Expert-Mode", "true")
         .expect(200);
 
@@ -170,12 +170,12 @@ describe("PuppetDB Node Detail Route", () => {
       expect(response.body._debug.context).toBeDefined();
       expect(response.body._debug.metadata).toBeDefined();
       expect(response.body._debug.metadata.certname).toBe("test-node-1");
-      expect(response.body._debug.metadata.hash).toBe("test-report-hash-1");
+      expect(response.body._debug.metadata.hash).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1");
     });
 
     it("should not include debug info when expert mode is disabled", async () => {
       const response = await request(app)
-        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/test-report-hash-1")
+        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
         .expect(200);
 
       expect(response.body).toBeDefined();
@@ -185,7 +185,7 @@ describe("PuppetDB Node Detail Route", () => {
 
     it("should attach debug info to error responses when expert mode is enabled", async () => {
       const response = await request(app)
-        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/non-existent-hash")
+        .get("/api/integrations/puppetdb/nodes/test-node-1/reports/cccccccccccccccccccccccccccccccccccccccc")
         .set("X-Expert-Mode", "true")
         .expect(404);
 

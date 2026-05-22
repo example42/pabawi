@@ -20,7 +20,12 @@ const PaginationSchema = z.object({
 });
 
 /**
- * Zod schema for creating a user
+ * Zod schema for creating a user.
+ *
+ * `isAdmin` is intentionally NOT accepted here — admin elevation goes through
+ * the dedicated `PUT /api/users/:id/admin-status` endpoint which requires
+ * `users:admin`. This prevents callers with only `users:write` from creating
+ * themselves an admin via mass-assignment.
  */
 const CreateUserSchema = z.object({
   username: z.string().min(3).max(50),
@@ -29,7 +34,13 @@ const CreateUserSchema = z.object({
   firstName: z.string().min(1).max(100),
   lastName: z.string().min(1).max(100),
   isActive: z.boolean().default(true),
-  isAdmin: z.boolean().default(false),
+}).strict();
+
+/**
+ * Zod schema for the dedicated admin-status endpoint
+ */
+const AdminStatusSchema = z.object({
+  isAdmin: z.boolean(),
 }).strict();
 
 
@@ -80,7 +91,7 @@ export function createUsersRouter(
           },
         });
 
-        // Create user
+        // Create user — isAdmin always false on creation; elevation via PUT /admin-status
         const user = await userService.createUser({
           username: validatedData.username,
           email: validatedData.email,
@@ -88,7 +99,7 @@ export function createUsersRouter(
           firstName: validatedData.firstName,
           lastName: validatedData.lastName,
           isActive: validatedData.isActive,
-          isAdmin: validatedData.isAdmin,
+          isAdmin: false,
         });
 
         // Convert to DTO
@@ -362,7 +373,10 @@ export function createUsersRouter(
   );
 
   /**
-   * Zod schema for updating user
+   * Zod schema for updating user.
+   *
+   * `isAdmin` is intentionally NOT accepted here — elevation goes through the
+   * dedicated `PUT /api/users/:id/admin-status` endpoint (gated by `users:admin`).
    */
   const UpdateUserSchema = z.object({
     email: z.string().email().optional(),
@@ -370,7 +384,6 @@ export function createUsersRouter(
     lastName: z.string().min(1).max(100).optional(),
     password: z.string().min(8).optional(),
     isActive: z.boolean().optional(),
-    isAdmin: z.boolean().optional(),
   }).strict();
 
   /**
@@ -405,6 +418,43 @@ export function createUsersRouter(
             fields: Object.keys(validatedData),
           },
         });
+
+        // Authorization refinements beyond the users:write gate (Defense-in-depth)
+        // 1. Modifying an admin target, or changing another user's password, requires users:admin.
+        // 2. Callers with only users:write may modify *other* (non-admin) users' email/isActive only.
+        // 3. Self-update is unrestricted (within the schema).
+        const callerId = req.user?.userId;
+        const isSelfUpdate = callerId === userId;
+        const callerHasUsersAdmin = callerId
+          ? await permissionService.hasPermission(callerId, "users", "admin")
+          : false;
+
+        if (!isSelfUpdate && !callerHasUsersAdmin) {
+          const target = await userService.getUserById(userId);
+          if (target?.isAdmin) {
+            res.status(403).json({
+              error: {
+                code: ERROR_CODES.FORBIDDEN,
+                message: "Modifying an admin account requires the users:admin permission",
+              },
+            });
+            return;
+          }
+
+          const allowedFields: readonly (keyof typeof validatedData)[] = ["email", "isActive"];
+          const disallowed = Object.keys(validatedData).filter(
+            (k) => !(allowedFields as readonly string[]).includes(k),
+          );
+          if (disallowed.length > 0) {
+            res.status(403).json({
+              error: {
+                code: ERROR_CODES.FORBIDDEN,
+                message: `Modifying these fields on another user requires users:admin: ${disallowed.join(", ")}`,
+              },
+            });
+            return;
+          }
+        }
 
         // Update user
         const updatedUser = await userService.updateUser(userId, validatedData);
@@ -498,6 +548,117 @@ export function createUsersRouter(
           error: {
             code: ERROR_CODES.INTERNAL_SERVER_ERROR,
             message: "Failed to update user",
+          },
+        });
+      }
+    })
+  );
+
+  /**
+   * POST /api/users/:id/unlock
+   * Admin-only: clear any active account lockout + cumulative failure counter
+   * for the target user. Audit-logged.
+   */
+  router.post(
+    "/:id/unlock",
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "admin")),
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const targetId = req.params.id;
+      try {
+        const target = await userService.getUserById(targetId);
+        if (!target) {
+          res.status(404).json({
+            error: { code: ERROR_CODES.NOT_FOUND, message: "User not found" },
+          });
+          return;
+        }
+
+        await authService.unlockAccount(target.username);
+
+        logger.info("Account unlocked by admin", {
+          component: "UsersRouter",
+          operation: "unlockAccount",
+          metadata: { userId: req.user?.userId, targetUserId: targetId, targetUsername: target.username },
+        });
+
+        res.status(200).json({ message: "Account unlocked", username: target.username });
+      } catch (error) {
+        logger.error("Unlock account failed", {
+          component: "UsersRouter",
+          operation: "unlockAccount",
+          metadata: { userId: req.user?.userId, targetUserId: targetId },
+        }, error instanceof Error ? error : undefined);
+        res.status(500).json({
+          error: {
+            code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+            message: "Failed to unlock account",
+          },
+        });
+      }
+    })
+  );
+
+  /**
+   * PUT /api/users/:id/admin-status
+   * Grant or revoke admin privileges. Dedicated route — gated by users:admin
+   * and forbids self-modification so an admin cannot lock themselves out of
+   * admin (and conversely cannot escalate themselves silently via the
+   * generic update endpoint).
+   */
+  router.put(
+    "/:id/admin-status",
+    asyncHandler(authMiddleware),
+    asyncHandler(rbacMiddleware("users", "admin")),
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const targetId = req.params.id;
+      const callerId = req.user?.userId;
+
+      try {
+        const { isAdmin } = AdminStatusSchema.parse(req.body);
+
+        if (callerId === targetId) {
+          res.status(403).json({
+            error: {
+              code: ERROR_CODES.FORBIDDEN,
+              message: "Cannot change your own admin status",
+            },
+          });
+          return;
+        }
+
+        const updated = await userService.updateUser(targetId, { isAdmin });
+
+        logger.info("User admin status changed", {
+          component: "UsersRouter",
+          operation: "setAdminStatus",
+          metadata: { userId: callerId, targetUserId: targetId, isAdmin },
+        });
+
+        res.status(200).json(userService.toUserDTO(updated));
+      } catch (error) {
+        if (error instanceof Error && error.message === "User not found") {
+          res.status(404).json({
+            error: { code: ERROR_CODES.NOT_FOUND, message: "User not found" },
+          });
+          return;
+        }
+
+        if (error instanceof ZodError) {
+          sendValidationError(res, error);
+          return;
+        }
+
+        logger.error("Set admin status failed", {
+          component: "UsersRouter",
+          operation: "setAdminStatus",
+          metadata: { userId: callerId, targetUserId: targetId },
+        }, error instanceof Error ? error : undefined);
+
+        res.status(500).json({
+          error: {
+            code: ERROR_CODES.INTERNAL_SERVER_ERROR,
+            message: "Failed to change admin status",
           },
         });
       }

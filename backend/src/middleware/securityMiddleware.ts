@@ -148,6 +148,17 @@ export function inputSanitizationMiddleware(
 }
 
 /**
+ * Field names whose string values must NOT be passed through sanitizeString.
+ * Trimming or truncating a password produces silent auth failures.
+ */
+const PASSWORD_FIELD_NAMES = new Set([
+  "password",
+  "currentPassword",
+  "newPassword",
+  "confirmPassword",
+]);
+
+/**
  * Recursively sanitize an object
  *
  * @param obj - Object to sanitize
@@ -186,6 +197,18 @@ function sanitizeObject(obj: unknown, depth = 0): unknown {
 
       // Sanitize the key
       const sanitizedKey = sanitizeString(key);
+
+      // Password-shaped fields are exempt from string sanitisation. Trimming
+      // whitespace or truncating to 10k chars silently mutates the user's
+      // password and produces "wrong password" errors that are impossible to
+      // diagnose. Per-field bounds belong in the Zod schema, not here.
+      if (
+        typeof value === "string" &&
+        PASSWORD_FIELD_NAMES.has(sanitizedKey)
+      ) {
+        sanitized[sanitizedKey] = value;
+        continue;
+      }
 
       // Recursively sanitize the value
       sanitized[sanitizedKey] = sanitizeObject(value, depth + 1);

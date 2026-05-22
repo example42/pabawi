@@ -43,7 +43,7 @@ describe('Users Router - GET /api/users', () => {
     );
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -383,7 +383,7 @@ describe('Users Router - GET /api/users/:id', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -730,7 +730,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -778,13 +778,30 @@ describe('Users Router - PUT /api/users/:id', () => {
       }
     }
 
-    // Create role with users:write permission
+    // Per A1, users:write alone restricts the caller to email/isActive on
+    // other users. The existing PUT tests here exercise password/firstName
+    // updates and rely on a fully-authorised caller, so we also grant
+    // users:admin to the test fixture.
+    const allPermsForPut = await permissionService.listPermissions();
+    let usersAdminPermissionPut = allPermsForPut.items.find(
+      p => p.resource === 'users' && p.action === 'admin'
+    );
+    if (!usersAdminPermissionPut) {
+      usersAdminPermissionPut = await permissionService.createPermission({
+        resource: 'users',
+        action: 'admin',
+        description: 'Full user management',
+      });
+    }
+
+    // Create role with users:write + users:admin permissions
     const adminRole = await roleService.createRole({
       name: 'UserWriter',
       description: 'Can write users',
     });
 
     await roleService.assignPermissionToRole(adminRole.id, usersWritePermission.id);
+    await roleService.assignPermissionToRole(adminRole.id, usersAdminPermissionPut.id);
     await userService.assignRoleToUser(adminUserId, adminRole.id);
 
     // Generate token for admin user
@@ -947,9 +964,21 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.isActive).toBe(false);
     });
 
-    it('should update user isAdmin status', async () => {
+    it('should reject isAdmin in the generic update endpoint (A1)', async () => {
+      // Per A1: isAdmin is removed from the schema; elevation goes through
+      // PUT /:id/admin-status. Sending it here hits the strict-mode unknown-key path.
       const response = await request(app)
         .put(`/api/users/${testUserId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ isAdmin: true })
+        .expect(400);
+
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('should update isAdmin via the dedicated admin-status endpoint', async () => {
+      const response = await request(app)
+        .put(`/api/users/${testUserId}/admin-status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ isAdmin: true })
         .expect(200);
@@ -1108,7 +1137,9 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('should return 400 for invalid isAdmin type', async () => {
+    it('should return 400 for isAdmin field (unknown key per A1)', async () => {
+      // Per A1, isAdmin is removed from this endpoint's schema entirely —
+      // any value (boolean or otherwise) is rejected as an unknown key.
       const response = await request(app)
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -1279,7 +1310,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -1704,7 +1735,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -2116,7 +2147,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -2572,7 +2603,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -3036,7 +3067,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     await disableDefaultRoleAssignment(databaseService);
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);

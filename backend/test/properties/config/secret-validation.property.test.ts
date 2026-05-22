@@ -25,7 +25,7 @@ describe('Secret Validation Properties', () => {
       port: 3000,
       host: 'localhost',
       boltProjectPath: '/tmp',
-      jwtSecret: 'valid-secret-value', // pragma: allowlist secret
+      jwtSecret: 'valid-secret-value-with-enough-entropy', // pragma: allowlist secret (>= 32 chars per C8 hardening)
       lifecycleToken: 'valid-lifecycle-token', // pragma: allowlist secret
       commandWhitelist: { allowAll: false, whitelist: [], matchMode: 'exact' },
       executionTimeout: 300000,

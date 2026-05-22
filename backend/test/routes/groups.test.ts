@@ -28,7 +28,7 @@ describe('Groups Router - POST /api/groups', () => {
     await databaseService.initialize();
 
     // Initialize services
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -229,7 +229,7 @@ describe('Groups Router - GET /api/groups', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -397,7 +397,7 @@ describe('Groups Router - GET /api/groups/:id', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -513,7 +513,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -652,7 +652,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -787,7 +787,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);
@@ -1004,7 +1004,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
     databaseService = new DatabaseService(':memory:');
     await databaseService.initialize();
 
-    const jwtSecret = 'test-secret-key';  // pragma: allowlist secret
+    const jwtSecret = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
     process.env.JWT_SECRET = jwtSecret;
     authService = new AuthenticationService(databaseService.getConnection(), jwtSecret);
     userService = new UserService(databaseService.getConnection(), authService);

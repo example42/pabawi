@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "kirograph": {
+      "command": "kirograph",
+      "args": [
+        "serve",
+        "--mcp"
+      ]
+    }
+  }
+}

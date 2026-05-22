@@ -17,6 +17,7 @@ import {
   extractDuplicateField
 } from "../utils/errorHandling";
 import { ZodError } from "zod";
+import { createAuthRateLimitMiddleware } from "../middleware/securityMiddleware";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
@@ -121,10 +122,17 @@ export function createSetupRouter(
 
   /**
    * POST /api/setup/initialize
-   * Complete initial setup by creating admin user and saving configuration
+   * Complete initial setup by creating admin user and saving configuration.
+   *
+   * Rate-limited (auth-style: 10 req / 15min / IP) to bound the initial-deploy
+   * race window. Inside the handler, a post-creation atomic count guards
+   * against the TOCTOU between `isSetupComplete()` and `createUser()` —
+   * SQLite has no row-level locking, so if a second concurrent request also
+   * created an admin we soft-delete the duplicate and 409 the caller.
    */
   router.post(
     "/initialize",
+    asyncHandler(createAuthRateLimitMiddleware()),
     asyncHandler(async (req: Request, res: Response) => {
       logger.info("Processing initial setup request", {
         component: "SetupRouter",
@@ -166,6 +174,27 @@ export function createSetupRouter(
           lastName: validatedData.lastName,
           isAdmin: true,
         });
+
+        // TOCTOU guard: if a concurrent /initialize request also created an
+        // admin, the count is now > 1 — undo our creation and 409.
+        const adminCountRow = await databaseService.getAdapter().queryOne<{ count: number }>(
+          "SELECT COUNT(*) as count FROM users WHERE isAdmin = 1",
+        );
+        if ((adminCountRow?.count ?? 0) > 1) {
+          logger.warn("TOCTOU detected during setup; rolling back duplicate admin creation", {
+            component: "SetupRouter",
+            operation: "initialize",
+            metadata: { username: adminUser.username, adminCount: adminCountRow?.count },
+          });
+          await userService.deleteUser(adminUser.id);
+          res.status(409).json({
+            error: {
+              code: "SETUP_ALREADY_COMPLETE",
+              message: "Initial setup was completed by a concurrent request",
+            },
+          });
+          return;
+        }
 
         // Save configuration
         await setupService.saveConfig({

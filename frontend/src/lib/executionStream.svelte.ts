@@ -195,9 +195,36 @@ export function useExecutionStream(
   }
 
   /**
-   * Build SSE URL with expert mode parameter and auth token
+   * Obtain a single-use SSE ticket from the backend. The legacy `?token=` flow
+   * was removed in C4 — passing the long-lived JWT in the URL leaked it into
+   * access logs, browser history, and proxy caches.
    */
-  function buildStreamUrl(): string {
+  async function obtainStreamTicket(): Promise<string | null> {
+    const authHeader = authManager.getAuthHeader();
+    if (!authHeader) {
+      return null;
+    }
+
+    const response = await fetch(
+      `/api/executions/${executionId}/stream-ticket`,
+      {
+        method: "POST",
+        headers: { Authorization: authHeader },
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as { ticket?: string };
+    return data.ticket ?? null;
+  }
+
+  /**
+   * Build SSE URL with expert mode parameter and a single-use ticket.
+   */
+  function buildStreamUrl(ticket: string): string {
     const baseUrl = `/api/executions/${executionId}/stream`;
     const params = new URLSearchParams();
 
@@ -205,16 +232,8 @@ export function useExecutionStream(
       params.set("expertMode", "true");
     }
 
-    // Add auth token as query parameter for SSE (EventSource doesn't support headers)
-    const authHeader = authManager.getAuthHeader();
-    if (authHeader) {
-      // Extract token from "Bearer <token>" format
-      const token = authHeader.replace(/^Bearer\s+/i, '');
-      params.set("token", token);
-    }
-
-    const queryString = params.toString();
-    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
+    params.set("ticket", ticket);
+    return `${baseUrl}?${params.toString()}`;
   }
 
   /**
@@ -293,7 +312,10 @@ export function useExecutionStream(
   }
 
   /**
-   * Connect to SSE stream
+   * Connect to SSE stream. Internally async (must obtain a single-use ticket
+   * from the backend before opening the EventSource) but exposed as
+   * fire-and-forget so callers don't have to await — preserves the
+   * pre-existing API and keeps Svelte component event handlers ergonomic.
    */
   function connect(): void {
     // Prevent multiple connections
@@ -304,8 +326,24 @@ export function useExecutionStream(
     isManualDisconnect = false;
     setStatus("connecting");
 
+    void connectAsync();
+  }
+
+  async function connectAsync(): Promise<void> {
     try {
-      const url = buildStreamUrl();
+      const ticket = await obtainStreamTicket();
+      if (!ticket) {
+        setStatus("error");
+        state.error = "Failed to obtain stream ticket";
+        return;
+      }
+
+      // Caller may have disconnected while we awaited the ticket
+      if (isManualDisconnect) {
+        return;
+      }
+
+      const url = buildStreamUrl(ticket);
       eventSource = new EventSource(url);
 
       // Handle different event types

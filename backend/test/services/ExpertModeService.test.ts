@@ -585,7 +585,11 @@ describe('ExpertModeService', () => {
     it('should generate request ID with correct format', () => {
       const id = service.generateRequestId();
 
-      expect(id).toMatch(/^req_\d+_[a-z0-9]+$/);
+      // Per D3, the random suffix is now a crypto.randomUUID() value
+      // (8-4-4-4-12 hex with dashes).
+      expect(id).toMatch(
+        /^req_\d+_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
     });
 
     it('should generate multiple unique IDs', () => {

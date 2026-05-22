@@ -324,7 +324,9 @@ export class AuthenticationService {
     };
 
     return jwt.sign(payload, this.jwtSecret, {
-      algorithm: 'HS256'
+      algorithm: 'HS256',
+      issuer: AuthenticationService.JWT_ISSUER,
+      audience: AuthenticationService.JWT_AUDIENCE,
     });
   }
 
@@ -345,7 +347,9 @@ export class AuthenticationService {
     };
 
     return Promise.resolve(jwt.sign(payload, this.jwtSecret, {
-      algorithm: 'HS256'
+      algorithm: 'HS256',
+      issuer: AuthenticationService.JWT_ISSUER,
+      audience: AuthenticationService.JWT_AUDIENCE,
     }));
   }
 
@@ -358,9 +362,11 @@ export class AuthenticationService {
    */
   public async verifyToken(token: string): Promise<TokenPayload> {
     try {
-      // Verify token signature and expiration
+      // Verify token signature, expiration, and required iss/aud claims
       const payload = jwt.verify(token, this.jwtSecret, {
-        algorithms: ['HS256']
+        algorithms: ['HS256'],
+        issuer: AuthenticationService.JWT_ISSUER,
+        audience: AuthenticationService.JWT_AUDIENCE,
       }) as TokenPayload;
 
       // Check if token is revoked
@@ -381,26 +387,44 @@ export class AuthenticationService {
   }
 
   /**
-   * Refresh access token using refresh token
+   * Refresh access token using refresh token.
+   *
+   * Implements rotation: every successful refresh issues BOTH a new access
+   * token and a new refresh token, and revokes the inbound refresh token's
+   * JTI in the same call. This means a stolen refresh token can only be
+   * used once before its replacement is required.
+   *
+   * Implements reuse detection: if the inbound refresh token is already
+   * revoked, we treat that as a likely token-theft event and revoke ALL
+   * tokens for the user (forcing a fresh login).
    *
    * @param refreshToken - Refresh token string
-   * @returns AuthResult with new access token
+   * @returns AuthResult with new access AND refresh tokens
    */
   public async refreshToken(refreshToken: string): Promise<AuthResult> {
     try {
-      // Verify refresh token
+      // Verify refresh token signature/expiration first
       const payload = jwt.verify(refreshToken, this.jwtSecret, {
-        algorithms: ['HS256']
+        algorithms: ['HS256'],
+        issuer: AuthenticationService.JWT_ISSUER,
+        audience: AuthenticationService.JWT_AUDIENCE,
       }) as RefreshTokenPayload;
 
-      // Check if it's a refresh token
+      // Must be a refresh token, not an access token
       if (payload.type !== 'refresh') {
         return { success: false, error: 'Invalid refresh token' };
       }
 
-      // Check if token is revoked
+      // Reuse detection: a revoked refresh token being presented is treated
+      // as compromise — revoke the entire token family for this user.
       const isRevoked = await this.isTokenRevoked(refreshToken);
       if (isRevoked) {
+        this.logger.warn('Refresh-token reuse detected; revoking all user tokens', {
+          component: 'AuthenticationService',
+          operation: 'refreshToken',
+          metadata: { userId: payload.userId, jti: payload.jti },
+        });
+        await this.revokeAllUserTokens(payload.userId);
         return { success: false, error: 'Refresh token has been revoked' };
       }
 
@@ -410,12 +434,17 @@ export class AuthenticationService {
         return { success: false, error: 'User not found or inactive' };
       }
 
-      // Generate new access token
-      const newToken = await this.generateToken(user);
+      // Rotate: revoke the inbound refresh token, then issue a fresh pair.
+      // Order matters — revoke first so a concurrent reuse will see the revoked state.
+      await this.revokeToken(refreshToken);
+
+      const newAccessToken = await this.generateToken(user);
+      const newRefreshToken = await this.generateRefreshToken(user);
 
       return {
         success: true,
-        token: newToken,
+        token: newAccessToken,
+        refreshToken: newRefreshToken,
         user: this.toUserDTO(user)
       };
     } catch (error) {
@@ -622,6 +651,21 @@ export class AuthenticationService {
     );
   }
   /**
+   * Record a failed password verification triggered OUTSIDE the login flow
+   * (e.g. the change-password endpoint's currentPassword check). Reuses the
+   * same brute-force lockout pipeline so an attacker can't burn through
+   * password attempts via /change-password to bypass /login's lockout.
+   */
+  public async recordPasswordVerificationFailure(
+    username: string,
+    reason: string,
+    ipAddress?: string,
+  ): Promise<{ isLocked: boolean; reason?: string }> {
+    await this.recordFailedLoginAttempt(username, reason, ipAddress);
+    return this.checkAccountLockout(username);
+  }
+
+  /**
    * Log failed authentication attempt
    *
    * @param username - Username that failed authentication
@@ -726,9 +770,12 @@ export class AuthenticationService {
           [username, timestamp, ipAddress ?? null, reason]
         );
 
-        // Increment the cumulative counter (never cleared on successful login).
-        // This is the source of truth for permanent lockout decisions so that
-        // a successful login interspersed with failures cannot reset the count.
+        // Keep the cumulative counter table populated for observability (still
+        // visible to admins via getFailedLoginAttempts), but it is no longer
+        // used to drive a permanent lockout — that path was removed in C2 as
+        // it created a self-service DoS where one attacker could lock any
+        // legitimate user out forever. The counter is now reset on a
+        // successful login (see clearFailedLoginAttempts).
         await this.db.execute(
           `INSERT INTO login_attempt_counters (username, cumulativeFailedAttempts, lastFailedAt)
            VALUES (?, 1, ?)
@@ -737,19 +784,6 @@ export class AuthenticationService {
              lastFailedAt = excluded.lastFailedAt`,
           [username, timestamp]
         );
-
-        const cumulativeRow = await this.db.queryOne<{ count: number }>(
-          `SELECT cumulativeFailedAttempts as count FROM login_attempt_counters WHERE username = ?`,
-          [username]
-        );
-
-        const totalCount = cumulativeRow?.count ?? 0;
-
-        // Check for permanent lockout first (10 cumulative attempts, never reset)
-        if (totalCount >= this.PERMANENT_LOCKOUT_ATTEMPTS) {
-          await this.applyPermanentLockout(username, totalCount);
-          return;
-        }
 
         // Count recent failed attempts (within the lockout window) for temporary lockout
         const windowStart = new Date(now.getTime() - this.TEMP_LOCKOUT_WINDOW_MINUTES * 60000);
@@ -813,59 +847,28 @@ export class AuthenticationService {
   }
 
   /**
-   * Apply permanent account lockout
-   *
-   * @param username - Username to lock
-   * @param failedAttempts - Number of failed attempts
-   */
-  private async applyPermanentLockout(username: string, failedAttempts: number): Promise<void> {
-    try {
-      const now = new Date();
-      const lockedAt = now.toISOString();
-
-      // Check if lockout already exists
-      const existing = await this.db.queryOne<{ username: string }>(
-        'SELECT username FROM account_lockouts WHERE username = ?',
-        [username]
-      );
-
-      if (existing) {
-        // Update to permanent lockout
-        await this.db.execute(
-          `UPDATE account_lockouts
-           SET lockoutType = ?, lockedAt = ?, lockedUntil = NULL, failedAttempts = ?, lastAttemptAt = ?
-           WHERE username = ?`,
-          ['permanent', lockedAt, failedAttempts, lockedAt, username]
-        );
-      } else {
-        // Insert new permanent lockout
-        await this.db.execute(
-          `INSERT INTO account_lockouts (username, lockoutType, lockedAt, lockedUntil, failedAttempts, lastAttemptAt)
-           VALUES (?, ?, ?, NULL, ?, ?)`,
-          [username, 'permanent', lockedAt, failedAttempts, lockedAt]
-        );
-      }
-
-      this.logger.warn('Permanent account lockout applied', { component: 'AuthenticationService', operation: 'applyPermanentLockout', metadata: { username, failedAttempts } });
-    } catch (error) {
-      this.logger.error('Error applying permanent lockout', { component: 'AuthenticationService', operation: 'applyPermanentLockout', metadata: { error: error instanceof Error ? error.message : String(error) } });
-    }
-  }
-
-  /**
-   * Clear failed login attempts for a user (called on successful authentication)
+   * Clear failed login attempts and the cumulative counter for a user
+   * (called on successful authentication). Resetting the cumulative counter
+   * is intentional now that permanent lockout is removed — a legitimate
+   * login is proof the account is still under its owner's control.
    *
    * @param username - Username to clear attempts for
    */
   private async clearFailedLoginAttempts(username: string): Promise<void> {
     try {
-      // Remove failed attempts
+      // Remove recent failed attempts
       await this.db.execute(
         'DELETE FROM failed_login_attempts WHERE username = ?',
         [username]
       );
 
-      // Remove any temporary lockouts (permanent lockouts remain)
+      // Reset the cumulative counter
+      await this.db.execute(
+        'DELETE FROM login_attempt_counters WHERE username = ?',
+        [username]
+      );
+
+      // Remove any temporary lockouts (no permanent lockout path remains)
       await this.db.execute(
         `DELETE FROM account_lockouts WHERE username = ? AND lockoutType = 'temporary'`,
         [username]
@@ -972,10 +975,17 @@ export class AuthenticationService {
     };
   }
 
-  // Brute force protection constants
+  // Brute force protection constants — only temporary lockout remains.
   private readonly TEMP_LOCKOUT_ATTEMPTS = 5;
   private readonly TEMP_LOCKOUT_WINDOW_MINUTES = 15;
   private readonly TEMP_LOCKOUT_DURATION_MINUTES = 15;
-  private readonly PERMANENT_LOCKOUT_ATTEMPTS = 10;
+
+  // JWT iss/aud claims. Required for every Pabawi-issued token; verifyToken
+  // refuses tokens missing or differing in these claims. Locks the token
+  // namespace to this app so a future application that shares the secret
+  // (e.g. an OIDC IdP, an SDK, a test harness) cannot mint tokens accepted
+  // by Pabawi's auth path.
+  private static readonly JWT_ISSUER = "pabawi";
+  private static readonly JWT_AUDIENCE = "pabawi";
 
 }

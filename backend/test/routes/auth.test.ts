@@ -12,7 +12,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
 
   beforeEach(async () => {
     // Set JWT_SECRET for testing
-    process.env.JWT_SECRET = 'test-secret-key';  // pragma: allowlist secret
+    process.env.JWT_SECRET = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
 
     // Create in-memory database with proper initialization
     databaseService = new DatabaseService(':memory:');
@@ -648,7 +648,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
 
   beforeEach(async () => {
     // Set JWT_SECRET for testing
-    process.env.JWT_SECRET = 'test-secret-key';  // pragma: allowlist secret
+    process.env.JWT_SECRET = 'test-secret-key-for-route-tests-32chars';  // pragma: allowlist secret
 
     // Create in-memory database with proper initialization
     databaseService = new DatabaseService(':memory:');
@@ -1813,8 +1813,11 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       expect(expirationTime).toBe(3600); // 1 hour in seconds
     });
 
-    it('should allow multiple token refreshes with same refresh token', async () => {
-      // Register and login a user
+    it('should rotate refresh tokens — same refresh token reused triggers family revocation (C1)', async () => {
+      // Per C1, refresh tokens rotate on every refresh: the inbound token is
+      // revoked and a new pair is issued. Presenting the same (now-revoked)
+      // refresh token a second time is treated as theft → all user tokens
+      // are revoked and the response is 401.
       const userData = {
         username: 'testuser',
         email: 'test@example.com',
@@ -1833,26 +1836,31 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
 
-      const refreshToken = loginResponse.body.refreshToken;
+      const originalRefreshToken = loginResponse.body.refreshToken;
 
-      // First refresh
+      // First refresh succeeds and returns a NEW refresh token
       const refreshResponse1 = await request(app)
         .post('/api/auth/refresh')
-        .send({ refreshToken })
+        .send({ refreshToken: originalRefreshToken })
         .expect(200);
 
-      // Second refresh with same refresh token
-      const refreshResponse2 = await request(app)
-        .post('/api/auth/refresh')
-        .send({ refreshToken })
-        .expect(200);
-
-      // Both should succeed
       expect(refreshResponse1.body).toHaveProperty('token');
-      expect(refreshResponse2.body).toHaveProperty('token');
+      expect(refreshResponse1.body).toHaveProperty('refreshToken');
+      expect(refreshResponse1.body.refreshToken).not.toBe(originalRefreshToken);
 
-      // Tokens should be different (each refresh generates a new token)
-      expect(refreshResponse1.body.token).not.toBe(refreshResponse2.body.token);
+      // Second refresh with the ORIGINAL (now-revoked) refresh token is
+      // rejected, AND it triggers a family-wide revocation: even the new
+      // refresh token issued in the previous step is invalidated because the
+      // reuse signals a likely token-theft scenario.
+      await request(app)
+        .post('/api/auth/refresh')
+        .send({ refreshToken: originalRefreshToken })
+        .expect(401);
+
+      await request(app)
+        .post('/api/auth/refresh')
+        .send({ refreshToken: refreshResponse1.body.refreshToken })
+        .expect(401);
     });
   });
 
@@ -2011,7 +2019,8 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
     });
 
     it('should reject refresh for non-existent user', async () => {
-      // Create a valid-looking refresh token for a non-existent user
+      // Create a valid-looking refresh token for a non-existent user. Must include
+      // the iss/aud claims required since C8.
       const jwt = require('jsonwebtoken');
       const fakeRefreshToken = jwt.sign(
         {
@@ -2022,7 +2031,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
           exp: Math.floor(Date.now() / 1000) + 604800,
         },
         testJwtSecret,
-        { algorithm: 'HS256' }
+        { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' }
       );
 
       const response = await request(app)
@@ -2055,8 +2064,9 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       expect(response.status).toBe(400);
     });
 
-    it('should handle multiple sequential refresh requests', async () => {
-      // Register and login a user
+    it('should handle multiple sequential refresh requests with rotation (C1)', async () => {
+      // Per C1, each refresh rotates the refresh token. The chain works as
+      // long as we always present the LATEST refresh token.
       const userData = {
         username: 'testuser',
         email: 'test@example.com',
@@ -2075,26 +2085,23 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
 
-      const refreshToken = loginResponse.body.refreshToken;
+      let currentRefreshToken: string = loginResponse.body.refreshToken;
 
-      // Make multiple sequential refresh requests (SQLite doesn't support true concurrency)
-      const responses = [];
+      const responses: { token: string }[] = [];
       for (let i = 0; i < 5; i++) {
         const response = await request(app)
           .post('/api/auth/refresh')
-          .send({ refreshToken });
-        responses.push(response);
-      }
-
-      // All should succeed
-      responses.forEach(response => {
+          .send({ refreshToken: currentRefreshToken });
         expect(response.status).toBe(200);
         expect(response.body).toHaveProperty('token');
+        expect(response.body).toHaveProperty('refreshToken');
         expect(response.body).toHaveProperty('user');
-      });
+        currentRefreshToken = response.body.refreshToken;
+        responses.push({ token: response.body.token });
+      }
 
-      // All tokens should be unique (each has a unique jti)
-      const tokens = responses.map(r => r.body.token);
+      // All access tokens should be unique
+      const tokens = responses.map(r => r.token);
       const uniqueTokens = new Set(tokens);
       expect(uniqueTokens.size).toBe(tokens.length);
     });

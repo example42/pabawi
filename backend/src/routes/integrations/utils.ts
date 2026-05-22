@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { ExpertModeService } from "../../services/ExpertModeService";
 import type { LoggerService } from "../../services/LoggerService";
 import type { DIContainer } from "../../container/DIContainer";
+import { CertnameStringSchema, PuppetHashStringSchema } from "../../validation/commonSchemas";
 
 /**
  * EXPERT MODE PATTERN - CORRECT IMPLEMENTATION
@@ -75,12 +76,12 @@ import type { DIContainer } from "../../container/DIContainer";
  * Request validation schemas
  */
 export const CertnameParamSchema = z.object({
-  certname: z.string().min(1, "Certname is required"),
+  certname: CertnameStringSchema,
 });
 
 export const ReportParamsSchema = z.object({
-  certname: z.string().min(1, "Certname is required"),
-  hash: z.string().min(1, "Report hash is required"),
+  certname: CertnameStringSchema,
+  hash: PuppetHashStringSchema,
 });
 
 export const PQLQuerySchema = z.object({
@@ -115,12 +116,12 @@ export const ReportsQuerySchema = z.object({
 });
 
 export const CatalogParamsSchema = z.object({
-  certname: z.string().min(1, "Certname is required"),
+  certname: CertnameStringSchema,
   environment: z.string().min(1, "Environment is required"),
 });
 
 export const CatalogCompareSchema = z.object({
-  certname: z.string().min(1, "Certname is required"),
+  certname: CertnameStringSchema,
   environment1: z.string().min(1, "First environment is required"),
   environment2: z.string().min(1, "Second environment is required"),
 });

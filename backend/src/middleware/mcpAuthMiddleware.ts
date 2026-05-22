@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express";
+import { tokensEqual } from "../utils/tokensEqual";
 
 /**
  * MCP-scoped authentication middleware.
@@ -32,7 +33,7 @@ export function createMcpAuthMiddleware(
 
     const token = authHeader.substring(7);
 
-    if (token === mcpAuthToken) {
+    if (tokensEqual(token, mcpAuthToken)) {
       // Static MCP token matched — authenticate as mcp-service user
       req.user = {
         userId: mcpUserId,
