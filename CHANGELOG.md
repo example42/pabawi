@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] - security remediation
+## [1.3.0] - 2026-05-23
 
 ### Security — breaking for operators
 
@@ -83,6 +83,22 @@
 - Regression test suite at
   `backend/test/security/jazzy-launching-wombat-regressions.test.ts` pinning
   the contracts for A2, B1, B2, B4, C3, C7, C8.
+- PostgreSQL test harness under `scripts/`: `docker-postgres-test.sh`
+  (start / stop / destroy / status / logs subcommands) plus a dedicated
+  `docker-postgres-test.compose.yml` and `docker-postgres-test.env`. Builds
+  the app from local source into an isolated Compose project
+  (`pabawi-postgres-test`) on host ports 3001 / 5433 so it does not collide
+  with the main stack. Useful while the published `:latest` image lags
+  behind PostgreSQL support.
+
+### Fixed
+
+- `scripts/docker-entrypoint.sh` no longer creates the SQLite data file when
+  `DB_TYPE=postgres`. The previous unconditional `touch "$DATABASE_PATH"`
+  caused the container to exit with `cannot touch: No such file or
+  directory` whenever a non-existent path was set under the postgres
+  backend. SQLite-mode behaviour is unchanged (default when `DB_TYPE` is
+  unset).
 
 ### Deferred (separate PRs)
 

@@ -42,6 +42,9 @@ services:
   # To make the app use it, set in .env:
   #   DB_TYPE=postgres
   #   DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
+  #
+  # For an isolated, self-contained PostgreSQL test stack (separate project,
+  # builds the app from local source), see scripts/docker-postgres-test.sh.
   postgres:
     image: postgres:16-alpine
     container_name: pabawi-postgres
