@@ -208,7 +208,7 @@ describe("executionStream handleEvent processes all event types", () => {
   });
 
   it("ignores repeated connect() calls while ticket fetch is still in flight", async () => {
-    let resolveTicket: ((value: { ok: boolean; json: () => Promise<{ ticket: string }> }) => void) | null = null;
+    let resolveTicket!: (value: { ok: boolean; json: () => Promise<{ ticket: string }> }) => void;
     const pendingTicket = new Promise<{ ok: boolean; json: () => Promise<{ ticket: string }> }>((resolve) => {
       resolveTicket = resolve;
     });
@@ -223,7 +223,7 @@ describe("executionStream handleEvent processes all event types", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(createdEventSources).toHaveLength(0);
 
-    resolveTicket?.({
+    resolveTicket({
       ok: true,
       json: async () => ({ ticket: "fake-stream-ticket" }),
     });

@@ -1,0 +1,63 @@
+# =============================================================================
+# Pabawi — dedicated Docker Compose stack for PostgreSQL testing
+# =============================================================================
+# Self-contained stack used by scripts/docker-postgres-test.sh. Runs in its
+# own Compose project (`pabawi-postgres-test`) so it does not collide with
+# the main docker-compose.yml stack.
+#
+# Builds the app image from local source so it includes the dialect-aware
+# migration runner and PostgreSQL-specific migrations (the published
+# example42/pabawi:latest image may predate these).
+# =============================================================================
+
+services:
+  app:
+    image: pabawi:postgres-test
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: pabawi-pgtest-app
+    env_file:
+      - docker-postgres-test.env
+    ports:
+      - "${HOST_APP_PORT:-3001}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');http.get('http://localhost:3000/api/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>{try{const j=JSON.parse(d);process.exit(r.statusCode===200&&j.status==='ok'?0:1)}catch{process.exit(1)}})}).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      start_period: 10s
+      retries: 12
+    restart: "no"
+    networks:
+      - pgtest
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: pabawi-pgtest-postgres
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-pabawi}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-pabawi}"
+      POSTGRES_DB: "${POSTGRES_DB:-pabawi}"
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pabawi} -d ${POSTGRES_DB:-pabawi}"]
+      interval: 5s
+      timeout: 3s
+      start_period: 5s
+      retries: 10
+    restart: "no"
+    networks:
+      - pgtest
+    # Ephemeral: data lives in an unnamed volume that goes away on
+    # `docker compose down -v`. No host bind mount for postgres data —
+    # this stack is for testing, not persistence.
+    tmpfs:
+      - /var/lib/postgresql/data
+
+networks:
+  pgtest:
+    driver: bridge
