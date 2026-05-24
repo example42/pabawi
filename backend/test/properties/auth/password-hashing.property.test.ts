@@ -134,11 +134,15 @@ describe('Password Hashing Properties', () => {
    * Verifies that all generated hashes follow the bcrypt format specification.
    */
   it('should always generate valid bcrypt hash format', async () => {
+    // This test enforces the OWASP-recommended cost factor on the production
+    // default. Construct the service explicitly with cost 12 to validate the
+    // production contract regardless of NODE_ENV-based defaults.
+    const productionAuthService = new AuthenticationService(db, testJwtSecret, undefined, 12);
     await fc.assert(
       fc.asyncProperty(
         fc.string({ minLength: 8, maxLength: 100 }),
         async (password) => {
-          const hash = await authService.hashPassword(password);
+          const hash = await productionAuthService.hashPassword(password);
 
           // Bcrypt hash format: $2b$12$[22 character salt][31 character hash]
           // Total length should be 60 characters

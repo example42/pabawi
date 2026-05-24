@@ -199,7 +199,7 @@ function generateInventoryArbitrary() {
         nodes: fc.constant([]),
       }),
       { minLength: 1, maxLength: 10 }
-    ),
+    ).map(groups => Array.from(new Map(groups.map(g => [g.id, g])).values())),
   }).chain(({ nodes, groups }) => {
     const nodeIds = nodes.map(n => n.id);
     return fc.tuple(
@@ -232,7 +232,7 @@ function generateInventoryWithEmptyGroupsArbitrary() {
         nodes: fc.constant([]),
       }),
       { minLength: 1, maxLength: 5 }
-    ),
+    ).map(groups => Array.from(new Map(groups.map(g => [g.id, g])).values())),
   });
 }
 

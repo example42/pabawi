@@ -99,12 +99,22 @@ export class AuthenticationService {
   private logger = new LoggerService();
   private accessTokenLifetime = 3600; // 1 hour in seconds
   private refreshTokenLifetime = 604800; // 7 days in seconds
-  private bcryptCostFactor = 12; // OWASP 2023 recommendation
+  // Production uses cost 12 (OWASP 2023). Tests default to cost 4 (bcrypt
+  // minimum) to keep the suite fast — hashing dominates auth-related test
+  // runtime and 12 rounds × dozens of users per beforeEach blows hook
+  // timeouts. Callers can override via the constructor.
+  private bcryptCostFactor: number;
   private auditLogger?: AuditLoggingService;
 
-  constructor(db: DatabaseAdapter, jwtSecret?: string, auditLogger?: AuditLoggingService) {
+  constructor(
+    db: DatabaseAdapter,
+    jwtSecret?: string,
+    auditLogger?: AuditLoggingService,
+    bcryptCostFactor?: number,
+  ) {
     this.db = db;
     this.auditLogger = auditLogger;
+    this.bcryptCostFactor = bcryptCostFactor ?? (process.env.NODE_ENV === 'test' ? 4 : 12);
 
     if (!jwtSecret) {
       const logger = new LoggerService();
