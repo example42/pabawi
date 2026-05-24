@@ -12,6 +12,19 @@ import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
 /**
+ * Information sources that establish a remote connection (typically SSH) to
+ * collect facts. These are deliberately excluded from the automatic
+ * GET /api/nodes/:id/facts fan-out and only invoked via the explicit
+ * POST /api/nodes/:id/facts endpoint triggered by the user from the UI.
+ *
+ * Rationale: opening an SSH session every time a node detail page loads is
+ * surprising, slow, and noisy on infrastructure with many monitored nodes.
+ * Passive sources (puppetdb, puppetserver, hiera, proxmox, aws, azure) only
+ * read existing data and remain safe to invoke automatically.
+ */
+const ACTIVE_FACT_SOURCES = new Set(["bolt", "ssh", "ansible"]);
+
+/**
  * Create facts router
  */
 export function createFactsRouter(
@@ -447,16 +460,29 @@ export function createFactsRouter(
   /**
    * GET /api/nodes/:id/facts
    * Get facts for a node from all available information sources
+   *
+   * Query parameters:
+   * - source (optional): Restrict the lookup to a single named information
+   *   source (e.g. `bolt`, `puppetdb`, `proxmox`). When set, the active-source
+   *   filter is bypassed so callers can explicitly request facts from
+   *   connection-establishing sources (bolt, ssh, ansible) without invoking
+   *   the active gather pipeline. When omitted, the endpoint fans out only
+   *   to passive sources to avoid opening SSH connections at page load.
    */
   router.get(
     "/:id/facts",
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
+      const requestedSource =
+        typeof req.query.source === "string" && req.query.source.trim() !== ""
+          ? req.query.source.trim()
+          : null;
+
       logger.info("Fetching facts from all sources", {
         component: "FactsRouter",
         operation: "getAllFacts",
-        metadata: { nodeId: req.params.id },
+        metadata: { nodeId: req.params.id, source: requestedSource },
       });
 
       try {
@@ -467,8 +493,30 @@ export function createFactsRouter(
         // knows about this node the response will simply have empty sources,
         // which the frontend already handles gracefully.
 
-        // Gather facts from all information sources in parallel
-        const sources = integrationManager.getAllInformationSources();
+        // Source selection:
+        // - When `?source=<name>` is provided, query only that source. This
+        //   path is used by the per-integration "Load facts" buttons on the
+        //   node facts tab, including bolt/ssh/ansible.
+        // - Otherwise, fan out only to passive sources (skip bolt/ssh/ansible)
+        //   so loading the page does not establish a remote connection.
+        const allSources = integrationManager.getAllInformationSources();
+        let sources;
+        if (requestedSource !== null) {
+          sources = allSources.filter((s) => s.name === requestedSource);
+          if (sources.length === 0) {
+            res.status(404).json({
+              error: {
+                code: "UNKNOWN_SOURCE",
+                message: `Information source '${requestedSource}' is not registered`,
+              },
+            });
+            return;
+          }
+        } else {
+          sources = allSources.filter(
+            (source) => !ACTIVE_FACT_SOURCES.has(source.name),
+          );
+        }
         const factsResults: Record<
           string,
           { facts: Record<string, unknown>; timestamp: string }

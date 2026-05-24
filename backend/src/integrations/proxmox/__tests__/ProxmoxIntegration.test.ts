@@ -304,6 +304,47 @@ describe("ProxmoxIntegration", () => {
       expect(mockService.getNodeFacts).toHaveBeenCalledWith("proxmox:pve1:100");
     });
 
+    it("should resolve a non-canonical nodeId via inventory lookup", async () => {
+      const mockNodes = [
+        {
+          id: "proxmox:pve1:100",
+          name: "openvox.test.lab42",
+          uri: "proxmox://pve1/100",
+          transport: "ssh" as const,
+          config: {},
+          source: "proxmox",
+        },
+      ];
+      const mockFacts = {
+        nodeId: "proxmox:pve1:100",
+        gatheredAt: "2024-01-01T00:00:00Z",
+        source: "proxmox",
+        facts: {
+          os: { family: "linux", name: "ubuntu", release: { full: "22.04", major: "22" } },
+          processors: { count: 2, models: [] },
+          memory: { system: { total: "2 GB", available: "1 GB" } },
+          networking: { hostname: "openvox", interfaces: {} },
+        },
+      };
+      mockService.getInventory.mockResolvedValue(mockNodes);
+      mockService.getNodeFacts.mockResolvedValue(mockFacts);
+
+      const facts = await plugin.getNodeFacts("openvox.test.lab42");
+
+      expect(facts).toEqual(mockFacts);
+      expect(mockService.getInventory).toHaveBeenCalledOnce();
+      expect(mockService.getNodeFacts).toHaveBeenCalledWith("proxmox:pve1:100");
+    });
+
+    it("should throw a clean error when no guest matches a non-canonical nodeId", async () => {
+      mockService.getInventory.mockResolvedValue([]);
+
+      await expect(plugin.getNodeFacts("unknown.example.com")).rejects.toThrow(
+        "Proxmox node not found: unknown.example.com"
+      );
+      expect(mockService.getNodeFacts).not.toHaveBeenCalled();
+    });
+
     it("should return null for getNodeData", async () => {
       const data = await plugin.getNodeData("proxmox:pve1:100", "reports");
 

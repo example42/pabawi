@@ -175,11 +175,12 @@
     applyJournalFilters();
   }
 
-  // Facts state — multi-source
+  // Facts state — per-source, on-demand
   let allSourceFacts = $state<Record<string, { facts: Record<string, unknown>; timestamp: string }>>({});
   let allSourceErrors = $state<Record<string, string>>({});
-  let allSourceFactsLoading = $state(false);
-  let gatheringFacts = $state(false);
+  let factsLoadingStates = $state<Record<string, boolean>>({});
+  let loadingAllFacts = $state(false);
+  let availableFactSources = $state<string[]>([]);
 
   // Command execution state
   let commandInput = $state('');
@@ -328,58 +329,82 @@
     }
   }
 
-  // Fetch facts from all information sources (GET)
-  async function fetchAllSourceFacts(): Promise<void> {
-    if (allSourceFactsLoading) return;
-    // Check cache first
-    if (dataCache['all-source-facts']) {
-      const cached = dataCache['all-source-facts'];
-      allSourceFacts = cached.sources;
-      allSourceErrors = cached.errors;
-      return;
-    }
+  // Fetch facts from a single information source on demand.
+  // Used by the per-integration "Load facts" / "Refresh" buttons on the facts tab.
+  async function loadFactsForSource(name: string): Promise<void> {
+    if (factsLoadingStates[name]) return;
 
-    allSourceFactsLoading = true;
-    allSourceErrors = {};
+    factsLoadingStates = { ...factsLoadingStates, [name]: true };
 
     try {
       const data = await get<{
         sources: Record<string, { facts: Record<string, unknown>; timestamp: string }>;
         errors?: Record<string, string>;
-      }>(`/api/nodes/${nodeId}/facts`, { maxRetries: 2 });
+      }>(`/api/nodes/${nodeId}/facts?source=${encodeURIComponent(name)}`, { maxRetries: 1 });
 
-      allSourceFacts = data.sources ?? {};
-      allSourceErrors = data.errors ?? {};
+      const next = { ...allSourceFacts };
+      const nextErrors = { ...allSourceErrors };
+      const sourceData = data.sources?.[name];
+
+      if (sourceData) {
+        next[name] = sourceData;
+        delete nextErrors[name];
+      } else if (data.errors?.[name]) {
+        nextErrors[name] = data.errors[name];
+      } else {
+        // No facts and no specific error — record a generic miss so the UI
+        // doesn't get stuck on the idle state.
+        nextErrors[name] = 'No facts returned';
+      }
+
+      allSourceFacts = next;
+      allSourceErrors = nextErrors;
       dataCache['all-source-facts'] = { sources: allSourceFacts, errors: allSourceErrors };
     } catch (err) {
-      console.error('Error fetching all source facts:', err);
+      const errMsg = err instanceof Error ? err.message : 'An unknown error occurred';
+      console.error(`Error fetching facts from ${name}:`, err);
+      allSourceErrors = { ...allSourceErrors, [name]: errMsg };
     } finally {
-      allSourceFactsLoading = false;
+      const nextLoading = { ...factsLoadingStates };
+      delete nextLoading[name];
+      factsLoadingStates = nextLoading;
     }
   }
 
-  // Gather facts actively via SSH/Ansible (POST) and refresh
-  async function gatherFacts(): Promise<void> {
-    gatheringFacts = true;
+  // Trigger active fact-gathering for connection-establishing sources
+  // (bolt, ssh, ansible) before loading them. The POST endpoint runs the full
+  // gather pipeline; we then refresh those sources via per-source GET so the
+  // results are cached on the page.
+  async function loadAllFactSources(): Promise<void> {
+    if (loadingAllFacts) return;
+    loadingAllFacts = true;
 
     try {
-      showInfo('Gathering facts...');
+      const ACTIVE = new Set(['bolt', 'ssh', 'ansible']);
+      const requestedActive = availableFactSources.filter((s) => ACTIVE.has(s));
 
-      await post(`/api/nodes/${nodeId}/facts`, undefined, {
-        maxRetries: 1,
-      });
+      // Kick off active gather pipeline if any active sources are available.
+      // Failures here are non-fatal — individual loadFactsForSource calls
+      // will still surface per-source errors.
+      const activeGather =
+        requestedActive.length > 0
+          ? post(`/api/nodes/${nodeId}/facts`, undefined, { maxRetries: 0 }).catch((err) => {
+              console.error('Active facts gather failed:', err);
+            })
+          : Promise.resolve();
 
-      // Clear cache and re-fetch from all sources to pick up new data
-      delete dataCache['all-source-facts'];
-      await fetchAllSourceFacts();
+      await activeGather;
 
-      showSuccess('Facts gathered successfully');
+      // Fan out per-source requests for everything in availableFactSources.
+      await Promise.all(availableFactSources.map((name) => loadFactsForSource(name)));
+
+      showSuccess('Facts loaded');
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error gathering facts:', err);
-      showError('Failed to gather facts', errMsg);
+      console.error('Error loading all facts:', err);
+      showError('Failed to load facts', errMsg);
     } finally {
-      gatheringFacts = false;
+      loadingAllFacts = false;
     }
   }
 
@@ -533,9 +558,19 @@
       if (!availableExecutionTools.includes(commandTool)) {
         commandTool = availableExecutionTools[0] ?? 'bolt';
       }
+
+      // Information sources (any integration with type 'information' or 'both'
+      // that is reachable) become entries in the facts tab so the user can
+      // request facts from each one explicitly.
+      const factSourceIntegrations = data.integrations.filter(
+        (integration) => (integration.type === 'information' || integration.type === 'both')
+          && (integration.status === 'connected' || integration.status === 'degraded'),
+      );
+      availableFactSources = factSourceIntegrations.map((i) => i.name);
     } catch {
       availableExecutionTools = ['bolt'];
       commandTool = 'bolt';
+      availableFactSources = [];
     }
   }
 
@@ -1032,8 +1067,9 @@
         }
         break;
       case 'facts':
-        // Load facts from all information sources (non-blocking)
-        fetchAllSourceFacts();
+        // Facts are loaded on demand by the user via per-source buttons in
+        // MultiSourceFactsViewer. No automatic fetching here so the page
+        // loads quickly and no remote connections are established at navigation.
         break;
       case 'actions':
         // Execution history is loaded on demand in the actions tab
@@ -1292,8 +1328,9 @@
     fetchCommandWhitelist();
     fetchExecutionTools();
 
-    // Pre-fetch all-source facts in background so the facts tab loads instantly
-    fetchAllSourceFacts();
+    // Facts are loaded on demand from the facts tab via per-source buttons.
+    // No automatic fetching here so the page loads quickly and no remote
+    // connections are established at navigation time.
 
     // Load overview tab data if it's the active tab
     if (activeTab === 'overview') {
@@ -1704,16 +1741,18 @@
             <div class="mb-4">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Facts</h2>
               <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                View facts from all available information sources
+                Request facts from each integration on demand
               </p>
             </div>
 
             <MultiSourceFactsViewer
               sources={allSourceFacts}
               sourceErrors={allSourceErrors}
-              loading={allSourceFactsLoading}
-              onGatherFacts={gatherFacts}
-              gatheringFacts={gatheringFacts}
+              availableSources={availableFactSources}
+              loadingStates={factsLoadingStates}
+              onLoadSource={loadFactsForSource}
+              onLoadAll={loadAllFactSources}
+              loadingAll={loadingAllFacts}
             />
           </div>
         </div>

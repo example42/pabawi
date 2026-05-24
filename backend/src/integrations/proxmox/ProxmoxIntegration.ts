@@ -230,13 +230,32 @@ export class ProxmoxIntegration
    * Delegates to ProxmoxService to retrieve configuration and status information
    * for a VM or container. Results are cached for 30 seconds.
    *
+   * Accepts either the canonical `proxmox:{node}:{vmid}` identifier or a
+   * cross-source identifier (hostname / linked node name). For non-canonical
+   * input the guest is looked up in the Proxmox inventory by id or name and
+   * the canonical identifier is forwarded to the service. This mirrors the
+   * behaviour of `AWSPlugin.getNodeFacts` and `AzurePlugin.getNodeFacts` and
+   * lets the multi-source facts view surface Proxmox metadata for nodes
+   * keyed by hostname.
+   *
    * Validates: Requirements 7.1-7.7
    *
-   * @param nodeId - Node identifier in format proxmox:{node}:{vmid}
+   * @param nodeId - Node identifier (proxmox:{node}:{vmid} or inventory id/name)
    * @returns Facts object with CPU, memory, disk, network config and current usage
-   * @throws Error if service is not initialized, nodeId format is invalid, or guest doesn't exist
+   * @throws Error if service is not initialized, no matching guest is found, or the API call fails
    */
   async getNodeFacts(nodeId: string): Promise<Facts> {
+    if (!nodeId.startsWith("proxmox:")) {
+      const inventory = await this.svc.getInventory();
+      const match = inventory.find(
+        (n) => n.id === nodeId || n.name === nodeId
+      );
+      if (!match) {
+        throw new Error(`Proxmox node not found: ${nodeId}`);
+      }
+      return await this.svc.getNodeFacts(match.id);
+    }
+
     return await this.svc.getNodeFacts(nodeId);
   }
 

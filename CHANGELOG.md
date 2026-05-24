@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.3.0] - 2026-05-23
+## [1.3.0] - 2026-05-25
 
 ### Security — breaking for operators
 
@@ -69,6 +69,25 @@
 
 ### Added
 
+- **Per-source on-demand facts on the node detail page.** The Facts tab now
+  loads nothing automatically. Each information source (Bolt, SSH, Ansible,
+  PuppetDB, Puppetserver, Hiera, Proxmox, AWS, Azure) gets its own card with
+  a "Load facts" button, plus per-card Refresh and Retry. A repurposed
+  "Load all" button covers the previous bulk Gather Facts use case. Page
+  load no longer establishes any SSH connection or queries any external
+  integration. Errors land per-source and the rest of the page keeps
+  rendering.
+- **`?source=<name>` query parameter on `GET /api/nodes/:id/facts`.** Scopes
+  the request to a single information source and bypasses the active-source
+  filter so the per-card Load buttons work for Bolt/SSH/Ansible. Returns
+  404 `UNKNOWN_SOURCE` when the source is not registered. Backend tests at
+  `backend/test/routes/facts-source-filter.test.ts` pin the contract.
+- **All-source view on the Facts tab.** Third toggle option ("Per Source ·
+  All · Merged") enumerates every fact key reported by any loaded source.
+  Sources reporting the same value collapse into one row with a badge per
+  contributing source; divergent values render as separate rows under the
+  same key. Equality uses a stable, key-sorted JSON serialisation so
+  property order on objects does not split groups.
 - **PostgreSQL backend support.** Set `DB_TYPE=postgres` and `DATABASE_URL`
   to run on PostgreSQL instead of SQLite; both share one schema and code path
   (application SQL uses `?` placeholders, rewritten to `$n` for PostgreSQL).
@@ -80,6 +99,14 @@
   counter, audit-logged.
 - `BoltCommandWhitelistService` (renamed; old `CommandWhitelistService`
   remains as a deprecated alias).
+- E2E coverage for the on-demand facts flow at
+  `e2e/inventory-to-facts.spec.ts` (idle cards, per-source Load, "Load all",
+  All view, terminal Refresh/Retry affordances).
+- Backend tests at `backend/test/routes/facts-source-filter.test.ts` and
+  three new cases in
+  `backend/src/integrations/proxmox/__tests__/ProxmoxIntegration.test.ts`
+  covering hostname resolution to canonical Proxmox IDs and the
+  not-found error path.
 - Regression test suite at
   `backend/test/security/jazzy-launching-wombat-regressions.test.ts` pinning
   the contracts for A2, B1, B2, B4, C3, C7, C8.
@@ -93,6 +120,20 @@
 
 ### Fixed
 
+- **Source cards on the Facts tab now switch the active view when clicked.**
+  After loading a second source, clicking its card focuses it (previously
+  only the inner title row was the click target, and the active highlight
+  stayed on the first-loaded source). The whole card is now a `role="button"`
+  target with keyboard support, and a per-source load auto-focuses the new
+  source unless a bulk Load-all is in flight.
+- **Proxmox facts fetch crashed on cross-source node identifiers.**
+  `ProxmoxIntegration.getNodeFacts()` now matches the AWS/Azure plugin
+  pattern: canonical `proxmox:{node}:{vmid}` IDs forward unchanged, while
+  hostname or linked-node names are resolved against Proxmox's own
+  inventory by `id` or `name` and the matching guest's canonical ID is
+  used. Unknown identifiers throw a clean `Proxmox node not found: <id>`
+  that surfaces under `errors.proxmox` on the facts response instead of
+  the previous parse-error.
 - `scripts/docker-entrypoint.sh` no longer creates the SQLite data file when
   `DB_TYPE=postgres`. The previous unconditional `touch "$DATABASE_PATH"`
   caused the container to exit with `cannot touch: No such file or
