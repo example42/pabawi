@@ -138,7 +138,7 @@ describe("JournalService", () => {
 
       expect(db.query).toHaveBeenCalledOnce();
       const [sql, params] = (db.query as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(sql).toContain("WHERE nodeId IN (?)");
+      expect(sql).toContain("WHERE node_id IN (?)");
       expect(sql).toContain("ORDER BY timestamp DESC");
       expect(sql).toContain("LIMIT ? OFFSET ?");
       expect(params[0]).toBe("node-1");
@@ -155,7 +155,7 @@ describe("JournalService", () => {
       });
 
       const [sql, params] = (db.query as ReturnType<typeof vi.fn>).mock.calls[0];
-      expect(sql).toContain("AND eventType IN (?)");
+      expect(sql).toContain("AND event_type IN (?)");
       expect(sql).toContain("AND source IN (?)");
       expect(params).toEqual(["node-1", "provision", "proxmox", 10, 5]);
     });

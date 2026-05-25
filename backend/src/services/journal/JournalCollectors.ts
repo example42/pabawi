@@ -442,7 +442,7 @@ export async function collectAWSStateEntry(
   try {
     const rows = await db.query<{ details: string }>(
       `SELECT details FROM journal_entries
-       WHERE nodeId = ? AND source = 'aws' AND action LIKE 'EC2 state change:%'
+       WHERE node_id = ? AND source = 'aws' AND "action" LIKE 'EC2 state change:%'
        ORDER BY timestamp DESC
        LIMIT 1`,
       [nodeId],
@@ -577,7 +577,7 @@ export async function collectAzureVMStateEntry(
   try {
     const rows = await db.query<{ details: string }>(
       `SELECT details FROM journal_entries
-       WHERE nodeId = ? AND source = 'azure' AND action LIKE 'Azure VM state change:%'
+       WHERE node_id = ? AND source = 'azure' AND "action" LIKE 'Azure VM state change:%'
        ORDER BY timestamp DESC
        LIMIT 1`,
       [nodeId],

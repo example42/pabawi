@@ -7,6 +7,7 @@ import { UserService } from '../../src/services/UserService';
 import { GroupService } from '../../src/services/GroupService';
 import { RoleService } from '../../src/services/RoleService';
 import { AuthenticationService } from '../../src/services/AuthenticationService';
+import { initializeTestSchema } from '../helpers/schema';
 
 /**
  * Integration Tests for Permission Inheritance
@@ -35,8 +36,14 @@ describe('Permission Inheritance Integration Tests', () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Initialize schema
-    await initializeSchema(db);
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
+
+    // Disable auto-assignment of the default role on createUser so test
+    // assertions only see permissions the test explicitly grants.
+    await db.execute(
+      `UPDATE config SET value = '' WHERE key = 'default_new_user_role'`,
+    );
 
     // Create service instances
     authService = new AuthenticationService(db);
@@ -69,13 +76,13 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create permissions
       const readPermission = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'read',
         description: 'Read Ansible resources',
       });
 
       const executePermission = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'execute',
         description: 'Execute Ansible playbooks',
       });
@@ -85,8 +92,8 @@ describe('Permission Inheritance Integration Tests', () => {
       await roleService.assignPermissionToRole(role.id, executePermission.id);
 
       // Verify user doesn't have permissions before role assignment
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(false);
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'execute')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'execute')).toBe(false);
 
       // Assign role to user
       await userService.assignRoleToUser(user.id, role.id);
@@ -95,11 +102,11 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify user now has permissions through direct role assignment
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'execute')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'execute')).toBe(true);
 
       // Verify user doesn't have permissions not in the role
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'admin')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'admin')).toBe(false);
     });
 
     it('should grant all permissions from role when assigned directly', async () => {
@@ -114,24 +121,24 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create role with multiple permissions
       const role = await roleService.createRole({
-        name: 'Operator',
+        name: 'TestOperator',
         description: 'Operator role',
       });
 
       // Create multiple permissions across different resources
       const permissions = [
         await permissionService.createPermission({
-          resource: 'ansible',
+          resource: 'test_ansible',
           action: 'read',
           description: 'Read Ansible',
         }),
         await permissionService.createPermission({
-          resource: 'bolt',
+          resource: 'test_bolt',
           action: 'read',
           description: 'Read Bolt',
         }),
         await permissionService.createPermission({
-          resource: 'puppetdb',
+          resource: 'test_puppetdb',
           action: 'read',
           description: 'Read PuppetDB',
         }),
@@ -146,17 +153,17 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.assignRoleToUser(user.id, role.id);
 
       // Verify user has all permissions from the role
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'puppetdb', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_puppetdb', 'read')).toBe(true);
 
       // Verify getUserPermissions returns all permissions
       const userPermissions = await permissionService.getUserPermissions(user.id);
       expect(userPermissions).toHaveLength(3);
       expect(userPermissions.map(p => `${p.resource}:${p.action}`).sort()).toEqual([
-        'ansible:read',
-        'bolt:read',
-        'puppetdb:read',
+        'test_ansible:read',
+        'test_bolt:read',
+        'test_puppetdb:read',
       ]);
     });
   });
@@ -186,7 +193,7 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create permission
       const permission = await permissionService.createPermission({
-        resource: 'bolt',
+        resource: 'test_bolt',
         action: 'execute',
         description: 'Execute Bolt tasks',
       });
@@ -198,7 +205,7 @@ describe('Permission Inheritance Integration Tests', () => {
       await groupService.assignRoleToGroup(group.id, role.id);
 
       // Verify user doesn't have permission before group membership
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'execute')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'execute')).toBe(false);
 
       // Add user to group
       await userService.addUserToGroup(user.id, group.id);
@@ -207,7 +214,7 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify user now has permission through group membership
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'execute')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'execute')).toBe(true);
     });
 
     it('should inherit permissions from multiple groups', async () => {
@@ -244,13 +251,13 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create permissions
       const perm1 = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'read',
         description: 'Read Ansible',
       });
 
       const perm2 = await permissionService.createPermission({
-        resource: 'bolt',
+        resource: 'test_bolt',
         action: 'read',
         description: 'Read Bolt',
       });
@@ -268,8 +275,8 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.addUserToGroup(user.id, group2.id);
 
       // Verify user has permissions from both groups
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'read')).toBe(true);
     });
   });
 
@@ -303,7 +310,7 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create permission
       const permission = await permissionService.createPermission({
-        resource: 'puppetdb',
+        resource: 'test_puppetdb',
         action: 'read',
         description: 'Read PuppetDB',
       });
@@ -320,12 +327,12 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.addUserToGroup(user.id, group.id);
 
       // Verify user has permission (should be deduplicated)
-      expect(await permissionService.hasPermission(user.id, 'puppetdb', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_puppetdb', 'read')).toBe(true);
 
       // Verify getUserPermissions returns deduplicated permissions
       const userPermissions = await permissionService.getUserPermissions(user.id);
       const puppetdbReadPerms = userPermissions.filter(
-        p => p.resource === 'puppetdb' && p.action === 'read'  // pragma: allowlist secret
+        p => p.resource === 'test_puppetdb' && p.action === 'read'  // pragma: allowlist secret
       );
       expect(puppetdbReadPerms).toHaveLength(1);
     });
@@ -359,13 +366,13 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create different permissions
       const directPerm = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'execute',
         description: 'Execute Ansible',
       });
 
       const groupPerm = await permissionService.createPermission({
-        resource: 'bolt',
+        resource: 'test_bolt',
         action: 'execute',
         description: 'Execute Bolt',
       });
@@ -382,15 +389,15 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.addUserToGroup(user.id, group.id);
 
       // Verify user has permissions from both paths
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'execute')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'execute')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'execute')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'execute')).toBe(true);
 
       // Verify getUserPermissions returns all permissions
       const userPermissions = await permissionService.getUserPermissions(user.id);
       expect(userPermissions).toHaveLength(2);
       expect(userPermissions.map(p => `${p.resource}:${p.action}`).sort()).toEqual([
-        'ansible:execute',
-        'bolt:execute',
+        'test_ansible:execute',
+        'test_bolt:execute',
       ]);
     });
   });
@@ -413,7 +420,7 @@ describe('Permission Inheritance Integration Tests', () => {
       });
 
       const permission = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'write',
         description: 'Write Ansible',
       });
@@ -424,7 +431,7 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.assignRoleToUser(user.id, role.id);
 
       // Verify user has permission
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'write')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'write')).toBe(true);
 
       // Remove role from user
       await userService.removeRoleFromUser(user.id, role.id);
@@ -433,7 +440,7 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify permission is revoked
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'write')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'write')).toBe(false);
     });
 
     it('should revoke permissions when user is removed from group', async () => {
@@ -458,7 +465,7 @@ describe('Permission Inheritance Integration Tests', () => {
       });
 
       const permission = await permissionService.createPermission({
-        resource: 'bolt',
+        resource: 'test_bolt',
         action: 'admin',
         description: 'Admin Bolt',
       });
@@ -470,7 +477,7 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.addUserToGroup(user.id, group.id);
 
       // Verify user has permission
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'admin')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'admin')).toBe(true);
 
       // Remove user from group
       await userService.removeUserFromGroup(user.id, group.id);
@@ -479,7 +486,7 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify permission is revoked
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'admin')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'admin')).toBe(false);
     });
 
     it('should retain permission when removed from one path but still has through another', async () => {
@@ -511,7 +518,7 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create permission
       const permission = await permissionService.createPermission({
-        resource: 'puppetdb',
+        resource: 'test_puppetdb',
         action: 'write',
         description: 'Write PuppetDB',
       });
@@ -528,7 +535,7 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.addUserToGroup(user.id, group.id);
 
       // Verify user has permission
-      expect(await permissionService.hasPermission(user.id, 'puppetdb', 'write')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_puppetdb', 'write')).toBe(true);
 
       // Remove direct role
       await userService.removeRoleFromUser(user.id, directRole.id);
@@ -537,7 +544,7 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify user still has permission through group
-      expect(await permissionService.hasPermission(user.id, 'puppetdb', 'write')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_puppetdb', 'write')).toBe(true);
 
       // Remove user from group
       await userService.removeUserFromGroup(user.id, group.id);
@@ -546,7 +553,7 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Now permission should be revoked
-      expect(await permissionService.hasPermission(user.id, 'puppetdb', 'write')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_puppetdb', 'write')).toBe(false);
     });
 
     it('should revoke all permissions when all roles are removed', async () => {
@@ -571,13 +578,13 @@ describe('Permission Inheritance Integration Tests', () => {
       });
 
       const perm1 = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'admin',
         description: 'Admin Ansible',
       });
 
       const perm2 = await permissionService.createPermission({
-        resource: 'bolt',
+        resource: 'test_bolt',
         action: 'write',
         description: 'Write Bolt',
       });
@@ -590,8 +597,8 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.assignRoleToUser(user.id, role2.id);
 
       // Verify user has both permissions
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'admin')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'write')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'admin')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'write')).toBe(true);
 
       // Remove first role
       await userService.removeRoleFromUser(user.id, role1.id);
@@ -600,8 +607,8 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify first permission is revoked but second remains
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'admin')).toBe(false);
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'write')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'admin')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'write')).toBe(true);
 
       // Remove second role
       await userService.removeRoleFromUser(user.id, role2.id);
@@ -610,8 +617,8 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify all permissions are revoked
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'admin')).toBe(false);
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'write')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'admin')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'write')).toBe(false);
 
       // Verify getUserPermissions returns empty array
       const userPermissions = await permissionService.getUserPermissions(user.id);
@@ -659,25 +666,25 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create four permissions
       const perm1 = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'read',
         description: 'Read Ansible',
       });
 
       const perm2 = await permissionService.createPermission({
-        resource: 'bolt',
+        resource: 'test_bolt',
         action: 'read',
         description: 'Read Bolt',
       });
 
       const perm3 = await permissionService.createPermission({
-        resource: 'puppetdb',
+        resource: 'test_puppetdb',
         action: 'read',
         description: 'Read PuppetDB',
       });
 
       const perm4 = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'execute',
         description: 'Execute Ansible',
       });
@@ -696,10 +703,10 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.addUserToGroup(user.id, group2.id);
 
       // Verify user has all permissions
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'execute')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'bolt', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'puppetdb', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'execute')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_bolt', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_puppetdb', 'read')).toBe(true);
 
       // Verify getUserPermissions returns all permissions
       const userPermissions = await permissionService.getUserPermissions(user.id);
@@ -724,13 +731,13 @@ describe('Permission Inheritance Integration Tests', () => {
 
       // Create permissions
       const perm1 = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'read',
         description: 'Read Ansible',
       });
 
       const perm2 = await permissionService.createPermission({
-        resource: 'ansible',
+        resource: 'test_ansible',
         action: 'write',
         description: 'Write Ansible',
       });
@@ -742,8 +749,8 @@ describe('Permission Inheritance Integration Tests', () => {
       await userService.assignRoleToUser(user.id, role.id);
 
       // Verify user has first permission
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'write')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'write')).toBe(false);
 
       // Add second permission to role
       await roleService.assignPermissionToRole(role.id, perm2.id);
@@ -752,8 +759,8 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify user now has both permissions
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(true);
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'write')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'write')).toBe(true);
 
       // Remove first permission from role
       await roleService.removePermissionFromRole(role.id, perm1.id);
@@ -762,37 +769,13 @@ describe('Permission Inheritance Integration Tests', () => {
       permissionService.invalidateUserPermissionCache(user.id);
 
       // Verify user only has second permission
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'read')).toBe(false);
-      expect(await permissionService.hasPermission(user.id, 'ansible', 'write')).toBe(true);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'read')).toBe(false);
+      expect(await permissionService.hasPermission(user.id, 'test_ansible', 'write')).toBe(true);
     });
   });
 });
 
 // Helper functions
-async function initializeSchema(db: DatabaseAdapter): Promise<void> {
-  await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER DEFAULT 1, isAdmin INTEGER DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
-  await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT, isBuiltIn INTEGER DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT, createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
-  await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (groupId) REFERENCES groups(id) )`);
-  await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (roleId) REFERENCES roles(id) )`);
-  await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id), FOREIGN KEY (roleId) REFERENCES roles(id) )`);
-  await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id), FOREIGN KEY (permissionId) REFERENCES permissions(id) )`);
-  await db.execute(`CREATE INDEX idx_users_username ON users(username)`);
-  await db.execute(`CREATE INDEX idx_users_email ON users(email)`);
-  await db.execute(`CREATE INDEX idx_users_active ON users(isActive)`);
-  await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
-  await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
-  await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
-  await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
-  await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
-  await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
-  await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
-  await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
-  await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
-  await db.execute(`CREATE TABLE config ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`INSERT INTO config (key, value, updatedAt) VALUES ('allow_self_registration', 'false', datetime('now')), ('default_new_user_role', '', datetime('now'))`);
-}
 
 async function closeDatabase(db: DatabaseAdapter): Promise<void> {
   await db.close();

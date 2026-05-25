@@ -4,6 +4,7 @@ import { UserService } from '../../../src/services/UserService';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
 import * as fc from 'fast-check';
 import { randomUUID } from 'crypto';
+import { initializeTestSchema } from "../../helpers/schema";
 
 /**
  * Property-Based Tests for Role Assignment Idempotence
@@ -32,7 +33,7 @@ describe('Role Assignment Idempotence Properties', () => {
     await db.initialize();
 
     // Initialize schema
-    await initializeRBACSchema(db);
+    await initializeTestSchema(db);
 
     // Create services
     authService = new AuthenticationService(db, testJwtSecret);
@@ -247,58 +248,10 @@ describe('Role Assignment Idempotence Properties', () => {
 
 // Helper functions
 
-async function initializeRBACSchema(db: SQLiteAdapter): Promise<void> {
-  const schema = `
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      isAdmin INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      isBuiltIn INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS revoked_tokens (
-      token TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      revokedAt TEXT NOT NULL,
-      expiresAt TEXT NOT NULL
-    );
-  `;
-
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-
-  for (const statement of statements) {
-    await db.execute(statement);
-  }
-}
 
 async function createTestUser(db: SQLiteAdapter, userId: string): Promise<void> {
   const sql = `
-    INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
   `;
 
@@ -319,7 +272,7 @@ async function createTestUser(db: SQLiteAdapter, userId: string): Promise<void> 
 
 async function createTestRole(db: SQLiteAdapter, roleId: string, name?: string): Promise<void> {
   const sql = `
-    INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+    INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
     VALUES (?, ?, ?, 0, ?, ?)
   `;
 
@@ -342,7 +295,7 @@ async function queryUserRoleAssignments(
   userId: string,
   roleId: string
 ): Promise<number> {
-  const sql = 'SELECT COUNT(*) as count FROM user_roles WHERE userId = ? AND roleId = ?';  // pragma: allowlist secret
+  const sql = 'SELECT COUNT(*) as count FROM user_roles WHERE user_id = ? AND role_id = ?';  // pragma: allowlist secret
 
   const row = await db.queryOne<{ count: number }>(sql, [userId, roleId]);
   return row?.count ?? 0;

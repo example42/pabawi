@@ -654,7 +654,7 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Deactivate user
       await databaseService.getConnection().execute(
-        'UPDATE users SET isActive = 0 WHERE id = ?',
+        'UPDATE users SET is_active = 0 WHERE id = ?',
         [userId]
       );
 

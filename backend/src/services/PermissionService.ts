@@ -13,6 +13,9 @@ export interface Permission {
   createdAt: string;
 }
 
+const PERMISSION_COLUMNS = `id, resource, "action", description,
+  created_at AS "createdAt"`;
+
 /**
  * Permission data transfer object
  */
@@ -117,7 +120,7 @@ export class PermissionService {
 
     // Insert permission
     await this.db.execute(
-      `INSERT INTO permissions (id, resource, "action", description, createdAt)
+      `INSERT INTO permissions (id, resource, "action", description, created_at)
        VALUES (?, ?, ?, ?, ?)`,
       [permissionId, data.resource, data.action, data.description || '', now]
     );
@@ -139,7 +142,7 @@ export class PermissionService {
    */
   public async getPermissionById(id: string): Promise<Permission | null> {
     return this.db.queryOne<Permission>(
-      'SELECT * FROM permissions WHERE id = ?',
+      `SELECT ${PERMISSION_COLUMNS} FROM permissions WHERE id = ?`,
       [id]
     );
   }
@@ -153,7 +156,7 @@ export class PermissionService {
    */
   private async getPermissionByResourceAction(resource: string, action: string): Promise<Permission | null> {
     return this.db.queryOne<Permission>(
-      'SELECT * FROM permissions WHERE resource = ? AND "action" = ?',
+      `SELECT ${PERMISSION_COLUMNS} FROM permissions WHERE resource = ? AND "action" = ?`,
       [resource, action]
     );
   }
@@ -178,7 +181,7 @@ export class PermissionService {
     }
 
     if (filters?.action) {
-      conditions.push('action = ?');
+      conditions.push(`"action" = ?`);
       params.push(filters.action);
     }
 
@@ -186,7 +189,7 @@ export class PermissionService {
       // SQLite LIKE is case-insensitive for ASCII; Postgres LIKE is not.
       // Use ILIKE on Postgres so search stays case-insensitive on both backends.
       const like = this.db.getDialect() === 'postgres' ? 'ILIKE' : 'LIKE';
-      conditions.push(`(resource ${like} ? OR action ${like} ? OR description ${like} ?)`);
+      conditions.push(`(resource ${like} ? OR "action" ${like} ? OR description ${like} ?)`);
       const searchPattern = `%${filters.search}%`;
       params.push(searchPattern, searchPattern, searchPattern);
     }
@@ -202,7 +205,7 @@ export class PermissionService {
 
     // Get paginated results
     const permissions = await this.db.query<Permission>(
-      `SELECT * FROM permissions ${whereClause} ORDER BY resource ASC, "action" ASC LIMIT ? OFFSET ?`,
+      `SELECT ${PERMISSION_COLUMNS} FROM permissions ${whereClause} ORDER BY resource ASC, "action" ASC LIMIT ? OFFSET ?`,
       [...params, String(limit), String(offset)]
     );
 
@@ -262,7 +265,7 @@ export class PermissionService {
 
     // Step 2: Check if user exists and get admin/active status (Requirement 5.5, 5.6)
     const user = await this.db.queryOne<{ isAdmin: number; isActive: number }>(
-      'SELECT isAdmin, isActive FROM users WHERE id = ?',
+      `SELECT is_admin AS "isAdmin", is_active AS "isActive" FROM users WHERE id = ?`,
       [userId]
     );
 
@@ -295,20 +298,20 @@ export class PermissionService {
     // Path 2: User-group-role-permission
     const hasPermissionQuery = `
       SELECT COUNT(*) as count FROM permissions p
-      WHERE p.resource = ? AND p.action = ?
+      WHERE p.resource = ? AND p."action" = ?
       AND p.id IN (
         -- Path 1: Direct role assignment (user -> user_roles -> role_permissions -> permissions)
-        SELECT rp.permissionId FROM role_permissions rp
-        INNER JOIN user_roles ur ON ur.roleId = rp.roleId
-        WHERE ur.userId = ?
+        SELECT rp.permission_id FROM role_permissions rp
+        INNER JOIN user_roles ur ON ur.role_id = rp.role_id
+        WHERE ur.user_id = ?
 
         UNION
 
         -- Path 2: Group role assignment (user -> user_groups -> group_roles -> role_permissions -> permissions)
-        SELECT rp.permissionId FROM role_permissions rp
-        INNER JOIN group_roles gr ON gr.roleId = rp.roleId
-        INNER JOIN user_groups ug ON ug.groupId = gr.groupId
-        WHERE ug.userId = ?
+        SELECT rp.permission_id FROM role_permissions rp
+        INNER JOIN group_roles gr ON gr.role_id = rp.role_id
+        INNER JOIN user_groups ug ON ug.group_id = gr.group_id
+        WHERE ug.user_id = ?
       )
     `;
 
@@ -380,11 +383,11 @@ export class PermissionService {
   public async invalidateRolePermissionCache(roleId: string): Promise<void> {
     // Find all users affected by this role (direct + group-based)
     const affectedUsers = await this.db.query<{ userId: string }>(
-      `SELECT userId FROM user_roles WHERE roleId = ?
+      `SELECT user_id AS "userId" FROM user_roles WHERE role_id = ?
        UNION
-       SELECT ug.userId FROM user_groups ug
-       INNER JOIN group_roles gr ON gr.groupId = ug.groupId
-       WHERE gr.roleId = ?`,
+       SELECT ug.user_id AS "userId" FROM user_groups ug
+       INNER JOIN group_roles gr ON gr.group_id = ug.group_id
+       WHERE gr.role_id = ?`,
       [roleId, roleId]
     );
 
@@ -428,7 +431,7 @@ export class PermissionService {
   public async getUserPermissions(userId: string): Promise<Permission[]> {
     // Step 1: Check if user exists and get admin/active status
     const user = await this.db.queryOne<{ isAdmin: number; isActive: number }>(
-      'SELECT isAdmin, isActive FROM users WHERE id = ?',
+      `SELECT is_admin AS "isAdmin", is_active AS "isActive" FROM users WHERE id = ?`,
       [userId]
     );
 
@@ -440,27 +443,29 @@ export class PermissionService {
     // Admin users get all permissions (Requirement 8.3)
     if (user.isAdmin === 1) {
       return this.db.query<Permission>(
-        'SELECT * FROM permissions ORDER BY resource ASC, "action" ASC'
+        `SELECT ${PERMISSION_COLUMNS} FROM permissions ORDER BY resource ASC, "action" ASC`
       );
     }
 
     // Step 2: Aggregate permissions from all sources with deduplication (Requirements 8.3, 8.6)
     // Use DISTINCT to deduplicate permissions from multiple paths
     const permissionsQuery = `
-      SELECT DISTINCT p.* FROM permissions p
-      INNER JOIN role_permissions rp ON rp.permissionId = p.id
-      WHERE rp.roleId IN (
+      SELECT DISTINCT p.id, p.resource, p."action", p.description,
+             p.created_at AS "createdAt"
+        FROM permissions p
+       INNER JOIN role_permissions rp ON rp.permission_id = p.id
+       WHERE rp.role_id IN (
         -- Path 1: Direct role assignments (user -> user_roles -> roles)
-        SELECT roleId FROM user_roles WHERE userId = ?
+        SELECT role_id FROM user_roles WHERE user_id = ?
 
         UNION
 
         -- Path 2: Group role assignments (user -> user_groups -> group_roles -> roles)
-        SELECT gr.roleId FROM group_roles gr
-        INNER JOIN user_groups ug ON ug.groupId = gr.groupId
-        WHERE ug.userId = ?
+        SELECT gr.role_id FROM group_roles gr
+        INNER JOIN user_groups ug ON ug.group_id = gr.group_id
+        WHERE ug.user_id = ?
       )
-      ORDER BY p.resource ASC, p.action ASC
+      ORDER BY p.resource ASC, p."action" ASC
     `;
 
     return this.db.query<Permission>(permissionsQuery, [userId, userId]);
@@ -511,7 +516,7 @@ export class PermissionService {
 
     // Step 2: Check user status once for all uncached checks
     const user = await this.db.queryOne<{ isAdmin: number; isActive: number }>(
-      'SELECT isAdmin, isActive FROM users WHERE id = ?',
+      `SELECT is_admin AS "isAdmin", is_active AS "isActive" FROM users WHERE id = ?`,
       [userId]
     );
 
@@ -541,7 +546,7 @@ export class PermissionService {
 
     // Step 3: Batch query for all uncached permissions
     // Build a query that checks all resource-action pairs at once
-    const conditions = uncachedChecks.map(() => '(p.resource = ? AND p.action = ?)').join(' OR ');
+    const conditions = uncachedChecks.map(() => `(p.resource = ? AND p."action" = ?)`).join(' OR ');
     const params: string[] = [];
     uncachedChecks.forEach(check => {
       params.push(check.resource, check.action);
@@ -552,17 +557,17 @@ export class PermissionService {
       WHERE (${conditions})
       AND p.id IN (
         -- Path 1: Direct role assignment
-        SELECT rp.permissionId FROM role_permissions rp
-        INNER JOIN user_roles ur ON ur.roleId = rp.roleId
-        WHERE ur.userId = ?
+        SELECT rp.permission_id FROM role_permissions rp
+        INNER JOIN user_roles ur ON ur.role_id = rp.role_id
+        WHERE ur.user_id = ?
 
         UNION
 
         -- Path 2: Group role assignment
-        SELECT rp.permissionId FROM role_permissions rp
-        INNER JOIN group_roles gr ON gr.roleId = rp.roleId
-        INNER JOIN user_groups ug ON ug.groupId = gr.groupId
-        WHERE ug.userId = ?
+        SELECT rp.permission_id FROM role_permissions rp
+        INNER JOIN group_roles gr ON gr.role_id = rp.role_id
+        INNER JOIN user_groups ug ON ug.group_id = gr.group_id
+        WHERE ug.user_id = ?
       )
     `;
 

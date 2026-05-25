@@ -359,8 +359,8 @@ export class AuditLoggingService {
 
     const sql = `
       INSERT INTO audit_logs (
-        id, timestamp, eventType, "action", userId, targetUserId,
-        targetResourceType, targetResourceId, ipAddress, userAgent,
+        id, timestamp, event_type, "action", user_id, target_user_id,
+        target_resource_type, target_resource_id, ip_address, user_agent,
         details, result
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
@@ -388,16 +388,26 @@ export class AuditLoggingService {
    * Requirement 13.5: Retain audit logs for at least 1 year
    */
   public async queryLogs(filters: AuditLogFilters = {}): Promise<AuditLogEntry[]> {
-    let sql = 'SELECT * FROM audit_logs WHERE 1=1';
+    let sql = `SELECT id, timestamp,
+                      event_type           AS "eventType",
+                      "action",
+                      user_id              AS "userId",
+                      target_user_id       AS "targetUserId",
+                      target_resource_type AS "targetResourceType",
+                      target_resource_id   AS "targetResourceId",
+                      ip_address           AS "ipAddress",
+                      user_agent           AS "userAgent",
+                      details, result
+                 FROM audit_logs WHERE 1=1`;
     const params: unknown[] = [];
 
     if (filters.userId) {
-      sql += ' AND userId = ?';
+      sql += ' AND user_id = ?';
       params.push(filters.userId);
     }
 
     if (filters.eventType) {
-      sql += ' AND eventType = ?';
+      sql += ' AND event_type = ?';
       params.push(filters.eventType);
     }
 
@@ -422,7 +432,7 @@ export class AuditLoggingService {
     }
 
     if (filters.ipAddress) {
-      sql += ' AND ipAddress = ?';
+      sql += ' AND ip_address = ?';
       params.push(filters.ipAddress);
     }
 
@@ -550,11 +560,11 @@ export class AuditLoggingService {
 
     const sql = `
       SELECT
-        COUNT(*) as totalLogs,
-        SUM(CASE WHEN eventType = 'auth' THEN 1 ELSE 0 END) as authenticationAttempts,
-        SUM(CASE WHEN eventType = 'auth' AND result = 'failure' THEN 1 ELSE 0 END) as authenticationFailures,
-        SUM(CASE WHEN eventType = 'authz' AND result = 'denied' THEN 1 ELSE 0 END) as authorizationFailures,
-        SUM(CASE WHEN eventType = 'admin' THEN 1 ELSE 0 END) as adminActions
+        COUNT(*) as "totalLogs",
+        SUM(CASE WHEN event_type = 'auth' THEN 1 ELSE 0 END) as "authenticationAttempts",
+        SUM(CASE WHEN event_type = 'auth' AND result = 'failure' THEN 1 ELSE 0 END) as "authenticationFailures",
+        SUM(CASE WHEN event_type = 'authz' AND result = 'denied' THEN 1 ELSE 0 END) as "authorizationFailures",
+        SUM(CASE WHEN event_type = 'admin' THEN 1 ELSE 0 END) as "adminActions"
       FROM audit_logs
       WHERE ${whereClause}
     `;

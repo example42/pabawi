@@ -3,6 +3,7 @@ import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
 import type { DatabaseAdapter } from '../src/database/DatabaseAdapter';
 import { AuthenticationService } from '../src/services/AuthenticationService';
 import { randomUUID } from 'crypto';
+import { initializeTestSchema } from './helpers/schema';
 
 describe('AuthenticationService', () => {
   let db: DatabaseAdapter;
@@ -14,8 +15,8 @@ describe('AuthenticationService', () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Initialize schema
-    await initializeSchema(db);
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
 
     // Create auth service
     authService = new AuthenticationService(db, testJwtSecret);
@@ -69,7 +70,7 @@ describe('AuthenticationService', () => {
       const now = new Date().toISOString();
 
       await db.execute(`
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
     });
@@ -103,7 +104,7 @@ describe('AuthenticationService', () => {
 
     it('should reject authentication for inactive user', async () => {
       // Deactivate user
-      await db.execute('UPDATE users SET isActive = 0 WHERE username = ?', ['testuser']);
+      await db.execute('UPDATE users SET is_active = 0 WHERE username = ?', ['testuser']);
 
       const result = await authService.authenticate('testuser', 'TestPass123!');
 
@@ -111,11 +112,11 @@ describe('AuthenticationService', () => {
       expect(result.error).toBe('Account is inactive');
     });
 
-    it('should update lastLoginAt timestamp on successful authentication', async () => {
+    it('should update last_login_at timestamp on successful authentication', async () => {
       await authService.authenticate('testuser', 'TestPass123!');
 
       const user = await db.queryOne<{ lastLoginAt: string }>(
-        'SELECT lastLoginAt FROM users WHERE username = ?',
+        'SELECT last_login_at AS "lastLoginAt" FROM users WHERE username = ?',
         ['testuser']
       );
 
@@ -165,7 +166,7 @@ describe('AuthenticationService', () => {
       const now = new Date().toISOString();
 
       await db.execute(`
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
@@ -231,7 +232,7 @@ describe('AuthenticationService', () => {
       const now = new Date().toISOString();
 
       await db.execute(`
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
@@ -274,7 +275,7 @@ describe('AuthenticationService', () => {
       const now = new Date().toISOString();
 
       await db.execute(`
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
@@ -308,7 +309,7 @@ describe('AuthenticationService', () => {
     });
 
     it('should reject refresh token for inactive user', async () => {
-      await db.execute('UPDATE users SET isActive = 0 WHERE id = ?', [testUser.id]);
+      await db.execute('UPDATE users SET is_active = 0 WHERE id = ?', [testUser.id]);
       const result = await authService.refreshToken(refreshToken);
 
       expect(result.success).toBe(false);
@@ -326,7 +327,7 @@ describe('AuthenticationService', () => {
       const now = new Date().toISOString();
 
       await db.execute(`
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
@@ -369,19 +370,19 @@ describe('AuthenticationService', () => {
 
       // Create user
       await db.execute(`
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', passwordHash, 'Test', 'User', 1, 0, now, now]);
 
       // Create role
       await db.execute(`
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'TestRole', 'Test role', 0, now, now]);
 
       // Assign role to user
       await db.execute(`
-        INSERT INTO user_roles (userId, roleId, assignedAt)
+        INSERT INTO user_roles (user_id, role_id, assigned_at)
         VALUES (?, ?, ?)
       `, [userId, roleId, now]);
 
@@ -403,25 +404,25 @@ describe('AuthenticationService', () => {
 
       // Create group
       await db.execute(`
-        INSERT INTO groups (id, name, description, createdAt, updatedAt)
+        INSERT INTO groups (id, name, description, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?)
       `, [groupId, 'TestGroup', 'Test group', now, now]);
 
       // Create role
       await db.execute(`
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'GroupRole', 'Group role', 0, now, now]);
 
       // Add user to group
       await db.execute(`
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?)
       `, [testUser.id, groupId, now]);
 
       // Assign role to group
       await db.execute(`
-        INSERT INTO group_roles (groupId, roleId, assignedAt)
+        INSERT INTO group_roles (group_id, role_id, assigned_at)
         VALUES (?, ?, ?)
       `, [groupId, roleId, now]);
 
@@ -432,108 +433,3 @@ describe('AuthenticationService', () => {
     });
   });
 });
-
-// Helper functions
-async function initializeSchema(db: DatabaseAdapter): Promise<void> {
-  const statements = [
-    `CREATE TABLE users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      isAdmin INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    )`,
-    `CREATE TABLE groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    )`,
-    `CREATE TABLE roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      isBuiltIn INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    )`,
-    `CREATE TABLE permissions (
-      id TEXT PRIMARY KEY,
-      resource TEXT NOT NULL,
-      action TEXT NOT NULL,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      UNIQUE(resource, action)
-    )`,
-    `CREATE TABLE user_groups (
-      userId TEXT NOT NULL,
-      groupId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, groupId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-    )`,
-    `CREATE TABLE user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    )`,
-    `CREATE TABLE group_roles (
-      groupId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (groupId, roleId),
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    )`,
-    `CREATE TABLE role_permissions (
-      roleId TEXT NOT NULL,
-      permissionId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (roleId, permissionId),
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-      FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-    )`,
-    `CREATE TABLE revoked_tokens (
-      token TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      revokedAt TEXT NOT NULL,
-      expiresAt TEXT NOT NULL,
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-    )`,
-    `CREATE TABLE account_lockouts (
-      username TEXT PRIMARY KEY,
-      lockoutType TEXT NOT NULL,
-      lockedAt TEXT NOT NULL,
-      lockedUntil TEXT,
-      failedAttempts INTEGER NOT NULL DEFAULT 0,
-      lastAttemptAt TEXT
-    )`,
-    `CREATE TABLE failed_login_attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL,
-      attemptedAt TEXT NOT NULL,
-      ipAddress TEXT,
-      reason TEXT NOT NULL
-    )`,
-    `CREATE TABLE login_attempt_counters (
-      username TEXT PRIMARY KEY,
-      cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0,
-      lastFailedAt TEXT
-    )`
-  ];
-
-  for (const statement of statements) {
-    await db.execute(statement);
-  }
-}

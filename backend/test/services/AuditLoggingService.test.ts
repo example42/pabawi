@@ -2,8 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
 import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { AuditLoggingService, AuditEventType, AuditAction, AuditResult } from '../../src/services/AuditLoggingService';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { initializeTestSchema } from '../helpers/schema';
 
 describe('AuditLoggingService', () => {
   let db: DatabaseAdapter;
@@ -14,42 +13,14 @@ describe('AuditLoggingService', () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Create users table first (required by audit_logs foreign keys)
-    await db.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        username TEXT NOT NULL UNIQUE,
-        email TEXT NOT NULL UNIQUE,
-        passwordHash TEXT NOT NULL,
-        firstName TEXT NOT NULL,
-        lastName TEXT NOT NULL,
-        isActive INTEGER NOT NULL DEFAULT 1,
-        isAdmin INTEGER NOT NULL DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL,
-        lastLoginAt TEXT
-      )
-    `);
-
-    // Load and execute audit schema (split multi-statement SQL)
-    const schemaPath = join(__dirname, '../../src/database/migrations/004_audit_logging.sql');
-    const schema = readFileSync(schemaPath, 'utf-8');
-
-    // Split by semicolons and execute each statement
-    const statements = schema
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    for (const stmt of statements) {
-      await db.execute(stmt);
-    }
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
 
     // Insert test users referenced by audit log entries (foreign key constraint)
     const testUsers = ['user-1', 'user-2', 'user-123', 'user-456', 'admin-1', 'admin-123'];
     for (const userId of testUsers) {
       await db.execute(
-        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, 1, 0, datetime('now'), datetime('now'))`,
         [userId, `user-${userId}`, `${userId}@test.com`, 'hash', 'Test', 'User']
       );

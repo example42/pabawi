@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
 import { RoleService, CreateRoleDTO, UpdateRoleDTO } from '../src/services/RoleService';
+import { initializeTestSchema } from './helpers/schema';
 
 describe('RoleService', () => {
   let db: SQLiteAdapter;
@@ -11,58 +12,8 @@ describe('RoleService', () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Create schema
-    const schema = `
-        CREATE TABLE roles (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL UNIQUE,
-          description TEXT NOT NULL,
-          isBuiltIn INTEGER NOT NULL DEFAULT 0,
-          createdAt TEXT NOT NULL,
-          updatedAt TEXT NOT NULL
-        );
-
-        CREATE TABLE permissions (
-          id TEXT PRIMARY KEY,
-          resource TEXT NOT NULL,
-          action TEXT NOT NULL,
-          description TEXT NOT NULL,
-          createdAt TEXT NOT NULL,
-          UNIQUE(resource, action)
-        );
-
-        CREATE TABLE role_permissions (
-          roleId TEXT NOT NULL,
-          permissionId TEXT NOT NULL,
-          assignedAt TEXT NOT NULL,
-          PRIMARY KEY (roleId, permissionId),
-          FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-          FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-        );
-
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
-          ('role-viewer-001', 'Viewer', 'Read-only access', 1, datetime('now'), datetime('now'));
-
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
-          ('role-operator-001', 'Operator', 'Read and execute access', 1, datetime('now'), datetime('now'));
-
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
-          ('role-admin-001', 'Administrator', 'Full access', 1, datetime('now'), datetime('now'));
-
-        INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
-          ('perm-ansible-read', 'ansible', 'read', 'View Ansible resources', datetime('now'));
-
-        INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
-          ('perm-ansible-write', 'ansible', 'write', 'Modify Ansible resources', datetime('now'));
-
-        INSERT INTO permissions (id, resource, "action", description, createdAt) VALUES
-          ('perm-bolt-read', 'bolt', 'read', 'View Bolt resources', datetime('now'));
-    `;
-
-    const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-    for (const statement of statements) {
-      await db.execute(statement);
-    }
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
 
     roleService = new RoleService(db);
   });
@@ -407,7 +358,7 @@ describe('RoleService', () => {
       const role = await roleService.createRole(data);
 
       // Assign permission to role
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-read');
+      await roleService.assignPermissionToRole(role.id, 'ansible-read-001');
 
       // Verify assignment exists
       const permissions = await roleService.getRolePermissions(role.id);
@@ -426,8 +377,9 @@ describe('RoleService', () => {
     it('should list all roles with default pagination', async () => {
       const result = await roleService.listRoles();
 
-      expect(result.items).toHaveLength(3); // 3 built-in roles
-      expect(result.total).toBe(3);
+      // Migrations seed 4 built-in roles: Administrator, Operator, Provisioner, Viewer
+      expect(result.items).toHaveLength(4);
+      expect(result.total).toBe(4);
       expect(result.limit).toBe(50);
       expect(result.offset).toBe(0);
     });
@@ -440,7 +392,8 @@ describe('RoleService', () => {
       const result = await roleService.listRoles({ limit: 2, offset: 1 });
 
       expect(result.items).toHaveLength(2);
-      expect(result.total).toBe(5);
+      // 4 built-in roles + 2 created = 6
+      expect(result.total).toBe(6);
       expect(result.limit).toBe(2);
       expect(result.offset).toBe(1);
     });
@@ -486,10 +439,12 @@ describe('RoleService', () => {
     it('should return all built-in roles', async () => {
       const roles = await roleService.getBuiltInRoles();
 
-      expect(roles).toHaveLength(3);
+      // Migrations seed 4 built-in roles: Viewer, Operator, Administrator, Provisioner
+      expect(roles).toHaveLength(4);
       expect(roles.map(r => r.name)).toContain('Viewer');
       expect(roles.map(r => r.name)).toContain('Operator');
       expect(roles.map(r => r.name)).toContain('Administrator');
+      expect(roles.map(r => r.name)).toContain('Provisioner');
     });
 
     it('should not return custom roles', async () => {
@@ -497,7 +452,7 @@ describe('RoleService', () => {
 
       const roles = await roleService.getBuiltInRoles();
 
-      expect(roles).toHaveLength(3);
+      expect(roles).toHaveLength(4);
       expect(roles.map(r => r.name)).not.toContain('Developer');
     });
 
@@ -506,7 +461,8 @@ describe('RoleService', () => {
 
       expect(roles[0].name).toBe('Administrator');
       expect(roles[1].name).toBe('Operator');
-      expect(roles[2].name).toBe('Viewer');
+      expect(roles[2].name).toBe('Provisioner');
+      expect(roles[3].name).toBe('Viewer');
     });
   });
 
@@ -536,16 +492,16 @@ describe('RoleService', () => {
     it('should assign permission to role', async () => {
       const role = await roleService.createRole({ name: 'Developer', description: 'Dev role' });
 
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-read');
+      await roleService.assignPermissionToRole(role.id, 'ansible-read-001');
 
       const permissions = await roleService.getRolePermissions(role.id);
       expect(permissions).toHaveLength(1);
-      expect(permissions[0].id).toBe('perm-ansible-read');
+      expect(permissions[0].id).toBe('ansible-read-001');
     });
 
     it('should throw error if role not found', async () => {
       await expect(
-        roleService.assignPermissionToRole('non-existent-id', 'perm-ansible-read')
+        roleService.assignPermissionToRole('non-existent-id', 'ansible-read-001')
       ).rejects.toThrow('Role not found');
     });
 
@@ -560,18 +516,18 @@ describe('RoleService', () => {
     it('should throw error if permission already assigned', async () => {
       const role = await roleService.createRole({ name: 'Developer', description: 'Dev role' });
 
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-read');
+      await roleService.assignPermissionToRole(role.id, 'ansible-read-001');
 
       await expect(
-        roleService.assignPermissionToRole(role.id, 'perm-ansible-read')
+        roleService.assignPermissionToRole(role.id, 'ansible-read-001')
       ).rejects.toThrow('Permission is already assigned to this role');
     });
 
     it('should allow assigning multiple permissions to same role', async () => {
       const role = await roleService.createRole({ name: 'Developer', description: 'Dev role' });
 
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-read');
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-write');
+      await roleService.assignPermissionToRole(role.id, 'ansible-read-001');
+      await roleService.assignPermissionToRole(role.id, 'ansible-write-001');
 
       const permissions = await roleService.getRolePermissions(role.id);
       expect(permissions).toHaveLength(2);
@@ -582,8 +538,8 @@ describe('RoleService', () => {
     it('should remove permission from role', async () => {
       const role = await roleService.createRole({ name: 'Developer', description: 'Dev role' });
 
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-read');
-      await roleService.removePermissionFromRole(role.id, 'perm-ansible-read');
+      await roleService.assignPermissionToRole(role.id, 'ansible-read-001');
+      await roleService.removePermissionFromRole(role.id, 'ansible-read-001');
 
       const permissions = await roleService.getRolePermissions(role.id);
       expect(permissions).toHaveLength(0);
@@ -593,7 +549,7 @@ describe('RoleService', () => {
       const role = await roleService.createRole({ name: 'Developer', description: 'Dev role' });
 
       await expect(
-        roleService.removePermissionFromRole(role.id, 'perm-ansible-read')
+        roleService.removePermissionFromRole(role.id, 'ansible-read-001')
       ).rejects.toThrow('Permission is not assigned to this role');
     });
   });
@@ -610,22 +566,22 @@ describe('RoleService', () => {
     it('should return all permissions assigned to role', async () => {
       const role = await roleService.createRole({ name: 'Developer', description: 'Dev role' });
 
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-read');
-      await roleService.assignPermissionToRole(role.id, 'perm-bolt-read');
+      await roleService.assignPermissionToRole(role.id, 'ansible-read-001');
+      await roleService.assignPermissionToRole(role.id, 'bolt-read-001');
 
       const permissions = await roleService.getRolePermissions(role.id);
 
       expect(permissions).toHaveLength(2);
-      expect(permissions.map(p => p.id)).toContain('perm-ansible-read');
-      expect(permissions.map(p => p.id)).toContain('perm-bolt-read');
+      expect(permissions.map(p => p.id)).toContain('ansible-read-001');
+      expect(permissions.map(p => p.id)).toContain('bolt-read-001');
     });
 
     it('should order permissions by resource and action', async () => {
       const role = await roleService.createRole({ name: 'Developer', description: 'Dev role' });
 
-      await roleService.assignPermissionToRole(role.id, 'perm-bolt-read');
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-write');
-      await roleService.assignPermissionToRole(role.id, 'perm-ansible-read');
+      await roleService.assignPermissionToRole(role.id, 'bolt-read-001');
+      await roleService.assignPermissionToRole(role.id, 'ansible-write-001');
+      await roleService.assignPermissionToRole(role.id, 'ansible-read-001');
 
       const permissions = await roleService.getRolePermissions(role.id);
 

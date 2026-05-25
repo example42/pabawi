@@ -122,7 +122,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
     const db = databaseService.getConnection();
     await db.execute('DELETE FROM user_roles');
     await db.execute('DELETE FROM role_permissions');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute("DELETE FROM permissions WHERE resource NOT IN ('ansible', 'bolt', 'puppetdb', 'users', 'groups', 'roles')");
     await db.execute('DELETE FROM users');
   });

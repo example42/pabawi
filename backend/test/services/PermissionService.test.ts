@@ -29,7 +29,7 @@ describe('PermissionService', () => {
         resource TEXT NOT NULL,
         action TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
-        createdAt TEXT NOT NULL,
+        created_at TEXT NOT NULL,
         UNIQUE(resource, action)
       )
     `);
@@ -458,21 +458,21 @@ describe('PermissionService', () => {
 
     beforeEach(async () => {
       // Create full RBAC schema for permission checking tests
-      await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
-await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
-await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
-await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
-await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
-await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
-await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
-await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
-await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
+      await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, is_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_login_at TEXT )`);
+await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, is_built_in INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE user_groups ( user_id TEXT NOT NULL, group_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, group_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE user_roles ( user_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, role_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE group_roles ( group_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (group_id, role_id), FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE role_permissions ( role_id TEXT NOT NULL, permission_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (role_id, permission_id), FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(user_id)`);
+await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(role_id)`);
+await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(user_id)`);
+await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(group_id)`);
+await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(group_id)`);
+await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(role_id)`);
+await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(role_id)`);
+await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permission_id)`);
 
       // Create test data
       const now = new Date().toISOString();
@@ -483,19 +483,19 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       inactiveUserId = 'inactive-789';  // pragma: allowlist secret
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [userId, 'testuser', 'test@example.com', 'hash', 'Test', 'User', 1, 0, now, now]
 );
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [adminUserId, 'admin', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now]
 );
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [inactiveUserId, 'inactive', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now]
 );
@@ -503,7 +503,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       // Create group
       groupId = 'group-123';  // pragma: allowlist secret
       await db.execute(
-  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+  `INSERT INTO groups (id, name, description, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?)`,
   [groupId, 'Test Group', 'Test group description', now, now]
 );
@@ -513,13 +513,13 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       groupRoleId = 'role-456';  // pragma: allowlist secret
 
       await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
   [roleId, 'Test Role', 'Test role description', 0, now, now]
 );
 
       await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
   [groupRoleId, 'Group Role', 'Group role description', 0, now, now]
 );
@@ -542,12 +542,12 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       // Assign role and permission to inactive user
       const now = new Date().toISOString();
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [inactiveUserId, roleId, now]
 );
 
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permissionId, now]
 );
 
@@ -570,13 +570,13 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
 
       // Assign role to user
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
       // Assign permission to role
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permissionId, now]
 );
 
@@ -589,19 +589,19 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
 
       // Add user to group
       await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, groupId, now]
 );
 
       // Assign role to group
       await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [groupId, groupRoleId, now]
 );
 
       // Assign permission to role
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [groupRoleId, permissionId, now]
 );
 
@@ -614,28 +614,28 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
 
       // Path 1: Direct role assignment
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permissionId, now]
 );
 
       // Path 2: Group role assignment
       await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, groupId, now]
 );
 
       await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [groupId, groupRoleId, now]
 );
 
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [groupRoleId, permissionId, now]
 );
 
@@ -653,7 +653,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
 
       // Assign role to user but don't assign permission to role
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
@@ -666,12 +666,12 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
 
       // Assign ansible:read permission
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permissionId, now]
 );
 
@@ -685,12 +685,12 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
 
       // Assign ansible:read permission
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permissionId, now]
 );
 
@@ -707,42 +707,42 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const role2Id = 'role-789';  // pragma: allowlist secret
 
       await db.execute(
-  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+  `INSERT INTO groups (id, name, description, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?)`,
   [group2Id, 'Test Group 2', 'Second test group', now, now]
 );
 
       await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
   [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
 );
 
       // Add user to both groups
       await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, groupId, now]
 );
 
       await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, group2Id, now]
 );
 
       // Assign roles to groups
       await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [groupId, groupRoleId, now]
 );
 
       await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [group2Id, role2Id, now]
 );
 
       // Assign permission to second role only
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [role2Id, permissionId, now]
 );
 
@@ -757,25 +757,25 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const role2Id = 'role-789';  // pragma: allowlist secret
 
       await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
   [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
 );
 
       // Assign both roles to user
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, role2Id, now]
 );
 
       // Assign permission to second role only
       await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [role2Id, permissionId, now]
 );
 
@@ -812,22 +812,22 @@ describe('PermissionService - getUserPermissions', () => {
     await db.initialize();
 
     // Create full RBAC schema for getUserPermissions tests
-    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
-await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
-await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
-await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
-await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
-await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
-await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
-await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
-await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
-await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
+    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, is_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_login_at TEXT )`);
+await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, is_built_in INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE user_groups ( user_id TEXT NOT NULL, group_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, group_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE user_roles ( user_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, role_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE group_roles ( group_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (group_id, role_id), FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE role_permissions ( role_id TEXT NOT NULL, permission_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (role_id, permission_id), FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(user_id)`);
+await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(role_id)`);
+await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(user_id)`);
+await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(group_id)`);
+await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(group_id)`);
+await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(role_id)`);
+await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(role_id)`);
+await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permission_id)`);
+await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, UNIQUE(resource, action) )`);
 await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
 
     // Initialize permission service
@@ -842,19 +842,19 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
     inactiveUserId = 'inactive-789';  // pragma: allowlist secret
 
     await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [userId, 'testuser', 'test@example.com', 'hash', 'Test', 'User', 1, 0, now, now]
 );
 
     await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [adminUserId, 'admin', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now]
 );
 
     await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [inactiveUserId, 'inactive', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now]
 );
@@ -862,7 +862,7 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
     // Create group
     groupId = 'group-123';  // pragma: allowlist secret
     await db.execute(
-  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+  `INSERT INTO groups (id, name, description, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?)`,
   [groupId, 'Test Group', 'Test group description', now, now]
 );
@@ -872,13 +872,13 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
     groupRoleId = 'role-456';  // pragma: allowlist secret
 
     await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
   [roleId, 'Test Role', 'Test role description', 0, now, now]
 );
 
     await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
   [groupRoleId, 'Group Role', 'Group role description', 0, now, now]
 );
@@ -915,12 +915,12 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
     // Assign role and permission to inactive user
     const now = new Date().toISOString();
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [inactiveUserId, roleId, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission1Id, now]
 );
 
@@ -944,18 +944,18 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
 
     // Assign role to user
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
     // Assign permissions to role
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission1Id, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission2Id, now]
 );
 
@@ -973,19 +973,19 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
 
     // Add user to group
     await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, groupId, now]
 );
 
     // Assign role to group
     await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [groupId, groupRoleId, now]
 );
 
     // Assign permission to role
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [groupRoleId, permission3Id, now]
 );
 
@@ -1001,28 +1001,28 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
 
     // Path 1: Direct role assignment with permission1
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission1Id, now]
 );
 
     // Path 2: Group role assignment with same permission1
     await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, groupId, now]
 );
 
     await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [groupId, groupRoleId, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [groupRoleId, permission1Id, now]
 );
 
@@ -1039,33 +1039,33 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
 
     // Direct role with permission1 and permission2
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission1Id, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission2Id, now]
 );
 
     // Group role with permission3
     await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, groupId, now]
 );
 
     await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [groupId, groupRoleId, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [groupRoleId, permission3Id, now]
 );
 
@@ -1097,28 +1097,28 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
 
     // Assign role to user
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
     // Assign permissions in non-alphabetical order
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission3Id, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission1Id, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, perm5.id, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, perm4.id, now]
 );
 
@@ -1144,7 +1144,7 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
 
     // Assign role to user but don't assign any permissions to role
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
@@ -1160,47 +1160,47 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
     const role2Id = 'role-789';  // pragma: allowlist secret
 
     await db.execute(
-  `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+  `INSERT INTO groups (id, name, description, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?)`,
   [group2Id, 'Test Group 2', 'Second test group', now, now]
 );
 
     await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
   [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
 );
 
     // Add user to both groups
     await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, groupId, now]
 );
 
     await db.execute(
-  `INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, group2Id, now]
 );
 
     // Assign roles to groups
     await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [groupId, groupRoleId, now]
 );
 
     await db.execute(
-  `INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [group2Id, role2Id, now]
 );
 
     // Assign different permissions to each role
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [groupRoleId, permission1Id, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [role2Id, permission2Id, now]
 );
 
@@ -1220,30 +1220,30 @@ await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(re
     const role2Id = 'role-789';  // pragma: allowlist secret
 
     await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
   [role2Id, 'Test Role 2', 'Second test role', 0, now, now]
 );
 
     // Assign both roles to user
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, role2Id, now]
 );
 
     // Assign different permissions to each role
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permission1Id, now]
 );
 
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [role2Id, permission3Id, now]
 );
 
@@ -1290,23 +1290,23 @@ describe('PermissionService - Permission Caching', () => {
     await db.initialize();
 
     // Create full RBAC schema
-    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
-await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE )`);
-await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
+    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, is_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_login_at TEXT )`);
+await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, is_built_in INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+await db.execute(`CREATE TABLE user_groups ( user_id TEXT NOT NULL, group_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, group_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE user_roles ( user_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, role_id), FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE group_roles ( group_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (group_id, role_id), FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE role_permissions ( role_id TEXT NOT NULL, permission_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (role_id, permission_id), FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE )`);
+await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, UNIQUE(resource, action) )`);
 await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
-await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
-await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
-await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
-await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
-await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
-await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
-await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
-await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
+await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(user_id)`);
+await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(role_id)`);
+await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(user_id)`);
+await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(group_id)`);
+await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(group_id)`);
+await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(role_id)`);
+await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(role_id)`);
+await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permission_id)`);
 
     // Initialize permission service
     permissionService = new PermissionService(db);
@@ -1317,7 +1317,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
     // Create user
     userId = 'user-cache-123';  // pragma: allowlist secret
     await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [userId, 'cacheuser', 'cache@example.com', 'hash', 'Cache', 'User', 1, 0, now, now]
 );
@@ -1325,7 +1325,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
     // Create role
     roleId = 'role-cache-123';  // pragma: allowlist secret
     await db.execute(
-  `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+  `INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
   [roleId, 'Cache Role', 'Cache test role', 0, now, now]
 );
@@ -1340,13 +1340,13 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
 
     // Assign role to user
     await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [userId, roleId, now]
 );
 
     // Assign permission to role
     await db.execute(
-  `INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`,
   [roleId, permissionId, now]
 );
   });
@@ -1390,7 +1390,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const now = new Date().toISOString();
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [adminId, 'adminuser', 'admin@example.com', 'hash', 'Admin', 'User', 1, 1, now, now]
 );
@@ -1410,7 +1410,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const now = new Date().toISOString();
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [inactiveId, 'inactiveuser', 'inactive@example.com', 'hash', 'Inactive', 'User', 0, 0, now, now]
 );
@@ -1430,7 +1430,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const now = new Date().toISOString();
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [user2Id, 'cacheuser2', 'cache2@example.com', 'hash', 'Cache2', 'User', 1, 0, now, now]
 );
@@ -1484,7 +1484,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const now = new Date().toISOString();
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [user2Id, 'cacheuser3', 'cache3@example.com', 'hash', 'Cache3', 'User', 1, 0, now, now]
 );
@@ -1547,7 +1547,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const now = new Date().toISOString();
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [adminId, 'admincorrect', 'admincorrect@example.com', 'hash', 'Admin', 'Correct', 1, 1, now, now]
 );
@@ -1568,14 +1568,14 @@ await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(per
       const now = new Date().toISOString();
 
       await db.execute(
-  `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+  `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [inactiveId, 'inactivecorrect', 'inactivecorrect@example.com', 'hash', 'Inactive', 'Correct', 0, 0, now, now]
 );
 
       // Assign role with permission
       await db.execute(
-  `INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`,
+  `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
   [inactiveId, roleId, now]
 );
 
@@ -1647,14 +1647,14 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
     await db.initialize();
 
     // Create full RBAC schema
-    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
-    await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-    await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-    await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
-    await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId) )`);
-    await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId) )`);
-    await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId) )`);
-    await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId) )`);
+    await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, is_active INTEGER NOT NULL DEFAULT 1, is_admin INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_login_at TEXT )`);
+    await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+    await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, is_built_in INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL )`);
+    await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, UNIQUE(resource, action) )`);
+    await db.execute(`CREATE TABLE user_groups ( user_id TEXT NOT NULL, group_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, group_id) )`);
+    await db.execute(`CREATE TABLE user_roles ( user_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (user_id, role_id) )`);
+    await db.execute(`CREATE TABLE group_roles ( group_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (group_id, role_id) )`);
+    await db.execute(`CREATE TABLE role_permissions ( role_id TEXT NOT NULL, permission_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (role_id, permission_id) )`);
 
     permissionService = new PermissionService(db);
     const now = new Date().toISOString();
@@ -1662,18 +1662,18 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
     // Users
     userId = 'user-role-cache-1';  // pragma: allowlist secret
     user2Id = 'user-role-cache-2';  // pragma: allowlist secret
-    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [userId, 'rolecache1', 'rc1@example.com', 'hash', 'RC', 'One', now, now]);
-    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [user2Id, 'rolecache2', 'rc2@example.com', 'hash', 'RC', 'Two', now, now]);
+    await db.execute(`INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [userId, 'rolecache1', 'rc1@example.com', 'hash', 'RC', 'One', now, now]);
+    await db.execute(`INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)`, [user2Id, 'rolecache2', 'rc2@example.com', 'hash', 'RC', 'Two', now, now]);
 
     // Group
     groupId = 'group-role-cache-1';  // pragma: allowlist secret
-    await db.execute(`INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`, [groupId, 'RC Group', 'Role cache test group', now, now]);
+    await db.execute(`INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, [groupId, 'RC Group', 'Role cache test group', now, now]);
 
     // Roles
     roleId = 'role-cache-direct';  // pragma: allowlist secret
     groupRoleId = 'role-cache-group';  // pragma: allowlist secret
-    await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, [roleId, 'Direct Role', 'Direct role', now, now]);
-    await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, [groupRoleId, 'Group Role', 'Group role', now, now]);
+    await db.execute(`INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)`, [roleId, 'Direct Role', 'Direct role', now, now]);
+    await db.execute(`INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)`, [groupRoleId, 'Group Role', 'Group role', now, now]);
 
     // Permissions
     const perm = await permissionService.createPermission({ resource: 'proxmox', action: 'execute', description: 'Execute Proxmox' });
@@ -1682,14 +1682,14 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
     permission2Id = perm2.id;
 
     // Assign role directly to user1
-    await db.execute(`INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)`, [userId, roleId, now]);
+    await db.execute(`INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`, [userId, roleId, now]);
     // Assign permission to role
-    await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, permissionId, now]);
+    await db.execute(`INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`, [roleId, permissionId, now]);
 
     // Assign user2 to group, group to groupRole
-    await db.execute(`INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)`, [user2Id, groupId, now]);
-    await db.execute(`INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)`, [groupId, groupRoleId, now]);
-    await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [groupRoleId, permissionId, now]);
+    await db.execute(`INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)`, [user2Id, groupId, now]);
+    await db.execute(`INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)`, [groupId, groupRoleId, now]);
+    await db.execute(`INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`, [groupRoleId, permissionId, now]);
   });
 
   afterEach(async () => {
@@ -1730,7 +1730,7 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
       expect(before).toBe(true);
 
       // Remove the permission from the role at DB level
-      await db.execute(`DELETE FROM role_permissions WHERE roleId = ? AND permissionId = ?`, [roleId, permissionId]);
+      await db.execute(`DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?`, [roleId, permissionId]);
 
       // Without invalidation, cache still returns true
       const stale = await permissionService.hasPermission(userId, 'proxmox', 'execute');
@@ -1762,7 +1762,7 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
 
     it('should handle role with no assigned users gracefully', async () => {
       const now = new Date().toISOString();
-      await db.execute(`INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, 0, ?, ?)`, ['orphan-role', 'Orphan', 'No users', now, now]);
+      await db.execute(`INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)`, ['orphan-role', 'Orphan', 'No users', now, now]);
 
       // Should not throw
       await expect(permissionService.invalidateRolePermissionCache('orphan-role')).resolves.not.toThrow();
@@ -1809,9 +1809,9 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
       const notePerm = await permissionService.createPermission({ resource: 'journal', action: 'note', description: 'Add notes' });
 
       // Assign some to user's role
-      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, provisionPerm.id, now]);
-      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, lifecyclePerm.id, now]);
-      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, notePerm.id, now]);
+      await db.execute(`INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`, [roleId, provisionPerm.id, now]);
+      await db.execute(`INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`, [roleId, lifecyclePerm.id, now]);
+      await db.execute(`INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`, [roleId, notePerm.id, now]);
 
       // Check permissions — first call populates cache, second uses cache
       expect(await permissionService.hasPermission(userId, 'aws', 'provision')).toBe(true);
@@ -1838,7 +1838,7 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
       const now = new Date().toISOString();
 
       // Add a new-style permission to the same role
-      await db.execute(`INSERT INTO role_permissions (roleId, permissionId, assignedAt) VALUES (?, ?, ?)`, [roleId, permission2Id, now]);
+      await db.execute(`INSERT INTO role_permissions (role_id, permission_id, assigned_at) VALUES (?, ?, ?)`, [roleId, permission2Id, now]);
 
       // Old permission still works
       expect(await permissionService.hasPermission(userId, 'proxmox', 'execute')).toBe(true);

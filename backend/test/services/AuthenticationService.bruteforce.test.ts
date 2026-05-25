@@ -22,14 +22,14 @@ describe('AuthenticationService - Brute Force Protection', () => {
         id TEXT PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
         email TEXT NOT NULL UNIQUE,
-        passwordHash TEXT NOT NULL,
-        firstName TEXT NOT NULL,
-        lastName TEXT NOT NULL,
-        isActive INTEGER NOT NULL DEFAULT 1,
-        isAdmin INTEGER NOT NULL DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL,
-        lastLoginAt TEXT
+        password_hash TEXT NOT NULL,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        is_admin INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        last_login_at TEXT
       )
     `);
 
@@ -38,45 +38,45 @@ describe('AuthenticationService - Brute Force Protection', () => {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL UNIQUE,
         description TEXT NOT NULL,
-        isBuiltIn INTEGER NOT NULL DEFAULT 0,
-        createdAt TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
+        is_built_in INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
       )
     `);
 
     await runQuery(db, `
       CREATE TABLE user_roles (
-        userId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, roleId)
+        user_id TEXT NOT NULL,
+        role_id TEXT NOT NULL,
+        assigned_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, role_id)
       )
     `);
 
     await runQuery(db, `
       CREATE TABLE group_roles (
-        groupId TEXT NOT NULL,
-        roleId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (groupId, roleId)
+        group_id TEXT NOT NULL,
+        role_id TEXT NOT NULL,
+        assigned_at TEXT NOT NULL,
+        PRIMARY KEY (group_id, role_id)
       )
     `);
 
     await runQuery(db, `
       CREATE TABLE user_groups (
-        userId TEXT NOT NULL,
-        groupId TEXT NOT NULL,
-        assignedAt TEXT NOT NULL,
-        PRIMARY KEY (userId, groupId)
+        user_id TEXT NOT NULL,
+        group_id TEXT NOT NULL,
+        assigned_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, group_id)
       )
     `);
 
     await runQuery(db, `
       CREATE TABLE revoked_tokens (
         token TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
-        revokedAt TEXT NOT NULL,
-        expiresAt TEXT NOT NULL
+        user_id TEXT NOT NULL,
+        revoked_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
       )
     `);
 
@@ -85,8 +85,8 @@ describe('AuthenticationService - Brute Force Protection', () => {
       CREATE TABLE failed_login_attempts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL,
-        attemptedAt TEXT NOT NULL,
-        ipAddress TEXT,
+        attempted_at TEXT NOT NULL,
+        ip_address TEXT,
         reason TEXT
       )
     `);
@@ -94,19 +94,19 @@ describe('AuthenticationService - Brute Force Protection', () => {
     await runQuery(db, `
       CREATE TABLE account_lockouts (
         username TEXT PRIMARY KEY,
-        lockoutType TEXT NOT NULL,
-        lockedAt TEXT NOT NULL,
-        lockedUntil TEXT,
-        failedAttempts INTEGER NOT NULL DEFAULT 0,
-        lastAttemptAt TEXT
+        lockout_type TEXT NOT NULL,
+        locked_at TEXT NOT NULL,
+        locked_until TEXT,
+        failed_attempts INTEGER NOT NULL DEFAULT 0,
+        last_attempt_at TEXT
       )
     `);
 
     await runQuery(db, `
       CREATE TABLE login_attempt_counters (
         username TEXT PRIMARY KEY,
-        cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0,
-        lastFailedAt TEXT
+        cumulative_failed_attempts INTEGER NOT NULL DEFAULT 0,
+        last_failed_at TEXT
       )
     `);
 
@@ -114,12 +114,12 @@ describe('AuthenticationService - Brute Force Protection', () => {
       CREATE TABLE config (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
-        updatedAt TEXT NOT NULL
+        updated_at TEXT NOT NULL
       )
     `);
 
     await runQuery(db, `
-      INSERT INTO config (key, value, updatedAt) VALUES
+      INSERT INTO config (key, value, updated_at) VALUES
         ('allow_self_registration', 'false', datetime('now')),
         ('default_new_user_role', 'role-viewer-001', datetime('now'))
     `);
@@ -131,7 +131,7 @@ describe('AuthenticationService - Brute Force Protection', () => {
     const now = new Date().toISOString();
 
     await runQuery(db, `
-      INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
     `, [userId, testUsername, 'test@example.com', passwordHash, 'Test', 'User', now, now]);
   });
@@ -286,8 +286,8 @@ describe('AuthenticationService - Brute Force Protection', () => {
     const pastTime = new Date(Date.now() - 1000).toISOString(); // 1 second ago
     await runQuery(db, `
       UPDATE account_lockouts
-      SET lockedUntil = ?
-      WHERE username = ? AND lockoutType = 'temporary'
+      SET locked_until = ?
+      WHERE username = ? AND lockout_type = 'temporary'
     `, [pastTime, testUsername]);
 
     // Now authentication should succeed (lockout expired)

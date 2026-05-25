@@ -110,7 +110,7 @@ describe('Groups Router - POST /api/groups', () => {
     await db.execute('DELETE FROM role_permissions');
     await db.execute('DELETE FROM groups');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 
@@ -299,7 +299,7 @@ describe('Groups Router - GET /api/groups', () => {
     await db.execute('DELETE FROM role_permissions');
     await db.execute('DELETE FROM groups');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 
@@ -466,7 +466,7 @@ describe('Groups Router - GET /api/groups/:id', () => {
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM groups');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 
@@ -580,7 +580,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
     await db.execute('DELETE FROM role_permissions');
     await db.execute('DELETE FROM groups');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 
@@ -729,7 +729,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
     await db.execute('DELETE FROM role_permissions');
     await db.execute('DELETE FROM groups');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 
@@ -885,7 +885,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM groups');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 
@@ -1105,7 +1105,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM groups');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 

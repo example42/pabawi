@@ -281,7 +281,7 @@ describe("C3: POST /api/setup/initialize is idempotent against TOCTOU", () => {
     // Exactly one admin exists in the database.
     const adminCount = await databaseService
       .getConnection()
-      .queryOne<{ count: number }>("SELECT COUNT(*) as count FROM users WHERE isAdmin = 1");
+      .queryOne<{ count: number }>("SELECT COUNT(*) as count FROM users WHERE is_admin = 1");
     expect(adminCount?.count).toBe(1);
   });
 });

@@ -3,6 +3,7 @@ import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
 import * as fc from 'fast-check';
 import * as jwt from 'jsonwebtoken';
+import { initializeTestSchema } from "../../helpers/schema";
 
 /**
  * Property-Based Tests for Token Validity
@@ -33,7 +34,7 @@ describe('Token Validity Properties', () => {
     await db.initialize();
 
     // Initialize minimal schema
-    await initializeMinimalSchema(db);
+    await initializeTestSchema(db);
 
     // Create auth service
     authService = new AuthenticationService(db, testJwtSecret);
@@ -280,51 +281,3 @@ describe('Token Validity Properties', () => {
 });
 
 // Helper function to initialize minimal schema
-async function initializeMinimalSchema(db: SQLiteAdapter): Promise<void> {
-  const schema = `
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      isAdmin INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS revoked_tokens (
-      token TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      revokedAt TEXT NOT NULL,
-      expiresAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      isBuiltIn INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-  `;
-
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-
-  for (const statement of statements) {
-    await db.execute(statement);
-  }
-}

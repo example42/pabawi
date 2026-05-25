@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { get, post, put, del } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
+  import { authManager } from '../lib/auth.svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
 
   interface Props {
@@ -202,6 +203,40 @@
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to remove role';
       showError('Failed to remove role', errorMessage);
+    } finally {
+      isSaving = false;
+    }
+  }
+
+  async function handleToggleAdmin(): Promise<void> {
+    if (!userId || !user) return;
+
+    const newAdminState = !user.isAdmin;
+    const action = newAdminState ? 'grant admin privileges to' : 'revoke admin privileges from';
+
+    if (!confirm(`Are you sure you want to ${action} this user?`)) {
+      return;
+    }
+
+    isSaving = true;
+    try {
+      const updated = await put<{ isAdmin: boolean }>(
+        `/api/users/${userId}/admin-status`,
+        { isAdmin: newAdminState }
+      );
+
+      user.isAdmin = updated.isAdmin;
+
+      showSuccess(
+        newAdminState ? 'Admin granted' : 'Admin revoked',
+        newAdminState
+          ? 'User now has administrator privileges'
+          : 'User no longer has administrator privileges'
+      );
+      onSaved();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to change admin status';
+      showError('Failed to change admin status', errorMessage);
     } finally {
       isSaving = false;
     }
@@ -489,23 +524,36 @@
               </div>
 
               <!-- Action Buttons -->
-              <div class="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div class="flex flex-wrap gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <button
                   type="button"
                   onclick={handleToggleActive}
                   disabled={isSaving}
-                  class="flex-1 inline-flex justify-center items-center gap-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 min-w-[10rem] inline-flex justify-center items-center gap-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {#if isSaving}
                     <LoadingSpinner size="sm" />
                   {/if}
                   {user.isActive ? 'Deactivate User' : 'Activate User'}
                 </button>
+                {#if authManager.user?.id !== user.id}
+                  <button
+                    type="button"
+                    onclick={handleToggleAdmin}
+                    disabled={isSaving}
+                    class="flex-1 min-w-[10rem] inline-flex justify-center items-center gap-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {#if isSaving}
+                      <LoadingSpinner size="sm" />
+                    {/if}
+                    {user.isAdmin ? 'Revoke Admin' : 'Grant Admin'}
+                  </button>
+                {/if}
                 <button
                   type="button"
                   onclick={handleClose}
                   disabled={isSaving}
-                  class="flex-1 inline-flex justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 min-w-[10rem] inline-flex justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Close
                 </button>

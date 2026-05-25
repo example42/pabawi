@@ -52,8 +52,8 @@ export class JournalService {
 
     const sql = `
       INSERT INTO journal_entries (
-        id, nodeId, nodeUri, eventType, source,
-        "action", summary, details, userId, timestamp
+        id, node_id, node_uri, event_type, source,
+        "action", summary, details, user_id, timestamp
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
@@ -113,13 +113,21 @@ export class JournalService {
 
     const ids = Array.isArray(nodeId) ? nodeId : [nodeId];
     const idPlaceholders = ids.map(() => "?").join(", ");
-    let sql = `SELECT * FROM journal_entries WHERE nodeId IN (${idPlaceholders})`;
+    let sql = `SELECT id,
+                      node_id    AS "nodeId",
+                      node_uri   AS "nodeUri",
+                      event_type AS "eventType",
+                      source,
+                      "action", summary, details,
+                      user_id    AS "userId",
+                      timestamp
+                 FROM journal_entries WHERE node_id IN (${idPlaceholders})`;
     const params: unknown[] = [...ids];
 
     if (opts.eventType) {
       const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
       const placeholders = types.map(() => "?").join(", ");
-      sql += ` AND eventType IN (${placeholders})`;
+      sql += ` AND event_type IN (${placeholders})`;
       params.push(...types);
     }
 
@@ -165,10 +173,18 @@ export class JournalService {
     const pattern = `%${query}%`;
 
     const sql = `
-      SELECT * FROM journal_entries
-      WHERE summary LIKE ? OR details LIKE ?
-      ORDER BY timestamp DESC
-      LIMIT ? OFFSET ?
+      SELECT id,
+             node_id    AS "nodeId",
+             node_uri   AS "nodeUri",
+             event_type AS "eventType",
+             source,
+             "action", summary, details,
+             user_id    AS "userId",
+             timestamp
+        FROM journal_entries
+       WHERE summary LIKE ? OR details LIKE ?
+       ORDER BY timestamp DESC
+       LIMIT ? OFFSET ?
     `;
 
     const params = [pattern, pattern, opts.limit, opts.offset];
@@ -222,20 +238,28 @@ export class JournalService {
   ): Promise<JournalEntry[]> {
     const opts = GlobalTimelineFiltersSchema.parse(filters ?? {});
 
-    let sql = `SELECT * FROM journal_entries`;
+    let sql = `SELECT id,
+                      node_id    AS "nodeId",
+                      node_uri   AS "nodeUri",
+                      event_type AS "eventType",
+                      source,
+                      "action", summary, details,
+                      user_id    AS "userId",
+                      timestamp
+                 FROM journal_entries`;
     const params: unknown[] = [];
     const conditions: string[] = [];
 
     if (opts.nodeIds && opts.nodeIds.length > 0) {
       const placeholders = opts.nodeIds.map(() => "?").join(", ");
-      conditions.push(`nodeId IN (${placeholders})`);
+      conditions.push(`node_id IN (${placeholders})`);
       params.push(...opts.nodeIds);
     }
 
     if (opts.eventType) {
       const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
       const placeholders = types.map(() => "?").join(", ");
-      conditions.push(`eventType IN (${placeholders})`);
+      conditions.push(`event_type IN (${placeholders})`);
       params.push(...types);
     }
 
@@ -288,14 +312,14 @@ export class JournalService {
 
     if (opts.nodeIds && opts.nodeIds.length > 0) {
       const placeholders = opts.nodeIds.map(() => "?").join(", ");
-      conditions.push(`nodeId IN (${placeholders})`);
+      conditions.push(`node_id IN (${placeholders})`);
       params.push(...opts.nodeIds);
     }
 
     if (opts.eventType) {
       const types = Array.isArray(opts.eventType) ? opts.eventType : [opts.eventType];
       const placeholders = types.map(() => "?").join(", ");
-      conditions.push(`eventType IN (${placeholders})`);
+      conditions.push(`event_type IN (${placeholders})`);
       params.push(...types);
     }
 

@@ -18,7 +18,6 @@
     firstName: string;
     lastName: string;
     isActive: boolean;
-    isAdmin: boolean;
   }
 
   // Form state
@@ -29,7 +28,6 @@
     firstName: '',
     lastName: '',
     isActive: true,
-    isAdmin: false,
   });
 
   let isSaving = $state(false);
@@ -95,7 +93,6 @@
       firstName: '',
       lastName: '',
       isActive: true,
-      isAdmin: false,
     };
     errors = {};
   }
@@ -252,19 +249,9 @@
                   Active (user can log in)
                 </label>
               </div>
-
-              <div class="flex items-center">
-                <input
-                  id="isAdmin"
-                  type="checkbox"
-                  bind:checked={formData.isAdmin}
-                  disabled={isSaving}
-                  class="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                <label for="isAdmin" class="ml-2 block text-sm text-gray-700 dark:text-gray-300">
-                  Administrator
-                </label>
-              </div>
+              <p class="text-xs text-gray-500 dark:text-gray-400">
+                Admin privileges are granted after creation from the user details dialog.
+              </p>
             </div>
 
             <!-- Action Buttons -->

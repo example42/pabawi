@@ -28,8 +28,8 @@ describe('Migration Integration Test', () => {
   it('should apply all migrations on initialization', async () => {
     const status = await dbService.getMigrationStatus();
 
-    // Should have applied all migrations (000 through 013, no 012 in source)
-    expect(status.applied).toHaveLength(13);
+    // Should have applied all migrations (000 through 014, no 012 in source)
+    expect(status.applied).toHaveLength(14);
     expect(status.applied[0].id).toBe('000');
     expect(status.applied[1].id).toBe('001');
     expect(status.applied[2].id).toBe('002');
@@ -43,6 +43,7 @@ describe('Migration Integration Test', () => {
     expect(status.applied[10].id).toBe('010');
     expect(status.applied[11].id).toBe('011');
     expect(status.applied[12].id).toBe('013');
+    expect(status.applied[13].id).toBe('014');
     expect(status.pending).toHaveLength(0);
   });
 
@@ -50,16 +51,16 @@ describe('Migration Integration Test', () => {
     const db = dbService.getConnection();
 
     // Check that roles exist
-    const roles = await db.query<any>('SELECT * FROM roles WHERE isBuiltIn = 1');
+    const roles = await db.query<{ name: string }>('SELECT name FROM roles WHERE is_built_in = 1');
 
     expect(roles).toHaveLength(4);
     expect(roles.map(r => r.name).sort()).toEqual(['Administrator', 'Operator', 'Provisioner', 'Viewer']);
 
     // Check that config table exists and has default values
-    const config = await db.query<any>('SELECT * FROM config');
+    const config = await db.query<{ key: string; value: string }>('SELECT key, value FROM config');
 
     expect(config.length).toBeGreaterThan(0);
-    const configMap = Object.fromEntries(config.map((c: any) => [c.key, c.value]));
+    const configMap = Object.fromEntries(config.map((c) => [c.key, c.value]));
     expect(configMap).toHaveProperty('allow_self_registration');
     expect(configMap).toHaveProperty('default_new_user_role');
   });
@@ -68,7 +69,7 @@ describe('Migration Integration Test', () => {
     const db = dbService.getConnection();
 
     // Check that no admin users exist
-    const row = await db.queryOne<any>('SELECT COUNT(*) as count FROM users WHERE isAdmin = 1');
+    const row = await db.queryOne<{ count: number }>('SELECT COUNT(*) as count FROM users WHERE is_admin = 1');
     const adminCount = row?.count ?? 0;
 
     expect(adminCount).toBe(0);
@@ -83,8 +84,8 @@ describe('Migration Integration Test', () => {
 
     const status = await dbService2.getMigrationStatus();
 
-    // Should still have 13 applied, 0 pending
-    expect(status.applied).toHaveLength(13);
+    // Should still have 14 applied, 0 pending
+    expect(status.applied).toHaveLength(14);
     expect(status.pending).toHaveLength(0);
 
     await dbService2.close();
