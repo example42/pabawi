@@ -4,6 +4,7 @@ import type { DatabaseAdapter } from '../src/database/DatabaseAdapter';
 import { UserService, CreateUserDTO, UpdateUserDTO } from '../src/services/UserService';
 import { AuthenticationService } from '../src/services/AuthenticationService';
 import { randomUUID } from 'crypto';
+import { initializeTestSchema } from './helpers/schema';
 
 describe('UserService', () => {
   let db: DatabaseAdapter;
@@ -15,8 +16,8 @@ describe('UserService', () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Initialize schema
-    await initializeSchema(db);
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
 
     // Create services
     authService = new AuthenticationService(db, 'test-secret'); // pragma: allowlist secret
@@ -657,106 +658,13 @@ describe('UserService', () => {
 
 // Helper functions
 
-async function initializeSchema(db: DatabaseAdapter): Promise<void> {
-  await db.execute(`
-    CREATE TABLE users (
-      id TEXT PRIMARY KEY,
-      username TEXT UNIQUE NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER DEFAULT 1,
-      isAdmin INTEGER DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE groups (
-      id TEXT PRIMARY KEY,
-      name TEXT UNIQUE NOT NULL,
-      description TEXT,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE roles (
-      id TEXT PRIMARY KEY,
-      name TEXT UNIQUE NOT NULL,
-      description TEXT,
-      isBuiltIn INTEGER DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE user_groups (
-      userId TEXT NOT NULL,
-      groupId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, groupId),
-      FOREIGN KEY (userId) REFERENCES users(id),
-      FOREIGN KEY (groupId) REFERENCES groups(id)
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id),
-      FOREIGN KEY (roleId) REFERENCES roles(id)
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE revoked_tokens (
-      token TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      revokedAt TEXT NOT NULL,
-      expiresAt TEXT NOT NULL
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    )
-  `);
-
-  // Insert default config values
-  await db.execute(
-    `INSERT INTO config (key, value, updatedAt) VALUES (?, ?, datetime('now'))`,
-    ['allow_self_registration', 'false']
-  );
-  await db.execute(
-    `INSERT INTO config (key, value, updatedAt) VALUES (?, ?, datetime('now'))`,
-    ['default_new_user_role', 'role-viewer-001']
-  );
-
-  // Seed the default viewer role so FK constraints are satisfied
-  await db.execute(
-    `INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    ['role-viewer-001', 'Viewer', 'Default viewer role', 1]
-  );
-}
 
 async function createTestGroup(db: DatabaseAdapter, name: string): Promise<string> {
   const groupId = randomUUID();
   const now = new Date().toISOString();
 
   await db.execute(
-    'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+    'INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
     [groupId, name, 'Test group description', now, now]
   );
 
@@ -768,7 +676,7 @@ async function createTestRole(db: DatabaseAdapter, name: string): Promise<string
   const now = new Date().toISOString();
 
   await db.execute(
-    'INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     [roleId, name, 'Test role description', 0, now, now]
   );
 

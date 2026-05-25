@@ -279,4 +279,93 @@ describe("MigrationRunner", () => {
     );
     expect(result?.count).toBe(1);
   });
+
+  it("rolls back partial migrations on failure", async () => {
+    // Migration creates a table successfully, then fails on the second
+    // statement. The first table must NOT exist after rollback.
+    writeFileSync(
+      join(testMigrationsDir, "001_partial_failure.sql"),
+      "CREATE TABLE good_table (id TEXT PRIMARY KEY); INVALID SQL;"
+    );
+
+    const runner = new MigrationRunner(db, testMigrationsDir);
+    await expect(runner.runPendingMigrations()).rejects.toThrow();
+
+    // The first statement's table must NOT exist — the transaction rolled back
+    const tables = await db.query<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='good_table'"
+    );
+    expect(tables).toHaveLength(0);
+
+    // The migrations table must not record this migration
+    const migrations = await db.query<{ id: string }>(
+      "SELECT id FROM migrations"
+    );
+    expect(migrations).toHaveLength(0);
+  });
+
+  it("retries a failed migration on the next run", async () => {
+    writeFileSync(
+      join(testMigrationsDir, "001_will_fail.sql"),
+      "CREATE TABLE t1 (id TEXT); INVALID SQL;"
+    );
+
+    const runner = new MigrationRunner(db, testMigrationsDir);
+    await expect(runner.runPendingMigrations()).rejects.toThrow();
+
+    // Replace the broken file with a fixed one
+    writeFileSync(
+      join(testMigrationsDir, "001_will_fail.sql"),
+      "CREATE TABLE t1 (id TEXT)"
+    );
+
+    const applied = await runner.runPendingMigrations();
+    expect(applied).toBe(1);
+
+    const tables = await db.query<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='t1'"
+    );
+    expect(tables).toHaveLength(1);
+  });
+
+  it("normalises legacy appliedAt column to applied_at on init", async () => {
+    // Simulate a legacy install: drop the runner-created table and recreate
+    // it with the old camelCase column.
+    await db.execute("CREATE TABLE legacy_marker (id TEXT)"); // ensure DB is alive
+    await db.execute(
+      "CREATE TABLE migrations (id TEXT PRIMARY KEY, name TEXT NOT NULL, appliedAt TEXT NOT NULL)"
+    );
+    await db.execute(
+      "INSERT INTO migrations (id, name, appliedAt) VALUES ('000', 'legacy.sql', '2024-01-01T00:00:00.000Z')"
+    );
+
+    writeFileSync(
+      join(testMigrationsDir, "001_after_rename.sql"),
+      "CREATE TABLE post_rename (id TEXT PRIMARY KEY)"
+    );
+
+    const runner = new MigrationRunner(db, testMigrationsDir);
+    await runner.runPendingMigrations();
+
+    // Column must be applied_at now
+    const cols = await db.query<{ name: string }>(
+      "PRAGMA table_info(migrations)"
+    );
+    const names = cols.map((c) => c.name);
+    expect(names).toContain("applied_at");
+    expect(names).not.toContain("appliedAt");
+
+    // Legacy row data must be preserved
+    const legacyRow = await db.queryOne<{ id: string; applied_at: string }>(
+      "SELECT id, applied_at FROM migrations WHERE id = '000'"
+    );
+    expect(legacyRow?.id).toBe("000");
+    expect(legacyRow?.applied_at).toBe("2024-01-01T00:00:00.000Z");
+
+    // New migration was recorded with the new column
+    const newRow = await db.queryOne<{ id: string }>(
+      "SELECT id FROM migrations WHERE id = '001'"
+    );
+    expect(newRow?.id).toBe("001");
+  });
 });

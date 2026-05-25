@@ -37,7 +37,7 @@ export class SetupService {
   public async isSetupComplete(): Promise<boolean> {
     try {
       const row = await this.db.queryOne<{ count: number }>(
-        "SELECT COUNT(*) as count FROM users WHERE isAdmin = 1"
+        "SELECT COUNT(*) as count FROM users WHERE is_admin = 1"
       );
       return (row?.count ?? 0) > 0;
     } catch (err) {
@@ -116,9 +116,9 @@ export class SetupService {
   private async setConfigValue(key: string, value: string): Promise<void> {
     try {
       await this.db.execute(
-        `INSERT INTO config (key, value, updatedAt)
+        `INSERT INTO config (key, value, updated_at)
          VALUES (?, ?, ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt`,
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
         [key, value, new Date().toISOString()]
       );
     } catch (err) {

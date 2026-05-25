@@ -22,6 +22,33 @@ export interface User {
 }
 
 /**
+ * Column list for SELECTs that hydrate the User interface.
+ *
+ * The DB schema is snake_case (see .kiro/steering/database-conventions.md);
+ * each row column is aliased to the camelCase TS field. Use this constant
+ * instead of `SELECT *` so adding a column to the DB does not silently
+ * change the row shape.
+ */
+const USER_COLUMNS = `id, username, email,
+  password_hash AS "passwordHash",
+  first_name    AS "firstName",
+  last_name     AS "lastName",
+  is_active     AS "isActive",
+  is_admin      AS "isAdmin",
+  created_at    AS "createdAt",
+  updated_at    AS "updatedAt",
+  last_login_at AS "lastLoginAt"`;
+
+const GROUP_COLUMNS = `id, name, description,
+  created_at AS "createdAt",
+  updated_at AS "updatedAt"`;
+
+const ROLE_COLUMNS = `id, name, description,
+  is_built_in AS "isBuiltIn",
+  created_at  AS "createdAt",
+  updated_at  AS "updatedAt"`;
+
+/**
  * User data transfer object (without password)
  */
 export interface UserDTO {
@@ -162,7 +189,7 @@ export class UserService {
 
     // Insert user
     await this.db.execute(
-      `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
@@ -184,7 +211,7 @@ export class UserService {
       const defaultRoleId = await this.setupService.getDefaultNewUserRole();
       if (defaultRoleId) {
         await this.db.execute(
-          `INSERT INTO user_roles (userId, roleId, assignedAt)
+          `INSERT INTO user_roles (user_id, role_id, assigned_at)
            VALUES (?, ?, ?)`,
           [userId, defaultRoleId, now]
         );
@@ -208,7 +235,7 @@ export class UserService {
    */
   public async getUserById(id: string): Promise<User | null> {
     return this.db.queryOne<User>(
-      'SELECT * FROM users WHERE id = ?',
+      `SELECT ${USER_COLUMNS} FROM users WHERE id = ?`,
       [id]
     );
   }
@@ -221,7 +248,7 @@ export class UserService {
    */
   public async getUserByUsername(username: string): Promise<User | null> {
     return this.db.queryOne<User>(
-      'SELECT * FROM users WHERE username = ?',
+      `SELECT ${USER_COLUMNS} FROM users WHERE username = ?`,
       [username]
     );
   }
@@ -234,7 +261,7 @@ export class UserService {
    */
   private async getUserByEmail(email: string): Promise<User | null> {
     return this.db.queryOne<User>(
-      'SELECT * FROM users WHERE email = ?',
+      `SELECT ${USER_COLUMNS} FROM users WHERE email = ?`,
       [email]
     );
   }
@@ -272,12 +299,12 @@ export class UserService {
     }
 
     if (data.firstName !== undefined) {
-      updates.push('firstName = ?');
+      updates.push('first_name = ?');
       params.push(data.firstName);
     }
 
     if (data.lastName !== undefined) {
-      updates.push('lastName = ?');
+      updates.push('last_name = ?');
       params.push(data.lastName);
     }
 
@@ -289,22 +316,22 @@ export class UserService {
       }
 
       const passwordHash = await this.authService.hashPassword(data.password);
-      updates.push('passwordHash = ?');
+      updates.push('password_hash = ?');
       params.push(passwordHash);
     }
 
     if (data.isActive !== undefined) {
-      updates.push('isActive = ?');
+      updates.push('is_active = ?');
       params.push(data.isActive ? 1 : 0);
     }
 
     if (data.isAdmin !== undefined) {
-      updates.push('isAdmin = ?');
+      updates.push('is_admin = ?');
       params.push(data.isAdmin ? 1 : 0);
     }
 
-    // Always update updatedAt
-    updates.push('updatedAt = ?');
+    // Always update updated_at
+    updates.push('updated_at = ?');
     params.push(new Date().toISOString());
 
     // Add user ID to params
@@ -338,9 +365,9 @@ export class UserService {
       throw new Error('User not found');
     }
 
-    // Soft delete: set isActive to 0
+    // Soft delete: set is_active to 0
     await this.db.execute(
-      'UPDATE users SET isActive = 0, updatedAt = ? WHERE id = ?',
+      'UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?',
       [new Date().toISOString(), id]
     );
   }
@@ -360,12 +387,12 @@ export class UserService {
     const params: (string | number)[] = [];
 
     if (filters?.isActive !== undefined) {
-      conditions.push('isActive = ?');
+      conditions.push('is_active = ?');
       params.push(filters.isActive ? 1 : 0);
     }
 
     if (filters?.isAdmin !== undefined) {
-      conditions.push('isAdmin = ?');
+      conditions.push('is_admin = ?');
       params.push(filters.isAdmin ? 1 : 0);
     }
 
@@ -377,7 +404,7 @@ export class UserService {
       // Use ILIKE on Postgres so search stays case-insensitive on both backends.
       const like = this.db.getDialect() === 'postgres' ? 'ILIKE' : 'LIKE';
       conditions.push(
-        `(username ${like} ? ESCAPE '\\' OR email ${like} ? ESCAPE '\\' OR firstName ${like} ? ESCAPE '\\' OR lastName ${like} ? ESCAPE '\\')`,
+        `(username ${like} ? ESCAPE '\\' OR email ${like} ? ESCAPE '\\' OR first_name ${like} ? ESCAPE '\\' OR last_name ${like} ? ESCAPE '\\')`,
       );
       params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
@@ -393,7 +420,7 @@ export class UserService {
 
     // Get paginated results
     const users = await this.db.query<User>(
-      `SELECT * FROM users ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`,
+      `SELECT ${USER_COLUMNS} FROM users ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
 
@@ -421,7 +448,7 @@ export class UserService {
 
     // Check if group exists
     const group = await this.db.queryOne<Group>(
-      'SELECT * FROM groups WHERE id = ?',
+      `SELECT ${GROUP_COLUMNS} FROM groups WHERE id = ?`,
       [groupId]
     );
     if (!group) {
@@ -430,7 +457,7 @@ export class UserService {
 
     // Check if association already exists
     const existing = await this.db.queryOne<{ userId: string }>(
-      'SELECT userId FROM user_groups WHERE userId = ? AND groupId = ?',
+      `SELECT user_id AS "userId" FROM user_groups WHERE user_id = ? AND group_id = ?`,
       [userId, groupId]
     );
     if (existing) {
@@ -439,7 +466,7 @@ export class UserService {
 
     // Create association
     await this.db.execute(
-      'INSERT INTO user_groups (userId, groupId, assignedAt) VALUES (?, ?, ?)',
+      'INSERT INTO user_groups (user_id, group_id, assigned_at) VALUES (?, ?, ?)',
       [userId, groupId, new Date().toISOString()]
     );
   }
@@ -454,7 +481,7 @@ export class UserService {
   public async removeUserFromGroup(userId: string, groupId: string): Promise<void> {
     // Check if association exists
     const existing = await this.db.queryOne<{ userId: string }>(
-      'SELECT userId FROM user_groups WHERE userId = ? AND groupId = ?',
+      `SELECT user_id AS "userId" FROM user_groups WHERE user_id = ? AND group_id = ?`,
       [userId, groupId]
     );
     if (!existing) {
@@ -463,7 +490,7 @@ export class UserService {
 
     // Remove association
     await this.db.execute(
-      'DELETE FROM user_groups WHERE userId = ? AND groupId = ?',
+      'DELETE FROM user_groups WHERE user_id = ? AND group_id = ?',
       [userId, groupId]
     );
   }
@@ -476,10 +503,13 @@ export class UserService {
    */
   public async getUserGroups(userId: string): Promise<Group[]> {
     return this.db.query<Group>(
-      `SELECT g.* FROM groups g
-       INNER JOIN user_groups ug ON ug.groupId = g.id
-       WHERE ug.userId = ?
-       ORDER BY g.name`,
+      `SELECT g.id, g.name, g.description,
+              g.created_at AS "createdAt",
+              g.updated_at AS "updatedAt"
+         FROM groups g
+        INNER JOIN user_groups ug ON ug.group_id = g.id
+        WHERE ug.user_id = ?
+        ORDER BY g.name`,
       [userId]
     );
   }
@@ -500,7 +530,7 @@ export class UserService {
 
     // Check if role exists
     const role = await this.db.queryOne<Role>(
-      'SELECT * FROM roles WHERE id = ?',
+      `SELECT ${ROLE_COLUMNS} FROM roles WHERE id = ?`,
       [roleId]
     );
     if (!role) {
@@ -509,7 +539,7 @@ export class UserService {
 
     // Check if assignment already exists
     const existing = await this.db.queryOne<{ userId: string }>(
-      'SELECT userId FROM user_roles WHERE userId = ? AND roleId = ?',
+      `SELECT user_id AS "userId" FROM user_roles WHERE user_id = ? AND role_id = ?`,
       [userId, roleId]
     );
     if (existing) {
@@ -518,7 +548,7 @@ export class UserService {
 
     // Create assignment
     await this.db.execute(
-      'INSERT INTO user_roles (userId, roleId, assignedAt) VALUES (?, ?, ?)',
+      'INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)',
       [userId, roleId, new Date().toISOString()]
     );
   }
@@ -533,7 +563,7 @@ export class UserService {
   public async removeRoleFromUser(userId: string, roleId: string): Promise<void> {
     // Check if assignment exists
     const existing = await this.db.queryOne<{ userId: string }>(
-      'SELECT userId FROM user_roles WHERE userId = ? AND roleId = ?',
+      `SELECT user_id AS "userId" FROM user_roles WHERE user_id = ? AND role_id = ?`,
       [userId, roleId]
     );
     if (!existing) {
@@ -542,7 +572,7 @@ export class UserService {
 
     // Remove assignment
     await this.db.execute(
-      'DELETE FROM user_roles WHERE userId = ? AND roleId = ?',
+      'DELETE FROM user_roles WHERE user_id = ? AND role_id = ?',
       [userId, roleId]
     );
   }
@@ -555,10 +585,14 @@ export class UserService {
    */
   public async getUserRoles(userId: string): Promise<Role[]> {
     return this.db.query<Role>(
-      `SELECT r.* FROM roles r
-       INNER JOIN user_roles ur ON ur.roleId = r.id
-       WHERE ur.userId = ?
-       ORDER BY r.name`,
+      `SELECT r.id, r.name, r.description,
+              r.is_built_in AS "isBuiltIn",
+              r.created_at  AS "createdAt",
+              r.updated_at  AS "updatedAt"
+         FROM roles r
+        INNER JOIN user_roles ur ON ur.role_id = r.id
+        WHERE ur.user_id = ?
+        ORDER BY r.name`,
       [userId]
     );
   }

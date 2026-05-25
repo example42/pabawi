@@ -6,6 +6,8 @@ import { createRbacMiddleware } from "../../src/middleware/rbacMiddleware";
 import { PermissionService } from "../../src/services/PermissionService";
 import { UserService } from "../../src/services/UserService";
 import { RoleService } from "../../src/services/RoleService";
+import { AuthenticationService } from "../../src/services/AuthenticationService";
+import { initializeTestSchema } from "../helpers/schema";
 
 describe("RBAC Middleware", () => {
   let db: DatabaseAdapter;
@@ -34,12 +36,13 @@ describe("RBAC Middleware", () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Initialize database schema
-    await initializeSchema(db);
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
 
     // Initialize services
     permissionService = new PermissionService(db);
-    userService = new UserService(db);
+    const authForUserService = new AuthenticationService(db, 'rbac-test-secret'); // pragma: allowlist secret
+    userService = new UserService(db, authForUserService);
     roleService = new RoleService(db);
     rbacMiddleware = createRbacMiddleware(db);
 
@@ -76,45 +79,32 @@ describe("RBAC Middleware", () => {
       isAdmin: 0
     });
 
-    // Create test permissions
-    const ansibleRead = await permissionService.createPermission({
-      resource: "ansible",
-      action: "read",
-      description: "Read Ansible resources"
-    });
+    // Use the permissions that migrations already seed; creating duplicates
+    // would collide on the unique (resource, action) constraint.
+    const ansibleRead = await permissionService.getPermissionById('ansible-read-001');
+    if (!ansibleRead) throw new Error('Expected seeded ansible-read permission');
     ansibleReadPermId = ansibleRead.id;
 
-    const ansibleWrite = await permissionService.createPermission({
-      resource: "ansible",
-      action: "write",
-      description: "Write Ansible resources"
-    });
+    const ansibleWrite = await permissionService.getPermissionById('ansible-write-001');
+    if (!ansibleWrite) throw new Error('Expected seeded ansible-write permission');
     ansibleWritePermId = ansibleWrite.id;
 
-    const boltExecute = await permissionService.createPermission({
-      resource: "bolt",
-      action: "execute",
-      description: "Execute Bolt tasks"
-    });
+    const boltExecute = await permissionService.getPermissionById('bolt-exec-001');
+    if (!boltExecute) throw new Error('Expected seeded bolt-execute permission');
     boltExecutePermId = boltExecute.id;
 
-    // Create test roles
-    const viewerRole = await roleService.createRole({
-      name: "Viewer",
-      description: "Can view resources"
-    });
+    // Use seeded built-in roles instead of creating duplicates
+    const viewerRole = await roleService.getRoleById('role-viewer-001');
+    if (!viewerRole) throw new Error('Expected seeded Viewer role');
     viewerRoleId = viewerRole.id;
 
-    const operatorRole = await roleService.createRole({
-      name: "Operator",
-      description: "Can view and execute"
-    });
+    const operatorRole = await roleService.getRoleById('role-operator-001');
+    if (!operatorRole) throw new Error('Expected seeded Operator role');
     operatorRoleId = operatorRole.id;
 
-    // Assign permissions to roles
-    await roleService.assignPermissionToRole(viewerRoleId, ansibleReadPermId);
-    await roleService.assignPermissionToRole(operatorRoleId, ansibleReadPermId);
-    await roleService.assignPermissionToRole(operatorRoleId, boltExecutePermId);
+    // The seeded role-permission assignments already include the ones we
+    // need (viewer→ansible-read, operator→ansible-read, operator→bolt-exec),
+    // so no extra assignPermissionToRole calls are required.
 
     // Assign role to regular user
     await userService.assignRoleToUser(regularUserId, viewerRoleId);
@@ -453,28 +443,6 @@ describe("RBAC Middleware", () => {
 });
 
 // Helper function to initialize database schema
-async function initializeSchema(db: DatabaseAdapter): Promise<void> {
-  await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
-  await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL, isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT NOT NULL, createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
-  await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE )`);
-  await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-  await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE, FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE )`);
-  await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE, FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE )`);
-  await db.execute(`CREATE TABLE revoked_tokens ( token TEXT PRIMARY KEY, userId TEXT NOT NULL, revokedAt TEXT NOT NULL, expiresAt TEXT NOT NULL, FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE )`);
-  await db.execute(`CREATE TABLE audit_logs ( id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, eventType TEXT NOT NULL, action TEXT NOT NULL, userId TEXT, targetUserId TEXT, targetResourceType TEXT, targetResourceId TEXT, ipAddress TEXT, userAgent TEXT, details TEXT, result TEXT NOT NULL, FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL )`);
-  await db.execute(`CREATE INDEX idx_revoked_tokens_expires ON revoked_tokens(expiresAt)`);
-  await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
-  await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
-  await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
-  await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
-  await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
-  await db.execute(`CREATE INDEX idx_audit_logs_user ON audit_logs(userId)`);
-  await db.execute(`CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp)`);
-  await db.execute(`CREATE TABLE config ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`INSERT INTO config (key, value, updatedAt) VALUES ('allow_self_registration', 'false', datetime('now')), ('default_new_user_role', 'role-viewer-001', datetime('now'))`);
-}
 
 // Helper function to create a user
 async function createUser(
@@ -488,7 +456,7 @@ async function createUser(
   }
 ): Promise<void> {
   await db.execute(
-    `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       data.id,

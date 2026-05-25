@@ -6,6 +6,7 @@ import { PermissionService } from '../../../src/services/PermissionService';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
 import * as fc from 'fast-check';
 import { randomUUID } from 'crypto';
+import { initializeTestSchema } from "../../helpers/schema";
 
 /**
  * Property-Based Tests for Permission Transitivity
@@ -36,7 +37,7 @@ describe('Permission Transitivity Properties', () => {
     await db.initialize();
 
     // Initialize schema
-    await initializeRBACSchema(db);
+    await initializeTestSchema(db);
 
     // Create services
     authService = new AuthenticationService(db, testJwtSecret);
@@ -371,102 +372,10 @@ describe('Permission Transitivity Properties', () => {
 
 // Helper functions
 
-async function initializeRBACSchema(db: SQLiteAdapter): Promise<void> {
-  const schema = `
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      isAdmin INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      isBuiltIn INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS permissions (
-      id TEXT PRIMARY KEY,
-      resource TEXT NOT NULL,
-      action TEXT NOT NULL,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      UNIQUE(resource, action)
-    );
-
-    CREATE TABLE IF NOT EXISTS user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS role_permissions (
-      roleId TEXT NOT NULL,
-      permissionId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (roleId, permissionId),
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-      FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS user_groups (
-      userId TEXT NOT NULL,
-      groupId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, groupId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS group_roles (
-      groupId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (groupId, roleId),
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS revoked_tokens (
-      token TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      revokedAt TEXT NOT NULL,
-      expiresAt TEXT NOT NULL
-    );
-  `;
-
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-
-  for (const statement of statements) {
-    await db.execute(statement);
-  }
-}
 
 async function createTestUser(db: SQLiteAdapter, userId: string): Promise<void> {
   const sql = `
-    INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)
   `;
 
@@ -487,7 +396,7 @@ async function createTestUser(db: SQLiteAdapter, userId: string): Promise<void> 
 
 async function createTestRole(db: SQLiteAdapter, roleId: string, name?: string): Promise<void> {
   const sql = `
-    INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+    INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
     VALUES (?, ?, ?, 0, ?, ?)
   `;
 
@@ -511,7 +420,7 @@ async function createTestPermission(
   action: string
 ): Promise<void> {
   const sql = `
-    INSERT INTO permissions (id, resource, "action", description, createdAt)
+    INSERT INTO permissions (id, resource, "action", description, created_at)
     VALUES (?, ?, ?, ?, ?)
   `;
 

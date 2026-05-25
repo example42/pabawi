@@ -4,6 +4,7 @@ import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
 import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
 import { createAuthMiddleware } from "../../src/middleware/authMiddleware";
 import { AuthenticationService } from "../../src/services/AuthenticationService";
+import { initializeTestSchema } from "../helpers/schema";
 
 describe("Authentication Middleware", () => {
   let db: DatabaseAdapter;
@@ -16,14 +17,14 @@ describe("Authentication Middleware", () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Initialize database schema
-    await initializeSchema(db);
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
 
     authService = new AuthenticationService(db, jwtSecret);
 
     // Create test user
     await db.execute(
-      `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+      `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
           "test-user-id",
@@ -316,46 +317,3 @@ describe("Authentication Middleware", () => {
 });
 
 // Helper function to initialize database schema
-async function initializeSchema(db: DatabaseAdapter): Promise<void> {
-  await db.execute(`CREATE TABLE users (
-    id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, email TEXT NOT NULL UNIQUE,
-    passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL,
-    isActive INTEGER NOT NULL DEFAULT 1, isAdmin INTEGER NOT NULL DEFAULT 0,
-    createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT
-  )`);
-  await db.execute(`CREATE TABLE groups (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
-    createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
-  )`);
-  await db.execute(`CREATE TABLE roles (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, description TEXT NOT NULL,
-    isBuiltIn INTEGER NOT NULL DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL
-  )`);
-  await db.execute(`CREATE TABLE user_groups (
-    userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL,
-    PRIMARY KEY (userId, groupId),
-    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-  )`);
-  await db.execute(`CREATE TABLE user_roles (
-    userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL,
-    PRIMARY KEY (userId, roleId),
-    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-  )`);
-  await db.execute(`CREATE TABLE group_roles (
-    groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL,
-    PRIMARY KEY (groupId, roleId),
-    FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-    FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-  )`);
-  await db.execute(`CREATE TABLE revoked_tokens (
-    token TEXT PRIMARY KEY, userId TEXT NOT NULL, revokedAt TEXT NOT NULL,
-    expiresAt TEXT NOT NULL,
-    FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-  )`);
-  await db.execute(`CREATE INDEX idx_revoked_tokens_expires ON revoked_tokens(expiresAt)`);
-  await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
-  await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
-  await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
-}

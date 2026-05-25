@@ -12,6 +12,15 @@ export interface Group {
   updatedAt: string;
 }
 
+const GROUP_COLUMNS = `id, name, description,
+  created_at AS "createdAt",
+  updated_at AS "updatedAt"`;
+
+const ROLE_COLUMNS = `id, name, description,
+  is_built_in AS "isBuiltIn",
+  created_at  AS "createdAt",
+  updated_at  AS "updatedAt"`;
+
 /**
  * Group data transfer object
  */
@@ -123,7 +132,7 @@ export class GroupService {
 
     // Insert group
     await this.db.execute(
-      `INSERT INTO groups (id, name, description, createdAt, updatedAt)
+      `INSERT INTO groups (id, name, description, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?)`,
       [groupId, data.name, data.description, now, now]
     );
@@ -145,7 +154,7 @@ export class GroupService {
    */
   public async getGroupById(id: string): Promise<Group | null> {
     return this.db.queryOne<Group>(
-      'SELECT * FROM groups WHERE id = ?',
+      `SELECT ${GROUP_COLUMNS} FROM groups WHERE id = ?`,
       [id]
     );
   }
@@ -158,7 +167,7 @@ export class GroupService {
    */
   private async getGroupByName(name: string): Promise<Group | null> {
     return this.db.queryOne<Group>(
-      'SELECT * FROM groups WHERE name = ?',
+      `SELECT ${GROUP_COLUMNS} FROM groups WHERE name = ?`,
       [name]
     );
   }
@@ -200,8 +209,8 @@ export class GroupService {
       params.push(data.description);
     }
 
-    // Always update updatedAt
-    updates.push('updatedAt = ?');
+    // Always update updated_at
+    updates.push('updated_at = ?');
     params.push(new Date().toISOString());
 
     // Add group ID to params
@@ -277,7 +286,7 @@ export class GroupService {
 
     // Get paginated results
     const groups = await this.db.query<Group>(
-      `SELECT * FROM groups ${whereClause} ORDER BY name ASC LIMIT ? OFFSET ?`,
+      `SELECT ${GROUP_COLUMNS} FROM groups ${whereClause} ORDER BY name ASC LIMIT ? OFFSET ?`,
       [...params, limit, offset]
     );
 
@@ -297,10 +306,18 @@ export class GroupService {
    */
   public async getGroupMembers(groupId: string): Promise<User[]> {
     return this.db.query<User>(
-      `SELECT u.* FROM users u
-       INNER JOIN user_groups ug ON ug.userId = u.id
-       WHERE ug.groupId = ?
-       ORDER BY u.username`,
+      `SELECT u.id, u.username, u.email,
+              u.first_name    AS "firstName",
+              u.last_name     AS "lastName",
+              u.is_active     AS "isActive",
+              u.is_admin      AS "isAdmin",
+              u.created_at    AS "createdAt",
+              u.updated_at    AS "updatedAt",
+              u.last_login_at AS "lastLoginAt"
+         FROM users u
+        INNER JOIN user_groups ug ON ug.user_id = u.id
+        WHERE ug.group_id = ?
+        ORDER BY u.username`,
       [groupId]
     );
   }
@@ -313,7 +330,7 @@ export class GroupService {
    */
   public async getGroupMemberCount(groupId: string): Promise<number> {
     const result = await this.db.queryOne<{ count: number }>(
-      `SELECT COUNT(*) as count FROM user_groups WHERE groupId = ?`,
+      `SELECT COUNT(*) as count FROM user_groups WHERE group_id = ?`,
       [groupId]
     );
     return result?.count ?? 0;
@@ -334,7 +351,7 @@ export class GroupService {
 
       // Check if role exists
       const role = await this.db.queryOne<Role>(
-        'SELECT * FROM roles WHERE id = ?',
+        `SELECT ${ROLE_COLUMNS} FROM roles WHERE id = ?`,
         [roleId]
       );
       if (!role) {
@@ -343,7 +360,7 @@ export class GroupService {
 
       // Check if assignment already exists
       const existing = await this.db.queryOne<{ groupId: string }>(
-        'SELECT groupId FROM group_roles WHERE groupId = ? AND roleId = ?',
+        `SELECT group_id AS "groupId" FROM group_roles WHERE group_id = ? AND role_id = ?`,
         [groupId, roleId]
       );
       if (existing) {
@@ -352,7 +369,7 @@ export class GroupService {
 
       // Create assignment
       await this.db.execute(
-        'INSERT INTO group_roles (groupId, roleId, assignedAt) VALUES (?, ?, ?)',
+        'INSERT INTO group_roles (group_id, role_id, assigned_at) VALUES (?, ?, ?)',
         [groupId, roleId, new Date().toISOString()]
       );
     }
@@ -367,7 +384,7 @@ export class GroupService {
     public async removeRoleFromGroup(groupId: string, roleId: string): Promise<void> {
       // Check if assignment exists
       const existing = await this.db.queryOne<{ groupId: string }>(
-        'SELECT groupId FROM group_roles WHERE groupId = ? AND roleId = ?',
+        `SELECT group_id AS "groupId" FROM group_roles WHERE group_id = ? AND role_id = ?`,
         [groupId, roleId]
       );
       if (!existing) {
@@ -376,7 +393,7 @@ export class GroupService {
 
       // Remove assignment
       await this.db.execute(
-        'DELETE FROM group_roles WHERE groupId = ? AND roleId = ?',
+        'DELETE FROM group_roles WHERE group_id = ? AND role_id = ?',
         [groupId, roleId]
       );
     }
@@ -389,10 +406,14 @@ export class GroupService {
      */
     public async getGroupRoles(groupId: string): Promise<Role[]> {
       return this.db.query<Role>(
-        `SELECT r.* FROM roles r
-         INNER JOIN group_roles gr ON gr.roleId = r.id
-         WHERE gr.groupId = ?
-         ORDER BY r.name`,
+        `SELECT r.id, r.name, r.description,
+                r.is_built_in AS "isBuiltIn",
+                r.created_at  AS "createdAt",
+                r.updated_at  AS "updatedAt"
+           FROM roles r
+          INNER JOIN group_roles gr ON gr.role_id = r.id
+          WHERE gr.group_id = ?
+          ORDER BY r.name`,
         [groupId]
       );
     }

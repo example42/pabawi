@@ -13,7 +13,7 @@ import { GroupService } from '../../src/services/GroupService';
 // Helper function to disable default role assignment in tests
 async function disableDefaultRoleAssignment(databaseService: DatabaseService): Promise<void> {
   await databaseService.getConnection().execute(
-    "INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))"
+    "INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('default_new_user_role', '', datetime('now'))"
   );
 }
 
@@ -39,7 +39,7 @@ describe('Users Router - GET /api/users', () => {
 
     // Disable default role assignment for all tests
     await databaseService.getConnection().execute(
-      "INSERT OR REPLACE INTO config (key, value, updatedAt) VALUES ('default_new_user_role', '', datetime('now'))"
+      "INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('default_new_user_role', '', datetime('now'))"
     );
 
     // Initialize services
@@ -125,7 +125,7 @@ describe('Users Router - GET /api/users', () => {
     await db.execute('DELETE FROM user_roles');
     await db.execute('DELETE FROM role_permissions');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
   });
 
@@ -477,7 +477,7 @@ describe('Users Router - GET /api/users/:id', () => {
     await db.execute('DELETE FROM user_groups');
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
     await db.execute('DELETE FROM groups');
   });
@@ -586,7 +586,7 @@ describe('Users Router - GET /api/users/:id', () => {
       const db = databaseService.getConnection();
       const groupId = randomUUID();
       await db.execute(
-        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
         [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()]
       );
 
@@ -636,12 +636,12 @@ describe('Users Router - GET /api/users/:id', () => {
       const group2Id = randomUUID();
 
       await db.execute(
-        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
         [group1Id, 'Group 1', 'First group', new Date().toISOString(), new Date().toISOString()]
       );
 
       await db.execute(
-        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
         [group2Id, 'Group 2', 'Second group', new Date().toISOString(), new Date().toISOString()]
       );
 
@@ -841,7 +841,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     await db.execute('DELETE FROM user_groups');
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
     await db.execute('DELETE FROM groups');
   });
@@ -918,7 +918,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.passwordHash).toBeUndefined();
     });
 
-    it('should update user firstName', async () => {
+    it('should update user first_name', async () => {
       const response = await request(app)
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -929,7 +929,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.lastName).toBe('User'); // Unchanged
     });
 
-    it('should update user lastName', async () => {
+    it('should update user last_name', async () => {
       const response = await request(app)
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -954,7 +954,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(authResult.success).toBe(true);
     });
 
-    it('should update user isActive status', async () => {
+    it('should update user is_active status', async () => {
       const response = await request(app)
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -964,7 +964,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.isActive).toBe(false);
     });
 
-    it('should reject isAdmin in the generic update endpoint (A1)', async () => {
+    it('should reject is_admin in the generic update endpoint (A1)', async () => {
       // Per A1: isAdmin is removed from the schema; elevation goes through
       // PUT /:id/admin-status. Sending it here hits the strict-mode unknown-key path.
       const response = await request(app)
@@ -976,7 +976,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('should update isAdmin via the dedicated admin-status endpoint', async () => {
+    it('should update is_admin via the dedicated admin-status endpoint', async () => {
       const response = await request(app)
         .put(`/api/users/${testUserId}/admin-status`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -1004,7 +1004,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.isActive).toBe(false);
     });
 
-    it('should update updatedAt timestamp', async () => {
+    it('should update updated_at timestamp', async () => {
       const userBefore = await userService.getUserById(testUserId);
       const updatedAtBefore = userBefore?.updatedAt;
 
@@ -1446,7 +1446,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     await db.execute('DELETE FROM user_groups');
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
     await db.execute('DELETE FROM groups');
   });
@@ -1555,7 +1555,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       expect(authResult.success).toBe(false);
     });
 
-    it('should update updatedAt timestamp on deletion', async () => {
+    it('should update updated_at timestamp on deletion', async () => {
       const userBefore = await userService.getUserById(testUserId);
       const updatedAtBefore = userBefore?.updatedAt;
 
@@ -1616,7 +1616,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       const db = databaseService.getConnection();
       const groupId = randomUUID();
       await db.execute(
-        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
         [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()]
       );
 
@@ -1656,7 +1656,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       const db = databaseService.getConnection();
       const groupId = randomUUID();
       await db.execute(
-        'INSERT INTO groups (id, name, description, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO groups (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
         [groupId, 'Test Group', 'Test group description', new Date().toISOString(), new Date().toISOString()]
       );
 
@@ -1837,7 +1837,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     await db.execute('DELETE FROM user_groups');
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
     await db.execute('DELETE FROM groups');
   });
@@ -2252,7 +2252,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     await db.execute('DELETE FROM user_groups');
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
     await db.execute('DELETE FROM groups');
   });
@@ -2704,7 +2704,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     await db.execute('DELETE FROM user_groups');
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
     await db.execute('DELETE FROM groups');
   });
@@ -3171,7 +3171,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     await db.execute('DELETE FROM user_groups');
     await db.execute('DELETE FROM group_roles');
     await db.execute('DELETE FROM users');
-    await db.execute("DELETE FROM roles WHERE isBuiltIn = 0");
+    await db.execute("DELETE FROM roles WHERE is_built_in = 0");
     await db.execute('DELETE FROM permissions');
     await db.execute('DELETE FROM groups');
   });

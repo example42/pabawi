@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SQLiteAdapter } from '../src/database/SQLiteAdapter';
 import { GroupService } from '../src/services/GroupService';
 import { randomUUID } from 'crypto';
+import { initializeTestSchema } from './helpers/schema';
 
 describe('GroupService', () => {
   let db: SQLiteAdapter;
@@ -12,8 +13,8 @@ describe('GroupService', () => {
     db = new SQLiteAdapter(':memory:');
     await db.initialize();
 
-    // Initialize schema
-    await initializeSchema(db);
+    // Apply real migrations — see .kiro/steering/database-conventions.md
+    await initializeTestSchema(db);
 
     // Create group service
     groupService = new GroupService(db);
@@ -156,7 +157,7 @@ describe('GroupService', () => {
       expect(updated.description).toBe('New description');
     });
 
-    it('should update updatedAt timestamp', async () => {
+    it('should update updated_at timestamp', async () => {
       // Wait a bit to ensure timestamp difference
       await new Promise(resolve => setTimeout(resolve, 10));
 
@@ -234,18 +235,18 @@ describe('GroupService', () => {
       const userId = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'testuser', 'test@example.com', 'hash', 'Test', 'User', 1, 0, now, now]);
 
       await runQuery(db, `
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?)
       `, [userId, group.id, now]);
 
       // Verify association exists before delete
       const beforeDelete = await allQuery(db,
-        'SELECT * FROM user_groups WHERE groupId = ?',
+        'SELECT * FROM user_groups WHERE group_id = ?',
         [group.id]
       );
       expect(beforeDelete).toHaveLength(1);
@@ -255,7 +256,7 @@ describe('GroupService', () => {
 
       // Verify user_groups association is deleted (CASCADE should handle this)
       const associations = await allQuery(db,
-        'SELECT * FROM user_groups WHERE groupId = ?',
+        'SELECT * FROM user_groups WHERE group_id = ?',
         [group.id]
       );
       expect(associations).toHaveLength(0);
@@ -271,18 +272,18 @@ describe('GroupService', () => {
       const roleId = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'TestRole', 'Test role', 0, now, now]);
 
       await runQuery(db, `
-        INSERT INTO group_roles (groupId, roleId, assignedAt)
+        INSERT INTO group_roles (group_id, role_id, assigned_at)
         VALUES (?, ?, ?)
       `, [group.id, roleId, now]);
 
       // Verify association exists before delete
       const beforeDelete = await allQuery(db,
-        'SELECT * FROM group_roles WHERE groupId = ?',
+        'SELECT * FROM group_roles WHERE group_id = ?',
         [group.id]
       );
       expect(beforeDelete).toHaveLength(1);
@@ -292,7 +293,7 @@ describe('GroupService', () => {
 
       // Verify group_roles association is deleted (CASCADE should handle this)
       const associations = await allQuery(db,
-        'SELECT * FROM group_roles WHERE groupId = ?',
+        'SELECT * FROM group_roles WHERE group_id = ?',
         [group.id]
       );
       expect(associations).toHaveLength(0);
@@ -398,12 +399,12 @@ describe('GroupService', () => {
       user2Id = randomUUID();
 
       await runQuery(db, `
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [user1Id, 'user1', 'user1@example.com', 'hash', 'User', 'One', 1, 0, now, now]);
 
       await runQuery(db, `
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [user2Id, 'user2', 'user2@example.com', 'hash', 'User', 'Two', 1, 0, now, now]);
     });
@@ -418,12 +419,12 @@ describe('GroupService', () => {
       // Add users to group
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?)
       `, [user1Id, testGroup.id, now]);
 
       await runQuery(db, `
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?)
       `, [user2Id, testGroup.id, now]);
 
@@ -438,7 +439,7 @@ describe('GroupService', () => {
       // Add users to group
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?), (?, ?, ?)
       `, [user1Id, testGroup.id, now, user2Id, testGroup.id, now]);
 
@@ -451,7 +452,7 @@ describe('GroupService', () => {
     it('should return complete user information', async () => {
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?)
       `, [user1Id, testGroup.id, now]);
 
@@ -490,12 +491,12 @@ describe('GroupService', () => {
       for (let i = 0; i < 5; i++) {
         const userId = randomUUID();
         await runQuery(db, `
-          INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+          INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [userId, `user${i}`, `user${i}@example.com`, 'hash', 'User', `${i}`, 1, 0, now, now]);
 
         await runQuery(db, `
-          INSERT INTO user_groups (userId, groupId, assignedAt)
+          INSERT INTO user_groups (user_id, group_id, assigned_at)
           VALUES (?, ?, ?)
         `, [userId, testGroup.id, now]);
       }
@@ -513,12 +514,12 @@ describe('GroupService', () => {
       const userId = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId, 'newuser', 'new@example.com', 'hash', 'New', 'User', 1, 0, now, now]);
 
       await runQuery(db, `
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?)
       `, [userId, testGroup.id, now]);
 
@@ -533,13 +534,13 @@ describe('GroupService', () => {
       const now = new Date().toISOString();
 
       await runQuery(db, `
-        INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [userId1, 'user1', 'user1@example.com', 'hash', 'User', 'One', 1, 0, now, now,
           userId2, 'user2', 'user2@example.com', 'hash', 'User', 'Two', 1, 0, now, now]);
 
       await runQuery(db, `
-        INSERT INTO user_groups (userId, groupId, assignedAt)
+        INSERT INTO user_groups (user_id, group_id, assigned_at)
         VALUES (?, ?, ?), (?, ?, ?)
       `, [userId1, testGroup.id, now, userId2, testGroup.id, now]);
 
@@ -548,7 +549,7 @@ describe('GroupService', () => {
 
       // Remove one member
       await runQuery(db, `
-        DELETE FROM user_groups WHERE userId = ? AND groupId = ?
+        DELETE FROM user_groups WHERE user_id = ? AND group_id = ?
       `, [userId1, testGroup.id]);
 
       const afterRemove = await groupService.getGroupMemberCount(testGroup.id);
@@ -570,7 +571,7 @@ describe('GroupService', () => {
       const roleId = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'TestRole', 'Test role', 0, now, now]);
 
@@ -616,7 +617,10 @@ describe('GroupService', () => {
       const afterAssign = new Date().toISOString();
 
       const assignment = await allQuery<{ groupId: string; roleId: string; assignedAt: string }>(db,
-        'SELECT * FROM group_roles WHERE groupId = ? AND roleId = ?',
+        `SELECT group_id    AS "groupId",
+                role_id     AS "roleId",
+                assigned_at AS "assignedAt"
+           FROM group_roles WHERE group_id = ? AND role_id = ?`,
         [testGroup.id, testRole.id]
       );
 
@@ -631,7 +635,7 @@ describe('GroupService', () => {
       const role2Id = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [role2Id, 'TestRole2', 'Test role 2', 0, now, now]);
 
@@ -675,7 +679,7 @@ describe('GroupService', () => {
       const roleId = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'TestRole', 'Test role', 0, now, now]);
 
@@ -695,7 +699,7 @@ describe('GroupService', () => {
       const unassignedRoleId = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [unassignedRoleId, 'UnassignedRole', 'Not assigned', 0, now, now]);
 
@@ -709,7 +713,7 @@ describe('GroupService', () => {
       const role2Id = randomUUID();
       const now = new Date().toISOString();
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [role2Id, 'TestRole2', 'Test role 2', 0, now, now]);
 
@@ -756,7 +760,7 @@ describe('GroupService', () => {
       const now = new Date().toISOString();
 
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)
       `, [role1Id, 'Role1', 'First role', 0, now, now,
           role2Id, 'Role2', 'Second role', 0, now, now]);
@@ -777,7 +781,7 @@ describe('GroupService', () => {
       const now = new Date().toISOString();
 
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)
       `, [roleIds[0], 'Zebra', 'Z role', 0, now, now,
           roleIds[1], 'Alpha', 'A role', 0, now, now,
@@ -799,7 +803,7 @@ describe('GroupService', () => {
       const now = new Date().toISOString();
 
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
       `, [roleId, 'TestRole', 'Test description', 1, now, now]);
 
@@ -829,7 +833,7 @@ describe('GroupService', () => {
       const now = new Date().toISOString();
 
       await runQuery(db, `
-        INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt)
+        INSERT INTO roles (id, name, description, is_built_in, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)
       `, [role1Id, 'Role1', 'First role', 0, now, now,
           role2Id, 'Role2', 'Second role', 0, now, now]);
@@ -858,73 +862,3 @@ function allQuery<T>(db: SQLiteAdapter, sql: string, params: any[] = []): Promis
   return db.query<T>(sql, params);
 }
 
-async function initializeSchema(db: SQLiteAdapter): Promise<void> {
-  // Enable foreign key constraints (required for CASCADE to work in SQLite)
-  // foreign_keys already enabled by SQLiteAdapter.initialize()
-
-  const schema = `
-    CREATE TABLE users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      isAdmin INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    );
-
-    CREATE TABLE groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      isBuiltIn INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE user_groups (
-      userId TEXT NOT NULL,
-      groupId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, groupId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE group_roles (
-      groupId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (groupId, roleId),
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-  `;
-
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-
-  for (const statement of statements) {
-    await runQuery(db, statement);
-  }
-}

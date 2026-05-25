@@ -721,7 +721,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
       expect(response.body.user).not.toHaveProperty('passwordHash');
     });
 
-    it('should update lastLoginAt timestamp on successful login (Requirement 1.3)', async () => {
+    it('should update last_login_at timestamp on successful login (Requirement 1.3)', async () => {
       // Register a user
       const userData = {
         username: 'testuser',
@@ -864,7 +864,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
 
       // Deactivate the user directly in database
       await databaseService.getConnection().execute(
-        'UPDATE users SET isActive = 0 WHERE username = ?',
+        'UPDATE users SET is_active = 0 WHERE username = ?',
         ['testuser']
       );
 
@@ -1589,7 +1589,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
       // Deactivate the user
       await databaseService.getConnection().execute(
-        'UPDATE users SET isActive = 0 WHERE username = ?',
+        'UPDATE users SET is_active = 0 WHERE username = ?',
         ['testuser']
       );
 
@@ -2004,7 +2004,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
       // Deactivate the user
       await databaseService.getConnection().execute(
-        'UPDATE users SET isActive = 0 WHERE username = ?',
+        'UPDATE users SET is_active = 0 WHERE username = ?',
         ['testuser']
       );
 

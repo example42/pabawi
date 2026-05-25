@@ -3,6 +3,7 @@ import { SQLiteAdapter } from '../../../src/database/SQLiteAdapter';
 import { UserService } from '../../../src/services/UserService';
 import { AuthenticationService } from '../../../src/services/AuthenticationService';
 import * as fc from 'fast-check';
+import { initializeTestSchema } from "../../helpers/schema";
 
 /**
  * Property-Based Tests for Username Uniqueness
@@ -30,7 +31,7 @@ describe('Username Uniqueness Properties', () => {
     await db.initialize();
 
     // Initialize schema
-    await initializeSchema(db);
+    await initializeTestSchema(db);
 
     // Create services
     authService = new AuthenticationService(db, testJwtSecret);
@@ -216,111 +217,3 @@ describe('Username Uniqueness Properties', () => {
 });
 
 // Helper function to initialize schema
-async function initializeSchema(db: SQLiteAdapter): Promise<void> {
-  const schema = `
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      isAdmin INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-
-    CREATE TABLE IF NOT EXISTS groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      isBuiltIn INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS permissions (
-      id TEXT PRIMARY KEY,
-      resource TEXT NOT NULL,
-      action TEXT NOT NULL,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      UNIQUE(resource, action)
-    );
-
-    CREATE TABLE IF NOT EXISTS user_groups (
-      userId TEXT NOT NULL,
-      groupId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, groupId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS group_roles (
-      groupId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (groupId, roleId),
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS role_permissions (
-      roleId TEXT NOT NULL,
-      permissionId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (roleId, permissionId),
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-      FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE IF NOT EXISTS revoked_tokens (
-      token TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      revokedAt TEXT NOT NULL,
-      expiresAt TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    INSERT INTO config (key, value, updatedAt) VALUES
-      ('allow_self_registration', 'false', datetime('now')),
-      ('default_new_user_role', 'role-viewer-001', datetime('now'));
-
-    INSERT INTO roles (id, name, description, isBuiltIn, createdAt, updatedAt) VALUES
-      ('role-viewer-001', 'Viewer', 'Default viewer role', 1, datetime('now'), datetime('now'));
-  `;
-
-  const statements = schema.split(';').map(s => s.trim()).filter(s => s.length > 0);
-
-  for (const statement of statements) {
-    await db.execute(statement);
-  }
-}

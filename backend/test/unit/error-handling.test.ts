@@ -9,6 +9,7 @@ import { AuthenticationService } from "../../src/services/AuthenticationService"
 import { UserService } from "../../src/services/UserService";
 import { Database } from "sqlite3";
 import { randomUUID } from "crypto";
+import { initializeTestSchema } from "../helpers/schema";
 
 /**
  * Unit tests for error handling in RBAC Authorization System
@@ -98,7 +99,7 @@ describe("Error Handling - Unit Tests", () => {
     it("should return 401 for inactive user account", async () => {
       // Create inactive user
       await databaseService.getConnection().execute(
-        `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+        `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           randomUUID(),
@@ -658,165 +659,13 @@ describe("Error Handling - Unit Tests", () => {
 
 // Helper functions
 
-async function initializeSchema(db: Database): Promise<void> {
-  const schema = `
-    CREATE TABLE users (
-      id TEXT PRIMARY KEY,
-      username TEXT NOT NULL UNIQUE,
-      email TEXT NOT NULL UNIQUE,
-      passwordHash TEXT NOT NULL,
-      firstName TEXT NOT NULL,
-      lastName TEXT NOT NULL,
-      isActive INTEGER NOT NULL DEFAULT 1,
-      isAdmin INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      lastLoginAt TEXT
-    );
-
-    CREATE TABLE groups (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE roles (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT NOT NULL,
-      isBuiltIn INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    CREATE TABLE permissions (
-      id TEXT PRIMARY KEY,
-      resource TEXT NOT NULL,
-      action TEXT NOT NULL,
-      description TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      UNIQUE(resource, action)
-    );
-
-    CREATE TABLE user_groups (
-      userId TEXT NOT NULL,
-      groupId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, groupId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE user_roles (
-      userId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (userId, roleId),
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE group_roles (
-      groupId TEXT NOT NULL,
-      roleId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (groupId, roleId),
-      FOREIGN KEY (groupId) REFERENCES groups(id) ON DELETE CASCADE,
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE role_permissions (
-      roleId TEXT NOT NULL,
-      permissionId TEXT NOT NULL,
-      assignedAt TEXT NOT NULL,
-      PRIMARY KEY (roleId, permissionId),
-      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
-      FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE revoked_tokens (
-      token TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
-      revokedAt TEXT NOT NULL,
-      expiresAt TEXT NOT NULL,
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE audit_logs (
-      id TEXT PRIMARY KEY,
-      timestamp TEXT NOT NULL,
-      eventType TEXT NOT NULL,
-      action TEXT NOT NULL,
-      userId TEXT,
-      targetUserId TEXT,
-      targetResourceType TEXT,
-      targetResourceId TEXT,
-      ipAddress TEXT,
-      userAgent TEXT,
-      details TEXT,
-      result TEXT NOT NULL,
-      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL
-    );
-
-    CREATE INDEX idx_users_username ON users(username);
-    CREATE INDEX idx_users_email ON users(email);
-    CREATE INDEX idx_revoked_tokens_expires ON revoked_tokens(expiresAt);
-    CREATE INDEX idx_user_roles_user ON user_roles(userId);
-    CREATE INDEX idx_user_groups_user ON user_groups(userId);
-    CREATE INDEX idx_group_roles_group ON group_roles(groupId);
-    CREATE INDEX idx_role_permissions_role ON role_permissions(roleId);
-    CREATE INDEX idx_permissions_resource_action ON permissions(resource, action);
-
-    CREATE TABLE account_lockouts (
-      username TEXT PRIMARY KEY,
-      lockoutType TEXT NOT NULL,
-      lockedAt TEXT NOT NULL,
-      lockedUntil TEXT,
-      failedAttempts INTEGER NOT NULL DEFAULT 0,
-      lastAttemptAt TEXT
-    );
-
-    CREATE TABLE failed_login_attempts (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL,
-      attemptedAt TEXT NOT NULL,
-      ipAddress TEXT,
-      reason TEXT
-    );
-
-    CREATE TABLE login_attempt_counters (
-      username TEXT PRIMARY KEY,
-      cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0,
-      lastFailedAt TEXT
-    );
-
-    CREATE TABLE config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-
-    INSERT INTO config (key, value, updatedAt) VALUES
-      ('allow_self_registration', 'false', datetime('now')),
-      ('default_new_user_role', 'role-viewer-001', datetime('now'));
-  `;
-
-  return new Promise((resolve, reject) => {
-    db.exec(schema, (err) => {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
-}
 
 async function createTestUser(db: Database): Promise<void> {
   const bcrypt = require("bcrypt");
   const passwordHash = await bcrypt.hash("Password123!", 10);
 
   await databaseService.getConnection().execute(
-    `INSERT INTO users (id, username, email, passwordHash, firstName, lastName, isActive, isAdmin, createdAt, updatedAt)
+    `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       "test-user-id",

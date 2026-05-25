@@ -178,7 +178,7 @@ export function createSetupRouter(
         // TOCTOU guard: if a concurrent /initialize request also created an
         // admin, the count is now > 1 — undo our creation and 409.
         const adminCountRow = await databaseService.getAdapter().queryOne<{ count: number }>(
-          "SELECT COUNT(*) as count FROM users WHERE isAdmin = 1",
+          "SELECT COUNT(*) as count FROM users WHERE is_admin = 1",
         );
         if ((adminCountRow?.count ?? 0) > 1) {
           logger.warn("TOCTOU detected during setup; rolling back duplicate admin creation", {

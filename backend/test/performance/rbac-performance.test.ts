@@ -23,6 +23,7 @@ import { RoleService } from '../../src/services/RoleService';
 import { GroupService } from '../../src/services/GroupService';
 import { MigrationRunner } from '../../src/database/MigrationRunner';
 import path from 'path';
+import { initializeTestSchema } from "../helpers/schema";
 
 // Performance thresholds (in milliseconds)
 // Note: AUTHENTICATION threshold raised to 500ms because bcrypt cost factor
@@ -84,7 +85,7 @@ describe('RBAC Performance Tests', () => {
     await db.initialize();
 
     // Initialize schema
-    await initializeSchema(db);
+    await initializeTestSchema(db);
 
     // Initialize services
     authService = new AuthenticationService(db, 'test-secret-key-for-route-tests-32chars');
@@ -246,8 +247,8 @@ describe('RBAC Performance Tests', () => {
     });
 
     it('should handle uncached permission checks for different resources efficiently', async () => {
-      // Create multiple permissions
-      const resources = ['ansible', 'bolt', 'puppetdb', 'users', 'groups'];
+      // Use unique resource names to avoid colliding with seeded permissions
+      const resources = ['perftest_a', 'perftest_b', 'perftest_c', 'perftest_d', 'perftest_e'];
       const permissions = await Promise.all(
         resources.map((resource) =>
           permissionService.createPermission({
@@ -501,33 +502,6 @@ describe('RBAC Performance Tests', () => {
 
 // Helper functions
 
-async function initializeSchema(db: DatabaseAdapter): Promise<void> {
-  await db.execute(`CREATE TABLE users ( id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, email TEXT UNIQUE NOT NULL, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, isActive INTEGER DEFAULT 1, isAdmin INTEGER DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL, lastLoginAt TEXT )`);
-  await db.execute(`CREATE TABLE groups ( id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`CREATE TABLE roles ( id TEXT PRIMARY KEY, name TEXT UNIQUE NOT NULL, description TEXT, isBuiltIn INTEGER DEFAULT 0, createdAt TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT NOT NULL, action TEXT NOT NULL, description TEXT, createdAt TEXT NOT NULL, UNIQUE(resource, action) )`);
-  await db.execute(`CREATE TABLE user_groups ( userId TEXT NOT NULL, groupId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, groupId), FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (groupId) REFERENCES groups(id) )`);
-  await db.execute(`CREATE TABLE user_roles ( userId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (userId, roleId), FOREIGN KEY (userId) REFERENCES users(id), FOREIGN KEY (roleId) REFERENCES roles(id) )`);
-  await db.execute(`CREATE TABLE group_roles ( groupId TEXT NOT NULL, roleId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (groupId, roleId), FOREIGN KEY (groupId) REFERENCES groups(id), FOREIGN KEY (roleId) REFERENCES roles(id) )`);
-  await db.execute(`CREATE TABLE role_permissions ( roleId TEXT NOT NULL, permissionId TEXT NOT NULL, assignedAt TEXT NOT NULL, PRIMARY KEY (roleId, permissionId), FOREIGN KEY (roleId) REFERENCES roles(id), FOREIGN KEY (permissionId) REFERENCES permissions(id) )`);
-  await db.execute(`CREATE TABLE failed_login_attempts ( id TEXT PRIMARY KEY, username TEXT NOT NULL, attemptedAt TEXT NOT NULL, ipAddress TEXT, reason TEXT )`);
-  await db.execute(`CREATE TABLE account_lockouts ( username TEXT PRIMARY KEY, lockoutType TEXT NOT NULL, lockedAt TEXT NOT NULL, lockedUntil TEXT, failedAttempts INTEGER NOT NULL DEFAULT 0, lastAttemptAt TEXT )`);
-  await db.execute(`CREATE TABLE login_attempt_counters ( username TEXT PRIMARY KEY, cumulativeFailedAttempts INTEGER NOT NULL DEFAULT 0, lastFailedAt TEXT )`);
-  await db.execute(`CREATE INDEX idx_users_username ON users(username)`);
-  await db.execute(`CREATE INDEX idx_users_email ON users(email)`);
-  await db.execute(`CREATE INDEX idx_users_active ON users(isActive)`);
-  await db.execute(`CREATE INDEX idx_user_roles_user ON user_roles(userId)`);
-  await db.execute(`CREATE INDEX idx_user_roles_role ON user_roles(roleId)`);
-  await db.execute(`CREATE INDEX idx_group_roles_group ON group_roles(groupId)`);
-  await db.execute(`CREATE INDEX idx_group_roles_role ON group_roles(roleId)`);
-  await db.execute(`CREATE INDEX idx_user_groups_user ON user_groups(userId)`);
-  await db.execute(`CREATE INDEX idx_user_groups_group ON user_groups(groupId)`);
-  await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(roleId)`);
-  await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permissionId)`);
-  await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
-  await db.execute(`CREATE TABLE config ( key TEXT PRIMARY KEY, value TEXT NOT NULL, updatedAt TEXT NOT NULL )`);
-  await db.execute(`INSERT INTO config (key, value, updatedAt) VALUES ('allow_self_registration', 'false', datetime('now')), ('default_new_user_role', '', datetime('now'))`);
-}
 
 async function closeDatabase(db: DatabaseAdapter): Promise<void> {
   await db.close();

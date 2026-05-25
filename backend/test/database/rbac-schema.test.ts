@@ -32,9 +32,9 @@ describe('RBAC Database Schema', () => {
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
     expect(result.sql).toContain('username TEXT NOT NULL UNIQUE');
     expect(result.sql).toContain('email TEXT NOT NULL UNIQUE');
-    expect(result.sql).toContain('passwordHash TEXT NOT NULL');
-    expect(result.sql).toContain('isActive INTEGER NOT NULL DEFAULT 1');
-    expect(result.sql).toContain('isAdmin INTEGER NOT NULL DEFAULT 0');
+    expect(result.sql).toContain('password_hash TEXT NOT NULL');
+    expect(result.sql).toContain('is_active INTEGER NOT NULL DEFAULT 1');
+    expect(result.sql).toContain('is_admin INTEGER NOT NULL DEFAULT 0');
   });
 
   it('should create groups table', async () => {
@@ -55,7 +55,7 @@ describe('RBAC Database Schema', () => {
     expect(result).toBeDefined();
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
     expect(result.sql).toContain('name TEXT NOT NULL UNIQUE');
-    expect(result.sql).toContain('isBuiltIn INTEGER NOT NULL DEFAULT 0');
+    expect(result.sql).toContain('is_built_in INTEGER NOT NULL DEFAULT 0');
   });
 
   it('should create permissions table with unique constraint', async () => {
@@ -91,9 +91,9 @@ describe('RBAC Database Schema', () => {
 
     expect(result).toBeDefined();
     expect(result.sql).toContain('token TEXT PRIMARY KEY');
-    expect(result.sql).toContain('userId TEXT NOT NULL');
-    expect(result.sql).toContain('revokedAt TEXT NOT NULL');
-    expect(result.sql).toContain('expiresAt TEXT NOT NULL');
+    expect(result.sql).toContain('user_id TEXT NOT NULL');
+    expect(result.sql).toContain('revoked_at TEXT NOT NULL');
+    expect(result.sql).toContain('expires_at TEXT NOT NULL');
   });
 
   it('should create performance indexes', async () => {
@@ -129,12 +129,12 @@ describe('RBAC Database Schema', () => {
     const db = dbService.getConnection();
 
     // Insert first user
-    await db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, createdAt, updatedAt)
+    await db.execute(`INSERT INTO users (id, username, email, password_hash, first_name, last_name, created_at, updated_at)
          VALUES ('user1', 'testuser', 'test@example.com', 'hash123', 'Test', 'User', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`);
 
     // Try to insert duplicate username
     await expect(
-      db.execute(`INSERT INTO users (id, username, email, passwordHash, firstName, lastName, createdAt, updatedAt)
+      db.execute(`INSERT INTO users (id, username, email, password_hash, first_name, last_name, created_at, updated_at)
            VALUES ('user2', 'testuser', 'other@example.com', 'hash456', 'Other', 'User', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')`)
     ).rejects.toThrow();
   });
@@ -143,12 +143,12 @@ describe('RBAC Database Schema', () => {
     const db = dbService.getConnection();
 
     // Insert first permission (use unique test values to avoid conflicts with seed data)
-    await db.execute(`INSERT INTO permissions (id, resource, "action", description, createdAt)
+    await db.execute(`INSERT INTO permissions (id, resource, "action", description, created_at)
          VALUES ('perm-test-1', 'test-resource', 'test-read', 'Test permission', '2024-01-01T00:00:00Z')`);
 
     // Try to insert duplicate resource-action
     await expect(
-      db.execute(`INSERT INTO permissions (id, resource, "action", description, createdAt)
+      db.execute(`INSERT INTO permissions (id, resource, "action", description, created_at)
            VALUES ('perm-test-2', 'test-resource', 'test-read', 'Another test permission', '2024-01-01T00:00:00Z')`)
     ).rejects.toThrow();
   });

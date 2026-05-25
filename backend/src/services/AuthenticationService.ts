@@ -519,7 +519,7 @@ export class AuthenticationService {
       const revokedAt = new Date().toISOString();
 
       await this.db.execute(
-        `INSERT INTO revoked_tokens (token, userId, revokedAt, expiresAt)
+        `INSERT INTO revoked_tokens (token, user_id, revoked_at, expires_at)
          VALUES (?, ?, ?, ?)`,
         [tokenHash, decoded.userId, revokedAt, expiresAt]
       );
@@ -551,13 +551,13 @@ export class AuthenticationService {
     if (existing) {
       // Update existing marker with new revocation time
       await this.db.execute(
-        `UPDATE revoked_tokens SET revokedAt = ?, expiresAt = ? WHERE token = ?`,
+        `UPDATE revoked_tokens SET revoked_at = ?, expires_at = ? WHERE token = ?`,
         [revokedAt, expiresAt, markerToken]
       );
     } else {
       // Insert new marker
       await this.db.execute(
-        `INSERT INTO revoked_tokens (token, userId, revokedAt, expiresAt)
+        `INSERT INTO revoked_tokens (token, user_id, revoked_at, expires_at)
          VALUES (?, ?, ?, ?)`,
         [markerToken, userId, revokedAt, expiresAt]
       );
@@ -582,7 +582,7 @@ export class AuthenticationService {
 
       // Check if specific token is revoked
       const revokedToken = await this.db.queryOne<{ token: string }>(
-        'SELECT token FROM revoked_tokens WHERE token = ? AND expiresAt > ?',
+        'SELECT token FROM revoked_tokens WHERE token = ? AND expires_at > ?',
         [tokenHash, new Date().toISOString()]
       );
 
@@ -592,8 +592,8 @@ export class AuthenticationService {
 
       // Check if all user tokens are revoked
       const userRevocation = await this.db.queryOne<{ revokedAt: string }>(
-        `SELECT revokedAt FROM revoked_tokens
-         WHERE token = ? AND expiresAt > ?`,
+        `SELECT revoked_at AS "revokedAt" FROM revoked_tokens
+         WHERE token = ? AND expires_at > ?`,
         [`user_revoke_all_${decoded.userId}`, new Date().toISOString()]
       );
 
@@ -616,7 +616,16 @@ export class AuthenticationService {
    */
   private async getUserByUsernameIncludingInactive(username: string): Promise<User | null> {
     return this.db.queryOne<User>(
-      'SELECT * FROM users WHERE username = ?',
+      `SELECT id, username, email,
+              password_hash AS "passwordHash",
+              first_name    AS "firstName",
+              last_name     AS "lastName",
+              is_active     AS "isActive",
+              is_admin      AS "isAdmin",
+              created_at    AS "createdAt",
+              updated_at    AS "updatedAt",
+              last_login_at AS "lastLoginAt"
+         FROM users WHERE username = ?`,
       [username]
     );
   }
@@ -626,7 +635,16 @@ export class AuthenticationService {
    */
   private async getUserById(userId: string): Promise<User | null> {
     return this.db.queryOne<User>(
-      'SELECT * FROM users WHERE id = ?',
+      `SELECT id, username, email,
+              password_hash AS "passwordHash",
+              first_name    AS "firstName",
+              last_name     AS "lastName",
+              is_active     AS "isActive",
+              is_admin      AS "isAdmin",
+              created_at    AS "createdAt",
+              updated_at    AS "updatedAt",
+              last_login_at AS "lastLoginAt"
+         FROM users WHERE id = ?`,
       [userId]
     );
   }
@@ -638,11 +656,11 @@ export class AuthenticationService {
     const roles = await this.db.query<{ name: string }>(
       `SELECT DISTINCT r.name FROM roles r
        WHERE r.id IN (
-         SELECT roleId FROM user_roles WHERE userId = ?
+         SELECT role_id FROM user_roles WHERE user_id = ?
          UNION
-         SELECT gr.roleId FROM group_roles gr
-         INNER JOIN user_groups ug ON ug.groupId = gr.groupId
-         WHERE ug.userId = ?
+         SELECT gr.role_id FROM group_roles gr
+         INNER JOIN user_groups ug ON ug.group_id = gr.group_id
+         WHERE ug.user_id = ?
        )`,
       [userId, userId]
     );
@@ -656,7 +674,7 @@ export class AuthenticationService {
   private async updateLastLogin(userId: string): Promise<void> {
     const now = new Date().toISOString();
     await this.db.execute(
-      'UPDATE users SET lastLoginAt = ? WHERE id = ?',
+      'UPDATE users SET last_login_at = ? WHERE id = ?',
       [now, userId]
     );
   }
@@ -711,7 +729,10 @@ export class AuthenticationService {
         lockedUntil: string | null;
         failedAttempts: number;
       }>(
-        'SELECT lockoutType, lockedUntil, failedAttempts FROM account_lockouts WHERE username = ?',
+        `SELECT lockout_type   AS "lockoutType",
+                locked_until   AS "lockedUntil",
+                failed_attempts AS "failedAttempts"
+           FROM account_lockouts WHERE username = ?`,
         [username]
       );
 
@@ -775,7 +796,7 @@ export class AuthenticationService {
 
         // Record the failed attempt
         await this.db.execute(
-          `INSERT INTO failed_login_attempts (username, attemptedAt, ipAddress, reason)
+          `INSERT INTO failed_login_attempts (username, attempted_at, ip_address, reason)
            VALUES (?, ?, ?, ?)`,
           [username, timestamp, ipAddress ?? null, reason]
         );
@@ -787,11 +808,11 @@ export class AuthenticationService {
         // legitimate user out forever. The counter is now reset on a
         // successful login (see clearFailedLoginAttempts).
         await this.db.execute(
-          `INSERT INTO login_attempt_counters (username, cumulativeFailedAttempts, lastFailedAt)
+          `INSERT INTO login_attempt_counters (username, cumulative_failed_attempts, last_failed_at)
            VALUES (?, 1, ?)
            ON CONFLICT(username) DO UPDATE SET
-             cumulativeFailedAttempts = cumulativeFailedAttempts + 1,
-             lastFailedAt = excluded.lastFailedAt`,
+             cumulative_failed_attempts = cumulative_failed_attempts + 1,
+             last_failed_at = excluded.last_failed_at`,
           [username, timestamp]
         );
 
@@ -799,7 +820,7 @@ export class AuthenticationService {
         const windowStart = new Date(now.getTime() - this.TEMP_LOCKOUT_WINDOW_MINUTES * 60000);
         const recentAttempts = await this.db.queryOne<{ count: number }>(
           `SELECT COUNT(*) as count FROM failed_login_attempts
-           WHERE username = ? AND attemptedAt >= ?`,
+           WHERE username = ? AND attempted_at >= ?`,
           [username, windowStart.toISOString()]
         );
 
@@ -837,14 +858,14 @@ export class AuthenticationService {
         // Update existing lockout
         await this.db.execute(
           `UPDATE account_lockouts
-           SET lockoutType = ?, lockedAt = ?, lockedUntil = ?, failedAttempts = ?, lastAttemptAt = ?
+           SET lockout_type = ?, locked_at = ?, locked_until = ?, failed_attempts = ?, last_attempt_at = ?
            WHERE username = ?`,
           ['temporary', lockedAt, lockedUntil, failedAttempts, lockedAt, username]
         );
       } else {
         // Insert new lockout
         await this.db.execute(
-          `INSERT INTO account_lockouts (username, lockoutType, lockedAt, lockedUntil, failedAttempts, lastAttemptAt)
+          `INSERT INTO account_lockouts (username, lockout_type, locked_at, locked_until, failed_attempts, last_attempt_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
           [username, 'temporary', lockedAt, lockedUntil, failedAttempts, lockedAt]
         );
@@ -880,7 +901,7 @@ export class AuthenticationService {
 
       // Remove any temporary lockouts (no permanent lockout path remains)
       await this.db.execute(
-        `DELETE FROM account_lockouts WHERE username = ? AND lockoutType = 'temporary'`,
+        `DELETE FROM account_lockouts WHERE username = ? AND lockout_type = 'temporary'`,
         [username]
       );
     } catch (error) {
@@ -926,10 +947,13 @@ export class AuthenticationService {
         ipAddress: string | null;
         reason: string;
       }>(
-        `SELECT attemptedAt, ipAddress, reason FROM failed_login_attempts
-         WHERE username = ?
-         ORDER BY attemptedAt DESC
-         LIMIT 50`,
+        `SELECT attempted_at AS "attemptedAt",
+                ip_address   AS "ipAddress",
+                reason
+           FROM failed_login_attempts
+          WHERE username = ?
+          ORDER BY attempted_at DESC
+          LIMIT 50`,
         [username]
       );
     } catch (error) {
@@ -957,7 +981,11 @@ export class AuthenticationService {
         lockedUntil: string | null;
         failedAttempts: number;
       }>(
-        'SELECT lockoutType, lockedAt, lockedUntil, failedAttempts FROM account_lockouts WHERE username = ?',
+        `SELECT lockout_type     AS "lockoutType",
+                locked_at        AS "lockedAt",
+                locked_until     AS "lockedUntil",
+                failed_attempts  AS "failedAttempts"
+           FROM account_lockouts WHERE username = ?`,
         [username]
       );
     } catch (error) {
