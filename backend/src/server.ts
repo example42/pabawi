@@ -39,6 +39,8 @@ import { ExecutionQueue } from "./services/ExecutionQueue";
 import { BatchExecutionService } from "./services/BatchExecutionService";
 import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
 import { expertModeMiddleware } from "./middleware/expertMode";
+import { requestRecorderMiddleware } from "./middleware/requestRecorder";
+import { installCrashHandlers } from "./utils/crashHandler";
 import { createAuthMiddleware } from "./middleware/authMiddleware";
 import { createMcpAuthMiddleware } from "./middleware/mcpAuthMiddleware";
 import { createRbacMiddleware } from "./middleware/rbacMiddleware";
@@ -74,6 +76,10 @@ import { createMcpServer } from "./mcp/McpServer";
 async function startServer(): Promise<Express> {
   // Create logger early for startup logging
   const logger = new LoggerService();
+
+  // Install crash handlers before any other initialization so failures during
+  // startup are captured to disk with full context, not lost to a silent exit.
+  installCrashHandlers(logger);
 
   try {
     // Load configuration
@@ -460,6 +466,10 @@ async function startServer(): Promise<Express> {
     // Request ID middleware - adds unique ID to each request
     app.use(requestIdMiddleware);
 
+    // Crash-forensics ring buffer - records each request so a fatal exit
+    // produces a dump containing the last N requests + anything in flight.
+    app.use(requestRecorderMiddleware);
+
     // Expert mode middleware - detects expert mode from request header
     app.use(expertModeMiddleware);
 
@@ -496,14 +506,35 @@ async function startServer(): Promise<Express> {
       next();
     });
 
-    // Health check endpoint
-    app.get("/api/health", (_req: Request, res: Response) => {
-      res.json({
-        status: "ok",
+    // Health check endpoint — liveness + DB ping.
+    // Returns 503 if the DB is unreachable so Docker/k8s mark the container unhealthy
+    // and the supervisor can restart it. Kept lightweight (single SELECT 1) so it
+    // can run at a tight interval without load. Deeper integration health lives
+    // under /api/integrations/health (auth-gated) on purpose.
+    app.get("/api/health", asyncHandler(async (_req: Request, res: Response) => {
+      const adapter = databaseService.getAdapter();
+      let dbStatus: "ok" | "error" = "ok";
+      let dbError: string | undefined;
+      try {
+        if (!adapter.isConnected()) {
+          throw new Error("database adapter not connected");
+        }
+        await adapter.queryOne<{ one: number }>("SELECT 1 AS one");
+      } catch (err) {
+        dbStatus = "error";
+        dbError = err instanceof Error ? err.message : String(err);
+      }
+
+      const overall: "ok" | "degraded" = dbStatus === "ok" ? "ok" : "degraded";
+      res.status(overall === "ok" ? 200 : 503).json({
+        status: overall,
         message: "Backend API is running",
         version: "1.0.0",
+        checks: {
+          database: dbError ? { status: dbStatus, error: dbError } : { status: dbStatus },
+        },
       });
-    });
+    }));
 
     // Setup routes (no authentication required - only accessible when setup is incomplete)
     app.use("/api/setup", createSetupRouter(databaseService, container));
