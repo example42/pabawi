@@ -1,0 +1,269 @@
+# Default values for the Pabawi Helm chart.
+
+replicaCount: 1
+revisionHistoryLimit: 10
+
+image:
+  repository: example42/pabawi
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  automountServiceAccountToken: false
+
+podAnnotations: {}
+podLabels: {}
+deploymentAnnotations: {}
+commonLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+  fsGroupChangePolicy: OnRootMismatch
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: http
+  annotations: {}
+
+containerPort: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: pabawi.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  behavior: {}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+migrations:
+  enabled: true
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  annotations: {}
+  resources: {}
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: ""
+
+networkPolicy:
+  enabled: false
+  ingress:
+    from: []
+  egress:
+    allowAll: true
+    rules: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+terminationGracePeriodSeconds: 30
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+
+probes:
+  liveness:
+    enabled: true
+    path: /api/health
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+  readiness:
+    enabled: true
+    path: /api/health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1
+  startup:
+    enabled: false
+    path: /api/health
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+    successThreshold: 1
+
+database:
+  type: sqlite
+  sqlite:
+    path: /opt/pabawi/data/pabawi.db
+    persistence:
+      enabled: true
+      existingClaim: ""
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 5Gi
+      annotations: {}
+  postgres:
+    # Highest-precedence option when secrets.create=true.
+    url: ""
+    # Use an existing Secret containing DATABASE_URL. This is preferred for
+    # ExternalSecrets, SOPS, SealedSecrets, and managed database credentials.
+    existingSecret: ""
+    existingSecretKey: DATABASE_URL
+    # Used to construct DATABASE_URL when url/existingSecret are not set.
+    host: ""
+    port: 5432
+    database: pabawi
+    username: pabawi
+    password: ""
+    sslMode: ""
+    parameters: ""
+
+postgresql:
+  enabled: false
+  auth:
+    username: pabawi
+    password: ""
+    database: pabawi
+  primary:
+    persistence:
+      enabled: true
+      size: 8Gi
+
+secrets:
+  create: true
+  existingSecret: ""
+  jwtSecret: ""
+  lifecycleToken: ""
+  mcpAuthToken: ""
+
+secretEnv: {}
+
+config:
+  host: 0.0.0.0
+  logLevel: info
+  boltProjectPath: /opt/pabawi/bolt-project
+  hieraControlRepoPath: /opt/pabawi/control-repo
+  ansibleProjectPath: /opt/pabawi/ansible
+  sshConfigPath: /opt/pabawi/ssh/config
+  sshDefaultKey: /opt/pabawi/ssh/id_rsa
+  commandWhitelistAllowAll: "false"
+  commandWhitelistMatchMode: exact
+  commandWhitelist: '["uptime","df -h","free -m"]'
+  boltExecutionTimeout: "300000"
+  cacheInventoryTtl: "60000"
+  cacheFactsTtl: "300000"
+  concurrentExecutionLimit: "10"
+  maxQueueSize: "100"
+  allowDestructiveProvisioning: "false"
+  corsAllowedOrigins: ""
+  mcpEnabled: "false"
+  uiShowHomePageRunChart: "true"
+
+integrations:
+  puppetdb:
+    enabled: "false"
+    serverUrl: ""
+    port: ""
+    sslCa: /opt/pabawi/certs/ca.pem
+    sslCert: /opt/pabawi/certs/client.crt
+    sslKey: /opt/pabawi/certs/client.key
+  puppetserver:
+    enabled: "false"
+    serverUrl: ""
+  hiera:
+    enabled: "false"
+  ansible:
+    enabled: "false"
+  ssh:
+    enabled: "false"
+  proxmox:
+    enabled: "false"
+  aws:
+    enabled: "false"
+  azure:
+    enabled: "false"
+
+extraEnv: []
+extraEnvFrom: []
+extraVolumes: []
+extraVolumeMounts: []
+
+volumeMounts:
+  boltProject:
+    enabled: false
+    name: bolt-project
+    mountPath: /opt/pabawi/bolt-project
+    readOnly: true
+  controlRepo:
+    enabled: false
+    name: control-repo
+    mountPath: /opt/pabawi/control-repo
+    readOnly: true
+  ansible:
+    enabled: false
+    name: ansible
+    mountPath: /opt/pabawi/ansible
+    readOnly: true
+  certs:
+    enabled: false
+    name: certs
+    mountPath: /opt/pabawi/certs
+    readOnly: true
+  ssh:
+    enabled: false
+    name: ssh
+    mountPath: /opt/pabawi/ssh
+    readOnly: true
+
+volumes:
+  boltProject: {}
+  controlRepo: {}
+  ansible: {}
+  certs: {}
+  ssh: {}

@@ -1,0 +1,21 @@
+{{- if and (eq .Values.database.type "sqlite") .Values.database.sqlite.persistence.enabled (not .Values.database.sqlite.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "pabawi.fullname" . }}-data
+  labels:
+    {{- include "pabawi.labels" . | nindent 4 }}
+  {{- with .Values.database.sqlite.persistence.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.database.sqlite.persistence.accessModes | nindent 4 }}
+  {{- if .Values.database.sqlite.persistence.storageClass }}
+  storageClassName: {{ .Values.database.sqlite.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.database.sqlite.persistence.size | quote }}
+{{- end }}

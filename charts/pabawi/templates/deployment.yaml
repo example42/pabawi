@@ -1,0 +1,187 @@
+{{- if and (not .Values.secrets.create) (not .Values.secrets.existingSecret) }}
+{{- fail "secrets.create=false requires secrets.existingSecret to provide at least JWT_SECRET" }}
+{{- end }}
+{{- if and (eq .Values.database.type "sqlite") (gt (int .Values.replicaCount) 1) (not .Values.autoscaling.enabled) }}
+{{- fail "SQLite mode requires replicaCount=1. Use database.type=postgres before scaling replicas." }}
+{{- end }}
+{{- if and (eq .Values.database.type "sqlite") .Values.autoscaling.enabled }}
+{{- fail "SQLite mode cannot use autoscaling. Use database.type=postgres before enabling autoscaling." }}
+{{- end }}
+{{- if and .Values.postgresql.enabled (ne .Values.database.type "postgres") }}
+{{- fail "postgresql.enabled=true requires database.type=postgres" }}
+{{- end }}
+{{- if and .Values.postgresql.enabled (gt (int .Values.replicaCount) 1) (not .Values.autoscaling.enabled) }}
+{{- fail "Bundled PostgreSQL is intended for single-replica/demo installs. Use external PostgreSQL for scalable Pabawi releases." }}
+{{- end }}
+{{- if and .Values.postgresql.enabled .Values.autoscaling.enabled }}
+{{- fail "Bundled PostgreSQL is intended for single-replica/demo installs. Use external PostgreSQL before enabling autoscaling." }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pabawi.fullname" . }}
+  labels:
+    {{- include "pabawi.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      {{- include "pabawi.selectorLabels" . | nindent 6 }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "pabawi.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "pabawi.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: {{ include "pabawi.name" . }}
+          image: "{{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "pabawi.fullname" . }}
+            - secretRef:
+                name: {{ include "pabawi.secretName" . }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if or (and (eq .Values.database.type "postgres") .Values.database.postgres.existingSecret) .Values.extraEnv }}
+          env:
+            {{- if and (eq .Values.database.type "postgres") .Values.database.postgres.existingSecret }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.postgres.existingSecret }}
+                  key: {{ .Values.database.postgres.existingSecretKey }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- if or (eq .Values.database.type "sqlite") .Values.extraVolumeMounts .Values.volumeMounts.boltProject.enabled .Values.volumeMounts.controlRepo.enabled .Values.volumeMounts.ansible.enabled .Values.volumeMounts.certs.enabled .Values.volumeMounts.ssh.enabled }}
+          volumeMounts:
+            {{- if eq .Values.database.type "sqlite" }}
+            - name: data
+              mountPath: {{ dir .Values.database.sqlite.path }}
+            {{- end }}
+            {{- range $key, $mount := .Values.volumeMounts }}
+            {{- if $mount.enabled }}
+            - name: {{ $mount.name }}
+              mountPath: {{ $mount.mountPath | quote }}
+              readOnly: {{ $mount.readOnly }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          {{- if .Values.probes.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.liveness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+            successThreshold: {{ .Values.probes.liveness.successThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readiness.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+            successThreshold: {{ .Values.probes.readiness.successThreshold }}
+          {{- end }}
+          {{- if .Values.probes.startup.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.probes.startup.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+            successThreshold: {{ .Values.probes.startup.successThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if or (eq .Values.database.type "sqlite") .Values.extraVolumes .Values.volumeMounts.boltProject.enabled .Values.volumeMounts.controlRepo.enabled .Values.volumeMounts.ansible.enabled .Values.volumeMounts.certs.enabled .Values.volumeMounts.ssh.enabled }}
+      volumes:
+        {{- if eq .Values.database.type "sqlite" }}
+        - name: data
+          {{- if .Values.database.sqlite.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ default (printf "%s-data" (include "pabawi.fullname" .)) .Values.database.sqlite.persistence.existingClaim }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+        {{- range $key, $mount := .Values.volumeMounts }}
+        {{- if $mount.enabled }}
+        - name: {{ $mount.name }}
+          {{- include "pabawi.volumeSource" (dict "source" (index $.Values.volumes $key)) | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

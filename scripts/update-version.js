@@ -101,6 +101,38 @@ function updateNavigation(newVersion) {
   }
 }
 
+function updateServerVersion(newVersion) {
+  const filePath = 'backend/src/server.ts';
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      log(`✗ File not found: ${filePath}`, 'red');
+      return false;
+    }
+
+    log(`Updating ${filePath}`, 'yellow');
+
+    let content = fs.readFileSync(filePath, 'utf8');
+
+    // Update the version literal inside the /api/health response body.
+    // Anchored on the adjacent "Backend API is running" message so unrelated
+    // version literals elsewhere in the file aren't touched.
+    const re = /(message:\s*"Backend API is running",\s*\n\s*version:\s*")\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?(")/;
+    if (!re.test(content)) {
+      log(`✗ Could not find /api/health version literal in ${filePath}`, 'red');
+      return false;
+    }
+    content = content.replace(re, `$1${newVersion}$2`);
+
+    fs.writeFileSync(filePath, content);
+    log(`✓ Updated ${filePath}`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ Error updating ${filePath}: ${error.message}`, 'red');
+    return false;
+  }
+}
+
 function updateDockerfiles(newVersion) {
   const dockerfiles = [
     'Dockerfile',
@@ -201,6 +233,11 @@ function main() {
 
   // Update Dockerfiles
   if (!updateDockerfiles(newVersion)) {
+    allSuccess = false;
+  }
+
+  // Update version reported by /api/health
+  if (!updateServerVersion(newVersion)) {
     allSuccess = false;
   }
 

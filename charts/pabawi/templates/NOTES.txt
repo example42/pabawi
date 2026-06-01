@@ -1,0 +1,26 @@
+Pabawi has been installed.
+
+Service:
+  {{ include "pabawi.fullname" . }}:{{ .Values.service.port }}
+
+{{- if .Values.ingress.enabled }}
+Ingress:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}{{ (index .paths 0).path }}
+{{- end }}
+{{- else }}
+Port-forward:
+  kubectl port-forward svc/{{ include "pabawi.fullname" . }} 3000:{{ .Values.service.port }}
+  http://127.0.0.1:3000
+{{- end }}
+
+Database backend: {{ .Values.database.type }}
+
+{{- if and (eq .Values.database.type "sqlite") (gt (int .Values.replicaCount) 1) }}
+WARNING: SQLite mode is not safe with multiple replicas.
+{{- end }}
+
+{{- if and (eq .Values.database.type "postgres") .Values.postgresql.enabled }}
+Bundled PostgreSQL is enabled. For production, prefer a managed PostgreSQL
+service or an operator-managed cluster.
+{{- end }}
