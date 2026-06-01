@@ -31,6 +31,7 @@ import { createPermissionsRouter } from "./routes/permissions";
 import { createJournalRouter } from "./routes/journal";
 import { createAWSRouter } from "./routes/integrations/aws";
 import { createAzureRouter } from "./routes/integrations/azure";
+import { createMonitoringRouter } from "./routes/integrations/monitoring";
 import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import monitoringRouter from "./routes/monitoring";
@@ -56,13 +57,14 @@ import type { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import type { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import type { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import type { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
+import type { CheckmkPlugin } from "./integrations/checkmk/CheckmkPlugin";
 import { pluginRegistry } from "./plugins/registry";
 import { LoggerService } from "./services/LoggerService";
 import { ExpertModeService } from "./services/ExpertModeService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 import { DIContainer } from "./container/DIContainer";
 import { PuppetRunHistoryService } from "./services/PuppetRunHistoryService";
-import { JournalService } from "./services/journal/JournalService";
+import { JournalService, type LiveSource } from "./services/journal/JournalService";
 import { AuthenticationService } from "./services/AuthenticationService";
 import { UserService } from "./services/UserService";
 import { RoleService } from "./services/RoleService";
@@ -393,7 +395,18 @@ async function startServer(): Promise<Express> {
     });
 
     // Create shared JournalService and wire it to plugins
-    const journalService = new JournalService(databaseService.getAdapter());
+    // Build live sources map for journal timeline aggregation
+    const liveSources = new Map<string, LiveSource>();
+    const checkmkPlugin = integrationManager.getInformationSource("checkmk") as CheckmkPlugin | null;
+    if (checkmkPlugin) {
+      liveSources.set("checkmk", checkmkPlugin);
+      logger.info("CheckmkPlugin registered as JournalService live source", {
+        component: "Server",
+        operation: "wireJournalService",
+      });
+    }
+
+    const journalService = new JournalService(databaseService.getAdapter(), liveSources);
     const proxmoxPlugin = integrationManager.getExecutionTool("proxmox") as ProxmoxIntegration | null;
     if (proxmoxPlugin) {
       proxmoxPlugin.setJournalService(journalService);
@@ -534,7 +547,7 @@ async function startServer(): Promise<Express> {
       res.status(overall === "ok" ? 200 : 503).json({
         status: overall,
         message: "Backend API is running",
-        version: "1.3.1",
+        version: "1.4.0",
         checks: {
           database: dbError ? { status: dbStatus, error: dbError } : { status: dbStatus },
         },
@@ -654,6 +667,13 @@ async function startServer(): Promise<Express> {
       rateLimitMiddleware,
       rbacMiddleware('bolt', 'execute'),
       createPuppetRouter(integrationManager, executionRepository, journalService, streamingManager, container),
+    );
+    app.use(
+      "/api/nodes",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('checkmk', 'read'),
+      createMonitoringRouter(integrationManager, container),
     );
     // Multi-node puppet run endpoint (global action)
     app.use(
@@ -781,7 +801,7 @@ async function startServer(): Promise<Express> {
       });
 
       try {
-        const authService = new AuthenticationService(databaseService.getAdapter());
+        const authService = new AuthenticationService(databaseService.getAdapter(), configService.getJwtSecret());
         const userService = new UserService(databaseService.getAdapter(), authService);
         const roleService = new RoleService(databaseService.getAdapter());
         const permissionService = new PermissionService(databaseService.getAdapter());

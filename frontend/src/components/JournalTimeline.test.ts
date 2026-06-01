@@ -203,6 +203,36 @@ describe('JournalTimeline Component', () => {
     });
   });
 
+  it('renders Checkmk state_change events with correct source label', async () => {
+    const checkmkEntry: JournalEntry = {
+      id: 'cmk-entry-1',
+      nodeId: 'node-1',
+      nodeUri: 'checkmk:node1.example.com',
+      eventType: 'state_change',
+      source: 'checkmk',
+      action: 'state_change',
+      summary: 'HTTP: OK → CRIT',
+      details: { serviceDescription: 'HTTP', previousState: 0, currentState: 2 },
+      userId: null,
+      timestamp: new Date().toISOString(),
+      isLive: true,
+    };
+
+    mockFetchSSE([
+      { event: 'init', data: { sources: ['checkmk'] } },
+      { event: 'batch', data: { source: 'checkmk', entries: [checkmkEntry] } },
+      { event: 'complete', data: {} },
+    ]);
+
+    render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: true } });
+
+    await waitFor(() => {
+      expect(screen.getByText('HTTP: OK → CRIT')).toBeTruthy();
+      expect(screen.getByText('State Change')).toBeTruthy();
+      expect(screen.getByText('💓')).toBeTruthy();
+    });
+  });
+
   it('does not start stream when active is false', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch');
     render(JournalTimeline, { props: { mode: 'node', nodeId: 'node-1', active: false } });

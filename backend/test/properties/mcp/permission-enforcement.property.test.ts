@@ -29,6 +29,8 @@ const TOOL_DEFAULT_ARGS: Record<string, Record<string, unknown>> = {
   executions_list: {},
   integrations_list: {},
   journal_query: {},
+  monitoring_services_get: { nodeId: 'test-host' },
+  monitoring_events_get: { nodeId: 'test-host' },
 };
 
 type ToolResult = { content: { type: string; text: string }[]; isError?: boolean };
@@ -69,9 +71,19 @@ function createMockDeps(permissionGranted: boolean) {
   const getNodeTimeline = vi.fn().mockResolvedValue([]);
   const searchEntries = vi.fn().mockResolvedValue([]);
 
+  // Mock CheckmkPlugin returned by getInformationSource
+  const checkmkGetNodeData = vi.fn().mockResolvedValue([]);
+  const checkmkGetInventory = vi.fn().mockResolvedValue([{ id: 'test-host', name: 'test-host' }]);
+  const checkmkPlugin = {
+    isInitialized: vi.fn().mockReturnValue(true),
+    getNodeData: checkmkGetNodeData,
+    getInventory: checkmkGetInventory,
+  };
+  const getInformationSource = vi.fn().mockReturnValue(checkmkPlugin);
+
   return {
     permissionService: { hasPermission },
-    integrationManager: { getAggregatedInventory, getNodeData, healthCheckAll },
+    integrationManager: { getAggregatedInventory, getNodeData, healthCheckAll, getInformationSource },
     puppetDBService: { getNodeReports, getAllReports, getNodeCatalog, getBulkFacts: vi.fn().mockResolvedValue({}) },
     hieraPlugin: { resolveKey },
     executionRepository: { findAll },
@@ -80,6 +92,7 @@ function createMockDeps(permissionGranted: boolean) {
     mcpUserId: 'test-user-id',
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
     version: '1.0.0',
+    checkmkPlugin,
   };
 }
 
@@ -100,6 +113,8 @@ function getServiceSpy(toolName: string, deps: MockDeps): ReturnType<typeof vi.f
     case 'executions_list': return deps.executionRepository.findAll;
     case 'integrations_list': return deps.integrationManager.healthCheckAll;
     case 'journal_query': return deps.journalService.searchEntries;
+    case 'monitoring_services_get': return deps.checkmkPlugin.getNodeData;
+    case 'monitoring_events_get': return deps.checkmkPlugin.getNodeData;
     default: return undefined;
   }
 }

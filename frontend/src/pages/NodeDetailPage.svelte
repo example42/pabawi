@@ -26,6 +26,7 @@
   import ExpertModeDebugPanel from '../components/ExpertModeDebugPanel.svelte';
   import ExecutionList from '../components/ExecutionList.svelte';
   import ManageTab from '../components/ManageTab.svelte';
+  import MonitorTab from '../components/MonitorTab.svelte';
   import JournalTimeline from '../components/JournalTimeline.svelte';
   import MultiSelectDropdown from '../components/MultiSelectDropdown.svelte';
   import { get, post } from '../lib/api';
@@ -106,7 +107,7 @@
   const nodeId = $derived(params?.id || '');
 
   // Tab types
-  type TabId = 'overview' | 'facts' | 'actions' | 'puppet' | 'hiera' | 'journal' | 'manage';
+  type TabId = 'overview' | 'facts' | 'actions' | 'puppet' | 'hiera' | 'journal' | 'manage' | 'monitor';
   type PuppetSubTabId = 'node-status' | 'catalog-compilation' | 'puppet-reports' | 'catalog' | 'events' | 'managed-resources';
 
   // State
@@ -1024,7 +1025,8 @@
     window.history.pushState({}, '', url.toString());
 
     // Lazy load data for the tab if not already loaded
-    if (!loadedTabs.has(tabId)) {
+    // Monitor tab is excluded — it remounts on each switch for live data
+    if (tabId !== 'monitor' && !loadedTabs.has(tabId)) {
       loadedTabs.add(tabId);
       loadTabData(tabId);
     }
@@ -1115,11 +1117,12 @@
     const subTabParam = url.searchParams.get('subtab') as PuppetSubTabId | null;
 
     // Set main tab
-    if (tabParam && ['overview', 'facts', 'actions', 'puppet', 'hiera', 'journal', 'manage'].includes(tabParam)) {
+    if (tabParam && ['overview', 'facts', 'actions', 'puppet', 'hiera', 'journal', 'manage', 'monitor'].includes(tabParam)) {
       activeTab = tabParam;
 
       // Load data for the tab if not already loaded
-      if (!loadedTabs.has(tabParam)) {
+      // Monitor tab is excluded — it remounts on each switch for live data
+      if (tabParam !== 'monitor' && !loadedTabs.has(tabParam)) {
         loadedTabs.add(tabParam);
         loadTabData(tabParam);
       }
@@ -1434,6 +1437,15 @@
         >
           Journal
         </button>
+        {#if ((node as Node & { sources?: string[] }).sources ?? []).includes('checkmk')}
+          <button
+            type="button"
+            class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'monitor' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
+            onclick={() => switchTab('monitor')}
+          >
+            Monitor
+          </button>
+        {/if}
         <button
           type="button"
           class="whitespace-nowrap border-b-2 px-1 py-4 text-sm font-medium {activeTab === 'manage' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'}"
@@ -2416,6 +2428,15 @@
             />
           </div>
         </div>
+      {/if}
+
+      <!-- Monitor Tab -->
+      {#if activeTab === 'monitor'}
+        {#if node}
+          {@const nodeWithMeta = node as Node & { sources?: string[]; sourceData?: Record<string, { config?: { folder?: string; labels?: Record<string, string> } }> }}
+          {@const checkmkConfig = nodeWithMeta.sourceData?.checkmk?.config}
+          <MonitorTab {nodeId} folder={checkmkConfig?.folder} labels={checkmkConfig?.labels} />
+        {/if}
       {/if}
 
       <!-- Manage Tab -->

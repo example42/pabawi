@@ -3,6 +3,7 @@
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
+  import { formatRelativeTime } from '../lib/formatRelativeTime';
 
   interface NodeStatus {
     certname: string;
@@ -66,35 +67,6 @@
       return date.toLocaleString();
     } catch {
       return 'Invalid date';
-    }
-  }
-
-  // Format relative time (e.g., "2 hours ago")
-  function formatRelativeTime(timestamp?: string): string {
-    if (!timestamp) {
-      return 'Never';
-    }
-
-    try {
-      const date = new Date(timestamp);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffSeconds = Math.floor(diffMs / 1000);
-      const diffMinutes = Math.floor(diffSeconds / 60);
-      const diffHours = Math.floor(diffMinutes / 60);
-      const diffDays = Math.floor(diffHours / 24);
-
-      if (diffSeconds < 60) {
-        return 'Just now';
-      } else if (diffMinutes < 60) {
-        return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
-      } else if (diffHours < 24) {
-        return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-      } else {
-        return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-      }
-    } catch {
-      return 'Unknown';
     }
   }
 

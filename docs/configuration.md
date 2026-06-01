@@ -268,6 +268,19 @@ Enable integrations by setting `<PREFIX>_ENABLED=true`. Disabled integrations ar
 | `HIERA_CODE_ANALYSIS_INTERVAL` | `3600000` | Analysis interval in ms (1 hour) |
 | `HIERA_CODE_ANALYSIS_EXCLUSION_PATTERNS` | `[]` | JSON array of glob patterns to exclude |
 
+### Checkmk
+
+| Variable | Default | Description |
+|---|---|---|
+| `CHECKMK_ENABLED` | — | Set to `true` to enable |
+| `CHECKMK_SERVER_URL` | **required** | Checkmk server URL (e.g. `https://checkmk.example.com`) |
+| `CHECKMK_SITE` | **required** | Checkmk site name |
+| `CHECKMK_USERNAME` | **required** | Automation user name |
+| `CHECKMK_PASSWORD` | **required** | Automation user secret |
+| `CHECKMK_SSL_VERIFY` | `true` | Set to `"false"` to skip TLS certificate verification |
+
+All data is fetched live (no caching). The plugin provides host inventory (priority 8), live service monitoring status, and state-change events. See [integrations/checkmk.md](./integrations/checkmk.md) for details.
+
 ### Proxmox
 
 | Variable | Default | Description |

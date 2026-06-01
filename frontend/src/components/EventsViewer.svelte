@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SvelteSet } from 'svelte/reactivity';
   import StatusBadge from './StatusBadge.svelte';
+  import { formatRelativeTime } from '../lib/formatRelativeTime';
 
   interface Event {
     certname: string;
@@ -132,22 +133,6 @@
 
   function formatTimestamp(timestamp: string): string {
     return new Date(timestamp).toLocaleString();
-  }
-
-  function formatRelativeTime(timestamp: string): string {
-    const now = Date.now();
-    const time = new Date(timestamp).getTime();
-    const diff = now - time;
-
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return `${seconds}s ago`;
   }
 
   function formatValue(value: unknown): string {

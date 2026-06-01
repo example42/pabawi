@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0] - Unreleased
+
+### Added
+
+- **Checkmk monitoring integration.** Connects to the Checkmk REST API v1 to provide live monitoring data: host inventory discovery, service status, and state-change events. All data is fetched live (no caching).
+- **Monitor tab** on the node detail page displaying live service status from Checkmk, grouped by state (CRIT → WARN → UNKNOWN → OK) with colored badges, plugin output, and relative timestamps.
+- **Journal integration** for Checkmk state-change events — monitoring events appear in the node journal timeline alongside events from other sources.
+- `GET /api/nodes/:nodeId/services` endpoint returning live service monitoring data.
+- `GET /api/nodes/:nodeId/monitoring-events` endpoint returning state-change events with configurable limit.
+- `CHECKMK_ENABLED`, `CHECKMK_SERVER_URL`, `CHECKMK_SITE`, `CHECKMK_USERNAME`, `CHECKMK_PASSWORD`, `CHECKMK_SSL_VERIFY` environment variables for configuration.
+- Checkmk integration documentation at `docs/integrations/checkmk.md`.
+- `monitoring:read` RBAC permission for monitoring endpoints.
+- Checkmk integration color (purple) in the integration color palette.
+
 ## [1.3.1] - 2026-06-01
 
 ### Added

@@ -73,6 +73,8 @@ export const TOOL_PERMISSIONS: Record<string, PermissionCheck> = {
   executions_list: { resource: 'bolt', action: 'read' },
   integrations_list: { resource: 'integration_config', action: 'read' },
   journal_query: { resource: 'journal', action: 'read' },
+  monitoring_services_get: { resource: 'checkmk', action: 'read' },
+  monitoring_events_get: { resource: 'checkmk', action: 'read' },
 };
 
 /**
@@ -86,7 +88,7 @@ export function createMcpServer(deps: McpDependencies): McpServerInstance {
 
   registerAllTools(server, deps);
 
-  deps.logger.info('MCP server created with 9 tools', {
+  deps.logger.info('MCP server created with 11 tools', {
     component: LOG_COMPONENT,
     operation: 'createMcpServer',
   });

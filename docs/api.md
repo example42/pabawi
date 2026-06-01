@@ -457,6 +457,47 @@ Lifecycle actions: `start`, `stop`, `restart`, `deallocate`.
 
 ---
 
+## Checkmk Monitoring
+
+Requires `CHECKMK_ENABLED=true`. All endpoints require JWT auth and the `monitoring:read` RBAC permission.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/nodes/:nodeId/services` | Live service monitoring status from Checkmk |
+| `GET` | `/api/nodes/:nodeId/monitoring-events` | State-change events from Checkmk |
+
+**Query params (`GET /api/nodes/:nodeId/monitoring-events`):**
+
+| Param | Default | Description |
+|---|---|---|
+| `limit` | `200` | Max events to return (1–1000) |
+
+**Response (`GET /api/nodes/:nodeId/services`):**
+
+```json
+{
+  "services": [
+    {
+      "description": "CPU load",
+      "state": "OK",
+      "stateType": "hard",
+      "pluginOutput": "OK - 15min load: 0.42",
+      "lastCheck": "2026-06-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+**Error codes:**
+
+| HTTP | Code | Condition |
+|---|---|---|
+| 503 | `CHECKMK_NOT_CONFIGURED` | Plugin not enabled |
+| 404 | `NODE_NOT_FOUND` | Node not known to Checkmk |
+| 502 | _(upstream error)_ | Checkmk API failure or timeout |
+
+---
+
 ## Journal
 
 Requires `AUTH_ENABLED=true` and the `journal:read` permission. Events are streamed via SSE.

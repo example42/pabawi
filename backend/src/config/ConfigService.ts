@@ -145,6 +145,21 @@ export class ConfigService {
       subscriptionId?: string;
       resourceGroups?: string[];
     };
+    checkmk?: {
+      enabled: boolean;
+      serverUrl: string;
+      site?: string;
+      username: string;
+      password: string; // pragma: allowlist secret
+      sslVerify: boolean;
+      healthCheckIntervalMs?: number;
+      livestatus?: {
+        host: string;
+        port?: number;
+        tls?: boolean;
+        timeoutMs?: number;
+      };
+    };
   } {
     const integrations: ReturnType<typeof this.parseIntegrationsConfig> = {};
 
@@ -534,6 +549,64 @@ export class ConfigService {
       };
     }
 
+    // Parse Checkmk configuration
+    if (process.env.CHECKMK_ENABLED === "true") {
+      const serverUrl = process.env.CHECKMK_SERVER_URL;
+      const site = process.env.CHECKMK_SITE;
+      const username = process.env.CHECKMK_USERNAME;
+      const password = process.env.CHECKMK_PASSWORD; // pragma: allowlist secret
+
+      const missing: string[] = [];
+      if (!serverUrl) missing.push("CHECKMK_SERVER_URL");
+      if (!username) missing.push("CHECKMK_USERNAME");
+      if (!password) missing.push("CHECKMK_PASSWORD"); // pragma: allowlist secret
+
+      if (missing.length > 0) {
+        console.warn(
+          `[ConfigService] Checkmk enabled but required variables missing: ${missing.join(", ")}. Plugin will not be registered.`,
+        );
+      } else if (serverUrl && username && password) {
+        const sslVerify = process.env.CHECKMK_SSL_VERIFY !== "false";
+
+        const checkmkConfig: NonNullable<typeof integrations.checkmk> = {
+          enabled: true,
+          serverUrl,
+          ...(site ? { site } : {}),
+          username,
+          password, // pragma: allowlist secret
+          sslVerify,
+          healthCheckIntervalMs: process.env.CHECKMK_HEALTHCHECK_INTERVAL_MS
+            ? parseInt(process.env.CHECKMK_HEALTHCHECK_INTERVAL_MS, 10)
+            : undefined,
+        };
+
+        // Build livestatus sub-object only when CHECKMK_LIVESTATUS_HOST is non-empty
+        const livestatusHost = process.env.CHECKMK_LIVESTATUS_HOST;
+        if (livestatusHost) {
+          const livestatusTls = process.env.CHECKMK_LIVESTATUS_TLS === "true";
+
+          if (!livestatusTls) {
+            console.warn(
+              "[ConfigService] Checkmk Livestatus enabled without TLS — traffic will be unencrypted.",
+            );
+          }
+
+          checkmkConfig.livestatus = {
+            host: livestatusHost,
+            port: process.env.CHECKMK_LIVESTATUS_PORT
+              ? parseInt(process.env.CHECKMK_LIVESTATUS_PORT, 10)
+              : undefined,
+            tls: livestatusTls,
+            timeoutMs: process.env.CHECKMK_LIVESTATUS_TIMEOUT_MS
+              ? parseInt(process.env.CHECKMK_LIVESTATUS_TIMEOUT_MS, 10)
+              : undefined,
+          };
+        }
+
+        integrations.checkmk = checkmkConfig;
+      }
+    }
+
     return integrations;
   }
 
@@ -883,6 +956,19 @@ export class ConfigService {
     const azure = this.config.integrations.azure;
     if (azure?.enabled) {
       return azure as typeof azure & { enabled: true };
+    }
+    return null;
+  }
+
+  /**
+   * Get Checkmk configuration if enabled
+   */
+  public getCheckmkConfig():
+    | (typeof this.config.integrations.checkmk & { enabled: true })
+    | null {
+    const checkmk = this.config.integrations.checkmk;
+    if (checkmk?.enabled) {
+      return checkmk as typeof checkmk & { enabled: true };
     }
     return null;
   }

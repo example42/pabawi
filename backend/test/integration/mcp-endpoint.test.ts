@@ -127,7 +127,7 @@ describe('MCP Endpoint Integration Tests', () => {
     await mcpServer.close();
   });
 
-  it('should return all 8 tools on tools/list', async () => {
+  it('should return all 11 tools on tools/list', async () => {
     const mcpServer = createMcpServer(mcpDeps);
     const app = await createMcpApp(mcpServer);
 
@@ -182,9 +182,11 @@ describe('MCP Endpoint Integration Tests', () => {
       'executions_list',
       'integrations_list',
       'journal_query',
+      'monitoring_services_get',
+      'monitoring_events_get',
     ];
 
-    expect(toolNames).toHaveLength(9);
+    expect(toolNames).toHaveLength(11);
     for (const tool of expectedTools) {
       expect(toolNames).toContain(tool);
     }

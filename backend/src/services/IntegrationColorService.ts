@@ -20,6 +20,7 @@ export interface IntegrationColors {
   proxmox: IntegrationColorConfig;
   aws: IntegrationColorConfig;
   azure: IntegrationColorConfig;
+  checkmk: IntegrationColorConfig;
 }
 
 /**
@@ -90,6 +91,12 @@ export class IntegrationColorService {
         primary: '#F59E0B',  // Vivid amber
         light: '#FFFBEB',
         dark: '#D97706',
+      },
+      // Monitoring — purple (source attribution only, not service-state badges)
+      checkmk: {
+        primary: '#8B5CF6',  // Vivid purple
+        light: '#F5F3FF',
+        dark: '#7C3AED',
       },
     };
 
