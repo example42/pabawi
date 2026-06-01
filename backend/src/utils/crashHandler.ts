@@ -85,7 +85,6 @@ function writeCrashDump(reason: string, error: unknown): string | null {
           }
         : null,
       inflightRequests: Array.from(inflight.values()),
-      inflightRequests: Array.from(inflight.values()),
       recentRequests: recent.slice(),
     };
     fs.writeFileSync(file, JSON.stringify(dump, null, 2), { mode: 0o600 });
