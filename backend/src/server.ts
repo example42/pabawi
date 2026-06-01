@@ -529,7 +529,7 @@ async function startServer(): Promise<Express> {
       res.status(overall === "ok" ? 200 : 503).json({
         status: overall,
         message: "Backend API is running",
-        version: "1.0.0",
+        version: "1.3.1",
         checks: {
           database: dbError ? { status: dbStatus, error: dbError } : { status: dbStatus },
         },
