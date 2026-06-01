@@ -133,6 +133,34 @@ function updateServerVersion(newVersion) {
   }
 }
 
+function updateHelmChart(newVersion) {
+  const filePath = 'charts/pabawi/Chart.yaml';
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      log(`✗ File not found: ${filePath}`, 'red');
+      return false;
+    }
+
+    log(`Updating ${filePath}`, 'yellow');
+
+    let content = fs.readFileSync(filePath, 'utf8');
+
+    // Update appVersion to match the application release
+    content = content.replace(
+      /^appVersion:\s*"[^"]*"/m,
+      `appVersion: "${newVersion}"`
+    );
+
+    fs.writeFileSync(filePath, content);
+    log(`✓ Updated ${filePath} (appVersion → ${newVersion})`, 'green');
+    return true;
+  } catch (error) {
+    log(`✗ Error updating ${filePath}: ${error.message}`, 'red');
+    return false;
+  }
+}
+
 function updateDockerfiles(newVersion) {
   const dockerfiles = [
     'Dockerfile',
@@ -233,6 +261,11 @@ function main() {
 
   // Update Dockerfiles
   if (!updateDockerfiles(newVersion)) {
+    allSuccess = false;
+  }
+
+  // Update Helm chart appVersion
+  if (!updateHelmChart(newVersion)) {
     allSuccess = false;
   }
 
