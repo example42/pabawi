@@ -42,7 +42,7 @@ If the directory cannot be created or written, the dump is skipped silently and 
 **Files written per crash:**
 
 - `crash-<ISO8601>-<pid>.json` — the JSON dump (see contents below)
-- `report-<ISO8601>-<pid>.json` — Node's native diagnostic report (heap, native stacks, libuv handles, env). Critical when a native module (`better-sqlite3`, `ssh2`) crashes the process — the JS dump alone won't show why.
+- `report-<ISO8601>-<pid>.json` — Node's native diagnostic report (heap, native stacks, libuv handles, env). Treat this file as sensitive: env vars can include secrets (JWT/database credentials).
 
 **`crash-*.json` fields:**
 
