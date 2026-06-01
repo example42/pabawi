@@ -147,10 +147,12 @@ function updateHelmChart(newVersion) {
     let content = fs.readFileSync(filePath, 'utf8');
 
     // Update appVersion to match the application release
-    content = content.replace(
-      /^appVersion:\s*"[^"]*"/m,
-      `appVersion: "${newVersion}"`
-    );
+    const re = /^appVersion:\s*"[^"]*"/m;
+    if (!re.test(content)) {
+      log(`✗ Could not find appVersion in ${filePath}`, 'red');
+      return false;
+    }
+    content = content.replace(re, `appVersion: "${newVersion}"`);
 
     fs.writeFileSync(filePath, content);
     log(`✓ Updated ${filePath} (appVersion → ${newVersion})`, 'green');
