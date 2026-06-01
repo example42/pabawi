@@ -522,7 +522,12 @@ async function startServer(): Promise<Express> {
         await adapter.queryOne<{ one: number }>("SELECT 1 AS one");
       } catch (err) {
         dbStatus = "error";
-        dbError = err instanceof Error ? err.message : String(err);
+        dbError = "unreachable";
+        logger.warn("Health check DB ping failed", {
+          component: "Server",
+          operation: "healthCheck",
+          metadata: { error: err instanceof Error ? err.message : String(err) },
+        });
       }
 
       const overall: "ok" | "degraded" = dbStatus === "ok" ? "ok" : "degraded";
