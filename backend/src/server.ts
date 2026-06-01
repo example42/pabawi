@@ -77,8 +77,8 @@ async function startServer(): Promise<Express> {
   // Create logger early for startup logging
   const logger = new LoggerService();
 
-  // Install crash handlers before any other initialization so failures during
-  // startup are captured to disk with full context, not lost to a silent exit.
+  // Install crash handlers early so unhandled failures (including during startup)
+  // are captured to disk with full context, rather than being lost on process exit.
   installCrashHandlers(logger);
 
   try {
