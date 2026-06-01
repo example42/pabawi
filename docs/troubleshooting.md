@@ -21,6 +21,62 @@ npm run dev:backend
 
 Enable **Expert Mode** in the UI to see raw API responses and detailed error output.
 
+If the backend crashed, see [Crash dumps](#crash-dumps) below — the dump is usually the fastest path to a root cause.
+
+---
+
+## Crash dumps
+
+On any unhandled exception or unhandled promise rejection, the backend writes a JSON crash dump and a Node diagnostic report before exiting. The container or systemd supervisor then restarts the process. The dump is what tells you *why* the next restart happened — without it, "the application crashed" is a dead end.
+
+**Location:** `$PABAWI_CRASH_DUMP_DIR` if set, otherwise `<cwd>/crash-dumps/`.
+
+| Runtime | Default path | How to persist |
+|---|---|---|
+| Official Docker image | `/app/crash-dumps/` (cwd is `/app`) | Mount a volume: `- ./crash-dumps:/app/crash-dumps` in `docker-compose.yml` |
+| `npm run dev:backend` | `<repo>/backend/crash-dumps/` | No action needed |
+| systemd unit | `<WorkingDirectory>/crash-dumps/` | Either set `PABAWI_CRASH_DUMP_DIR=/var/log/pabawi/crashes` or ensure `WorkingDirectory` is writable |
+
+If the directory cannot be created or written, the dump is skipped silently and only the fatal log line is emitted. Verify the path is writable by the `pabawi` user (`uid 1001` in the Docker image).
+
+**Files written per crash:**
+
+- `crash-<ISO8601>-<pid>.json` — the JSON dump (see contents below)
+- `report-<ISO8601>-<pid>.json` — Node's native diagnostic report (heap, native stacks, libuv handles, env). Critical when a native module (`better-sqlite3`, `ssh2`) crashes the process — the JS dump alone won't show why.
+
+**`crash-*.json` fields:**
+
+| Field | What it tells you |
+|---|---|
+| `error.{name,message,stack}` | The exception that killed the process |
+| `reason` | `uncaughtException (uncaughtException)` or `unhandledRejection` |
+| `inflightRequests` | Requests being processed at the moment of crash (method, path, requestId, userId) |
+| `recentRequests` | Last ~200 completed requests (adds statusCode, durationMs) |
+| `memory` | `rss`, `heapUsed`, `heapTotal`, `external`, `arrayBuffers` |
+| `eventLoopDelayMs` | `mean` / `max` / `p99` lag (ms). High values before a crash usually mean blocking work, not a bug |
+| `uptimeSec`, `pid`, `nodeVersion`, `resourceUsage` | Process forensics |
+
+**Typical triage:**
+
+```bash
+# Find the latest dump
+ls -lt crash-dumps/ | head
+
+# What killed it, and what was running?
+jq '.error, .inflightRequests' crash-dumps/<file>
+
+# Was the event loop stuck before death?
+jq '.eventLoopDelayMs' crash-dumps/<file>
+
+# Last requests — is one path overrepresented? That's your suspect.
+jq -r '.recentRequests[-50:] | .[] | "\(.method) \(.path) -> \(.statusCode) (\(.durationMs)ms)"' crash-dumps/<file>
+
+# Native crash (segfault in a .node module)? Read the diagnostic report.
+jq '.javascriptStack, .nativeStack[0:10], .header.event' crash-dumps/report-<...>.json
+```
+
+A high `eventLoopDelayMs.p99` (say, >500ms) just before a fatal usually points at a slow synchronous operation — a large `JSON.parse`, a sync FS call, a blocking spawn — not the line that ultimately threw. Fix the blocking work, not the apparent throw site.
+
 ---
 
 ## Bolt
