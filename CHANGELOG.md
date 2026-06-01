@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.3.1] - 2026-06-01
+
+### Added
+
+- **Crash forensics.** Ring-buffer request recorder captures the last N
+  requests on fatal exit. Synchronous crash dumps written to disk include
+  memory stats, event-loop lag, and in-flight request metadata. Dump
+  directory configurable via `PABAWI_CRASH_DUMP_DIR` environment variable.
+- **Enhanced `/api/health` endpoint.** Now checks database connectivity and
+  returns per-component status. Returns HTTP 503 when the database is
+  unreachable, enabling container orchestrators to detect unhealthy pods.
+- **Helm chart for Kubernetes deployment** (`charts/pabawi/`). Includes
+  templates for Deployment, Service, Ingress, HPA, NetworkPolicy, PDB,
+  PVC, ConfigMap, Secret, ServiceAccount, and a database migration Job.
+  Supports both SQLite (single-replica, default) and external or bundled
+  PostgreSQL with multi-replica scaling. Schema validation via
+  `values.schema.json`.
+- Version update script (`scripts/update-version.js`) for managing release
+  versions across package files.
+- Kubernetes deployment documentation expanded with Helm installation
+  instructions (`docs/deployment/kubernetes.md`).
+
+### Changed
+
+- Docker health check `start-period` increased from 5s to 30s across all
+  Dockerfiles to accommodate slower cold starts under resource-constrained
+  environments.
+
 ## [1.3.0] - 2026-05-25
 
 ### Security — breaking for operators
