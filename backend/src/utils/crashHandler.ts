@@ -63,7 +63,7 @@ function resolveDumpDir(): string {
 function writeCrashDump(reason: string, error: unknown): string | null {
   try {
     const dir = resolveDumpDir();
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const file = path.join(dir, `crash-${stamp}-${String(process.pid)}.json`);
     const dump = {
