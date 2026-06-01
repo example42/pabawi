@@ -169,6 +169,8 @@ The endpoint accepts standard MCP Streamable HTTP requests at `POST /mcp`. All r
 | `executions_list` | List execution history | `limit?`, `status?`, `tool?` |
 | `integrations_list` | List integrations and health status | _(none)_ |
 | `journal_query` | Search journal entries | `nodeId?`, `eventType?`, `limit?` |
+| `monitoring_services_get` | Get live Checkmk service status for a node | `nodeId` — node hostname |
+| `monitoring_events_get` | Get Checkmk state-change events for a node | `nodeId` — node hostname, `limit?` (1-1000, default 200) |
 
 All tools are read-only. Each tool checks RBAC permissions before executing.
 
@@ -300,7 +302,89 @@ eventType: "puppet_run" →  only Puppet run events
 limit: 20              →  last 20 entries
 ```
 
+### monitoring_services_get
+
+Returns live Checkmk service monitoring status for a node. Requires the Checkmk integration to be configured. Returns an MCP error if the plugin is disabled or the node is unknown.
+
+```
+nodeId: "web-01"       →  service status for this node
+```
+
+Each service includes: description, state (OK/WARN/CRIT/UNKNOWN), plugin output, and last check timestamp.
+
+### monitoring_events_get
+
+Returns Checkmk state-change events for a node. Events come from Livestatus when configured, otherwise derived from the REST API. Returns an MCP error if the plugin is disabled or the node is unknown.
+
+```
+nodeId: "web-01"       →  events for this node
+limit: 50              →  last 50 events (default: 200, max: 1000)
+```
+
+Each event includes: timestamp, service description, state transition, and output text.
+
 ## Troubleshooting
+
+### Docker and Container Deployments
+
+The MCP endpoint (`/mcp`) is served on the same port as the rest of the API (default 3000). No additional port mapping is needed — if the Pabawi UI is reachable, so is MCP.
+
+To enable MCP in Docker, add to your `.env` file (or the env_file referenced by docker-compose):
+
+```bash
+MCP_ENABLED=true
+MCP_AUTH_TOKEN=<generate-with-openssl-rand-hex-32>
+```
+
+The MCP client URL from outside the container is:
+
+```
+http://<docker-host>:<mapped-port>/mcp
+```
+
+For example, with the default `docker-compose.yml` mapping `3000:3000`:
+
+```
+http://localhost:3000/mcp
+```
+
+#### Reverse Proxy / Ingress Considerations
+
+The MCP Streamable HTTP transport uses long-lived SSE connections on `GET /mcp`. If you place a reverse proxy (nginx, Traefik, HAProxy) or Kubernetes ingress in front of Pabawi:
+
+- **Disable response buffering** for the `/mcp` path — SSE requires unbuffered streaming
+- **Increase idle/read timeouts** to at least 300s (the default 60s in nginx will drop MCP sessions)
+- **Disable request body size limits** or set them generously for `/mcp` POST (MCP messages can be large)
+- **Preserve headers** — the `mcp-session-id` header must pass through unmodified
+
+Example nginx location block:
+
+```nginx
+location /mcp {
+    proxy_pass http://pabawi:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+}
+```
+
+Example Kubernetes ingress annotation (nginx ingress controller):
+
+```yaml
+nginx.ingress.kubernetes.io/proxy-buffering: "off"
+nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+```
+
+#### Kubernetes / Pod Deployments
+
+When running Pabawi in a pod:
+
+1. The `/mcp` endpoint is part of the same container — expose it via the same Service/Ingress as the UI
+2. Set `MCP_ENABLED=true` and `MCP_AUTH_TOKEN` in your ConfigMap/Secret
+3. If using horizontal pod autoscaling, note that MCP sessions are in-memory and not shared across replicas — a client must hit the same pod for the duration of a session (use sticky sessions or session affinity)
 
 ### MCP endpoint not responding
 

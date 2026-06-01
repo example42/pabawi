@@ -1,14 +1,14 @@
 /**
  * MCP Tool Handler Registrations
  *
- * Registers all 8 read-only MCP tools with permission checks.
+ * Registers all 11 read-only MCP tools with permission checks.
  * Each tool checks RBAC permissions before calling the underlying service.
  *
  * Tool outputs are optimised for LLM consumption — verbose fields like raw
  * logs, resource events, full catalog parameters, and duplicated facts are
  * stripped by default.  Callers can opt-in to detail via boolean flags.
  *
- * Requirements: 11–18, 19.1–19.4
+ * Requirements: 11–18, 19.1–19.4, 14.1–14.6
  */
 
 import { z } from 'zod';
@@ -21,6 +21,7 @@ import {
   summariseJournalEntry,
   summariseNode,
   summariseReport,
+  summariseService,
 } from './McpOutputSummariser';
 
 /* ------------------------------------------------------------------ */
@@ -81,6 +82,8 @@ export function registerAllTools(server: McpServerInstance, deps: McpDependencie
   registerExecutionsList(server, deps);
   registerIntegrationsList(server, deps);
   registerJournalQuery(server, deps);
+  registerMonitoringServicesGet(server, deps);
+  registerMonitoringEventsGet(server, deps);
 }
 
 function registerInventoryList(server: McpServerInstance, deps: McpDependencies): void {
@@ -333,6 +336,79 @@ function registerJournalQuery(server: McpServerInstance, deps: McpDependencies):
       return jsonResult(filtered.map((e) =>
         summariseJournalEntry(e),
       ));
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err));
+    }
+  });
+}
+
+function registerMonitoringServicesGet(server: McpServerInstance, deps: McpDependencies): void {
+  server.registerTool('monitoring_services_get', {
+    description: 'Get live Checkmk service monitoring status for a node. Returns description, state, plugin output, and last check per service.',
+    inputSchema: z.object({
+      nodeId: z.string().describe('Node ID (hostname) to retrieve service status for'),
+    }),
+    annotations: { readOnlyHint: true },
+  }, async ({ nodeId }: { nodeId: string }) => {
+    const denied = await checkPermission(deps, 'monitoring_services_get');
+    if (denied) return permissionError(denied.resource, denied.action);
+    try {
+      const plugin = deps.integrationManager.getInformationSource('checkmk');
+      if (!plugin?.isInitialized()) {
+        return errorResult('Checkmk plugin is not configured or not initialized');
+      }
+      const services = await plugin.getNodeData(nodeId, 'services') as object[];
+      if (Array.isArray(services) && services.length === 0) {
+        const inventory = await plugin.getInventory();
+        const nodeExists = inventory.some(
+          (n) => n.id.toLowerCase() === nodeId.toLowerCase() ||
+                 n.name.toLowerCase() === nodeId.toLowerCase(),
+        );
+        if (!nodeExists) {
+          return errorResult(`Node '${nodeId}' is not known to Checkmk`);
+        }
+      }
+      const summarised = Array.isArray(services)
+        ? services.map((s) => summariseService(s))
+        : [];
+      return jsonResult(summarised);
+    } catch (err) {
+      return errorResult(err instanceof Error ? err.message : String(err));
+    }
+  });
+}
+
+function registerMonitoringEventsGet(server: McpServerInstance, deps: McpDependencies): void {
+  server.registerTool('monitoring_events_get', {
+    description: 'Get Checkmk state-change events for a node. Returns timestamp, service, state transition, and output per event.',
+    inputSchema: z.object({
+      nodeId: z.string().describe('Node ID (hostname) to retrieve events for'),
+      limit: z.number().min(1).max(1000).optional().describe('Maximum events to return (default: 200)'),
+    }),
+    annotations: { readOnlyHint: true },
+  }, async ({ nodeId, limit }: { nodeId: string; limit?: number }) => {
+    const denied = await checkPermission(deps, 'monitoring_events_get');
+    if (denied) return permissionError(denied.resource, denied.action);
+    try {
+      const plugin = deps.integrationManager.getInformationSource('checkmk');
+      if (!plugin?.isInitialized()) {
+        return errorResult('Checkmk plugin is not configured or not initialized');
+      }
+      const events = await plugin.getNodeData(nodeId, 'events') as object[];
+      if (Array.isArray(events) && events.length === 0) {
+        const inventory = await plugin.getInventory();
+        const nodeExists = inventory.some(
+          (n) => n.id.toLowerCase() === nodeId.toLowerCase() ||
+                 n.name.toLowerCase() === nodeId.toLowerCase(),
+        );
+        if (!nodeExists) {
+          return errorResult(`Node '${nodeId}' is not known to Checkmk`);
+        }
+      }
+      const effectiveLimit = limit ?? 200;
+      const limited = Array.isArray(events) ? events.slice(0, effectiveLimit) : [];
+      const summarised = limited.map((e) => summariseJournalEntry(e));
+      return jsonResult(summarised);
     } catch (err) {
       return errorResult(err instanceof Error ? err.message : String(err));
     }

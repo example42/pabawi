@@ -281,3 +281,26 @@ export function summariseJournalEntry(entryObj: object): Record<string, unknown>
 
   return summary;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Checkmk service summarisation                                      */
+/* ------------------------------------------------------------------ */
+
+/** State number → human-readable name for MCP output. */
+const SERVICE_STATE_NAMES: Record<number, string> = {
+  0: 'OK',
+  1: 'WARN',
+  2: 'CRIT',
+  3: 'UNKNOWN',
+};
+
+/** Summarise a Checkmk service status for LLM consumption. */
+export function summariseService(serviceObj: object): Record<string, unknown> {
+  const svc = toRecord(serviceObj);
+  return {
+    description: svc.description,
+    state: SERVICE_STATE_NAMES[svc.state as number] ?? `UNKNOWN(${String(svc.state)})`,
+    pluginOutput: svc.pluginOutput,
+    lastCheck: svc.lastCheck,
+  };
+}

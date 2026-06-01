@@ -41,6 +41,7 @@
     ansible: { icon: '🔧', color: 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400', label: 'Ansible' },
     ssh: { icon: '🔑', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400', label: 'SSH' },
     puppetdb: { icon: '🐶', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400', label: 'PuppetDB' },
+    checkmk: { icon: '💓', color: 'bg-violet-100 text-violet-800 dark:bg-violet-900/20 dark:text-violet-400', label: 'Checkmk' },
     user: { icon: '📝', color: 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400', label: 'User' },
     system: { icon: '⚙️', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/20 dark:text-indigo-400', label: 'System' },
     executions: { icon: '▶️', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400', label: 'Executions' },
@@ -60,6 +61,7 @@
     puppet_run: 'Puppet Run',
     package_install: 'Package',
     config_change: 'Config Change',
+    state_change: 'State Change',
     note: 'Note',
     unknown: 'Unknown',
   };

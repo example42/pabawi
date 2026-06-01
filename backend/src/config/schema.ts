@@ -343,6 +343,40 @@ export const ProvisioningConfigSchema = z.object({
 export type ProvisioningConfig = z.infer<typeof ProvisioningConfigSchema>;
 
 /**
+ * Checkmk Livestatus configuration schema
+ */
+export const CheckmkLivestatusConfigSchema = z.object({
+  host: z.string().min(1),
+  port: z.number().int().default(6557),
+  tls: z.boolean().default(false),
+  timeoutMs: z.number().int().default(5000),
+});
+
+export type CheckmkLivestatusConfig = z.infer<typeof CheckmkLivestatusConfigSchema>;
+
+/**
+ * Checkmk integration configuration schema
+ */
+export const CheckmkConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  serverUrl: z
+    .string()
+    .max(2048)
+    .refine(
+      (url) => url.startsWith("http://") || url.startsWith("https://"),
+      "Server URL must begin with http:// or https://",
+    ),
+  site: z.string().min(1).optional(),
+  username: z.string().min(1),
+  password: z.string().min(1), // pragma: allowlist secret
+  sslVerify: z.boolean().default(true),
+  healthCheckIntervalMs: z.number().int().default(300000),
+  livestatus: CheckmkLivestatusConfigSchema.optional(),
+});
+
+export type CheckmkConfig = z.infer<typeof CheckmkConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
@@ -353,6 +387,7 @@ export const IntegrationsConfigSchema = z.object({
   proxmox: ProxmoxConfigSchema.optional(),
   aws: AWSConfigSchema.optional(),
   azure: AzureConfigSchema.optional(),
+  checkmk: CheckmkConfigSchema.optional(),
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;

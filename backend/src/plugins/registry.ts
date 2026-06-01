@@ -28,6 +28,7 @@ import { loadSSHConfig } from "../integrations/ssh/config";
 import { ProxmoxIntegration } from "../integrations/proxmox/ProxmoxIntegration";
 import { AWSPlugin } from "../integrations/aws/AWSPlugin";
 import { AzurePlugin } from "../integrations/azure/AzurePlugin";
+import { CheckmkPlugin } from "../integrations/checkmk/CheckmkPlugin";
 
 export interface PluginRegistryEntry {
   /** Integration name (matches IntegrationConfig.name) */
@@ -237,6 +238,23 @@ export const pluginRegistry: PluginRegistryEntry[] = [
     },
     create(deps: PluginDeps): IntegrationPlugin {
       return new AzurePlugin(deps.logger, deps.performanceMonitor);
+    },
+  },
+
+  // 10. Checkmk — priority 8
+  {
+    name: "checkmk",
+    type: "information",
+    priority: 8,
+    resolveConfig(configService: ConfigService): Record<string, unknown> | null {
+      const checkmkConfig = configService.getIntegrationsConfig().checkmk;
+      if (!checkmkConfig?.serverUrl) {
+        return null;
+      }
+      return checkmkConfig;
+    },
+    create(deps: PluginDeps): IntegrationPlugin {
+      return new CheckmkPlugin(deps.logger, deps.performanceMonitor);
     },
   },
 ];

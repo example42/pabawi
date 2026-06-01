@@ -22,6 +22,7 @@ export interface IntegrationColors {
   ssh: IntegrationColorConfig;
   proxmox: IntegrationColorConfig;
   aws: IntegrationColorConfig;
+  checkmk: IntegrationColorConfig;
 }
 
 /**
@@ -126,7 +127,7 @@ class IntegrationColorStore {
    * @returns Array of valid integration names
    */
   getValidIntegrations(): IntegrationType[] {
-    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh', 'proxmox', 'aws'];
+    return ['bolt', 'ansible', 'puppetdb', 'puppetserver', 'hiera', 'ssh', 'proxmox', 'aws', 'checkmk'];
   }
 
   /**
@@ -187,6 +188,12 @@ class IntegrationColorStore {
         primary: '#F59E0B',
         light: '#FFFBEB',
         dark: '#D97706',
+      },
+      // Monitoring — purple (source attribution only, not service-state badges)
+      checkmk: {
+        primary: '#8B5CF6',
+        light: '#F5F3FF',
+        dark: '#7C3AED',
       },
     };
   }
