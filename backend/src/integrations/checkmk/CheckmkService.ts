@@ -126,32 +126,55 @@ export class CheckmkService {
     try {
       const response = await this.request(
         "GET",
-        "/domain-types/host_config/collections/all",
+        "/domain-types/host_config/collections/all?effective_attributes=true",
       );
 
       const data = response as {
         value?: {
           id?: string;
+          title?: string;
           extensions?: {
             attributes?: Record<string, unknown>;
+            effective_attributes?: Record<string, unknown>;
             folder?: string;
           };
         }[];
       };
 
       if (!Array.isArray(data.value)) {
+        this.logger.warn("Checkmk getHosts: response.value is not an array", {
+          component: "CheckmkService",
+          integration: "checkmk",
+          operation: "getHosts",
+          metadata: {
+            serverUrl: this.config.serverUrl,
+            responseKeys: response !== null && typeof response === "object" ? Object.keys(response) : [],
+            valueType: typeof (data as Record<string, unknown>).value,
+          },
+        });
         return [];
       }
 
-      return data.value.map((host) => ({
-        hostname: host.id ?? "",
-        attributes: {
-          ipaddress: host.extensions?.attributes?.ipaddress as string | undefined,
-          folder: host.extensions?.folder,
-          labels: host.extensions?.attributes?.labels as Record<string, string> | undefined,
-          ...host.extensions?.attributes,
-        },
-      }));
+      this.logger.info(`Checkmk getHosts: received ${String(data.value.length)} hosts`, {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "getHosts",
+        metadata: { serverUrl: this.config.serverUrl, hostCount: data.value.length },
+      });
+
+      return data.value.map((host) => {
+        // Prefer effective_attributes (resolved) over raw attributes
+        const attrs = host.extensions?.effective_attributes ?? host.extensions?.attributes ?? {};
+        return {
+          hostname: host.id ?? host.title ?? "",
+          attributes: {
+            ipaddress: attrs.ipaddress as string | undefined,
+            folder: host.extensions?.folder,
+            labels: attrs.labels as Record<string, string> | undefined,
+            ...attrs,
+          },
+        };
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 

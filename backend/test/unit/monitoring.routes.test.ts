@@ -123,26 +123,19 @@ describe("Monitoring Router", () => {
       expect(response.body.error.code).toBe("CHECKMK_NOT_CONFIGURED");
     });
 
-    it("returns 404 when node is unknown (empty services + not in inventory)", async () => {
+    it("returns 200 with empty array when node is unknown (no inventory cross-check)", async () => {
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-      (mockPlugin.getInventory as ReturnType<typeof vi.fn>).mockResolvedValue([
-        { id: "otherhost", name: "otherhost" },
-      ]);
 
       const response = await request(app).get("/api/nodes/unknownhost/services");
 
-      expect(response.status).toBe(404);
-      expect(response.body.error.code).toBe("NODE_NOT_FOUND");
-      expect(response.body.error.message).toContain("unknownhost");
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([]);
     });
 
-    it("returns 404 with case-insensitive inventory check", async () => {
+    it("returns 200 with empty array when node has no services (no inventory cross-check)", async () => {
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-      (mockPlugin.getInventory as ReturnType<typeof vi.fn>).mockResolvedValue([
-        { id: "WebServer01", name: "WebServer01" },
-      ]);
 
-      // Same host, different case — should find it and return 200 with []
+      // Different case — but no cross-check anymore, just returns []
       const response = await request(app).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(200);
@@ -233,16 +226,15 @@ describe("Monitoring Router", () => {
       expect(response.body.error.code).toBe("CHECKMK_NOT_CONFIGURED");
     });
 
-    it("returns 404 when node is unknown", async () => {
+    it("returns 200 with empty array when node is unknown (no inventory cross-check)", async () => {
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue([]);
-      (mockPlugin.getInventory as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
       const response = await request(app).get(
         "/api/nodes/unknownhost/monitoring-events",
       );
 
-      expect(response.status).toBe(404);
-      expect(response.body.error.code).toBe("NODE_NOT_FOUND");
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([]);
     });
 
     it("returns 502 on upstream failure", async () => {

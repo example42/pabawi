@@ -31,6 +31,7 @@ export const JournalEventTypeSchema = z.enum([
   "puppet_run",
   "package_install",
   "config_change",
+  "state_change",
   "note",
   "unknown",
 ]);
@@ -50,6 +51,7 @@ export const JournalSourceSchema = z.enum([
   "ansible",
   "ssh",
   "puppetdb",
+  "checkmk",
   "user",
   "system",
 ]);
