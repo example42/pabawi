@@ -431,7 +431,7 @@ export class CheckmkPlugin
               : undefined,
         },
       },
-    } as Facts;
+    } as unknown as Facts;
   }
 
   /**
