@@ -8,6 +8,9 @@ dist/
 build/
 backend/public/
 
+# Crash dumps
+backend/crash-dumps/
+
 # Environment variables
 .env
 .env.local

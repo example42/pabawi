@@ -44,6 +44,19 @@ export interface CheckmkEvent {
   output: string;
 }
 
+export interface CheckmkHostEvent extends CheckmkEvent {
+  hostname: string;
+}
+
+export interface CheckmkFailingService {
+  hostname: string;
+  serviceDescription: string;
+  state: 0 | 1 | 2 | 3;
+  lastState: 0 | 1 | 2 | 3;
+  lastStateChange: number;
+  output: string;
+}
+
 export const SERVICE_STATE_NAMES: Record<number, string> = {
   0: "OK",
   1: "WARN",

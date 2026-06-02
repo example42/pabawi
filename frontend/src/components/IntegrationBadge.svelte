@@ -26,6 +26,7 @@
     ssh: 'SSH',
     proxmox: 'Proxmox',
     aws: 'AWS',
+    checkmk: 'Checkmk',
   };
 
   const label = $derived(integrationLabels[integration]);

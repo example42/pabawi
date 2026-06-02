@@ -13,10 +13,10 @@ import { get } from './api';
  */
 export interface ServiceStatus {
   description: string;
-  state: 'OK' | 'WARN' | 'CRIT' | 'UNKNOWN';
-  stateType: 'soft' | 'hard';
+  state: 0 | 1 | 2 | 3;
+  stateType: 0 | 1;
   pluginOutput: string;
-  lastCheck: string; // ISO 8601 timestamp
+  lastCheck: number; // Unix epoch seconds from Checkmk
 }
 
 /**
@@ -31,15 +31,46 @@ export interface MonitoringEvent {
   output: string;
 }
 
+function extractArrayPayload<T>(
+  payload: unknown,
+  key: 'services' | 'events',
+): T[] {
+  if (Array.isArray(payload)) {
+    return payload as T[];
+  }
+
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const keyed = record[key];
+    if (Array.isArray(keyed)) {
+      return keyed as T[];
+    }
+
+    // Backward-compat for expert-mode responses that spread arrays into
+    // numeric object keys plus _debug metadata.
+    const numericEntries = Object.entries(record)
+      .filter(([entryKey]) => /^\d+$/.test(entryKey))
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([, value]) => value);
+
+    if (numericEntries.length > 0) {
+      return numericEntries as T[];
+    }
+  }
+
+  return [];
+}
+
 /**
  * Get live service status for a node from Checkmk.
  * Validates Requirements: 9.2, 11.1
  */
 export async function getNodeServices(nodeId: string): Promise<ServiceStatus[]> {
-  return get<ServiceStatus[]>(`/api/nodes/${encodeURIComponent(nodeId)}/services`, {
+  const data = await get<unknown>(`/api/nodes/${encodeURIComponent(nodeId)}/services`, {
     maxRetries: 1,
     retryDelay: 1000,
   });
+  return extractArrayPayload(data, 'services');
 }
 
 /**
@@ -51,8 +82,9 @@ export async function getNodeMonitoringEvents(
   limit?: number,
 ): Promise<MonitoringEvent[]> {
   const params = limit ? `?limit=${String(limit)}` : '';
-  return get<MonitoringEvent[]>(
+  const data = await get<unknown>(
     `/api/nodes/${encodeURIComponent(nodeId)}/monitoring-events${params}`,
     { maxRetries: 1, retryDelay: 1000 },
   );
+  return extractArrayPayload(data, 'events');
 }

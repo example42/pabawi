@@ -38,6 +38,14 @@ export interface ServiceGroup {
   services: ServiceStatus[];
 }
 
+function resolveServiceState(state: ServiceStatus['state'] | string): number {
+  if (typeof state === 'number') {
+    return state;
+  }
+
+  return STATE_NAME_TO_NUM[state] ?? 3;
+}
+
 /**
  * Group services by state in severity order: CRIT → WARN → UNKNOWN → OK.
  * Empty groups are omitted.
@@ -48,7 +56,7 @@ export function groupServicesByState(services: ServiceStatus[]): ServiceGroup[] 
   const groups: ServiceGroup[] = [];
   for (const stateNum of STATE_ORDER) {
     const stateName = STATE_NAMES[stateNum];
-    const matching = services.filter(s => STATE_NAME_TO_NUM[s.state] === stateNum);
+    const matching = services.filter(s => resolveServiceState(s.state) === stateNum);
     if (matching.length > 0) {
       groups.push({ state: stateNum, name: stateName, services: matching });
     }

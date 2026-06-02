@@ -10,13 +10,21 @@ import * as https from "node:https";
 import * as http from "node:http";
 
 import type { LoggerService } from "../../services/LoggerService";
-import type { CheckmkConfig, CheckmkHost, CheckmkServiceStatus } from "./types";
+import type {
+  CheckmkConfig,
+  CheckmkFailingService,
+  CheckmkHost,
+  CheckmkServiceStatus,
+} from "./types";
 
 /** Default request timeout in milliseconds (Requirement 12.2) */
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 /** Connection test timeout in milliseconds */
 const TEST_CONNECTION_TIMEOUT_MS = 10_000;
+
+/** Host inventory request timeout in milliseconds */
+const HOSTS_TIMEOUT_MS = 60_000;
 
 /** Service columns required for the services endpoint */
 const SERVICE_COLUMNS = [
@@ -27,6 +35,15 @@ const SERVICE_COLUMNS = [
   "last_check",
   "last_state",
   "last_state_change",
+] as const;
+
+const FAILING_SERVICE_COLUMNS = [
+  "host_name",
+  "description",
+  "state",
+  "last_state",
+  "last_state_change",
+  "plugin_output",
 ] as const;
 
 export class CheckmkService {
@@ -127,54 +144,36 @@ export class CheckmkService {
       const response = await this.request(
         "GET",
         "/domain-types/host_config/collections/all?effective_attributes=true",
+        HOSTS_TIMEOUT_MS,
       );
+      let hosts = this.parseHostCollection(response);
 
-      const data = response as {
-        value?: {
-          id?: string;
-          title?: string;
-          extensions?: {
-            attributes?: Record<string, unknown>;
-            effective_attributes?: Record<string, unknown>;
-            folder?: string;
-          };
-        }[];
-      };
-
-      if (!Array.isArray(data.value)) {
-        this.logger.warn("Checkmk getHosts: response.value is not an array", {
+      // Some Checkmk setups expose monitored hosts through `host` while
+      // `host_config` may be empty depending on permissions.
+      if (hosts.length === 0) {
+        this.logger.warn("Checkmk host_config endpoint returned no hosts, trying host endpoint fallback", {
           component: "CheckmkService",
           integration: "checkmk",
           operation: "getHosts",
-          metadata: {
-            serverUrl: this.config.serverUrl,
-            responseKeys: response !== null && typeof response === "object" ? Object.keys(response) : [],
-            valueType: typeof (data as Record<string, unknown>).value,
-          },
+          metadata: { serverUrl: this.config.serverUrl },
         });
-        return [];
+
+        const fallbackResponse = await this.request(
+          "GET",
+          "/domain-types/host/collections/all",
+          HOSTS_TIMEOUT_MS,
+        );
+        hosts = this.parseHostCollection(fallbackResponse);
       }
 
-      this.logger.info(`Checkmk getHosts: received ${String(data.value.length)} hosts`, {
+      this.logger.info(`Checkmk getHosts: received ${String(hosts.length)} hosts`, {
         component: "CheckmkService",
         integration: "checkmk",
         operation: "getHosts",
-        metadata: { serverUrl: this.config.serverUrl, hostCount: data.value.length },
+        metadata: { serverUrl: this.config.serverUrl, hostCount: hosts.length },
       });
 
-      return data.value.map((host) => {
-        // Prefer effective_attributes (resolved) over raw attributes
-        const attrs = host.extensions?.effective_attributes ?? host.extensions?.attributes ?? {};
-        return {
-          hostname: host.id ?? host.title ?? "",
-          attributes: {
-            ipaddress: attrs.ipaddress as string | undefined,
-            folder: host.extensions?.folder,
-            labels: attrs.labels as Record<string, string> | undefined,
-            ...attrs,
-          },
-        };
-      });
+      return hosts;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -187,6 +186,70 @@ export class CheckmkService {
 
       return [];
     }
+  }
+
+  /**
+   * Parse Checkmk host collection responses into Pabawi host objects.
+   * Supports both `host_config` and `host` domain-type collection shapes.
+   */
+  private parseHostCollection(response: unknown): CheckmkHost[] {
+    const data = response as {
+      value?: {
+        id?: string;
+        title?: string;
+        extensions?: {
+          attributes?: Record<string, unknown>;
+          effective_attributes?: Record<string, unknown>;
+          folder?: string;
+        };
+      }[];
+      items?: {
+        id?: string;
+        title?: string;
+        extensions?: {
+          attributes?: Record<string, unknown>;
+          effective_attributes?: Record<string, unknown>;
+          folder?: string;
+        };
+      }[];
+    };
+
+    const records = Array.isArray(data.value)
+      ? data.value
+      : (Array.isArray(data.items) ? data.items : []);
+
+    if (records.length === 0) {
+      this.logger.warn("Checkmk host collection response contained no host records", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "parseHostCollection",
+        metadata: {
+          serverUrl: this.config.serverUrl,
+          responseKeys: response !== null && typeof response === "object" ? Object.keys(response as Record<string, unknown>) : [],
+        },
+      });
+      return [];
+    }
+
+    const hosts: CheckmkHost[] = [];
+    for (const host of records) {
+      const hostname = host.id ?? host.title ?? "";
+      if (!hostname) continue;
+
+      // Prefer effective_attributes (resolved) over raw attributes.
+      const attrs = host.extensions?.effective_attributes ?? host.extensions?.attributes ?? {};
+      hosts.push({
+        hostname,
+        attributes: {
+          ipaddress: attrs.ipaddress as string | undefined,
+          folder: host.extensions?.folder,
+          labels: attrs.labels as Record<string, string> | undefined,
+          ...attrs,
+        },
+      });
+    }
+
+    return hosts;
   }
 
   /**
@@ -251,6 +314,89 @@ export class CheckmkService {
   }
 
   /**
+   * Fetch currently failing services globally (single request, no per-host polling).
+   * Uses the monitoring service collection endpoint with a query filter state != 0.
+   */
+  async getFailingServices(
+    hostnames?: string[],
+    limit: number = 500,
+  ): Promise<CheckmkFailingService[]> {
+    try {
+      const response = await this.request(
+        "POST",
+        "/domain-types/service/collections/all",
+        DEFAULT_TIMEOUT_MS,
+        {
+          columns: [...FAILING_SERVICE_COLUMNS],
+          query: {
+            op: "!=",
+            left: "state",
+            right: "0",
+          },
+        },
+      );
+
+      const data = response as {
+        value?: {
+          extensions?: {
+            host_name?: string;
+            description?: string;
+            state?: number;
+            last_state?: number;
+            last_state_change?: number;
+            plugin_output?: string;
+          };
+        }[];
+      };
+
+      if (!Array.isArray(data.value)) {
+        return [];
+      }
+
+      const allowedHosts = hostnames && hostnames.length > 0
+        ? new Set(hostnames)
+        : null;
+
+      const failingServices: CheckmkFailingService[] = [];
+      for (const entry of data.value) {
+        const ext = entry.extensions;
+        if (!ext) continue;
+
+        const state = (ext.state ?? 3) as 0 | 1 | 2 | 3;
+        if (state === 0) continue;
+
+        const hostname = ext.host_name ?? "";
+        if (!hostname) continue;
+        if (allowedHosts && !allowedHosts.has(hostname)) continue;
+
+        failingServices.push({
+          hostname,
+          serviceDescription: ext.description ?? "",
+          state,
+          lastState: (ext.last_state ?? 0) as 0 | 1 | 2 | 3,
+          lastStateChange: ext.last_state_change ?? 0,
+          output: ext.plugin_output ?? "",
+        });
+      }
+
+      return failingServices
+        .sort((a, b) => b.lastStateChange - a.lastStateChange)
+        .slice(0, Math.max(1, limit));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to fetch failing services from Checkmk", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "getFailingServices",
+        metadata: { serverUrl: this.config.serverUrl, errorMessage },
+      });
+
+      return [];
+    }
+  }
+
+  /**
    * Sanitize a string to ensure the password never appears in log output.
    */
   private sanitize(text: string): string {
@@ -266,6 +412,7 @@ export class CheckmkService {
     method: string,
     path: string,
     timeout: number = DEFAULT_TIMEOUT_MS,
+    body?: unknown,
   ): Promise<unknown> {
     const url = `${this.baseUrl}${path}`;
 
@@ -273,6 +420,9 @@ export class CheckmkService {
       const parsed = new URL(url);
       const isHttps = parsed.protocol === "https:";
       const transport = isHttps ? https : http;
+
+      const hasBody = body !== undefined;
+      const payload = hasBody ? JSON.stringify(body) : "";
 
       const reqOptions: https.RequestOptions = {
         hostname: parsed.hostname,
@@ -282,6 +432,12 @@ export class CheckmkService {
         headers: {
           Authorization: this.authHeader,
           Accept: "application/json",
+          ...(hasBody
+            ? {
+              "Content-Type": "application/json",
+              "Content-Length": Buffer.byteLength(payload).toString(),
+            }
+            : {}),
         },
         timeout,
         ...(isHttps && this.httpsAgent ? { agent: this.httpsAgent } : {}),
@@ -320,6 +476,10 @@ export class CheckmkService {
       req.on("error", (err) => {
         reject(new Error(`Checkmk API request failed: ${err.message}`));
       });
+
+      if (hasBody) {
+        req.write(payload);
+      }
 
       req.end();
     });

@@ -419,6 +419,19 @@ export function createInventoryRouter(
             expertModeService.addMetadata(debugInfo, 'groupCount', filteredGroups.length);
             expertModeService.addMetadata(debugInfo, 'requestedSources', requestedSources);
             expertModeService.addMetadata(debugInfo, 'pqlQuery', query.pql);
+            expertModeService.addMetadata(debugInfo, 'sourceFetchDiagnostics', aggregated.fetchDiagnostics ?? {});
+
+            const timedOutSources = Object.entries(aggregated.fetchDiagnostics ?? {})
+              .filter(([, diag]) => diag.timedOut)
+              .map(([source]) => source);
+            if (timedOutSources.length > 0) {
+              expertModeService.addWarning(debugInfo, {
+                message: `Inventory source timeout detected: ${timedOutSources.join(', ')}`,
+                context: JSON.stringify(aggregated.fetchDiagnostics),
+                level: 'warn',
+              });
+            }
+
             expertModeService.addInfo(debugInfo, {
               message: `Retrieved ${String(filteredNodes.length)} nodes and ${String(filteredGroups.length)} groups from ${String(Object.keys(filteredSources).length)} sources`,
               level: 'info',

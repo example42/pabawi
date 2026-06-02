@@ -163,7 +163,12 @@ export function createMonitoringRouter(
             expertModeService.collectPerformanceMetrics();
           debugInfo.context =
             expertModeService.collectRequestContext(req);
-          res.json(expertModeService.attachDebugInfo(services, debugInfo));
+          res.json(
+            expertModeService.attachDebugInfo(
+              { services: Array.isArray(services) ? services : [] },
+              debugInfo,
+            ),
+          );
         } else {
           res.json(services);
         }
@@ -380,7 +385,10 @@ export function createMonitoringRouter(
           debugInfo.context =
             expertModeService.collectRequestContext(req);
           res.json(
-            expertModeService.attachDebugInfo(limitedEvents, debugInfo),
+            expertModeService.attachDebugInfo(
+              { events: limitedEvents },
+              debugInfo,
+            ),
           );
         } else {
           res.json(limitedEvents);

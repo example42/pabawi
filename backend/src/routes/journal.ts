@@ -15,6 +15,7 @@ import {
 } from "../services/journal/JournalCollectors";
 import type { ProxmoxIntegration } from "../integrations/proxmox/ProxmoxIntegration";
 import type { AWSPlugin } from "../integrations/aws/AWSPlugin";
+import type { CheckmkPlugin } from "../integrations/checkmk/CheckmkPlugin";
 import { JournalEventTypeSchema, JournalSourceSchema, type JournalEntry } from "../services/journal/types";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { DatabaseService } from "../database/DatabaseService";
@@ -256,6 +257,16 @@ export function createJournalRouter(
           const activeSources: string[] = ["journal", "executions"];
           if (deps.puppetdb?.isInitialized()) activeSources.push("puppetdb");
 
+          // Checkmk monitoring events can be collected globally in one query.
+          const wantsCheckmkBySource = query.source === undefined || query.source.includes("checkmk");
+          const wantsCheckmkByType = query.eventType === undefined || query.eventType.includes("state_change");
+          if (wantsCheckmkBySource && wantsCheckmkByType && deps.integrationManager) {
+            const checkmkPlugin = deps.integrationManager.getInformationSource("checkmk");
+            if (checkmkPlugin?.isInitialized()) {
+              activeSources.push("checkmk");
+            }
+          }
+
           send("init", { sources: activeSources });
 
           const tasks: Promise<void>[] = [];
@@ -310,6 +321,29 @@ export function createJournalRouter(
                 })
                 .catch(() => { send("source_error", { source: "puppetdb", message: "Failed to load PuppetDB reports" }); }),
             );
+          }
+
+          // Source 4: Checkmk monitoring events (single global query)
+          const skipCheckmkBySource = query.source !== undefined && !query.source.includes("checkmk");
+          const skipCheckmkByType = query.eventType !== undefined && !query.eventType.includes("state_change");
+          if (
+            activeSources.includes("checkmk")
+            && !skipCheckmkBySource
+            && !skipCheckmkByType
+            && deps.integrationManager
+          ) {
+            const checkmkPlugin = deps.integrationManager.getInformationSource("checkmk") as CheckmkPlugin | null;
+            if (checkmkPlugin?.isInitialized()) {
+              tasks.push(
+                Promise.resolve()
+                  .then(async () => {
+                    const events = await checkmkPlugin.getGlobalEvents(nodeIds);
+                    const filtered = filterEntriesByDate(events, query.startDate, query.endDate);
+                    send("batch", { source: "checkmk", entries: filtered });
+                  })
+                  .catch(() => { send("source_error", { source: "checkmk", message: "Failed to load Checkmk monitoring events" }); }),
+              );
+            }
           }
 
           await Promise.all(tasks);

@@ -135,6 +135,7 @@
     { value: 'reboot', label: 'Rebooted' },
     { value: 'suspend', label: 'Suspended' },
     { value: 'resume', label: 'Resumed' },
+    { value: 'state_change', label: 'State Change' },
     { value: 'command_execution', label: 'Command' },
     { value: 'task_execution', label: 'Task' },
     { value: 'puppet_run', label: 'Puppet Run' },
@@ -145,10 +146,12 @@
   const journalSourceOptions = [
     { value: 'proxmox', label: 'Proxmox' },
     { value: 'aws', label: 'AWS' },
+    { value: 'azure', label: 'Azure' },
     { value: 'bolt', label: 'Bolt' },
     { value: 'ansible', label: 'Ansible' },
     { value: 'ssh', label: 'SSH' },
     { value: 'puppetdb', label: 'PuppetDB' },
+    { value: 'checkmk', label: 'Checkmk' },
     { value: 'user', label: 'User' },
     { value: 'system', label: 'System' },
   ];

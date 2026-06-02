@@ -16,21 +16,16 @@ import * as fc from 'fast-check';
 import { groupServicesByState, STATE_ORDER } from './monitorTabUtils';
 import type { ServiceStatus } from './checkmkApi';
 
-/** Generator for valid ServiceStatus state strings */
-const serviceStateArb = fc.oneof(
-  fc.constant('OK' as const),
-  fc.constant('WARN' as const),
-  fc.constant('CRIT' as const),
-  fc.constant('UNKNOWN' as const),
-);
+/** Generator for valid ServiceStatus state numbers */
+const serviceStateArb = fc.constantFrom<0 | 1 | 2 | 3>(0, 1, 2, 3);
 
 /** Generator for a single ServiceStatus object */
 const serviceStatusArb: fc.Arbitrary<ServiceStatus> = fc.record({
   description: fc.string({ minLength: 1, maxLength: 100 }),
   state: serviceStateArb,
-  stateType: fc.oneof(fc.constant('soft' as const), fc.constant('hard' as const)),
+  stateType: fc.oneof(fc.constant(0 as const), fc.constant(1 as const)),
   pluginOutput: fc.string({ maxLength: 200 }),
-  lastCheck: fc.integer({ min: 946684800000, max: 1924905600000 }).map(ts => new Date(ts).toISOString()),
+  lastCheck: fc.integer({ min: 946684800, max: 1924905600 }),
 });
 
 /** Generator for arrays of ServiceStatus with at least one service */
@@ -38,14 +33,6 @@ const servicesArb = fc.array(serviceStatusArb, { minLength: 1, maxLength: 50 });
 
 /** Expected group order: CRIT=2, WARN=1, UNKNOWN=3, OK=0 */
 const EXPECTED_ORDER = [2, 1, 3, 0];
-
-/** Map state name to numeric value for verification */
-const stateNameToNum: Record<string, number> = {
-  OK: 0,
-  WARN: 1,
-  CRIT: 2,
-  UNKNOWN: 3,
-};
 
 describe('Feature: checkmk-integration, Property 9: Service grouping order', () => {
   it('groups are produced in CRIT → WARN → UNKNOWN → OK order', () => {
@@ -74,9 +61,7 @@ describe('Feature: checkmk-integration, Property 9: Service grouping order', () 
         const groups = groupServicesByState(services);
 
         for (const group of groups) {
-          const expectedCount = services.filter(
-            s => stateNameToNum[s.state] === group.state,
-          ).length;
+          const expectedCount = services.filter(s => s.state === group.state).length;
           expect(group.services.length).toBe(expectedCount);
         }
       }),
@@ -106,7 +91,7 @@ describe('Feature: checkmk-integration, Property 9: Service grouping order', () 
         }
 
         // States not present in input must not appear in output
-        const inputStates = new Set(services.map(s => stateNameToNum[s.state]));
+        const inputStates = new Set(services.map(s => s.state));
         for (const group of groups) {
           expect(inputStates.has(group.state)).toBe(true);
         }

@@ -10,7 +10,11 @@
 
 import * as net from "node:net";
 import * as tls from "node:tls";
-import type { CheckmkLivestatusConfig, CheckmkEvent } from "./types";
+import type {
+  CheckmkEvent,
+  CheckmkHostEvent,
+  CheckmkLivestatusConfig,
+} from "./types";
 import type { LoggerService } from "../../services/LoggerService";
 
 const DEFAULT_DAYS = 7;
@@ -111,6 +115,61 @@ export class CheckmkLivestatusClient {
     const response = await this.executeQuery(query);
     const rows = this.parseResponse(response);
     return this.mapRowsToEvents(rows);
+  }
+
+  /**
+   * Fetches recent state-change events globally in a single query.
+   * Optional host filtering is applied server-side via OR-ed host_name filters.
+   */
+  async getGlobalEvents(options?: {
+    days?: number;
+    limit?: number;
+    hostnames?: string[];
+  }): Promise<CheckmkHostEvent[]> {
+    const days = options?.days ?? DEFAULT_DAYS;
+    const limit = options?.limit ?? DEFAULT_LIMIT;
+    const cutoffTimestamp = Math.floor(Date.now() / 1000) - days * 86400;
+
+    const queryLines = [
+      "GET log",
+      "Columns: time host_name service_description state state_type plugin_output",
+      "Filter: class = 1",
+      `Filter: time >= ${String(cutoffTimestamp)}`,
+    ];
+
+    const hostnames = options?.hostnames?.filter(Boolean) ?? [];
+    if (hostnames.length === 1) {
+      queryLines.push(`Filter: host_name = ${hostnames[0]}`);
+    } else if (hostnames.length > 1) {
+      for (const host of hostnames) {
+        queryLines.push(`Filter: host_name = ${host}`);
+      }
+      queryLines.push(`Or: ${String(hostnames.length)}`);
+    }
+
+    queryLines.push(
+      `Limit: ${String(limit)}`,
+      "OutputFormat: json",
+      "",
+      "",
+    );
+
+    this.logger.debug("Executing global Livestatus log query", {
+      component: "CheckmkLivestatusClient",
+      integration: "checkmk",
+      operation: "getGlobalEvents",
+      metadata: {
+        host: this.config.host,
+        port: this.config.port,
+        days,
+        limit,
+        hostFilterCount: hostnames.length,
+      },
+    });
+
+    const response = await this.executeQuery(queryLines.join("\n"));
+    const rows = this.parseResponse(response);
+    return this.mapRowsToHostEvents(rows);
   }
 
   /**
@@ -274,6 +333,48 @@ export class CheckmkLivestatusClient {
     }
 
     // Return descending by timestamp (most recent first)
+    return events.reverse();
+  }
+
+  /**
+   * Maps raw Livestatus log rows to host-scoped CheckmkEvent objects.
+   * Row format: [time, host_name, service_description, state, state_type, plugin_output]
+   */
+  private mapRowsToHostEvents(rows: unknown[][]): CheckmkHostEvent[] {
+    const sorted = [...rows].sort((a, b) => {
+      const timeA = Number(a[0]) || 0;
+      const timeB = Number(b[0]) || 0;
+      return timeA - timeB;
+    });
+
+    const lastStateByHostService = new Map<string, 0 | 1 | 2 | 3>();
+    const events: CheckmkHostEvent[] = [];
+
+    for (const row of sorted) {
+      if (!Array.isArray(row) || row.length < 6) continue;
+
+      const time = Number(row[0]);
+      const hostname = this.toSafeString(row[1]);
+      const serviceDescription = this.toSafeString(row[2]);
+      const state = this.clampState(Number(row[3]));
+      const output = this.truncateOutput(this.toSafeString(row[5]));
+
+      if (!hostname || !serviceDescription || isNaN(time) || time <= 0) continue;
+
+      const key = `${hostname}::${serviceDescription}`;
+      const previousState = lastStateByHostService.get(key) ?? state;
+      lastStateByHostService.set(key, state);
+
+      events.push({
+        hostname,
+        timestamp: new Date(time * 1000).toISOString(),
+        serviceDescription,
+        previousState,
+        currentState: state,
+        output,
+      });
+    }
+
     return events.reverse();
   }
 

@@ -1,17 +1,19 @@
 /**
  * Format a timestamp as a human-readable relative time string.
  *
- * @param timestamp - ISO 8601 timestamp string, or undefined/null
+ * @param timestamp - ISO 8601 timestamp string, Unix epoch seconds, or undefined/null
  * @returns A relative time string like "5 minutes ago", "2 hours ago", "3 days ago",
  *          "Just now" for <60s, "Never" for undefined/null, or "Unknown" on parse error
  */
-export function formatRelativeTime(timestamp?: string | null): string {
+export function formatRelativeTime(timestamp?: string | number | null): string {
   if (!timestamp) {
     return 'Never';
   }
 
   try {
-    const date = new Date(timestamp);
+    const date = typeof timestamp === 'number'
+      ? new Date(timestamp < 1e12 ? timestamp * 1000 : timestamp)
+      : new Date(/^\d+$/.test(timestamp.trim()) ? Number(timestamp) * 1000 : timestamp);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffSeconds = Math.floor(diffMs / 1000);

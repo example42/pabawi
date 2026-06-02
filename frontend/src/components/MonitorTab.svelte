@@ -6,7 +6,7 @@
   import type { ServiceStatus } from '../lib/checkmkApi';
   import {
     STATE_COLORS,
-    STATE_NAME_TO_NUM,
+    STATE_NAMES,
     groupServicesByState,
   } from '../lib/monitorTabUtils';
 
@@ -26,6 +26,37 @@
 
   // Group services by state in CRIT → WARN → UNKNOWN → OK order
   const groupedServices = $derived(groupServicesByState(services));
+
+  interface MonitorServicesResponse {
+    services?: ServiceStatus[];
+    _debug?: unknown;
+    [key: string]: unknown;
+  }
+
+  function normalizeServicesPayload(payload: unknown): ServiceStatus[] {
+    if (Array.isArray(payload)) {
+      return payload as ServiceStatus[];
+    }
+
+    if (payload && typeof payload === 'object') {
+      const maybeResponse = payload as MonitorServicesResponse;
+      if (Array.isArray(maybeResponse.services)) {
+        return maybeResponse.services;
+      }
+
+      const numericEntries = Object.entries(maybeResponse)
+        .filter(([key]) => /^\d+$/.test(key))
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([, value]) => value)
+        .filter((value) => value && typeof value === 'object');
+
+      if (numericEntries.length > 0) {
+        return numericEntries as ServiceStatus[];
+      }
+    }
+
+    return [];
+  }
 
   // Truncate plugin output to 200 chars
   function truncateOutput(output: string, maxLen = 200): string {
@@ -51,11 +82,11 @@
     services = [];
 
     try {
-      const result = await get<ServiceStatus[]>(
+      const result = await get<unknown>(
         `/api/nodes/${encodeURIComponent(nodeId)}/services`,
         { maxRetries: 0, retryableStatuses: [], showRetryNotifications: false },
       );
-      services = result;
+      services = normalizeServicesPayload(result);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'An unknown error occurred';
       // Distinguish 503 (unavailable/not configured) from 502 (upstream error)
@@ -188,6 +219,7 @@
               {@const serviceId = `${String(group.state)}-${service.description}`}
               {@const isExpanded = expandedServices.has(serviceId)}
               {@const needsTruncation = service.pluginOutput.length > 200}
+              {@const serviceStateName = STATE_NAMES[service.state] ?? String(service.state)}
               <div class="px-4 py-3">
                 <div class="flex items-start justify-between gap-3">
                   <div class="flex-1 min-w-0">
@@ -196,8 +228,8 @@
                       <span class="font-medium text-sm text-gray-900 dark:text-white truncate">
                         {service.description}
                       </span>
-                      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 {STATE_COLORS[STATE_NAME_TO_NUM[service.state]]}">
-                        {service.state}
+                      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 {STATE_COLORS[service.state]}">
+                        {serviceStateName}
                       </span>
                     </div>
 
