@@ -29,9 +29,12 @@ import type { LoggerService } from "../../services/LoggerService";
 import type { PerformanceMonitorService } from "../../services/PerformanceMonitorService";
 import { CheckmkService } from "./CheckmkService";
 import { CheckmkLivestatusClient } from "./CheckmkLivestatusClient";
+import type { JournalEntry } from "../../services/journal/types";
 import type {
   CheckmkConfig,
+  CheckmkFailingService,
   CheckmkEvent,
+  CheckmkHostEvent,
   CheckmkServiceStatus,
 } from "./types";
 import { SERVICE_STATE_NAMES } from "./types";
@@ -53,23 +56,6 @@ interface CachedHealthResult {
 interface LivestatusProbeState {
   reachable: boolean;
   lastProbeTimestamp: number;
-}
-
-/**
- * Journal entry shape returned by getNodeData("events").
- * Compatible with JournalService LiveSource interface.
- */
-interface JournalEntry {
-  id: string;
-  nodeId: string;
-  nodeUri: string;
-  eventType: string;
-  source: string;
-  action: string;
-  summary: string;
-  details: Record<string, unknown>;
-  timestamp: string;
-  isLive: boolean;
 }
 
 export class CheckmkPlugin
@@ -346,10 +332,106 @@ export class CheckmkPlugin
   }
 
   /**
-   * Get node facts — not supported by Checkmk integration.
+   * Get node facts for a monitored host.
+   *
+   * Checkmk does not provide OS/hardware facts like Puppet/SSH sources.
+   * Instead, we expose monitoring facts so the Facts tab can surface
+   * useful Checkmk context for the node.
    */
-  getNodeFacts(_nodeId: string): Promise<Facts> {
-    return Promise.resolve({} as Facts);
+  async getNodeFacts(nodeId: string): Promise<Facts> {
+    const gatheredAt = new Date().toISOString();
+    const services = await this.service.getServices(nodeId);
+
+    let latestLastCheck = 0;
+    let latestStateChange = 0;
+    let worstState: 0 | 1 | 2 | 3 = 0;
+
+    const stateCounts = {
+      ok: 0,
+      warn: 0,
+      crit: 0,
+      unknown: 0,
+    };
+
+    for (const service of services) {
+      latestLastCheck = Math.max(latestLastCheck, service.lastCheck);
+      latestStateChange = Math.max(latestStateChange, service.lastStateChange);
+      if (service.state > worstState) {
+        worstState = service.state;
+      }
+
+      if (service.state === 0) {
+        stateCounts.ok += 1;
+      } else if (service.state === 1) {
+        stateCounts.warn += 1;
+      } else if (service.state === 2) {
+        stateCounts.crit += 1;
+      } else {
+        stateCounts.unknown += 1;
+      }
+    }
+
+    const nonOkCount =
+      stateCounts.warn + stateCounts.crit + stateCounts.unknown;
+
+    const topIssues = services
+      .filter((service) => service.state !== 0)
+      .sort((a, b) => {
+        if (a.state !== b.state) {
+          return b.state - a.state;
+        }
+        return b.lastStateChange - a.lastStateChange;
+      })
+      .slice(0, 10)
+      .map((service) => ({
+        description: service.description,
+        state: service.state,
+        stateName: SERVICE_STATE_NAMES[service.state] ?? "UNKNOWN",
+        stateType: service.stateType,
+        lastCheck:
+          service.lastCheck > 0
+            ? new Date(service.lastCheck * 1000).toISOString()
+            : null,
+        lastStateChange:
+          service.lastStateChange > 0
+            ? new Date(service.lastStateChange * 1000).toISOString()
+            : null,
+        pluginOutput: this.truncateString(
+          service.pluginOutput,
+          MAX_SERVICE_OUTPUT_LENGTH,
+        ),
+      }));
+
+    return {
+      nodeId,
+      source: "checkmk",
+      gatheredAt,
+      facts: {
+        checkmk: {
+          hostname: nodeId,
+          serviceSummary: {
+            total: services.length,
+            ...stateCounts,
+            nonOk: nonOkCount,
+            worstState,
+            worstStateName: SERVICE_STATE_NAMES[worstState] ?? "UNKNOWN",
+            latestCheck:
+              latestLastCheck > 0
+                ? new Date(latestLastCheck * 1000).toISOString()
+                : null,
+            latestStateChange:
+              latestStateChange > 0
+                ? new Date(latestStateChange * 1000).toISOString()
+                : null,
+          },
+          topIssues,
+          note:
+            services.length === 0
+              ? "No Checkmk services were returned for this node"
+              : undefined,
+        },
+      },
+    } as Facts;
   }
 
   /**
@@ -369,6 +451,40 @@ export class CheckmkPlugin
       default:
         return [];
     }
+  }
+
+  /**
+   * Get global Checkmk monitoring events without per-node polling.
+   * - Livestatus primary: latest state-change events from log table
+   * - REST fallback: currently failing checks snapshot
+   */
+  async getGlobalEvents(nodeIds?: string[]): Promise<JournalEntry[]> {
+    const limit = 500;
+
+    if (this.livestatusClient?.isEnabled()) {
+      try {
+        const events = await this.livestatusClient.getGlobalEvents({
+          hostnames: nodeIds,
+          limit,
+        });
+        return this.mapGlobalEventsToJournalEntries(events);
+      } catch (error) {
+        this.logger.debug(
+          "Global Livestatus event fetch failed, falling back to REST failing-services snapshot",
+          {
+            component: "CheckmkPlugin",
+            integration: "checkmk",
+            operation: "getGlobalEvents",
+            metadata: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          },
+        );
+      }
+    }
+
+    const failing = await this.service.getFailingServices(nodeIds, limit);
+    return this.mapFailingServicesToJournalEntries(failing);
   }
 
   // ========================================
@@ -523,6 +639,74 @@ export class CheckmkPlugin
           timestamp: event.timestamp,
         },
         timestamp: event.timestamp,
+        isLive: true,
+      };
+    });
+  }
+
+  /**
+   * Map host-scoped Checkmk events to journal entries.
+   */
+  private mapGlobalEventsToJournalEntries(
+    events: CheckmkHostEvent[],
+  ): JournalEntry[] {
+    return events.map((event) => {
+      const prevName = SERVICE_STATE_NAMES[event.previousState];
+      const currName = SERVICE_STATE_NAMES[event.currentState];
+
+      return {
+        id: randomUUID(),
+        nodeId: event.hostname,
+        nodeUri: `checkmk:${event.hostname}`,
+        eventType: "state_change",
+        source: "checkmk",
+        action: "state_change",
+        summary: `${event.serviceDescription}: ${prevName} → ${currName}`,
+        details: {
+          serviceDescription: event.serviceDescription,
+          previousState: event.previousState,
+          currentState: event.currentState,
+          output: this.truncateString(event.output, MAX_EVENT_OUTPUT_LENGTH),
+          timestamp: event.timestamp,
+        },
+        timestamp: event.timestamp,
+        isLive: true,
+      };
+    });
+  }
+
+  /**
+   * Map failing-service snapshots to journal entries when event log data is unavailable.
+   */
+  private mapFailingServicesToJournalEntries(
+    services: CheckmkFailingService[],
+  ): JournalEntry[] {
+    const nowIso = new Date().toISOString();
+
+    return services.map((svc) => {
+      const prevName = SERVICE_STATE_NAMES[svc.lastState];
+      const currName = SERVICE_STATE_NAMES[svc.state];
+      const ts = svc.lastStateChange > 0
+        ? new Date(svc.lastStateChange * 1000).toISOString()
+        : nowIso;
+
+      return {
+        id: randomUUID(),
+        nodeId: svc.hostname,
+        nodeUri: `checkmk:${svc.hostname}`,
+        eventType: "state_change",
+        source: "checkmk",
+        action: "state_change",
+        summary: `${svc.serviceDescription}: ${prevName} → ${currName}`,
+        details: {
+          serviceDescription: svc.serviceDescription,
+          previousState: svc.lastState,
+          currentState: svc.state,
+          output: this.truncateString(svc.output, MAX_EVENT_OUTPUT_LENGTH),
+          timestamp: ts,
+          snapshot: true,
+        },
+        timestamp: ts,
         isLive: true,
       };
     });

@@ -79,6 +79,18 @@ export interface AggregatedInventory {
       status: "healthy" | "degraded" | "unavailable";
     }
   >;
+  /** Per-source fetch diagnostics used for expert-mode troubleshooting */
+  fetchDiagnostics?: Record<
+    string,
+    {
+      durationMs: number;
+      timedOut: boolean;
+      status: "healthy" | "unavailable";
+      nodeCount: number;
+      groupCount: number;
+      error?: string;
+    }
+  >;
 }
 
 /**
@@ -432,6 +444,7 @@ export class IntegrationManager {
     }
 
     const sources: AggregatedInventory["sources"] = {};
+    const fetchDiagnostics: NonNullable<AggregatedInventory["fetchDiagnostics"]> = {};
     const allNodes: Node[] = [];
     const allGroups: NodeGroup[] = [];
     const now = new Date().toISOString();
@@ -439,6 +452,7 @@ export class IntegrationManager {
     // Get inventory and groups from all sources in parallel
     const inventoryPromises = Array.from(this.informationSources.entries()).map(
       async ([name, source]) => {
+        const sourceStart = Date.now();
         this.logger.debug(`Processing source: ${name}`, {
           component: "IntegrationManager",
           operation: "getAggregatedInventory",
@@ -458,12 +472,21 @@ export class IntegrationManager {
               lastSync: now,
               status: "unavailable",
             };
+            fetchDiagnostics[name] = {
+              durationMs: Date.now() - sourceStart,
+              timedOut: false,
+              status: "unavailable",
+              nodeCount: 0,
+              groupCount: 0,
+              error: "Source is not initialized",
+            };
             return { nodes: [], groups: [] };
           }
 
-          // Fetch nodes and groups in parallel with per-source timeout
-          // Prevents a single slow source from blocking the entire inventory
-          const SOURCE_TIMEOUT_MS = 15_000;
+          // Fetch nodes and groups in parallel with per-source timeout.
+          // Checkmk inventories can be larger/slower, so allow a longer budget.
+          const SOURCE_TIMEOUT_MS = name === "checkmk" ? 60_000 : 15_000;
+          const timeoutErrorMessage = `Source '${name}' timed out after ${String(SOURCE_TIMEOUT_MS)}ms`;
 
           this.logger.debug(`Calling getInventory() and getGroups() on source '${name}'`, {
             component: "IntegrationManager",
@@ -474,7 +497,7 @@ export class IntegrationManager {
           let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
           const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(
-              () => { reject(new Error(`Source '${name}' timed out after ${String(SOURCE_TIMEOUT_MS)}ms`)); },
+              () => { reject(new Error(timeoutErrorMessage)); },
               SOURCE_TIMEOUT_MS,
             );
           });
@@ -547,6 +570,13 @@ export class IntegrationManager {
             lastSync: now,
             status: "healthy",
           };
+          fetchDiagnostics[name] = {
+            durationMs: Date.now() - sourceStart,
+            timedOut: false,
+            status: "healthy",
+            nodeCount: nodes.length,
+            groupCount: validatedGroups.length,
+          };
 
           this.logger.debug(
             `Successfully processed ${String(nodes.length)} nodes and ${String(validatedGroups.length)} groups from '${name}'`,
@@ -559,6 +589,7 @@ export class IntegrationManager {
           return { nodes: nodesWithSource, groups: validatedGroups };
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
+          const timedOut = err.message.includes("timed out after");
           this.logger.error(`Failed to get inventory from '${name}'`, {
             component: "IntegrationManager",
             operation: "getAggregatedInventory",
@@ -569,6 +600,14 @@ export class IntegrationManager {
             groupCount: 0,
             lastSync: now,
             status: "unavailable",
+          };
+          fetchDiagnostics[name] = {
+            durationMs: Date.now() - sourceStart,
+            timedOut,
+            status: "unavailable",
+            nodeCount: 0,
+            groupCount: 0,
+            error: err.message,
           };
           return { nodes: [], groups: [] };
         }
@@ -692,6 +731,7 @@ export class IntegrationManager {
       nodes: uniqueNodes,
       groups: linkedGroups,
       sources,
+      fetchDiagnostics,
     };
 
     // Update cache
