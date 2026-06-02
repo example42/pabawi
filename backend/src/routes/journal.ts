@@ -432,6 +432,12 @@ export function createJournalRouter(
                 activeSources.push("aws_states");
               }
             }
+
+            // Checkmk live monitoring events — available for any node when checkmk is healthy
+            const checkmkPlugin = deps.integrationManager.getInformationSource("checkmk");
+            if (checkmkPlugin?.isInitialized()) {
+              activeSources.push("checkmk");
+            }
           } catch {
             // Continue without additional sources
           }
@@ -552,6 +558,27 @@ export function createJournalRouter(
                   .catch(() => { send("source_error", { source: "aws_states", message: "Failed to load AWS state changes" }); }),
               );
             }
+          }
+        }
+
+        // Source 6: Checkmk monitoring events (live state changes)
+        // Skip if source filter excludes checkmk
+        const skipCheckmkBySource = query.source !== undefined && !query.source.includes("checkmk");
+        const skipCheckmkByType = query.eventType !== undefined && !query.eventType.includes("state_change");
+        if (activeSources.includes("checkmk") && !skipCheckmkBySource && !skipCheckmkByType && deps.integrationManager) {
+          const checkmkPlugin = deps.integrationManager.getInformationSource("checkmk");
+          if (checkmkPlugin?.isInitialized()) {
+            tasks.push(
+              Promise.resolve()
+                .then(async () => {
+                  const events = await checkmkPlugin.getNodeData(nodeId, "events") as JournalEntry[];
+                  if (Array.isArray(events) && events.length > 0) {
+                    const filtered = filterEntriesByDate(events, query.startDate, query.endDate);
+                    send("batch", { source: "checkmk", entries: filtered });
+                  }
+                })
+                .catch(() => { send("source_error", { source: "checkmk", message: "Failed to load Checkmk monitoring events" }); }),
+            );
           }
         }
 

@@ -70,6 +70,7 @@ export class NodeLinkingService {
     bolt: 10,
     puppetdb: 10,
     ansible: 8,
+    checkmk: 8,
     hiera: 6,
   };
 

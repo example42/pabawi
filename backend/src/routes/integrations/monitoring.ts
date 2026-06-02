@@ -129,57 +129,10 @@ export function createMonitoringRouter(
           }),
         ]);
 
-        // If the plugin returns an empty array AND the node doesn't exist
-        // in Checkmk inventory, return 404. If it returns an empty array
-        // but the node IS known, return 200 with [].
-        if (Array.isArray(services) && services.length === 0) {
-          const inventory = await plugin.getInventory();
-          const nodeExists = inventory.some(
-            (n) =>
-              n.id.toLowerCase() === nodeId.toLowerCase() ||
-              n.name.toLowerCase() === nodeId.toLowerCase(),
-          );
-
-          if (!nodeExists) {
-            logger.warn("Node not found in Checkmk inventory", {
-              component: "MonitoringRouter",
-              integration: "checkmk",
-              operation: "getServices",
-              metadata: { nodeId },
-            });
-
-            if (debugInfo) {
-              debugInfo.duration = Date.now() - startTime;
-              expertModeService.addWarning(debugInfo, {
-                message: `Node '${nodeId}' not found in Checkmk`,
-                level: "warn",
-              });
-              debugInfo.performance =
-                expertModeService.collectPerformanceMetrics();
-              debugInfo.context =
-                expertModeService.collectRequestContext(req);
-            }
-
-            const errorResponse = {
-              error: {
-                code: "NODE_NOT_FOUND",
-                message: `Node '${nodeId}' is not known to Checkmk`,
-              },
-            };
-
-            res
-              .status(404)
-              .json(
-                debugInfo
-                  ? expertModeService.attachDebugInfo(
-                      errorResponse,
-                      debugInfo,
-                    )
-                  : errorResponse,
-              );
-            return;
-          }
-        }
+        // Return 200 with empty array when no services found.
+        // We no longer cross-check against getInventory() because the
+        // host inventory endpoint may fail independently of the per-host
+        // services endpoint. The frontend handles empty arrays gracefully.
 
         const duration = Date.now() - startTime;
 
@@ -387,55 +340,8 @@ export function createMonitoringRouter(
           }),
         ]);
 
-        // Check if node exists when events are empty
-        if (Array.isArray(events) && events.length === 0) {
-          const inventory = await plugin.getInventory();
-          const nodeExists = inventory.some(
-            (n) =>
-              n.id.toLowerCase() === nodeId.toLowerCase() ||
-              n.name.toLowerCase() === nodeId.toLowerCase(),
-          );
-
-          if (!nodeExists) {
-            logger.warn("Node not found in Checkmk inventory", {
-              component: "MonitoringRouter",
-              integration: "checkmk",
-              operation: "getMonitoringEvents",
-              metadata: { nodeId },
-            });
-
-            if (debugInfo) {
-              debugInfo.duration = Date.now() - startTime;
-              expertModeService.addWarning(debugInfo, {
-                message: `Node '${nodeId}' not found in Checkmk`,
-                level: "warn",
-              });
-              debugInfo.performance =
-                expertModeService.collectPerformanceMetrics();
-              debugInfo.context =
-                expertModeService.collectRequestContext(req);
-            }
-
-            const errorResponse = {
-              error: {
-                code: "NODE_NOT_FOUND",
-                message: `Node '${nodeId}' is not known to Checkmk`,
-              },
-            };
-
-            res
-              .status(404)
-              .json(
-                debugInfo
-                  ? expertModeService.attachDebugInfo(
-                      errorResponse,
-                      debugInfo,
-                    )
-                  : errorResponse,
-              );
-            return;
-          }
-        }
+        // Return 200 with empty array when no events found.
+        // Skip cross-check against getInventory() — see services endpoint comment.
 
         // Apply limit
         const limitedEvents = Array.isArray(events)

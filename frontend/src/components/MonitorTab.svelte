@@ -62,6 +62,7 @@
       if (
         message.includes('unavailable') ||
         message.includes('CHECKMK_NOT_CONFIGURED') ||
+        message.includes('not configured') ||
         message.includes('Service unavailable') ||
         message.includes('503')
       ) {

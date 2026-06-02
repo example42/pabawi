@@ -161,14 +161,13 @@ describe("CheckmkPlugin", () => {
       );
     });
 
-    it("should throw when site is missing", async () => {
+    it("should succeed when site is empty (site is optional)", async () => {
       const checkmkConfig = createValidCheckmkConfig();
       checkmkConfig.site = "";
       const config = createIntegrationConfig(checkmkConfig);
 
-      await expect(plugin.initialize(config)).rejects.toThrow(
-        "site is required",
-      );
+      // Should not throw — site is optional. The URL path just omits the site prefix.
+      await expect(plugin.initialize(config)).resolves.not.toThrow();
     });
 
     it("should throw when username is missing", async () => {
