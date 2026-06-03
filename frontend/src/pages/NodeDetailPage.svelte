@@ -34,6 +34,8 @@
   import { expertMode } from '../lib/expertMode.svelte';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
+  import { getNodeServices, type ServiceStatus } from '../lib/checkmkApi';
+  import { STATE_NAMES, STATE_COLORS, groupServicesByState } from '../lib/monitorTabUtils';
 
   // Dynamic page title based on node name
   const pageTitle = $derived(node ? `Pabawi - ${node.name}` : 'Pabawi - Node Details');
@@ -272,6 +274,11 @@
   let environments = $state<any[]>([]);
   let environmentsLoading = $state(false);
   let environmentsError = $state<string | null>(null);
+
+  // Checkmk overview summary state
+  let overviewServices = $state<ServiceStatus[]>([]);
+  let overviewServicesLoading = $state(false);
+  let overviewServicesError = $state<string | null>(null);
 
   // Cache for loaded data
   let dataCache = $state<Record<TabId, any>>({});
@@ -577,6 +584,38 @@
       availableFactSources = [];
     }
   }
+
+  // Fetch Checkmk services summary for the overview tab
+  async function fetchOverviewServices(): Promise<void> {
+    if (overviewServicesLoading) return;
+
+    overviewServicesLoading = true;
+    overviewServicesError = null;
+
+    try {
+      overviewServices = await getNodeServices(nodeId);
+    } catch (err) {
+      overviewServicesError = err instanceof Error ? err.message : 'An unknown error occurred';
+    } finally {
+      overviewServicesLoading = false;
+    }
+  }
+
+  // Derived: summary counts for Checkmk services on overview
+  const overviewServiceSummary = $derived.by(() => {
+    const total = overviewServices.length;
+    const ok = overviewServices.filter(s => s.state === 0).length;
+    const warn = overviewServices.filter(s => s.state === 1).length;
+    const crit = overviewServices.filter(s => s.state === 2).length;
+    const unknown = overviewServices.filter(s => s.state === 3).length;
+    return { total, ok, warn, crit, unknown };
+  });
+
+  // Derived: critical and warning services for detail display
+  const overviewCritWarnServices = $derived(
+    overviewServices.filter(s => s.state === 1 || s.state === 2)
+      .sort((a, b) => b.state - a.state)
+  );
 
   // Lazy load Puppet Reports (for overview - limited to 5)
   async function fetchPuppetReports(): Promise<void> {
@@ -1066,9 +1105,13 @@
         if (!puppetdbFacts && !puppetdbFactsLoading && !puppetdbFactsError) {
           fetchPuppetDBFacts();
         }
-        // Load latest puppet reports for overview (non-blocking)
-        if (puppetReports.length === 0 && !puppetReportsLoading && !puppetReportsError) {
+        // Load latest puppet reports for overview (non-blocking, only if PuppetDB available)
+        if (availableFactSources.includes('puppetdb') && puppetReports.length === 0 && !puppetReportsLoading && !puppetReportsError) {
           fetchPuppetReports();
+        }
+        // Load Checkmk services summary (non-blocking, only if Checkmk available)
+        if (availableFactSources.includes('checkmk') && overviewServices.length === 0 && !overviewServicesLoading && !overviewServicesError) {
+          fetchOverviewServices();
         }
         break;
       case 'facts':
@@ -1326,6 +1369,19 @@
     checkReExecutionParams();
   });
 
+  // When availableFactSources becomes populated and we're on the overview tab,
+  // trigger deferred data loads for PuppetDB reports and Checkmk services.
+  $effect(() => {
+    if (activeTab !== 'overview' || availableFactSources.length === 0) return;
+
+    if (availableFactSources.includes('puppetdb') && puppetReports.length === 0 && !puppetReportsLoading && !puppetReportsError) {
+      fetchPuppetReports();
+    }
+    if (availableFactSources.includes('checkmk') && overviewServices.length === 0 && !overviewServicesLoading && !overviewServicesError) {
+      fetchOverviewServices();
+    }
+  });
+
   // On mount
   onMount(() => {
     debugInfoBlocks = []; // Clear debug info blocks on mount
@@ -1578,7 +1634,8 @@
             {/if}
           </div>
 
-          <!-- Latest Puppet Runs (if PuppetDB active) -->
+          <!-- Latest Puppet Runs (only when PuppetDB integration is available) -->
+          {#if availableFactSources.includes('puppetdb')}
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div class="mb-4 flex items-center justify-between">
               <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Latest Puppet Runs</h2>
@@ -1711,6 +1768,7 @@
               {/if}
             {/if}
           </div>
+          {/if}
 
           <!-- Latest Actions -->
           <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -1746,6 +1804,95 @@
               {/if}
             {/if}
           </div>
+
+          <!-- Checkmk Monitoring Summary (only when Checkmk integration is available) -->
+          {#if availableFactSources.includes('checkmk')}
+          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Monitoring Summary</h2>
+              <IntegrationBadge integration="checkmk" variant="badge" size="sm" />
+            </div>
+            {#if overviewServicesLoading}
+              <div class="flex justify-center py-4">
+                <LoadingSpinner message="Loading monitoring data..." />
+              </div>
+            {:else if overviewServicesError}
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                Unable to load monitoring data.
+                <button type="button" class="text-blue-600 hover:text-blue-700 dark:text-blue-400" onclick={fetchOverviewServices}>Retry</button>
+              </p>
+            {:else if overviewServices.length === 0}
+              <p class="text-sm text-gray-500 dark:text-gray-400">
+                No monitored services found for this node.
+              </p>
+            {:else}
+              <!-- Summary counts -->
+              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 mb-4">
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center dark:border-gray-700 dark:bg-gray-900/50">
+                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{overviewServiceSummary.total}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Total</div>
+                </div>
+                <div class="rounded-lg border border-green-200 bg-green-50 p-3 text-center dark:border-green-800 dark:bg-green-900/20">
+                  <div class="text-2xl font-bold text-green-700 dark:text-green-400">{overviewServiceSummary.ok}</div>
+                  <div class="text-xs text-green-600 dark:text-green-400">OK</div>
+                </div>
+                {#if overviewServiceSummary.warn > 0}
+                <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-800 dark:bg-amber-900/20">
+                  <div class="text-2xl font-bold text-amber-700 dark:text-amber-400">{overviewServiceSummary.warn}</div>
+                  <div class="text-xs text-amber-600 dark:text-amber-400">Warning</div>
+                </div>
+                {/if}
+                {#if overviewServiceSummary.crit > 0}
+                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-center dark:border-red-800 dark:bg-red-900/20">
+                  <div class="text-2xl font-bold text-red-700 dark:text-red-400">{overviewServiceSummary.crit}</div>
+                  <div class="text-xs text-red-600 dark:text-red-400">Critical</div>
+                </div>
+                {/if}
+                {#if overviewServiceSummary.unknown > 0}
+                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center dark:border-gray-600 dark:bg-gray-900/50">
+                  <div class="text-2xl font-bold text-gray-700 dark:text-gray-400">{overviewServiceSummary.unknown}</div>
+                  <div class="text-xs text-gray-500 dark:text-gray-400">Unknown</div>
+                </div>
+                {/if}
+              </div>
+
+              <!-- Critical and Warning service details -->
+              {#if overviewCritWarnServices.length > 0}
+                <div class="mt-4 space-y-2">
+                  <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Issues requiring attention</h3>
+                  <div class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700/50 dark:border-gray-700">
+                    {#each overviewCritWarnServices.slice(0, 10) as service (service.description)}
+                      <div class="px-4 py-2.5">
+                        <div class="flex items-center gap-2">
+                          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold {STATE_COLORS[service.state]}">
+                            {STATE_NAMES[service.state]}
+                          </span>
+                          <span class="text-sm font-medium text-gray-900 dark:text-white">{service.description}</span>
+                        </div>
+                        {#if service.pluginOutput}
+                          <p class="mt-1 text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{service.pluginOutput}</p>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                  {#if overviewCritWarnServices.length > 10}
+                    <button
+                      type="button"
+                      class="w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                      onclick={() => switchTab('monitor')}
+                    >
+                      View all {overviewCritWarnServices.length} issues →
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+
+              {#if overviewCritWarnServices.length === 0}
+                <p class="text-sm text-green-700 dark:text-green-400">All monitored services are healthy.</p>
+              {/if}
+            {/if}
+          </div>
+          {/if}
         </div>
       {/if}
 
