@@ -44,6 +44,7 @@ const FAILING_SERVICE_COLUMNS = [
   "last_state",
   "last_state_change",
   "plugin_output",
+  "acknowledged",
 ] as const;
 
 export class CheckmkService {
@@ -360,6 +361,7 @@ export class CheckmkService {
             last_state?: number;
             last_state_change?: number;
             plugin_output?: string;
+            acknowledged?: number;
           };
         }[];
       };
@@ -391,6 +393,7 @@ export class CheckmkService {
           lastState: (ext.last_state ?? 0) as 0 | 1 | 2 | 3,
           lastStateChange: ext.last_state_change ?? 0,
           output: ext.plugin_output ?? "",
+          acknowledged: (ext.acknowledged ?? 0) !== 0,
         });
       }
 
