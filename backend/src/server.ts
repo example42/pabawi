@@ -32,6 +32,7 @@ import { createJournalRouter } from "./routes/journal";
 import { createAWSRouter } from "./routes/integrations/aws";
 import { createAzureRouter } from "./routes/integrations/azure";
 import { createMonitoringRouter } from "./routes/integrations/monitoring";
+import { createMonitoringOverviewRouter } from "./routes/integrations/monitoringOverview";
 import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import monitoringRouter from "./routes/monitoring";
@@ -606,6 +607,15 @@ async function startServer(): Promise<Express> {
 
     // Monitoring routes (performance metrics)
     app.use("/api/monitoring", authMiddleware, rateLimitMiddleware, monitoringRouter);
+
+    // Checkmk monitoring overview (home page dashboard)
+    app.use(
+      "/api/monitoring",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('checkmk', 'read'),
+      createMonitoringOverviewRouter(integrationManager, container),
+    );
 
     // API Routes - Inventory routes (protected with RBAC)
     app.use(

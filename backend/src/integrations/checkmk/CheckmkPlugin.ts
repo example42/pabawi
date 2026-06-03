@@ -488,6 +488,78 @@ export class CheckmkPlugin
   }
 
   // ========================================
+  // Home Page Dashboard Methods
+  // ========================================
+
+  /**
+   * Get unhandled service problems (state != 0, not acknowledged).
+   * Returns raw failing service objects for the home page dashboard.
+   */
+  async getUnhandledServiceProblems(
+    limit = 100,
+  ): Promise<CheckmkFailingService[]> {
+    return this.service.getFailingServices(undefined, limit, true);
+  }
+
+  /**
+   * Get recent monitoring events within a time window.
+   * Livestatus primary (hours converted to days), REST fallback.
+   * Returns raw host event objects for the home page dashboard.
+   */
+  async getRecentEvents(
+    hours = 4,
+    limit = 100,
+  ): Promise<CheckmkHostEvent[]> {
+    const days = Math.max(1, Math.ceil(hours / 24));
+    const cutoffTimestamp = Date.now() - hours * 3600 * 1000;
+
+    if (this.livestatusClient?.isEnabled()) {
+      try {
+        const events = await this.livestatusClient.getGlobalEvents({
+          days,
+          limit,
+        });
+        // Filter to exact hours window (Livestatus queries by full days)
+        return events.filter(
+          (e) => new Date(e.timestamp).getTime() >= cutoffTimestamp,
+        );
+      } catch (error) {
+        this.logger.debug(
+          "Livestatus event fetch for overview failed, falling back to REST",
+          {
+            component: "CheckmkPlugin",
+            integration: "checkmk",
+            operation: "getRecentEvents",
+            metadata: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          },
+        );
+      }
+    }
+
+    // REST fallback: return failing services as pseudo-events
+    const failing = await this.service.getFailingServices(undefined, limit);
+    return failing
+      .filter(
+        (s) =>
+          s.lastStateChange > 0 &&
+          s.lastStateChange * 1000 >= cutoffTimestamp,
+      )
+      .map((s) => ({
+        hostname: s.hostname,
+        timestamp:
+          s.lastStateChange > 0
+            ? new Date(s.lastStateChange * 1000).toISOString()
+            : new Date().toISOString(),
+        serviceDescription: s.serviceDescription,
+        previousState: s.lastState,
+        currentState: s.state,
+        output: this.truncateString(s.output, MAX_EVENT_OUTPUT_LENGTH),
+      }));
+  }
+
+  // ========================================
   // Private Data Methods
   // ========================================
 
