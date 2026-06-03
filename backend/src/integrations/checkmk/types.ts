@@ -55,6 +55,7 @@ export interface CheckmkFailingService {
   lastState: 0 | 1 | 2 | 3;
   lastStateChange: number;
   output: string;
+  acknowledged: boolean;
 }
 
 export const SERVICE_STATE_NAMES: Record<number, string> = {

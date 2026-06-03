@@ -492,13 +492,14 @@ export class CheckmkPlugin
   // ========================================
 
   /**
-   * Get unhandled service problems (state != 0, not acknowledged).
-   * Returns raw failing service objects for the home page dashboard.
+   * Get all service problems including acknowledged ones.
+   * Returns raw failing service objects with acknowledged flag for the home page dashboard.
+   * Frontend uses the acknowledged flag to visually distinguish handled problems.
    */
   async getUnhandledServiceProblems(
     limit = 100,
   ): Promise<CheckmkFailingService[]> {
-    return this.service.getFailingServices(undefined, limit, true);
+    return this.service.getFailingServices(undefined, limit, false);
   }
 
   /**
