@@ -135,6 +135,32 @@
   let puppetReportsListLoading = $state(false);
   let puppetReportsListError = $state<string | null>(null);
 
+  // Checkmk monitoring overview state
+  interface CheckmkServiceProblem {
+    hostname: string;
+    serviceDescription: string;
+    state: 0 | 1 | 2 | 3;
+    lastState: 0 | 1 | 2 | 3;
+    lastStateChange: number;
+    output: string;
+  }
+
+  interface CheckmkMonitoringEvent {
+    hostname: string;
+    timestamp: string;
+    serviceDescription: string;
+    previousState: 0 | 1 | 2 | 3;
+    currentState: 0 | 1 | 2 | 3;
+    output: string;
+  }
+
+  let isCheckmkActive = $state(false);
+  let checkmkProblems = $state<CheckmkServiceProblem[]>([]);
+  let checkmkEvents = $state<CheckmkMonitoringEvent[]>([]);
+  let checkmkLoading = $state(false);
+  let checkmkError = $state<string | null>(null);
+  let checkmkEventsHours = $state(4);
+
   // UI configuration state
   let showHomePageRunChart = $state(true); // Default to true
 
@@ -310,6 +336,15 @@
       const puppetDB = integrations.find(i => i.name === 'puppetdb');
       isPuppetDBActive = puppetDB?.status === 'connected';
 
+      // Check if Checkmk is active
+      const checkmk = integrations.find(i => i.name === 'checkmk');
+      isCheckmkActive = checkmk?.status === 'connected';
+
+      // Fetch Checkmk overview if active
+      if (isCheckmkActive) {
+        void fetchCheckmkOverview();
+      }
+
       // Fetch Puppet reports if PuppetDB is active
       if (isPuppetDBActive) {
         void fetchPuppetReports(puppetReportsTimeRange);
@@ -382,6 +417,38 @@
   function handleTimeRangeChange(hours: number): void {
     puppetReportsTimeRange = hours;
     void fetchPuppetReports(hours);
+  }
+
+  async function fetchCheckmkOverview(hours?: number): Promise<void> {
+    checkmkLoading = true;
+    checkmkError = null;
+
+    const h = hours ?? checkmkEventsHours;
+
+    try {
+      const data = await get<{
+        serviceProblems: CheckmkServiceProblem[];
+        events: CheckmkMonitoringEvent[];
+      }>(`/api/monitoring/overview?hours=${h}&limit=100`);
+      checkmkProblems = data.serviceProblems || [];
+      checkmkEvents = data.events || [];
+    } catch (err) {
+      // 503 means checkmk is not configured — not an error to display
+      if (err instanceof Error && err.message.includes('503')) {
+        isCheckmkActive = false;
+        return;
+      }
+      checkmkError = err instanceof Error ? err.message : 'Failed to load monitoring overview';
+      checkmkProblems = [];
+      checkmkEvents = [];
+    } finally {
+      checkmkLoading = false;
+    }
+  }
+
+  function handleCheckmkEventsHoursChange(hours: number): void {
+    checkmkEventsHours = hours;
+    void fetchCheckmkOverview(hours);
   }
 
   async function fetchAggregatedRunHistory(days = 7): Promise<void> {
@@ -955,6 +1022,170 @@
       />
     {/if}
   </div>
+
+  <!-- Checkmk Monitoring Overview (only show if Checkmk is active) -->
+  {#if isCheckmkActive}
+    <div id="checkmk-section" class="mb-12 scroll-mt-8">
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-3">
+          <h2 class="text-2xl font-bold text-gray-900 dark:text-white">
+            Monitoring
+          </h2>
+          <IntegrationBadge integration="checkmk" variant="badge" size="sm" />
+        </div>
+      </div>
+
+      {#if checkmkLoading}
+        <div class="flex justify-center py-12">
+          <LoadingSpinner size="lg" message="Loading monitoring data..." />
+        </div>
+      {:else if checkmkError}
+        <ErrorAlert
+          message="Failed to load monitoring overview"
+          details={checkmkError}
+          onRetry={() => fetchCheckmkOverview()}
+        />
+      {:else}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Column 1: Service Problems (Unhandled) -->
+          <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
+            <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-medium text-gray-900 dark:text-white">Service Problems</h3>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  {checkmkProblems.length} unhandled
+                </span>
+              </div>
+            </div>
+            {#if checkmkProblems.length === 0}
+              <div class="p-6 text-center">
+                <svg class="mx-auto h-10 w-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No unhandled service problems</p>
+              </div>
+            {:else}
+              <div class="max-h-96 overflow-y-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                    <tr>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">State</th>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Host</th>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Service</th>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Output</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                    {#each checkmkProblems.slice(0, 50) as problem}
+                      <tr
+                        class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                        onclick={() => router.navigate(`/nodes/${problem.hostname}`)}
+                      >
+                        <td class="whitespace-nowrap px-3 py-2 text-xs">
+                          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {problem.state === 2 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : problem.state === 1 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}">
+                            {problem.state === 2 ? 'CRIT' : problem.state === 1 ? 'WARN' : 'UNKN'}
+                          </span>
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
+                          {problem.hostname}
+                        </td>
+                        <td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[200px] truncate" title={problem.serviceDescription}>
+                          {problem.serviceDescription}
+                        </td>
+                        <td class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 max-w-[250px] truncate" title={problem.output}>
+                          {problem.output}
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+              {#if checkmkProblems.length > 50}
+                <div class="border-t border-gray-200 px-4 py-2 text-center text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                  Showing 50 of {checkmkProblems.length} problems
+                </div>
+              {/if}
+            {/if}
+          </div>
+
+          <!-- Column 2: Latest Events -->
+          <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
+            <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-medium text-gray-900 dark:text-white">Latest Events</h3>
+                <div class="flex items-center gap-1">
+                  {#each [1, 4, 24] as hours}
+                    <button
+                      type="button"
+                      onclick={() => handleCheckmkEventsHoursChange(hours)}
+                      class="rounded px-2 py-0.5 text-xs font-medium transition-colors {checkmkEventsHours === hours ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                    >
+                      {hours}h
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            </div>
+            {#if checkmkEvents.length === 0}
+              <div class="p-6 text-center">
+                <svg class="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No events in the last {checkmkEventsHours}h</p>
+              </div>
+            {:else}
+              <div class="max-h-96 overflow-y-auto">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                    <tr>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Time</th>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Host</th>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Service</th>
+                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Transition</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
+                    {#each checkmkEvents.slice(0, 50) as event}
+                      <tr
+                        class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                        onclick={() => router.navigate(`/nodes/${event.hostname}`)}
+                      >
+                        <td class="whitespace-nowrap px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
+                          {new Date(event.timestamp).toLocaleTimeString()}
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
+                          {event.hostname}
+                        </td>
+                        <td class="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[180px] truncate" title={event.serviceDescription}>
+                          {event.serviceDescription}
+                        </td>
+                        <td class="whitespace-nowrap px-3 py-2 text-xs">
+                          <span class="inline-flex items-center gap-1">
+                            <span class="{event.previousState === 0 ? 'text-green-600 dark:text-green-400' : event.previousState === 1 ? 'text-yellow-600 dark:text-yellow-400' : event.previousState === 2 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}">
+                              {event.previousState === 0 ? 'OK' : event.previousState === 1 ? 'WARN' : event.previousState === 2 ? 'CRIT' : 'UNKN'}
+                            </span>
+                            <span class="text-gray-400">→</span>
+                            <span class="{event.currentState === 0 ? 'text-green-600 dark:text-green-400' : event.currentState === 1 ? 'text-yellow-600 dark:text-yellow-400' : event.currentState === 2 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}">
+                              {event.currentState === 0 ? 'OK' : event.currentState === 1 ? 'WARN' : event.currentState === 2 ? 'CRIT' : 'UNKN'}
+                            </span>
+                          </span>
+                        </td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+              {#if checkmkEvents.length > 50}
+                <div class="border-t border-gray-200 px-4 py-2 text-center text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
+                  Showing 50 of {checkmkEvents.length} events
+                </div>
+              {/if}
+            {/if}
+          </div>
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Puppet Reports (only show if PuppetDB is active, list mode with changes only) -->
   {#if isPuppetDBActive}

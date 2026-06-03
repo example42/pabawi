@@ -316,23 +316,38 @@ export class CheckmkService {
   /**
    * Fetch currently failing services globally (single request, no per-host polling).
    * Uses the monitoring service collection endpoint with a query filter state != 0.
+   *
+   * @param hostnames - Optional list of hostnames to restrict results to
+   * @param limit - Maximum number of results (default 500)
+   * @param unhandledOnly - When true, excludes acknowledged services (default false)
    */
   async getFailingServices(
     hostnames?: string[],
-    limit: number = 500,
+    limit = 500,
+    unhandledOnly = false,
   ): Promise<CheckmkFailingService[]> {
     try {
+      const query = unhandledOnly
+        ? {
+          op: "and",
+          expr: [
+            { op: "!=", left: "state", right: "0" },
+            { op: "=", left: "acknowledged", right: "0" },
+          ],
+        }
+        : {
+          op: "!=",
+          left: "state",
+          right: "0",
+        };
+
       const response = await this.request(
         "POST",
         "/domain-types/service/collections/all",
         DEFAULT_TIMEOUT_MS,
         {
           columns: [...FAILING_SERVICE_COLUMNS],
-          query: {
-            op: "!=",
-            left: "state",
-            right: "0",
-          },
+          query,
         },
       );
 
