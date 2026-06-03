@@ -487,8 +487,13 @@
           settings?: Record<string, unknown>;
         };
 
-        // For software installation, use the task name if available (Bolt), otherwise use a generic action
-        requestBody.action = softwareData.taskName || `package::${softwareData.ensure}`;
+        // For software installation: Bolt uses the task name (e.g. "package::install"),
+        // Ansible expects just "package" (ensure is passed as a parameter)
+        if (softwareData.tool === 'ansible') {
+          requestBody.action = 'package';
+        } else {
+          requestBody.action = softwareData.taskName || `package::${softwareData.ensure}`;
+        }
         requestBody.tool = softwareData.tool;
 
         // Build parameters for package installation
