@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
@@ -35,6 +35,14 @@
     message?: string;
   }
 
+  const REFRESH_RATES = [
+    { value: 0, label: 'Off' },
+    { value: 15, label: '15s' },
+    { value: 30, label: '30s' },
+    { value: 60, label: '1m' },
+    { value: 300, label: '5m' },
+  ];
+
   let isCheckmkActive = $state(false);
   let checkmkHostSummary = $state<CheckmkHostSummary[]>([]);
   let checkmkProblems = $state<CheckmkServiceProblem[]>([]);
@@ -42,6 +50,10 @@
   let error = $state<string | null>(null);
   let checkmkProblemsHours = $state<number | null>(null);
   let checkmkProblemSort = $state<'severity' | 'freshness'>('severity');
+  let refreshing = $state(false);
+  let lastRefresh = $state<Date | null>(null);
+  let autoRefreshInterval = $state(0);
+  let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
   const sortedCheckmkProblems = $derived.by(() => {
     let filtered = checkmkProblems;
@@ -63,8 +75,29 @@
     });
   });
 
+  $effect(() => {
+    // React to autoRefreshInterval changes
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
+
+    if (autoRefreshInterval > 0 && isCheckmkActive) {
+      autoRefreshTimer = setInterval(() => {
+        void refreshProblems();
+      }, autoRefreshInterval * 1000);
+    }
+  });
+
   onMount(() => {
     void fetchData();
+  });
+
+  onDestroy(() => {
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
   });
 
   async function fetchData(): Promise<void> {
@@ -94,12 +127,23 @@
       }>('/api/monitoring/overview?hours=24&limit=500');
       checkmkProblems = data.serviceProblems || [];
       checkmkHostSummary = data.hostSummary || [];
+      lastRefresh = new Date();
     } catch (err) {
       if (err instanceof Error && err.message.includes('503')) {
         isCheckmkActive = false;
         return;
       }
       error = err instanceof Error ? err.message : 'Failed to load CheckMK data';
+    }
+  }
+
+  async function refreshProblems(): Promise<void> {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await fetchCheckmkData();
+    } finally {
+      refreshing = false;
     }
   }
 </script>
@@ -145,7 +189,7 @@
       <!-- Service Problems -->
       <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
         <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
-          <div class="flex items-center justify-between">
+          <div class="flex items-center justify-between flex-wrap gap-2">
             <div class="flex items-center gap-2">
               <h3 class="text-sm font-medium text-gray-900 dark:text-white">Service Problems</h3>
               <span class="text-xs text-gray-500 dark:text-gray-400">
@@ -156,6 +200,7 @@
               </span>
             </div>
             <div class="flex items-center gap-2">
+              <!-- Time filter -->
               <div class="flex items-center gap-1">
                 {#each [1, 4, 24] as hours}
                   <button
@@ -169,6 +214,7 @@
                 {/each}
               </div>
               <span class="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
+              <!-- Sort -->
               <div class="flex items-center gap-1">
                 <button
                   type="button"
@@ -187,6 +233,37 @@
                   Freshness
                 </button>
               </div>
+              <span class="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
+              <!-- Auto-refresh -->
+              <div class="flex items-center gap-1">
+                <svg class="h-3.5 w-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {#each REFRESH_RATES as rate}
+                  <button
+                    type="button"
+                    onclick={() => autoRefreshInterval = rate.value}
+                    class="rounded px-2 py-0.5 text-xs font-medium transition-colors {autoRefreshInterval === rate.value ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                    title={rate.value === 0 ? 'Disable auto-refresh' : `Auto-refresh every ${rate.label}`}
+                  >
+                    {rate.label}
+                  </button>
+                {/each}
+              </div>
+              <span class="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
+              <!-- Refresh button -->
+              <button
+                type="button"
+                onclick={() => refreshProblems()}
+                disabled={refreshing}
+                class="inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
+                title={lastRefresh ? `Last refreshed: ${lastRefresh.toLocaleTimeString()}` : 'Refresh now'}
+              >
+                <svg class="h-3.5 w-3.5 {refreshing ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
             </div>
           </div>
         </div>
