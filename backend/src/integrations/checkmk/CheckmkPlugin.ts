@@ -35,6 +35,7 @@ import type {
   CheckmkFailingService,
   CheckmkEvent,
   CheckmkHostEvent,
+  CheckmkHostSummary,
   CheckmkServiceStatus,
 } from "./types";
 import { SERVICE_STATE_NAMES } from "./types";
@@ -500,6 +501,14 @@ export class CheckmkPlugin
     limit = 100,
   ): Promise<CheckmkFailingService[]> {
     return this.service.getFailingServices(undefined, limit, false);
+  }
+
+  /**
+   * Get per-host service state summary (total/ok/warn/crit/unknown).
+   * Single API call, aggregated in-process.
+   */
+  async getHostServiceSummary(): Promise<CheckmkHostSummary[]> {
+    return this.service.getHostServiceSummary();
   }
 
   /**

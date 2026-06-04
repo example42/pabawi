@@ -378,9 +378,10 @@
         {@const isActive = sourceView === 'single' && activeSource === name}
         {@const isLoading = state === 'loading'}
         {@const hasFacts = state === 'loaded'}
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
-          role={hasFacts ? 'button' : undefined}
-          tabindex={hasFacts ? 0 : undefined}
+          role={hasFacts ? 'button' : 'presentation'}
+          tabindex={hasFacts ? 0 : -1}
           aria-pressed={hasFacts ? isActive : undefined}
           onclick={() => { if (hasFacts) setActiveSource(name); }}
           onkeydown={(e) => handleCardKeyDown(e, name, hasFacts)}

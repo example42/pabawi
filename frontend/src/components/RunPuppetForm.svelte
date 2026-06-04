@@ -16,7 +16,8 @@
 
   let { availableTools, multiNode = false, executing = false, onSubmit }: Props = $props();
 
-  // Form state
+  // Form state — intentional one-time capture; tool is user-mutable after init
+  // svelte-ignore state_referenced_locally
   let tool = $state<'bolt' | 'ansible' | 'ssh'>(availableTools[0] ?? 'bolt');
   let environment = $state('');
   let noop = $state(false);

@@ -44,6 +44,7 @@ const OverviewQuerySchema = z.object({
  *   {
  *     serviceProblems: CheckmkFailingService[],
  *     events: CheckmkHostEvent[],
+ *     hostSummary: CheckmkHostSummary[],
  *   }
  */
 export function createMonitoringOverviewRouter(
@@ -96,10 +97,11 @@ export function createMonitoringOverviewRouter(
       });
 
       try {
-        const [serviceProblems, events] = await Promise.race([
+        const [serviceProblems, events, hostSummary] = await Promise.race([
           Promise.all([
             plugin.getUnhandledServiceProblems(limit),
             plugin.getRecentEvents(hours, limit),
+            plugin.getHostServiceSummary(),
           ]),
           new Promise<never>((_, reject) => {
             setTimeout(() => {
@@ -108,7 +110,7 @@ export function createMonitoringOverviewRouter(
           }),
         ]);
 
-        res.json({ serviceProblems, events });
+        res.json({ serviceProblems, events, hostSummary });
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown upstream error";

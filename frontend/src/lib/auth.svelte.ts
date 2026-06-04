@@ -370,3 +370,7 @@ class AuthManager {
 
 // Export singleton instance
 export const authManager = new AuthManager();
+
+// Register auth header getter with logger (breaks circular dependency:
+// auth imports logger, logger needs auth header for backend sync)
+logger.setAuthHeaderGetter(() => authManager.getAuthHeader());
