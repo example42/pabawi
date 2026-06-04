@@ -66,6 +66,14 @@ class FrontendLogger {
   private pendingLogs: LogEntry[] = [];
   private throttleTimer: number | null = null;
   private currentCorrelationId: string | null = null;
+  private authHeaderGetter: (() => string | null) | null = null;
+
+  /**
+   * Register an auth header provider (called by auth module to break circular dep)
+   */
+  public setAuthHeaderGetter(getter: () => string | null): void {
+    this.authHeaderGetter = getter;
+  }
 
   constructor() {
     // Load config from localStorage
@@ -201,32 +209,25 @@ class FrontendLogger {
     const logsToSend = [...this.pendingLogs];
     this.pendingLogs = [];
 
-    // Import authManager dynamically to avoid circular dependencies
-    import('./auth.svelte').then(({ authManager }) => {
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
 
-      // Add authentication header if available
-      const authHeader = authManager.getAuthHeader();
-      if (authHeader) {
-        headers.Authorization = authHeader;
-      }
+    // Use registered auth header getter to avoid circular dependency
+    const authHeader = this.authHeaderGetter?.();
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
 
-      fetch('/api/debug/frontend-logs', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          logs: logsToSend,
-          browserInfo: this.getBrowserInfo(),
-        }),
-      }).catch((error: unknown) => {
-        // Failed to send logs - add back to buffer but don't retry
-        // to avoid infinite loops
-        console.warn('Failed to send logs to backend:', error);
-      });
+    fetch('/api/debug/frontend-logs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        logs: logsToSend,
+        browserInfo: this.getBrowserInfo(),
+      }),
     }).catch((error: unknown) => {
-      console.warn('Failed to import authManager:', error);
+      console.warn('Failed to send logs to backend:', error);
     });
   }
 

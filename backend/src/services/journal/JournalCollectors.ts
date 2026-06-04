@@ -224,7 +224,8 @@ export async function collectExecutionEntries(
 }
 
 /**
- * Fetch PuppetDB reports for a node and convert to journal entries
+ * Fetch PuppetDB reports for a node and convert to journal entries.
+ * Filters out "unchanged" reports (no events) to reduce noise.
  */
 export async function collectPuppetDBEntries(
   puppetdb: PuppetDBLike,
@@ -233,7 +234,9 @@ export async function collectPuppetDBEntries(
 ): Promise<JournalEntry[]> {
   if (!puppetdb.isInitialized()) return [];
   const reports = await puppetdb.getNodeReports(nodeId, limit, 0);
-  return reports.map((r) => reportToJournalEntry(r, nodeId));
+  return reports
+    .filter((r) => r.status !== "unchanged")
+    .map((r) => reportToJournalEntry(r, nodeId));
 }
 
 // ============================================================================
@@ -728,6 +731,7 @@ export async function collectGlobalExecutionEntries(
 
 /**
  * Fetch recent PuppetDB reports across all nodes and convert to journal entries.
+ * Filters out "unchanged" reports (no events) to reduce noise.
  * Uses getAllReports if available, otherwise falls back to per-node queries
  * using the provided nodeIds.
  */
@@ -747,6 +751,8 @@ export async function collectGlobalPuppetDBEntries(
         const nodeSet = new Set(nodeIds);
         filtered = reports.filter((r) => nodeSet.has(r.certname));
       }
+      // Exclude unchanged runs (no events)
+      filtered = filtered.filter((r) => r.status !== "unchanged");
       return filtered.map((r) =>
         reportToJournalEntry(r, r.certname),
       );
@@ -762,7 +768,9 @@ export async function collectGlobalPuppetDBEntries(
   const promises = nodeIds.map(async (nodeId) => {
     try {
       const reports = await puppetdb.getNodeReports(nodeId, perNode, 0);
-      return reports.map((r) => reportToJournalEntry(r, nodeId));
+      return reports
+        .filter((r) => r.status !== "unchanged")
+        .map((r) => reportToJournalEntry(r, nodeId));
     } catch {
       return [] as JournalEntry[];
     }

@@ -14,6 +14,7 @@ import type {
   CheckmkConfig,
   CheckmkFailingService,
   CheckmkHost,
+  CheckmkHostSummary,
   CheckmkServiceStatus,
 } from "./types";
 
@@ -407,6 +408,78 @@ export class CheckmkService {
         component: "CheckmkService",
         integration: "checkmk",
         operation: "getFailingServices",
+        metadata: { serverUrl: this.config.serverUrl, errorMessage },
+      });
+
+      return [];
+    }
+  }
+
+  /**
+   * Fetch a per-host summary of service states (total, ok, warn, crit, unknown).
+   * Uses the same bulk service endpoint as getFailingServices but without a state filter.
+   * Returns an array sorted by worst-state-count descending.
+   */
+  async getHostServiceSummary(): Promise<CheckmkHostSummary[]> {
+    try {
+      const response = await this.request(
+        "POST",
+        "/domain-types/service/collections/all",
+        DEFAULT_TIMEOUT_MS,
+        {
+          columns: ["host_name", "state"],
+        },
+      );
+
+      const data = response as {
+        value?: {
+          extensions?: {
+            host_name?: string;
+            state?: number;
+          };
+        }[];
+      };
+
+      if (!Array.isArray(data.value)) {
+        return [];
+      }
+
+      const hostMap = new Map<string, CheckmkHostSummary>();
+
+      for (const entry of data.value) {
+        const ext = entry.extensions;
+        if (!ext) continue;
+
+        const hostname = ext.host_name ?? "";
+        if (!hostname) continue;
+
+        let summary = hostMap.get(hostname);
+        if (!summary) {
+          summary = { hostname, total: 0, ok: 0, warn: 0, crit: 0, unknown: 0 };
+          hostMap.set(hostname, summary);
+        }
+
+        summary.total += 1;
+        const state = ext.state ?? 3;
+        if (state === 0) summary.ok += 1;
+        else if (state === 1) summary.warn += 1;
+        else if (state === 2) summary.crit += 1;
+        else summary.unknown += 1;
+      }
+
+      // Sort: hosts with CRIT first, then WARN, then by total descending
+      return [...hostMap.values()].sort((a, b) => {
+        if (a.crit !== b.crit) return b.crit - a.crit;
+        if (a.warn !== b.warn) return b.warn - a.warn;
+        return b.total - a.total;
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to fetch host service summary from Checkmk", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "getHostServiceSummary",
         metadata: { serverUrl: this.config.serverUrl, errorMessage },
       });
 

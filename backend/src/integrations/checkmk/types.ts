@@ -58,6 +58,15 @@ export interface CheckmkFailingService {
   acknowledged: boolean;
 }
 
+export interface CheckmkHostSummary {
+  hostname: string;
+  total: number;
+  ok: number;
+  warn: number;
+  crit: number;
+  unknown: number;
+}
+
 export const SERVICE_STATE_NAMES: Record<number, string> = {
   0: "OK",
   1: "WARN",
