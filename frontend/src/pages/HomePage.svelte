@@ -136,16 +136,6 @@
   let puppetReportsListError = $state<string | null>(null);
 
   // Checkmk monitoring overview state
-  interface CheckmkServiceProblem {
-    hostname: string;
-    serviceDescription: string;
-    state: 0 | 1 | 2 | 3;
-    lastState: 0 | 1 | 2 | 3;
-    lastStateChange: number;
-    output: string;
-    acknowledged: boolean;
-  }
-
   interface CheckmkHostSummary {
     hostname: string;
     total: number;
@@ -156,12 +146,9 @@
   }
 
   let isCheckmkActive = $state(false);
-  let checkmkProblems = $state<CheckmkServiceProblem[]>([]);
   let checkmkHostSummary = $state<CheckmkHostSummary[]>([]);
   let checkmkLoading = $state(false);
   let checkmkError = $state<string | null>(null);
-  let checkmkProblemsHours = $state<number | null>(null);
-  let checkmkProblemSort = $state<'severity' | 'freshness'>('severity');
 
   // UI configuration state
   let showHomePageRunChart = $state(true); // Default to true
@@ -196,32 +183,6 @@
       const timeA = new Date(a.debugInfo.timestamp).getTime();
       const timeB = new Date(b.debugInfo.timestamp).getTime();
       return timeB - timeA; // Newest first
-    });
-  });
-
-  // Sorted checkmk problems: filtered by time window, unacknowledged first, then by chosen sort order
-  const sortedCheckmkProblems = $derived.by(() => {
-    let filtered = checkmkProblems;
-
-    // Apply time filter if set
-    if (checkmkProblemsHours !== null) {
-      const cutoff = (Date.now() - checkmkProblemsHours * 3600_000) / 1000;
-      filtered = filtered.filter(p => p.lastStateChange >= cutoff);
-    }
-
-    return [...filtered].sort((a, b) => {
-      // Acknowledged always sort to the bottom
-      if (a.acknowledged !== b.acknowledged) {
-        return a.acknowledged ? 1 : -1;
-      }
-      if (checkmkProblemSort === 'severity') {
-        // Higher state = more severe, sort descending
-        if (a.state !== b.state) return b.state - a.state;
-        // Same severity: newer first
-        return b.lastStateChange - a.lastStateChange;
-      }
-      // Freshness: newer problems first
-      return b.lastStateChange - a.lastStateChange;
     });
   });
 
@@ -453,10 +414,8 @@
 
     try {
       const data = await get<{
-        serviceProblems: CheckmkServiceProblem[];
         hostSummary: CheckmkHostSummary[];
       }>('/api/monitoring/overview?hours=24&limit=500');
-      checkmkProblems = data.serviceProblems || [];
       checkmkHostSummary = data.hostSummary || [];
     } catch (err) {
       // 503 means checkmk is not configured — not an error to display
@@ -465,7 +424,6 @@
         return;
       }
       checkmkError = err instanceof Error ? err.message : 'Failed to load monitoring overview';
-      checkmkProblems = [];
       checkmkHostSummary = [];
     } finally {
       checkmkLoading = false;
@@ -1054,6 +1012,16 @@
           </h2>
           <IntegrationBadge integration="checkmk" variant="badge" size="sm" />
         </div>
+        <button
+          type="button"
+          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          onclick={() => router.navigate('/monitor')}
+        >
+          View Details
+          <svg class="ml-2 -mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
       {#if checkmkLoading}
@@ -1067,188 +1035,50 @@
           onRetry={() => fetchCheckmkOverview()}
         />
       {:else}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <!-- Column 1: Service Problems -->
-          <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
-            <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <h3 class="text-sm font-medium text-gray-900 dark:text-white">Service Problems</h3>
-                  <span class="text-xs text-gray-500 dark:text-gray-400">
-                    {sortedCheckmkProblems.filter(p => !p.acknowledged).length} unhandled
-                    {#if sortedCheckmkProblems.filter(p => p.acknowledged).length > 0}
-                      <span class="text-gray-400">/ {sortedCheckmkProblems.filter(p => p.acknowledged).length} ack</span>
-                    {/if}
-                  </span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <div class="flex items-center gap-1">
-                    {#each [1, 4, 24] as hours}
-                      <button
-                        type="button"
-                        onclick={() => checkmkProblemsHours = checkmkProblemsHours === hours ? null : hours}
-                        class="rounded px-2 py-0.5 text-xs font-medium transition-colors {checkmkProblemsHours === hours ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                        title="Show problems from last {hours}h{checkmkProblemsHours === hours ? ' (click to clear filter)' : ''}"
-                      >
-                        {hours}h
-                      </button>
-                    {/each}
-                  </div>
-                  <span class="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
-                  <div class="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onclick={() => checkmkProblemSort = 'severity'}
-                      class="rounded px-2 py-0.5 text-xs font-medium transition-colors {checkmkProblemSort === 'severity' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                      title="Sort by severity (CRIT first)"
-                    >
-                      Severity
-                    </button>
-                    <button
-                      type="button"
-                      onclick={() => checkmkProblemSort = 'freshness'}
-                      class="rounded px-2 py-0.5 text-xs font-medium transition-colors {checkmkProblemSort === 'freshness' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
-                      title="Sort by freshness (newest first)"
-                    >
-                      Freshness
-                    </button>
-                  </div>
-                </div>
-              </div>
+        {@const hostStats = { total: checkmkHostSummary.length }}
+        {@const serviceStats = checkmkHostSummary.reduce((acc, h) => ({
+          total: acc.total + h.total,
+          ok: acc.ok + h.ok,
+          warn: acc.warn + h.warn,
+          crit: acc.crit + h.crit,
+          unknown: acc.unknown + h.unknown,
+        }), { total: 0, ok: 0, warn: 0, crit: 0, unknown: 0 })}
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Host Statistics -->
+          <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 p-5">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Host Statistics</h3>
+            <div class="flex items-baseline gap-2">
+              <span class="text-4xl font-bold text-gray-900 dark:text-white">{hostStats.total}</span>
+              <span class="text-sm text-gray-500 dark:text-gray-400">monitored hosts</span>
             </div>
-            {#if sortedCheckmkProblems.length === 0}
-              <div class="p-6 text-center">
-                <svg class="mx-auto h-10 w-10 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                  {checkmkProblemsHours !== null ? `No problems in the last ${checkmkProblemsHours}h` : 'No service problems'}
-                </p>
-              </div>
-            {:else}
-              <div class="max-h-96 overflow-y-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0">
-                    <tr>
-                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">State</th>
-                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Host</th>
-                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Service</th>
-                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Since</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                    {#each sortedCheckmkProblems.slice(0, 50) as problem}
-                      <tr
-                        class="cursor-pointer transition-colors {problem.acknowledged ? 'opacity-50 hover:opacity-70' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}"
-                        onclick={() => router.navigate(`/nodes/${problem.hostname}`)}
-                        title={problem.acknowledged ? `[ACK] ${problem.output}` : problem.output}
-                      >
-                        <td class="whitespace-nowrap px-3 py-2 text-xs">
-                          <span class="inline-flex items-center gap-1">
-                            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {problem.state === 2 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : problem.state === 1 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}">
-                              {problem.state === 2 ? 'CRIT' : problem.state === 1 ? 'WARN' : 'UNKN'}
-                            </span>
-                            {#if problem.acknowledged}
-                              <span class="text-gray-400 dark:text-gray-500" title="Acknowledged">✓</span>
-                            {/if}
-                          </span>
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2 text-sm {problem.acknowledged ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}">
-                          {problem.hostname}
-                        </td>
-                        <td class="px-3 py-2 text-sm {problem.acknowledged ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'} max-w-[180px] truncate" title={problem.serviceDescription}>
-                          {problem.serviceDescription}
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2 text-xs text-gray-500 dark:text-gray-400">
-                          {#if problem.lastStateChange > 0}
-                            {(() => {
-                              const ago = Date.now() - problem.lastStateChange * 1000;
-                              if (ago < 3600000) return `${Math.round(ago / 60000)}m ago`;
-                              if (ago < 86400000) return `${Math.round(ago / 3600000)}h ago`;
-                              return `${Math.round(ago / 86400000)}d ago`;
-                            })()}
-                          {:else}
-                            —
-                          {/if}
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-              {#if sortedCheckmkProblems.length > 50}
-                <div class="border-t border-gray-200 px-4 py-2 text-center text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                  Showing 50 of {sortedCheckmkProblems.length} problems
-                </div>
-              {/if}
-            {/if}
           </div>
 
-          <!-- Column 2: Host Overview -->
-          <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
-            <div class="border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/50">
-              <div class="flex items-center justify-between">
-                <h3 class="text-sm font-medium text-gray-900 dark:text-white">Host Overview</h3>
-                <span class="text-xs text-gray-500 dark:text-gray-400">
-                  {checkmkHostSummary.length} hosts
-                </span>
+          <!-- Service Statistics -->
+          <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 p-5">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Service Statistics</h3>
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400">{serviceStats.ok}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">OK</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{serviceStats.warn}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Warning</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-red-600 dark:text-red-400">{serviceStats.crit}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Critical</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-gray-600 dark:text-gray-400">{serviceStats.unknown}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Unknown</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-gray-900 dark:text-white">{serviceStats.total}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Total</div>
               </div>
             </div>
-            {#if checkmkHostSummary.length === 0}
-              <div class="p-6 text-center">
-                <svg class="mx-auto h-10 w-10 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
-                </svg>
-                <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No host data available</p>
-              </div>
-            {:else}
-              <div class="max-h-96 overflow-y-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead class="bg-gray-50 dark:bg-gray-900 sticky top-0">
-                    <tr>
-                      <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Host</th>
-                      <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Total</th>
-                      <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-green-600 dark:text-green-400">OK</th>
-                      <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-yellow-600 dark:text-yellow-400">WARN</th>
-                      <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-red-600 dark:text-red-400">CRIT</th>
-                      <th scope="col" class="px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">UNKN</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                    {#each checkmkHostSummary as host}
-                      <tr
-                        class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                        onclick={() => router.navigate(`/nodes/${host.hostname}`)}
-                      >
-                        <td class="whitespace-nowrap px-3 py-2 text-sm text-gray-900 dark:text-white">
-                          {host.hostname}
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2 text-center text-xs text-gray-600 dark:text-gray-400">
-                          {host.total}
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2 text-center text-xs {host.ok > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-300 dark:text-gray-600'}">
-                          {host.ok}
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2 text-center text-xs {host.warn > 0 ? 'text-yellow-600 dark:text-yellow-400 font-medium' : 'text-gray-300 dark:text-gray-600'}">
-                          {host.warn || '—'}
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2 text-center text-xs {host.crit > 0 ? 'text-red-600 dark:text-red-400 font-bold' : 'text-gray-300 dark:text-gray-600'}">
-                          {host.crit || '—'}
-                        </td>
-                        <td class="whitespace-nowrap px-3 py-2 text-center text-xs {host.unknown > 0 ? 'text-gray-600 dark:text-gray-400' : 'text-gray-300 dark:text-gray-600'}">
-                          {host.unknown || '—'}
-                        </td>
-                      </tr>
-                    {/each}
-                  </tbody>
-                </table>
-              </div>
-              {#if checkmkHostSummary.length > 50}
-                <div class="border-t border-gray-200 px-4 py-2 text-center text-xs text-gray-500 dark:border-gray-700 dark:text-gray-400">
-                  Showing all {checkmkHostSummary.length} hosts
-                </div>
-              {/if}
-            {/if}
           </div>
         </div>
       {/if}

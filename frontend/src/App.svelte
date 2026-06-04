@@ -19,6 +19,7 @@
   import RoleManagementPage from './pages/RoleManagementPage.svelte';
   import ProvisionPage from './pages/ProvisionPage.svelte';
   import IntegrationConfigPage from './pages/IntegrationConfigPage.svelte';
+  import MonitorPage from './pages/MonitorPage.svelte';
   import { router } from './lib/router.svelte';
   import type { RouteConfig } from './lib/router.svelte';
   import { get } from './lib/api';
@@ -33,6 +34,7 @@
     '/executions': { component: ExecutionsPage, requiresAuth: true },
     '/provision': { component: ProvisionPage, requiresAuth: true },
     '/puppet': { component: PuppetPage, requiresAuth: true },
+    '/monitor': { component: MonitorPage, requiresAuth: true },
     '/journal': { component: GlobalJournalPage, requiresAuth: true },
     '/users': { component: UserManagementPage, requiresAuth: true, requiresAdmin: true },
     '/groups': { component: GroupManagementPage, requiresAuth: true, requiresAdmin: true },
