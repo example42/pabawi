@@ -750,7 +750,6 @@ export class BoltService {
     nodeId: string,
     command: string,
     streamingCallback?: StreamingCallback,
-    options?: { runAs?: string },
   ): Promise<ExecutionResult> {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
@@ -765,10 +764,6 @@ export class BoltService {
       "--format",
       "json",
     ];
-
-    if (options?.runAs) {
-      args.push("--run-as", options.runAs);
-    }
     const commandString = this.buildCommandString(args);
 
     try {

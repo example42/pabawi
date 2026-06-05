@@ -21,6 +21,7 @@
   import IntegrationConfigPage from './pages/IntegrationConfigPage.svelte';
   import MonitorPage from './pages/MonitorPage.svelte';
   import CrashDumpsPage from './pages/CrashDumpsPage.svelte';
+  import LogsPage from './pages/LogsPage.svelte';
   import { router } from './lib/router.svelte';
   import type { RouteConfig } from './lib/router.svelte';
   import { get } from './lib/api';
@@ -44,7 +45,8 @@
     '/nodes/:id': { component: NodeDetailPage, requiresAuth: true },
     '/integrations/:integration/setup': { component: IntegrationSetupPage, requiresAuth: true },
     '/integrations/config': { component: IntegrationConfigPage, requiresAuth: true },
-    '/crash-dumps': { component: CrashDumpsPage, requiresAuth: true, requiresAdmin: true }
+    '/crash-dumps': { component: CrashDumpsPage, requiresAuth: true, requiresAdmin: true },
+    '/logs': { component: LogsPage, requiresAuth: true, requiresAdmin: true }
   };
 
   let setupComplete = $state(true); // Default to true to avoid flashing

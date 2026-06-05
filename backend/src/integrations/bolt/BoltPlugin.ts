@@ -221,14 +221,19 @@ export class BoltPlugin
       let result: ExecutionResult;
 
       switch (action.type) {
-        case "command":
+        case "command": {
+          // When sudo is requested, prepend sudo to the command rather than
+          // using Bolt's --run-as (which depends on transport run-as-command config).
+          const command = action.parameters?.sudo
+            ? `sudo ${action.action}`
+            : action.action;
           result = await this.boltService.runCommand(
             target,
-            action.action,
+            command,
             streamingCallback,
-            action.parameters?.sudo ? { runAs: "root" } : undefined,
           );
           break;
+        }
 
         case "task":
           result = await this.boltService.runTask(
