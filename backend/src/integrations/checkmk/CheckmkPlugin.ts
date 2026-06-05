@@ -387,7 +387,7 @@ export class CheckmkPlugin
       .map((service) => ({
         description: service.description,
         state: service.state,
-        stateName: SERVICE_STATE_NAMES[service.state] ?? "UNKNOWN",
+        stateName: SERVICE_STATE_NAMES[service.state],
         stateType: service.stateType,
         lastCheck:
           service.lastCheck > 0
@@ -415,7 +415,7 @@ export class CheckmkPlugin
             ...stateCounts,
             nonOk: nonOkCount,
             worstState,
-            worstStateName: SERVICE_STATE_NAMES[worstState] ?? "UNKNOWN",
+            worstStateName: SERVICE_STATE_NAMES[worstState],
             latestCheck:
               latestLastCheck > 0
                 ? new Date(latestLastCheck * 1000).toISOString()
