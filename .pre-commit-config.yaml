@@ -61,6 +61,22 @@ repos:
         files: ^frontend/
         pass_filenames: false
 
+      - id: test-backend
+        name: Unit Tests (Backend)
+        entry: bash -c 'cd backend && npx vitest --run'
+        language: system
+        types_or: [ts, tsx]
+        files: ^backend/
+        pass_filenames: false
+
+      - id: test-frontend
+        name: Unit Tests (Frontend)
+        entry: bash -c 'cd frontend && npx vitest --run --passWithNoTests'
+        language: system
+        types_or: [ts, tsx]
+        files: ^frontend/
+        pass_filenames: false
+
   # Prevent duplicate/backup files
   - repo: local
     hooks:
