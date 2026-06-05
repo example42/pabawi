@@ -86,38 +86,19 @@ export class BoltPlugin
 
     try {
       // First check if Bolt command is available
+      // Use exec (shell: true) so that shell-wrapper binstubs (rbenv, asdf, gem)
+      // resolve correctly — spawn without a shell can miss PATH shims.
       const childProcess = await import("child_process");
-      const boltCheck = childProcess.spawn("bolt", ["--version"], { stdio: "pipe" });
+      const { promisify } = await import("util");
+      const exec = promisify(childProcess.exec);
 
-      const boltAvailable = await new Promise<boolean>((resolve) => {
-        let resolved = false;
-
-        const handleClose = (code: number | null): void => {
-          if (!resolved) {
-            resolved = true;
-            resolve(code === 0);
-          }
-        };
-
-        const handleError = (): void => {
-          if (!resolved) {
-            resolved = true;
-            resolve(false);
-          }
-        };
-
-        boltCheck.on("close", handleClose);
-        boltCheck.on("error", handleError);
-
-        // Timeout after 5 seconds
-        setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            boltCheck.kill();
-            resolve(false);
-          }
-        }, 5000);
-      });
+      let boltAvailable: boolean;
+      try {
+        await exec("bolt --version", { timeout: 5000 });
+        boltAvailable = true;
+      } catch {
+        boltAvailable = false;
+      }
 
       if (!boltAvailable) {
         complete({ available: false });
@@ -245,6 +226,7 @@ export class BoltPlugin
             target,
             action.action,
             streamingCallback,
+            action.parameters?.sudo ? { runAs: "root" } : undefined,
           );
           break;
 

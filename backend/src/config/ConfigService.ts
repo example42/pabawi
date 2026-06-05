@@ -704,6 +704,7 @@ export class ConfigService {
       const rawConfig = {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : undefined,
         host: process.env.HOST,
+        crashDumpDir: process.env.PABAWI_CRASH_DUMP_DIR ?? undefined,
         boltProjectPath: process.env.BOLT_PROJECT_PATH,
         jwtSecret: process.env.JWT_SECRET,
         lifecycleToken: process.env.PABAWI_LIFECYCLE_TOKEN,
@@ -810,6 +811,14 @@ export class ConfigService {
    */
   public getLogLevel(): string {
     return this.config.logLevel;
+  }
+
+  /**
+   * Get crash dump directory path.
+   * Returns the configured path or undefined (crash handler falls back to <cwd>/crash-dumps).
+   */
+  public getCrashDumpDir(): string | undefined {
+    return this.config.crashDumpDir;
   }
 
   /**

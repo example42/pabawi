@@ -929,7 +929,8 @@ export class IntegrationManager {
     );
 
     // Run initial health check then schedule the next one
-    void this.healthCheckAll(false).then((results) => {
+    // Use cache if results were already warmed during startup
+    void this.healthCheckAll(this.healthCheckCache.size > 0).then((results) => {
       this.scheduleNextHealthCheck(results);
     });
 

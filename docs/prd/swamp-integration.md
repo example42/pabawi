@@ -90,12 +90,14 @@ Streaming uses swamp CLI's own stdout/stderr — same pattern as `BoltService` a
 **Capability.** Run admin-allowlisted swamp model methods and workflows from pabawi, with per-node action menus and a global command catalog.
 
 **`listCapabilities()`** derives from the manifest (§7):
+
 - For each `hosts:` entry with a `methods:` list, expose one capability per `(modelType, methodName)` pair — per-node only, scoped to nodes of that type.
 - For each `methods:` entry with `perHost: true`, expose one capability shown in the per-node menu for **every** node (probe/scan-style).
 - For each `methods:` entry with `perHost: false`, expose one capability in the global catalog (takes inputs at run time).
 - For each `workflows:` entry, expose one capability in the global catalog with the workflow's input JSON Schema.
 
 **`executeAction(action)`** dispatches based on action type:
+
 - `swamp-method`: `swamp model method run <modelName> <method> --stdin --json` with input JSON piped over stdin (never argv). When `SWAMP_TOOL` is set, `--tool <value>` is unconditionally appended.
 - `swamp-workflow`: `swamp workflow run <workflowName> --stdin --json` with input JSON piped over stdin.
 - Returns `ExecutionResult` (stdout, stderr, exit code, parsed output).
@@ -104,6 +106,7 @@ Streaming uses swamp CLI's own stdout/stderr — same pattern as `BoltService` a
 **Per-model lock.** `SwampService` maintains an in-process `Map<lockKey, Promise<void>>` keyed by `swamp:<modelType>:<modelName>` to serialize calls against the same model (avoids contending on swamp's per-model lock). Cross-model calls run in parallel. `CONCURRENT_EXECUTION_LIMIT` still applies as the global cap.
 
 **Bulk semantics.** When a user invokes a per-node method against N nodes:
+
 - Pabawi serializes within the lock bucket but parallelizes across buckets.
 - Hard cap: `SWAMP_MAX_BULK_TARGETS` (default `50`).
 - Bulk-confirmation modal shows estimated time and cap.
@@ -117,6 +120,7 @@ Streaming uses swamp CLI's own stdout/stderr — same pattern as `BoltService` a
 **Cache invalidation.** After a successful method run, pabawi invalidates the per-model inventory cache (`swamp:<modelType>`). Affects only that model's nodes.
 
 **RBAC.** New permissions:
+
 - `swamp.read` — view swamp catalog (commands, models, workflows, reports)
 - `swamp.execute.workflow` — run any allowlisted workflow
 - `swamp.execute.model_method` — run any allowlisted model method
@@ -131,6 +135,7 @@ Coarse permissions in v1; admin curates blast radius via the manifest (only allo
 **Capability.** Project host-shaped swamp artifacts into pabawi inventory, correlated by hostname with hosts from other sources.
 
 **`getInventory()`** flow:
+
 1. Load manifest.
 2. For each `hosts:` entry, fetch artifacts via `swamp data query 'modelType == "<type>"<&& skipIf-inverted>' --json` (when `skipIf` is present, it's passed through as part of the predicate so swamp does the filtering).
 3. Project each artifact to a pabawi `Node`:
@@ -140,6 +145,7 @@ Coarse permissions in v1; admin curates blast radius via the manifest (only allo
 4. Pass nodes to `NodeLinkingService`. Correlation uses the existing identifier set (`id` / `name` / `uri` / `config.hostname`) — same as every other inventory source. No alias system.
 
 **`getNodeFacts(nodeId)`** flow:
+
 - For each manifest `hosts:` entry, query `swamp data query 'modelType == "<type>" && <hostname-CEL> == "<nodeId>"' --json`.
 - Merge projected facts across matched artifacts.
 - Source-attribute facts as `swamp:<modelType>` for UI display.
@@ -155,6 +161,7 @@ Coarse permissions in v1; admin curates blast radius via the manifest (only allo
 **Capability.** List and run allowlisted swamp reports. Live read-through; no pabawi-side caching.
 
 **Backend routes** (`backend/src/routes/swampReports.ts`):
+
 - `GET  /api/swamp/reports` — list reports allowlisted in the manifest `reports:` section. Live-fetched via swamp CLI.
 - `POST /api/swamp/reports/:name/run` — kick off via `swamp report run <name> --json`. Streaming via stdout (same as method/workflow execution).
 - `GET  /api/swamp/reports/:name/runs/:id` — proxy to swamp's own report-run storage (`swamp report get` or equivalent). Pabawi does **not** persist report output.
@@ -162,6 +169,7 @@ Coarse permissions in v1; admin curates blast radius via the manifest (only allo
 Pabawi-side persistence is limited to `ExecutionRepository` audit rows (who kicked off which report, when).
 
 **Frontend** (`frontend/src/pages/SwampReports.svelte`):
+
 - List view of allowlisted reports.
 - Run button → streaming output.
 - View past runs via swamp's own storage (list of run IDs, click-through to fetched output).
@@ -173,6 +181,7 @@ Pabawi-side persistence is limited to `ExecutionRepository` audit rows (who kick
 **Detection.** When the integration is enabled but no manifest-declared host type has matching artifacts (or no allowlisted methods/workflows have matching items in the repo), pabawi shows a "Recommended extensions" panel.
 
 **Panel content.** A curated list of well-known swamp extensions, each with:
+
 - Status badge: `not installed` / `installed but no instances` / `installed, N instances`.
 - One-click **Install** button (admin only) → `POST /api/swamp/bootstrap/install` with `{ package: "<name>" }`.
 - Post-install suggestion: "Now run `<extension>.<discoverMethod>`" with a one-click trigger.
@@ -180,6 +189,7 @@ Pabawi-side persistence is limited to `ExecutionRepository` audit rows (who kick
 **Server-side install.** `POST /api/swamp/bootstrap/install` spawns `swamp extension pull <package>` server-side, requires `swamp.bootstrap` permission, journals as `swamp.extension.install`. Audited. Disabled entirely when `SWAMP_BOOTSTRAP_ENABLED=false`.
 
 **Curated default list** (subject to registry verification at M6):
+
 - `swamp/aws` — EC2 host discovery + lifecycle
 - `swamp/azure` — VM host discovery + lifecycle
 - `swamp/proxmox` — VM host discovery + lifecycle
@@ -284,6 +294,7 @@ reports:
 ```
 
 **Validation.** Manifest is parsed and validated at pabawi startup (Zod). Per-entry warnings (not fatal) when:
+
 - A declared `type:` does not exist in the swamp repo.
 - A declared workflow/report name does not exist.
 - A declared method does not exist on the type.
@@ -344,6 +355,7 @@ A minimum swamp CLI version is pinned in pabawi's config; health check verifies 
 ## 10. Audit & journal
 
 Every swamp execution initiated by pabawi produces:
+
 - An `ExecutionRepository` row (user, integration, action type, target, exit code, output, `inputHash: sha256:...`).
 - A journal entry (`JournalService`) with event type `swamp.execute.workflow`, `swamp.execute.model_method`, or `swamp.extension.install` (bootstrap).
 - **Never** the raw input JSON. Only the hash, for diffing repeated runs.

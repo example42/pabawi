@@ -494,7 +494,7 @@ Requires `CHECKMK_ENABLED=true`. All endpoints require JWT auth and the `monitor
 |---|---|---|
 | 503 | `CHECKMK_NOT_CONFIGURED` | Plugin not enabled |
 | 404 | `NODE_NOT_FOUND` | Node not known to Checkmk |
-| 502 | _(upstream error)_ | Checkmk API failure or timeout |
+| 502 | *(upstream error)* | Checkmk API failure or timeout |
 
 ---
 

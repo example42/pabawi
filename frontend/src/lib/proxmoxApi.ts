@@ -61,10 +61,26 @@ export async function getProvisioningIntegrations(): Promise<ListIntegrationsRes
  * Retry logic: No retries for provisioning operations (user-initiated)
  */
 export async function createProxmoxVM(params: ProxmoxVMParams): Promise<ProvisioningResult> {
-  return post<ProvisioningResult>('/api/integrations/proxmox/provision/vm', params, {
-    maxRetries: 0,
-    showRetryNotifications: false,
-  });
+  const response = await post<{ result: { id: string; status: string; error?: string; results?: { output?: { stdout?: string } }[] } }>(
+    '/api/integrations/proxmox/provision/vm',
+    params,
+    {
+      maxRetries: 0,
+      showRetryNotifications: false,
+    },
+  );
+
+  const success = response.result.status === 'success';
+  const message = success
+    ? response.result.results?.[0]?.output?.stdout ?? `VM ${String(params.vmid)} created successfully`
+    : response.result.error ?? 'Failed to create VM';
+
+  return {
+    success,
+    message,
+    vmid: params.vmid,
+    taskId: response.result.id,
+  };
 }
 
 /**
@@ -74,10 +90,26 @@ export async function createProxmoxVM(params: ProxmoxVMParams): Promise<Provisio
  * Retry logic: No retries for provisioning operations (user-initiated)
  */
 export async function createProxmoxLXC(params: ProxmoxLXCParams): Promise<ProvisioningResult> {
-  return post<ProvisioningResult>('/api/integrations/proxmox/provision/lxc', params, {
-    maxRetries: 0,
-    showRetryNotifications: false,
-  });
+  const response = await post<{ result: { id: string; status: string; error?: string; results?: { output?: { stdout?: string } }[] } }>(
+    '/api/integrations/proxmox/provision/lxc',
+    params,
+    {
+      maxRetries: 0,
+      showRetryNotifications: false,
+    },
+  );
+
+  const success = response.result.status === 'success';
+  const message = success
+    ? response.result.results?.[0]?.output?.stdout ?? `LXC ${String(params.vmid)} created successfully`
+    : response.result.error ?? 'Failed to create LXC container';
+
+  return {
+    success,
+    message,
+    vmid: params.vmid,
+    taskId: response.result.id,
+  };
 }
 
 /**

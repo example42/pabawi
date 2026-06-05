@@ -20,6 +20,7 @@ Run `scripts/setup.sh` for interactive setup that generates a complete `.env` fi
 | `PORT` | `3000` | HTTP port |
 | `HOST` | `localhost` | Bind address (`0.0.0.0` for all interfaces) |
 | `LOG_LEVEL` | `info` | `error` / `warn` / `info` / `debug` |
+| `PABAWI_CRASH_DUMP_DIR` | `<cwd>/crash-dumps` | Directory where JSON crash dumps and Node diagnostic reports are written on unhandled exceptions. Created automatically with mode `0700`. Must be writable by the process user. |
 | `CORS_ALLOWED_ORIGINS` | _(none)_ | Comma-separated list of allowed origins (e.g. `http://localhost:5173`) |
 
 ## Database

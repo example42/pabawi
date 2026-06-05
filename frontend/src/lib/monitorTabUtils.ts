@@ -32,6 +32,8 @@ export const STATE_NAME_TO_NUM: Record<string, number> = {
   UNKNOWN: 3,
 };
 
+export type ServiceSortMode = 'status' | 'lastStateChange';
+
 export interface ServiceGroup {
   state: number;
   name: string;
@@ -62,4 +64,11 @@ export function groupServicesByState(services: ServiceStatus[]): ServiceGroup[] 
     }
   }
   return groups;
+}
+
+/**
+ * Sort services by lastStateChange (most recent first), returning a flat list.
+ */
+export function sortServicesByLastStateChange(services: ServiceStatus[]): ServiceStatus[] {
+  return [...services].sort((a, b) => (b.lastStateChange ?? 0) - (a.lastStateChange ?? 0));
 }

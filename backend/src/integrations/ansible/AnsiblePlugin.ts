@@ -28,6 +28,14 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
     this.ansibleService = ansibleService;
   }
 
+  /**
+   * Get the underlying AnsibleService instance for direct access
+   * (e.g., playbook browsing).
+   */
+  getAnsibleService(): AnsibleService {
+    return this.ansibleService;
+  }
+
   protected async performInitialization(): Promise<void> {
     await this.performHealthCheck();
   }
@@ -124,6 +132,7 @@ export class AnsiblePlugin extends BasePlugin implements ExecutionToolPlugin, In
           target,
           action.action,
           streamingCallback,
+          action.parameters?.sudo ? { become: true } : undefined,
         );
       case "task": {
         if (action.action !== "package") {

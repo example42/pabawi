@@ -29,6 +29,7 @@ const inflight = new Map<string, RequestRecord>();
 
 let eventLoopMonitor: IntervalHistogram | undefined;
 let installed = false;
+let configuredDumpDir: string | undefined;
 
 function inflightKey(rec: RequestRecord): string {
   return rec.requestId ?? `${rec.method}-${rec.path}-${String(Date.now())}-${String(Math.random())}`;
@@ -57,7 +58,7 @@ export function recordRequestFinish(
 }
 
 function resolveDumpDir(): string {
-  return process.env.PABAWI_CRASH_DUMP_DIR ?? path.join(process.cwd(), "crash-dumps");
+  return configuredDumpDir ?? process.env.PABAWI_CRASH_DUMP_DIR ?? path.join(process.cwd(), "crash-dumps");
 }
 
 function writeCrashDump(reason: string, error: unknown): string | null {
@@ -106,10 +107,17 @@ function writeCrashDump(reason: string, error: unknown): string | null {
  * Install global crash handlers. Idempotent — safe to call once at boot.
  * Pass the shared LoggerService so fatal events appear in the normal log stream
  * in addition to the on-disk dump.
+ *
+ * @param dumpDir - Optional override for crash dump directory. Falls back to
+ *   PABAWI_CRASH_DUMP_DIR env var, then <cwd>/crash-dumps.
  */
-export function installCrashHandlers(logger: LoggerService): void {
+export function installCrashHandlers(logger: LoggerService, dumpDir?: string): void {
   if (installed) return;
   installed = true;
+
+  if (dumpDir) {
+    configuredDumpDir = dumpDir;
+  }
 
   try {
     eventLoopMonitor = monitorEventLoopDelay({ resolution: 20 });

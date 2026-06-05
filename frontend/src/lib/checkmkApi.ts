@@ -17,6 +17,7 @@ export interface ServiceStatus {
   stateType: 0 | 1;
   pluginOutput: string;
   lastCheck: number; // Unix epoch seconds from Checkmk
+  lastStateChange: number; // Unix epoch seconds from Checkmk
 }
 
 /**

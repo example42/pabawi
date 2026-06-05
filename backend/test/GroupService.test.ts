@@ -861,4 +861,3 @@ function runQuery(db: SQLiteAdapter, sql: string, params: any[] = []): Promise<v
 function allQuery<T>(db: SQLiteAdapter, sql: string, params: any[] = []): Promise<T[]> {
   return db.query<T>(sql, params);
 }
-

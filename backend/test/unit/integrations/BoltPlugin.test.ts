@@ -9,8 +9,10 @@ import type { IntegrationConfig } from "../../../src/integrations/types";
 
 // Mock child_process
 const mockSpawn = vi.fn();
+const mockExec = vi.fn();
 vi.mock("child_process", () => ({
   spawn: mockSpawn,
+  exec: mockExec,
 }));
 
 // Mock fs
@@ -39,6 +41,14 @@ describe("BoltPlugin", () => {
 
     // Reset mocks
     vi.clearAllMocks();
+
+    // Default exec mock: simulate bolt command available (callback-style for promisify)
+    mockExec.mockImplementation((_cmd: string, _opts: unknown, callback?: (error: Error | null, result?: unknown) => void) => {
+      const cb = typeof _opts === 'function' ? _opts : callback;
+      if (cb) {
+        cb(null, { stdout: "3.29.0\n", stderr: "" });
+      }
+    });
   });
 
   describe("initialization", () => {
@@ -89,16 +99,13 @@ describe("BoltPlugin", () => {
       ];
       vi.mocked(mockBoltService.getInventory).mockResolvedValue(mockInventory);
 
-      // Mock spawn to simulate bolt command not available
-      const mockProcess = {
-        on: vi.fn((event, callback) => {
-          if (event === "error") {
-            setTimeout(() => callback(new Error("Command not found")), 10);
-          }
-        }),
-        kill: vi.fn(),
-      };
-      mockSpawn.mockReturnValue(mockProcess);
+      // Mock exec (callback-style) to simulate bolt command not available
+      mockExec.mockImplementation((_cmd: string, _opts: unknown, callback?: (error: Error | null, result?: unknown) => void) => {
+        const cb = typeof _opts === 'function' ? _opts : callback;
+        if (cb) {
+          cb(new Error("Command not found"));
+        }
+      });
 
       const config: IntegrationConfig = {
         enabled: true,
@@ -127,16 +134,14 @@ describe("BoltPlugin", () => {
       vi.mocked(mockBoltService.getInventory)
         .mockResolvedValueOnce([]); // First call for initialization
 
-      // Mock spawn to simulate bolt command not available
-      const mockProcess = {
-        on: vi.fn((event, callback) => {
-          if (event === "close") {
-            setTimeout(() => callback(1), 10); // Exit code 1 = failure
-          }
-        }),
-        kill: vi.fn(),
-      };
-      mockSpawn.mockReturnValue(mockProcess);
+      // Mock exec (callback-style) to simulate bolt command not available
+      // promisify(exec) calls exec(cmd, opts, callback) — simulate failure
+      mockExec.mockImplementation((_cmd: string, _opts: unknown, callback?: (error: Error | null, result?: unknown) => void) => {
+        const cb = typeof _opts === 'function' ? _opts : callback;
+        if (cb) {
+          cb(new Error("Command not found"));
+        }
+      });
 
       const config: IntegrationConfig = {
         enabled: true,
@@ -184,7 +189,7 @@ describe("BoltPlugin", () => {
       const result = await boltPlugin.executeAction(action);
 
       expect(result).toEqual(mockResult);
-      expect(mockBoltService.runCommand).toHaveBeenCalledWith("node1", "uptime", undefined);
+      expect(mockBoltService.runCommand).toHaveBeenCalledWith("node1", "uptime", undefined, undefined);
     });
 
     it("should execute task action", async () => {

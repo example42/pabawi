@@ -8,6 +8,8 @@
     STATE_COLORS,
     STATE_NAMES,
     groupServicesByState,
+    sortServicesByLastStateChange,
+    type ServiceSortMode,
   } from '../lib/monitorTabUtils';
 
   interface Props {
@@ -23,9 +25,12 @@
   let services = $state<ServiceStatus[]>([]);
   let error = $state<{ type: 'upstream' | 'unavailable'; message: string } | null>(null);
   let expandedServices = $state<Set<string>>(new Set());
+  let sortMode = $state<ServiceSortMode>('status');
 
   // Group services by state in CRIT → WARN → UNKNOWN → OK order
   const groupedServices = $derived(groupServicesByState(services));
+  // Flat list sorted by lastStateChange (most recent first)
+  const servicesByLastChange = $derived(sortServicesByLastStateChange(services));
 
   interface MonitorServicesResponse {
     services?: ServiceStatus[];
@@ -198,72 +203,162 @@
 
   <!-- Services grouped list -->
   {:else}
-    <div class="space-y-4">
-      {#each groupedServices as group (group.state)}
-        <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-          <!-- Group heading -->
-          <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
-            <div class="flex items-center gap-2">
-              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold {STATE_COLORS[group.state]}">
-                {group.name}
-              </span>
-              <span class="text-sm text-gray-500 dark:text-gray-400">
-                {group.services.length} service{group.services.length !== 1 ? 's' : ''}
-              </span>
-            </div>
-          </div>
+    <!-- Sort toggle -->
+    <div class="flex items-center gap-2">
+      <span class="text-xs text-gray-500 dark:text-gray-400">Sort by:</span>
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          onclick={() => sortMode = 'status'}
+          class="rounded px-2 py-0.5 text-xs font-medium transition-colors {sortMode === 'status' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+          title="Group by status severity (CRIT → WARN → UNKNOWN → OK)"
+        >
+          Status
+        </button>
+        <button
+          type="button"
+          onclick={() => sortMode = 'lastStateChange'}
+          class="rounded px-2 py-0.5 text-xs font-medium transition-colors {sortMode === 'lastStateChange' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+          title="Sort by most recent state change"
+        >
+          Last Change
+        </button>
+      </div>
+    </div>
 
-          <!-- Service list -->
-          <div class="divide-y divide-gray-100 dark:divide-gray-700/50">
-            {#each group.services as service (service.description)}
-              {@const serviceId = `${String(group.state)}-${service.description}`}
-              {@const isExpanded = expandedServices.has(serviceId)}
-              {@const needsTruncation = service.pluginOutput.length > 200}
-              {@const serviceStateName = STATE_NAMES[service.state] ?? String(service.state)}
-              <div class="px-4 py-3">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="flex-1 min-w-0">
-                    <!-- Service description and badge -->
-                    <div class="flex items-center gap-2 mb-1">
-                      <span class="font-medium text-sm text-gray-900 dark:text-white truncate">
-                        {service.description}
-                      </span>
-                      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 {STATE_COLORS[service.state]}">
-                        {serviceStateName}
-                      </span>
+    {#if sortMode === 'status'}
+      <!-- Grouped by state -->
+      <div class="space-y-4">
+        {#each groupedServices as group (group.state)}
+          <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+            <!-- Group heading -->
+            <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold {STATE_COLORS[group.state]}">
+                  {group.name}
+                </span>
+                <span class="text-sm text-gray-500 dark:text-gray-400">
+                  {group.services.length} service{group.services.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+
+            <!-- Service list -->
+            <div class="divide-y divide-gray-100 dark:divide-gray-700/50">
+              {#each group.services as service (service.description)}
+                {@const serviceId = `${String(group.state)}-${service.description}`}
+                {@const isExpanded = expandedServices.has(serviceId)}
+                {@const needsTruncation = service.pluginOutput.length > 200}
+                {@const serviceStateName = STATE_NAMES[service.state] ?? String(service.state)}
+                <div class="px-4 py-3">
+                  <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1 min-w-0">
+                      <!-- Service description and badge -->
+                      <div class="flex items-center gap-2 mb-1">
+                        <span class="font-medium text-sm text-gray-900 dark:text-white truncate">
+                          {service.description}
+                        </span>
+                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 {STATE_COLORS[service.state]}">
+                          {serviceStateName}
+                        </span>
+                      </div>
+
+                      <!-- Plugin output -->
+                      {#if service.pluginOutput}
+                        <p class="text-sm text-gray-600 dark:text-gray-400 break-words">
+                          {#if isExpanded || !needsTruncation}
+                            {service.pluginOutput}
+                          {:else}
+                            {truncateOutput(service.pluginOutput)}
+                          {/if}
+                        </p>
+                        {#if needsTruncation}
+                          <button
+                            type="button"
+                            class="mt-1 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                            onclick={() => toggleExpand(serviceId)}
+                          >
+                            {isExpanded ? 'Show less' : 'Show more'}
+                          </button>
+                        {/if}
+                      {/if}
                     </div>
 
-                    <!-- Plugin output -->
-                    {#if service.pluginOutput}
-                      <p class="text-sm text-gray-600 dark:text-gray-400 break-words">
-                        {#if isExpanded || !needsTruncation}
-                          {service.pluginOutput}
+                    <!-- Timestamps -->
+                    <div class="flex flex-col items-end gap-0.5 flex-shrink-0">
+                      <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap" title="Last state change">
+                        {#if service.lastStateChange > 0}
+                          {formatRelativeTime(service.lastStateChange)}
                         {:else}
-                          {truncateOutput(service.pluginOutput)}
+                          —
                         {/if}
-                      </p>
-                      {#if needsTruncation}
-                        <button
-                          type="button"
-                          class="mt-1 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
-                          onclick={() => toggleExpand(serviceId)}
-                        >
-                          {isExpanded ? 'Show less' : 'Show more'}
-                        </button>
-                      {/if}
-                    {/if}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <!-- Flat list sorted by lastStateChange -->
+      <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+        <div class="divide-y divide-gray-100 dark:divide-gray-700/50">
+          {#each servicesByLastChange as service (service.description)}
+            {@const serviceId = `change-${service.description}`}
+            {@const isExpanded = expandedServices.has(serviceId)}
+            {@const needsTruncation = service.pluginOutput.length > 200}
+            {@const serviceStateName = STATE_NAMES[service.state] ?? String(service.state)}
+            <div class="px-4 py-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                  <!-- Service description and badge -->
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="font-medium text-sm text-gray-900 dark:text-white truncate">
+                      {service.description}
+                    </span>
+                    <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium flex-shrink-0 {STATE_COLORS[service.state]}">
+                      {serviceStateName}
+                    </span>
                   </div>
 
-                  <!-- Last check time -->
-                  <span class="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
-                    {formatRelativeTime(service.lastCheck)}
+                  <!-- Plugin output -->
+                  {#if service.pluginOutput}
+                    <p class="text-sm text-gray-600 dark:text-gray-400 break-words">
+                      {#if isExpanded || !needsTruncation}
+                        {service.pluginOutput}
+                      {:else}
+                        {truncateOutput(service.pluginOutput)}
+                      {/if}
+                    </p>
+                    {#if needsTruncation}
+                      <button
+                        type="button"
+                        class="mt-1 text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+                        onclick={() => toggleExpand(serviceId)}
+                      >
+                        {isExpanded ? 'Show less' : 'Show more'}
+                      </button>
+                    {/if}
+                  {/if}
+                </div>
+
+                <!-- Last state change time -->
+                <div class="flex flex-col items-end gap-0.5 flex-shrink-0">
+                  <span class="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap" title="Last state change">
+                    {#if service.lastStateChange > 0}
+                      {formatRelativeTime(service.lastStateChange)}
+                    {:else}
+                      —
+                    {/if}
                   </span>
                 </div>
               </div>
-            {/each}
-          </div>
+            </div>
+          {/each}
         </div>
-      {/each}
-    </div>
+      </div>
+    {/if}
   {/if}
 </div>
