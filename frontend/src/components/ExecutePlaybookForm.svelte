@@ -169,6 +169,9 @@
       showError('Failed to load playbooks', loadError);
       // Fall back to manual path mode
       manualPathMode = true;
+      if (initialPlaybookPath) {
+        manualPath = initialPlaybookPath;
+      }
     } finally {
       loading = false;
     }

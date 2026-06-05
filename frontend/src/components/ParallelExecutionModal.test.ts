@@ -27,7 +27,7 @@ describe('ParallelExecutionModal Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock API calls: inventory for node list, tasks for ExecuteTaskForm, package-tasks for InstallSoftwareForm
+    // Mock API calls: inventory for node list, tasks for ExecuteTaskForm, package-tasks for InstallSoftwareForm, playbooks for ExecutePlaybookForm
     vi.mocked(api.get).mockImplementation((url: string) => {
       if (url === '/api/tasks/by-module') {
         return Promise.resolve({
@@ -47,6 +47,24 @@ describe('ParallelExecutionModal Component', () => {
               parameterMapping: { packageName: 'name', ensure: 'ensure', version: 'version' },
             },
           ],
+        });
+      }
+      if (url === '/api/playbooks') {
+        return Promise.resolve({
+          playbooks: [
+            { path: 'playbooks/site.yml', name: 'site.yml', directory: 'playbooks' },
+          ],
+        });
+      }
+      if (url.startsWith('/api/playbooks/details')) {
+        return Promise.resolve({
+          playbook: {
+            path: 'playbooks/site.yml',
+            name: 'site.yml',
+            content: '---\n- hosts: all',
+            plays: [{ name: 'Main', hosts: 'all' }],
+            parameters: [],
+          },
         });
       }
       // Default: return inventory data
@@ -530,7 +548,8 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(playbookRadio);
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText(/playbooks\/site\.yml/i)).toBeTruthy();
+        // ExecutePlaybookForm renders with playbook browser showing search input
+        expect(screen.getByPlaceholderText(/search playbooks/i)).toBeTruthy();
       });
     });
 
@@ -559,7 +578,8 @@ describe('ParallelExecutionModal Component', () => {
       await fireEvent.click(playbookRadio);
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText(/playbooks\/site\.yml/i)).toBeTruthy();
+        // ExecutePlaybookForm renders with playbook browser showing search input
+        expect(screen.getByPlaceholderText(/search playbooks/i)).toBeTruthy();
       });
     });
 
@@ -2170,9 +2190,9 @@ describe('ParallelExecutionModal Component', () => {
       const playbookLabel = screen.getByText('Execute Playbook');
       await fireEvent.click(playbookLabel);
 
-      // ExecutePlaybookForm should be visible (playbook path input with specific placeholder)
+      // ExecutePlaybookForm should be visible (playbook browser with search input)
       await waitFor(() => {
-        expect(screen.getByPlaceholderText(/playbooks\/site\.yml/i)).toBeTruthy();
+        expect(screen.getByPlaceholderText(/search playbooks/i)).toBeTruthy();
       });
     });
 
@@ -2674,17 +2694,19 @@ describe('ParallelExecutionModal Component', () => {
       const nodeCheckbox = screen.getAllByRole('checkbox')[0];
       await fireEvent.click(nodeCheckbox);
 
-      // Enter playbook path - verify the form renders with the correct input
+      // Wait for playbook browser to load
       await waitFor(() => {
-        expect(screen.getByPlaceholderText(/playbooks\/site\.yml/i)).toBeTruthy();
+        expect(screen.getByPlaceholderText(/search playbooks/i)).toBeTruthy();
       });
 
-      const playbookInput = screen.getByPlaceholderText(/playbooks\/site\.yml/i);
-      await fireEvent.input(playbookInput, { target: { value: '/path/to/playbook.yml' } });
-      expect((playbookInput as HTMLInputElement).value).toBe('/path/to/playbook.yml');
+      // Select the playbook from the browser list
+      const playbookFile = screen.getByText('site.yml');
+      await fireEvent.click(playbookFile);
 
-      // Note: ExecutePlaybookForm does not use a $effect for multiNode reactive updates.
-      // The form renders correctly with the expected input field.
+      // Verify the playbook is selected
+      await waitFor(() => {
+        expect(screen.getByText('playbooks/site.yml')).toBeTruthy();
+      });
     });
 
     it('should build correct request for install-software action', async () => {
