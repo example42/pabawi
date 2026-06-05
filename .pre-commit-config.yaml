@@ -49,7 +49,7 @@ repos:
         name: TypeScript Check (Backend)
         entry: bash -c 'cd backend && npx tsc --noEmit'
         language: system
-        types: [ts, tsx]
+        types_or: [ts, tsx]
         files: ^backend/
         pass_filenames: false
 
@@ -57,7 +57,7 @@ repos:
         name: TypeScript Check (Frontend)
         entry: bash -c 'cd frontend && npx tsc --noEmit'
         language: system
-        types: [ts, tsx]
+        types_or: [ts, tsx]
         files: ^frontend/
         pass_filenames: false
 
