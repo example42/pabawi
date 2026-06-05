@@ -149,8 +149,8 @@ describe("Integration Status API", () => {
       expect(response.body).toHaveProperty("integrations");
       expect(response.body).toHaveProperty("timestamp");
       expect(Array.isArray(response.body.integrations)).toBe(true);
-      // Configured plugins + unconfigured Puppetserver, Hiera, Proxmox, and AWS
-      expect(response.body.integrations).toHaveLength(6);
+      // Only configured plugins are returned
+      expect(response.body.integrations).toHaveLength(2);
 
       // Check first integration
       const puppetdb = response.body.integrations.find(
@@ -172,22 +172,16 @@ describe("Integration Status API", () => {
       expect(bolt.lastCheck).toBeDefined();
       expect(bolt.message).toBe("bolt is healthy");
 
-      // Check unconfigured Puppetserver
+      // Unconfigured integrations should NOT appear
       const puppetserver = response.body.integrations.find(
         (i: { name: string }) => i.name === "puppetserver",
       );
-      expect(puppetserver).toBeDefined();
-      expect(puppetserver.type).toBe("information");
-      expect(puppetserver.status).toBe("not_configured");
+      expect(puppetserver).toBeUndefined();
 
-      // Check unconfigured Hiera
       const hiera = response.body.integrations.find(
         (i: { name: string }) => i.name === "hiera",
       );
-      expect(hiera).toBeDefined();
-      expect(hiera.type).toBe("information");
-      expect(hiera.status).toBe("not_configured");
-      expect(hiera.message).toBe("Hiera integration is not configured");
+      expect(hiera).toBeUndefined();
     });
 
     it("should return error status for unhealthy integrations", async () => {
@@ -229,7 +223,7 @@ describe("Integration Status API", () => {
       expect(unhealthy.message).toContain("Health check failed");
     });
 
-    it("should include unconfigured PuppetDB and Puppetserver when no integrations configured", async () => {
+    it("should return empty list when no integrations are configured", async () => {
       // Create new manager with no plugins
       const emptyManager = new IntegrationManager({ logger: new LoggerService('error') });
       await emptyManager.initializePlugins();
@@ -246,36 +240,9 @@ describe("Integration Status API", () => {
         .get("/api/integrations/status")
         .expect(200);
 
-      // Should have unconfigured puppetdb, puppetserver, bolt, hiera, proxmox, and aws entries
-      expect(response.body.integrations).toHaveLength(6);
+      // No configured plugins means empty integrations list
+      expect(response.body.integrations).toHaveLength(0);
       expect(response.body.timestamp).toBeDefined();
-
-      const puppetdb = response.body.integrations.find(
-        (i: { name: string }) => i.name === "puppetdb",
-      );
-      expect(puppetdb).toBeDefined();
-      expect(puppetdb.status).toBe("not_configured");
-      expect(puppetdb.message).toBe("PuppetDB integration is not configured");
-
-      const puppetserver = response.body.integrations.find(
-        (i: { name: string }) => i.name === "puppetserver",
-      );
-      expect(puppetserver).toBeDefined();
-      expect(puppetserver.status).toBe("not_configured");
-      expect(puppetserver.message).toBe("Puppetserver integration is not configured");
-
-      const bolt = response.body.integrations.find(
-        (i: { name: string }) => i.name === "bolt",
-      );
-      expect(bolt).toBeDefined();
-      expect(bolt.status).toBe("not_configured");
-
-      const hiera = response.body.integrations.find(
-        (i: { name: string }) => i.name === "hiera",
-      );
-      expect(hiera).toBeDefined();
-      expect(hiera.status).toBe("not_configured");
-      expect(hiera.message).toBe("Hiera integration is not configured");
     });
 
     it("should use cached results by default", async () => {
@@ -284,8 +251,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(true);
-      // Configured plugins + unconfigured Puppetserver, Hiera, Proxmox, and AWS
-      expect(response.body.integrations).toHaveLength(6);
+      // Only configured plugins
+      expect(response.body.integrations).toHaveLength(2);
     });
 
     it("should refresh health checks when requested", async () => {
@@ -294,8 +261,8 @@ describe("Integration Status API", () => {
         .expect(200);
 
       expect(response.body.cached).toBe(false);
-      // Configured plugins + unconfigured Puppetserver, Hiera, Proxmox, and AWS
-      expect(response.body.integrations).toHaveLength(6);
+      // Only configured plugins
+      expect(response.body.integrations).toHaveLength(2);
     });
   });
 });

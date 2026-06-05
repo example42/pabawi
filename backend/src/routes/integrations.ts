@@ -34,8 +34,6 @@ export function createIntegrationsRouter(
   // Mount status router
   router.use("/status", createStatusRouter(
     integrationManager,
-    puppetDBService,
-    puppetserverService,
     container
   ));
 

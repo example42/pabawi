@@ -1,7 +1,5 @@
 import { Router, type Request, type Response } from "express";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";
-import type { PuppetDBService } from "../../integrations/puppetdb/PuppetDBService";
-import type { PuppetserverService } from "../../integrations/puppetserver/PuppetserverService";
 import { asyncHandler } from "../asyncHandler";
 import { requestDeduplication } from "../../middleware/deduplication";
 import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
@@ -11,8 +9,6 @@ import { type DIContainer, createDefaultContainer } from "../../container/DICont
  */
 export function createStatusRouter(
   integrationManager: IntegrationManager,
-  puppetDBService?: PuppetDBService,
-  puppetserverService?: PuppetserverService,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -129,132 +125,6 @@ export function createStatusRouter(
             };
           },
         );
-
-        // Add unconfigured integrations (like PuppetDB or Puppetserver if not configured)
-        const configuredNames = new Set(integrations.map((i) => i.name));
-
-        // Check if PuppetDB is not configured
-        if (!puppetDBService && !configuredNames.has("puppetdb")) {
-          logger.debug("PuppetDB integration is not configured", {
-            component: "StatusRouter",
-            integration: "puppetdb",
-            operation: "getStatus",
-          });
-          integrations.push({
-            name: "puppetdb",
-            type: "information",
-            status: "not_configured",
-            lastCheck: new Date().toISOString(),
-            message: "PuppetDB integration is not configured",
-            details: undefined,
-            workingCapabilities: undefined,
-            failingCapabilities: undefined,
-          });
-        }
-
-        // Check if Puppetserver is not configured
-        if (!puppetserverService && !configuredNames.has("puppetserver")) {
-          logger.debug("Puppetserver integration is not configured", {
-            component: "StatusRouter",
-            integration: "puppetserver",
-            operation: "getStatus",
-          });
-          integrations.push({
-            name: "puppetserver",
-            type: "information",
-            status: "not_configured",
-            lastCheck: new Date().toISOString(),
-            message: "Puppetserver integration is not configured",
-            details: undefined,
-            workingCapabilities: undefined,
-            failingCapabilities: undefined,
-          });
-        }
-
-        // Check if Bolt is not configured
-        if (!configuredNames.has("bolt")) {
-          logger.debug("Bolt integration is not configured", {
-            component: "StatusRouter",
-            integration: "bolt",
-            operation: "getStatus",
-          });
-          integrations.push({
-            name: "bolt",
-            type: "both",
-            status: "not_configured",
-            lastCheck: new Date().toISOString(),
-            message: "Bolt integration is not configured",
-            details: undefined,
-            workingCapabilities: undefined,
-            failingCapabilities: undefined,
-          });
-        }
-
-        // Check if Hiera is not configured
-        if (!configuredNames.has("hiera")) {
-          logger.debug("Hiera integration is not configured", {
-            component: "StatusRouter",
-            integration: "hiera",
-            operation: "getStatus",
-          });
-          integrations.push({
-            name: "hiera",
-            type: "information",
-            status: "not_configured",
-            lastCheck: new Date().toISOString(),
-            message: "Hiera integration is not configured",
-            details: {
-              setupRequired: true,
-              setupUrl: "/integrations/hiera/setup",
-            },
-            workingCapabilities: undefined,
-            failingCapabilities: undefined,
-          });
-        }
-
-        // Check if Proxmox is not configured
-        if (!configuredNames.has("proxmox")) {
-          logger.debug("Proxmox integration is not configured", {
-            component: "StatusRouter",
-            integration: "proxmox",
-            operation: "getStatus",
-          });
-          integrations.push({
-            name: "proxmox",
-            type: "both",
-            status: "not_configured",
-            lastCheck: new Date().toISOString(),
-            message: "Proxmox integration is not configured",
-            details: {
-              setupRequired: true,
-              setupUrl: "/setup/proxmox",
-            },
-            workingCapabilities: undefined,
-            failingCapabilities: undefined,
-          });
-        }
-
-        // Check if AWS is not configured
-        if (!configuredNames.has("aws")) {
-          logger.debug("AWS integration is not configured", {
-            component: "StatusRouter",
-            integration: "aws",
-            operation: "getStatus",
-          });
-          integrations.push({
-            name: "aws",
-            type: "both",
-            status: "not_configured",
-            lastCheck: new Date().toISOString(),
-            message: "AWS integration is not configured",
-            details: {
-              setupRequired: true,
-              setupUrl: "/setup/aws",
-            },
-            workingCapabilities: undefined,
-            failingCapabilities: undefined,
-          });
-        }
 
         const duration = Date.now() - startTime;
         const responseData = {
