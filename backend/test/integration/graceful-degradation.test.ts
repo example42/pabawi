@@ -83,7 +83,7 @@ describe('Graceful Degradation', () => {
   });
 
   describe('Integration Status', () => {
-    it('should show Puppetserver as not configured', async () => {
+    it('should not show unconfigured integrations in status', async () => {
       const response = await request(app)
         .get('/api/integrations/status')
         .expect(200);
@@ -91,14 +91,12 @@ describe('Graceful Degradation', () => {
       expect(response.body).toHaveProperty('integrations');
       expect(Array.isArray(response.body.integrations)).toBe(true);
 
-      // Find Puppetserver in integrations
+      // Unconfigured Puppetserver should NOT appear
       const puppetserver = response.body.integrations.find(
         (i: { name: string }) => i.name === 'puppetserver'  // pragma: allowlist secret
       );
 
-      expect(puppetserver).toBeDefined();
-      expect(puppetserver.status).toBe('not_configured');
-      expect(puppetserver.message).toContain('not configured');
+      expect(puppetserver).toBeUndefined();
     });
 
     it('should show PuppetDB status independently', async () => {
