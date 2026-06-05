@@ -26,6 +26,7 @@ const serviceStatusArb: fc.Arbitrary<ServiceStatus> = fc.record({
   stateType: fc.oneof(fc.constant(0 as const), fc.constant(1 as const)),
   pluginOutput: fc.string({ maxLength: 200 }),
   lastCheck: fc.integer({ min: 946684800, max: 1924905600 }),
+  lastStateChange: fc.integer({ min: 0, max: 1924905600 }),
 });
 
 /** Generator for arrays of ServiceStatus with at least one service */

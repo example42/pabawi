@@ -1,12 +1,12 @@
 <script lang="ts">
   import { get, post } from '../lib/api';
   import { showError, showInfo, showSuccess } from '../lib/toast.svelte';
-  import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
   import StatusBadge from './StatusBadge.svelte';
   import CommandOutput from './CommandOutput.svelte';
   import RealtimeOutputViewer from './RealtimeOutputViewer.svelte';
   import IntegrationBadge from './IntegrationBadge.svelte';
+  import ExecutePlaybookForm from './ExecutePlaybookForm.svelte';
   import { expertMode } from '../lib/expertMode.svelte';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
 
@@ -42,11 +42,14 @@
     error?: string;
   }
 
+  interface PlaybookSubmitData {
+    playbookPath: string;
+    extraVars?: Record<string, unknown>;
+  }
+
   let { nodeId, onExecutionComplete }: Props = $props();
 
   let expanded = $state(false);
-  let playbookPath = $state('');
-  let extraVarsJson = $state('');
   let executing = $state(false);
   let error = $state<string | null>(null);
   let result = $state<ExecutionResult | null>(null);
@@ -70,29 +73,7 @@
     }
   }
 
-  async function executePlaybook(event: Event): Promise<void> {
-    event.preventDefault();
-
-    if (!playbookPath.trim()) {
-      showError('Playbook path is required');
-      return;
-    }
-
-    let extraVars: Record<string, unknown> | undefined;
-    if (extraVarsJson.trim()) {
-      try {
-        const parsed = JSON.parse(extraVarsJson) as unknown;
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          showError('Extra vars must be a JSON object');
-          return;
-        }
-        extraVars = parsed as Record<string, unknown>;
-      } catch {
-        showError('Extra vars must be valid JSON');
-        return;
-      }
-    }
-
+  async function handlePlaybookSubmit(data: PlaybookSubmitData): Promise<void> {
     executing = true;
     error = null;
     result = null;
@@ -102,18 +83,18 @@
     try {
       showInfo('Executing playbook...');
 
-      const data = await post<{ executionId: string }>(
+      const responseData = await post<{ executionId: string }>(
         `/api/nodes/${nodeId}/playbook`,
         {
-          playbookPath: playbookPath.trim(),
-          extraVars,
+          playbookPath: data.playbookPath,
+          extraVars: data.extraVars,
           expertMode: expertMode.enabled,
           tool: 'ansible',
         },
         { maxRetries: 0 },
       );
 
-      const executionId = data.executionId;
+      const executionId = responseData.executionId;
       currentExecutionId = executionId;
 
       if (expertMode.enabled) {
@@ -207,55 +188,11 @@
       {#if statusChecked && !ansibleAvailable}
         <ErrorAlert message="Ansible integration is not available" details="Enable and configure the Ansible integration to run playbooks." />
       {:else}
-        <form onsubmit={executePlaybook} class="space-y-4">
-          <div>
-            <label for="playbook-path" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Playbook Path
-            </label>
-            <input
-              id="playbook-path"
-              type="text"
-              bind:value={playbookPath}
-              placeholder="e.g., playbooks/site.yml"
-              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
-              disabled={executing}
-              required
-            />
-          </div>
-
-          <div>
-            <label for="extra-vars" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Extra Vars (JSON, optional)
-            </label>
-            <textarea
-              id="extra-vars"
-              bind:value={extraVarsJson}
-              placeholder='&#123;"app_version":"1.2.3"&#125;'
-              rows="4"
-              class="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-mono placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white dark:placeholder-gray-500"
-              disabled={executing}
-            ></textarea>
-          </div>
-
-          <button
-            type="submit"
-            class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={executing || !playbookPath.trim()}
-          >
-            {executing ? 'Executing...' : 'Execute Playbook'}
-          </button>
-        </form>
-      {/if}
-
-      {#if executing}
-        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <LoadingSpinner size="sm" />
-          <span>Executing playbook...</span>
-        </div>
-      {/if}
-
-      {#if error}
-        <ErrorAlert message="Playbook execution failed" details={error} />
+        <ExecutePlaybookForm
+          executing={executing}
+          error={error}
+          onSubmit={handlePlaybookSubmit}
+        />
       {/if}
 
       {#if executionStream && currentExecutionId && expertMode.enabled && (executionStream.executionStatus === 'running' || executionStream.isConnecting)}

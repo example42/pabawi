@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — feat(ansible): playbook browser with parameter detection</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --surface-alt: #1f2335;
+    --border: #3b4261;
+    --text: #c0caf5;
+    --text-muted: #9aa5ce;
+    --accent: #7aa2f7;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --yellow: #e0af68;
+    --orange: #ff9e64;
+    --purple: #bb9af7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+    background: var(--bg);
+    color: var(--text);
+    padding: 2rem;
+    line-height: 1.6;
+  }
+  h1 { color: var(--accent); font-size: 1.4rem; margin-bottom: 0.5rem; }
+  h2 { color: var(--purple); font-size: 1.1rem; margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  h3 { color: var(--yellow); font-size: 0.95rem; margin: 1rem 0 0.5rem; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .commit-msg {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .commit-msg code {
+    display: block;
+    font-size: 1rem;
+    color: var(--green);
+    margin-bottom: 0.5rem;
+  }
+  .commit-msg p { color: var(--text-muted); font-size: 0.875rem; }
+  .file-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .file-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid var(--surface-alt);
+    font-size: 0.825rem;
+  }
+  .file-item:last-child { border-bottom: none; }
+  .file-status {
+    font-weight: bold;
+    width: 1.5rem;
+    text-align: center;
+    border-radius: 3px;
+    padding: 0.1rem 0.3rem;
+    font-size: 0.75rem;
+  }
+  .file-status.M { color: var(--yellow); }
+  .file-status.A { color: var(--green); }
+  .file-status.D { color: var(--red); }
+  .file-path { flex: 1; color: var(--text-muted); font-family: monospace; font-size: 0.8rem; }
+  .file-stats { font-size: 0.75rem; }
+  .file-stats .add { color: var(--green); }
+  .file-stats .del { color: var(--red); }
+  .pages-list, .check-list {
+    list-style: none;
+    padding: 0;
+  }
+  .pages-list li, .check-list li {
+    padding: 0.4rem 0;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+  }
+  .pages-list a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .pages-list a:hover { text-decoration: underline; }
+  .check-list li::before {
+    content: "→ ";
+    color: var(--orange);
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem;
+    text-align: center;
+  }
+  .stat-card .value { font-size: 1.5rem; color: var(--accent); font-weight: bold; }
+  .stat-card .label { font-size: 0.75rem; color: var(--text-muted); }
+  .tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-right: 0.3rem;
+  }
+  .tag-backend { background: #1e3a5f; color: #7aa2f7; }
+  .tag-frontend { background: #2d3a1e; color: #9ece6a; }
+  .tag-docs { background: #3a2e1e; color: #e0af68; }
+  .tag-ansible { background: #2e1e3a; color: #bb9af7; }
+  .tag-bolt { background: #1e3a3a; color: #73daca; }
+  .tag-checkmk { background: #3a1e2e; color: #f7768e; }
+  .tag-proxmox { background: #3a351e; color: #ff9e64; }
+  .impact-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    font-size: 0.875rem;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Commit Report</h1>
+<p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 1.5rem;">Generated: 2026-06-05 11:10 · Branch: 140</p>
+
+<h2>Commit Message</h2>
+<div class="commit-msg">
+  <code>feat(ansible): playbook browser with parameter detection</code>
+  <p style="margin-top: 0.75rem; white-space: pre-wrap;">Add a playbook browser UI that discovers YAML playbook files in
+ANSIBLE_PROJECT_PATH, displays their structure (plays, hosts, roles),
+and auto-extracts parameters from vars_prompt/vars for a dynamic form.
+
+Backend:
+- New /api/playbooks and /api/playbooks/details endpoints
+- AnsibleService.listPlaybooks() scans directories recursively
+- AnsibleService.getPlaybookDetails() parses YAML to extract plays
+  and parameters (vars_prompt → required, vars → optional)
+- AnsiblePlugin exposes getAnsibleService() accessor
+- BoltPlugin health check simplified to exec() for shell-wrapper compat
+- Bolt/Ansible commands now pass --become / --run-as on sudo actions
+- Crash handler accepts configurable dump directory via ConfigService
+- Integration health checks run once synchronously at startup to warm cache
+
+Frontend:
+- ExecutePlaybookForm rewritten as full playbook browser with
+  directory tree, search, content viewer, and PlaybookParameterForm
+- AnsiblePlaybookInterface delegates form to ExecutePlaybookForm
+- MonitorTab adds "Last Change" sort mode for Checkmk services
+- Proxmox API functions unwrap nested response to return clean result
+
+Tests:
+- BoltPlugin tests updated for exec-based health check mock</p>
+</div>
+
+<h2>Files Changed</h2>
+<div class="file-list">
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/.env.example</span><span class="file-stats"><span class="add">+4</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/config/ConfigService.ts</span><span class="file-stats"><span class="add">+9</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/config/schema.ts</span><span class="file-stats"><span class="add">+1</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/integrations/IntegrationManager.ts</span><span class="file-stats"><span class="add">+2</span> <span class="del">-1</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/integrations/ansible/AnsiblePlugin.ts</span><span class="file-stats"><span class="add">+9</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/integrations/ansible/AnsibleService.ts</span><span class="file-stats"><span class="add">+326</span> <span class="del">-1</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/integrations/bolt/BoltPlugin.ts</span><span class="file-stats"><span class="add">+10</span> <span class="del">-32</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/integrations/bolt/BoltService.ts</span><span class="file-stats"><span class="add">+5</span></span></div>
+  <div class="file-item"><span class="file-status A">A</span><span class="file-path">backend/src/routes/playbookBrowser.ts</span><span class="file-stats"><span class="add">+245</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/server.ts</span><span class="file-stats"><span class="add">+13</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/src/utils/crashHandler.ts</span><span class="file-stats"><span class="add">+8</span> <span class="del">-4</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">backend/test/unit/integrations/BoltPlugin.test.ts</span><span class="file-stats"><span class="add">+24</span> <span class="del">-23</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">docs/configuration.md</span><span class="file-stats"><span class="add">+1</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">frontend/src/components/AnsiblePlaybookInterface.svelte</span><span class="file-stats"><span class="add">+18</span> <span class="del">-77</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">frontend/src/components/ExecutePlaybookForm.svelte</span><span class="file-stats"><span class="add">+385</span> <span class="del">-95</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">frontend/src/components/MonitorTab.svelte</span><span class="file-stats"><span class="add">+146</span> <span class="del">-57</span></span></div>
+  <div class="file-item"><span class="file-status A">A</span><span class="file-path">frontend/src/components/PlaybookParameterForm.svelte</span><span class="file-stats"><span class="add">+232</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">frontend/src/lib/checkmkApi.ts</span><span class="file-stats"><span class="add">+1</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">frontend/src/lib/monitorTabUtils.test.ts</span><span class="file-stats"><span class="add">+1</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">frontend/src/lib/monitorTabUtils.ts</span><span class="file-stats"><span class="add">+9</span></span></div>
+  <div class="file-item"><span class="file-status M">M</span><span class="file-path">frontend/src/lib/proxmoxApi.ts</span><span class="file-stats"><span class="add">+40</span> <span class="del">-8</span></span></div>
+</div>
+
+<h2>Pages Affected</h2>
+<ul class="pages-list">
+  <li><a href="http://localhost:5173/executions">Executions</a> — playbook execution form rewritten; new /api/playbooks endpoint; Bolt/Ansible --become/--run-as support</li>
+  <li><a href="http://localhost:5173/">Home / Monitor</a> — MonitorTab sort-by-last-state-change feature; checkmkApi lastStateChange field</li>
+  <li><a href="http://localhost:5173/provision">Provision</a> — Proxmox API response unwrapping changed</li>
+  <li><a href="http://localhost:5173/inventory">Inventory</a> — Startup health check warm may affect initial integration status display</li>
+  <li>All pages — IntegrationManager startup health check timing changed; crash handler config path</li>
+</ul>
+
+<h2>What to Check</h2>
+<ul class="check-list">
+  <li>Navigate to Executions → select a node → Ansible Playbook tab → verify the playbook browser loads and lists playbooks from ANSIBLE_PROJECT_PATH</li>
+  <li>Select a playbook → verify plays, parameters, and content viewer render correctly</li>
+  <li>Execute a playbook with parameters → verify extra-vars are passed to ansible-playbook</li>
+  <li>Toggle "Enter path manually" and confirm legacy manual-path mode still works</li>
+  <li>Monitor tab (Home page) → verify "Sort by: Last Change" button appears and reorders services</li>
+  <li>Provision page → create a Proxmox VM/LXC → confirm success/error messages display correctly (response shape changed)</li>
+  <li>Cold start: restart the backend → verify integrations show correct health status immediately (no brief "unavailable" flash)</li>
+  <li>Bolt command execution → ensure --run-as root is passed when sudo is toggled</li>
+</ul>
+
+<h2>Impact Analysis</h2>
+<div class="impact-section">
+  <p><strong>Primary impact:</strong> <span class="tag tag-ansible">ansible</span> The new playbook browser is additive — new API endpoints, new UI components. The existing AnsiblePlaybookInterface delegates to ExecutePlaybookForm, so the execution path is preserved but the form UX is completely rewritten.</p>
+  <p style="margin-top: 0.5rem;"><strong>Moderate impact:</strong> <span class="tag tag-bolt">bolt</span> BoltPlugin health check switches from raw spawn to exec(). Functionally equivalent but different code path — tests updated to match.</p>
+  <p style="margin-top: 0.5rem;"><strong>Moderate impact:</strong> <span class="tag tag-proxmox">proxmox</span> proxmoxApi.ts now unwraps the nested response object. If the API response shape from the backend doesn't match `{ result: { id, status, error?, results? } }`, provisioning will break.</p>
+  <p style="margin-top: 0.5rem;"><strong>Low impact:</strong> <span class="tag tag-checkmk">checkmk</span> MonitorTab sort mode is a new UI-only toggle. The lastStateChange field must be present in the Checkmk API response.</p>
+  <p style="margin-top: 0.5rem;"><strong>Cross-cutting:</strong> IntegrationManager startup health check runs synchronously before listen — adds startup latency proportional to slowest integration health check but prevents stale-status flash. Crash handler config is a no-behavior-change refactor when env var is unset.</p>
+</div>
+
+<h2>Codebase Stats</h2>
+<div class="stats-grid">
+  <div class="stat-card"><div class="value">21</div><div class="label">Files changed</div></div>
+  <div class="stat-card"><div class="value">+1527</div><div class="label">Lines added</div></div>
+  <div class="stat-card"><div class="value">-259</div><div class="label">Lines removed</div></div>
+  <div class="stat-card"><div class="value">Both</div><div class="label">Workspaces</div></div>
+</div>
+<div style="margin-top: 1rem;">
+  <span class="tag tag-backend">backend</span>
+  <span class="tag tag-frontend">frontend</span>
+  <span class="tag tag-docs">docs</span>
+  <span class="tag tag-ansible">ansible</span>
+  <span class="tag tag-bolt">bolt</span>
+  <span class="tag tag-checkmk">checkmk</span>
+  <span class="tag tag-proxmox">proxmox</span>
+</div>
+
+</div>
+</body>
+</html>

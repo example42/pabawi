@@ -141,7 +141,7 @@ State-change events are sourced from the Checkmk **Livestatus** `log` table when
 
 > **Design note:** these four post-loading states (data / empty / upstream-error+retry / unavailable) are mapped directly from the HTTP status of `GET /api/nodes/:nodeId/services`, so an operator can distinguish "host has no checks" from "Checkmk is down" from "Checkmk not configured".
 
-9. THE Monitor_Tab SHALL display a small header showing the linked host's Checkmk **folder path** and **labels**, sourced from the linked node's `sourceData["checkmk"].config` (`folder`, `labels`) passed in as props by NodeDetailPage — not from the `/services` response (whose contract stays a pure service array). The header SHALL be omitted gracefully when folder/labels are absent.
+1. THE Monitor_Tab SHALL display a small header showing the linked host's Checkmk **folder path** and **labels**, sourced from the linked node's `sourceData["checkmk"].config` (`folder`, `labels`) passed in as props by NodeDetailPage — not from the `/services` response (whose contract stays a pure service array). The header SHALL be omitted gracefully when folder/labels are absent.
 
 ### Requirement 10: Journal Integration
 
@@ -169,7 +169,7 @@ State-change events are sourced from the Checkmk **Livestatus** `log` table when
 6. THE backend SHALL enforce RBAC permission `checkmk:read` (resource `checkmk`, action `read` — following the repo's per-integration convention, e.g. `azure:read`, `ssh:read`) on all monitoring endpoints, applied at the router mount in server.ts via `rbacMiddleware('checkmk', 'read')`, consistent with the other `/api/nodes` routers. A new database migration (`014`) SHALL seed this permission and backfill it to the Viewer, Operator, Administrator, and Provisioner roles; without it every user receives 403.
 
 > **Note:** `GET /api/nodes/:nodeId/monitoring-events` (11.2) has no frontend consumer in v1.4.0 — the journal timeline obtains events directly via the LiveSource interface. It is retained deliberately for API completeness / future use.
-7. IF the Checkmk_Plugin is enabled but the upstream Checkmk API request fails or times out (within 30 seconds), THEN THE backend SHALL return HTTP 502 with an error response indicating the upstream failure reason
+1. IF the Checkmk_Plugin is enabled but the upstream Checkmk API request fails or times out (within 30 seconds), THEN THE backend SHALL return HTTP 502 with an error response indicating the upstream failure reason
 
 ### Requirement 12: Error Handling and Graceful Degradation
 

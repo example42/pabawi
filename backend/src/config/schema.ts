@@ -398,6 +398,7 @@ export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
 export const AppConfigSchema = z.object({
   port: z.number().int().positive().default(3000),
   host: z.string().default("localhost"),
+  crashDumpDir: z.string().optional(),
   boltProjectPath: z.string().default(process.cwd()),
   jwtSecret: z
     .string()

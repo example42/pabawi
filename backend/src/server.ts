@@ -12,6 +12,7 @@ import { createFactsRouter } from "./routes/facts";
 import { createCommandsRouter } from "./routes/commands";
 import { createTasksRouter } from "./routes/tasks";
 import { createPlaybooksRouter } from "./routes/playbooks";
+import { createPlaybookBrowserRouter } from "./routes/playbookBrowser";
 import { createExecutionsRouter } from "./routes/executions";
 import { createPuppetRouter } from "./routes/puppet";
 import { createPuppetHistoryRouter } from "./routes/puppetHistory";
@@ -450,6 +451,11 @@ async function startServer(): Promise<Express> {
 
     // Start health check scheduler for integrations
     if (integrationManager.getPluginCount() > 0) {
+      // Run one health check round synchronously to warm the cache before
+      // the server accepts requests — prevents the frontend from seeing stale
+      // "not available" status in the window between listen and first scheduled check.
+      await integrationManager.healthCheckAll(false);
+
       const startScheduler = integrationManager.startHealthCheckScheduler.bind(integrationManager);
       startScheduler();
       logger.info("Integration health check scheduler started", {
@@ -727,6 +733,13 @@ async function startServer(): Promise<Express> {
         streamingManager,
         container,
       ),
+    );
+    app.use(
+      "/api/playbooks",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('ansible', 'read'),
+      createPlaybookBrowserRouter(integrationManager, container),
     );
     app.use(
       "/api/executions",

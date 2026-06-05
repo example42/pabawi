@@ -1,10 +1,56 @@
 import { randomUUID } from "crypto";
 import { spawn, type ChildProcess } from "child_process";
-import { writeFileSync, rmSync, mkdtempSync } from "fs";
+import { writeFileSync, rmSync, mkdtempSync, readFileSync, readdirSync, statSync } from "fs";
 import { tmpdir } from "os";
-import { dirname, join } from "path";
+import { dirname, join, relative, extname } from "path";
+import { parse as parseYaml } from "yaml";
 import type { ExecutionResult, Node } from "../bolt/types";
 import type { NodeGroup } from "../types";
+
+/**
+ * Represents an Ansible playbook file discovered in the project
+ */
+export interface PlaybookFile {
+  /** Relative path from ANSIBLE_PROJECT_PATH */
+  path: string;
+  /** Filename without directory */
+  name: string;
+  /** Directory containing the playbook (relative) */
+  directory: string;
+}
+
+/**
+ * Parameter extracted from a playbook's vars_prompt or role defaults
+ */
+export interface PlaybookParameter {
+  name: string;
+  type: "String" | "Boolean" | "Integer" | "Array" | "Hash";
+  description?: string;
+  required: boolean;
+  default?: unknown;
+  private?: boolean;
+}
+
+/**
+ * Full playbook details including content and detected parameters
+ */
+export interface PlaybookDetails {
+  path: string;
+  name: string;
+  content: string;
+  plays: PlaybookPlay[];
+  parameters: PlaybookParameter[];
+}
+
+/**
+ * A single play within a playbook
+ */
+interface PlaybookPlay {
+  name?: string;
+  hosts?: string;
+  roles?: string[];
+  tasks?: number;
+}
 
 export interface StreamingCallback {
   onStdout?: (chunk: string) => void;
@@ -47,6 +93,7 @@ export class AnsibleService {
     nodeId: string,
     command: string,
     streamingCallback?: StreamingCallback,
+    options?: { become?: boolean },
   ): Promise<ExecutionResult> {
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
@@ -82,6 +129,10 @@ export class AnsibleService {
         "-a",
         command,
       ];
+    }
+
+    if (options?.become) {
+      args.push("--become");
     }
 
     const exec = await this.executeCommand("ansible", args, streamingCallback);
@@ -624,5 +675,276 @@ ${hostname} ansible_connection=ssh ansible_user=${user}
     } catch {
       // Ignore cleanup errors — temp dir cleanup must never break the caller
     }
+  }
+
+  /**
+   * List all playbook YAML files in the configured ANSIBLE_PROJECT_PATH.
+   *
+   * Recursively scans the project directory for .yml/.yaml files that look
+   * like playbooks (top-level array of plays). Excludes common non-playbook
+   * directories (roles, group_vars, host_vars, etc.).
+   */
+  public listPlaybooks(): PlaybookFile[] {
+    const playbooks: PlaybookFile[] = [];
+    this.scanForPlaybooks(this.ansibleProjectPath, playbooks);
+    return playbooks.sort((a, b) => a.path.localeCompare(b.path));
+  }
+
+  /**
+   * Get full details of a playbook including content and extracted parameters.
+   *
+   * Parses the YAML to extract:
+   * - vars_prompt entries (interactive variables)
+   * - vars with defaults (extra-vars candidates)
+   * - Play structure (name, hosts, roles, task count)
+   */
+  public getPlaybookDetails(playbookRelPath: string): PlaybookDetails | null {
+    // Validate path — must be relative, no traversal
+    if (playbookRelPath.startsWith("/") || playbookRelPath.includes("..")) {
+      return null;
+    }
+
+    const fullPath = join(this.ansibleProjectPath, playbookRelPath);
+    const resolvedFull = join(this.ansibleProjectPath, playbookRelPath);
+
+    // Ensure resolved path is within project (prevent symlink escape)
+    if (!resolvedFull.startsWith(this.ansibleProjectPath)) {
+      return null;
+    }
+
+    let content: string;
+    try {
+      content = readFileSync(fullPath, "utf8");
+    } catch {
+      return null;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = parseYaml(content);
+    } catch {
+      // Invalid YAML — return raw content without parse data
+      return {
+        path: playbookRelPath,
+        name: playbookRelPath.split("/").pop() ?? playbookRelPath,
+        content,
+        plays: [],
+        parameters: [],
+      };
+    }
+
+    const plays = this.extractPlays(parsed);
+    const parameters = this.extractParameters(parsed);
+
+    return {
+      path: playbookRelPath,
+      name: playbookRelPath.split("/").pop() ?? playbookRelPath,
+      content,
+      plays,
+      parameters,
+    };
+  }
+
+  /**
+   * Recursively scan for playbook files.
+   * Skips directories that typically contain task files, not playbooks.
+   */
+  private scanForPlaybooks(dir: string, results: PlaybookFile[]): void {
+    const EXCLUDED_DIRS = new Set([
+      "roles",
+      ".git",
+      "node_modules",
+      "__pycache__",
+      ".venv",
+      "venv",
+      "collections",
+      "molecule",
+      "filter_plugins",
+      "library",
+      "callback_plugins",
+      "action_plugins",
+      "lookup_plugins",
+      "module_utils",
+      "group_vars",
+      "host_vars",
+    ]);
+
+    let entries: string[];
+    try {
+      entries = readdirSync(dir);
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = join(dir, entry);
+      let stat;
+      try {
+        stat = statSync(fullPath);
+      } catch {
+        continue;
+      }
+
+      if (stat.isDirectory()) {
+        if (!EXCLUDED_DIRS.has(entry) && !entry.startsWith(".")) {
+          this.scanForPlaybooks(fullPath, results);
+        }
+        continue;
+      }
+
+      if (!stat.isFile()) continue;
+
+      const ext = extname(entry).toLowerCase();
+      if (ext !== ".yml" && ext !== ".yaml") continue;
+
+      // Quick check: read file and see if it parses as a playbook (array of plays)
+      if (this.isPlaybookFile(fullPath)) {
+        const relPath = relative(this.ansibleProjectPath, fullPath);
+        const dirPart = relative(this.ansibleProjectPath, dirname(fullPath));
+        results.push({
+          path: relPath,
+          name: entry,
+          directory: dirPart || ".",
+        });
+      }
+    }
+  }
+
+  /**
+   * Check if a YAML file looks like a playbook (top-level array with plays).
+   */
+  private isPlaybookFile(filePath: string): boolean {
+    try {
+      const content = readFileSync(filePath, "utf8");
+      const parsed: unknown = parseYaml(content);
+
+      // A playbook is an array of plays
+      if (!Array.isArray(parsed) || parsed.length === 0) return false;
+
+      // Each play should be an object with typical play keys
+      const firstPlay = parsed[0] as Record<string, unknown> | null;
+      if (typeof firstPlay !== "object" || firstPlay === null) return false;
+
+      const playKeys = Object.keys(firstPlay);
+      const playbookIndicators = [
+        "hosts",
+        "roles",
+        "tasks",
+        "pre_tasks",
+        "post_tasks",
+        "handlers",
+        "import_playbook",
+        "include",
+      ];
+
+      return playKeys.some((k) => playbookIndicators.includes(k));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Extract play summaries from parsed YAML.
+   */
+  private extractPlays(parsed: unknown): PlaybookPlay[] {
+    if (!Array.isArray(parsed)) return [];
+
+    const plays: PlaybookPlay[] = [];
+
+    for (const item of parsed) {
+      if (typeof item !== "object" || item === null) continue;
+      const play = item as Record<string, unknown>;
+
+      const roles = Array.isArray(play.roles)
+        ? play.roles
+            .map((r: unknown) => {
+              if (typeof r === "string") return r;
+              if (typeof r === "object" && r !== null && "role" in r) {
+                return String((r as Record<string, unknown>).role);
+              }
+              return null;
+            })
+            .filter((r): r is string => r !== null)
+        : undefined;
+
+      const taskCount = Array.isArray(play.tasks) ? play.tasks.length : 0;
+
+      plays.push({
+        name: typeof play.name === "string" ? play.name : undefined,
+        hosts: typeof play.hosts === "string" ? play.hosts : undefined,
+        roles,
+        tasks: taskCount > 0 ? taskCount : undefined,
+      });
+    }
+
+    return plays;
+  }
+
+  /**
+   * Extract parameters from a playbook.
+   *
+   * Sources of parameters (in priority order):
+   * 1. vars_prompt — explicitly prompted variables (required)
+   * 2. Top-level vars — serve as defaults that extra-vars can override
+   */
+  private extractParameters(parsed: unknown): PlaybookParameter[] {
+    if (!Array.isArray(parsed)) return [];
+
+    const params = new Map<string, PlaybookParameter>();
+
+    for (const item of parsed) {
+      if (typeof item !== "object" || item === null) continue;
+      const play = item as Record<string, unknown>;
+
+      // Extract vars_prompt
+      if (Array.isArray(play.vars_prompt)) {
+        for (const prompt of play.vars_prompt) {
+          if (typeof prompt !== "object" || prompt === null) continue;
+          const p = prompt as Record<string, unknown>;
+
+          const name = typeof p.name === "string" ? p.name : null;
+          if (!name) continue;
+
+          params.set(name, {
+            name,
+            type: "String",
+            description: typeof p.prompt === "string" ? p.prompt : undefined,
+            required: p.default === undefined,
+            default: p.default,
+            private: p.private === true,
+          });
+        }
+      }
+
+      // Extract vars (as optional parameters with defaults)
+      if (typeof play.vars === "object" && play.vars !== null && !Array.isArray(play.vars)) {
+        const vars = play.vars as Record<string, unknown>;
+        for (const [varName, varValue] of Object.entries(vars)) {
+          // Skip if already extracted from vars_prompt
+          if (params.has(varName)) continue;
+
+          params.set(varName, {
+            name: varName,
+            type: this.inferParameterType(varValue),
+            description: undefined,
+            required: false,
+            default: varValue,
+          });
+        }
+      }
+    }
+
+    return Array.from(params.values());
+  }
+
+  /**
+   * Infer the parameter type from a default value.
+   */
+  private inferParameterType(value: unknown): PlaybookParameter["type"] {
+    if (typeof value === "boolean") return "Boolean";
+    if (typeof value === "number") return "Integer";
+    if (Array.isArray(value)) return "Array";
+    if (typeof value === "object" && value !== null) return "Hash";
+    return "String";
   }
 }

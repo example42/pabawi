@@ -17,7 +17,7 @@ The numeric monitoring state of a **Service**: 0 OK, 1 WARN, 2 CRIT, 3 UNKNOWN.
 
 **State Change Event**:
 A transition of a **Service** from one **Service_State** to another at a point in time. In Pabawi this is *not* a Checkmk Event Console event — it is a service state transition.
-_Avoid_: "Event" unqualified (collides with Checkmk's Event Console, which is a different, log/trap-based concept this integration does not use).
+*Avoid*: "Event" unqualified (collides with Checkmk's Event Console, which is a different, log/trap-based concept this integration does not use).
 
 **REST source**:
 The Checkmk REST API v1 (`{serverUrl}/{site}/check_mk/api/1.0`, Bearer-authed over HTTPS). Source of host inventory and live **Service** status. Can also yield the *single most recent* **State Change Event** per service via the `last_state`/`state`/`last_state_change` columns.

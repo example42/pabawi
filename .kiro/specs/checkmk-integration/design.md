@@ -99,6 +99,7 @@ export class CheckmkPlugin extends BasePlugin implements InformationSourcePlugin
 ```
 
 **Responsibilities:**
+
 - Lifecycle management. `performInitialization()` validates config (throws only on config errors), then attempts `CheckmkService.testConnection()`; on connectivity failure it logs a warning, marks unhealthy, and **completes initialization** (does not throw) so the periodic health check can recover it without a restart (Requirements 2.3, 12.6)
 - Delegates REST communication to `CheckmkService` and Livestatus communication to `CheckmkLivestatusClient`
 - Maps Checkmk responses to Pabawi types (`Node`, `NodeGroup`, journal entries)
@@ -125,6 +126,7 @@ export class CheckmkService {
 ```
 
 **Responsibilities:**
+
 - Constructs the base URL: `{serverUrl}/{site}/check_mk/api/1.0`
 - Attaches `Authorization: Bearer {username} {password}` header to every request
 - Configures HTTPS agent based on `sslVerify` setting
@@ -148,6 +150,7 @@ export class CheckmkLivestatusClient {
 ```
 
 **Responsibilities:**
+
 - Opens a `net.Socket` (or `tls.connect` when `tls` is true; `rejectUnauthorized` from the shared `sslVerify`) to `host:port`
 - Writes an LQL query to the `log` table: `GET log` with `Columns: time host_name service_description state state_type plugin_output`, `Filter: class = 1`, `Filter: host_name = {hostname}`, `Filter: time >= {now-7d}`, `Limit: 500`, `OutputFormat: json`, then `ResponseHeader: fixed16` (or KeepAlive off, one request per connection)
 - Applies `timeoutMs` (default 5000); on connect/timeout/parse error throws so the plugin can fall back to REST
@@ -288,6 +291,7 @@ export function createMonitoringRouter(container: DIContainer): Router;
 RBAC is applied at the **router mount** in `server.ts` (`app.use("/api/nodes", authMiddleware, rateLimitMiddleware, rbacMiddleware('checkmk','read'), createMonitoringRouter(...))`), matching the existing `/api/nodes` routers — not per-route inside the router. The `checkmk:read` permission must be seeded by migration `014` and backfilled to Viewer/Operator/Administrator/Provisioner, or all requests 403. The router is mounted unconditionally; it returns 503 `CHECKMK_NOT_CONFIGURED` when the plugin is absent.
 
 Both endpoints:
+
 - Return 503 with `CHECKMK_NOT_CONFIGURED` if plugin not enabled
 - Return 404 with `NODE_NOT_FOUND` if hostname unknown to Checkmk
 - Return 502 with upstream error details on Checkmk API failure/timeout (30s)
@@ -397,6 +401,7 @@ The `JournalService` constructor receives the CheckmkPlugin in its `liveSources`
 ### Checkmk API Response Shapes (External)
 
 **GET `/domain-types/host_config/collections/all`** — Host inventory:
+
 ```json
 {
   "value": [
@@ -413,6 +418,7 @@ The `JournalService` constructor receives the CheckmkPlugin in its `liveSources`
 ```
 
 **GET `/objects/host/{hostname}/collections/services?columns=description&columns=state&columns=state_type&columns=plugin_output&columns=last_check&columns=last_state&columns=last_state_change`** — Service status (columns are mandatory):
+
 ```json
 {
   "value": [
@@ -432,6 +438,7 @@ The `JournalService` constructor receives the CheckmkPlugin in its `liveSources`
 ```
 
 **Events — primary: Livestatus `log` table (LQL over TCP, not REST).** `/domain-types/historical_event/...` does **not** exist in the REST API. Query:
+
 ```
 GET log
 Columns: time host_name service_description state state_type plugin_output
@@ -441,6 +448,7 @@ Filter: time >= 1699395200
 Limit: 500
 OutputFormat: json
 ```
+
 Response is a JSON array-of-arrays (one row per state change), mapped to `CheckmkEvent`.
 
 **Events — fallback: REST service-status derivation.** When Livestatus is unconfigured/unreachable, each service from the `getServices` response yields one `CheckmkEvent`: `previousState = last_state`, `currentState = state`, `timestamp = last_state_change`, `output = plugin_output`.
@@ -525,8 +533,6 @@ Response is a JSON array-of-arrays (one row per state change), mapped to `Checkm
 
 **Validates: Requirements 12.1, 8.6**
 
-
-
 ## Error Handling
 
 ### Strategy
@@ -588,6 +594,7 @@ The plugin does not require a restart to recover. The IntegrationManager's perio
 ### Unit Tests (`backend/test/unit/`)
 
 **CheckmkService tests:**
+
 - Auth header construction with various username/password values
 - URL construction from config (serverUrl + site)
 - HTTPS agent configuration (sslVerify true/false, http:// scheme)
@@ -595,11 +602,13 @@ The plugin does not require a restart to recover. The IntegrationManager's perio
 - Mandatory `columns=` query parameters present on the services request
 
 **CheckmkLivestatusClient tests:**
+
 - LQL `log` query construction (class=1, host_name, time≥now-7d, limit 500)
 - Row→`CheckmkEvent` mapping; TLS vs plaintext socket selection; `rejectUnauthorized` from `sslVerify`
 - Timeout aborts and surfaces an error (so the plugin can fall back)
 
 **CheckmkPlugin init & fallback tests:**
+
 - Init with REST unreachable → `initialized === true`, plugin unhealthy, **no throw**; a later successful `performHealthCheck()` flips healthy without re-init (Req 2.3/12.6)
 - Init with invalid config → throws
 - events: Livestatus reachable → Livestatus events; Livestatus unreachable/timeout → REST-derived events; Livestatus failure never flips overall health
@@ -608,6 +617,7 @@ The plugin does not require a restart to recover. The IntegrationManager's perio
 - Error handling for various HTTP status codes
 
 **CheckmkPlugin tests:**
+
 - Host-to-Node mapping (various attribute combinations)
 - Service filtering (missing fields omitted)
 - Event sorting (timestamp descending)
@@ -616,12 +626,14 @@ The plugin does not require a restart to recover. The IntegrationManager's perio
 - Graceful degradation (empty arrays on service errors)
 
 **ConfigService tests:**
+
 - Env var parsing for all CHECKMK_* variables
 - Validation of server URL format
 - SSL verify defaulting and parsing
 - Missing required vars when enabled
 
 **Route tests (supertest):**
+
 - 503 when plugin not configured
 - 404 for unknown node
 - 502 on upstream failure
@@ -653,6 +665,7 @@ it("maps any valid Checkmk host to a correct Pabawi Node", () => {
 ```
 
 **Properties to implement:**
+
 1. Plugin registration correctness (config combinations)
 2. Server URL validation (random strings)
 3. SSL verify parsing (random strings)
@@ -668,6 +681,7 @@ it("maps any valid Checkmk host to a correct Pabawi Node", () => {
 ### Frontend Tests (`frontend/src/components/`)
 
 **MonitorTab.test.ts:**
+
 - Renders loading state
 - Renders services grouped by state in correct order, with semantic state-badge colors
 - `502` → renders upstream-error state with Retry button; Retry triggers re-fetch
