@@ -14,6 +14,7 @@ import type {
   CheckmkConfig,
   CheckmkFailingService,
   CheckmkHost,
+  CheckmkHostStateSummary,
   CheckmkHostSummary,
   CheckmkServiceStatus,
 } from "./types";
@@ -484,6 +485,81 @@ export class CheckmkService {
       });
 
       return [];
+    }
+  }
+
+  /**
+   * Fetch host state summary from Checkmk.
+   *
+   * Queries the host collection for state and scheduled_downtime_depth columns,
+   * then aggregates into up/down/unreachable/inDowntime/total counts.
+   *
+   * Host states: 0 = UP, 1 = DOWN, 2 = UNREACHABLE.
+   * A host with scheduled_downtime_depth > 0 is counted as "in downtime"
+   * regardless of its current state.
+   */
+  async getHostStateSummary(): Promise<CheckmkHostStateSummary> {
+    try {
+      const response = await this.request(
+        "POST",
+        "/domain-types/host/collections/all",
+        DEFAULT_TIMEOUT_MS,
+        {
+          columns: ["name", "state", "scheduled_downtime_depth"],
+        },
+      );
+
+      const data = response as {
+        value?: {
+          extensions?: {
+            name?: string;
+            state?: number;
+            scheduled_downtime_depth?: number;
+          };
+        }[];
+      };
+
+      if (!Array.isArray(data.value)) {
+        return { up: 0, down: 0, unreachable: 0, inDowntime: 0, total: 0 };
+      }
+
+      const summary: CheckmkHostStateSummary = {
+        up: 0,
+        down: 0,
+        unreachable: 0,
+        inDowntime: 0,
+        total: 0,
+      };
+
+      for (const entry of data.value) {
+        const ext = entry.extensions;
+        if (!ext) continue;
+
+        summary.total += 1;
+        const downtimeDepth = ext.scheduled_downtime_depth ?? 0;
+
+        if (downtimeDepth > 0) {
+          summary.inDowntime += 1;
+        } else {
+          const state = ext.state ?? 0;
+          if (state === 0) summary.up += 1;
+          else if (state === 1) summary.down += 1;
+          else summary.unreachable += 1;
+        }
+      }
+
+      return summary;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to fetch host state summary from Checkmk", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "getHostStateSummary",
+        metadata: { serverUrl: this.config.serverUrl, errorMessage },
+      });
+
+      return { up: 0, down: 0, unreachable: 0, inDowntime: 0, total: 0 };
     }
   }
 

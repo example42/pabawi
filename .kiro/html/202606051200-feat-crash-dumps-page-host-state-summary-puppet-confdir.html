@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commit Report — feat(multi): crash dumps UI, host state summary, puppet confdir</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --border: #414868;
+    --text: #c0caf5;
+    --text-muted: #565f89;
+    --accent: #7aa2f7;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --orange: #ff9e64;
+    --yellow: #e0af68;
+    --purple: #bb9af7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { color: var(--accent); font-size: 1.5rem; margin-bottom: 0.5rem; }
+  h2 { color: var(--purple); font-size: 1.2rem; margin: 2rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  h3 { color: var(--orange); font-size: 1rem; margin: 1.2rem 0 0.5rem; }
+  p, li { margin-bottom: 0.4rem; }
+  ul { padding-left: 1.5rem; }
+  code {
+    background: var(--surface);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.85em;
+    color: var(--green);
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge-added { background: #1a3a2a; color: var(--green); }
+  .badge-modified { background: #2a2a1a; color: var(--yellow); }
+  .stat { display: inline-block; margin-right: 1.5rem; }
+  .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 0.8rem; color: var(--text-muted); }
+  table { width: 100%; border-collapse: collapse; margin: 0.5rem 0; }
+  th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; }
+  .plus { color: var(--green); }
+  .minus { color: var(--red); }
+  .timestamp { color: var(--text-muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+
+<h1>feat(multi): crash dumps UI, host state summary, puppet confdir</h1>
+<p class="timestamp">June 5, 2026 — Branch: 140</p>
+
+<h2>Commit Message</h2>
+<div class="card">
+<p><strong>feat(multi): crash dumps page, host state summary, puppet confdir</strong></p>
+<br>
+<p>Three unrelated improvements bundled on branch 140:</p>
+<ul>
+  <li><strong>Crash dumps admin page</strong> — New <code>/crash-dumps</code> route (admin-only) with backend API for listing, viewing, downloading, and deleting crash dump JSON files. Frontend table view with detail viewer and download support.</li>
+  <li><strong>Checkmk host state summary</strong> — New <code>getHostStateSummary()</code> method queries Checkmk for host state (up/down/unreachable/downtime). The monitoring overview endpoint now returns <code>hostStateSummary</code> and the home page renders a grid of host states instead of a plain count.</li>
+  <li><strong>Puppet agent --confdir</strong> — <code>buildPuppetCommand()</code> now passes <code>--confdir /etc/puppetlabs/puppet</code> explicitly so puppet agent resolves config correctly even when not running as root.</li>
+  <li><strong>Theme default</strong> — Default theme changed from <code>system</code> to <code>light</code> for new users without stored preference.</li>
+</ul>
+</div>
+
+<h2>Codebase Stats</h2>
+<div class="card">
+  <div class="stat"><span class="stat-value">13</span><br><span class="stat-label">Files changed</span></div>
+  <div class="stat"><span class="stat-value plus">+642</span><br><span class="stat-label">Lines added</span></div>
+  <div class="stat"><span class="stat-value minus">-14</span><br><span class="stat-label">Lines removed</span></div>
+  <div class="stat"><span class="stat-value">Both</span><br><span class="stat-label">Workspaces</span></div>
+  <div class="stat"><span class="stat-value">Checkmk</span><br><span class="stat-label">Integrations touched</span></div>
+</div>
+
+<h2>Files Changed</h2>
+<div class="card">
+<table>
+<thead><tr><th>Status</th><th>File</th><th>+/-</th></tr></thead>
+<tbody>
+<tr><td><span class="badge badge-added">A</span></td><td><code>backend/src/routes/crashDumps.ts</code></td><td><span class="plus">+255</span></td></tr>
+<tr><td><span class="badge badge-added">A</span></td><td><code>frontend/src/pages/CrashDumpsPage.svelte</code></td><td><span class="plus">+226</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>backend/src/integrations/checkmk/CheckmkService.ts</code></td><td><span class="plus">+76</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>frontend/src/pages/HomePage.svelte</code></td><td><span class="plus">+38</span> / <span class="minus">-4</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>backend/src/routes/puppet.ts</code></td><td><span class="plus">+13</span> / <span class="minus">-3</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>backend/src/server.ts</code></td><td><span class="plus">+10</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>backend/src/integrations/checkmk/CheckmkPlugin.ts</code></td><td><span class="plus">+8</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>backend/src/integrations/checkmk/types.ts</code></td><td><span class="plus">+8</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>frontend/src/lib/theme.svelte.ts</code></td><td><span class="plus">+6</span> / <span class="minus">-2</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>frontend/src/components/Navigation.svelte</code></td><td><span class="plus">+6</span> / <span class="minus">-2</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>backend/src/routes/integrations/monitoringOverview.ts</code></td><td><span class="plus">+5</span> / <span class="minus">-2</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>frontend/src/App.svelte</code></td><td><span class="plus">+4</span> / <span class="minus">-1</span></td></tr>
+<tr><td><span class="badge badge-modified">M</span></td><td><code>.kiro/specs/checkmk-integration/requirements.md</code></td><td><span class="plus">+1</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>Pages Affected</h2>
+<div class="card">
+<ul>
+  <li><a href="http://localhost:5173/">Home / Dashboard</a> — Checkmk host state grid replaces plain host count</li>
+  <li><a href="http://localhost:5173/crash-dumps">/crash-dumps</a> — <strong>New page</strong> — Admin crash dump viewer</li>
+  <li><a href="http://localhost:5173/monitor">/monitor</a> — Monitoring overview endpoint now includes hostStateSummary (backend change)</li>
+  <li>All pages — Navigation updated with Crash Dumps link in admin dropdown; theme default changed to light</li>
+</ul>
+</div>
+
+<h2>What to Check</h2>
+<div class="card">
+<h3>Crash Dumps Page</h3>
+<ul>
+  <li>Navigate to <code>/crash-dumps</code> as an admin user — verify table loads (empty state if no dumps exist)</li>
+  <li>If crash dumps exist: click "View" to open detail, verify JSON renders; click "Download" and confirm file downloads</li>
+  <li>Verify non-admin users receive 403 / are redirected away from the page</li>
+  <li>Confirm the "Crash Dumps" link appears in the admin dropdown menu</li>
+</ul>
+
+<h3>Home Page — Checkmk Host State Summary</h3>
+<ul>
+  <li>With Checkmk enabled: verify the Host Statistics card shows a grid (Up / In downtime / Unreachable / Down / Total) instead of the previous single total number</li>
+  <li>With Checkmk disabled: verify the monitoring section is hidden as before</li>
+</ul>
+
+<h3>Puppet Run</h3>
+<ul>
+  <li>Trigger a Puppet agent run on a node — verify <code>--confdir /etc/puppetlabs/puppet</code> appears in the command (check expert mode output)</li>
+  <li>Confirm puppet finds its config correctly even when executed via sudo on a non-root session</li>
+</ul>
+
+<h3>Theme</h3>
+<ul>
+  <li>Clear localStorage <code>theme</code> key, reload — verify app starts in light mode (previously would follow system preference)</li>
+</ul>
+</div>
+
+<h2>Impact Analysis</h2>
+<div class="card">
+<h3>Crash Dumps (isolated)</h3>
+<p>Fully additive. New route file + new page + server mount + navigation entry. No existing functionality is modified. Blast radius: zero — failure only affects the new page.</p>
+
+<h3>Checkmk Host State Summary (moderate)</h3>
+<p>Touches the Checkmk plugin, service, types, and the monitoring overview route. The <code>/api/monitoring/overview</code> response gains a new field (<code>hostStateSummary</code>) — additive, no breaking change for existing consumers. Home page rendering change is cosmetic.</p>
+
+<h3>Puppet --confdir (targeted)</h3>
+<p>Modifies <code>buildPuppetCommand()</code> which affects every Puppet agent invocation (single and multi-node). Low blast radius — additional argument is always safe; puppet accepts --confdir even when already using the default path.</p>
+
+<h3>Theme default (global cosmetic)</h3>
+<p>Affects first-time users or users without a stored theme preference. Existing users with a stored preference are unaffected.</p>
+</div>
+
+</body>
+</html>

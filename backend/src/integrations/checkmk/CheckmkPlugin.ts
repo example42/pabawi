@@ -35,6 +35,7 @@ import type {
   CheckmkFailingService,
   CheckmkEvent,
   CheckmkHostEvent,
+  CheckmkHostStateSummary,
   CheckmkHostSummary,
   CheckmkServiceStatus,
 } from "./types";
@@ -509,6 +510,13 @@ export class CheckmkPlugin
    */
   async getHostServiceSummary(): Promise<CheckmkHostSummary[]> {
     return this.service.getHostServiceSummary();
+  }
+
+  /**
+   * Get aggregated host state summary (up/down/unreachable/inDowntime/total).
+   */
+  async getHostStateSummary(): Promise<CheckmkHostStateSummary> {
+    return this.service.getHostStateSummary();
   }
 
   /**

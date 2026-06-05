@@ -21,6 +21,7 @@ import { createStreamingRouter, streamAuthMiddleware } from "./routes/streaming"
 import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
+import { createCrashDumpsRouter } from "./routes/crashDumps";
 import { createConfigRouter } from "./routes/config";
 import { asyncHandler } from "./routes/asyncHandler";
 import { createAuthRouter } from "./routes/auth";
@@ -814,6 +815,15 @@ async function startServer(): Promise<Express> {
       rateLimitMiddleware,
       rbacMiddleware("debug", "admin"),
       createDebugRouter(container),
+    );
+
+    // Crash dumps admin route
+    app.use(
+      "/api/crash-dumps",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware("debug", "admin"),
+      createCrashDumpsRouter(container),
     );
 
     // Conditionally initialize MCP server

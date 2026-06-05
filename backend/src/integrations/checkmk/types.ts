@@ -67,6 +67,14 @@ export interface CheckmkHostSummary {
   unknown: number;
 }
 
+export interface CheckmkHostStateSummary {
+  up: number;
+  down: number;
+  unreachable: number;
+  inDowntime: number;
+  total: number;
+}
+
 export const SERVICE_STATE_NAMES: Record<number, string> = {
   0: "OK",
   1: "WARN",

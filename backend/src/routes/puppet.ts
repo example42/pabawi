@@ -40,11 +40,18 @@ const MultiNodePuppetRunBodySchema = z.object({
 
 /**
  * Build the puppet agent command string from configuration options.
- * Uses `env` to set PATH so that puppet is found even when executed via sudo,
- * since `sudo` does not pass inline variable assignments to the command.
+ * Uses the absolute path to the puppet binary and explicitly sets --confdir
+ * to the system-wide config directory. Without --confdir, puppet resolves
+ * its config based on the effective uid: root → /etc/puppetlabs/puppet,
+ * any other user → ~/.puppetlabs/etc/puppet (which typically doesn't exist
+ * and causes fallback to compiled-in defaults like server=puppet).
  */
 function buildPuppetCommand(config: PuppetRunBody): string {
-  const parts = ["env", "PATH=/opt/puppetlabs/bin:$PATH", "puppet", "agent", "-t"];
+  const parts = [
+    "env", "PATH=/opt/puppetlabs/bin:$PATH", "puppet",
+    "agent", "-t",
+    "--confdir", "/etc/puppetlabs/puppet",
+  ];
 
   if (config.noop) {
     parts.push("--noop");
