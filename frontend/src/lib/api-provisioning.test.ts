@@ -15,7 +15,6 @@ import {
 import type {
   ProxmoxVMParams,
   ProxmoxLXCParams,
-  ProvisioningResult,
   ListIntegrationsResponse,
 } from './types/provisioning';
 
@@ -89,21 +88,28 @@ describe('Provisioning API Methods', () => {
         memory: 2048,
       };
 
-      const mockResult: ProvisioningResult = {
-        success: true,
-        taskId: 'task-123',
-        vmid: 100,
-        message: 'VM created successfully',
+      // Mock the raw API response shape that api.post returns (after JSON parsing)
+      const mockApiResponse = {
+        result: {
+          id: 'task-123',
+          status: 'success',
+          results: [{ output: { stdout: 'VM created successfully' } }],
+        },
       };
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockResult),
+        json: () => Promise.resolve(mockApiResponse),
       });
 
       const result = await createProxmoxVM(vmParams);
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({
+        success: true,
+        taskId: 'task-123',
+        vmid: 100,
+        message: 'VM created successfully',
+      });
       expect(mockFetch).toHaveBeenCalledWith(
         '/api/integrations/proxmox/provision/vm',
         expect.objectContaining({
@@ -144,21 +150,28 @@ describe('Provisioning API Methods', () => {
         memory: 512,
       };
 
-      const mockResult: ProvisioningResult = {
-        success: true,
-        taskId: 'task-456',
-        vmid: 200,
-        message: 'LXC created successfully',
+      // Mock the raw API response shape that api.post returns (after JSON parsing)
+      const mockApiResponse = {
+        result: {
+          id: 'task-456',
+          status: 'success',
+          results: [{ output: { stdout: 'LXC created successfully' } }],
+        },
       };
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve(mockResult),
+        json: () => Promise.resolve(mockApiResponse),
       });
 
       const result = await createProxmoxLXC(lxcParams);
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({
+        success: true,
+        taskId: 'task-456',
+        vmid: 200,
+        message: 'LXC created successfully',
+      });
       expect(mockFetch).toHaveBeenCalledWith(
         '/api/integrations/proxmox/provision/lxc',
         expect.objectContaining({
