@@ -5,14 +5,36 @@
 ### Added
 
 - **Checkmk monitoring integration.** Connects to the Checkmk REST API v1 to provide live monitoring data: host inventory discovery, service status, and state-change events. All data is fetched live (no caching).
-- **Monitor tab** on the node detail page displaying live service status from Checkmk, grouped by state (CRIT → WARN → UNKNOWN → OK) with colored badges, plugin output, and relative timestamps.
+- **Dedicated Monitor page** (`/monitor`) showing unhandled service problems across all hosts with severity grouping, host state summary, and acknowledged-problem tracking.
+- **Home page monitoring dashboard** displaying unhandled problems count and recent state-change events from Checkmk.
+- **Monitor tab** on the node detail page displaying live service status from Checkmk, grouped by state (CRIT → WARN → UNKNOWN → OK) with colored badges, plugin output, and relative timestamps. Supports "Sort by: Last Change" toggle for chronological view.
+- **Checkmk monitoring summary on node overview tab** showing per-host service state counts (OK/WARN/CRIT/UNKNOWN) at a glance.
+- **Auto-refresh and manual refresh controls** on the Monitor page with configurable interval.
+- **Ansible playbook browser.** `GET /api/playbooks` discovers YAML playbook files in `ANSIBLE_PROJECT_PATH`; `GET /api/playbooks/details?path=...` returns playbook structure (plays, hosts, roles, task count) and auto-extracted parameters from `vars_prompt` and top-level `vars`.
+- **PlaybookParameterForm component** rendering dynamic inputs for playbook variables with type-aware editors (String, Boolean, Integer, Array, Hash) and validation.
+- **ExecutePlaybookForm rewrite** with directory tree browser, search, content viewer, and auto-detected parameters replacing the previous manual-path textarea.
 - **Journal integration** for Checkmk state-change events — monitoring events appear in the node journal timeline alongside events from other sources.
 - `GET /api/nodes/:nodeId/services` endpoint returning live service monitoring data.
 - `GET /api/nodes/:nodeId/monitoring-events` endpoint returning state-change events with configurable limit.
+- `GET /api/nodes/:nodeId/monitoring-summary` endpoint returning per-host service state counts.
 - `CHECKMK_ENABLED`, `CHECKMK_SERVER_URL`, `CHECKMK_SITE`, `CHECKMK_USERNAME`, `CHECKMK_PASSWORD`, `CHECKMK_SSL_VERIFY` environment variables for configuration.
+- `PABAWI_CRASH_DUMP_DIR` configurable via `ConfigService` (previously env-only in the crash handler).
 - Checkmk integration documentation at `docs/integrations/checkmk.md`.
 - `monitoring:read` RBAC permission for monitoring endpoints.
 - Checkmk integration color (purple) in the integration color palette.
+- Checkmk `lastStateChange` field exposed in service status for chronological sorting.
+- Acknowledged flag on Checkmk service problems for distinguishing handled vs unhandled issues.
+
+### Changed
+
+- Bolt health check switched from raw `spawn` to `exec()` with shell resolution, fixing detection failures behind rbenv/asdf shims.
+- Bolt and Ansible command execution now pass `--run-as root` / `--become` when sudo is requested by the action.
+- Integration health checks run one synchronous round at startup before accepting requests, eliminating the brief "unavailable" flash on cold start.
+- Proxmox API functions (`createProxmoxVM`, `createProxmoxLXC`) unwrap the nested `{ result: { ... } }` response to return a clean `ProvisioningResult`.
+
+### Fixed
+
+- Ansible parallel-execution package action format handled correctly (was passing malformed arguments).
 
 ## [1.3.1] - 2026-06-01
 

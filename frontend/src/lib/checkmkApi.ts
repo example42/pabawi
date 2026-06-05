@@ -67,7 +67,7 @@ function extractArrayPayload<T>(
  * Validates Requirements: 9.2, 11.1
  */
 export async function getNodeServices(nodeId: string): Promise<ServiceStatus[]> {
-  const data = await get<unknown>(`/api/nodes/${encodeURIComponent(nodeId)}/services`, {
+  const data = await get(`/api/nodes/${encodeURIComponent(nodeId)}/services`, {
     maxRetries: 1,
     retryDelay: 1000,
   });
@@ -83,7 +83,7 @@ export async function getNodeMonitoringEvents(
   limit?: number,
 ): Promise<MonitoringEvent[]> {
   const params = limit ? `?limit=${String(limit)}` : '';
-  const data = await get<unknown>(
+  const data = await get(
     `/api/nodes/${encodeURIComponent(nodeId)}/monitoring-events${params}`,
     { maxRetries: 1, retryDelay: 1000 },
   );

@@ -70,5 +70,5 @@ export function groupServicesByState(services: ServiceStatus[]): ServiceGroup[] 
  * Sort services by lastStateChange (most recent first), returning a flat list.
  */
 export function sortServicesByLastStateChange(services: ServiceStatus[]): ServiceStatus[] {
-  return [...services].sort((a, b) => (b.lastStateChange ?? 0) - (a.lastStateChange ?? 0));
+  return [...services].sort((a, b) => b.lastStateChange - a.lastStateChange);
 }

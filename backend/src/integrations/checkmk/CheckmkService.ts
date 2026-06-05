@@ -227,7 +227,7 @@ export class CheckmkService {
         operation: "parseHostCollection",
         metadata: {
           serverUrl: this.config.serverUrl,
-          responseKeys: response !== null && typeof response === "object" ? Object.keys(response as Record<string, unknown>) : [],
+          responseKeys: response !== null && typeof response === "object" ? Object.keys(response) : [],
         },
       });
       return [];
