@@ -145,8 +145,17 @@
     unknown: number;
   }
 
+  interface CheckmkHostStateSummary {
+    up: number;
+    down: number;
+    unreachable: number;
+    inDowntime: number;
+    total: number;
+  }
+
   let isCheckmkActive = $state(false);
   let checkmkHostSummary = $state<CheckmkHostSummary[]>([]);
+  let checkmkHostStateSummary = $state<CheckmkHostStateSummary>({ up: 0, down: 0, unreachable: 0, inDowntime: 0, total: 0 });
   let checkmkLoading = $state(false);
   let checkmkError = $state<string | null>(null);
 
@@ -415,8 +424,10 @@
     try {
       const data = await get<{
         hostSummary: CheckmkHostSummary[];
+        hostStateSummary?: CheckmkHostStateSummary;
       }>('/api/monitoring/overview?hours=24&limit=500');
       checkmkHostSummary = data.hostSummary || [];
+      checkmkHostStateSummary = data.hostStateSummary || { up: 0, down: 0, unreachable: 0, inDowntime: 0, total: 0 };
     } catch (err) {
       // 503 means checkmk is not configured — not an error to display
       if (err instanceof Error && err.message.includes('503')) {
@@ -425,6 +436,7 @@
       }
       checkmkError = err instanceof Error ? err.message : 'Failed to load monitoring overview';
       checkmkHostSummary = [];
+      checkmkHostStateSummary = { up: 0, down: 0, unreachable: 0, inDowntime: 0, total: 0 };
     } finally {
       checkmkLoading = false;
     }
@@ -1035,7 +1047,7 @@
           onRetry={() => fetchCheckmkOverview()}
         />
       {:else}
-        {@const hostStats = { total: checkmkHostSummary.length }}
+        {@const hostStats = checkmkHostStateSummary}
         {@const serviceStats = checkmkHostSummary.reduce((acc, h) => ({
           total: acc.total + h.total,
           ok: acc.ok + h.ok,
@@ -1048,9 +1060,27 @@
           <!-- Host Statistics -->
           <div class="rounded-lg border border-gray-200 bg-white shadow dark:border-gray-700 dark:bg-gray-800 p-5">
             <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4">Host Statistics</h3>
-            <div class="flex items-baseline gap-2">
-              <span class="text-4xl font-bold text-gray-900 dark:text-white">{hostStats.total}</span>
-              <span class="text-sm text-gray-500 dark:text-gray-400">monitored hosts</span>
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <div class="text-2xl font-bold text-green-600 dark:text-green-400">{hostStats.up}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Up</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-blue-600 dark:text-blue-400">{hostStats.inDowntime}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">In downtime</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-orange-600 dark:text-orange-400">{hostStats.unreachable}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Unreachable</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-red-600 dark:text-red-400">{hostStats.down}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Down</div>
+              </div>
+              <div>
+                <div class="text-2xl font-bold text-gray-900 dark:text-white">{hostStats.total}</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400">Total</div>
+              </div>
             </div>
           </div>
 

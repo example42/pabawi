@@ -1,15 +1,17 @@
 type Theme = 'light' | 'dark' | 'system';
 
 class ThemeManager {
-  private _theme = $state<Theme>('system');
+  private _theme = $state<Theme>('light');
   private _resolvedTheme = $state<'light' | 'dark'>('light');
 
   constructor() {
-    // Initialize theme from localStorage or default to system
+    // Initialize theme from localStorage or default to light
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem('theme');
       if (stored === 'light' || stored === 'dark' || stored === 'system') {
         this._theme = stored;
+      } else {
+        this._theme = 'light';
       }
 
       this.updateResolvedTheme();

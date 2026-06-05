@@ -97,11 +97,12 @@ export function createMonitoringOverviewRouter(
       });
 
       try {
-        const [serviceProblems, events, hostSummary] = await Promise.race([
+        const [serviceProblems, events, hostSummary, hostStateSummary] = await Promise.race([
           Promise.all([
             plugin.getUnhandledServiceProblems(limit),
             plugin.getRecentEvents(hours, limit),
             plugin.getHostServiceSummary(),
+            plugin.getHostStateSummary(),
           ]),
           new Promise<never>((_, reject) => {
             setTimeout(() => {
@@ -110,7 +111,7 @@ export function createMonitoringOverviewRouter(
           }),
         ]);
 
-        res.json({ serviceProblems, events, hostSummary });
+        res.json({ serviceProblems, events, hostSummary, hostStateSummary });
       } catch (error: unknown) {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown upstream error";
