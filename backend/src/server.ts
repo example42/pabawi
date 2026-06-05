@@ -22,6 +22,7 @@ import { createIntegrationsRouter } from "./routes/integrations";
 import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
 import { createCrashDumpsRouter } from "./routes/crashDumps";
+import { createLogsRouter } from "./routes/logs";
 import { createConfigRouter } from "./routes/config";
 import { asyncHandler } from "./routes/asyncHandler";
 import { createAuthRouter } from "./routes/auth";
@@ -63,6 +64,7 @@ import type { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegrati
 import type { CheckmkPlugin } from "./integrations/checkmk/CheckmkPlugin";
 import { pluginRegistry } from "./plugins/registry";
 import { LoggerService } from "./services/LoggerService";
+import { LogBufferService } from "./services/LogBufferService";
 import { ExpertModeService } from "./services/ExpertModeService";
 import { PerformanceMonitorService } from "./services/PerformanceMonitorService";
 import { DIContainer } from "./container/DIContainer";
@@ -81,6 +83,10 @@ import { createMcpServer } from "./mcp/McpServer";
 async function startServer(): Promise<Express> {
   // Create logger early for startup logging
   const logger = new LoggerService();
+
+  // Attach in-memory log buffer for the admin Logs UI
+  const logBuffer = new LogBufferService(2000);
+  logger.setLogBuffer(logBuffer);
 
   // Install crash handlers early so unhandled failures (including during startup)
   // are captured to disk with full context, rather than being lost on process exit.
@@ -824,6 +830,15 @@ async function startServer(): Promise<Express> {
       rateLimitMiddleware,
       rbacMiddleware("debug", "admin"),
       createCrashDumpsRouter(container),
+    );
+
+    // Logs admin route (in-memory ring buffer)
+    app.use(
+      "/api/logs",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware("debug", "admin"),
+      createLogsRouter(container),
     );
 
     // Conditionally initialize MCP server

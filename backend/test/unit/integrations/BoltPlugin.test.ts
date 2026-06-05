@@ -189,7 +189,7 @@ describe("BoltPlugin", () => {
       const result = await boltPlugin.executeAction(action);
 
       expect(result).toEqual(mockResult);
-      expect(mockBoltService.runCommand).toHaveBeenCalledWith("node1", "uptime", undefined, undefined);
+      expect(mockBoltService.runCommand).toHaveBeenCalledWith("node1", "uptime", undefined);
     });
 
     it("should execute task action", async () => {

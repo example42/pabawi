@@ -5,6 +5,8 @@
  * log level hierarchy enforcement across all backend components.
  */
 
+import type { LogBufferService, LogEntry } from './LogBufferService';
+
 /**
  * Log level type definition
  * Hierarchy: error > warn > info > debug
@@ -42,6 +44,7 @@ export class LoggerService {
     info: 2,
     debug: 3,
   };
+  private logBuffer: LogBufferService | null = null;
 
   /**
    * Create a new LoggerService instance
@@ -52,6 +55,38 @@ export class LoggerService {
     // Read from environment variable or use provided level or default to 'info'
     const envLevel = process.env.LOG_LEVEL?.toLowerCase();
     this.level = level ?? this.validateLogLevel(envLevel) ?? 'info';
+  }
+
+  /**
+   * Attach a LogBufferService to capture log entries in memory.
+   * Must be called after construction (to avoid circular dependency during bootstrap).
+   */
+  setLogBuffer(buffer: LogBufferService): void {
+    this.logBuffer = buffer;
+  }
+
+  /**
+   * Get the attached LogBufferService (if any).
+   */
+  getLogBuffer(): LogBufferService | null {
+    return this.logBuffer;
+  }
+
+  /**
+   * Emit a structured entry to the ring buffer (if attached).
+   */
+  private emitToBuffer(level: LogLevel, message: string, context?: LogContext): void {
+    if (!this.logBuffer) return;
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      component: context?.component,
+      integration: context?.integration,
+      operation: context?.operation,
+      metadata: context?.metadata,
+    };
+    this.logBuffer.push(entry);
   }
 
   /**
@@ -150,6 +185,8 @@ export class LoggerService {
    * @param error - Optional error object
    */
   public error(message: string, context?: LogContext, error?: Error): void {
+    this.emitToBuffer('error', message, context);
+
     if (!this.shouldLog('error')) {
       return;
     }
@@ -170,6 +207,8 @@ export class LoggerService {
    * @param context - Optional context information
    */
   public warn(message: string, context?: LogContext): void {
+    this.emitToBuffer('warn', message, context);
+
     if (!this.shouldLog('warn')) {
       return;
     }
@@ -185,6 +224,8 @@ export class LoggerService {
    * @param context - Optional context information
    */
   public info(message: string, context?: LogContext): void {
+    this.emitToBuffer('info', message, context);
+
     if (!this.shouldLog('info')) {
       return;
     }
@@ -201,6 +242,8 @@ export class LoggerService {
    * @param context - Optional context information
    */
   public debug(message: string, context?: LogContext): void {
+    this.emitToBuffer('debug', message, context);
+
     if (!this.shouldLog('debug')) {
       return;
     }
