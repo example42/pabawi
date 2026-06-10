@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { AuthenticationService } from './AuthenticationService';
 import { SetupService } from './SetupService';
 import { validatePassword } from '../utils/passwordValidation';
+import type { IdTokenClaims } from './EntraIdService';
 
 /**
  * User model from database
@@ -47,6 +48,16 @@ const ROLE_COLUMNS = `id, name, description,
   is_built_in AS "isBuiltIn",
   created_at  AS "createdAt",
   updated_at  AS "updatedAt"`;
+
+const FEDERATED_IDENTITY_COLUMNS = `id,
+  user_id    AS "userId",
+  provider,
+  subject,
+  issuer,
+  email,
+  id_token   AS "idToken",
+  created_at AS "createdAt",
+  updated_at AS "updatedAt"`;
 
 /**
  * User data transfer object (without password)
@@ -129,6 +140,21 @@ export interface Role {
   name: string;
   description: string;
   isBuiltIn: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Federated identity link — maps an external IdP subject to a Pabawi user
+ */
+export interface FederatedIdentity {
+  id: string;
+  userId: string;
+  provider: string;
+  subject: string;
+  issuer: string;
+  email: string | null;
+  idToken: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -633,6 +659,195 @@ export class UserService {
       updatedAt: user.updatedAt,
       lastLoginAt: user.lastLoginAt
     };
+  }
+
+  /**
+   * Derive a valid username from IdToken claims.
+   *
+   * If preferred_username matches ^[a-zA-Z0-9_]{3,50}$, use it directly.
+   * Otherwise, derive from the email local-part by replacing disallowed
+   * characters with underscores and truncating to 50 characters.
+   */
+  private deriveUsername(claims: IdTokenClaims): string {
+    const validUsernamePattern = /^[a-zA-Z0-9_]{3,50}$/;
+
+    if (claims.preferred_username && validUsernamePattern.test(claims.preferred_username)) {
+      return claims.preferred_username;
+    }
+
+    const localPart = claims.email.split('@')[0];
+    const sanitized = localPart.replace(/[^a-zA-Z0-9_]/g, '_');
+    return sanitized.slice(0, 50);
+  }
+
+  /**
+   * Create a new user from federated identity (SSO) claims.
+   *
+   * Creates the user with null password_hash, is_active=1, assigns the
+   * default viewer role, and creates a federated_identities record linking
+   * the user to the external IdP.
+   *
+   * @param claims - Validated ID token claims from the identity provider
+   * @returns Created user
+   * @throws Error if username uniqueness constraint is violated
+   */
+  public async createFederatedUser(claims: IdTokenClaims): Promise<User> {
+    const username = this.deriveUsername(claims);
+
+    // Use a transaction to ensure atomicity — no partial records
+    return this.db.withTransaction(async () => {
+      // Check username uniqueness
+      const existingUsername = await this.getUserByUsername(username);
+      if (existingUsername) {
+        throw new Error(
+          `Account creation failed: derived username "${username}" already exists`
+        );
+      }
+
+      // Check email uniqueness (a separate user with this email should not exist;
+      // email-match linking is handled by the caller before invoking this method)
+      const existingEmail = await this.getUserByEmail(claims.email);
+      if (existingEmail) {
+        throw new Error(
+          `Account creation failed: email "${claims.email}" already exists`
+        );
+      }
+
+      const userId = randomUUID();
+      const now = new Date().toISOString();
+
+      // Insert user with null password_hash (federation-only)
+      await this.db.execute(
+        `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, ?, ?, 1, 0, ?, ?)`,
+        [
+          userId,
+          username,
+          claims.email,
+          claims.given_name || '',
+          claims.family_name || '',
+          now,
+          now
+        ]
+      );
+
+      // Assign default viewer role
+      const defaultRoleId = await this.setupService.getDefaultNewUserRole();
+      if (defaultRoleId) {
+        await this.db.execute(
+          `INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)`,
+          [userId, defaultRoleId, now]
+        );
+      }
+
+      // Create federated identity record
+      const federatedId = randomUUID();
+      await this.db.execute(
+        `INSERT INTO federated_identities (id, user_id, provider, subject, issuer, email, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          federatedId,
+          userId,
+          'entra-id',
+          claims.sub,
+          claims.iss,
+          claims.email,
+          now,
+          now
+        ]
+      );
+
+      const user = await this.getUserById(userId);
+      if (!user) {
+        throw new Error('Failed to create federated user');
+      }
+
+      return user;
+    });
+  }
+
+  /**
+   * Link an existing user account to a federated identity.
+   *
+   * Used when a local user with the same email is found during SSO login —
+   * preserves the existing password_hash so local login remains available.
+   *
+   * @param userId - Existing Pabawi user ID
+   * @param provider - Identity provider name (e.g. 'entra-id')
+   * @param subject - The IdP subject claim (unique per tenant+user)
+   * @param issuer - Token issuer URL
+   * @param email - Email from the IdP (informational)
+   */
+  public async linkFederatedIdentity(
+    userId: string,
+    provider: string,
+    subject: string,
+    issuer: string,
+    email: string | null,
+  ): Promise<FederatedIdentity> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+
+    try {
+      await this.db.execute(
+        `INSERT INTO federated_identities (id, user_id, provider, subject, issuer, email, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, userId, provider, subject, issuer, email, now, now]
+      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('UNIQUE') || message.includes('unique') || message.includes('duplicate')) {
+        throw new Error(
+          `Federated identity already linked: provider=${provider}, subject=${subject}`
+        );
+      }
+      throw err;
+    }
+
+    const identity = await this.db.queryOne<FederatedIdentity>(
+      `SELECT ${FEDERATED_IDENTITY_COLUMNS} FROM federated_identities WHERE id = ?`,
+      [id]
+    );
+    if (!identity) {
+      throw new Error('Failed to create federated identity link');
+    }
+
+    return identity;
+  }
+
+  /**
+   * Look up a user by their federated identity (provider + subject).
+   *
+   * @param provider - Identity provider name (e.g. 'entra-id')
+   * @param subject - The IdP subject claim
+   * @returns The linked user, or null if no matching federated identity exists
+   */
+  public async findByFederatedIdentity(
+    provider: string,
+    subject: string,
+  ): Promise<User | null> {
+    const identity = await this.db.queryOne<FederatedIdentity>(
+      `SELECT ${FEDERATED_IDENTITY_COLUMNS} FROM federated_identities
+       WHERE provider = ? AND subject = ?`,
+      [provider, subject]
+    );
+
+    if (!identity) {
+      return null;
+    }
+
+    return this.getUserById(identity.userId);
+  }
+
+  /**
+   * Public wrapper around the private getUserByEmail method.
+   * Used by EntraIdService for email-match account linking during SSO.
+   *
+   * @param email - Email address to search for
+   * @returns User or null if not found
+   */
+  public async findByEmail(email: string): Promise<User | null> {
+    return this.getUserByEmail(email);
   }
 
 }

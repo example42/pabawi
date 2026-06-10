@@ -20,6 +20,7 @@ import {
 import { ZodError } from "zod";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import type { EntraIdService } from "../services/EntraIdService";
 
 /**
  * Zod schema for user registration
@@ -80,6 +81,35 @@ export function createAuthRouter(
   const userService = new UserService(databaseService.getAdapter(), authService);
   const setupService = new SetupService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
+
+  /**
+   * Resolve EntraIdService from the container (if registered).
+   */
+  function getEntraIdService(): EntraIdService | null {
+    const services = (container as unknown as { services: Map<string, unknown> }).services;
+    const service = services.get("entraId") as EntraIdService | undefined;
+    return service ?? null;
+  }
+
+  /**
+   * GET /api/auth/providers
+   * Returns available authentication methods (public, no auth required)
+   *
+   * Requirements: 11.1, 11.2, 11.3, 11.4, 11.5
+   */
+  router.get(
+    "/providers",
+    asyncHandler((_req: Request, res: Response): void => {
+      const providers: Record<string, unknown> = { local: true };
+
+      const entraIdService = getEntraIdService();
+      if (entraIdService) {
+        providers.entraId = entraIdService.getProviderInfo();
+      }
+
+      res.status(200).json(providers);
+    }),
+  );
 
   /**
    * POST /api/auth/register
@@ -388,6 +418,35 @@ export function createAuthRouter(
           operation: "logout",
           metadata: { userId: req.user?.userId, username: req.user?.username },
         });
+
+        // Check if user session was established via Entra ID
+        const entraIdService = getEntraIdService();
+        if (entraIdService && req.user?.userId) {
+          try {
+            const fedIdentity = await databaseService.getAdapter().queryOne<{
+              idToken: string | null;
+            }>(
+              `SELECT id_token AS "idToken" FROM federated_identities WHERE user_id = ? AND provider = 'entra-id'`,
+              [req.user.userId],
+            );
+
+            if (fedIdentity?.idToken) {
+              const entraIdLogoutUrl = entraIdService.buildLogoutUrl(fedIdentity.idToken);
+              res.status(200).json({
+                message: "Logout successful",
+                entraIdLogoutUrl,
+              });
+              return;
+            }
+          } catch (lookupErr) {
+            // Best-effort: federated identity lookup must not fail the logout
+            logger.warn("Failed to look up federated identity during logout", {
+              component: "AuthRouter",
+              operation: "logout",
+              metadata: { userId: req.user.userId, error: lookupErr instanceof Error ? lookupErr.message : String(lookupErr) },
+            });
+          }
+        }
 
         // Return 200 OK with success message
         res.status(200).json({

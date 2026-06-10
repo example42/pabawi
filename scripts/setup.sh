@@ -388,6 +388,38 @@ if [[ "$SKIP_ENV" != "true" ]]; then
     ask AZURE_RESOURCE_GROUPS "Azure Resource Groups (comma-separated, leave empty for all)" ""
   fi
 
+  # ── Azure Entra ID SSO ───────────────────────────────────────────────
+  ask_yn ENTRA_ID_ENABLED "Enable Azure Entra ID SSO (Sign in with Microsoft)?" "n"
+  ENTRA_ID_TENANT_ID=""
+  ENTRA_ID_CLIENT_ID=""
+  ENTRA_ID_CLIENT_SECRET=""
+  ENTRA_ID_REDIRECT_URI=""
+  ENTRA_ID_SCOPES=""
+  ENTRA_ID_GROUP_MAPPING=""
+  ENTRA_ID_POST_LOGOUT_REDIRECT_URI=""
+  if [[ "$ENTRA_ID_ENABLED" == "true" ]]; then
+    ask ENTRA_ID_TENANT_ID "Entra ID Tenant (Directory) ID" ""
+    while [[ -z "$ENTRA_ID_TENANT_ID" ]]; do
+      error "Tenant ID is required when Entra ID SSO is enabled."
+      ask ENTRA_ID_TENANT_ID "Entra ID Tenant (Directory) ID" ""
+    done
+    ask ENTRA_ID_CLIENT_ID "Entra ID Application (Client) ID" ""
+    while [[ -z "$ENTRA_ID_CLIENT_ID" ]]; do
+      error "Client ID is required when Entra ID SSO is enabled."
+      ask ENTRA_ID_CLIENT_ID "Entra ID Application (Client) ID" ""
+    done
+    ask ENTRA_ID_CLIENT_SECRET "Entra ID Client Secret" ""
+    while [[ -z "$ENTRA_ID_CLIENT_SECRET" ]]; do
+      error "Client Secret is required when Entra ID SSO is enabled."
+      ask ENTRA_ID_CLIENT_SECRET "Entra ID Client Secret" ""
+    done
+    local default_redirect="http://localhost:3000/api/auth/entra-id/callback"
+    ask ENTRA_ID_REDIRECT_URI "OAuth Redirect URI" "$default_redirect"
+    ask ENTRA_ID_SCOPES "OAuth Scopes (comma-separated, leave empty for default)" ""
+    ask ENTRA_ID_GROUP_MAPPING "Group-to-role mapping JSON (leave empty to skip)" ""
+    ask ENTRA_ID_POST_LOGOUT_REDIRECT_URI "Post-logout redirect URI (leave empty for app base URL)" ""
+  fi
+
   # ── Puppet Node SSL Certificates ────────────────────────────────────────
   PUPPET_NODE_CERTS_WRITE="false"
   PUPPET_NODE_SSL_CA=""
@@ -535,6 +567,21 @@ EOF
     [[ -n "$AZURE_CLIENT_ID" ]]     && echo "AZURE_CLIENT_ID=${AZURE_CLIENT_ID}" >> "$ENV_FILE"
     [[ -n "$AZURE_CLIENT_SECRET" ]] && echo "AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET}" >> "$ENV_FILE"
     [[ -n "$AZURE_RESOURCE_GROUPS" ]] && echo "AZURE_RESOURCE_GROUPS=${AZURE_RESOURCE_GROUPS}" >> "$ENV_FILE"
+  fi
+
+  if [[ "$ENTRA_ID_ENABLED" == "true" ]]; then
+    cat >> "$ENV_FILE" <<EOF
+
+# ── Azure Entra ID SSO ──────────────────────────────
+ENTRA_ID_ENABLED=true
+ENTRA_ID_TENANT_ID=${ENTRA_ID_TENANT_ID}
+ENTRA_ID_CLIENT_ID=${ENTRA_ID_CLIENT_ID}
+ENTRA_ID_CLIENT_SECRET=${ENTRA_ID_CLIENT_SECRET}
+ENTRA_ID_REDIRECT_URI=${ENTRA_ID_REDIRECT_URI}
+EOF
+    [[ -n "$ENTRA_ID_SCOPES" ]]        && echo "ENTRA_ID_SCOPES=${ENTRA_ID_SCOPES}" >> "$ENV_FILE"
+    [[ -n "$ENTRA_ID_GROUP_MAPPING" ]] && echo "ENTRA_ID_GROUP_MAPPING=${ENTRA_ID_GROUP_MAPPING}" >> "$ENV_FILE"
+    [[ -n "$ENTRA_ID_POST_LOGOUT_REDIRECT_URI" ]] && echo "ENTRA_ID_POST_LOGOUT_REDIRECT_URI=${ENTRA_ID_POST_LOGOUT_REDIRECT_URI}" >> "$ENV_FILE"
   fi
 
   if [[ "$PUPPET_NODE_CERTS_WRITE" == "true" ]]; then

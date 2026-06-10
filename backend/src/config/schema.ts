@@ -377,6 +377,23 @@ export const CheckmkConfigSchema = z.object({
 export type CheckmkConfig = z.infer<typeof CheckmkConfigSchema>;
 
 /**
+ * Azure Entra ID (OpenID Connect) authentication provider configuration schema
+ */
+export const EntraIdConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  tenantId: z.string().min(1),
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  redirectUri: z.string().url(),
+  scopes: z.array(z.string()).default(["openid", "profile", "email"]),
+  groupMapping: z.record(z.string(), z.string()).nullable().default(null),
+  postLogoutRedirectUri: z.string().url().optional(),
+  jwksCacheTtlMs: z.number().int().positive().default(86400000), // 24 hours
+});
+
+export type EntraIdConfig = z.infer<typeof EntraIdConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
@@ -434,6 +451,7 @@ export const AppConfigSchema = z.object({
   ui: UIConfigSchema.default({ showHomePageRunChart: true }),
   mcpEnabled: z.boolean().default(false),
   mcpAuthToken: z.string().optional(),
+  entraId: EntraIdConfigSchema.optional(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

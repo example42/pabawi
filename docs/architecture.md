@@ -155,6 +155,7 @@ backend/src/
 │   ├── CommandWhitelistService.ts  security: allowed commands
 │   ├── DatabaseService.ts          SQLite, migrations
 │   ├── AuthenticationService.ts    JWT auth
+│   ├── EntraIdService.ts           Azure Entra ID SSO (OIDC, PKCE, user provisioning)
 │   ├── BatchExecutionService.ts    multi-node execution
 │   ├── UserService.ts
 │   ├── RoleService.ts
@@ -181,6 +182,7 @@ frontend/src/
 └── lib/
     ├── router.svelte.ts            client-side router (Svelte 5 runes)
     ├── auth.svelte.ts              JWT auth state
+    ├── entraIdAuth.svelte.ts       Entra ID SSO state (provider discovery, callback handling)
     ├── api.ts                      HTTP infrastructure (get, post, put, del, error handling)
     ├── proxmoxApi.ts               Proxmox provisioning API functions
     ├── awsApi.ts                   AWS EC2 API functions
@@ -208,6 +210,7 @@ Schema is managed by sequential migration files in `database/migrations/`. A mig
 
 - **Command whitelisting** — `CommandWhitelistService` validates every command before execution. Set `COMMAND_WHITELIST_ALLOW_ALL=false` in production.
 - **JWT authentication** — all API routes behind auth middleware when `AUTH_ENABLED=true`.
+- **Azure Entra ID SSO** — optional federated authentication via OpenID Connect (OAuth 2.0 Authorization Code + PKCE). Coexists with local auth. See [integrations/entra-id.md](integrations/entra-id.md).
 - **RBAC** — role-based access control via `UserService`, `RoleService`, `PermissionService`. See [permissions-rbac.md](./permissions-rbac.md).
 - **Rate limiting** — applied at middleware level.
 - **Security headers** — helmet middleware.

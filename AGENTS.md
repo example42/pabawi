@@ -95,9 +95,9 @@ The frontend uses **Svelte 5 runes** throughout (`$state()`, `$effect()`, `$deri
 
 ### Configuration
 
-All configuration is via `backend/.env`. Run `scripts/setup.sh` for interactive setup. Key variable groups: `PORT/HOST/LOG_LEVEL`, `JWT_SECRET` (required), `PABAWI_LIFECYCLE_TOKEN` (optional), `BOLT_*`, `PUPPETDB_*`, `PUPPETSERVER_*`, `HIERA_*`, `ANSIBLE_*`, `SSH_*`, `AWS_*`, `AZURE_*`, `PROXMOX_*`, `COMMAND_WHITELIST*`, `CACHE_*`, `CONCURRENT_EXECUTION_LIMIT`, `MCP_ENABLED`.
+All configuration is via `backend/.env`. Run `scripts/setup.sh` for interactive setup. Key variable groups: `PORT/HOST/LOG_LEVEL`, `JWT_SECRET` (required), `PABAWI_LIFECYCLE_TOKEN` (optional), `ENTRA_ID_*` (SSO), `BOLT_*`, `PUPPETDB_*`, `PUPPETSERVER_*`, `HIERA_*`, `ANSIBLE_*`, `SSH_*`, `AWS_*`, `AZURE_*`, `PROXMOX_*`, `COMMAND_WHITELIST*`, `CACHE_*`, `CONCURRENT_EXECUTION_LIMIT`, `MCP_ENABLED`.
 
-See `docs/configuration.md` for the full reference. Other useful docs: `docs/mcp.md` (MCP setup and tools), `docs/permissions-rbac.md` (RBAC model), `docs/architecture.md` (system overview), `docs/api.md` (REST API reference), `docs/integrations/` (per-integration guides).
+See `docs/configuration.md` for the full reference. Other useful docs: `docs/mcp.md` (MCP setup and tools), `docs/permissions-rbac.md` (RBAC model), `docs/architecture.md` (system overview), `docs/api.md` (REST API reference), `docs/integrations/` (per-integration guides), `docs/integrations/entra-id.md` (Azure Entra ID SSO setup).
 
 ### Testing conventions
 

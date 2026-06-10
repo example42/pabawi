@@ -74,6 +74,9 @@ import { AuthenticationService } from "./services/AuthenticationService";
 import { UserService } from "./services/UserService";
 import { RoleService } from "./services/RoleService";
 import { PermissionService } from "./services/PermissionService";
+import { AuditLoggingService } from "./services/AuditLoggingService";
+import { EntraIdService } from "./services/EntraIdService";
+import { createEntraIdAuthRouter } from "./routes/entraIdAuth";
 import { provisionMcpServiceUser } from "./mcp/McpServiceUser";
 import { createMcpServer } from "./mcp/McpServer";
 
@@ -575,6 +578,70 @@ async function startServer(): Promise<Express> {
     const authRateLimitMiddleware = createAuthRateLimitMiddleware();
     app.use("/api/auth", authRateLimitMiddleware, createAuthRouter(databaseService, container));
 
+    // Conditionally initialize Entra ID SSO authentication
+    const entraIdConfig = configService.getEntraIdConfig();
+    let entraIdCleanupInterval: ReturnType<typeof setInterval> | undefined;
+    if (entraIdConfig?.enabled) {
+      logger.info("Entra ID authentication enabled, initializing...", {
+        component: "Server",
+        operation: "initializeEntraId",
+      });
+
+      try {
+        const auditLogger = new AuditLoggingService(databaseService.getAdapter());
+        const authService = new AuthenticationService(
+          databaseService.getAdapter(),
+          configService.getJwtSecret(),
+          auditLogger,
+        );
+        const userService = new UserService(databaseService.getAdapter(), authService);
+        const roleService = new RoleService(databaseService.getAdapter());
+
+        const entraIdService = new EntraIdService(
+          databaseService.getAdapter(),
+          entraIdConfig,
+          authService,
+          userService,
+          roleService,
+          auditLogger,
+          logger,
+        );
+        container.register("entraId", entraIdService);
+
+        app.use(
+          "/api/auth/entra-id",
+          authRateLimitMiddleware,
+          createEntraIdAuthRouter(databaseService, container),
+        );
+
+        // Periodic cleanup of expired OAuth state entries (every 5 minutes)
+        entraIdCleanupInterval = setInterval(() => {
+          entraIdService.cleanupExpiredState().catch((err: unknown) => {
+            logger.warn("Entra ID state cleanup failed", {
+              component: "Server",
+              operation: "entraIdCleanup",
+              metadata: { error: err instanceof Error ? err.message : String(err) },
+            });
+          });
+        }, 5 * 60 * 1000);
+
+        logger.info("Entra ID authentication initialized, /api/auth/entra-id routes mounted", {
+          component: "Server",
+          operation: "initializeEntraId",
+        });
+      } catch (error) {
+        logger.error("Failed to initialize Entra ID authentication", {
+          component: "Server",
+          operation: "initializeEntraId",
+        }, error instanceof Error ? error : undefined);
+      }
+    } else {
+      logger.info("Entra ID authentication disabled", {
+        component: "Server",
+        operation: "initializeEntraId",
+      });
+    }
+
     // Create authentication and RBAC middleware instances
     // Wrap async middleware with asyncHandler to satisfy Express's void return expectation
     const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getAdapter(), configService.getJwtSecret()));
@@ -1010,6 +1077,9 @@ async function startServer(): Promise<Express> {
       });
       streamingManager.cleanup();
       integrationManager.stopHealthCheckScheduler();
+      if (entraIdCleanupInterval) {
+        clearInterval(entraIdCleanupInterval);
+      }
       server.close(() => {
         void databaseService.close().then(() => {
           logger.info("Server closed", {
