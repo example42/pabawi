@@ -73,6 +73,24 @@ DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
 | `JWT_SECRET` | **required** | Secret key for JWT token signing. Must be ≥ 32 chars of random entropy and not a placeholder (e.g. `your-secure-random-secret-here`, `change-me`). Generate with `openssl rand -base64 32`. The server refuses to start otherwise. Tokens are issued/verified with `iss=pabawi` / `aud=pabawi`. |
 | `PABAWI_LIFECYCLE_TOKEN` | _(empty)_ | Bearer token required for inventory lifecycle endpoints (`POST /api/nodes/:id/action`, `DELETE /api/inventory/:id`). When unset, those endpoints return 500 (`LIFECYCLE_AUTH_MISCONFIGURED`). |
 
+### Azure Entra ID SSO
+
+Optional federated authentication via OpenID Connect. When enabled, the login page shows "Sign in with Microsoft" alongside local login. See [integrations/entra-id.md](./integrations/entra-id.md) for Azure portal setup.
+
+| Variable | Default | Description |
+|---|---|---|
+| `ENTRA_ID_ENABLED` | `false` | Set to `"true"` to enable Entra ID SSO. All other `ENTRA_ID_*` vars are ignored unless this is `"true"`. |
+| `ENTRA_ID_TENANT_ID` | **required** | Azure tenant (directory) ID |
+| `ENTRA_ID_CLIENT_ID` | **required** | Application (client) ID from the app registration |
+| `ENTRA_ID_CLIENT_SECRET` | **required** | Client secret value |
+| `ENTRA_ID_REDIRECT_URI` | **required** | OAuth callback URL (must match Azure app registration). Format: `https://your-host/api/auth/entra-id/callback` |
+| `ENTRA_ID_SCOPES` | `openid,profile,email` | Comma-separated OAuth scopes. Empty entries are discarded. |
+| `ENTRA_ID_GROUP_MAPPING` | _(none)_ | JSON object mapping Azure group IDs to Pabawi role names. Example: `{"uuid-1":"administrator","uuid-2":"operator"}` |
+| `ENTRA_ID_POST_LOGOUT_REDIRECT_URI` | _(app base URL)_ | Where Microsoft redirects after SSO logout |
+| `ENTRA_ID_JWKS_CACHE_TTL_MS` | `86400000` | How long to cache JWKS signing keys (ms). Default: 24 hours. |
+
+When `ENTRA_ID_ENABLED=true`, all four required variables must be set or the server refuses to start with a validation error listing the missing ones.
+
 ## Bolt
 
 | Variable | Default | Description |

@@ -583,8 +583,44 @@ Require `AUTH_ENABLED=true`. All endpoints require JWT auth and appropriate RBAC
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/auth/login` | Login (returns JWT) |
-| `POST` | `/api/auth/logout` | Logout |
+| `POST` | `/api/auth/logout` | Logout (includes `entraIdLogoutUrl` for SSO sessions) |
 | `GET` | `/api/auth/me` | Current user info |
+| `GET` | `/api/auth/providers` | Available auth methods (public, no auth required) |
+
+### Azure Entra ID SSO
+
+Available when `ENTRA_ID_ENABLED=true`. Returns 404 otherwise.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/auth/entra-id/login` | Redirects (302) to Microsoft login |
+| `GET` | `/api/auth/entra-id/callback` | OAuth callback — exchanges code, redirects to frontend |
+| `POST` | `/api/auth/entra-id/token` | Exchange single-use auth code for JWT pair |
+
+**`GET /api/auth/providers` response:**
+
+```json
+{
+  "local": true,
+  "entraId": { "enabled": true, "name": "Microsoft Entra ID" }
+}
+```
+
+**`POST /api/auth/entra-id/token` request:**
+
+```json
+{ "code": "<authorization-code>" }
+```
+
+**`POST /api/auth/entra-id/token` response:**
+
+```json
+{
+  "token": "<access-token>",
+  "refreshToken": "<refresh-token>",
+  "user": { "id": "...", "username": "...", "email": "..." }
+}
+```
 
 ---
 

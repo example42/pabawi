@@ -160,19 +160,23 @@ class AuthManager {
   }
 
   /**
-   * Logout and clear all auth data
-   * Requirement: 1.6, 6.4
+   * Logout and clear all auth data.
+   * If the session was established via Entra ID, the backend returns an
+   * `entraIdLogoutUrl` — redirect the browser there for single sign-out.
+   * Requirement: 1.6, 6.4, 8.4
    */
   async logout(): Promise<void> {
     logger.info('Auth', 'logout', 'Logging out user', {
       userId: this._user?.id,
     });
 
+    let entraIdLogoutUrl: string | undefined;
+
     // Call logout endpoint to revoke tokens — pass both access + refresh so
     // the backend can revoke them as a pair (C1 refresh-token rotation).
     if (this._token) {
       try {
-        await fetch(`${API_BASE_URL}/auth/logout`, {
+        const response = await fetch(`${API_BASE_URL}/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${this._token}`,
@@ -182,6 +186,11 @@ class AuthManager {
             ? JSON.stringify({ refreshToken: this._refreshToken })
             : undefined,
         });
+
+        if (response.ok) {
+          const data = await response.json() as { entraIdLogoutUrl?: string };
+          entraIdLogoutUrl = data.entraIdLogoutUrl;
+        }
       } catch (error) {
         logger.warn('Auth', 'logout', 'Logout API call failed', {
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -191,6 +200,13 @@ class AuthManager {
     }
 
     this.clearAuthData();
+
+    // Redirect to Entra ID end-session endpoint for SSO single sign-out
+    if (entraIdLogoutUrl) {
+      logger.info('Auth', 'logout', 'Redirecting to Entra ID logout');
+      window.location.href = entraIdLogoutUrl;
+      return;
+    }
 
     logger.info('Auth', 'logout', 'Logout complete');
   }
@@ -270,6 +286,14 @@ class AuthManager {
    */
   clearError(): void {
     this._error = null;
+  }
+
+  /**
+   * Set auth data from an external SSO flow (Entra ID token exchange).
+   * Public wrapper around setAuthData for use by entraIdAuth module.
+   */
+  setAuthDataFromSso(data: AuthResponse): void {
+    this.setAuthData(data);
   }
 
   // Private methods

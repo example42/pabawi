@@ -2,6 +2,27 @@
 
 Pabawi uses Role-Based Access Control (RBAC) when `AUTH_ENABLED=true`. Users are assigned roles. Roles contain permissions. Permissions gate specific actions.
 
+## Authentication Methods
+
+Pabawi supports two authentication methods that can work simultaneously:
+
+- **Local authentication** — username/password login, always available
+- **Azure Entra ID SSO** — federated login via OpenID Connect (optional, see [integrations/entra-id.md](./integrations/entra-id.md))
+
+Both methods issue identical Pabawi JWT tokens. The RBAC middleware makes no distinction between authentication origins — permissions are determined by the user's assigned roles regardless of how they logged in.
+
+### Federated Users
+
+Users who authenticate via Entra ID for the first time are automatically provisioned:
+
+- If a local user with the same email exists, the Entra ID identity is linked to that account
+- Otherwise, a new account is created with federation-only access (no local password)
+- The default viewer role is assigned to new federated users
+
+### Group-to-Role Mapping
+
+When `ENTRA_ID_GROUP_MAPPING` is configured, Pabawi synchronizes roles at each SSO login based on the user's Azure group memberships. Manually assigned roles are preserved. See [integrations/entra-id.md](./integrations/entra-id.md#group-to-role-mapping) for details.
+
 ## Permission Format
 
 ```

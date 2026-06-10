@@ -32,7 +32,7 @@ describe('RBAC Database Schema', () => {
     expect(result.sql).toContain('id TEXT PRIMARY KEY');
     expect(result.sql).toContain('username TEXT NOT NULL UNIQUE');
     expect(result.sql).toContain('email TEXT NOT NULL UNIQUE');
-    expect(result.sql).toContain('password_hash TEXT NOT NULL');
+    expect(result.sql).toContain('password_hash TEXT');
     expect(result.sql).toContain('is_active INTEGER NOT NULL DEFAULT 1');
     expect(result.sql).toContain('is_admin INTEGER NOT NULL DEFAULT 0');
   });
