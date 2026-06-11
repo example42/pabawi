@@ -31,7 +31,7 @@
 - **Mixed-tool environments** — if you use both Puppet and Ansible, Pabawi brings them together in one interface
 - **Homelabbers** who just want a web frontend for their servers (SSH-only works fine)
 
-If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — Pabawi is built for you.
+If you manage "classic infrastructure" — bare metal, VMs, Kubernetes nodes — Pabawi is built for you.
 
 ## Table of Contents
 
@@ -43,6 +43,7 @@ If you manage "classic infrastructure" — bare metal, VMs, not Kubernetes — P
   - [Quick Start](#quick-start)
   - [Manual Setup](#manual-setup)
   - [Docker](#docker)
+- [Upgrading](#upgrading)
 - [Configuration](#configuration)
 - [Project Structure](#project-structure)
 - [Troubleshooting](#troubleshooting)
@@ -154,6 +155,21 @@ The application starts at <http://localhost:3000>.
 
 For full Docker and Kubernetes deployment instructions, see the [Docker Deployment Guide](docs/deployment/docker.md) and [Kubernetes Guide](docs/deployment/kubernetes.md).
 
+## Upgrading
+
+For existing installations, the upgrade path depends on your deployment method:
+
+| Method | Command |
+|---|---|
+| Git / source | `git fetch --tags && git checkout v<VERSION> && npm run install:all && npm run build` |
+| Docker | `docker pull example42/pabawi:latest` then recreate the container |
+| Docker Compose | `docker compose pull && docker compose up -d` |
+| Helm / Kubernetes | `helm upgrade pabawi ./charts/pabawi --set image.tag=<VERSION>` |
+
+Database migrations run automatically on startup. Always back up your database and review the [CHANGELOG](CHANGELOG.md) for breaking changes before upgrading.
+
+Full instructions: [Upgrade Guide](docs/upgrading.md).
+
 ## Configuration
 
 All configuration is in `backend/.env`. The setup script generates this file, or use `backend/.env.example` as a template.
@@ -217,32 +233,11 @@ See the [Troubleshooting Guide](docs/troubleshooting.md) for common issues with 
 
 See the [Development Guide](docs/development.md) for setup, testing, and contribution guidelines.
 
-## Roadmap
-
-### Planned integrations
-
-- **Icinga / CheckMK** — monitoring context in the same interface
-- **Terraform / OpenTofu** — infrastructure provisioning alongside configuration management
-
-### Also planned
-
-Scheduled executions, custom dashboards, CLI tool, audit logging, Tiny Puppet integration.
 
 ### Version History
 
-- **v1.2.0**: Embedded MCP server with 8 read-only tools, RBAC permission gaps fixed, CreateRoleDialog, new Azure/Hiera/SSH permissions
-- **v1.1.0**: Azure integration, Global Journal with cross-node timeline, security hardening, docs rewrite
-- **v1.0.0**: Configuration refactor (`.env` as single source of truth), Proxmox and AWS provisioning, Node Journal, setup wizard `.env` snippet generators, Integration Status Dashboard
-- **v0.10.0**: AWS EC2 integration, integration configuration management
-- **v0.9.0**: Proxmox integration, Node Journal
-- **v0.8.0**: RBAC authentication, SSH integration, inventory groups
-- **v0.7.0**: Ansible integration, class-aware Hiera lookups
-- **v0.6.0**: Code consolidation and fixes
-- **v0.5.0**: Report filtering, Puppet run history visualization, enhanced expert mode
-- **v0.4.0**: Hiera integration, enhanced plugin architecture
-- **v0.3.0**: Puppetserver integration, interface enhancements
-- **v0.2.0**: PuppetDB integration, re-execution, expert mode
-- **v0.1.0**: Initial release with Bolt integration
+See [CHANGELOG](CHANGELOG.md).
+
 
 ## License
 
@@ -253,7 +248,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 **Documentation**
 
 - [Architecture](docs/architecture.md) | [Configuration](docs/configuration.md) | [User Guide](docs/user-guide.md) | [API Reference](docs/api.md)
-- [Permissions & RBAC](docs/permissions-rbac.md) | [MCP Server](docs/mcp.md) | [Troubleshooting](docs/troubleshooting.md) | [Development](docs/development.md)
+- [Permissions & RBAC](docs/permissions-rbac.md) | [MCP Server](docs/mcp.md) | [Upgrading](docs/upgrading.md) | [Troubleshooting](docs/troubleshooting.md) | [Development](docs/development.md)
 
 **Integrations**
 
