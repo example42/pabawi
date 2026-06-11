@@ -29,16 +29,32 @@
   const INTEGRATION_ICONS: Record<string, string> = {
     proxmox: 'M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2',
     aws: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z',
+    azure: 'M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z',
     puppetdb: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
     puppetserver: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
     ansible: 'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
     hiera: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z',
     ssh: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z',
     bolt: 'M13 10V3L4 14h7v7l9-11h-7z',
+    checkmk: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
   };
 
   /** Integrations that support "Test Connection" */
   const TESTABLE_INTEGRATIONS = ['proxmox', 'aws'];
+
+  /** All integrations that have setup guide pages */
+  const ALL_SETUP_GUIDES: { type: string; label: string }[] = [
+    { type: 'bolt', label: 'Puppet Bolt' },
+    { type: 'puppetdb', label: 'PuppetDB' },
+    { type: 'puppetserver', label: 'Puppet Server' },
+    { type: 'hiera', label: 'Hiera' },
+    { type: 'ansible', label: 'Ansible' },
+    { type: 'ssh', label: 'SSH' },
+    { type: 'proxmox', label: 'Proxmox' },
+    { type: 'aws', label: 'AWS' },
+    { type: 'azure', label: 'Azure' },
+    { type: 'checkmk', label: 'Checkmk' },
+  ];
 
   // State
   let integrations = $state<IntegrationStatus[]>([]);
@@ -122,6 +138,17 @@
   function isTestable(integration: IntegrationStatus): boolean {
     const type = integration.type || integration.name.toLowerCase();
     return TESTABLE_INTEGRATIONS.includes(type) && integration.status !== 'not_configured';
+  }
+
+  /** Get setup guide URL for an integration type */
+  function getSetupUrl(type: string): string {
+    return `/integrations/${type}/setup`;
+  }
+
+  /** Check if an integration has a setup guide */
+  function hasSetupGuide(integration: IntegrationStatus): boolean {
+    const type = integration.type || integration.name.toLowerCase();
+    return ALL_SETUP_GUIDES.some(g => g.type === type);
   }
 
   /** Test connection for an integration */
@@ -248,6 +275,20 @@
             </div>
 
             <div class="flex items-center gap-3 shrink-0">
+              <!-- Setup Guide link -->
+              {#if hasSetupGuide(integration)}
+                <a
+                  href={getSetupUrl(integration.type || integration.name.toLowerCase())}
+                  onclick={(e) => { e.preventDefault(); router.navigate(getSetupUrl(integration.type || integration.name.toLowerCase())); }}
+                  class="inline-flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200"
+                >
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  Setup Guide
+                </a>
+              {/if}
+
               <!-- Test Connection button -->
               {#if isTestable(integration)}
                 <button
@@ -297,6 +338,34 @@
           {/if}
         </div>
       {/each}
+    </div>
+
+    <!-- All Setup Guides section -->
+    <div class="mt-8">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-3">Integrations Setup guides</h2>
+      <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Click to view setup instructions for any integration.
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {#each ALL_SETUP_GUIDES as guide (guide.type)}
+          <a
+            href={getSetupUrl(guide.type)}
+            onclick={(e) => { e.preventDefault(); router.navigate(getSetupUrl(guide.type)); }}
+            class="flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-4 hover:border-primary-300 hover:bg-primary-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-primary-600 dark:hover:bg-primary-900/10 transition-colors"
+          >
+            <svg class="h-5 w-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={INTEGRATION_ICONS[guide.type] ?? 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'} />
+            </svg>
+            <div class="min-w-0">
+              <span class="font-medium text-gray-900 dark:text-white">{guide.label}</span>
+              <p class="text-xs text-gray-500 dark:text-gray-400">View setup instructions</p>
+            </div>
+            <svg class="h-4 w-4 text-gray-400 ml-auto shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </a>
+        {/each}
+      </div>
     </div>
   {/if}
 </div>
