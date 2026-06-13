@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { router } from '../lib/router.svelte';
+  import '../lib/widgets/index';  // Side-effect: registers all widgets
+  import WidgetGrid from '../components/WidgetGrid.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
   import StatusBadge from '../components/StatusBadge.svelte';
@@ -34,8 +36,6 @@
   import { expertMode } from '../lib/expertMode.svelte';
   import { useExecutionStream, type ExecutionStream } from '../lib/executionStream.svelte';
   import type { DebugInfo, LabeledDebugInfo } from '../lib/api';
-  import { getNodeServices, type ServiceStatus } from '../lib/checkmkApi';
-  import { STATE_NAMES, STATE_COLORS, groupServicesByState } from '../lib/monitorTabUtils';
 
   // Dynamic page title based on node name
   const pageTitle = $derived(node ? `Pabawi - ${node.name}` : 'Pabawi - Node Details');
@@ -267,18 +267,9 @@
   // let puppetserverFactsLoading = $state(false);
   // let puppetserverFactsError = $state<string | null>(null);
 
-  let puppetdbFacts = $state<any | null>(null);
-  let puppetdbFactsLoading = $state(false);
-  let puppetdbFactsError = $state<string | null>(null);
-
   let environments = $state<any[]>([]);
   let environmentsLoading = $state(false);
   let environmentsError = $state<string | null>(null);
-
-  // Checkmk overview summary state
-  let overviewServices = $state<ServiceStatus[]>([]);
-  let overviewServicesLoading = $state(false);
-  let overviewServicesError = $state<string | null>(null);
 
   // Cache for loaded data
   let dataCache = $state<Record<TabId, any>>({});
@@ -584,38 +575,6 @@
       availableFactSources = [];
     }
   }
-
-  // Fetch Checkmk services summary for the overview tab
-  async function fetchOverviewServices(): Promise<void> {
-    if (overviewServicesLoading) return;
-
-    overviewServicesLoading = true;
-    overviewServicesError = null;
-
-    try {
-      overviewServices = await getNodeServices(nodeId);
-    } catch (err) {
-      overviewServicesError = err instanceof Error ? err.message : 'An unknown error occurred';
-    } finally {
-      overviewServicesLoading = false;
-    }
-  }
-
-  // Derived: summary counts for Checkmk services on overview
-  const overviewServiceSummary = $derived.by(() => {
-    const total = overviewServices.length;
-    const ok = overviewServices.filter(s => s.state === 0).length;
-    const warn = overviewServices.filter(s => s.state === 1).length;
-    const crit = overviewServices.filter(s => s.state === 2).length;
-    const unknown = overviewServices.filter(s => s.state === 3).length;
-    return { total, ok, warn, crit, unknown };
-  });
-
-  // Derived: critical and warning services for detail display
-  const overviewCritWarnServices = $derived(
-    overviewServices.filter(s => s.state === 1 || s.state === 2)
-      .sort((a, b) => b.state - a.state)
-  );
 
   // Lazy load Puppet Reports (for overview - limited to 5)
   async function fetchPuppetReports(): Promise<void> {
@@ -943,39 +902,6 @@
   //   }
   // }
 
-  // Lazy load PuppetDB Facts
-  async function fetchPuppetDBFacts(): Promise<void> {
-    // Check cache first
-    if (dataCache['puppetdb-facts']) {
-      puppetdbFacts = dataCache['puppetdb-facts'];
-      return;
-    }
-
-    puppetdbFactsLoading = true;
-    puppetdbFactsError = null;
-
-    try {
-      const data = await get<{ facts: any; _debug?: DebugInfo }>(
-        `/api/integrations/puppetdb/nodes/${nodeId}/facts`,
-        { maxRetries: 2 }
-      );
-
-      puppetdbFacts = data.facts;
-      dataCache['puppetdb-facts'] = puppetdbFacts;
-
-      // Store debug info if present
-      if (data._debug) {
-        handleDebugInfo('PuppetDB Facts', data._debug);
-      }
-    } catch (err) {
-      puppetdbFactsError = err instanceof Error ? err.message : 'An unknown error occurred';
-      console.error('Error fetching PuppetDB facts:', err);
-      // Don't show error toast - display inline error instead
-    } finally {
-      puppetdbFactsLoading = false;
-    }
-  }
-
   // Lazy load Environments
   async function fetchEnvironments(): Promise<void> {
     // Check cache first
@@ -1101,18 +1027,7 @@
   async function loadTabData(tabId: TabId): Promise<void> {
     switch (tabId) {
       case 'overview':
-        // Load PuppetDB facts for OS/IP info display (non-blocking)
-        if (!puppetdbFacts && !puppetdbFactsLoading && !puppetdbFactsError) {
-          fetchPuppetDBFacts();
-        }
-        // Load latest puppet reports for overview (non-blocking, only if PuppetDB available)
-        if (availableFactSources.includes('puppetdb') && puppetReports.length === 0 && !puppetReportsLoading && !puppetReportsError) {
-          fetchPuppetReports();
-        }
-        // Load Checkmk services summary (non-blocking, only if Checkmk available)
-        if (availableFactSources.includes('checkmk') && overviewServices.length === 0 && !overviewServicesLoading && !overviewServicesError) {
-          fetchOverviewServices();
-        }
+        // Widgets self-fetch; no page-level data loading needed
         break;
       case 'facts':
         // Facts are loaded on demand by the user via per-source buttons in
@@ -1253,111 +1168,6 @@
     }
   }
 
-  // Extract general info from facts
-  function extractGeneralInfo(): {
-    os?: string;
-    ip?: string;
-    hostname?: string;
-    kernel?: string;
-    architecture?: string;
-    puppetVersion?: string;
-    memory?: string;
-    cpuCount?: number;
-    uptime?: string;
-    disks?: string[];
-  } {
-    const info: {
-      os?: string;
-      ip?: string;
-      hostname?: string;
-      kernel?: string;
-      architecture?: string;
-      puppetVersion?: string;
-      memory?: string;
-      cpuCount?: number;
-      uptime?: string;
-      disks?: string[];
-    } = {};
-
-    // Try to get info from PuppetDB facts first (most reliable)
-    if (puppetdbFacts?.facts) {
-      const facts = puppetdbFacts.facts;
-
-      // OS information
-      if (facts.os?.name && facts.os?.release?.full) {
-        info.os = `${facts.os.name} ${facts.os.release.full}`;
-      } else if (facts.operatingsystem && facts.operatingsystemrelease) {
-        info.os = `${facts.operatingsystem} ${facts.operatingsystemrelease}`;
-      } else if (facts.osfamily) {
-        info.os = facts.osfamily;
-      }
-
-      // IP address - try multiple fact names
-      info.ip = facts.ipaddress || facts.networking?.ip || facts.ipaddress_eth0 || facts.ipaddress_ens0;
-
-      // Hostname
-      info.hostname = facts.hostname || facts.fqdn;
-
-      // Kernel
-      info.kernel = facts.kernel || facts.kernelversion;
-
-      // Architecture
-      info.architecture = facts.architecture || facts.hardwaremodel;
-
-      // Puppet version
-      info.puppetVersion = facts.aio_agent_version;
-
-      // Memory
-      info.memory = facts.memory?.system?.total;
-
-      // CPU count
-      info.cpuCount = facts.processors?.count;
-
-      // Uptime
-      info.uptime = facts.system_uptime?.uptime;
-
-      // Disks - get first level keys from disks fact
-      if (facts.disks && typeof facts.disks === 'object') {
-        info.disks = Object.keys(facts.disks);
-      }
-    }
-
-    // Fallback to other sources if PuppetDB facts not available
-    if (!info.os) {
-      // Try each source from allSourceFacts (bolt, ssh, ansible, etc.)
-      for (const [, sourceData] of Object.entries(allSourceFacts)) {
-        if (!sourceData?.facts) continue;
-        const f = sourceData.facts as Record<string, any>;
-
-        if (!info.os) {
-          if (f.os?.name && f.os?.release?.full) {
-            info.os = `${f.os.name} ${f.os.release.full}`;
-          } else if (f.operatingsystem && f.operatingsystemrelease) {
-            info.os = `${f.operatingsystem} ${f.operatingsystemrelease}`;
-          }
-        }
-
-        info.ip = info.ip || f.ipaddress || f.networking?.ip;
-        info.hostname = info.hostname || f.hostname || f.fqdn;
-        info.kernel = info.kernel || f.kernel;
-        info.architecture = info.architecture || f.architecture;
-        info.puppetVersion = info.puppetVersion || f.aio_agent_version;
-        info.memory = info.memory || f.memory?.system?.total;
-        info.cpuCount = info.cpuCount || f.processors?.count;
-        info.uptime = info.uptime || f.system_uptime?.uptime;
-
-        if (!info.disks && f.disks && typeof f.disks === 'object') {
-          info.disks = Object.keys(f.disks);
-        }
-      }
-    }
-
-    return info;
-  }
-
-  // Derived general info
-  let generalInfo = $derived(extractGeneralInfo());
-
   // Watch for URL query parameter changes (for re-execution and tab switching)
   $effect(() => {
     // Access router.currentQuery to make this effect reactive to URL changes
@@ -1369,19 +1179,6 @@
     checkReExecutionParams();
   });
 
-  // When availableFactSources becomes populated and we're on the overview tab,
-  // trigger deferred data loads for PuppetDB reports and Checkmk services.
-  $effect(() => {
-    if (activeTab !== 'overview' || availableFactSources.length === 0) return;
-
-    if (availableFactSources.includes('puppetdb') && puppetReports.length === 0 && !puppetReportsLoading && !puppetReportsError) {
-      fetchPuppetReports();
-    }
-    if (availableFactSources.includes('checkmk') && overviewServices.length === 0 && !overviewServicesLoading && !overviewServicesError) {
-      fetchOverviewServices();
-    }
-  });
-
   // On mount
   onMount(() => {
     debugInfoBlocks = []; // Clear debug info blocks on mount
@@ -1389,10 +1186,6 @@
     fetchExecutions();
     fetchCommandWhitelist();
     fetchExecutionTools();
-
-    // Facts are loaded on demand from the facts tab via per-source buttons.
-    // No automatic fetching here so the page loads quickly and no remote
-    // connections are established at navigation time.
 
     // Load overview tab data if it's the active tab
     if (activeTab === 'overview') {
@@ -1519,381 +1312,7 @@
     <div class="tab-content">
       <!-- Overview Tab -->
       {#if activeTab === 'overview'}
-        <div class="space-y-6">
-          <!-- Node Metadata -->
-          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">General Information</h2>
-              <div class="flex items-center gap-2">
-                <IntegrationBadge integration="bolt" variant="badge" size="sm" />
-                {#if generalInfo.os || generalInfo.ip}
-                  <span class="text-xs text-gray-500 dark:text-gray-400">+</span>
-                  <IntegrationBadge integration="puppetdb" variant="label" size="sm" />
-                {/if}
-              </div>
-            </div>
-            <dl class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Node ID</dt>
-                <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.id}</dd>
-              </div>
-              <div>
-                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Transport</dt>
-                <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.transport}</dd>
-              </div>
-              <div>
-                <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">URI</dt>
-                <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.uri}</dd>
-              </div>
-              {#if generalInfo.os}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Operating System</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.os}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.ip}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">IP Address</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.ip}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.hostname}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Hostname</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.hostname}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.kernel}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Kernel</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.kernel}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.architecture}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Architecture</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.architecture}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.puppetVersion}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Puppet Version</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.puppetVersion}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.memory}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Memory</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.memory}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.cpuCount}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Number of CPUs</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.cpuCount}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.uptime}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Uptime</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.uptime}</dd>
-                </div>
-              {/if}
-              {#if generalInfo.disks && generalInfo.disks.length > 0}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Disks</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{generalInfo.disks.join(', ')}</dd>
-                </div>
-              {/if}
-              {#if node.config.user}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">User</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.config.user}</dd>
-                </div>
-              {/if}
-              {#if node.config.port}
-                <div>
-                  <dt class="text-sm font-medium text-gray-500 dark:text-gray-400">Port</dt>
-                  <dd class="mt-1 text-sm text-gray-900 dark:text-white">{node.config.port}</dd>
-                </div>
-              {/if}
-            </dl>
-            {#if !generalInfo.os && !generalInfo.ip && !puppetdbFactsLoading}
-              <div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
-                <div class="flex items-start gap-2">
-                  <svg class="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div class="flex-1">
-                    <p class="text-sm text-blue-800 dark:text-blue-400">
-                      Additional system information (OS, IP) will appear here once facts are gathered. Visit the <button type="button" class="font-medium underline hover:no-underline" onclick={() => switchTab('facts')}>Facts tab</button> to gather facts.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            {/if}
-          </div>
-
-          <!-- Latest Puppet Runs (only when PuppetDB integration is available) -->
-          {#if availableFactSources.includes('puppetdb')}
-          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Latest Puppet Runs</h2>
-              <IntegrationBadge integration="puppetdb" variant="badge" size="sm" />
-            </div>
-            {#if !puppetReports}
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                Loading Puppet runs... <button type="button" class="text-blue-600 hover:text-blue-700 dark:text-blue-400" onclick={async () => { await fetchPuppetReports(); }}>Load now</button>
-              </p>
-            {:else if puppetReports.length === 0}
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                No Puppet runs found for this node.
-              </p>
-            {:else}
-              <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 overflow-hidden">
-                <div class="overflow-x-auto">
-                  <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead class="bg-gray-50 dark:bg-gray-900">
-                      <tr>
-                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Start Time
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Duration
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Environment
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Total
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Corrective
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Intentional
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Unchanged
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Failed
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Skipped
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Noop
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Compile Time
-                        </th>
-                        <th scope="col" class="px-2 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
-                      {#each puppetReports.slice(0, 5) as report}
-                        <tr
-                          class="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
-                          onclick={() => {
-                            switchTab('puppet');
-                            switchPuppetSubTab('puppet-reports');
-                            fetchReportDetails(report);
-                          }}
-                        >
-                          <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
-                            {formatTimestamp(report.start_time)}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-600 dark:text-gray-400">
-                            {getDuration(report.start_time, report.end_time)}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-sm text-gray-900 dark:text-white">
-                            <div class="flex items-center gap-2">
-                              {report.environment}
-                              {#if report.noop}
-                                <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800 dark:bg-purple-900/20 dark:text-purple-400">
-                                  No-op
-                                </span>
-                              {/if}
-                            </div>
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-900 dark:text-white">
-                            {report.metrics.resources.total}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-yellow-700 dark:text-yellow-400">
-                            {report.metrics.resources.corrective_change || 0}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-blue-700 dark:text-blue-400">
-                            {getIntentionalChanges(report.metrics)}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-600 dark:text-gray-400">
-                            {getUnchanged(report.metrics)}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-red-700 dark:text-red-400">
-                            {report.metrics.resources.failed}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-600 dark:text-gray-400">
-                            {report.metrics.resources.skipped}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-purple-700 dark:text-purple-400">
-                            {report.metrics.events?.noop || 0}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-right text-sm text-gray-900 dark:text-white">
-                            {formatCompilationTime(report.metrics.time?.config_retrieval)}
-                          </td>
-                          <td class="whitespace-nowrap px-2 py-2 text-sm">
-                            <StatusBadge status={getStatusBadgeStatus(report.status, report.metrics.time?.config_retrieval)} size="sm" />
-                          </td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              {#if puppetReports.length >= 5}
-                <div class="mt-4">
-                  <button
-                    type="button"
-                    class="w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                    onclick={() => {
-                      switchTab('puppet');
-                      switchPuppetSubTab('puppet-reports');
-                    }}
-                  >
-                    View all runs →
-                  </button>
-                </div>
-              {/if}
-            {/if}
-          </div>
-          {/if}
-
-          <!-- Latest Actions -->
-          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Latest Actions</h2>
-              <IntegrationBadge integration="bolt" variant="badge" size="sm" />
-            </div>
-            {#if executionsLoading}
-              <div class="flex justify-center py-4">
-                <LoadingSpinner message="Loading executions..." />
-              </div>
-            {:else if executionsError}
-              <ErrorAlert message="Failed to load executions" details={executionsError} onRetry={fetchExecutions} />
-            {:else if executions.length === 0}
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                No executions found for this node.
-              </p>
-            {:else}
-              <ExecutionList
-                executions={executions.slice(0, 5)}
-                currentNodeId={nodeId}
-                onExecutionClick={(execution) => router.navigate(`/executions?id=${execution.id}`)}
-                showTargets={false}
-              />
-              {#if executions.length > 5}
-                <button
-                  type="button"
-                  class="mt-4 w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                  onclick={() => switchTab('actions')}
-                >
-                  View all executions →
-                </button>
-              {/if}
-            {/if}
-          </div>
-
-          <!-- Checkmk Monitoring Summary (only when Checkmk integration is available) -->
-          {#if availableFactSources.includes('checkmk')}
-          <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <div class="mb-4 flex items-center justify-between">
-              <h2 class="text-xl font-semibold text-gray-900 dark:text-white">Monitoring Summary</h2>
-              <IntegrationBadge integration="checkmk" variant="badge" size="sm" />
-            </div>
-            {#if overviewServicesLoading}
-              <div class="flex justify-center py-4">
-                <LoadingSpinner message="Loading monitoring data..." />
-              </div>
-            {:else if overviewServicesError}
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                Unable to load monitoring data.
-                <button type="button" class="text-blue-600 hover:text-blue-700 dark:text-blue-400" onclick={fetchOverviewServices}>Retry</button>
-              </p>
-            {:else if overviewServices.length === 0}
-              <p class="text-sm text-gray-500 dark:text-gray-400">
-                No monitored services found for this node.
-              </p>
-            {:else}
-              <!-- Summary counts -->
-              <div class="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 mb-4">
-                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center dark:border-gray-700 dark:bg-gray-900/50">
-                  <div class="text-2xl font-bold text-gray-900 dark:text-white">{overviewServiceSummary.total}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Total</div>
-                </div>
-                <div class="rounded-lg border border-green-200 bg-green-50 p-3 text-center dark:border-green-800 dark:bg-green-900/20">
-                  <div class="text-2xl font-bold text-green-700 dark:text-green-400">{overviewServiceSummary.ok}</div>
-                  <div class="text-xs text-green-600 dark:text-green-400">OK</div>
-                </div>
-                {#if overviewServiceSummary.warn > 0}
-                <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-800 dark:bg-amber-900/20">
-                  <div class="text-2xl font-bold text-amber-700 dark:text-amber-400">{overviewServiceSummary.warn}</div>
-                  <div class="text-xs text-amber-600 dark:text-amber-400">Warning</div>
-                </div>
-                {/if}
-                {#if overviewServiceSummary.crit > 0}
-                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-center dark:border-red-800 dark:bg-red-900/20">
-                  <div class="text-2xl font-bold text-red-700 dark:text-red-400">{overviewServiceSummary.crit}</div>
-                  <div class="text-xs text-red-600 dark:text-red-400">Critical</div>
-                </div>
-                {/if}
-                {#if overviewServiceSummary.unknown > 0}
-                <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center dark:border-gray-600 dark:bg-gray-900/50">
-                  <div class="text-2xl font-bold text-gray-700 dark:text-gray-400">{overviewServiceSummary.unknown}</div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400">Unknown</div>
-                </div>
-                {/if}
-              </div>
-
-              <!-- Critical and Warning service details -->
-              {#if overviewCritWarnServices.length > 0}
-                <div class="mt-4 space-y-2">
-                  <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Issues requiring attention</h3>
-                  <div class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700/50 dark:border-gray-700">
-                    {#each overviewCritWarnServices.slice(0, 10) as service (service.description)}
-                      <div class="px-4 py-2.5">
-                        <div class="flex items-center gap-2">
-                          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold {STATE_COLORS[service.state]}">
-                            {STATE_NAMES[service.state]}
-                          </span>
-                          <span class="text-sm font-medium text-gray-900 dark:text-white">{service.description}</span>
-                        </div>
-                        {#if service.pluginOutput}
-                          <p class="mt-1 text-xs text-gray-600 dark:text-gray-400 line-clamp-2">{service.pluginOutput}</p>
-                        {/if}
-                      </div>
-                    {/each}
-                  </div>
-                  {#if overviewCritWarnServices.length > 10}
-                    <button
-                      type="button"
-                      class="w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-                      onclick={() => switchTab('monitor')}
-                    >
-                      View all {overviewCritWarnServices.length} issues →
-                    </button>
-                  {/if}
-                </div>
-              {/if}
-
-              {#if overviewCritWarnServices.length === 0}
-                <p class="text-sm text-green-700 dark:text-green-400">All monitored services are healthy.</p>
-              {/if}
-            {/if}
-          </div>
-          {/if}
-        </div>
+        <WidgetGrid {nodeId} />
       {/if}
 
       <!-- Facts Tab -->
