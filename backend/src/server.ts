@@ -61,6 +61,12 @@ import type { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import type { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import type { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import type { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
+import type { ProxmoxClient } from "./integrations/proxmox/ProxmoxClient";
+import type { ProxmoxConfig } from "./integrations/proxmox/types";
+import { ProxmoxConsoleProvider } from "./integrations/proxmox/ProxmoxConsoleProvider";
+import { ConsoleSessionManager } from "./services/ConsoleSessionManager";
+import { ConsoleWebSocketProxy } from "./services/ConsoleWebSocketProxy";
+import { createConsoleRouter } from "./routes/console";
 import type { CheckmkPlugin } from "./integrations/checkmk/CheckmkPlugin";
 import { pluginRegistry } from "./plugins/registry";
 import { LoggerService } from "./services/LoggerService";
@@ -442,6 +448,26 @@ async function startServer(): Promise<Express> {
         component: "Server",
         operation: "wireJournalService",
       });
+    }
+
+    // Register ProxmoxConsoleProvider alongside the Proxmox plugin (Req 9.1, 2.6)
+    if (proxmoxPlugin) {
+      const rawClient = proxmoxPlugin.getClient();
+      const proxmoxCfg = proxmoxPlugin.getConfig().config as unknown as ProxmoxConfig;
+      if (rawClient) {
+        const proxmoxClient = rawClient as unknown as ProxmoxClient;
+        const consoleProvider = new ProxmoxConsoleProvider(proxmoxClient, proxmoxCfg, logger);
+        integrationManager.registerConsoleProvider(consoleProvider);
+        logger.info("ProxmoxConsoleProvider registered with IntegrationManager", {
+          component: "Server",
+          operation: "initializeConsole",
+        });
+      } else {
+        logger.warn("Proxmox client not available — skipping ProxmoxConsoleProvider registration", {
+          component: "Server",
+          operation: "initializeConsole",
+        });
+      }
     }
 
     // Retrieve specific plugin instances needed by downstream consumers
@@ -1044,6 +1070,26 @@ async function startServer(): Promise<Express> {
       });
     }
 
+    // === Console Integration Wiring (session manager + routes) ===
+    const consoleConfig = configService.getConsoleConfig();
+    const auditLoggingService = new AuditLoggingService(databaseService.getAdapter());
+    const consoleSessionManager = new ConsoleSessionManager(
+      databaseService.getAdapter(),
+      consoleConfig,
+      logger,
+      auditLoggingService,
+    );
+
+    // Mount console routes before SPA fallback so /api/console is handled correctly
+    app.use(
+      "/api/console",
+      createConsoleRouter(container, integrationManager, consoleSessionManager, databaseService.getAdapter()),
+    );
+    logger.info("Console routes mounted at /api/console", {
+      component: "Server",
+      operation: "initializeConsole",
+    });
+
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");
     app.use(express.static(publicPath));
@@ -1069,6 +1115,42 @@ async function startServer(): Promise<Express> {
       });
     });
 
+    // Attach WebSocket proxy to the HTTP server (noServer: true, shared port)
+    new ConsoleWebSocketProxy(
+      server,
+      consoleSessionManager,
+      { allowedOrigins: config.corsAllowedOrigins, console: consoleConfig },
+      logger,
+    );
+    logger.info("ConsoleWebSocketProxy attached to HTTP server", {
+      component: "Server",
+      operation: "initializeConsole",
+    });
+
+    // Graceful restart: terminate all pre-existing sessions for each registered console provider (Req 2.6)
+    const consoleProviders = integrationManager.getAllConsoleProviders();
+    for (const cp of consoleProviders) {
+      await consoleSessionManager.terminateAllForProvider(cp.name);
+    }
+    if (consoleProviders.length > 0) {
+      logger.info("Terminated stale console sessions from previous run", {
+        component: "Server",
+        operation: "initializeConsole",
+        metadata: { providerCount: consoleProviders.length },
+      });
+    }
+
+    // Session cleanup interval: expire idle sessions periodically
+    const consoleCleanupInterval = setInterval(() => {
+      consoleSessionManager.cleanupExpiredSessions().catch((err: unknown) => {
+        logger.warn("Console session cleanup failed", {
+          component: "Server",
+          operation: "consoleCleanup",
+          metadata: { error: err instanceof Error ? err.message : String(err) },
+        });
+      });
+    }, consoleConfig.sessionTimeoutMs);
+
     // Graceful shutdown
     process.on("SIGTERM", () => {
       logger.info("SIGTERM received, shutting down gracefully...", {
@@ -1080,6 +1162,7 @@ async function startServer(): Promise<Express> {
       if (entraIdCleanupInterval) {
         clearInterval(entraIdCleanupInterval);
       }
+      clearInterval(consoleCleanupInterval);
       server.close(() => {
         void databaseService.close().then(() => {
           logger.info("Server closed", {

@@ -1,12 +1,15 @@
 import { config as loadDotenv } from "dotenv";
 import {
   AppConfigSchema,
+  ConsoleConfigSchema,
   type AppConfig,
+  type ConsoleConfig,
   type EntraIdConfig,
   type WhitelistConfig,
 } from "./schema";
 import { z } from "zod";
 import { parseJson } from "../utils/json";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Configuration service to load and validate application settings
@@ -15,6 +18,7 @@ import { parseJson } from "../utils/json";
 export class ConfigService {
   private config: AppConfig;
   private entraIdConfig: EntraIdConfig | null = null;
+  private consoleConfig: ConsoleConfig;
 
   constructor() {
     // Load .env file only if not in test environment
@@ -22,8 +26,81 @@ export class ConfigService {
       loadDotenv();
     }
 
+    // Parse console config with validation and warning logging
+    this.consoleConfig = this.parseConsoleConfig();
+
     // Parse and validate configuration
     this.config = this.loadConfiguration();
+  }
+
+  /**
+   * Parse and validate console configuration from CONSOLE_* environment variables.
+   * Logs warnings via LoggerService for invalid values and cross-field constraint violations.
+   */
+  private parseConsoleConfig(): ConsoleConfig {
+    const logger = new LoggerService();
+    const context = { component: "ConfigService" };
+    const defaults = ConsoleConfigSchema.parse({});
+
+    const parsePositiveInt = (
+      envName: string,
+      defaultValue: number,
+      minValue = 1,
+    ): number => {
+      const raw = process.env[envName];
+      if (raw === undefined || raw === "") {
+        return defaultValue;
+      }
+
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < minValue) {
+        logger.warn(
+          `Invalid value for ${envName}="${raw}" (must be an integer >= ${String(minValue)}). Using default: ${String(defaultValue)}`,
+          context,
+        );
+        return defaultValue;
+      }
+
+      return parsed;
+    };
+
+    const sessionTimeoutMs = parsePositiveInt(
+      "CONSOLE_SESSION_TIMEOUT_MS",
+      defaults.sessionTimeoutMs,
+    );
+    const maxSessionDuration = parsePositiveInt(
+      "CONSOLE_MAX_SESSION_DURATION",
+      defaults.maxSessionDuration,
+    );
+    const maxConcurrentSessions = parsePositiveInt(
+      "CONSOLE_MAX_CONCURRENT_SESSIONS",
+      defaults.maxConcurrentSessions,
+    );
+    const heartbeatIntervalMs = parsePositiveInt(
+      "CONSOLE_HEARTBEAT_INTERVAL_MS",
+      defaults.heartbeatIntervalMs,
+    );
+
+    // Cross-field validation: heartbeat must be less than session timeout (Req 11.6)
+    if (heartbeatIntervalMs >= sessionTimeoutMs) {
+      logger.warn(
+        `CONSOLE_HEARTBEAT_INTERVAL_MS (${String(heartbeatIntervalMs)}) must be less than CONSOLE_SESSION_TIMEOUT_MS (${String(sessionTimeoutMs)}). Using defaults for both: heartbeatIntervalMs=${String(defaults.heartbeatIntervalMs)}, sessionTimeoutMs=${String(defaults.sessionTimeoutMs)}`,
+        context,
+      );
+      return {
+        sessionTimeoutMs: defaults.sessionTimeoutMs,
+        maxSessionDuration,
+        maxConcurrentSessions,
+        heartbeatIntervalMs: defaults.heartbeatIntervalMs,
+      };
+    }
+
+    return {
+      sessionTimeoutMs,
+      maxSessionDuration,
+      maxConcurrentSessions,
+      heartbeatIntervalMs,
+    };
   }
 
   /**
@@ -826,6 +903,7 @@ export class ConfigService {
         mcpEnabled: process.env.MCP_ENABLED === "true",
         mcpAuthToken: process.env.MCP_AUTH_TOKEN ?? undefined,
         entraId: this.parseEntraIdConfig() ?? undefined,
+        console: this.consoleConfig,
       };
 
       // Validate with Zod schema
@@ -1086,5 +1164,12 @@ export class ConfigService {
    */
   public getEntraIdConfig(): EntraIdConfig | null {
     return this.entraIdConfig;
+  }
+
+  /**
+   * Get console session configuration
+   */
+  public getConsoleConfig(): ConsoleConfig {
+    return this.consoleConfig;
   }
 }

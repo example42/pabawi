@@ -410,6 +410,18 @@ export const IntegrationsConfigSchema = z.object({
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
 
 /**
+ * Console session configuration schema
+ */
+export const ConsoleConfigSchema = z.object({
+  sessionTimeoutMs: z.number().int().positive().default(300000),
+  maxSessionDuration: z.number().int().positive().default(28800000),
+  maxConcurrentSessions: z.number().int().min(1).default(3),
+  heartbeatIntervalMs: z.number().int().positive().default(30000),
+});
+
+export type ConsoleConfig = z.infer<typeof ConsoleConfigSchema>;
+
+/**
  * Application configuration schema with Zod validation
  */
 export const AppConfigSchema = z.object({
@@ -449,6 +461,7 @@ export const AppConfigSchema = z.object({
   integrations: IntegrationsConfigSchema.default({}),
   provisioning: ProvisioningConfigSchema.default({ allowDestructiveActions: false }),
   ui: UIConfigSchema.default({ showHomePageRunChart: true }),
+  console: ConsoleConfigSchema.default({}),
   mcpEnabled: z.boolean().default(false),
   mcpAuthToken: z.string().optional(),
   entraId: EntraIdConfigSchema.optional(),
