@@ -14,7 +14,8 @@
 
   // Column span CSS class mapping
   const spanClass = $derived(
-    widget.colSpan === 3 ? 'sm:col-span-2 lg:col-span-3'
+    widget.colSpan === 4 ? 'sm:col-span-2 lg:col-span-4'
+    : widget.colSpan === 3 ? 'sm:col-span-2 lg:col-span-3'
     : widget.colSpan === 2 ? 'sm:col-span-2 lg:col-span-2'
     : 'col-span-1'
   );

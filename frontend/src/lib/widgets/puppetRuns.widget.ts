@@ -7,6 +7,6 @@ registerWidget({
   component: PuppetRunsWidget,
   integration: 'puppetdb',
   type: 'list',
-  colSpan: 3,
+  colSpan: 4,
   priority: 100,
 });
