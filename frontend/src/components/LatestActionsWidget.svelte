@@ -79,12 +79,12 @@
     </p>
   {:else}
     <ExecutionList
-      executions={executions.slice(0, 5)}
+      executions={executions.slice(0, 6)}
       currentNodeId={nodeId}
       onExecutionClick={(execution) => router.navigate(`/executions?id=${execution.id}`)}
       showTargets={false}
     />
-    {#if executions.length > 5}
+    {#if executions.length > 6}
       <a
         href="/executions?targetNode={nodeId}"
         class="mt-4 block w-full text-center text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"

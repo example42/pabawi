@@ -104,7 +104,22 @@ export function createAuthRateLimitMiddleware(): (req: Request, res: Response, n
     // Use IP address as the key with proper IPv6 handling
     keyGenerator: (req: Request): string => ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? ""),
 
-    // Custom handler for rate limit exceeded
+    // Skip rate limiting for non-credential endpoints that happen to live
+    // under /api/auth. These are either read-only discovery endpoints or
+    // authenticated operations that are not brute-force targets.
+    skip: (req: Request): boolean => {
+      // GET /api/auth/providers — public discovery, not an auth attempt
+      if (req.method === "GET" && req.path === "/providers") return true;
+      // POST /api/auth/refresh — token refresh, not a credential submission
+      if (req.method === "POST" && req.path === "/refresh") return true;
+      // POST /api/auth/logout — requires existing auth, not an attempt
+      if (req.method === "POST" && req.path === "/logout") return true;
+      // GET /api/auth/entra-id/callback — automated OAuth callback from provider
+      if (req.method === "GET" && req.path === "/callback") return true;
+      return false;
+    },
+
+    // Custom handler for auth rate limit exceeded
     handler: (_req: Request, res: Response): void => {
       res.status(429).json({
         error: "Too many authentication attempts",

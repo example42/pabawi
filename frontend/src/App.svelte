@@ -23,9 +23,13 @@
   import CrashDumpsPage from './pages/CrashDumpsPage.svelte';
   import LogsPage from './pages/LogsPage.svelte';
   import { router } from './lib/router.svelte';
+  import { authManager } from './lib/auth.svelte';
   import type { RouteConfig } from './lib/router.svelte';
   import { get } from './lib/api';
   import { onMount } from 'svelte';
+
+  // Public pages that should render without the navigation shell
+  const PUBLIC_PATHS = new Set(['/login', '/register', '/setup']);
 
   const routes: Record<string, any> = {
     '/': { component: HomePage, requiresAuth: true },
@@ -98,14 +102,14 @@
     </div>
   {:else}
     <div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
-      {#if setupComplete}
+      {#if setupComplete && authManager.isAuthenticated && !PUBLIC_PATHS.has(router.currentPath)}
         <Navigation currentPath={router.currentPath} />
       {/if}
       <main class="flex-1">
         <Router {routes} />
       </main>
 
-      {#if setupComplete}
+      {#if setupComplete && authManager.isAuthenticated && !PUBLIC_PATHS.has(router.currentPath)}
         <!-- Footer -->
         <footer class="mt-auto py-8 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
           <div class="w-full px-4 sm:px-6 lg:px-8 text-left">

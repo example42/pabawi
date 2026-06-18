@@ -25,7 +25,7 @@ export interface WidgetDefinition {
   integration: string;
   /** Widget category: determines placement (action → ActionRow, others → grid) */
   type: WidgetType;
-  /** Column span in the grid: 1, 2, or 3. Clamped to [1,3] on registration. */
+  /** Column span in the grid: 1–4. Clamped to [1,4] on registration. */
   colSpan: number;
   /** Numeric priority weight. Lower renders first. */
   priority: number;
@@ -41,13 +41,13 @@ export interface IntegrationStatusEntry {
 let definitions = $state<WidgetDefinition[]>([]);
 
 /**
- * Register a widget definition. Column span is clamped to [1,3].
+ * Register a widget definition. Column span is clamped to [1,4].
  * Called at module load time as a side-effect of static imports.
  */
 export function registerWidget(def: WidgetDefinition): void {
   const clamped: WidgetDefinition = {
     ...def,
-    colSpan: Math.max(1, Math.min(3, Math.round(def.colSpan))),
+    colSpan: Math.max(1, Math.min(4, Math.round(def.colSpan))),
   };
   definitions.push(clamped);
 }

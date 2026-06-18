@@ -124,12 +124,12 @@ describe('widgetRegistry property tests', () => {
    * Property 2: Column span clamping
    *
    * For any integer value provided as colSpan during registration, the stored
-   * colSpan SHALL equal `Math.max(1, Math.min(3, Math.round(value)))`.
+   * colSpan SHALL equal `Math.max(1, Math.min(4, Math.round(value)))`.
    *
    * **Validates: Requirements 1.3**
    */
   describe('Property 2: Column span clamping', () => {
-    it('stored colSpan equals Math.max(1, Math.min(3, Math.round(value)))', () => {
+    it('stored colSpan equals Math.max(1, Math.min(4, Math.round(value)))', () => {
       fc.assert(
         fc.property(
           widgetDefinitionArb(),
@@ -139,7 +139,7 @@ describe('widgetRegistry property tests', () => {
             const input = { ...def, colSpan: rawColSpan };
             registerWidget(input);
             const stored = getWidgets()[0];
-            const expected = Math.max(1, Math.min(3, Math.round(rawColSpan)));
+            const expected = Math.max(1, Math.min(4, Math.round(rawColSpan)));
             expect(stored.colSpan).toBe(expected);
           },
         ),
@@ -147,14 +147,14 @@ describe('widgetRegistry property tests', () => {
       );
     });
 
-    it('colSpan is always in [1, 3] regardless of input', () => {
+    it('colSpan is always in [1, 4] regardless of input', () => {
       fc.assert(
         fc.property(widgetDefinitionArb(), (def) => {
           _resetForTesting();
           registerWidget(def);
           const stored = getWidgets()[0];
           expect(stored.colSpan).toBeGreaterThanOrEqual(1);
-          expect(stored.colSpan).toBeLessThanOrEqual(3);
+          expect(stored.colSpan).toBeLessThanOrEqual(4);
         }),
         { numRuns: 200 },
       );
