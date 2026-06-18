@@ -13,7 +13,7 @@ Refactor the node detail overview tab from a monolithic 2700-line page into a co
     - Export `stableSortByPriority()` pure function for priority ordering
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 7.1_
 
-  - [ ]* 1.2 Write property tests for widget registry (`frontend/src/lib/widgetRegistry.property.test.ts`)
+  - [x] 1.2 Write property tests for widget registry (`frontend/src/lib/widgetRegistry.property.test.ts`)
     - **Property 1: Registration preserves widget definitions**
     - **Property 2: Column span clamping**
     - **Property 3: Integration filtering**
@@ -35,7 +35,7 @@ Refactor the node detail overview tab from a monolithic 2700-line page into a co
     - Render each action widget inside a WidgetFrame
     - _Requirements: 4.1, 4.2, 4.4, 4.5_
 
-  - [ ]* 2.3 Write unit tests for WidgetFrame (`frontend/src/components/WidgetFrame.test.ts`)
+  - [x] 2.3 Write unit tests for WidgetFrame (`frontend/src/components/WidgetFrame.test.ts`)
     - **Property 5: Column span applied to frame element**
     - **Property 7: Error badge content**
     - Test loading skeleton display, error state with retry, and content transition
@@ -51,7 +51,7 @@ Refactor the node detail overview tab from a monolithic 2700-line page into a co
     - Show inline error notification when integration status endpoint fails
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 5.2_
 
-  - [ ]* 3.2 Write unit tests for WidgetGrid (`frontend/src/components/WidgetGrid.test.ts`)
+  - [x] 3.2 Write unit tests for WidgetGrid (`frontend/src/components/WidgetGrid.test.ts`)
     - **Property 6: Action row composition**
     - **Property 8: Error isolation**
     - Test integration status error displays notification
@@ -102,7 +102,7 @@ Refactor the node detail overview tab from a monolithic 2700-line page into a co
     - Preserve all other tabs (facts, actions, puppet, hiera, journal, manage, monitor) unchanged
     - _Requirements: 3.1, 4.1, 5.2_
 
-  - [ ]* 8.2 Write integration test verifying WidgetGrid renders registered widgets with correct filtering (`frontend/src/components/WidgetGrid.integration.test.ts`)
+  - [x] 8.2 Write integration test verifying WidgetGrid renders registered widgets with correct filtering (`frontend/src/components/WidgetGrid.integration.test.ts`)
     - Mock `/api/integrations/status` response
     - Register test widgets with various integration names
     - Verify only enabled-integration widgets render

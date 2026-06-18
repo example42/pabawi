@@ -60,11 +60,12 @@
     errorMessage = null;
 
     try {
-      const response = await post<SessionResponse>('/api/console/sessions', {
+      const data = await post<{ session: SessionResponse }>('/api/console/sessions', {
         nodeId,
         provider: activeCapability.provider,
       });
 
+      const response = data.session;
       sessionId = response.sessionId;
       const wsUrl = buildWsUrl(response.wsUrl, response.token);
 
