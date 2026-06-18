@@ -40,8 +40,16 @@ RUN npm run build
 # This runs on the target platform to ensure native modules (like sqlite3) are built correctly
 FROM node:20-bookworm-slim AS backend-deps
 WORKDIR /app/backend
+
+# Install build tools needed to compile sqlite3 from source
+# Pre-built binaries may target a newer glibc than bookworm provides (2.36)
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY backend/package*.json ./
-RUN npm install --omit=dev --no-audit
+RUN npm install --omit=dev --no-audit --build-from-source
 
 # Stage 3: Install Bolt CLI gems in a builder stage
 FROM ubuntu:24.04 AS bolt-builder
