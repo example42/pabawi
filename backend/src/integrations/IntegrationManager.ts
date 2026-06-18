@@ -339,6 +339,12 @@ export class IntegrationManager {
    * is given a 3-second timeout. Providers that timeout or throw are excluded
    * from the response. Results are sorted by provider name ascending.
    *
+   * When the caller passes a linked/merged node identifier (e.g. an FQDN from
+   * the aggregated inventory), this method resolves it to the provider-specific
+   * ID (e.g. "proxmox:pve1:101") before querying each provider. This avoids
+   * the mismatch where providers expect their own ID format but the frontend
+   * only knows the merged inventory name.
+   *
    * @param nodeId - The node to query console availability for
    * @returns Array of available console capabilities sorted by provider name
    */
@@ -347,9 +353,28 @@ export class IntegrationManager {
 
     const providerEntries = Array.from(this.consoleProviders.entries());
 
+    // Resolve linked node sourceData so we can map nodeId → provider-specific ID.
+    // Uses cached inventory to avoid an extra fetch on every availability check.
+    let sourceData: Record<string, { id: string }> | undefined;
+    try {
+      const aggregated = await this.getAggregatedInventory(true);
+      const linkedNode = aggregated.nodes.find(
+        (n) => n.id === nodeId || n.name === nodeId,
+      );
+      if (linkedNode?.sourceData) {
+        sourceData = linkedNode.sourceData;
+      }
+    } catch {
+      // If inventory lookup fails, proceed with raw nodeId — providers will
+      // reject if the format doesn't match, which is the pre-existing behaviour.
+    }
+
     const results = await Promise.all(
       providerEntries.map(async ([name, provider]): Promise<ConsoleAvailabilityEntry[]> => {
         try {
+          // Use provider-specific ID if available, otherwise fall back to raw nodeId.
+          const resolvedId = sourceData?.[name]?.id ?? nodeId;
+
           let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
           const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(
@@ -358,7 +383,7 @@ export class IntegrationManager {
             );
           });
 
-          const workPromise = provider.getConsoleCapabilities(nodeId);
+          const workPromise = provider.getConsoleCapabilities(resolvedId);
           workPromise.catch(() => { /* handled by race */ });
 
           let capabilities;

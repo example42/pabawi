@@ -132,10 +132,26 @@ export function createConsoleRouter(
         return;
       }
 
+      // Resolve nodeId to provider-specific ID (e.g. FQDN → proxmox:node:vmid).
+      // The frontend passes the merged inventory name; providers expect their own format.
+      let resolvedNodeId = nodeId;
+      try {
+        const aggregated = await integrationManager.getAggregatedInventory(true);
+        const linkedNode = aggregated.nodes.find(
+          (n) => n.id === nodeId || n.name === nodeId,
+        );
+        const providerSpecificId = linkedNode?.sourceData?.[providerName]?.id;
+        if (providerSpecificId) {
+          resolvedNodeId = providerSpecificId;
+        }
+      } catch {
+        // Proceed with raw nodeId if inventory lookup fails
+      }
+
       // Create session via provider
       let session;
       try {
-        session = await provider.createSession(nodeId, userId);
+        session = await provider.createSession(resolvedNodeId, userId);
       } catch (error) {
         const message =
           error instanceof Error ? error.message : String(error);
