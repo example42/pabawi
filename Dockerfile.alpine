@@ -40,8 +40,13 @@ RUN npm run build
 # This runs on the target platform to ensure native modules (like sqlite3) are built correctly
 FROM node:20-alpine3.21 AS backend-deps
 WORKDIR /app/backend
+
+# Install build tools needed to compile sqlite3 from source (no glibc pre-built binaries for musl)
+# hadolint ignore=DL3018
+RUN apk add --no-cache python3 make g++
+
 COPY backend/package*.json ./
-RUN npm install --omit=dev --no-audit
+RUN npm install --omit=dev --no-audit --build-from-source
 
 # Stage 3: Install Bolt CLI gems in a builder stage
 FROM node:20-alpine3.21 AS bolt-builder
