@@ -24,7 +24,7 @@
   import LogsPage from './pages/LogsPage.svelte';
   import { router } from './lib/router.svelte';
   import { authManager } from './lib/auth.svelte';
-  import type { RouteConfig } from './lib/router.svelte';
+  import { entraIdAuth } from './lib/entraIdAuth.svelte';
   import { get } from './lib/api';
   import { onMount } from 'svelte';
 
@@ -53,22 +53,34 @@
     '/logs': { component: LogsPage, requiresAuth: true, requiresAdmin: true }
   };
 
+  // Detect SSO authorization code synchronously before any child mounts
+  const hasSsoCode = typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('code');
+
+  let processingSso = $state(hasSsoCode);
   let setupComplete = $state(true); // Default to true to avoid flashing
   let checkingSetup = $state(true);
 
-  // Check setup status on mount
   onMount(async () => {
+    // Exchange the SSO code first — before the router or guard can strip it
+    if (hasSsoCode) {
+      try {
+        await entraIdAuth.handleSsoCallback();
+      } finally {
+        processingSso = false;
+      }
+    }
+
+    // Then check setup status
     try {
       const status = await get<{ isComplete: boolean }>('/api/setup/status');
       setupComplete = status.isComplete;
 
-      // Redirect to setup if not complete and not already on setup page
       if (!setupComplete && router.currentPath !== '/setup') {
         router.navigate('/setup');
       }
     } catch (error) {
       console.error('Failed to check setup status:', error);
-      // Assume setup is complete if we can't check
       setupComplete = true;
     } finally {
       checkingSetup = false;
@@ -85,7 +97,15 @@
 </script>
 
 <ErrorBoundary onError={handleError}>
-  {#if checkingSetup}
+  {#if processingSso}
+    <!-- SSO code exchange in progress — do not mount router or fire auth guards -->
+    <div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+      <div class="text-center">
+        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <p class="mt-4 text-gray-600 dark:text-gray-400">Completing sign-in...</p>
+      </div>
+    </div>
+  {:else if checkingSetup}
     <!-- Show loading state while checking setup -->
     <div class="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
       <div class="text-center">
