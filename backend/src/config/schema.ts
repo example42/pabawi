@@ -417,6 +417,13 @@ export const ConsoleConfigSchema = z.object({
   maxSessionDuration: z.number().int().positive().default(28800000),
   maxConcurrentSessions: z.number().int().min(1).default(3),
   heartbeatIntervalMs: z.number().int().positive().default(30000),
+  /**
+   * Whether to verify the TLS certificate of the upstream console host
+   * (VNC/terminal websocket). Defaults to `true` (secure). Set to `false`
+   * only for trusted networks with self-signed upstream certificates —
+   * disabling it exposes the proxied session to MITM.
+   */
+  verifyUpstreamTls: z.boolean().default(true),
 });
 
 export type ConsoleConfig = z.infer<typeof ConsoleConfigSchema>;

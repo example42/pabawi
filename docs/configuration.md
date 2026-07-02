@@ -133,6 +133,13 @@ COMMAND_WHITELIST_MATCH_MODE=prefix
 
 Never set `COMMAND_WHITELIST_ALLOW_ALL=true` in production.
 
+The whitelist is enforced on **every** command-execution path — single-node
+(`POST /api/nodes/:id/command`), multi-node batch (`POST /api/executions/batch`),
+and re-execution (`POST /api/executions/:id/re-execute`). Shell metacharacters
+(`; | & \` $() {} * ? [] ~ < > \\` and newlines) and commands beginning with `-`
+are **always** rejected, even when `COMMAND_WHITELIST_ALLOW_ALL=true`, because
+they would be interpreted by the remote shell on the target node.
+
 ## Streaming
 
 | Variable | Default | Description |
@@ -140,6 +147,24 @@ Never set `COMMAND_WHITELIST_ALLOW_ALL=true` in production.
 | `STREAMING_BUFFER_MS` | `100` | Output batch interval in ms. Lower = more real-time, higher = less traffic |
 | `STREAMING_MAX_OUTPUT_SIZE` | `10485760` | Max output per execution in bytes (10 MB) |
 | `STREAMING_MAX_LINE_LENGTH` | `10000` | Max characters per output line before truncation |
+
+## Console (VNC / Terminal)
+
+Settings for the browser-based console proxy (VNC and terminal sessions).
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONSOLE_SESSION_TIMEOUT_MS` | `300000` | Idle session timeout in ms (5 min) |
+| `CONSOLE_MAX_SESSION_DURATION` | `28800000` | Absolute session lifetime in ms (8 h) |
+| `CONSOLE_MAX_CONCURRENT_SESSIONS` | `3` | Max simultaneous console sessions |
+| `CONSOLE_HEARTBEAT_INTERVAL_MS` | `30000` | Heartbeat interval in ms (must be less than the idle timeout) |
+| `CONSOLE_VERIFY_UPSTREAM_TLS` | `true` | Verify the TLS certificate of the upstream console host |
+
+`CONSOLE_VERIFY_UPSTREAM_TLS` defaults to `true` (secure). Set it to `false`
+**only** on trusted networks where the upstream console host uses a self-signed
+certificate — disabling verification exposes the proxied session (which may
+carry credentials and keystrokes) to man-in-the-middle attacks, and the server
+logs a warning at startup when it is disabled.
 
 ## Caching
 

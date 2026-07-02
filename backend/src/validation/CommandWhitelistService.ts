@@ -1,6 +1,17 @@
 import type { WhitelistConfig } from "../config/schema";
 
 /**
+ * Shell metacharacters that are always blocked in remote commands.
+ *
+ * Prevents command chaining, piping, subshell execution, and glob expansion.
+ * Exported as the single source of truth so that any execution choke point
+ * (route validators AND the spawn site in BoltService) enforces the identical
+ * rule. These characters are interpreted by remote shells on target nodes and
+ * could enable command injection regardless of local shell safety.
+ */
+export const SHELL_META_PATTERN = /[;|&`$(){}\n\r\t><\\*?[\]~]/;
+
+/**
  * Error thrown when a command is not allowed by the whitelist
  */
 export class BoltCommandNotAllowedError extends Error {
@@ -38,8 +49,10 @@ export class BoltCommandWhitelistService {
    * Shell metacharacters that are always blocked in commands.
    * Prevents command chaining, piping, subshell execution, and glob expansion.
    * Applied regardless of allowAll setting to protect remote targets.
+   *
+   * @see {@link SHELL_META_PATTERN} — the shared module-level source of truth.
    */
-  private static readonly SHELL_META_PATTERN = /[;|&`$(){}\n\r\t><\\*?[\]~]/;
+  private static readonly SHELL_META_PATTERN = SHELL_META_PATTERN;
 
   /**
    * Check if a command is allowed based on whitelist configuration

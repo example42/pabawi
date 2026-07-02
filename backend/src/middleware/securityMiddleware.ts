@@ -65,9 +65,11 @@ export function createRateLimitMiddleware(): (req: Request, res: Response, next:
       return ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? "");
     },
 
-    // Skip rate limiting for health check and public endpoints
+    // Skip rate limiting for the health check only. `/api/health` is the sole
+    // truly public endpoint; `/api/config` requires authentication and must not
+    // be categorically exempt from per-user limits.
     skip: (req: Request): boolean => {
-      const publicPaths = ["/api/health", "/api/config"];
+      const publicPaths = ["/api/health"];
       return publicPaths.includes(req.path);
     },
 

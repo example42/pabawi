@@ -140,7 +140,7 @@ export function createConsoleRouter(
         const linkedNode = aggregated.nodes.find(
           (n) => n.id === nodeId || n.name === nodeId,
         );
-        const providerSpecificId = linkedNode?.sourceData?.[providerName]?.id;
+        const providerSpecificId = linkedNode?.sourceData[providerName]?.id;
         if (providerSpecificId) {
           resolvedNodeId = providerSpecificId;
         }

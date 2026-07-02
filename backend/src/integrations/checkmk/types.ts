@@ -56,6 +56,49 @@ export interface CheckmkFailingService {
   lastStateChange: number;
   output: string;
   acknowledged: boolean;
+  /**
+   * True when the service is currently suppressed by a scheduled downtime —
+   * either a downtime on the service itself or an inherited downtime from its
+   * host. Derived from `scheduled_downtime_depth` and
+   * `host_scheduled_downtime_depth` being greater than zero.
+   */
+  inDowntime: boolean;
+}
+
+/**
+ * Options for acknowledging a service problem via the Checkmk REST API.
+ * Mirrors the fields of the `acknowledge/collections/service` endpoint.
+ */
+export interface CheckmkAcknowledgeOptions {
+  hostname: string;
+  serviceDescription: string;
+  comment: string;
+  /** Acknowledgement persists across state recoveries until removed (default true). */
+  sticky: boolean;
+  /** Comment survives a Checkmk restart (default false). */
+  persistent: boolean;
+  /** Send notifications about the acknowledgement (default true). */
+  notify: boolean;
+}
+
+/**
+ * Options for scheduling a service downtime via the Checkmk REST API.
+ * Mirrors the fields of the `downtime/collections/service` endpoint.
+ */
+export interface CheckmkDowntimeOptions {
+  hostname: string;
+  serviceDescription: string;
+  comment: string;
+  /** ISO-8601 start timestamp. */
+  startTime: string;
+  /** ISO-8601 end timestamp. */
+  endTime: string;
+}
+
+/** Result of a Checkmk write action (acknowledge / downtime). */
+export interface CheckmkActionResult {
+  success: boolean;
+  error?: string;
 }
 
 export interface CheckmkHostSummary {

@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import type {
   ExecutionRepository,
@@ -11,6 +11,8 @@ import type { ExecutionQueue } from "../services/ExecutionQueue";
 import { asyncHandler } from "./asyncHandler";
 import type { BatchExecutionService } from "../services/BatchExecutionService";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import type { BoltCommandWhitelistService } from "../validation/CommandWhitelistService";
+import { BoltCommandNotAllowedError } from "../validation/CommandWhitelistService";
 
 /**
  * Request validation schemas
@@ -52,16 +54,44 @@ const BatchExecutionRequestSchema = z.object({
 
 /**
  * Create executions router
+ *
+ * @param rbacExecuteMiddleware - Optional RBAC middleware (e.g. `bolt:execute`)
+ *   applied to all command-executing / mutating routes (`/batch`,
+ *   `/:id/re-execute`, `/:id/cancel`, `/batch/:batchId/cancel`). When omitted
+ *   (tests), those routes fall back to a passthrough. In production `server.ts`
+ *   MUST supply it so these routes match the authorization of the single-node
+ *   command route.
+ * @param commandWhitelistService - Optional whitelist validator. When supplied,
+ *   `type: "command"` batch/re-execute requests are validated against the same
+ *   whitelist (and shell-metacharacter block) that guards the single-node route.
  */
 export function createExecutionsRouter(
   executionRepository: ExecutionRepository,
   executionQueue?: ExecutionQueue,
   batchExecutionService?: BatchExecutionService,
   container: DIContainer = createDefaultContainer(),
+  rbacExecuteMiddleware?: RequestHandler,
+  commandWhitelistService?: BoltCommandWhitelistService,
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
+
+  // Fall back to a passthrough when no RBAC middleware is injected (e.g. in
+  // unit tests that mount the router directly without the DI/auth stack).
+  const rbacExecute: RequestHandler =
+    rbacExecuteMiddleware ?? ((_req, _res, next): void => { next(); });
+
+  /**
+   * Validate a command against the whitelist for command-type executions.
+   * Throws BoltCommandNotAllowedError when the command is rejected. No-op when
+   * the type is not "command" or no whitelist service was injected.
+   */
+  const validateCommandOrThrow = (type: string, action: string): void => {
+    if (type === "command" && commandWhitelistService) {
+      commandWhitelistService.validateCommand(action);
+    }
+  };
 
   /**
    * GET /api/executions
@@ -754,6 +784,7 @@ export function createExecutionsRouter(
    */
   router.post(
     "/:id/re-execute",
+    rbacExecute,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -829,6 +860,31 @@ export function createExecutionsRouter(
           expertMode: (modifications.expertMode ?? originalExecution.expertMode),
           executionTool: originalExecution.executionTool,
         };
+
+        // Re-validate command-type actions against the whitelist. A stored
+        // execution's action must not be trusted just because it was accepted
+        // once; whitelist policy may have tightened, and modifications can
+        // introduce a new command string.
+        try {
+          validateCommandOrThrow(executionData.type, executionData.action);
+        } catch (error) {
+          if (error instanceof BoltCommandNotAllowedError) {
+            logger.warn("Re-execution command not allowed by whitelist", {
+              component: "ExecutionsRouter",
+              operation: "createReExecution",
+              metadata: { action: executionData.action, reason: error.reason },
+            });
+            res.status(403).json({
+              error: {
+                code: "COMMAND_NOT_ALLOWED",
+                message: error.message,
+                details: error.reason,
+              },
+            });
+            return;
+          }
+          throw error;
+        }
 
         logger.debug("Creating re-execution with parameters", {
           component: "ExecutionsRouter",
@@ -1280,6 +1336,7 @@ export function createExecutionsRouter(
    */
   router.post(
     "/:id/cancel",
+    rbacExecute,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -1558,6 +1615,7 @@ export function createExecutionsRouter(
    */
   router.post(
     "/batch",
+    rbacExecute,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -1640,6 +1698,30 @@ export function createExecutionsRouter(
         }
 
         const batchRequest = validationResult.data;
+
+        // Validate command-type actions against the whitelist (same policy as
+        // the single-node route). Blocks shell metacharacters and non-whitelisted
+        // commands before any execution is enqueued.
+        try {
+          validateCommandOrThrow(batchRequest.type, batchRequest.action);
+        } catch (error) {
+          if (error instanceof BoltCommandNotAllowedError) {
+            logger.warn("Batch command not allowed by whitelist", {
+              component: "ExecutionsRouter",
+              operation: "createBatch",
+              metadata: { action: batchRequest.action, reason: error.reason },
+            });
+            res.status(403).json({
+              error: {
+                code: "COMMAND_NOT_ALLOWED",
+                message: error.message,
+                details: error.reason,
+              },
+            });
+            return;
+          }
+          throw error;
+        }
 
         // Get user ID from request (set by auth middleware)
         const userId: string = req.user?.userId ?? "unknown";
@@ -1969,6 +2051,7 @@ export function createExecutionsRouter(
    */
   router.post(
     "/batch/:batchId/cancel",
+    rbacExecute,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

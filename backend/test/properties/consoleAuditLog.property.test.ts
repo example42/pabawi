@@ -158,6 +158,9 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
     return fc.assert(
       fc.asyncProperty(sessionDataArb, async (data) => {
         auditLogger.calls.length = 0;
+        // Each fast-check iteration shares the same db; clear prior sessions so
+        // a regenerated sessionId cannot collide on the UNIQUE id constraint.
+        await db.execute("DELETE FROM console_sessions");
 
         const session = buildConsoleSession(data);
         await sessionManager.createSession(session);
@@ -189,6 +192,9 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
         terminateReasonArb,
         async (data, reason) => {
           auditLogger.calls.length = 0;
+          // Clear prior sessions so a regenerated sessionId cannot collide on
+          // the UNIQUE id constraint across fast-check iterations.
+          await db.execute("DELETE FROM console_sessions");
 
           // First create the session so terminateSession can find it
           const session = buildConsoleSession(data);

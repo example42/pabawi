@@ -716,6 +716,8 @@ export class EntraIdService {
     }
 
     // Validate required claims presence
+    const audClaim = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
+
     const missingClaims: string[] = [];
     if (!payload.sub) missingClaims.push('sub');
     if (!payload.email && !payload.preferred_username) {
@@ -729,16 +731,26 @@ export class EntraIdService {
       );
     }
 
+    // Narrow the registered claims that jwt.verify guarantees when audience,
+    // issuer and expiry are validated. The JwtPayload type marks them optional,
+    // so assert their presence explicitly instead of using non-null assertions.
+    if (!payload.sub || !audClaim || !payload.iss || payload.exp === undefined) {
+      throw new EntraIdError(
+        ENTRA_ID_ERROR_CODES.INVALID_ID_TOKEN,
+        'Token is missing required registered claims (sub, aud, iss or exp)',
+      );
+    }
+
     return {
-      sub: payload.sub!,
+      sub: payload.sub,
       email: String(payload.email ?? ''),
       preferred_username: String(payload.preferred_username ?? ''),
       given_name: String(payload.given_name ?? ''),
       family_name: String(payload.family_name ?? ''),
       nonce: payload.nonce as string,
-      aud: (Array.isArray(payload.aud) ? payload.aud[0] : payload.aud)!,
-      iss: payload.iss!,
-      exp: payload.exp!,
+      aud: audClaim,
+      iss: payload.iss,
+      exp: payload.exp,
       groups: payload.groups as string[] | undefined,
     };
   }

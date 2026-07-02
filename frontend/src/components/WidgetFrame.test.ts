@@ -8,7 +8,7 @@
  * Validates: Requirements 3.4, 5.4, 6.1, 6.2, 6.4
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import type { Component } from 'svelte';
 import WidgetFrame from './WidgetFrame.svelte';
@@ -173,7 +173,7 @@ describe('WidgetFrame', () => {
 
     it('clicking retry resets to loading state', async () => {
       const widget = makeWidget({ component: MockErrorWidget as unknown as Component });
-      const { container } = render(WidgetFrame, { props: { widget, nodeId: 'node-1' } });
+      render(WidgetFrame, { props: { widget, nodeId: 'node-1' } });
 
       // Wait for error state
       await waitFor(() => {

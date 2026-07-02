@@ -43,6 +43,7 @@ CHECKMK_PASSWORD=myautomationsecret
 | **Inventory** | Hosts from Checkmk (priority 8), merged into unified inventory |
 | **Service monitoring** | Live status of all services on a node (OK, WARN, CRIT, UNKNOWN) |
 | **State-change events** | Historical events from the Event Console, shown in the Monitor tab and node journal |
+| **Acknowledge / downtime** | Operators can acknowledge service problems and schedule downtime windows from the Monitor page (requires `checkmk:write`) |
 | **Node linking** | Checkmk hosts are linked to existing Pabawi nodes by hostname |
 
 ## How It Works
@@ -115,14 +116,50 @@ For production, use a properly signed certificate or add the CA to the system tr
 
 ## API Endpoints
 
-The Checkmk integration exposes two API endpoints:
+The Checkmk integration exposes these API endpoints:
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/api/nodes/:nodeId/services` | Live service monitoring status |
-| GET | `/api/nodes/:nodeId/monitoring-events` | State-change events (supports `?limit=N`, default 200, max 1000) |
+| Method | Path | Permission | Description |
+|---|---|---|---|
+| GET | `/api/nodes/:nodeId/services` | `checkmk:read` | Live service monitoring status |
+| GET | `/api/nodes/:nodeId/monitoring-events` | `checkmk:read` | State-change events (supports `?limit=N`, default 200, max 1000) |
+| GET | `/api/monitoring/overview` | `checkmk:read` | Global problem/host summary for the Monitor and Home pages |
+| POST | `/api/monitoring/acknowledge` | `checkmk:write` | Acknowledge a service problem |
+| POST | `/api/monitoring/downtime` | `checkmk:write` | Schedule a downtime window for a service |
 
-Both endpoints require JWT authentication and the `monitoring:read` RBAC permission.
+All endpoints require JWT authentication. The `checkmk:read` permission is held
+by the Viewer, Operator, Administrator, and Provisioner roles. The
+`checkmk:write` permission (acknowledge / downtime) is held by the **Operator**
+and **Administrator** roles only.
+
+### Acknowledging problems and scheduling downtimes
+
+From the Monitor page, each service problem row has **Ack** and **Downtime**
+actions:
+
+- **Acknowledge** marks the problem as handled. It stays visible but stops
+  repeat notifications. A comment is required; `sticky` and `notify` are
+  toggleable (sticky and notify default on). Maps to
+  `POST /domain-types/acknowledge/collections/service` on the Checkmk REST API.
+- **Downtime** suppresses the service for a chosen window (1h / 2h / 4h / 8h /
+  24h, max 7 days). A comment is required. Maps to
+  `POST /domain-types/downtime/collections/service`.
+
+Both actions are recorded in the Pabawi audit log with the acting user, the
+target host/service, and the comment.
+
+In the problem list, services are visually distinguished:
+
+- **Acknowledged** services are dimmed with a `✓` marker.
+- **In-downtime** services use a blue-grey tint with a `⏸ DT` badge (a distinct
+  treatment from acknowledgement). A service in downtime — whether through a
+  service downtime or an inherited host downtime — is detected via the
+  `scheduled_downtime_depth` and `host_scheduled_downtime_depth` columns.
+- A **Hide downtime** toggle removes in-downtime services from the list.
+
+> **Note:** The Checkmk automation user must have write permissions in Checkmk
+> (not just read) for acknowledge and downtime calls to succeed. A read-only
+> automation user will return `403 Forbidden` upstream, surfaced in Pabawi as a
+> `502` with the upstream error message.
 
 ## Error Handling
 

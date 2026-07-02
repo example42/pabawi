@@ -5,7 +5,7 @@
  * providing service status and monitoring event data for nodes.
  */
 
-import { get } from './api';
+import { get, post } from './api';
 
 /**
  * Service status as returned by the monitoring API.
@@ -88,4 +88,42 @@ export async function getNodeMonitoringEvents(
     { maxRetries: 1, retryDelay: 1000 },
   );
   return extractArrayPayload(data, 'events');
+}
+
+/**
+ * Acknowledge a Checkmk service problem.
+ *
+ * Marks the (host, service) problem as handled. Requires the `checkmk:write`
+ * permission server-side. Resolves on success; throws on failure so callers
+ * can surface the error via a toast.
+ */
+export async function acknowledgeProblem(params: {
+  hostname: string;
+  serviceDescription: string;
+  comment: string;
+  sticky?: boolean;
+  persistent?: boolean;
+  notify?: boolean;
+}): Promise<void> {
+  await post('/api/monitoring/acknowledge', params, {
+    maxRetries: 0,
+  });
+}
+
+/**
+ * Schedule a downtime window for a Checkmk service.
+ *
+ * `startTime` and `endTime` are ISO-8601 strings. Requires the `checkmk:write`
+ * permission server-side. Resolves on success; throws on failure.
+ */
+export async function scheduleDowntime(params: {
+  hostname: string;
+  serviceDescription: string;
+  comment: string;
+  startTime: string;
+  endTime: string;
+}): Promise<void> {
+  await post('/api/monitoring/downtime', params, {
+    maxRetries: 0,
+  });
 }

@@ -115,8 +115,10 @@ function cleanupOldLogs(): void {
   }
 }
 
-// Run cleanup every minute
-setInterval(cleanupOldLogs, 60 * 1000);
+// Run cleanup every minute. unref() so this timer never keeps the process
+// (or a reused test worker) alive or adds event-loop load after shutdown.
+const cleanupInterval = setInterval(cleanupOldLogs, 60 * 1000);
+cleanupInterval.unref();
 
 /**
  * Create debug router

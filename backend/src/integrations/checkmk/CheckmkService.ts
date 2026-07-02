@@ -11,7 +11,10 @@ import * as http from "node:http";
 
 import type { LoggerService } from "../../services/LoggerService";
 import type {
+  CheckmkAcknowledgeOptions,
+  CheckmkActionResult,
   CheckmkConfig,
+  CheckmkDowntimeOptions,
   CheckmkFailingService,
   CheckmkHost,
   CheckmkHostStateSummary,
@@ -47,6 +50,8 @@ const FAILING_SERVICE_COLUMNS = [
   "last_state_change",
   "plugin_output",
   "acknowledged",
+  "scheduled_downtime_depth",
+  "host_scheduled_downtime_depth",
 ] as const;
 
 export class CheckmkService {
@@ -364,6 +369,8 @@ export class CheckmkService {
             last_state_change?: number;
             plugin_output?: string;
             acknowledged?: number;
+            scheduled_downtime_depth?: number;
+            host_scheduled_downtime_depth?: number;
           };
         }[];
       };
@@ -388,6 +395,10 @@ export class CheckmkService {
         if (!hostname) continue;
         if (allowedHosts && !allowedHosts.has(hostname)) continue;
 
+        const inDowntime =
+          (ext.scheduled_downtime_depth ?? 0) > 0 ||
+          (ext.host_scheduled_downtime_depth ?? 0) > 0;
+
         failingServices.push({
           hostname,
           serviceDescription: ext.description ?? "",
@@ -396,6 +407,7 @@ export class CheckmkService {
           lastStateChange: ext.last_state_change ?? 0,
           output: ext.plugin_output ?? "",
           acknowledged: (ext.acknowledged ?? 0) !== 0,
+          inDowntime,
         });
       }
 
@@ -564,6 +576,123 @@ export class CheckmkService {
   }
 
   /**
+   * Acknowledge a service problem in Checkmk.
+   *
+   * Sends `POST /domain-types/acknowledge/collections/service` with
+   * `acknowledge_type: "service"`. Checkmk responds with 204 on success.
+   * The acknowledged service remains visible but is marked as "handled" and
+   * stops generating repeat notifications.
+   */
+  async acknowledgeServiceProblem(
+    options: CheckmkAcknowledgeOptions,
+  ): Promise<CheckmkActionResult> {
+    try {
+      await this.request(
+        "POST",
+        "/domain-types/acknowledge/collections/service",
+        DEFAULT_TIMEOUT_MS,
+        {
+          acknowledge_type: "service",
+          sticky: options.sticky,
+          persistent: options.persistent,
+          notify: options.notify,
+          comment: options.comment,
+          host_name: options.hostname,
+          service_description: options.serviceDescription,
+        },
+      );
+
+      this.logger.info("Checkmk service problem acknowledged", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "acknowledgeServiceProblem",
+        metadata: {
+          serverUrl: this.config.serverUrl,
+          hostname: options.hostname,
+          serviceDescription: options.serviceDescription,
+        },
+      });
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to acknowledge Checkmk service problem", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "acknowledgeServiceProblem",
+        metadata: {
+          serverUrl: this.config.serverUrl,
+          hostname: options.hostname,
+          serviceDescription: options.serviceDescription,
+          errorMessage,
+        },
+      });
+
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Schedule a downtime window for a service in Checkmk.
+   *
+   * Sends `POST /domain-types/downtime/collections/service` with
+   * `downtime_type: "service"`. Checkmk responds with 204 on success.
+   * During the window the service's notifications are suppressed and it is
+   * flagged with a non-zero scheduled_downtime_depth.
+   */
+  async scheduleServiceDowntime(
+    options: CheckmkDowntimeOptions,
+  ): Promise<CheckmkActionResult> {
+    try {
+      await this.request(
+        "POST",
+        "/domain-types/downtime/collections/service",
+        DEFAULT_TIMEOUT_MS,
+        {
+          downtime_type: "service",
+          start_time: options.startTime,
+          end_time: options.endTime,
+          comment: options.comment,
+          host_name: options.hostname,
+          service_descriptions: [options.serviceDescription],
+        },
+      );
+
+      this.logger.info("Checkmk service downtime scheduled", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "scheduleServiceDowntime",
+        metadata: {
+          serverUrl: this.config.serverUrl,
+          hostname: options.hostname,
+          serviceDescription: options.serviceDescription,
+          startTime: options.startTime,
+          endTime: options.endTime,
+        },
+      });
+
+      return { success: true };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+
+      this.logger.error("Failed to schedule Checkmk service downtime", {
+        component: "CheckmkService",
+        integration: "checkmk",
+        operation: "scheduleServiceDowntime",
+        metadata: {
+          serverUrl: this.config.serverUrl,
+          hostname: options.hostname,
+          serviceDescription: options.serviceDescription,
+          errorMessage,
+        },
+      });
+
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
    * Sanitize a string to ensure the password never appears in log output.
    */
   private sanitize(text: string): string {
@@ -623,6 +752,13 @@ export class CheckmkService {
                 `Checkmk API returned HTTP ${String(statusCode)}: ${this.sanitize(bodyText.slice(0, 500))}`,
               ),
             );
+            return;
+          }
+
+          // 204 No Content (and other empty-body successes) carry no JSON.
+          // Checkmk returns 204 for acknowledge/downtime actions.
+          if (statusCode === 204 || bodyText.trim().length === 0) {
+            resolve(null);
             return;
           }
 

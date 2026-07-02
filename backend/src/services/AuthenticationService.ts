@@ -598,10 +598,18 @@ export class AuthenticationService {
       );
 
       if (userRevocation) {
-        // Check if token was issued before the revocation
-        const tokenIssuedAt = decoded.iat * 1000;
-        const revokedAt = new Date(userRevocation.revokedAt).getTime();
-        return tokenIssuedAt < revokedAt;
+        // JWT `iat` is second-granularity, but `revokedAt` is stored with
+        // millisecond precision. Comparing `iat * 1000 < revokedAt` (strict, ms)
+        // left a sub-second ambiguity for tokens minted in the same wall-clock
+        // second as the revocation. Compare at second granularity and treat the
+        // revocation second as inclusive: any token whose `iat` is at or before
+        // the revocation second is rejected (fail-secure). A token minted in a
+        // later second survives.
+        const tokenIssuedAtSec = decoded.iat;
+        const revokedAtSec = Math.floor(
+          new Date(userRevocation.revokedAt).getTime() / 1000,
+        );
+        return tokenIssuedAtSec <= revokedAtSec;
       }
 
       return false;

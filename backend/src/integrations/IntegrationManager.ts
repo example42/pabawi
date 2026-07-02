@@ -382,6 +382,10 @@ export class IntegrationManager {
               CONSOLE_AVAILABILITY_TIMEOUT_MS,
             );
           });
+          // Always handle the timeout promise rejection so an orphaned timer
+          // (e.g. if work setup throws before the race is built) cannot surface
+          // as an unhandled rejection polluting other tests.
+          timeoutPromise.catch(() => { /* handled: see clearTimeout below */ });
 
           const workPromise = provider.getConsoleCapabilities(resolvedId);
           workPromise.catch(() => { /* handled by race */ });
@@ -654,6 +658,12 @@ export class IntegrationManager {
               SOURCE_TIMEOUT_MS,
             );
           });
+          // Always attach a rejection handler to the timeout promise. If the
+          // work setup below throws synchronously (so the race is never built
+          // and the timer is never cleared), the timer can still fire later and
+          // would otherwise surface as an unhandled rejection that pollutes
+          // unrelated tests sharing the same worker.
+          timeoutPromise.catch(() => { /* handled: see clearTimeout below */ });
 
           // Attach a no-op catch to the work promise so that, if the timeout
           // wins the race and the work later rejects, the rejection is silently
