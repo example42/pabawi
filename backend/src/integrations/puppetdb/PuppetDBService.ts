@@ -1880,7 +1880,7 @@ export class PuppetDBService
       typeof raw.transaction_uuid === "string" ? raw.transaction_uuid : "";
 
     // Extract metrics with detailed logging
-    this.log(`Extracting resource metrics for report ${hash}`);
+    this.log(`Extracting resource metrics for report ${hash}`, "debug");
     const resourceMetrics = {
       total: getMetricValue("resources", "total"),
       skipped: getMetricValue("resources", "skipped"),

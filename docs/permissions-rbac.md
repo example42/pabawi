@@ -52,7 +52,7 @@ Includes all Viewer permissions plus:
 | Permission | Description |
 |---|---|
 | `ansible/execute` | Execute Ansible playbooks |
-| `bolt/execute` | Execute Bolt tasks and commands |
+| `bolt/execute` | Execute Bolt tasks and commands (single-node, multi-node batch, and re-execution) |
 | `proxmox/lifecycle` | Start/stop/reboot Proxmox VMs |
 | `aws/lifecycle` | Start/stop/reboot AWS instances |
 | `azure/lifecycle` | Start/stop/reboot Azure VMs |

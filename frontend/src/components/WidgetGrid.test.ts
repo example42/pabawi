@@ -60,7 +60,7 @@ function registerSummaryWidget(id: string, integration: string, priority: number
   });
 }
 
-function mockIntegrationStatus(integrations: Array<{ name: string; status: string; type?: string }>): void {
+function mockIntegrationStatus(integrations: { name: string; status: string; type?: string }[]): void {
   mockGet.mockResolvedValue({
     integrations: integrations.map(i => ({
       type: 'both',

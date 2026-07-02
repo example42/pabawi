@@ -16,7 +16,6 @@ import type { Component } from 'svelte';
 import WidgetGrid from './WidgetGrid.svelte';
 import { registerWidget, _resetForTesting } from '../lib/widgetRegistry.svelte';
 import MockReadyWidget from './__tests__/MockReadyWidget.svelte';
-import MockErrorWidget from './__tests__/MockErrorWidget.svelte';
 
 // Mock the API module
 vi.mock('../lib/api', () => ({
@@ -29,7 +28,7 @@ const mockGet = vi.mocked(get);
 // --- Helpers ---
 
 function mockIntegrationStatus(
-  integrations: Array<{ name: string; status: string; type?: string }>,
+  integrations: { name: string; status: string; type?: string }[],
 ): void {
   mockGet.mockResolvedValue({
     integrations: integrations.map(i => ({ type: 'both', ...i })),

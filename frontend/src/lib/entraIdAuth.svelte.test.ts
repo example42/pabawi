@@ -98,11 +98,10 @@ describe('EntraIdAuthStore', () => {
       originalLocation = window.location;
       Object.defineProperty(window, 'location', {
         writable: true,
-        value: {
-          ...originalLocation,
+        value: Object.assign({}, originalLocation, {
           search: '',
           pathname: '/login',
-        },
+        }),
       });
 
       // Mock window.history.replaceState

@@ -247,7 +247,9 @@ export class ConsoleWebSocketProxy {
     clientWs: WebSocket, session: ConsoleSession, upstreamUrl: string,
   ): Promise<WebSocket | null> {
     return new Promise((resolve) => {
-      const upstream = new WebSocket(upstreamUrl, { rejectUnauthorized: false });
+      const upstream = new WebSocket(upstreamUrl, {
+        rejectUnauthorized: this.config.console.verifyUpstreamTls,
+      });
 
       const timeout = setTimeout(() => {
         upstream.terminate();

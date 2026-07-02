@@ -81,6 +81,17 @@ export class ConfigService {
       defaults.heartbeatIntervalMs,
     );
 
+    // TLS verification for the upstream console host. Secure by default; only a
+    // literal "false" opts out. Any other value keeps verification enabled.
+    const rawVerifyTls = process.env.CONSOLE_VERIFY_UPSTREAM_TLS;
+    const verifyUpstreamTls = !(rawVerifyTls?.toLowerCase() === "false");
+    if (!verifyUpstreamTls) {
+      logger.warn(
+        "CONSOLE_VERIFY_UPSTREAM_TLS=false — upstream console TLS certificate verification is DISABLED. The proxied console session is exposed to man-in-the-middle attacks. Only use this on trusted networks with self-signed upstream certificates.",
+        context,
+      );
+    }
+
     // Cross-field validation: heartbeat must be less than session timeout (Req 11.6)
     if (heartbeatIntervalMs >= sessionTimeoutMs) {
       logger.warn(
@@ -92,6 +103,7 @@ export class ConfigService {
         maxSessionDuration,
         maxConcurrentSessions,
         heartbeatIntervalMs: defaults.heartbeatIntervalMs,
+        verifyUpstreamTls,
       };
     }
 
@@ -100,6 +112,7 @@ export class ConfigService {
       maxSessionDuration,
       maxConcurrentSessions,
       heartbeatIntervalMs,
+      verifyUpstreamTls,
     };
   }
 

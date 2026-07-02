@@ -5,6 +5,8 @@
   import IntegrationBadge from '../components/IntegrationBadge.svelte';
   import { router } from '../lib/router.svelte';
   import { get } from '../lib/api';
+  import { acknowledgeProblem, scheduleDowntime } from '../lib/checkmkApi';
+  import { showSuccess, showError } from '../lib/toast.svelte';
 
   const pageTitle = 'Pabawi - Monitor';
 
@@ -25,6 +27,7 @@
     lastStateChange: number;
     output: string;
     acknowledged: boolean;
+    inDowntime: boolean;
   }
 
   interface IntegrationStatusData {
@@ -50,10 +53,32 @@
   let error = $state<string | null>(null);
   let checkmkProblemsHours = $state<number | null>(null);
   let checkmkProblemSort = $state<'severity' | 'freshness'>('severity');
+  let hideInDowntime = $state(false);
   let refreshing = $state(false);
   let lastRefresh = $state<Date | null>(null);
   let autoRefreshInterval = $state(0);
   let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
+  // ---- Action modal state (acknowledge / downtime) ----
+  const DOWNTIME_PRESETS = [
+    { label: '1h', minutes: 60 },
+    { label: '2h', minutes: 120 },
+    { label: '4h', minutes: 240 },
+    { label: '8h', minutes: 480 },
+    { label: '24h', minutes: 1440 },
+  ];
+
+  let actionModal = $state<{
+    kind: 'ack' | 'downtime';
+    problem: CheckmkServiceProblem;
+  } | null>(null);
+  let actionComment = $state('');
+  let actionSubmitting = $state(false);
+  // Acknowledge options
+  let ackSticky = $state(true);
+  let ackNotify = $state(true);
+  // Downtime options
+  let downtimeMinutes = $state(120);
 
   const sortedCheckmkProblems = $derived.by(() => {
     let filtered = checkmkProblems;
@@ -63,9 +88,20 @@
       filtered = filtered.filter(p => p.lastStateChange >= cutoff);
     }
 
+    if (hideInDowntime) {
+      filtered = filtered.filter(p => !p.inDowntime);
+    }
+
+    // A problem is "suppressed" when it is acknowledged or in a downtime
+    // window. Suppressed problems sink below active ones regardless of sort.
+    const isSuppressed = (p: CheckmkServiceProblem): boolean =>
+      p.acknowledged || p.inDowntime;
+
     return [...filtered].sort((a, b) => {
-      if (a.acknowledged !== b.acknowledged) {
-        return a.acknowledged ? 1 : -1;
+      const aSup = isSuppressed(a);
+      const bSup = isSuppressed(b);
+      if (aSup !== bSup) {
+        return aSup ? 1 : -1;
       }
       if (checkmkProblemSort === 'severity') {
         if (a.state !== b.state) return b.state - a.state;
@@ -146,6 +182,73 @@
       refreshing = false;
     }
   }
+
+  function openAck(problem: CheckmkServiceProblem): void {
+    actionModal = { kind: 'ack', problem };
+    actionComment = '';
+    ackSticky = true;
+    ackNotify = true;
+  }
+
+  function openDowntime(problem: CheckmkServiceProblem): void {
+    actionModal = { kind: 'downtime', problem };
+    actionComment = '';
+    downtimeMinutes = 120;
+  }
+
+  function closeActionModal(): void {
+    if (actionSubmitting) return;
+    actionModal = null;
+  }
+
+  async function submitAction(): Promise<void> {
+    if (!actionModal || actionSubmitting) return;
+    const { kind, problem } = actionModal;
+    const comment = actionComment.trim();
+    if (!comment) {
+      showError('A comment is required');
+      return;
+    }
+
+    actionSubmitting = true;
+    try {
+      if (kind === 'ack') {
+        await acknowledgeProblem({
+          hostname: problem.hostname,
+          serviceDescription: problem.serviceDescription,
+          comment,
+          sticky: ackSticky,
+          notify: ackNotify,
+        });
+        showSuccess(`Acknowledged ${problem.serviceDescription} on ${problem.hostname}`);
+      } else {
+        const startTime = new Date();
+        const endTime = new Date(startTime.getTime() + downtimeMinutes * 60_000);
+        await scheduleDowntime({
+          hostname: problem.hostname,
+          serviceDescription: problem.serviceDescription,
+          comment,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+        });
+        showSuccess(
+          `Scheduled ${downtimeMinutes >= 60 ? `${downtimeMinutes / 60}h` : `${downtimeMinutes}m`} downtime for ${problem.serviceDescription} on ${problem.hostname}`,
+        );
+      }
+      actionModal = null;
+      // Reflect the new Checkmk state. The change may take a moment to
+      // propagate; refetch so acknowledged/downtime flags update.
+      await fetchCheckmkData();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Action failed';
+      showError(
+        kind === 'ack' ? 'Failed to acknowledge problem' : 'Failed to schedule downtime',
+        message,
+      );
+    } finally {
+      actionSubmitting = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -193,7 +296,10 @@
             <div class="flex items-center gap-2">
               <h3 class="text-sm font-medium text-gray-900 dark:text-white">Service Problems</h3>
               <span class="text-xs text-gray-500 dark:text-gray-400">
-                {sortedCheckmkProblems.filter(p => !p.acknowledged).length} unhandled
+                {sortedCheckmkProblems.filter(p => !p.acknowledged && !p.inDowntime).length} unhandled
+                {#if sortedCheckmkProblems.filter(p => p.inDowntime).length > 0}
+                  <span class="text-blue-400 dark:text-blue-300">/ {sortedCheckmkProblems.filter(p => p.inDowntime).length} downtime</span>
+                {/if}
                 {#if sortedCheckmkProblems.filter(p => p.acknowledged).length > 0}
                   <span class="text-gray-400">/ {sortedCheckmkProblems.filter(p => p.acknowledged).length} ack</span>
                 {/if}
@@ -233,6 +339,16 @@
                   Freshness
                 </button>
               </div>
+              <span class="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
+              <!-- Hide in-downtime -->
+              <button
+                type="button"
+                onclick={() => hideInDowntime = !hideInDowntime}
+                class="rounded px-2 py-0.5 text-xs font-medium transition-colors {hideInDowntime ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                title={hideInDowntime ? 'Showing all problems (click to hide in-downtime)' : 'Hide problems currently in a downtime window'}
+              >
+                {hideInDowntime ? 'Downtime hidden' : 'Hide downtime'}
+              </button>
               <span class="w-px h-4 bg-gray-300 dark:bg-gray-600"></span>
               <!-- Auto-refresh -->
               <div class="flex items-center gap-1">
@@ -286,29 +402,33 @@
                   <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Service</th>
                   <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Output</th>
                   <th scope="col" class="px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Since</th>
+                  <th scope="col" class="px-3 py-2 text-right text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">Actions</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-200 bg-white dark:divide-gray-700 dark:bg-gray-800">
                 {#each sortedCheckmkProblems as problem}
                   <tr
-                    class="cursor-pointer transition-colors {problem.acknowledged ? 'opacity-50 hover:opacity-70' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}"
+                    class="cursor-pointer transition-colors {problem.inDowntime ? 'bg-blue-50 italic hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30' : problem.acknowledged ? 'opacity-50 hover:opacity-70' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}"
                     onclick={() => router.navigate(`/nodes/${problem.hostname}`)}
-                    title={problem.acknowledged ? `[ACK] ${problem.output}` : problem.output}
+                    title={`${problem.inDowntime ? '[DOWNTIME] ' : ''}${problem.acknowledged ? '[ACK] ' : ''}${problem.output}`}
                   >
                     <td class="whitespace-nowrap px-3 py-2 text-xs">
                       <span class="inline-flex items-center gap-1">
                         <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {problem.state === 2 ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : problem.state === 1 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'}">
                           {problem.state === 2 ? 'CRIT' : problem.state === 1 ? 'WARN' : 'UNKN'}
                         </span>
+                        {#if problem.inDowntime}
+                          <span class="inline-flex items-center rounded px-1 text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-200" title="In scheduled downtime">⏸ DT</span>
+                        {/if}
                         {#if problem.acknowledged}
                           <span class="text-gray-400 dark:text-gray-500" title="Acknowledged">✓</span>
                         {/if}
                       </span>
                     </td>
-                    <td class="whitespace-nowrap px-3 py-2 text-sm {problem.acknowledged ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}">
+                    <td class="whitespace-nowrap px-3 py-2 text-sm {problem.acknowledged || problem.inDowntime ? 'text-gray-500 dark:text-gray-500' : 'text-gray-900 dark:text-white'}">
                       {problem.hostname}
                     </td>
-                    <td class="px-3 py-2 text-sm {problem.acknowledged ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'} max-w-[200px] truncate" title={problem.serviceDescription}>
+                    <td class="px-3 py-2 text-sm {problem.acknowledged || problem.inDowntime ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'} max-w-[200px] truncate" title={problem.serviceDescription}>
                       {problem.serviceDescription}
                     </td>
                     <td class="px-3 py-2 text-xs text-gray-500 dark:text-gray-400 max-w-[250px] truncate" title={problem.output}>
@@ -325,6 +445,28 @@
                       {:else}
                         —
                       {/if}
+                    </td>
+                    <td class="whitespace-nowrap px-3 py-2 text-right text-xs">
+                      <div class="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onclick={(e) => { e.stopPropagation(); openAck(problem); }}
+                          disabled={problem.acknowledged}
+                          class="rounded px-2 py-0.5 text-xs font-medium transition-colors bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={problem.acknowledged ? 'Already acknowledged' : 'Acknowledge this problem'}
+                        >
+                          Ack
+                        </button>
+                        <button
+                          type="button"
+                          onclick={(e) => { e.stopPropagation(); openDowntime(problem); }}
+                          disabled={problem.inDowntime}
+                          class="rounded px-2 py-0.5 text-xs font-medium transition-colors bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/40 dark:text-blue-200 dark:hover:bg-blue-900/60 disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={problem.inDowntime ? 'Already in downtime' : 'Schedule a downtime window'}
+                        >
+                          Downtime
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 {/each}
@@ -398,3 +540,100 @@
     </div>
   {/if}
 </div>
+
+{#if actionModal}
+  <!-- Action modal: acknowledge / schedule downtime -->
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    role="presentation"
+    onclick={closeActionModal}
+  >
+    <div
+      class="w-full max-w-md rounded-lg bg-white shadow-xl dark:bg-gray-800"
+      role="dialog"
+      aria-modal="true"
+      onclick={(e) => e.stopPropagation()}
+    >
+      <div class="border-b border-gray-200 px-5 py-3 dark:border-gray-700">
+        <h3 class="text-base font-semibold text-gray-900 dark:text-white">
+          {actionModal.kind === 'ack' ? 'Acknowledge problem' : 'Schedule downtime'}
+        </h3>
+        <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          <span class="font-medium">{actionModal.problem.serviceDescription}</span>
+          on <span class="font-medium">{actionModal.problem.hostname}</span>
+        </p>
+      </div>
+
+      <div class="space-y-4 px-5 py-4">
+        <div>
+          <label for="action-comment" class="block text-xs font-medium text-gray-700 dark:text-gray-300">
+            Comment <span class="text-red-500">*</span>
+          </label>
+          <textarea
+            id="action-comment"
+            bind:value={actionComment}
+            rows="2"
+            maxlength="1000"
+            placeholder={actionModal.kind === 'ack' ? 'Reason for acknowledging…' : 'Reason for downtime…'}
+            class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+          ></textarea>
+        </div>
+
+        {#if actionModal.kind === 'ack'}
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+              <input type="checkbox" bind:checked={ackSticky} class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Sticky
+            </label>
+            <label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+              <input type="checkbox" bind:checked={ackNotify} class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              Notify
+            </label>
+          </div>
+        {:else}
+          <div>
+            <span class="block text-xs font-medium text-gray-700 dark:text-gray-300">Duration</span>
+            <div class="mt-1 flex flex-wrap items-center gap-1">
+              {#each DOWNTIME_PRESETS as preset}
+                <button
+                  type="button"
+                  onclick={() => downtimeMinutes = preset.minutes}
+                  class="rounded px-2 py-1 text-xs font-medium transition-colors {downtimeMinutes === preset.minutes ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'}"
+                >
+                  {preset.label}
+                </button>
+              {/each}
+            </div>
+            <p class="mt-1 text-xs text-gray-400">
+              Ends {new Date(Date.now() + downtimeMinutes * 60_000).toLocaleString()}
+            </p>
+          </div>
+        {/if}
+      </div>
+
+      <div class="flex justify-end gap-2 border-t border-gray-200 px-5 py-3 dark:border-gray-700">
+        <button
+          type="button"
+          onclick={closeActionModal}
+          disabled={actionSubmitting}
+          class="rounded-md px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50 dark:text-gray-300 dark:hover:bg-gray-700"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onclick={() => submitAction()}
+          disabled={actionSubmitting || actionComment.trim().length === 0}
+          class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white transition-colors disabled:opacity-50 {actionModal.kind === 'ack' ? 'bg-gray-700 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500' : 'bg-blue-600 hover:bg-blue-700'}"
+        >
+          {#if actionSubmitting}
+            <svg class="h-3.5 w-3.5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          {/if}
+          {actionModal.kind === 'ack' ? 'Acknowledge' : 'Schedule downtime'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}

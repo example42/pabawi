@@ -36,6 +36,7 @@ import { createAWSRouter } from "./routes/integrations/aws";
 import { createAzureRouter } from "./routes/integrations/azure";
 import { createMonitoringRouter } from "./routes/integrations/monitoring";
 import { createMonitoringOverviewRouter } from "./routes/integrations/monitoringOverview";
+import { createMonitoringActionsRouter } from "./routes/integrations/monitoringActions";
 import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import monitoringRouter from "./routes/monitoring";
@@ -678,17 +679,29 @@ async function startServer(): Promise<Express> {
     // Create rate limiting middleware for authenticated routes
     const rateLimitMiddleware = createRateLimitMiddleware();
 
-    // Configuration endpoint (security-sensitive — requires authentication)
-    app.get("/api/config", authMiddleware, (_req: Request, res: Response) => {
+    // Configuration endpoint (security-sensitive — requires authentication).
+    // The command whitelist (allow/deny policy) is only returned to callers who
+    // hold `bolt:execute`, since it is only actionable for users who can run
+    // commands. Non-executors receive execution timeout only. (Finding L-3)
+    const configPermissionService = new PermissionService(databaseService.getAdapter());
+    app.get("/api/config", authMiddleware, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const canExecute = req.user?.userId
+        ? await configPermissionService.hasPermission(req.user.userId, "bolt", "execute")
+        : false;
+
       res.json({
-        commandWhitelist: {
-          allowAll: config.commandWhitelist.allowAll,
-          matchMode: config.commandWhitelist.matchMode,
-          whitelist: config.commandWhitelist.whitelist,
-        },
+        ...(canExecute
+          ? {
+              commandWhitelist: {
+                allowAll: config.commandWhitelist.allowAll,
+                matchMode: config.commandWhitelist.matchMode,
+                whitelist: config.commandWhitelist.whitelist,
+              },
+            }
+          : {}),
         executionTimeout: config.executionTimeout,
       });
-    });
+    }));
 
     // Config routes (UI settings — requires authentication)
     app.use("/api/config", authMiddleware, createConfigRouter(container));
@@ -721,6 +734,20 @@ async function startServer(): Promise<Express> {
       rateLimitMiddleware,
       rbacMiddleware('checkmk', 'read'),
       createMonitoringOverviewRouter(integrationManager, container),
+    );
+
+    // Checkmk monitoring write actions (acknowledge / downtime).
+    // Mounted AFTER the read overview so that GET /overview resolves there and
+    // never triggers the write-permission gate. Write actions additionally pass
+    // through the read mount above (read router does not match POST routes), so
+    // they require both checkmk:read and checkmk:write — both held by the
+    // Operator and Administrator roles.
+    app.use(
+      "/api/monitoring",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('checkmk', 'write'),
+      createMonitoringActionsRouter(integrationManager, databaseService, container),
     );
 
     // API Routes - Inventory routes (protected with RBAC)
@@ -845,18 +872,18 @@ async function startServer(): Promise<Express> {
       "/api/executions",
       authMiddleware,
       rateLimitMiddleware,
-      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService, container),
+      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService, container, rbacMiddleware('bolt', 'execute'), commandWhitelistService),
     );
     app.use(
       "/api/executions",
-      streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
+      streamAuthMiddleware, // resolve single-use ?ticket= before auth check
       authMiddleware,
       rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository, container),
     );
     app.use(
       "/api/streaming",
-      streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
+      streamAuthMiddleware, // resolve single-use ?ticket= before auth check
       authMiddleware,
       rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository, container),

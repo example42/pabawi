@@ -19,6 +19,7 @@ import {
   BoltTaskParameterError,
 } from "./types";
 import { LoggerService } from "../../services/LoggerService";
+import { SHELL_META_PATTERN } from "../../validation/CommandWhitelistService";
 
 /**
  * Streaming callback for real-time output
@@ -70,6 +71,27 @@ export class BoltService {
     if (value.length === 0 || value.startsWith("-")) {
       throw new BoltExecutionError(
         `Refusing to pass ${fieldName}=${JSON.stringify(value)} to bolt: leading '-' would be parsed as a flag`,
+        -1,
+        "",
+        "",
+      );
+    }
+  }
+
+  /**
+   * Final defensive check before running a remote shell command: reject shell
+   * metacharacters. Bolt executes `command run` inside a shell ON THE REMOTE
+   * TARGET, so metacharacters (`; | & $() {} * ? …`) would be interpreted there
+   * and enable remote command injection. The route-level whitelist validator is
+   * the primary defence; this unconditional guard is defense-in-depth so that
+   * NO caller — batch, re-execute, or any future path — can reach the spawn
+   * site with an unvalidated command. Mirrors the identical rule enforced by
+   * {@link BoltCommandWhitelistService} on the single-node route.
+   */
+  private assertNoShellMetacharacters(command: string): void {
+    if (SHELL_META_PATTERN.test(command.trim())) {
+      throw new BoltExecutionError(
+        `Refusing to run command containing shell metacharacters: ${JSON.stringify(command)}`,
         -1,
         "",
         "",
@@ -754,6 +776,7 @@ export class BoltService {
     const startTime = Date.now();
     const executionId = this.generateExecutionId();
     this.assertNoLeadingDash(command, "command");
+    this.assertNoShellMetacharacters(command);
     this.assertNoLeadingDash(nodeId, "nodeId");
     const args = [
       "command",

@@ -54,6 +54,10 @@ Common error codes: `COMMAND_NOT_WHITELISTED`, `INTEGRATION_NOT_AVAILABLE`, `NOD
 | `GET` | `/api/config` | Application configuration |
 | `GET` | `/api/config/ui` | UI-specific configuration |
 
+`GET /api/config` returns the command-whitelist policy (`allowAll`, `matchMode`,
+`whitelist`) only to callers holding `bolt:execute`; other authenticated users
+receive `executionTimeout` only.
+
 ---
 
 ## Integrations
@@ -223,8 +227,17 @@ Query param: `days` (default 7, max 365).
 | `GET` | `/api/executions/:id/original` | Get the original execution for a re-run |
 | `GET` | `/api/executions/:id/re-executions` | All re-runs of an execution |
 | `POST` | `/api/executions/:id/cancel` | Cancel a running execution |
+| `POST` | `/api/executions/batch` | Run an action across multiple nodes / groups |
+| `GET` | `/api/executions/batch/:batchId` | Batch execution status |
+| `POST` | `/api/executions/batch/:batchId/cancel` | Cancel a batch execution |
 | `GET` | `/api/executions/queue/status` | Execution queue status |
 | `GET` | `/api/streaming/stats` | Streaming server stats |
+
+**Authorization:** the command-executing / mutating routes
+(`/batch`, `/:id/re-execute`, `/:id/cancel`, `/batch/:batchId/cancel`) require
+the `bolt:execute` permission. Command-type requests are validated against the
+[command whitelist](configuration.md#command-whitelist) — shell metacharacters
+are always rejected. The read-only `GET` routes require authentication only.
 
 **`GET /api/executions` query params:**
 

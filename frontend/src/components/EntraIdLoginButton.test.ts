@@ -9,7 +9,7 @@ describe('EntraIdLoginButton', () => {
     originalLocation = window.location;
     Object.defineProperty(window, 'location', {
       writable: true,
-      value: { ...originalLocation, href: '' },
+      value: Object.assign({}, originalLocation, { href: '' }),
     });
   });
 
