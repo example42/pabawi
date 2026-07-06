@@ -109,6 +109,10 @@ export function createAuthRateLimitMiddleware(): (req: Request, res: Response, n
     // Skip rate limiting for non-credential endpoints that happen to live
     // under /api/auth. These are either read-only discovery endpoints or
     // authenticated operations that are not brute-force targets.
+    //
+    // Also skip Entra ID SSO endpoints: these are not brute-forceable because
+    // /login is just a redirect to Microsoft, /callback is automated by the
+    // provider, and /token consumes a cryptographic single-use code with 60s TTL.
     skip: (req: Request): boolean => {
       // GET /api/auth/providers — public discovery, not an auth attempt
       if (req.method === "GET" && req.path === "/providers") return true;
@@ -116,8 +120,13 @@ export function createAuthRateLimitMiddleware(): (req: Request, res: Response, n
       if (req.method === "POST" && req.path === "/refresh") return true;
       // POST /api/auth/logout — requires existing auth, not an attempt
       if (req.method === "POST" && req.path === "/logout") return true;
-      // GET /api/auth/entra-id/callback — automated OAuth callback from provider
-      if (req.method === "GET" && req.path === "/callback") return true;
+      // All Entra ID SSO paths — not brute-forceable credential submissions.
+      // /login → 302 redirect to Microsoft (no credentials accepted here)
+      // /callback → automated redirect from Microsoft with one-time code+state
+      // /token → exchanges a cryptographic single-use auth code (60s TTL)
+      // Use originalUrl to avoid false matches with local POST /login which
+      // shares the same req.path when mounted at /api/auth.
+      if (req.originalUrl.includes("/entra-id/")) return true;
       return false;
     },
 
