@@ -637,7 +637,6 @@ async function startServer(): Promise<Express> {
 
         app.use(
           "/api/auth/entra-id",
-          authRateLimitMiddleware,
           createEntraIdAuthRouter(databaseService, container),
         );
 
