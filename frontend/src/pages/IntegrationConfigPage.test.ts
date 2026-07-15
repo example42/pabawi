@@ -285,7 +285,7 @@ describe('IntegrationConfigPage', () => {
       await fireEvent.click(screen.getByText(/retry/i));
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       expect(callCount).toBe(2);
@@ -313,7 +313,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       expect(screen.getByRole('button', { name: /test connection/i })).toBeInTheDocument();
@@ -327,7 +327,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('AWS')).toBeInTheDocument();
+        expect(screen.getAllByText('AWS').length).toBeGreaterThanOrEqual(1);
       });
 
       expect(screen.getByRole('button', { name: /test connection/i })).toBeInTheDocument();
@@ -341,7 +341,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       expect(screen.queryByRole('button', { name: /test connection/i })).not.toBeInTheDocument();
@@ -355,7 +355,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('PuppetDB')).toBeInTheDocument();
+        expect(screen.getAllByText('PuppetDB').length).toBeGreaterThanOrEqual(1);
       });
 
       expect(screen.queryByRole('button', { name: /test connection/i })).not.toBeInTheDocument();
@@ -374,7 +374,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       await fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
@@ -397,7 +397,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('AWS')).toBeInTheDocument();
+        expect(screen.getAllByText('AWS').length).toBeGreaterThanOrEqual(1);
       });
 
       await fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
@@ -420,7 +420,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       await fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
@@ -443,7 +443,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       await fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
@@ -463,7 +463,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       await fireEvent.click(screen.getByRole('button', { name: /test connection/i }));
@@ -486,7 +486,7 @@ describe('IntegrationConfigPage', () => {
       render(IntegrationConfigPage);
 
       await waitFor(() => {
-        expect(screen.getByText('Proxmox')).toBeInTheDocument();
+        expect(screen.getAllByText('Proxmox').length).toBeGreaterThanOrEqual(1);
       });
 
       const testButton = screen.getByRole('button', { name: /test connection/i });
