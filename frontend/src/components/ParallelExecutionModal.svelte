@@ -26,9 +26,17 @@
     nodes: string[];
   }
 
+  interface SourceInfo {
+    nodeCount: number;
+    groupCount: number;
+    lastSync: string;
+    status: 'healthy' | 'degraded' | 'unavailable';
+  }
+
   interface InventoryResponse {
     nodes: Node[];
     groups: NodeGroup[];
+    sources?: Record<string, SourceInfo>;
   }
 
   interface CommandWhitelistConfig {
@@ -73,7 +81,29 @@
   // State for search and filtering
   let searchQuery = $state<string>("");
   let sourceFilter = $state<string>("all");
-  let viewMode = $state<"nodes" | "groups">("nodes");
+  let viewMode = $state<"nodes" | "groups" | "pql">("nodes");
+
+  // PQL query state
+  let pqlQuery = $state<string>("");
+  let pqlError = $state<string | null>(null);
+  let pqlLoading = $state<boolean>(false);
+  let selectedPqlTemplate = $state<string>("");
+  let puppetdbAvailable = $state<boolean>(false);
+
+  // PQL query templates (same as InventoryPage)
+  const pqlPlaceholder = 'Example: nodes[certname] { certname ~ "web.*" }';
+  const pqlTemplates = [
+    { name: 'All nodes', query: 'nodes[certname]' },
+    { name: 'Nodes by certname pattern', query: 'nodes[certname] { certname ~ "web.*" }' },
+    { name: 'Nodes with specific OS', query: 'inventory[certname] { facts.os.name = "Ubuntu" }' },
+    { name: 'Nodes by environment', query: 'nodes[certname] { catalog_environment = "production" }' },
+    { name: 'Recently active nodes', query: `nodes[certname] { report_timestamp > "${new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()}" }` },
+    { name: 'Nodes with failed reports', query: 'nodes[certname] { latest_report_status = "failed" }' },
+    { name: 'Nodes by OS family', query: 'inventory[certname] { facts.os.family = "RedHat" }' },
+    { name: 'Nodes with specific resource', query: 'inventory[certname] { resources { type = "Service" and title = "apache2" } }' },
+    { name: 'Deactivated nodes', query: 'nodes[certname] { deactivated is not null }' },
+    { name: 'Windows nodes', query: 'inventory[certname] { facts.os.family = "windows" }' },
+  ];
 
   // State for action configuration
   type ActionType = 'install-software' | 'execute-playbook' | 'execute-command' | 'execute-task' | 'run-puppet';
@@ -198,7 +228,7 @@
       }
     }
 
-    // Keyboard shortcuts for view mode switching (Alt+N for nodes, Alt+G for groups)
+    // Keyboard shortcuts for view mode switching (Alt+N for nodes, Alt+G for groups, Alt+P for PQL)
     if (event.altKey && !loading) {
       if (event.key === 'n' || event.key === 'N') {
         event.preventDefault();
@@ -206,6 +236,9 @@
       } else if (event.key === 'g' || event.key === 'G') {
         event.preventDefault();
         viewMode = 'groups';
+      } else if ((event.key === 'p' || event.key === 'P') && puppetdbAvailable) {
+        event.preventDefault();
+        viewMode = 'pql';
       }
     }
   }
@@ -220,6 +253,9 @@
     sourceFilter = "all";
     viewMode = "nodes";
     executionTool = availableExecutionTools[0] ?? 'bolt';
+    pqlQuery = '';
+    pqlError = null;
+    selectedPqlTemplate = '';
   }
 
   // Fetch inventory data
@@ -231,6 +267,7 @@
       const data = await get<InventoryResponse>('/api/inventory');
       nodes = data.nodes || [];
       groups = data.groups || [];
+      puppetdbAvailable = !!(data.sources && 'puppetdb' in data.sources);
     } catch (err) {
       inventoryError = err instanceof Error ? err.message : 'Failed to load inventory';
       console.error('[ParallelExecutionModal] Error fetching inventory:', err);
@@ -278,6 +315,65 @@
     } catch {
       availableExecutionTools = ['bolt'];
       executionTool = 'bolt';
+    }
+  }
+
+  // Apply PQL query to select nodes
+  async function applyPqlQuery(): Promise<void> {
+    if (!pqlQuery.trim()) {
+      pqlError = 'Please enter a PQL query';
+      return;
+    }
+
+    // Basic PQL validation
+    const query = pqlQuery.trim();
+    if (!query.match(/^(nodes|facts|resources|reports|catalogs|edges|events|inventory|fact-contents)/)) {
+      pqlError = 'Invalid PQL query: must start with a valid entity (nodes, facts, resources, inventory, etc.)';
+      return;
+    }
+
+    pqlLoading = true;
+    pqlError = null;
+
+    try {
+      const params = new URLSearchParams();
+      params.append('pql', query);
+      const data = await get<InventoryResponse>(`/api/inventory?${params.toString()}`);
+      const matchedNodes = data.nodes || [];
+
+      if (matchedNodes.length === 0) {
+        pqlError = 'No nodes matched the PQL query';
+        return;
+      }
+
+      // Select matching node IDs
+      const matchedIds = matchedNodes.map(n => n.id);
+      selectedNodeIds = [...new Set([...selectedNodeIds, ...matchedIds])];
+
+      // Switch to nodes view to show selection
+      viewMode = 'nodes';
+    } catch (err) {
+      pqlError = err instanceof Error ? err.message : 'Failed to execute PQL query';
+    } finally {
+      pqlLoading = false;
+    }
+  }
+
+  // Clear PQL query and its selections
+  function clearPqlQuery(): void {
+    pqlQuery = '';
+    pqlError = null;
+    selectedPqlTemplate = '';
+  }
+
+  // Apply PQL template
+  function applyPqlTemplate(): void {
+    if (selectedPqlTemplate) {
+      const template = pqlTemplates.find(t => t.name === selectedPqlTemplate);
+      if (template) {
+        pqlQuery = template.query;
+        pqlError = null;
+      }
     }
   }
 
@@ -642,7 +738,7 @@
           </div>
 
           <p id="modal-description" class="sr-only">
-            Select target nodes or groups and configure an action to execute in parallel across multiple systems. Press Escape to close. Use Alt+N for nodes view, Alt+G for groups view.
+            Select target nodes or groups and configure an action to execute in parallel across multiple systems. Press Escape to close. Use Alt+N for nodes view, Alt+G for groups view{puppetdbAvailable ? ', Alt+P for PQL query' : ''}.
           </p>
 
           <!-- Error Display -->
@@ -756,15 +852,41 @@
                         e.preventDefault();
                         viewMode = 'nodes';
                       }
+                      if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && puppetdbAvailable) {
+                        e.preventDefault();
+                        viewMode = 'pql';
+                      }
                     }}
                     class="flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 {viewMode === 'groups' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
                   >
                     Groups ({groups.length})
                     <span class="sr-only">{viewMode === 'groups' ? '(selected)' : ''}</span>
                   </button>
+                  {#if puppetdbAvailable}
+                    <button
+                      type="button"
+                      role="tab"
+                      id="pql-tab"
+                      aria-selected={viewMode === "pql"}
+                      aria-controls="pql-panel"
+                      tabindex={viewMode === "pql" ? 0 : -1}
+                      onclick={() => viewMode = "pql"}
+                      onkeydown={(e) => {
+                        if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          viewMode = 'groups';
+                        }
+                      }}
+                      class="flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 {viewMode === 'pql' ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+                    >
+                      PQL Query
+                      <span class="sr-only">{viewMode === 'pql' ? '(selected)' : ''}</span>
+                    </button>
+                  {/if}
                 </div>
 
-                <!-- Search and Filter Controls -->
+                <!-- Search and Filter Controls (hidden in PQL mode) -->
+                {#if viewMode !== "pql"}
                 <div class="flex flex-col sm:flex-row gap-2 mb-4">
                   <div class="flex-1">
                     <label for="search-input" class="sr-only">Search {viewMode === 'nodes' ? 'nodes' : 'groups'} by name</label>
@@ -812,6 +934,7 @@
                     Clear All
                   </button>
                 </div>
+                {/if}
 
                 <!-- Nodes List -->
                 {#if viewMode === "nodes"}
@@ -908,6 +1031,90 @@
                         {/each}
                       </div>
                     {/if}
+                  </div>
+                {/if}
+
+                <!-- PQL Query Panel -->
+                {#if viewMode === "pql" && puppetdbAvailable}
+                  <div
+                    id="pql-panel"
+                    role="tabpanel"
+                    aria-labelledby="pql-tab"
+                    tabindex="0"
+                    class="border border-gray-200 dark:border-gray-700 rounded-md p-3 sm:p-4 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Use a PQL query to select nodes from PuppetDB. Matched nodes will be added to your selection.
+                    </p>
+
+                    <!-- Template Selector -->
+                    <div class="mb-3">
+                      <label for="pql-template-select" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Query Template
+                      </label>
+                      <select
+                        id="pql-template-select"
+                        bind:value={selectedPqlTemplate}
+                        onchange={applyPqlTemplate}
+                        disabled={pqlLoading}
+                        class="block w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50"
+                      >
+                        <option value="">Select a template...</option>
+                        {#each pqlTemplates as template}
+                          <option value={template.name}>{template.name}</option>
+                        {/each}
+                      </select>
+                    </div>
+
+                    <!-- PQL Query Input -->
+                    <div class="mb-3">
+                      <label for="pql-query-input" class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        PQL Query
+                      </label>
+                      <textarea
+                        id="pql-query-input"
+                        bind:value={pqlQuery}
+                        disabled={pqlLoading}
+                        rows={3}
+                        placeholder={pqlPlaceholder}
+                        class="block w-full px-3 py-2 text-sm font-mono border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 disabled:opacity-50 resize-none"
+                      ></textarea>
+                    </div>
+
+                    <!-- PQL Error -->
+                    {#if pqlError}
+                      <div class="mb-3 rounded-md bg-red-50 dark:bg-red-900/20 p-2" role="alert">
+                        <p class="text-xs text-red-700 dark:text-red-300">{pqlError}</p>
+                      </div>
+                    {/if}
+
+                    <!-- PQL Action Buttons -->
+                    <div class="flex gap-2">
+                      <button
+                        type="button"
+                        onclick={applyPqlQuery}
+                        disabled={pqlLoading || !pqlQuery.trim()}
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-600 rounded hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {#if pqlLoading}
+                          <LoadingSpinner size="sm" />
+                          Querying...
+                        {:else}
+                          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          Apply Query
+                        {/if}
+                      </button>
+                      <button
+                        type="button"
+                        onclick={clearPqlQuery}
+                        disabled={pqlLoading || (!pqlQuery.trim() && !pqlError)}
+                        class="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
                 {/if}
               {/if}

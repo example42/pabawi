@@ -234,12 +234,16 @@ export function createInventoryRouter(
                 );
                 const pqlNodeIds = new Set(pqlNodes.map((n) => n.id));
 
-                // Filter to only include PuppetDB nodes that match PQL query
+                // Filter to only include nodes that exist in PuppetDB and match the PQL query.
+                // Linked nodes may have a different primary source (e.g., "ssh") but still
+                // include "puppetdb" in their sources array.
                 filteredNodes = filteredNodes.filter((node) => {
-                  const nodeSource =
-                    (node as { source?: string }).source ?? "bolt";
-                  // When PQL query is applied, only show PuppetDB nodes that match
-                  return nodeSource === "puppetdb" && pqlNodeIds.has(node.id);
+                  const linkedNode = node as { source?: string; sources?: string[] };
+                  const nodeSources = linkedNode.sources && linkedNode.sources.length > 0
+                    ? linkedNode.sources
+                    : [linkedNode.source ?? "bolt"];
+                  const isFromPuppetdb = nodeSources.includes("puppetdb");
+                  return isFromPuppetdb && pqlNodeIds.has(node.id);
                 });
 
                 logger.info("PQL filter applied successfully", {
