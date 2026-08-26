@@ -1,9 +1,24 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { createAuthRouter } from '../../src/routes/auth';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { SetupService } from '../../src/services/SetupService';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('Auth Routes - POST /api/auth/register', () => {
   let app: Express;
@@ -45,7 +60,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -73,7 +88,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -91,7 +106,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -108,7 +123,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -125,7 +140,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -144,7 +159,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -169,7 +184,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -194,7 +209,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -219,7 +234,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -237,7 +252,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
       };
 
       // Create first user
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -251,7 +266,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'Two',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(duplicateData)
         .expect(409);
@@ -271,7 +286,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -296,7 +311,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -314,7 +329,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
       };
 
       // Create first user
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -328,7 +343,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'Two',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(duplicateData)
         .expect(409);
@@ -348,7 +363,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -373,7 +388,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -398,7 +413,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -423,7 +438,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -448,7 +463,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -473,7 +488,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -492,7 +507,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -509,7 +524,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -525,7 +540,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         firstName: 'Test',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -542,7 +557,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -559,7 +574,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'a'.repeat(101),
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(400);
@@ -570,7 +585,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
 
   describe('Edge cases and error handling', () => {
     it('should reject request with missing body', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .expect(400);
 
@@ -578,7 +593,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
     });
 
     it('should reject request with empty body', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send({})
         .expect(400);
@@ -597,7 +612,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
       };
 
       // Should still succeed but extra field should be ignored
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -631,7 +646,7 @@ describe('Auth Routes - POST /api/auth/register', () => {
         lastName: 'User',
       };
 
-      const response = await request(tempApp)
+      const response = await request(harness.use(tempApp))
         .post('/api/auth/register')
         .send(userData)
         .expect(500);
@@ -682,7 +697,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -693,7 +708,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(200);
@@ -731,7 +746,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -745,7 +760,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(200);
@@ -769,7 +784,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -780,13 +795,13 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response1 = await request(app)
+      const response1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(200);
 
       // Login second time
-      const response2 = await request(app)
+      const response2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(200);
@@ -804,7 +819,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(401);
@@ -827,7 +842,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -838,7 +853,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'WrongPassword123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(401);
@@ -857,7 +872,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -874,7 +889,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(401);
@@ -885,13 +900,13 @@ describe('Auth Routes - POST /api/auth/login', () => {
 
     it('should use generic error message to prevent username enumeration', async () => {
       // Try to login with non-existent user
-      const response1 = await request(app)
+      const response1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'nonexistent', password: 'Password123!' })
         .expect(401);
 
       // Register a user
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send({
           username: 'testuser',
@@ -903,7 +918,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         .expect(201);
 
       // Try to login with wrong password
-      const response2 = await request(app)
+      const response2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'WrongPassword!' })
         .expect(401);
@@ -920,7 +935,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(400);
@@ -942,7 +957,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(400);
@@ -955,7 +970,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         username: 'testuser',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(400);
@@ -977,7 +992,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: '',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(400);
@@ -986,7 +1001,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
     });
 
     it('should reject login with missing body', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .expect(400);
 
@@ -994,7 +1009,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
     });
 
     it('should reject login with empty body', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send({})
         .expect(400);
@@ -1014,7 +1029,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -1025,7 +1040,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(200);
@@ -1059,7 +1074,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -1070,7 +1085,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(200);
@@ -1101,7 +1116,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -1112,7 +1127,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(401);
@@ -1143,7 +1158,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         password: 'Password123!',
       };
 
-      const response = await request(tempApp)
+      const response = await request(harness.use(tempApp))
         .post('/api/auth/login')
         .send(loginData);
 
@@ -1162,7 +1177,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -1174,7 +1189,7 @@ describe('Auth Routes - POST /api/auth/login', () => {
       };
 
       const requests = Array(5).fill(null).map(() =>
-        request(app)
+        request(harness.use(app))
           .post('/api/auth/login')
           .send(loginData)
       );
@@ -1240,12 +1255,12 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1253,7 +1268,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token = loginResponse.body.token;
 
       // Logout
-      const logoutResponse = await request(app)
+      const logoutResponse = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -1272,12 +1287,12 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1285,13 +1300,13 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token = loginResponse.body.token;
 
       // Logout
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
       // Try to logout again with the same token (should fail)
-      const secondLogoutResponse = await request(app)
+      const secondLogoutResponse = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(401);
@@ -1310,12 +1325,12 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse1 = await request(app)
+      const loginResponse1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1323,13 +1338,13 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token1 = loginResponse1.body.token;
 
       // Logout
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
       // Login again
-      const loginResponse2 = await request(app)
+      const loginResponse2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1338,7 +1353,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       expect(loginResponse2.body.token).not.toBe(token1);
 
       // New token should work
-      const logoutResponse2 = await request(app)
+      const logoutResponse2 = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${loginResponse2.body.token}`)
         .expect(200);
@@ -1356,18 +1371,18 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login twice to get two different tokens
-      const loginResponse1 = await request(app)
+      const loginResponse1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
 
-      const loginResponse2 = await request(app)
+      const loginResponse2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1376,13 +1391,13 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token2 = loginResponse2.body.token;
 
       // Logout with first token
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
       // Second token should still work
-      const logoutResponse2 = await request(app)
+      const logoutResponse2 = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token2}`)
         .expect(200);
@@ -1393,7 +1408,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
   describe('Authentication required', () => {
     it('should reject logout without Authorization header', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .expect(401);
 
@@ -1402,7 +1417,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
     });
 
     it('should reject logout with invalid Authorization header format', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', 'InvalidFormat')
         .expect(401);
@@ -1412,7 +1427,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
     });
 
     it('should reject logout with empty token', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', 'Bearer ')
         .expect(401);
@@ -1423,7 +1438,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
     });
 
     it('should reject logout with invalid token', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', 'Bearer invalid.token.here')
         .expect(401);
@@ -1437,7 +1452,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       // For now, we'll test with an invalid token structure
       const expiredToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMjMiLCJleHAiOjB9.invalid';  // pragma: allowlist secret
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${expiredToken}`)
         .expect(401);
@@ -1457,12 +1472,12 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1470,13 +1485,13 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token = loginResponse.body.token;
 
       // First logout should succeed
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
       // Second logout with same token should fail (token already revoked)
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(401);
@@ -1495,14 +1510,14 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login multiple times to get different tokens
       const loginPromises = Array(3).fill(null).map(() =>
-        request(app)
+        request(harness.use(app))
           .post('/api/auth/login')
           .send({ username: 'testuser', password: 'Password123!' })
       );
@@ -1512,7 +1527,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
       // Logout concurrently with all tokens
       const logoutPromises = tokens.map(token =>
-        request(app)
+        request(harness.use(app))
           .post('/api/auth/logout')
           .set('Authorization', `Bearer ${token}`)
       );
@@ -1536,12 +1551,12 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1553,7 +1568,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
       // Logout should fail at middleware level (token verification fails)
       // because the database is needed to check revocation
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(401);
@@ -1575,12 +1590,12 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1594,7 +1609,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       );
 
       // Logout should still work (token is still valid, just revoke it)
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -1605,7 +1620,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
 
   describe('Security considerations', () => {
     it('should not expose user information in error messages', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', 'Bearer invalid.token.here')
         .expect(401);
@@ -1630,12 +1645,12 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1643,7 +1658,7 @@ describe('Auth Routes - POST /api/auth/logout', () => {
       const token = loginResponse.body.token;
 
       // Logout (should be logged)
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -1697,12 +1712,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1710,7 +1725,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Refresh the token
-      const refreshResponse = await request(app)
+      const refreshResponse = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -1745,12 +1760,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1759,7 +1774,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Refresh the token
-      const refreshResponse = await request(app)
+      const refreshResponse = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -1784,12 +1799,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1797,7 +1812,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Refresh the token
-      const refreshResponse = await request(app)
+      const refreshResponse = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -1826,12 +1841,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1839,7 +1854,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const originalRefreshToken = loginResponse.body.refreshToken;
 
       // First refresh succeeds and returns a NEW refresh token
-      const refreshResponse1 = await request(app)
+      const refreshResponse1 = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: originalRefreshToken })
         .expect(200);
@@ -1852,12 +1867,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       // rejected, AND it triggers a family-wide revocation: even the new
       // refresh token issued in the previous step is invalidated because the
       // reuse signals a likely token-theft scenario.
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: originalRefreshToken })
         .expect(401);
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: refreshResponse1.body.refreshToken })
         .expect(401);
@@ -1866,7 +1881,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
   describe('Failed token refresh', () => {
     it('should reject refresh with missing refresh token', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({})
         .expect(400);
@@ -1883,7 +1898,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
     });
 
     it('should reject refresh with empty refresh token', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: '' })
         .expect(400);
@@ -1900,7 +1915,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
     });
 
     it('should reject refresh with invalid refresh token format', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: 'invalid.token.format' })
         .expect(400);
@@ -1919,12 +1934,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1932,7 +1947,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const accessToken = loginResponse.body.token;
 
       // Try to refresh with access token (should fail)
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: accessToken })
         .expect(400);
@@ -1951,12 +1966,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -1965,13 +1980,13 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const accessToken = loginResponse.body.token;
 
       // Logout to revoke access token
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       // Refresh token should still work (it's independent of access token)
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -1990,12 +2005,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -2009,7 +2024,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       );
 
       // Try to refresh token
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(401);
@@ -2034,7 +2049,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' }
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: fakeRefreshToken })
         .expect(401);
@@ -2046,7 +2061,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
   describe('Edge cases and error handling', () => {
     it('should handle missing request body', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .expect(400);
 
@@ -2054,7 +2069,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
     });
 
     it('should handle malformed JSON in request body', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .set('Content-Type', 'application/json')
         .send('{ invalid json }')
@@ -2075,12 +2090,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -2089,7 +2104,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
 
       const responses: { token: string }[] = [];
       for (let i = 0; i < 5; i++) {
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .post('/api/auth/refresh')
           .send({ refreshToken: currentRefreshToken });
         expect(response.status).toBe(200);
@@ -2116,12 +2131,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -2132,7 +2147,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       await databaseService.getConnection().close();
 
       // Refresh should fail gracefully
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(401);
@@ -2144,7 +2159,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
     });
 
     it('should not expose sensitive information in error messages', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: 'invalid.token.here' })
         .expect(400);
@@ -2172,7 +2187,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         { algorithm: 'HS256' }
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: wrongSecretToken })
         .expect(400);
@@ -2196,7 +2211,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         { algorithm: 'HS256' }
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: expiredToken })
         .expect(401);
@@ -2215,12 +2230,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -2228,7 +2243,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Refresh token (should be logged)
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -2249,12 +2264,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -2262,7 +2277,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Refresh the token
-      const refreshResponse = await request(app)
+      const refreshResponse = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -2270,7 +2285,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const newAccessToken = refreshResponse.body.token;
 
       // Use new access token to logout (protected endpoint)
-      const logoutResponse = await request(app)
+      const logoutResponse = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${newAccessToken}`)
         .expect(200);
@@ -2288,12 +2303,12 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -2302,7 +2317,7 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Refresh the token
-      const refreshResponse = await request(app)
+      const refreshResponse = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -2361,13 +2376,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2380,7 +2395,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword456!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2400,13 +2415,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2414,7 +2429,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
       const token = loginResponse.body.token;
 
       // Change password
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({
@@ -2424,7 +2439,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         .expect(200);
 
       // Try to login with new password
-      const newLoginResponse = await request(app)
+      const newLoginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'NewPassword456!' })
         .expect(200);
@@ -2443,13 +2458,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2457,7 +2472,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
       const token = loginResponse.body.token;
 
       // Change password
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({
@@ -2467,7 +2482,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         .expect(200);
 
       // Try to login with old password (should fail)
-      const oldLoginResponse = await request(app)
+      const oldLoginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(401);
@@ -2485,13 +2500,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get first token
-      const loginResponse1 = await request(app)
+      const loginResponse1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2499,7 +2514,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
       const token1 = loginResponse1.body.token;
 
       // Login again to get second token
-      const loginResponse2 = await request(app)
+      const loginResponse2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2507,7 +2522,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
       const token2 = loginResponse2.body.token;
 
       // Change password using first token
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token1}`)
         .send({
@@ -2517,13 +2532,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         .expect(200);
 
       // Try to use first token (should fail - revoked)
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token1}`)
         .expect(401);
 
       // Try to use second token (should also fail - all tokens revoked)
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token2}`)
         .expect(401);
@@ -2537,7 +2552,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword456!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .send(changePasswordData)
         .expect(401);
@@ -2551,7 +2566,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword456!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', 'Bearer invalid-token')
         .send(changePasswordData)
@@ -2577,13 +2592,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2596,7 +2611,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword456!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2616,13 +2631,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2634,7 +2649,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword456!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2661,13 +2676,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2680,7 +2695,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword456!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2701,13 +2716,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2720,7 +2735,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'Pass1!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2747,13 +2762,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2766,7 +2781,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'newpassword123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2793,13 +2808,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2812,7 +2827,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NEWPASSWORD123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2839,13 +2854,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2858,7 +2873,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2885,13 +2900,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2904,7 +2919,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'NewPassword123',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2931,13 +2946,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2949,7 +2964,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         currentPassword: 'OldPassword123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -2976,13 +2991,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -2995,7 +3010,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'C0mpl3x!P@ssw0rd',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)
@@ -3016,13 +3031,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'OldPassword123!' })
         .expect(200);
@@ -3030,7 +3045,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
       const token = loginResponse.body.token;
 
       // Try to change password with empty body
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send({})
@@ -3049,13 +3064,13 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         lastName: 'User',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
       // Login to get token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'Password123!' })
         .expect(200);
@@ -3068,7 +3083,7 @@ describe('Auth Routes - POST /api/auth/change-password', () => {
         newPassword: 'Password123!',
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/change-password')
         .set('Authorization', `Bearer ${token}`)
         .send(changePasswordData)

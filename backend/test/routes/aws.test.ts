@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from "vitest";
 import { createAWSRouter } from "../../src/routes/integrations/aws";
 import { DatabaseService } from "../../src/database/DatabaseService";
@@ -35,6 +36,20 @@ function createMockAWSPlugin(): AWSPlugin {
     getKeyPairs: vi.fn().mockResolvedValue([]),
   } as unknown as AWSPlugin;
 }
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("AWS Router", () => {
   let app: Express;
@@ -132,7 +147,7 @@ describe("AWS Router", () => {
       ];
       (mockPlugin.getInventory as ReturnType<typeof vi.fn>).mockResolvedValue(mockNodes);
 
-      const response = await request(app).get("/api/integrations/aws/inventory");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/inventory");
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty("inventory");
@@ -144,7 +159,7 @@ describe("AWS Router", () => {
         new AWSAuthenticationError("Invalid credentials")
       );
 
-      const response = await request(app).get("/api/integrations/aws/inventory");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/inventory");
 
       expect(response.status).toBe(401);
       expect(response.body.error.code).toBe("UNAUTHORIZED");
@@ -155,7 +170,7 @@ describe("AWS Router", () => {
         new Error("Something went wrong")
       );
 
-      const response = await request(app).get("/api/integrations/aws/inventory");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/inventory");
 
       expect(response.status).toBe(500);
       expect(response.body.error.code).toBe("INTERNAL_SERVER_ERROR");
@@ -164,7 +179,7 @@ describe("AWS Router", () => {
 
   describe("POST /api/integrations/aws/provision", () => {
     it("should provision an instance with valid params", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/aws/provision")
         .send({ imageId: "ami-12345", instanceType: "t2.micro" });
 
@@ -174,7 +189,7 @@ describe("AWS Router", () => {
     });
 
     it("should return 400 when imageId is missing", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/aws/provision")
         .send({ instanceType: "t2.micro" });
 
@@ -187,7 +202,7 @@ describe("AWS Router", () => {
         new AWSAuthenticationError("Expired token")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/aws/provision")
         .send({ imageId: "ami-12345" });
 
@@ -197,7 +212,7 @@ describe("AWS Router", () => {
 
   describe("POST /api/integrations/aws/lifecycle", () => {
     it("should execute a lifecycle action", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/aws/lifecycle")
         .send({ instanceId: "i-abc123", action: "stop" });
 
@@ -206,7 +221,7 @@ describe("AWS Router", () => {
     });
 
     it("should return 400 for invalid action", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/aws/lifecycle")
         .send({ instanceId: "i-abc123", action: "destroy" });
 
@@ -215,7 +230,7 @@ describe("AWS Router", () => {
     });
 
     it("should return 400 when instanceId is missing", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/aws/lifecycle")
         .send({ action: "start" });
 
@@ -223,7 +238,7 @@ describe("AWS Router", () => {
     });
 
     it("should include region in target when provided", async () => {
-      await request(app)
+      await request(harness.use(app))
         .post("/api/integrations/aws/lifecycle")
         .send({ instanceId: "i-abc123", action: "reboot", region: "eu-west-1" });
 
@@ -238,7 +253,7 @@ describe("AWS Router", () => {
 
   describe("GET /api/integrations/aws/regions", () => {
     it("should return regions", async () => {
-      const response = await request(app).get("/api/integrations/aws/regions");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/regions");
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty("regions");
@@ -248,14 +263,14 @@ describe("AWS Router", () => {
 
   describe("GET /api/integrations/aws/instance-types", () => {
     it("should return instance types", async () => {
-      const response = await request(app).get("/api/integrations/aws/instance-types");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/instance-types");
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty("instanceTypes");
     });
 
     it("should pass region query param to plugin", async () => {
-      await request(app)
+      await request(harness.use(app))
         .get("/api/integrations/aws/instance-types")
         .query({ region: "eu-west-1" });
 
@@ -265,7 +280,7 @@ describe("AWS Router", () => {
 
   describe("GET /api/integrations/aws/amis", () => {
     it("should return AMIs for a region", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/aws/amis")
         .query({ region: "us-east-1" });
 
@@ -274,7 +289,7 @@ describe("AWS Router", () => {
     });
 
     it("should return 400 when region is missing", async () => {
-      const response = await request(app).get("/api/integrations/aws/amis");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/amis");
 
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe("VALIDATION_ERROR");
@@ -283,7 +298,7 @@ describe("AWS Router", () => {
 
   describe("GET /api/integrations/aws/vpcs", () => {
     it("should return VPCs for a region", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/aws/vpcs")
         .query({ region: "us-east-1" });
 
@@ -292,14 +307,14 @@ describe("AWS Router", () => {
     });
 
     it("should return 400 when region is missing", async () => {
-      const response = await request(app).get("/api/integrations/aws/vpcs");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/vpcs");
       expect(response.status).toBe(400);
     });
   });
 
   describe("GET /api/integrations/aws/subnets", () => {
     it("should return subnets for a region", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/aws/subnets")
         .query({ region: "us-east-1" });
 
@@ -308,7 +323,7 @@ describe("AWS Router", () => {
     });
 
     it("should pass vpcId filter when provided", async () => {
-      await request(app)
+      await request(harness.use(app))
         .get("/api/integrations/aws/subnets")
         .query({ region: "us-east-1", vpcId: "vpc-123" });
 
@@ -316,14 +331,14 @@ describe("AWS Router", () => {
     });
 
     it("should return 400 when region is missing", async () => {
-      const response = await request(app).get("/api/integrations/aws/subnets");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/subnets");
       expect(response.status).toBe(400);
     });
   });
 
   describe("GET /api/integrations/aws/security-groups", () => {
     it("should return security groups for a region", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/aws/security-groups")
         .query({ region: "us-east-1" });
 
@@ -332,7 +347,7 @@ describe("AWS Router", () => {
     });
 
     it("should pass vpcId filter when provided", async () => {
-      await request(app)
+      await request(harness.use(app))
         .get("/api/integrations/aws/security-groups")
         .query({ region: "us-east-1", vpcId: "vpc-456" });
 
@@ -342,7 +357,7 @@ describe("AWS Router", () => {
 
   describe("GET /api/integrations/aws/key-pairs", () => {
     it("should return key pairs for a region", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/aws/key-pairs")
         .query({ region: "us-east-1" });
 
@@ -351,7 +366,7 @@ describe("AWS Router", () => {
     });
 
     it("should return 400 when region is missing", async () => {
-      const response = await request(app).get("/api/integrations/aws/key-pairs");
+      const response = await request(harness.use(app)).get("/api/integrations/aws/key-pairs");
       expect(response.status).toBe(400);
     });
   });

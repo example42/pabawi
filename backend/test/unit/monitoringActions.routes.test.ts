@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import request from "supertest";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import { createMonitoringActionsRouter } from "../../src/routes/integrations/monitoringActions";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import type { CheckmkPlugin } from "../../src/integrations/checkmk/CheckmkPlugin";
@@ -100,6 +101,20 @@ const VALID_DOWNTIME = {
   endTime: "2026-01-01T02:00:00.000Z",
 };
 
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("Monitoring Actions Router", () => {
   let mockPlugin: CheckmkPlugin;
   let app: Express;
@@ -113,13 +128,13 @@ describe("Monitoring Actions Router", () => {
   describe("POST /api/monitoring/acknowledge", () => {
     it("returns 503 when plugin is not configured", async () => {
       const testApp = buildApp(createMockIntegrationManager(null));
-      const res = await request(testApp).post("/api/monitoring/acknowledge").send(VALID_ACK);
+      const res = await request(harness.use(testApp)).post("/api/monitoring/acknowledge").send(VALID_ACK);
       expect(res.status).toBe(503);
       expect(res.body.error.code).toBe("CHECKMK_NOT_CONFIGURED");
     });
 
     it("returns 400 when comment is missing", async () => {
-      const res = await request(app)
+      const res = await request(harness.use(app))
         .post("/api/monitoring/acknowledge")
         .send({ hostname: "web01", serviceDescription: "CPU load" });
       expect(res.status).toBe(400);
@@ -127,7 +142,7 @@ describe("Monitoring Actions Router", () => {
     });
 
     it("acknowledges with default sticky/notify and returns 200", async () => {
-      const res = await request(app).post("/api/monitoring/acknowledge").send(VALID_ACK);
+      const res = await request(harness.use(app)).post("/api/monitoring/acknowledge").send(VALID_ACK);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(mockPlugin.acknowledgeServiceProblem).toHaveBeenCalledWith({
@@ -147,14 +162,14 @@ describe("Monitoring Actions Router", () => {
           .mockResolvedValue({ success: false, error: "403 Forbidden" }),
       });
       const testApp = buildApp(createMockIntegrationManager(failingPlugin));
-      const res = await request(testApp).post("/api/monitoring/acknowledge").send(VALID_ACK);
+      const res = await request(harness.use(testApp)).post("/api/monitoring/acknowledge").send(VALID_ACK);
       expect(res.status).toBe(502);
       expect(res.body.error.code).toBe("UPSTREAM_ERROR");
     });
 
     it("writes an audit log entry on success when a user is present", async () => {
       const testApp = buildApp(createMockIntegrationManager(mockPlugin), true);
-      const res = await request(testApp).post("/api/monitoring/acknowledge").send(VALID_ACK);
+      const res = await request(harness.use(testApp)).post("/api/monitoring/acknowledge").send(VALID_ACK);
       expect(res.status).toBe(200);
       expect(auditExecute).toHaveBeenCalledTimes(1);
     });
@@ -162,7 +177,7 @@ describe("Monitoring Actions Router", () => {
 
   describe("POST /api/monitoring/downtime", () => {
     it("schedules a downtime and returns 200", async () => {
-      const res = await request(app).post("/api/monitoring/downtime").send(VALID_DOWNTIME);
+      const res = await request(harness.use(app)).post("/api/monitoring/downtime").send(VALID_DOWNTIME);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(mockPlugin.scheduleServiceDowntime).toHaveBeenCalledWith({
@@ -175,7 +190,7 @@ describe("Monitoring Actions Router", () => {
     });
 
     it("returns 400 when endTime is not after startTime", async () => {
-      const res = await request(app)
+      const res = await request(harness.use(app))
         .post("/api/monitoring/downtime")
         .send({ ...VALID_DOWNTIME, endTime: "2025-12-31T23:00:00.000Z" });
       expect(res.status).toBe(400);
@@ -183,7 +198,7 @@ describe("Monitoring Actions Router", () => {
     });
 
     it("returns 400 when the window exceeds 7 days", async () => {
-      const res = await request(app)
+      const res = await request(harness.use(app))
         .post("/api/monitoring/downtime")
         .send({
           ...VALID_DOWNTIME,
@@ -201,7 +216,7 @@ describe("Monitoring Actions Router", () => {
           .mockResolvedValue({ success: false, error: "timeout" }),
       });
       const testApp = buildApp(createMockIntegrationManager(failingPlugin));
-      const res = await request(testApp).post("/api/monitoring/downtime").send(VALID_DOWNTIME);
+      const res = await request(harness.use(testApp)).post("/api/monitoring/downtime").send(VALID_DOWNTIME);
       expect(res.status).toBe(502);
       expect(res.body.error.code).toBe("UPSTREAM_ERROR");
     });

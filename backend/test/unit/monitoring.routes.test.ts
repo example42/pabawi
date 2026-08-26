@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import request from "supertest";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import { createMonitoringRouter } from "../../src/routes/integrations/monitoring";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import type { CheckmkPlugin } from "../../src/integrations/checkmk/CheckmkPlugin";
@@ -87,6 +88,20 @@ function buildApp(
   return app;
 }
 
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("Monitoring Router", () => {
   let app: Express;
   let mockPlugin: CheckmkPlugin;
@@ -103,7 +118,7 @@ describe("Monitoring Router", () => {
       const mgr = createMockIntegrationManager(null);
       const testApp = buildApp(mgr);
 
-      const response = await request(testApp).get("/api/nodes/webserver01/services");
+      const response = await request(harness.use(testApp)).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(503);
       expect(response.body.error.code).toBe("CHECKMK_NOT_CONFIGURED");
@@ -117,7 +132,7 @@ describe("Monitoring Router", () => {
       const mgr = createMockIntegrationManager(uninitPlugin);
       const testApp = buildApp(mgr);
 
-      const response = await request(testApp).get("/api/nodes/webserver01/services");
+      const response = await request(harness.use(testApp)).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(503);
       expect(response.body.error.code).toBe("CHECKMK_NOT_CONFIGURED");
@@ -126,7 +141,7 @@ describe("Monitoring Router", () => {
     it("returns 200 with empty array when node is unknown (no inventory cross-check)", async () => {
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-      const response = await request(app).get("/api/nodes/unknownhost/services");
+      const response = await request(harness.use(app)).get("/api/nodes/unknownhost/services");
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
@@ -136,7 +151,7 @@ describe("Monitoring Router", () => {
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
       // Different case — but no cross-check anymore, just returns []
-      const response = await request(app).get("/api/nodes/webserver01/services");
+      const response = await request(harness.use(app)).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
@@ -147,7 +162,7 @@ describe("Monitoring Router", () => {
         new Error("Connection refused"),
       );
 
-      const response = await request(app).get("/api/nodes/webserver01/services");
+      const response = await request(harness.use(app)).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(502);
       expect(response.body.error.code).toBe("UPSTREAM_ERROR");
@@ -161,7 +176,7 @@ describe("Monitoring Router", () => {
         }),
       );
 
-      const response = await request(app).get("/api/nodes/webserver01/services");
+      const response = await request(harness.use(app)).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(502);
       expect(response.body.error.code).toBe("UPSTREAM_ERROR");
@@ -191,7 +206,7 @@ describe("Monitoring Router", () => {
       ];
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue(services);
 
-      const response = await request(app).get("/api/nodes/webserver01/services");
+      const response = await request(harness.use(app)).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual(services);
@@ -206,7 +221,7 @@ describe("Monitoring Router", () => {
         { id: "webserver01", name: "webserver01" },
       ]);
 
-      const response = await request(app).get("/api/nodes/webserver01/services");
+      const response = await request(harness.use(app)).get("/api/nodes/webserver01/services");
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual([]);
@@ -218,7 +233,7 @@ describe("Monitoring Router", () => {
       const mgr = createMockIntegrationManager(null);
       const testApp = buildApp(mgr);
 
-      const response = await request(testApp).get(
+      const response = await request(harness.use(testApp)).get(
         "/api/nodes/webserver01/monitoring-events",
       );
 
@@ -229,7 +244,7 @@ describe("Monitoring Router", () => {
     it("returns 200 with empty array when node is unknown (no inventory cross-check)", async () => {
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/unknownhost/monitoring-events",
       );
 
@@ -242,7 +257,7 @@ describe("Monitoring Router", () => {
         new Error("ECONNREFUSED"),
       );
 
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/webserver01/monitoring-events",
       );
 
@@ -270,7 +285,7 @@ describe("Monitoring Router", () => {
       ];
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue(events);
 
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/webserver01/monitoring-events",
       );
 
@@ -293,7 +308,7 @@ describe("Monitoring Router", () => {
       }));
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue(events);
 
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/webserver01/monitoring-events?limit=3",
       );
 
@@ -308,7 +323,7 @@ describe("Monitoring Router", () => {
       }));
       (mockPlugin.getNodeData as ReturnType<typeof vi.fn>).mockResolvedValue(events);
 
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/webserver01/monitoring-events",
       );
 
@@ -317,7 +332,7 @@ describe("Monitoring Router", () => {
     });
 
     it("returns 400 for invalid limit (out of range)", async () => {
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/webserver01/monitoring-events?limit=0",
       );
 
@@ -326,7 +341,7 @@ describe("Monitoring Router", () => {
     });
 
     it("returns 400 for limit exceeding 1000", async () => {
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/webserver01/monitoring-events?limit=1001",
       );
 
@@ -335,7 +350,7 @@ describe("Monitoring Router", () => {
     });
 
     it("returns 400 for non-numeric limit", async () => {
-      const response = await request(app).get(
+      const response = await request(harness.use(app)).get(
         "/api/nodes/webserver01/monitoring-events?limit=abc",
       );
 

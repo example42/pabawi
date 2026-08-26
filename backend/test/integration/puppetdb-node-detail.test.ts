@@ -1,9 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import express, { type Express } from "express";
 import { createPuppetDBRouter } from "../../src/routes/integrations/puppetdb";
 import { PuppetDBService } from "../../src/integrations/puppetdb/PuppetDBService";
 import { expertModeMiddleware } from "../../src/middleware/expertMode";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("PuppetDB Node Detail Route", () => {
   let app: Express;
@@ -59,7 +74,7 @@ describe("PuppetDB Node Detail Route", () => {
 
   describe("GET /api/integrations/puppetdb/nodes/:certname", () => {
     it("should return node details when node exists", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1")
         .expect(200);
 
@@ -70,7 +85,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should return 404 when node does not exist", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/non-existent-node")
         .expect(404);
 
@@ -80,7 +95,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should include debug info when expert mode is enabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1")
         .set("X-Expert-Mode", "true")
         .expect(200);
@@ -96,7 +111,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should not include debug info when expert mode is disabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1")
         .expect(200);
 
@@ -106,7 +121,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should attach debug info to error responses when expert mode is enabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/non-existent-node")
         .set("X-Expert-Mode", "true")
         .expect(404);
@@ -122,7 +137,7 @@ describe("PuppetDB Node Detail Route", () => {
 
   describe("GET /api/integrations/puppetdb/nodes/:certname/reports/:hash", () => {
     it("should return report details when report exists", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/reports/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
         .expect(200);
 
@@ -134,7 +149,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should return 404 when report does not exist", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/reports/cccccccccccccccccccccccccccccccccccccccc")
         .expect(404);
 
@@ -144,7 +159,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should return 404 when report belongs to different node", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/reports/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2")
         .expect(404);
 
@@ -155,7 +170,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should include debug info when expert mode is enabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/reports/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
         .set("X-Expert-Mode", "true")
         .expect(200);
@@ -174,7 +189,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should not include debug info when expert mode is disabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/reports/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1")
         .expect(200);
 
@@ -184,7 +199,7 @@ describe("PuppetDB Node Detail Route", () => {
     });
 
     it("should attach debug info to error responses when expert mode is enabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/reports/cccccccccccccccccccccccccccccccccccccccc")
         .set("X-Expert-Mode", "true")
         .expect(404);

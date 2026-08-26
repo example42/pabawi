@@ -6,11 +6,26 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import express, { type Express } from 'express';
 import { createIntegrationsRouter } from '../../src/routes/integrations';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import type { IntegrationConfig } from '../../src/integrations/types';
 import { expertModeMiddleware } from '../../src/middleware/expertMode';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('PuppetDB Events API Integration', () => {
   let app: Express;
@@ -42,7 +57,7 @@ describe('PuppetDB Events API Integration', () => {
 
   describe('GET /api/integrations/puppetdb/nodes/:certname/events', () => {
     it('should return 503 when PuppetDB is not configured', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events')
         .expect(503);
 
@@ -51,7 +66,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should accept limit query parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events?limit=50')
         .expect(503); // Still 503 because not configured, but validates parameter parsing
 
@@ -59,7 +74,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should accept status filter query parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events?status=failure')
         .expect(503);
 
@@ -67,7 +82,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should accept resourceType filter query parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events?resourceType=File')
         .expect(503);
 
@@ -75,7 +90,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should accept time range filter query parameters', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events?startTime=2024-01-01T00:00:00Z&endTime=2024-12-31T23:59:59Z')
         .expect(503);
 
@@ -83,7 +98,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should accept multiple filter parameters', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events?status=failure&resourceType=File&limit=25')
         .expect(503);
 
@@ -115,7 +130,7 @@ describe('PuppetDB Events API Integration', () => {
 
   describe('Events error handling', () => {
     it('should handle invalid certname parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes//events')
         .expect(404); // Express returns 404 for empty param
 
@@ -123,7 +138,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should handle invalid status filter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events?status=invalid')
         .expect(503); // Still 503 because not configured
 
@@ -132,7 +147,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should handle invalid limit parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events?limit=invalid')
         .expect(503); // Still 503 because not configured
 
@@ -143,7 +158,7 @@ describe('PuppetDB Events API Integration', () => {
 
   describe('Expert mode', () => {
     it('should include debug info when expert mode is enabled', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events')
         .set('X-Expert-Mode', 'true')
         .expect(503);
@@ -165,7 +180,7 @@ describe('PuppetDB Events API Integration', () => {
     });
 
     it('should not include debug info when expert mode is disabled', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes/test-node/events')
         .expect(503);
 

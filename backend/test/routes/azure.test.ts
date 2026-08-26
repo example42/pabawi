@@ -7,7 +7,8 @@
 
 import express, { type Express } from "express";
 import request from "supertest";
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import { createAzureRouter } from "../../src/routes/integrations/azure";
 import { AzureAuthenticationError } from "../../src/integrations/azure/types";
 import type { AzurePlugin } from "../../src/integrations/azure/AzurePlugin";
@@ -45,6 +46,20 @@ function createMockAzurePlugin(): AzurePlugin {
   } as unknown as AzurePlugin;
 }
 
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("Azure Router", () => {
   let app: Express;
   let mockPlugin: AzurePlugin;
@@ -65,7 +80,7 @@ describe("Azure Router", () => {
       ];
       (mockPlugin.getInventory as ReturnType<typeof vi.fn>).mockResolvedValue(mockNodes);
 
-      const response = await request(app).get("/api/integrations/azure/inventory");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/inventory");
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty("inventory");
@@ -77,7 +92,7 @@ describe("Azure Router", () => {
         new AzureAuthenticationError("Invalid credentials"),
       );
 
-      const response = await request(app).get("/api/integrations/azure/inventory");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/inventory");
 
       expect(response.status).toBe(401);
       expect(response.body.error.code).toBe("UNAUTHORIZED");
@@ -88,7 +103,7 @@ describe("Azure Router", () => {
         new Error("Something went wrong"),
       );
 
-      const response = await request(app).get("/api/integrations/azure/inventory");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/inventory");
 
       expect(response.status).toBe(500);
       expect(response.body.error.code).toBe("INTERNAL_SERVER_ERROR");
@@ -108,7 +123,7 @@ describe("Azure Router", () => {
     };
 
     it("should provision a VM with valid params and return 201", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/provision")
         .send(validProvisionBody);
 
@@ -119,7 +134,7 @@ describe("Azure Router", () => {
 
     it("should return 400 when resourceGroup is missing", async () => {
       const { resourceGroup: _rg, ...body } = validProvisionBody;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/provision")
         .send(body);
 
@@ -129,7 +144,7 @@ describe("Azure Router", () => {
 
     it("should return 400 when networkInterfaceId is missing", async () => {
       const { networkInterfaceId: _nic, ...body } = validProvisionBody;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/provision")
         .send(body);
 
@@ -139,7 +154,7 @@ describe("Azure Router", () => {
 
     it("should return 400 when adminUsername is missing", async () => {
       const { adminUsername: _u, ...body } = validProvisionBody;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/provision")
         .send(body);
 
@@ -152,7 +167,7 @@ describe("Azure Router", () => {
         new AzureAuthenticationError("Expired token"),
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/provision")
         .send(validProvisionBody);
 
@@ -165,7 +180,7 @@ describe("Azure Router", () => {
         new Error("Azure SDK error"),
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/provision")
         .send(validProvisionBody);
 
@@ -189,7 +204,7 @@ describe("Azure Router", () => {
         results: [],
       });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/lifecycle")
         .send({ vmName: "my-vm", resourceGroup: "rg-1", action: "start" });
 
@@ -199,7 +214,7 @@ describe("Azure Router", () => {
     });
 
     it("should return 400 for invalid action", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/lifecycle")
         .send({ vmName: "my-vm", resourceGroup: "rg-1", action: "destroy" });
 
@@ -208,7 +223,7 @@ describe("Azure Router", () => {
     });
 
     it("should return 400 when vmName is missing", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/lifecycle")
         .send({ resourceGroup: "rg-1", action: "stop" });
 
@@ -224,7 +239,7 @@ describe("Azure Router", () => {
         createAzureRouter(mockPlugin, undefined, { allowDestructiveActions: false }),
       );
 
-      const response = await request(restrictedApp)
+      const response = await request(harness.use(restrictedApp))
         .post("/api/integrations/azure/lifecycle")
         .send({ vmName: "my-vm", resourceGroup: "rg-1", action: "deallocate" });
 
@@ -233,7 +248,7 @@ describe("Azure Router", () => {
     });
 
     it("should use canonical target format azure:{rg}:{vmName}", async () => {
-      await request(app)
+      await request(harness.use(app))
         .post("/api/integrations/azure/lifecycle")
         .send({ vmName: "my-vm", resourceGroup: "rg-1", action: "restart" });
 
@@ -250,7 +265,7 @@ describe("Azure Router", () => {
         new AzureAuthenticationError("Auth failed"),
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/azure/lifecycle")
         .send({ vmName: "my-vm", resourceGroup: "rg-1", action: "stop" });
 
@@ -262,7 +277,7 @@ describe("Azure Router", () => {
 
   describe("POST /api/integrations/azure/test", () => {
     it("should return success when health check passes", async () => {
-      const response = await request(app).post("/api/integrations/azure/test");
+      const response = await request(harness.use(app)).post("/api/integrations/azure/test");
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
@@ -274,7 +289,7 @@ describe("Azure Router", () => {
         message: "Auth failed",
       });
 
-      const response = await request(app).post("/api/integrations/azure/test");
+      const response = await request(harness.use(app)).post("/api/integrations/azure/test");
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(false);
@@ -285,7 +300,7 @@ describe("Azure Router", () => {
 
   describe("GET /api/integrations/azure/locations", () => {
     it("should return available locations", async () => {
-      const response = await request(app).get("/api/integrations/azure/locations");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/locations");
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty("locations");
@@ -297,7 +312,7 @@ describe("Azure Router", () => {
         new AzureAuthenticationError("Auth failed"),
       );
 
-      const response = await request(app).get("/api/integrations/azure/locations");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/locations");
 
       expect(response.status).toBe(401);
     });
@@ -307,7 +322,7 @@ describe("Azure Router", () => {
 
   describe("GET /api/integrations/azure/vm-sizes", () => {
     it("should return VM sizes for a location", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/azure/vm-sizes")
         .query({ location: "eastus" });
 
@@ -317,7 +332,7 @@ describe("Azure Router", () => {
     });
 
     it("should return 400 when location is missing", async () => {
-      const response = await request(app).get("/api/integrations/azure/vm-sizes");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/vm-sizes");
 
       expect(response.status).toBe(400);
       expect(response.body.error.code).toBe("VALIDATION_ERROR");
@@ -328,7 +343,7 @@ describe("Azure Router", () => {
 
   describe("GET /api/integrations/azure/images", () => {
     it("should return images and pass all query params including location", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/azure/images")
         .query({ location: "westeurope", publisher: "Canonical", offer: "UbuntuServer", sku: "18.04-LTS" });
 
@@ -338,7 +353,7 @@ describe("Azure Router", () => {
     });
 
     it("should work without location (falls back to plugin default)", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/azure/images")
         .query({ publisher: "Canonical", offer: "UbuntuServer", sku: "18.04-LTS" });
 
@@ -351,7 +366,7 @@ describe("Azure Router", () => {
         new AzureAuthenticationError("Auth failed"),
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/azure/images")
         .query({ publisher: "Canonical", offer: "UbuntuServer", sku: "18.04-LTS" });
 
@@ -363,7 +378,7 @@ describe("Azure Router", () => {
 
   describe("GET /api/integrations/azure/resource-groups", () => {
     it("should return resource groups", async () => {
-      const response = await request(app).get("/api/integrations/azure/resource-groups");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/resource-groups");
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty("resourceGroups");
@@ -375,7 +390,7 @@ describe("Azure Router", () => {
         new AzureAuthenticationError("Auth failed"),
       );
 
-      const response = await request(app).get("/api/integrations/azure/resource-groups");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/resource-groups");
 
       expect(response.status).toBe(401);
     });
@@ -385,7 +400,7 @@ describe("Azure Router", () => {
         new Error("Azure SDK error"),
       );
 
-      const response = await request(app).get("/api/integrations/azure/resource-groups");
+      const response = await request(harness.use(app)).get("/api/integrations/azure/resource-groups");
 
       expect(response.status).toBe(500);
       expect(response.body.error.code).toBe("INTERNAL_SERVER_ERROR");

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { beforeAll, afterAll } from "vitest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import express, { type Express } from "express";
 import { BoltService } from "../../src/integrations/bolt/BoltService";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
@@ -12,6 +14,20 @@ import type { Node } from "../../src/integrations/bolt/types";
 vi.mock("child_process", () => ({
   spawn: vi.fn(),
 }));
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Expert Mode Routes Integration Tests", () => {
   let app: Express;
@@ -53,7 +69,7 @@ describe("Expert Mode Routes Integration Tests", () => {
   describe("GET /api/inventory", () => {
     it("should include debug info when expert mode is enabled", async () => {
       const request = (await import("supertest")).default;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/inventory")
         .set("X-Expert-Mode", "true")
         .expect(200);
@@ -74,7 +90,7 @@ describe("Expert Mode Routes Integration Tests", () => {
 
     it("should not include debug info when expert mode is disabled", async () => {
       const request = (await import("supertest")).default;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/inventory")
         .expect(200);
 
@@ -90,7 +106,7 @@ describe("Expert Mode Routes Integration Tests", () => {
   describe("GET /api/integrations/status", () => {
     it("should include debug info when expert mode is enabled", async () => {
       const request = (await import("supertest")).default;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/status")
         .set("X-Expert-Mode", "true")
         .expect(200);
@@ -110,7 +126,7 @@ describe("Expert Mode Routes Integration Tests", () => {
 
     it("should not include debug info when expert mode is disabled", async () => {
       const request = (await import("supertest")).default;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/status")
         .expect(200);
 
@@ -125,7 +141,7 @@ describe("Expert Mode Routes Integration Tests", () => {
   describe("GET /api/integrations/puppetdb/nodes/:certname/reports", () => {
     it("should return 503 when PuppetDB is not configured", async () => {
       const request = (await import("supertest")).default;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node/reports")
         .set("X-Expert-Mode", "true")
         .expect(503);
@@ -147,7 +163,7 @@ describe("Expert Mode Routes Integration Tests", () => {
 
     it("should not include debug info in error response when expert mode is disabled", async () => {
       const request = (await import("supertest")).default;
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node/reports")
         .expect(503);
 

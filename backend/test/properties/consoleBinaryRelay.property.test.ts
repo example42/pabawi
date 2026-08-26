@@ -141,36 +141,71 @@ async function createRelayFixture(): Promise<RelayFixture> {
   };
 }
 
-/** Collect N messages from a WebSocket as Buffers */
+/**
+ * Collect N messages from a WebSocket as Buffers.
+ *
+ * Listeners are removed on settle so the same long-lived socket can be reused
+ * across property runs without accumulating handlers.
+ */
 function collectMessages(ws: WebSocket, count: number): Promise<Buffer[]> {
   return new Promise((resolve, reject) => {
     const messages: Buffer[] = [];
-    const timeout = setTimeout(() => {
-      reject(new Error(`Timed out waiting for ${count} messages, received ${messages.length}`));
-    }, 5000);
 
-    ws.on("message", (data: Buffer) => {
+    const settle = (fn: () => void): void => {
+      clearTimeout(timeout);
+      ws.off("message", onMessage);
+      ws.off("error", onError);
+      fn();
+    };
+
+    const onMessage = (data: Buffer): void => {
       messages.push(Buffer.isBuffer(data) ? data : Buffer.from(data));
       if (messages.length === count) {
-        clearTimeout(timeout);
-        resolve(messages);
+        settle(() => resolve(messages));
       }
-    });
+    };
 
-    ws.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
+    const onError = (err: Error): void => {
+      settle(() => reject(err));
+    };
+
+    const timeout = setTimeout(() => {
+      settle(() =>
+        reject(
+          new Error(`Timed out waiting for ${count} messages, received ${messages.length}`),
+        ),
+      );
+    }, COLLECT_TIMEOUT_MS);
+
+    ws.on("message", onMessage);
+    ws.on("error", onError);
   });
 }
 
-/** Arbitrary: random binary buffer (1 byte to 64KB) */
+/**
+ * Arbitrary: random binary buffer (1 byte to 64KB).
+ *
+ * The `.chain()` over a uniform size is deliberate: a bare
+ * `fc.uint8Array({ maxLength: 65536 })` applies fast-check's default size bias
+ * and yields buffers of ~12 bytes, which never reach the ws fragmentation and
+ * internal-buffering paths this property exists to cover. Measured: `.chain()`
+ * draws up to the full 65536 across 100 runs, the bare form up to 12.
+ */
 const binaryBufferArb = fc.integer({ min: 1, max: 65536 }).chain((size) =>
   fc.uint8Array({ minLength: size, maxLength: size }).map((arr) => Buffer.from(arr)),
 );
 
 /** Arbitrary: array of 1-10 random binary buffers */
 const bufferBatchArb = fc.array(binaryBufferArb, { minLength: 1, maxLength: 10 });
+
+/**
+ * Budgets. 100 property runs of real socket I/O is not a 5s test; CI runners are
+ * slower than a dev machine and vitest runs these files several workers deep.
+ * TEST_TIMEOUT_MS must stay comfortably above COLLECT_TIMEOUT_MS so that a slow
+ * run reports the vitest timeout rather than a misleading "relay dropped frames".
+ */
+const COLLECT_TIMEOUT_MS = 15_000;
+const TEST_TIMEOUT_MS = 60_000;
 
 describe("Feature: console-integration, Property 3: Binary frame relay integrity", () => {
   let fixture: RelayFixture;
@@ -186,10 +221,6 @@ describe("Feature: console-integration, Property 3: Binary frame relay integrity
   it("binary frames sent from client to upstream arrive byte-for-byte identical", async () => {
     await fc.assert(
       fc.asyncProperty(bufferBatchArb, async (buffers) => {
-        // Rebuild fixture for each property run to avoid message accumulation
-        await fixture.cleanup();
-        fixture = await createRelayFixture();
-
         // Set up message collection on the target (upstream) side
         const received = collectMessages(fixture.target, buffers.length);
 
@@ -209,15 +240,11 @@ describe("Feature: console-integration, Property 3: Binary frame relay integrity
       }),
       { numRuns: 100 },
     );
-  });
+  }, TEST_TIMEOUT_MS);
 
   it("binary frames sent from upstream to client arrive byte-for-byte identical", async () => {
     await fc.assert(
       fc.asyncProperty(bufferBatchArb, async (buffers) => {
-        // Rebuild fixture for each property run
-        await fixture.cleanup();
-        fixture = await createRelayFixture();
-
         // Set up message collection on the sender (client) side
         const received = collectMessages(fixture.sender, buffers.length);
 
@@ -237,7 +264,7 @@ describe("Feature: console-integration, Property 3: Binary frame relay integrity
       }),
       { numRuns: 100 },
     );
-  });
+  }, TEST_TIMEOUT_MS);
 
   it("bidirectional relay: frames in both directions are byte-for-byte identical simultaneously", async () => {
     await fc.assert(
@@ -245,10 +272,6 @@ describe("Feature: console-integration, Property 3: Binary frame relay integrity
         bufferBatchArb,
         bufferBatchArb,
         async (clientToServer, serverToClient) => {
-          // Rebuild fixture for each property run
-          await fixture.cleanup();
-          fixture = await createRelayFixture();
-
           // Set up collectors for both directions
           const receivedAtTarget = collectMessages(fixture.target, clientToServer.length);
           const receivedAtSender = collectMessages(fixture.sender, serverToClient.length);
@@ -261,11 +284,18 @@ describe("Feature: console-integration, Property 3: Binary frame relay integrity
             fixture.target.send(buf, { binary: true });
           }
 
-          // Wait for all messages
-          const [targetReceived, senderReceived] = await Promise.all([
+          // Wait for both directions. allSettled (not all) so that a failure in
+          // one direction still awaits the other: bailing early would leave a
+          // live collector attached to a socket the next property run reuses,
+          // turning one failure into a cascade of bogus shrink attempts.
+          const [targetResult, senderResult] = await Promise.allSettled([
             receivedAtTarget,
             receivedAtSender,
           ]);
+          if (targetResult.status === "rejected") throw targetResult.reason;
+          if (senderResult.status === "rejected") throw senderResult.reason;
+          const targetReceived = targetResult.value;
+          const senderReceived = senderResult.value;
 
           // Verify client → server direction
           expect(targetReceived.length).toBe(clientToServer.length);
@@ -282,5 +312,5 @@ describe("Feature: console-integration, Property 3: Binary frame relay integrity
       ),
       { numRuns: 100 },
     );
-  });
+  }, TEST_TIMEOUT_MS);
 });

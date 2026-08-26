@@ -11,12 +11,27 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import express, { type Express } from "express";
 import { createIntegrationsRouter } from "../../src/routes/integrations";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { LoggerService } from "../../src/services/LoggerService";
 import { PuppetserverService } from "../../src/integrations/puppetserver/PuppetserverService";
 import type { PuppetserverConfig } from "../../src/config/schema";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Puppetserver Catalog and Environment Endpoints", () => {
   let app: Express;
@@ -144,7 +159,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
 
   describe("GET /api/integrations/puppetserver/catalog/:certname/:environment", () => {
     it("should compile catalog for a node in a specific environment", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/catalog/test-node/production")
         .expect(200);
 
@@ -157,7 +172,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
     });
 
     it("should return 400 for invalid certname", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/catalog//production")
         .expect(404);
 
@@ -166,7 +181,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
     });
 
     it("should return 400 for invalid environment", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/catalog/test-node/")
         .expect(404);
 
@@ -177,7 +192,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
 
   describe("POST /api/integrations/puppetserver/catalog/compare", () => {
     it("should compare catalogs between two environments", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/puppetserver/catalog/compare")
         .send({
           certname: "test-node",
@@ -197,7 +212,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
     });
 
     it("should return 400 for missing certname", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/puppetserver/catalog/compare")
         .send({
           environment1: "production",
@@ -210,7 +225,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
     });
 
     it("should return 400 for missing environment1", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/puppetserver/catalog/compare")
         .send({
           certname: "test-node",
@@ -223,7 +238,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
     });
 
     it("should return 400 for missing environment2", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/puppetserver/catalog/compare")
         .send({
           certname: "test-node",
@@ -238,7 +253,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
 
   describe("GET /api/integrations/puppetserver/environments", () => {
     it("should list all available environments", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/environments")
         .expect(200);
 
@@ -253,7 +268,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
 
   describe("GET /api/integrations/puppetserver/environments/:name", () => {
     it("should get details for a specific environment", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/environments/production")
         .expect(200);
 
@@ -273,7 +288,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
         return originalGetEnvironment.call(puppetserverService, name);
       };
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/environments/nonexistent")
         .expect(404);
 
@@ -290,7 +305,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
 
   describe("POST /api/integrations/puppetserver/environments/:name/deploy", () => {
     it("should deploy an environment", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/puppetserver/environments/production/deploy")
         .expect(200);
 
@@ -302,7 +317,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
     });
 
     it("should return 400 for invalid environment name", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/integrations/puppetserver/environments//deploy")
         .expect(404);
 

@@ -6,9 +6,10 @@
  * shipping.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { z } from "zod";
 import { AppConfigSchema, type WhitelistConfig } from "../../src/config/schema";
 import { BoltCommandWhitelistService } from "../../src/validation/CommandWhitelistService";
@@ -38,6 +39,20 @@ const TaskNameSchema = z
   .min(1)
   .max(128)
   .regex(/^[a-z][a-z0-9_]*(::[a-z][a-z0-9_]*)*$/);
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("B1: TaskNameSchema rejects CLI-flag-shaped task names", () => {
   it("rejects '--modulepath=/tmp/evil'", () => {
@@ -211,12 +226,12 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
 
   it("returns 401 when no Authorization header is present", async () => {
     const app = buildApp(LIFECYCLE_TOKEN);
-    await request(app).delete("/api/inventory/some-node-id").expect(401);
+    await request(harness.use(app)).delete("/api/inventory/some-node-id").expect(401);
   });
 
   it("returns 401 when the bearer token is wrong", async () => {
     const app = buildApp(LIFECYCLE_TOKEN);
-    await request(app)
+    await request(harness.use(app))
       .delete("/api/inventory/some-node-id")
       .set("Authorization", "Bearer wrong-token-32chars-padded-xx-xx")
       .expect(401);
@@ -224,7 +239,7 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
 
   it("returns 500 (misconfigured) when no lifecycle token is configured", async () => {
     const app = buildApp("");
-    await request(app)
+    await request(harness.use(app))
       .delete("/api/inventory/some-node-id")
       .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`)
       .expect(500);
@@ -232,7 +247,7 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
 
   it("returns 403 when destructive actions are disabled by config", async () => {
     const app = buildApp(LIFECYCLE_TOKEN, false);
-    await request(app)
+    await request(harness.use(app))
       .delete("/api/inventory/some-node-id")
       .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`)
       .expect(403);
@@ -270,10 +285,10 @@ describe("C3: POST /api/setup/initialize is idempotent against TOCTOU", () => {
       defaultNewUserRole: null,
     };
 
-    await request(app).post("/api/setup/initialize").send(payload).expect(201);
+    await request(harness.use(app)).post("/api/setup/initialize").send(payload).expect(201);
 
     // Second call with a different proposed admin: rejected because setup is complete.
-    const second = await request(app)
+    const second = await request(harness.use(app))
       .post("/api/setup/initialize")
       .send({ ...payload, username: "admin2", email: "admin2@example.com" });
     expect(second.status).toBe(409);
@@ -313,7 +328,7 @@ describe("C7: 5 wrong currentPassword on /change-password locks the account", ()
     app.use("/api/auth", createAuthRouter(databaseService));
 
     // Register + login to obtain an access token
-    await request(app)
+    await request(harness.use(app))
       .post("/api/auth/register")
       .send({
         username,
@@ -324,7 +339,7 @@ describe("C7: 5 wrong currentPassword on /change-password locks the account", ()
       })
       .expect(201);
 
-    const login = await request(app)
+    const login = await request(harness.use(app))
       .post("/api/auth/login")
       .send({ username, password: correctPassword })
       .expect(200);
@@ -344,7 +359,7 @@ describe("C7: 5 wrong currentPassword on /change-password locks the account", ()
 
   it("locks the account after 5 wrong currentPassword attempts", async () => {
     for (let i = 0; i < 4; i++) {
-      const r = await request(app)
+      const r = await request(harness.use(app))
         .post("/api/auth/change-password")
         .set("Authorization", `Bearer ${accessToken}`)
         .send({
@@ -356,7 +371,7 @@ describe("C7: 5 wrong currentPassword on /change-password locks the account", ()
     }
 
     // 5th wrong attempt: pipeline applies temporary lockout, returns 423
-    const fifth = await request(app)
+    const fifth = await request(harness.use(app))
       .post("/api/auth/change-password")
       .set("Authorization", `Bearer ${accessToken}`)
       .send({
@@ -367,7 +382,7 @@ describe("C7: 5 wrong currentPassword on /change-password locks the account", ()
     expect(fifth.body.error.code).toBe("ACCOUNT_LOCKED");
 
     // Authenticate is also blocked while locked
-    const blocked = await request(app)
+    const blocked = await request(harness.use(app))
       .post("/api/auth/login")
       .send({ username, password: correctPassword });
     expect(blocked.status).toBe(401);

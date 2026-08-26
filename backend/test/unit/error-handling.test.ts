@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from "vitest";
 import express, { Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { createAuthRouter } from "../../src/routes/auth";
 import { createUsersRouter } from "../../src/routes/users";
 import { DatabaseService } from "../../src/database/DatabaseService";
@@ -23,6 +24,20 @@ import { initializeTestSchema } from "../helpers/schema";
  * - 16.6: Duplicate username/email error messages (409)
  * - 16.7: Error logging with sufficient detail
  */
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("Error Handling - Unit Tests", () => {
   let app: Express;
   let databaseService: DatabaseService;
@@ -64,7 +79,7 @@ describe("Error Handling - Unit Tests", () => {
 
   describe("Requirement 16.1: Authentication Failures (401)", () => {
     it("should return 401 with clear error message for invalid credentials", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -81,7 +96,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return 401 for non-existent username without revealing it", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "nonexistentuser",
@@ -115,7 +130,7 @@ describe("Error Handling - Unit Tests", () => {
         ]
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "inactiveuser",
@@ -128,7 +143,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return 401 with missing authorization header", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/users")
         .expect(401);
 
@@ -137,7 +152,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return 401 with invalid authorization header format", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/users")
         .set("Authorization", "Basic sometoken")
         .expect(401);
@@ -152,7 +167,7 @@ describe("Error Handling - Unit Tests", () => {
   describe("Requirement 16.2: Authorization Failures (403)", () => {
     it("should return 401 when user is not authenticated for protected endpoint", async () => {
       // Without authentication, should get 401 before authorization check
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${randomUUID()}`)
         .expect(401);
 
@@ -162,7 +177,7 @@ describe("Error Handling - Unit Tests", () => {
 
     it("should include error structure for authorization failures", async () => {
       // Login as regular user
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -172,7 +187,7 @@ describe("Error Handling - Unit Tests", () => {
       const token = loginResponse.body.token;
 
       // Try to access endpoint (will fail at auth or authz level)
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${randomUUID()}`)
         .set("Authorization", `Bearer ${token}`);
 
@@ -190,7 +205,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return proper error format for insufficient permissions", async () => {
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -199,7 +214,7 @@ describe("Error Handling - Unit Tests", () => {
 
       const token = loginResponse.body.token;
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${randomUUID()}`)
         .set("Authorization", `Bearer ${token}`)
         .send({ firstName: "Updated" });
@@ -216,7 +231,7 @@ describe("Error Handling - Unit Tests", () => {
       // Close the database to simulate connection failure
       await databaseService.close();
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -243,7 +258,7 @@ describe("Error Handling - Unit Tests", () => {
       badApp.use(express.json());
       badApp.use("/api/auth", createAuthRouter(badDatabaseService));
 
-      const response = await request(badApp)
+      const response = await request(harness.use(badApp))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -275,7 +290,7 @@ describe("Error Handling - Unit Tests", () => {
         { algorithm: "HS256" }
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/users")
         .set("Authorization", `Bearer ${expiredToken}`)
         .expect(401);
@@ -298,7 +313,7 @@ describe("Error Handling - Unit Tests", () => {
         { algorithm: "HS256" }
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/users")
         .set("Authorization", `Bearer ${expiredToken}`)
         .expect(401);
@@ -310,7 +325,7 @@ describe("Error Handling - Unit Tests", () => {
 
     it("should return 401 for revoked token", async () => {
       // First register a user
-      await request(app)
+      await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "testuser",
@@ -321,7 +336,7 @@ describe("Error Handling - Unit Tests", () => {
         });
 
       // Login to get valid token
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -334,7 +349,7 @@ describe("Error Handling - Unit Tests", () => {
       await authService.revokeToken(token);
 
       // Try to use revoked token
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/users")
         .set("Authorization", `Bearer ${token}`)
         .expect(401);
@@ -346,7 +361,7 @@ describe("Error Handling - Unit Tests", () => {
 
   describe("Requirement 16.5: Input Validation Failures (400)", () => {
     it("should return 400 with validation details for invalid input", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "ab", // Too short
@@ -364,7 +379,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should include field path in validation error details", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "ab",
@@ -386,7 +401,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return 400 for password complexity violations", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "testuser2",
@@ -408,7 +423,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return 400 for invalid email format", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "testuser3",
@@ -430,7 +445,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return 400 for missing required fields", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "testuser4",
@@ -443,7 +458,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should provide clear validation error messages", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "a", // Too short
@@ -465,7 +480,7 @@ describe("Error Handling - Unit Tests", () => {
   describe("Requirement 16.6: Duplicate Username/Email (409)", () => {
     it("should return 409 for duplicate username", async () => {
       // First registration succeeds
-      await request(app)
+      await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "duplicateuser",
@@ -477,7 +492,7 @@ describe("Error Handling - Unit Tests", () => {
         .expect(201);
 
       // Second registration with same username fails
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "duplicateuser",
@@ -495,7 +510,7 @@ describe("Error Handling - Unit Tests", () => {
 
     it("should return 409 for duplicate email", async () => {
       // First registration succeeds
-      await request(app)
+      await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "user1",
@@ -507,7 +522,7 @@ describe("Error Handling - Unit Tests", () => {
         .expect(201);
 
       // Second registration with same email fails
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "user2",
@@ -524,7 +539,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should specify which field conflicts in 409 error", async () => {
-      await request(app)
+      await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "conflictuser",
@@ -535,7 +550,7 @@ describe("Error Handling - Unit Tests", () => {
         })
         .expect(201);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/register")
         .send({
           username: "conflictuser",
@@ -553,7 +568,7 @@ describe("Error Handling - Unit Tests", () => {
 
   describe("Requirement 16.7: Error Logging", () => {
     it("should return proper error structure for authentication failures", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -570,14 +585,14 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should return proper error structure for authorization failures", async () => {
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
           password: "Password123!",
         });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${randomUUID()}`)
         .set("Authorization", `Bearer ${loginResponse.body.token}`);
 
@@ -591,7 +606,7 @@ describe("Error Handling - Unit Tests", () => {
       // Close database to trigger error
       await databaseService.close();
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -618,7 +633,7 @@ describe("Error Handling - Unit Tests", () => {
         throw new Error("Unexpected error");
       });
 
-      const response = await request(brokenApp)
+      const response = await request(harness.use(brokenApp))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -631,7 +646,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should not expose sensitive information in error messages", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .send({
           username: "testuser",
@@ -646,7 +661,7 @@ describe("Error Handling - Unit Tests", () => {
     });
 
     it("should handle malformed JSON with proper error", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/auth/login")
         .set("Content-Type", "application/json")
         .send("{ invalid json");

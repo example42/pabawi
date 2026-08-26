@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { createFactsRouter } from "../../src/routes/facts";
 import { requestIdMiddleware } from "../../src/middleware/errorHandler";
@@ -91,6 +92,20 @@ function buildApp(...plugins: InformationSourcePlugin[]): {
   return { app, manager };
 }
 
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("GET /api/nodes/:id/facts source selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -106,7 +121,7 @@ describe("GET /api/nodes/:id/facts source selection", () => {
 
     const { app } = buildApp(bolt, ssh, ansible, puppetdb);
 
-    const response = await request(app).get("/api/nodes/node1/facts").expect(200);
+    const response = await request(harness.use(app)).get("/api/nodes/node1/facts").expect(200);
 
     expect(Object.keys(response.body.sources as Record<string, unknown>)).toEqual([
       "puppetdb",
@@ -126,7 +141,7 @@ describe("GET /api/nodes/:id/facts source selection", () => {
 
     const { app } = buildApp(bolt, puppetdb, proxmox);
 
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/nodes/node1/facts?source=bolt")
       .expect(200);
 
@@ -142,7 +157,7 @@ describe("GET /api/nodes/:id/facts source selection", () => {
     const puppetdb = new FakeInformationSource("puppetdb");
     const { app } = buildApp(puppetdb);
 
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/nodes/node1/facts?source=does-not-exist")
       .expect(404);
 
@@ -157,7 +172,7 @@ describe("GET /api/nodes/:id/facts source selection", () => {
 
     const { app } = buildApp(ssh);
 
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/nodes/host.example/facts?source=ssh")
       .expect(200);
 

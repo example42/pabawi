@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import express, { type Express } from 'express';
 import { createIntegrationsRouter } from '../../src/routes/integrations';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
@@ -35,7 +36,7 @@ async function measureApiTime(
   body?: any
 ): Promise<{ response: request.Response; duration: number }> {
   const start = Date.now();
-  let req = request(app)[method](path);
+  let req = request(harness.use(app))[method](path);
 
   if (body) {
     req = req.send(body);
@@ -46,6 +47,20 @@ async function measureApiTime(
 
   return { response, duration };
 }
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('API Performance Tests', () => {
   let app: Express;
@@ -89,7 +104,7 @@ describe('API Performance Tests', () => {
       const start = Date.now();
 
       const promises = Array.from({ length: 10 }, () =>
-        request(app).get('/api/integrations/inventory')
+        request(harness.use(app)).get('/api/integrations/inventory')
       );
 
       await Promise.all(promises);
@@ -117,7 +132,7 @@ describe('API Performance Tests', () => {
       const start = Date.now();
 
       const promises = Array.from({ length: 5 }, (_, i) =>
-        request(app).get(`/api/integrations/puppetdb/nodes/test-node-${i}`)
+        request(harness.use(app)).get(`/api/integrations/puppetdb/nodes/test-node-${i}`)
       );
 
       await Promise.all(promises);

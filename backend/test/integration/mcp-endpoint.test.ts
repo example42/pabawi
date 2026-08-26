@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express, { type Express, type Request, type Response } from 'express';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { AuthenticationService } from '../../src/services/AuthenticationService';
@@ -62,6 +63,20 @@ async function createMcpApp(mcpServer: McpServerInstance): Promise<Express> {
   return app;
 }
 
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe('MCP Endpoint Integration Tests', () => {
   let databaseService: DatabaseService;
   let mcpDeps: Parameters<typeof createMcpServer>[0];
@@ -105,7 +120,7 @@ describe('MCP Endpoint Integration Tests', () => {
     const mcpServer = createMcpServer(mcpDeps);
     const app = await createMcpApp(mcpServer);
 
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post('/mcp')
       .set(MCP_HEADERS)
       .send({
@@ -132,7 +147,7 @@ describe('MCP Endpoint Integration Tests', () => {
     const app = await createMcpApp(mcpServer);
 
     // Initialize session
-    const initResponse = await request(app)
+    const initResponse = await request(harness.use(app))
       .post('/mcp')
       .set(MCP_HEADERS)
       .send({
@@ -151,14 +166,14 @@ describe('MCP Endpoint Integration Tests', () => {
     expect(sessionId).toBeDefined();
 
     // Send initialized notification
-    await request(app)
+    await request(harness.use(app))
       .post('/mcp')
       .set(MCP_HEADERS)
       .set('mcp-session-id', sessionId)
       .send({ jsonrpc: '2.0', method: 'notifications/initialized' });
 
     // Request tools list
-    const toolsResponse = await request(app)
+    const toolsResponse = await request(harness.use(app))
       .post('/mcp')
       .set(MCP_HEADERS)
       .set('mcp-session-id', sessionId)

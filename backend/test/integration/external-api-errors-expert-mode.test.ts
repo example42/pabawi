@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { createPuppetDBRouter } from '../../src/routes/integrations/puppetdb';
 import { createPuppetserverRouter } from '../../src/routes/integrations/puppetserver';
 import { createTasksRouter } from '../../src/routes/tasks';
@@ -32,6 +33,20 @@ import {
   BoltNodeUnreachableError,
   BoltTimeoutError,
 } from '../../src/integrations/bolt/types';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('External API Errors in Expert Mode', () => {
   let app: Express;
@@ -62,7 +77,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes')
         .set('X-Expert-Mode', 'true')
         .expect(503);
@@ -101,7 +116,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb-auth', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb-auth/nodes')
         .set('X-Expert-Mode', 'true')
         .expect(401);
@@ -134,7 +149,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb-query', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb-query/nodes')
         .set('X-Expert-Mode', 'true')
         .expect(400);
@@ -169,7 +184,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetserverRouter(mockPuppetserverService);
       app.use('/api/integrations/puppetserver', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver/environments')
         .set('X-Expert-Mode', 'true')
         .expect(503);
@@ -203,7 +218,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetserverRouter(mockPuppetserverService);
       app.use('/api/integrations/puppetserver-auth', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver-auth/environments')
         .set('X-Expert-Mode', 'true')
         .expect(500);
@@ -236,7 +251,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetserverRouter(mockPuppetserverService);
       app.use('/api/integrations/puppetserver-error', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver-error/environments')
         .set('X-Expert-Mode', 'true')
         .expect(500);
@@ -275,7 +290,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createTasksRouter(mockIntegrationManager, mockExecutionRepository);
       app.use('/api/tasks', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/tasks')
         .set('X-Expert-Mode', 'true')
         .expect(500);
@@ -314,7 +329,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createTasksRouter(mockIntegrationManager, mockExecutionRepository);
       app.use('/api/tasks-unreachable', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/tasks-unreachable')
         .set('X-Expert-Mode', 'true')
         .expect(500);
@@ -351,7 +366,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createTasksRouter(mockIntegrationManager, mockExecutionRepository);
       app.use('/api/tasks-timeout', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/tasks-timeout')
         .set('X-Expert-Mode', 'true')
         .expect(500);
@@ -383,7 +398,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb-no-expert', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb-no-expert/nodes')
         // No X-Expert-Mode header
         .expect(503);
@@ -412,7 +427,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb-stack', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb-stack/nodes')
         .set('X-Expert-Mode', 'true')
         .expect(503);
@@ -444,7 +459,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb-code', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb-code/nodes')
         .set('X-Expert-Mode', 'true')
         .expect(401);
@@ -472,7 +487,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb-perf', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb-perf/nodes')
         .set('X-Expert-Mode', 'true')
         .expect(503);
@@ -497,7 +512,7 @@ describe('External API Errors in Expert Mode', () => {
       const router = createPuppetDBRouter(mockPuppetDBService);
       app.use('/api/integrations/puppetdb-context', router);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb-context/nodes')
         .set('X-Expert-Mode', 'true')
         .expect(503);

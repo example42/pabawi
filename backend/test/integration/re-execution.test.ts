@@ -1,13 +1,7 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-} from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { ExecutionRepository } from "../../src/database/ExecutionRepository";
 import { createExecutionsRouter } from "../../src/routes/executions";
 import { errorHandler, requestIdMiddleware } from "../../src/middleware/errorHandler";
@@ -50,6 +44,20 @@ const mockDb = {
     if (callback) callback(null);
   }),
 };
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Re-execution API Endpoints", () => {
   let app: Express;
@@ -95,7 +103,7 @@ describe("Re-execution API Endpoints", () => {
         originalExecution,
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/re-exec-456/original")
         .expect(200);
 
@@ -114,7 +122,7 @@ describe("Re-execution API Endpoints", () => {
       // Mock findById to return null (execution doesn't exist)
       vi.spyOn(executionRepository, "findById").mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/nonexistent/original")
         .expect(404);
 
@@ -139,7 +147,7 @@ describe("Re-execution API Endpoints", () => {
       // Mock findById to return the execution (it exists)
       vi.spyOn(executionRepository, "findById").mockResolvedValue(execution);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/exec-123/original")
         .expect(404);
 
@@ -190,7 +198,7 @@ describe("Re-execution API Endpoints", () => {
         reExecutions,
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/original-123/re-executions")
         .expect(200);
 
@@ -219,7 +227,7 @@ describe("Re-execution API Endpoints", () => {
       // Mock findReExecutions to return empty array
       vi.spyOn(executionRepository, "findReExecutions").mockResolvedValue([]);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/exec-123/re-executions")
         .expect(200);
 
@@ -232,7 +240,7 @@ describe("Re-execution API Endpoints", () => {
       // Mock findById to return null
       vi.spyOn(executionRepository, "findById").mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/nonexistent/re-executions")
         .expect(404);
 
@@ -277,7 +285,7 @@ describe("Re-execution API Endpoints", () => {
         "re-exec-456",
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/original-123/re-execute")
         .send({})
         .expect(201);
@@ -329,7 +337,7 @@ describe("Re-execution API Endpoints", () => {
         "re-exec-456",
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/original-123/re-execute")
         .send({
           targetNodes: ["node1", "node2"],
@@ -349,7 +357,7 @@ describe("Re-execution API Endpoints", () => {
       // Mock findById to return null
       vi.spyOn(executionRepository, "findById").mockResolvedValue(null);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/nonexistent/re-execute")
         .send({})
         .expect(404);

@@ -13,10 +13,11 @@
 
 // Feature: azure-entra-id-auth, Property 17: Providers endpoint always includes local authentication
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from 'vitest';
 import * as fc from 'fast-check';
 import express from 'express';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 
 import { createAuthRouter } from '../../src/routes/auth.ts';
 import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
@@ -50,6 +51,20 @@ const configStateArb: fc.Arbitrary<ConfigState> = fc.record({
     'Azure AD',
     'Custom SSO Provider',
   ),
+});
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
 });
 
 describe('Providers Endpoint — Property 17: Providers endpoint always includes local authentication', () => {
@@ -131,7 +146,7 @@ describe('Providers Endpoint — Property 17: Providers endpoint always includes
           const container = buildContainer(state);
           const app = buildApp(container);
 
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .get('/api/auth/providers')
             .expect(200);
 
@@ -154,7 +169,7 @@ describe('Providers Endpoint — Property 17: Providers endpoint always includes
           const container = buildContainer(state);
           const app = buildApp(container);
 
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .get('/api/auth/providers')
             .expect(200);
 
@@ -182,7 +197,7 @@ describe('Providers Endpoint — Property 17: Providers endpoint always includes
           const container = buildContainer(state);
           const app = buildApp(container);
 
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .get('/api/auth/providers');
 
           expect(res.status).toBe(200);
@@ -210,7 +225,7 @@ describe('Providers Endpoint — Property 17: Providers endpoint always includes
           const app = buildApp(container);
 
           // No Authorization header at all — endpoint must not require auth
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .get('/api/auth/providers');
 
           expect(res.status).toBe(200);

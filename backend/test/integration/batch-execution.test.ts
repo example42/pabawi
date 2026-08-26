@@ -1,13 +1,7 @@
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  vi,
-} from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
 import type { DatabaseAdapter } from "../../src/database/DatabaseAdapter";
 import { ExecutionRepository } from "../../src/database/ExecutionRepository";
@@ -24,6 +18,20 @@ import type { IntegrationManager } from "../../src/integrations/IntegrationManag
  *
  * **Validates: Requirements 5.1, 5.2, 5.8, 5.9, 5.10, 6.1, 6.2, 6.6, 6.7, 8.2, 8.9, 15.3**
  */
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("Batch Execution API Endpoints", () => {
   let app: Express;
   let executionRepository: ExecutionRepository;
@@ -74,7 +82,7 @@ describe("Batch Execution API Endpoints", () => {
         mockResponse
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node1", "node2", "node3"],
@@ -110,7 +118,7 @@ describe("Batch Execution API Endpoints", () => {
         mockResponse
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetGroupIds: ["group1"],
@@ -145,7 +153,7 @@ describe("Batch Execution API Endpoints", () => {
         mockResponse
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node1", "node2"],
@@ -160,7 +168,7 @@ describe("Batch Execution API Endpoints", () => {
     });
 
     it("should return 400 when no targets are specified", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           type: "command",
@@ -174,7 +182,7 @@ describe("Batch Execution API Endpoints", () => {
     });
 
     it("should return 400 when action is missing", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node1"],
@@ -187,7 +195,7 @@ describe("Batch Execution API Endpoints", () => {
     });
 
     it("should return 400 when type is invalid", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node1"],
@@ -205,7 +213,7 @@ describe("Batch Execution API Endpoints", () => {
         new Error("Invalid node IDs: node-nonexistent")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node-nonexistent"],
@@ -223,7 +231,7 @@ describe("Batch Execution API Endpoints", () => {
         new Error("Execution queue is full. Maximum concurrent executions: 5")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node1", "node2", "node3"],
@@ -241,7 +249,7 @@ describe("Batch Execution API Endpoints", () => {
         new Error("Database connection failed")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node1"],
@@ -265,7 +273,7 @@ describe("Batch Execution API Endpoints", () => {
       );
       appWithoutService.use(errorHandler);
 
-      const response = await request(appWithoutService)
+      const response = await request(harness.use(appWithoutService))
         .post("/api/executions/batch")
         .send({
           targetNodeIds: ["node1"],
@@ -340,7 +348,7 @@ describe("Batch Execution API Endpoints", () => {
         mockBatchStatus
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/batch/batch-123")
         .expect(200);
 
@@ -401,7 +409,7 @@ describe("Batch Execution API Endpoints", () => {
         mockBatchStatus
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/batch/batch-123?status=failed")
         .expect(200);
 
@@ -418,7 +426,7 @@ describe("Batch Execution API Endpoints", () => {
         new Error("Batch execution batch-nonexistent not found")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/batch/batch-nonexistent")
         .expect(404);
 
@@ -431,7 +439,7 @@ describe("Batch Execution API Endpoints", () => {
         new Error("Database connection failed")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/executions/batch/batch-123")
         .expect(500);
 
@@ -450,7 +458,7 @@ describe("Batch Execution API Endpoints", () => {
       );
       appWithoutService.use(errorHandler);
 
-      const response = await request(appWithoutService)
+      const response = await request(harness.use(appWithoutService))
         .get("/api/executions/batch/batch-123")
         .expect(500);
 
@@ -467,7 +475,7 @@ describe("Batch Execution API Endpoints", () => {
         mockResult
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch/batch-123/cancel")
         .expect(200);
 
@@ -485,7 +493,7 @@ describe("Batch Execution API Endpoints", () => {
         mockResult
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch/batch-456/cancel")
         .expect(200);
 
@@ -498,7 +506,7 @@ describe("Batch Execution API Endpoints", () => {
         new Error("Batch execution batch-nonexistent not found")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch/batch-nonexistent/cancel")
         .expect(404);
 
@@ -511,7 +519,7 @@ describe("Batch Execution API Endpoints", () => {
         new Error("Database connection failed")
       );
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/executions/batch/batch-123/cancel")
         .expect(500);
 
@@ -530,7 +538,7 @@ describe("Batch Execution API Endpoints", () => {
       );
       appWithoutService.use(errorHandler);
 
-      const response = await request(appWithoutService)
+      const response = await request(harness.use(appWithoutService))
         .post("/api/executions/batch/batch-123/cancel")
         .expect(500);
 
@@ -701,7 +709,7 @@ describe("Batch Execution End-to-End Flow", () => {
   });
 
   it("should create batch execution with nodes and store in database", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1", "node2"],
@@ -739,7 +747,7 @@ describe("Batch Execution End-to-End Flow", () => {
   });
 
   it("should expand groups and create executions for all members", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetGroupIds: ["group1"],
@@ -764,7 +772,7 @@ describe("Batch Execution End-to-End Flow", () => {
   });
 
   it("should deduplicate nodes when mixing node IDs and group IDs", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1", "node2"],
@@ -787,7 +795,7 @@ describe("Batch Execution End-to-End Flow", () => {
 
   it("should fetch batch status with aggregated statistics", async () => {
     // Create batch
-    const createResponse = await request(app)
+    const createResponse = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1", "node2", "node3"],
@@ -819,7 +827,7 @@ describe("Batch Execution End-to-End Flow", () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Fetch batch status
-    const statusResponse = await request(app)
+    const statusResponse = await request(harness.use(app))
       .get(`/api/executions/batch/${batchId}`)
       .expect(200);
 
@@ -836,7 +844,7 @@ describe("Batch Execution End-to-End Flow", () => {
 
   it("should filter batch status by execution status", async () => {
     // Create batch
-    const createResponse = await request(app)
+    const createResponse = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1", "node2", "node3"],
@@ -864,7 +872,7 @@ describe("Batch Execution End-to-End Flow", () => {
     );
 
     // Fetch only failed executions
-    const statusResponse = await request(app)
+    const statusResponse = await request(harness.use(app))
       .get(`/api/executions/batch/${batchId}?status=failed`)
       .expect(200);
 
@@ -874,7 +882,7 @@ describe("Batch Execution End-to-End Flow", () => {
 
   it("should cancel batch execution and update database", async () => {
     // Create batch
-    const createResponse = await request(app)
+    const createResponse = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1", "node2", "node3"],
@@ -886,7 +894,7 @@ describe("Batch Execution End-to-End Flow", () => {
     const batchId = createResponse.body.batchId;
 
     // Immediately cancel batch before executions complete
-    const cancelResponse = await request(app)
+    const cancelResponse = await request(harness.use(app))
       .post(`/api/executions/batch/${batchId}/cancel`)
       .expect(200);
 
@@ -919,7 +927,7 @@ describe("Batch Execution End-to-End Flow", () => {
       new Error("Execution queue is full. Maximum concurrent executions: 5")
     );
 
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1", "node2"],
@@ -936,7 +944,7 @@ describe("Batch Execution End-to-End Flow", () => {
   });
 
   it("should validate node IDs and return error for invalid nodes", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1", "invalid-node"],
@@ -954,7 +962,7 @@ describe("Batch Execution End-to-End Flow", () => {
   });
 
   it("should handle multiple groups with overlapping nodes", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetGroupIds: ["group1", "group2"],
@@ -977,7 +985,7 @@ describe("Batch Execution End-to-End Flow", () => {
   it("should store batch parameters correctly", async () => {
     const parameters = { package: "nginx", version: "latest" };
 
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1"],
