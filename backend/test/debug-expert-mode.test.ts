@@ -1,8 +1,23 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "./helpers/httpHarness";
 import { requestIdMiddleware } from "../src/middleware/errorHandler";
 import { expertModeMiddleware } from "../src/middleware/expertMode";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Debug Expert Mode", () => {
   let app: Express;
@@ -22,7 +37,7 @@ describe("Debug Expert Mode", () => {
   });
 
   it("should have expertMode=false when no header is set", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/test")
       .expect(200);
 
@@ -31,7 +46,7 @@ describe("Debug Expert Mode", () => {
   });
 
   it("should have expertMode=true when header is set", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/test")
       .set("X-Expert-Mode", "true")
       .expect(200);

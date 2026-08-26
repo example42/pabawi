@@ -1,5 +1,7 @@
 import express, { Express } from 'express';
 import request from 'supertest';
+import { beforeAll, afterAll } from 'vitest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { createGroupsRouter } from '../../src/routes/groups';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { randomUUID } from 'crypto';
@@ -8,6 +10,20 @@ import { UserService } from '../../src/services/UserService';
 import { PermissionService } from '../../src/services/PermissionService';
 import { RoleService } from '../../src/services/RoleService';
 import { GroupService } from '../../src/services/GroupService';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('Groups Router - POST /api/groups', () => {
   let app: Express;
@@ -116,7 +132,7 @@ describe('Groups Router - POST /api/groups', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .send({ name: 'Test Group', description: 'Test description' })
         .expect(401);
@@ -125,7 +141,7 @@ describe('Groups Router - POST /api/groups', () => {
     });
 
     it('should return 403 when user lacks groups:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .set('Authorization', `Bearer ${regularUserToken}`)
         .send({ name: 'Test Group', description: 'Test description' })
@@ -137,7 +153,7 @@ describe('Groups Router - POST /api/groups', () => {
 
   describe('Validation', () => {
     it('should return 400 when name is missing', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ description: 'Test description' })
@@ -147,7 +163,7 @@ describe('Groups Router - POST /api/groups', () => {
     });
 
     it('should return 400 when name is too short', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'ab', description: 'Test description' })
@@ -157,7 +173,7 @@ describe('Groups Router - POST /api/groups', () => {
     });
 
     it('should return 400 when name is too long', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'a'.repeat(101), description: 'Test description' })
@@ -167,7 +183,7 @@ describe('Groups Router - POST /api/groups', () => {
     });
 
     it('should return 400 when description is too long', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Test Group', description: 'a'.repeat(501) })
@@ -179,7 +195,7 @@ describe('Groups Router - POST /api/groups', () => {
 
   describe('Success Cases', () => {
     it('should create a group with valid data', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Developers', description: 'Development team' })
@@ -202,7 +218,7 @@ describe('Groups Router - POST /api/groups', () => {
       });
 
       // Try to create duplicate
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Developers', description: 'Another team' })
@@ -305,7 +321,7 @@ describe('Groups Router - GET /api/groups', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/groups')
         .expect(401);
 
@@ -314,7 +330,7 @@ describe('Groups Router - GET /api/groups', () => {
     });
 
     it('should return 403 when user lacks groups:read permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/groups')
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -326,7 +342,7 @@ describe('Groups Router - GET /api/groups', () => {
 
   describe('Success Cases', () => {
     it('should return empty list when no groups exist', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -346,7 +362,7 @@ describe('Groups Router - GET /api/groups', () => {
       await groupService.createGroup({ name: 'Group B', description: 'Second group' });
       await groupService.createGroup({ name: 'Group C', description: 'Third group' });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/groups')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -366,7 +382,7 @@ describe('Groups Router - GET /api/groups', () => {
         await groupService.createGroup({ name: `Group ${i}`, description: `Group ${i}` });
       }
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/groups?page=2&limit=2')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -472,7 +488,7 @@ describe('Groups Router - GET /api/groups/:id', () => {
 
   describe('Success Cases', () => {
     it('should return group with members and roles', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -488,7 +504,7 @@ describe('Groups Router - GET /api/groups/:id', () => {
 
     it('should return 404 when group does not exist', async () => {
       const fakeId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/groups/${fakeId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -586,7 +602,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
 
   describe('Success Cases', () => {
     it('should update group name', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Updated Group' })
@@ -597,7 +613,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
     });
 
     it('should update group description', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ description: 'Updated description' })
@@ -609,7 +625,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
 
     it('should return 404 when group does not exist', async () => {
       const fakeId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/groups/${fakeId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Updated Group' })
@@ -625,7 +641,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
         description: 'Another group',
       });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ name: 'Existing Group' })
@@ -735,7 +751,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 403 when user lacks groups:admin permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -747,7 +763,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
 
   describe('Success Cases', () => {
     it('should delete group successfully', async () => {
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -759,7 +775,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
 
     it('should return 404 when group does not exist', async () => {
       const fakeId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/groups/${fakeId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -891,7 +907,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .expect(401);
 
@@ -900,7 +916,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
     });
 
     it('should return 403 when user lacks groups:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -912,7 +928,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
 
   describe('Success Cases', () => {
     it('should assign role to group successfully', async () => {
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -933,7 +949,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
       await roleService.assignPermissionToRole(testRoleId, testPermission.id);
 
       // Assign role to group
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -950,7 +966,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
   describe('Error Cases', () => {
     it('should return 404 when group does not exist', async () => {
       const fakeId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/groups/${fakeId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -961,7 +977,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
 
     it('should return 404 when role does not exist', async () => {
       const fakeId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/groups/${testGroupId}/roles/${fakeId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -975,7 +991,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
       await groupService.assignRoleToGroup(testGroupId, testRoleId);
 
       // Try to assign again
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(409);
@@ -1111,7 +1127,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .expect(401);
 
@@ -1120,7 +1136,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
     });
 
     it('should return 403 when user lacks groups:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -1132,7 +1148,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
 
   describe('Success Cases', () => {
     it('should remove role from group successfully', async () => {
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1152,7 +1168,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
       await roleService.assignPermissionToRole(testRoleId, testPermission.id);
 
       // Remove role from group
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1174,7 +1190,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
         description: 'Another role',
       });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}/roles/${anotherRole.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);

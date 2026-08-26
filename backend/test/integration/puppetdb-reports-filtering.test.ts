@@ -1,10 +1,25 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import express, { type Express } from "express";
 import { createPuppetDBRouter } from "../../src/routes/integrations/puppetdb";
 import { PuppetDBService } from "../../src/integrations/puppetdb/PuppetDBService";
 import { expertModeMiddleware } from "../../src/middleware/expertMode";
 import type { Report } from "../../src/integrations/puppetdb/types";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("PuppetDB Reports Filtering", () => {
   let app: Express;
@@ -75,7 +90,7 @@ describe("PuppetDB Reports Filtering", () => {
 
   describe("GET /api/integrations/puppetdb/reports", () => {
     it("should return all reports when no filters are applied", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports")
         .expect(200);
 
@@ -88,7 +103,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should filter reports by single status", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?status=failed")
         .expect(200);
 
@@ -100,7 +115,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should filter reports by multiple statuses", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?status=success,failed")
         .expect(200);
 
@@ -115,7 +130,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should filter reports by minimum duration", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?minDuration=400")
         .expect(200);
 
@@ -130,7 +145,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should filter reports by minimum compile time", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?minCompileTime=25")
         .expect(200);
 
@@ -145,7 +160,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should filter reports by minimum total resources", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?minTotalResources=100")
         .expect(200);
 
@@ -159,7 +174,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should apply multiple filters with AND logic", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?status=failed,unchanged&minDuration=400")
         .expect(200);
 
@@ -174,7 +189,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should return empty array when no reports match filters", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?status=failed&minDuration=1000")
         .expect(200);
 
@@ -185,7 +200,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should return 400 for invalid status values", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?status=invalid-status")
         .expect(400);
 
@@ -195,7 +210,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should return 400 for negative duration", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?minDuration=-100")
         .expect(400);
 
@@ -205,7 +220,7 @@ describe("PuppetDB Reports Filtering", () => {
     });
 
     it("should include filter metadata in debug info when expert mode is enabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/reports?status=failed&minDuration=400")
         .set("X-Expert-Mode", "true")
         .expect(200);

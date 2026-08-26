@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from 'vitest';
 import express, { type Express } from 'express';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 
@@ -100,6 +101,20 @@ function createValidIdToken(overrides: Partial<Record<string, unknown>> = {}, no
  *
  * Validates: Requirements 2.1, 3.1, 7.1, 7.2, 7.3, 7.4, 9.4, 9.8
  */
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe('Entra ID Auth Flow Integration Tests', () => {
   let app: Express;
   let databaseService: DatabaseService;
@@ -168,7 +183,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
   describe('Full happy path: auth URL → callback → token exchange', () => {
     it('should complete the full OAuth flow', async () => {
       // Step 1: Get the authorization URL via /login endpoint
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .get('/api/auth/entra-id/login')
         .expect(302);
 
@@ -223,7 +238,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       });
 
       // Call the callback endpoint
-      const callbackResponse = await request(app)
+      const callbackResponse = await request(harness.use(app))
         .get('/api/auth/entra-id/callback')
         .query({ code: 'mock-auth-code', state: state! })
         .expect(302);
@@ -235,7 +250,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       expect(authCode!.length).toBeGreaterThan(0);
 
       // Step 3: Exchange the auth code for tokens
-      const tokenResponse = await request(app)
+      const tokenResponse = await request(harness.use(app))
         .post('/api/auth/entra-id/token')
         .send({ code: authCode })
         .expect(200);
@@ -247,7 +262,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       expect(tokenResponse.body.user.email).toBe('testuser@example.com');
 
       // Step 4: Verify the auth code cannot be reused (single-use)
-      const replayResponse = await request(app)
+      const replayResponse = await request(harness.use(app))
         .post('/api/auth/entra-id/token')
         .send({ code: authCode })
         .expect(400);
@@ -259,7 +274,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
   describe('JWKS cache fallback on endpoint failure', () => {
     it('should use cached JWKS keys when endpoint fails on second request', async () => {
       // First: generate auth URL to get state
-      const loginRes = await request(app)
+      const loginRes = await request(harness.use(app))
         .get('/api/auth/entra-id/login')
         .expect(302);
 
@@ -308,13 +323,13 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       });
 
       // First callback: should succeed and cache JWKS keys
-      const callbackRes1 = await request(app)
+      const callbackRes1 = await request(harness.use(app))
         .get('/api/auth/entra-id/callback')
         .query({ code: 'auth-code-1', state })
         .expect(302);
 
       const authCode1 = new URL(callbackRes1.headers.location).searchParams.get('code')!;
-      await request(app).post('/api/auth/entra-id/token').send({ code: authCode1 }).expect(200);
+      await request(harness.use(app)).post('/api/auth/entra-id/token').send({ code: authCode1 }).expect(200);
 
       // Now force cache to be stale by manipulating the service internals
       // The jwksCache has a fetchedAt that we need to backdating.
@@ -322,7 +337,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       // the in-memory cache anyway. Let's verify via a second full flow.
 
       // Generate a new authorization URL for a second login
-      const loginRes2 = await request(app).get('/api/auth/entra-id/login').expect(302);
+      const loginRes2 = await request(harness.use(app)).get('/api/auth/entra-id/login').expect(302);
       const state2 = new URL(loginRes2.headers.location).searchParams.get('state')!;
 
       const stateEntry2 = await databaseService.getAdapter().queryOne<{
@@ -358,13 +373,13 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       (entraIdService as any).jwksCache.fetchedAt = 0;
 
       // Second callback: JWKS endpoint fails but cache should serve
-      const callbackRes2 = await request(app)
+      const callbackRes2 = await request(harness.use(app))
         .get('/api/auth/entra-id/callback')
         .query({ code: 'auth-code-2', state: state2 })
         .expect(302);
 
       const authCode2 = new URL(callbackRes2.headers.location).searchParams.get('code')!;
-      const tokenRes2 = await request(app)
+      const tokenRes2 = await request(harness.use(app))
         .post('/api/auth/entra-id/token')
         .send({ code: authCode2 })
         .expect(200);
@@ -375,7 +390,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
 
   describe('Token exchange timeout behavior (>10s)', () => {
     it('should return TOKEN_EXCHANGE_FAILED when token endpoint times out', async () => {
-      const loginRes = await request(app).get('/api/auth/entra-id/login').expect(302);
+      const loginRes = await request(harness.use(app)).get('/api/auth/entra-id/login').expect(302);
       const state = new URL(loginRes.headers.location).searchParams.get('state')!;
 
       // Mock the token endpoint to abort (simulating a timeout via AbortError)
@@ -397,7 +412,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
         return new Response('Not found', { status: 404 });
       });
 
-      const callbackRes = await request(app)
+      const callbackRes = await request(harness.use(app))
         .get('/api/auth/entra-id/callback')
         .query({ code: 'timeout-code', state })
         .expect(401);
@@ -409,7 +424,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
 
   describe('Database failure during provisioning (atomicity)', () => {
     it('should reject with PROVISIONING_FAILED and leave no partial state', async () => {
-      const loginRes = await request(app).get('/api/auth/entra-id/login').expect(302);
+      const loginRes = await request(harness.use(app)).get('/api/auth/entra-id/login').expect(302);
       const state = new URL(loginRes.headers.location).searchParams.get('state')!;
 
       const stateEntry = await databaseService.getAdapter().queryOne<{ nonce: string }>(
@@ -443,7 +458,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       );
       createFederatedUserSpy.mockRejectedValueOnce(new Error('SQLITE_CONSTRAINT: UNIQUE'));
 
-      const callbackRes = await request(app)
+      const callbackRes = await request(harness.use(app))
         .get('/api/auth/entra-id/callback')
         .query({ code: 'db-fail-code', state })
         .expect(500);
@@ -468,7 +483,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
 
   describe('Audit logging verification', () => {
     it('should record audit log entry after successful SSO login', async () => {
-      const loginRes = await request(app).get('/api/auth/entra-id/login').expect(302);
+      const loginRes = await request(harness.use(app)).get('/api/auth/entra-id/login').expect(302);
       const state = new URL(loginRes.headers.location).searchParams.get('state')!;
 
       const stateEntry = await databaseService.getAdapter().queryOne<{ nonce: string }>(
@@ -495,13 +510,13 @@ describe('Entra ID Auth Flow Integration Tests', () => {
         return new Response('Not found', { status: 404 });
       });
 
-      const callbackRes = await request(app)
+      const callbackRes = await request(harness.use(app))
         .get('/api/auth/entra-id/callback')
         .query({ code: 'audit-code', state })
         .expect(302);
 
       const authCode = new URL(callbackRes.headers.location).searchParams.get('code')!;
-      await request(app).post('/api/auth/entra-id/token').send({ code: authCode }).expect(200);
+      await request(harness.use(app)).post('/api/auth/entra-id/token').send({ code: authCode }).expect(200);
 
       // Verify audit log entry exists
       const auditLogs = await databaseService.getAdapter().query<{
@@ -529,7 +544,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
   describe('Federation-only account local login rejection', () => {
     it('should reject local login with HTTP 401 for user with null password_hash', async () => {
       // First: complete an SSO login to create a federation-only user
-      const loginRes = await request(app).get('/api/auth/entra-id/login').expect(302);
+      const loginRes = await request(harness.use(app)).get('/api/auth/entra-id/login').expect(302);
       const state = new URL(loginRes.headers.location).searchParams.get('state')!;
 
       const stateEntry = await databaseService.getAdapter().queryOne<{ nonce: string }>(
@@ -556,13 +571,13 @@ describe('Entra ID Auth Flow Integration Tests', () => {
         return new Response('Not found', { status: 404 });
       });
 
-      const callbackRes = await request(app)
+      const callbackRes = await request(harness.use(app))
         .get('/api/auth/entra-id/callback')
         .query({ code: 'fed-only-code', state })
         .expect(302);
 
       const authCode = new URL(callbackRes.headers.location).searchParams.get('code')!;
-      await request(app).post('/api/auth/entra-id/token').send({ code: authCode }).expect(200);
+      await request(harness.use(app)).post('/api/auth/entra-id/token').send({ code: authCode }).expect(200);
 
       // Verify user exists and has null password_hash
       const user = await databaseService.getAdapter().queryOne<{
@@ -575,7 +590,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       expect(user!.passwordHash).toBeNull();
 
       // Attempt local login with this federation-only user
-      const localLoginRes = await request(app)
+      const localLoginRes = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'testuser', password: 'AnyPassword123!' })
         .expect(401);
@@ -587,7 +602,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
   describe('Coexistence: local auth continues working when Entra ID enabled', () => {
     it('should allow local user registration and login while Entra ID is enabled', async () => {
       // Verify the providers endpoint shows both
-      const providersRes = await request(app)
+      const providersRes = await request(harness.use(app))
         .get('/api/auth/providers')
         .expect(200);
 
@@ -605,7 +620,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       );
 
       // Register a local user
-      const registerRes = await request(app)
+      const registerRes = await request(harness.use(app))
         .post('/api/auth/register')
         .send({
           username: 'localuser',
@@ -619,7 +634,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       expect(registerRes.body.user.username).toBe('localuser');
 
       // Login with local credentials
-      const localLoginRes = await request(app)
+      const localLoginRes = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'localuser', password: 'SecurePass123!' })
         .expect(200);
@@ -629,7 +644,7 @@ describe('Entra ID Auth Flow Integration Tests', () => {
       expect(localLoginRes.body.user.username).toBe('localuser');
 
       // Simultaneously, Entra ID endpoints are available
-      const entraLoginRes = await request(app)
+      const entraLoginRes = await request(harness.use(app))
         .get('/api/auth/entra-id/login')
         .expect(302);
 

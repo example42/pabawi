@@ -159,13 +159,20 @@ describe("Feature: console-integration, Property 14: Configuration parsing with 
 
           process.env[envVar] = validValue;
 
-          // Ensure heartbeat < timeout to avoid cross-field default revert
+          // Ensure heartbeat < timeout to avoid the cross-field default revert
+          // (ConfigService reverts BOTH fields when heartbeat >= timeout).
           if (envVar === "CONSOLE_HEARTBEAT_INTERVAL_MS") {
             const hb = parseInt(validValue, 10);
             process.env.CONSOLE_SESSION_TIMEOUT_MS = String(hb + 1000000);
           } else if (envVar === "CONSOLE_SESSION_TIMEOUT_MS") {
             const timeout = parseInt(validValue, 10);
-            process.env.CONSOLE_HEARTBEAT_INTERVAL_MS = String(Math.max(1, timeout - 1));
+            // A timeout of 1 admits no valid heartbeat: heartbeat must be a
+            // positive integer strictly below it. Math.max(1, timeout - 1)
+            // silently yielded heartbeat === timeout === 1, tripping the very
+            // revert this branch exists to avoid. Such inputs are outside the
+            // property's domain, so discard rather than clamp.
+            fc.pre(timeout > 1);
+            process.env.CONSOLE_HEARTBEAT_INTERVAL_MS = String(timeout - 1);
           }
 
           const config = new ConfigService();

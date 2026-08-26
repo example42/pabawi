@@ -95,6 +95,10 @@ function createMockLogger(): LoggerService {
 // Pre-generate key pairs (expensive, do once)
 const primaryKey = generateTestKeyPair();
 const primaryJwk = pemToJwkComponents(primaryKey.publicKey);
+// A key that is deliberately never published in the mocked JWKS. Generated once
+// at module load: RSA-2048 keygen inside a property body costs ~100 keygens per
+// test and blows the default 5s timeout under CI load.
+const foreignKey = generateTestKeyPair();
 
 function buildIdToken(
   config: EntraIdConfig,
@@ -370,13 +374,12 @@ describe('EntraIdService — Callback Validation Properties', () => {
             setupValidStateEntry();
 
             // Sign with a different key not in JWKS
-            const wrongKey = generateTestKeyPair();
             const idToken = buildIdToken(
               config,
               storedNonce,
               {},
-              wrongKey.privateKey,
-              wrongKey.kid,
+              foreignKey.privateKey,
+              foreignKey.kid,
             );
             mockFetchForToken(idToken);
 
@@ -611,13 +614,12 @@ describe('EntraIdService — Callback Validation Properties', () => {
             });
 
             // Sign with wrong key → INVALID_ID_TOKEN
-            const wrongKey = generateTestKeyPair();
             const idToken = buildIdToken(
               config,
               storedNonce,
               {},
-              wrongKey.privateKey,
-              wrongKey.kid,
+              foreignKey.privateKey,
+              foreignKey.kid,
             );
             mockFetchForToken(idToken);
 

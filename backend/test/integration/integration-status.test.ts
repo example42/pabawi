@@ -2,9 +2,10 @@
  * Integration tests for /api/integrations/status endpoint
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BasePlugin } from "../../src/integrations/BasePlugin";
 import { LoggerService } from "../../src/services/LoggerService";
@@ -93,6 +94,20 @@ class MockInformationSource
   }
 }
 
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("Integration Status API", () => {
   let app: Express;
   let integrationManager: IntegrationManager;
@@ -142,7 +157,7 @@ describe("Integration Status API", () => {
 
   describe("GET /api/integrations/status", () => {
     it("should return status for all configured integrations", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/status")
         .expect(200);
 
@@ -209,7 +224,7 @@ describe("Integration Status API", () => {
         createIntegrationsRouter(newManager),
       );
 
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/api/integrations/status")
         .expect(200);
 
@@ -236,7 +251,7 @@ describe("Integration Status API", () => {
         createIntegrationsRouter(emptyManager),
       );
 
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/api/integrations/status")
         .expect(200);
 
@@ -246,7 +261,7 @@ describe("Integration Status API", () => {
     });
 
     it("should use cached results by default", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/status")
         .expect(200);
 
@@ -256,7 +271,7 @@ describe("Integration Status API", () => {
     });
 
     it("should refresh health checks when requested", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/status?refresh=true")
         .expect(200);
 

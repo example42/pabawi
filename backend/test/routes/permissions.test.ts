@@ -1,11 +1,27 @@
 import express, { Express } from 'express';
 import request from 'supertest';
+import { beforeAll, afterAll } from 'vitest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { createPermissionsRouter } from '../../src/routes/permissions';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { AuthenticationService } from '../../src/services/AuthenticationService';
 import { UserService } from '../../src/services/UserService';
 import { PermissionService } from '../../src/services/PermissionService';
 import { RoleService } from '../../src/services/RoleService';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('Permissions Router', () => {
   let app: Express;
@@ -121,7 +137,7 @@ describe('Permissions Router', () => {
 
   describe('POST /api/permissions', () => {
     it('should create a new permission with valid data', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -138,7 +154,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 401 when not authenticated', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .send({
           resource: 'test_resource',
@@ -150,7 +166,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 403 when user lacks permissions:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${regularUserToken}`)
         .send({
@@ -163,7 +179,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when resource is invalid', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -177,7 +193,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when action is invalid', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -191,7 +207,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when resource is too short', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -205,7 +221,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when action is too short', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -220,7 +236,7 @@ describe('Permissions Router', () => {
 
     it('should return 409 when permission with same resource-action already exists', async () => {
       // Create first permission
-      await request(app)
+      await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -230,7 +246,7 @@ describe('Permissions Router', () => {
         });
 
       // Try to create duplicate
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -245,7 +261,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when description is too long', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -259,7 +275,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when required fields are missing', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -292,7 +308,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return paginated list of permissions', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ page: 1, limit: 10 });
@@ -309,14 +325,14 @@ describe('Permissions Router', () => {
     });
 
     it('should return 401 when not authenticated', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions');
 
       expect(response.status).toBe(401);
     });
 
     it('should return 403 when user lacks permissions:read permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions')
         .set('Authorization', `Bearer ${regularUserToken}`);
 
@@ -324,7 +340,7 @@ describe('Permissions Router', () => {
     });
 
     it('should support pagination with different page sizes', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ page: 1, limit: 5 });
@@ -335,7 +351,7 @@ describe('Permissions Router', () => {
     });
 
     it('should default to page 1 and limit 20 when not specified', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`);
 
@@ -345,7 +361,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when page is invalid', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ page: 0 });
@@ -355,7 +371,7 @@ describe('Permissions Router', () => {
     });
 
     it('should return 400 when limit exceeds maximum', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ limit: 101 });
@@ -365,7 +381,7 @@ describe('Permissions Router', () => {
     });
 
     it('should include all permission fields in response', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/permissions')
         .set('Authorization', `Bearer ${adminToken}`)
         .query({ page: 1, limit: 1 });

@@ -1,5 +1,7 @@
 import express, { Express } from "express";
 import request from "supertest";
+import { beforeAll, afterAll } from "vitest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { createJournalRouter } from "../../src/routes/journal";
 import { DatabaseService } from "../../src/database/DatabaseService";
 import { AuthenticationService } from "../../src/services/AuthenticationService";
@@ -7,6 +9,20 @@ import { UserService } from "../../src/services/UserService";
 import { PermissionService } from "../../src/services/PermissionService";
 import { RoleService } from "../../src/services/RoleService";
 import { JournalService } from "../../src/services/journal/JournalService";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Journal Router", () => {
   let app: Express;
@@ -148,7 +164,7 @@ describe("Journal Router", () => {
 
   describe("GET /api/journal/:nodeId", () => {
     it("should return timeline entries for a node", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/node-1")
         .set("Authorization", `Bearer ${adminToken}`);
 
@@ -159,19 +175,19 @@ describe("Journal Router", () => {
     });
 
     it("should return 401 when not authenticated", async () => {
-      const response = await request(app).get("/api/journal/node-1");
+      const response = await request(harness.use(app)).get("/api/journal/node-1");
       expect(response.status).toBe(401);
     });
 
     it("should return 403 when user lacks journal:read permission", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/node-1")
         .set("Authorization", `Bearer ${regularUserToken}`);
       expect(response.status).toBe(403);
     });
 
     it("should return empty entries for unknown node", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/unknown-node")
         .set("Authorization", `Bearer ${adminToken}`);
 
@@ -180,7 +196,7 @@ describe("Journal Router", () => {
     });
 
     it("should support pagination via limit and offset", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/node-1")
         .set("Authorization", `Bearer ${adminToken}`)
         .query({ limit: 1, offset: 0 });
@@ -190,7 +206,7 @@ describe("Journal Router", () => {
     });
 
     it("should return 400 for invalid limit", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/node-1")
         .set("Authorization", `Bearer ${adminToken}`)
         .query({ limit: 0 });
@@ -202,7 +218,7 @@ describe("Journal Router", () => {
 
   describe("POST /api/journal/:nodeId/notes", () => {
     it("should add a manual note to a node", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/journal/node-1/notes")
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ content: "This is a test note" });
@@ -212,14 +228,14 @@ describe("Journal Router", () => {
     });
 
     it("should return 401 when not authenticated", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/journal/node-1/notes")
         .send({ content: "Unauthorized note" });
       expect(response.status).toBe(401);
     });
 
     it("should return 403 when user lacks journal:note permission", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/journal/node-1/notes")
         .set("Authorization", `Bearer ${regularUserToken}`)
         .send({ content: "Forbidden note" });
@@ -227,7 +243,7 @@ describe("Journal Router", () => {
     });
 
     it("should return 400 when content is missing", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/journal/node-1/notes")
         .set("Authorization", `Bearer ${adminToken}`)
         .send({});
@@ -237,7 +253,7 @@ describe("Journal Router", () => {
     });
 
     it("should return 400 when content is empty string", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post("/api/journal/node-1/notes")
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ content: "" });
@@ -247,12 +263,12 @@ describe("Journal Router", () => {
     });
 
     it("should persist the note and appear in timeline", async () => {
-      await request(app)
+      await request(harness.use(app))
         .post("/api/journal/node-1/notes")
         .set("Authorization", `Bearer ${adminToken}`)
         .send({ content: "Persisted note" });
 
-      const timeline = await request(app)
+      const timeline = await request(harness.use(app))
         .get("/api/journal/node-1")
         .set("Authorization", `Bearer ${adminToken}`);
 
@@ -268,7 +284,7 @@ describe("Journal Router", () => {
 
   describe("GET /api/journal/search", () => {
     it("should search journal entries by query", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/search")
         .set("Authorization", `Bearer ${adminToken}`)
         .query({ q: "Provisioned" });
@@ -279,14 +295,14 @@ describe("Journal Router", () => {
     });
 
     it("should return 401 when not authenticated", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/search")
         .query({ q: "test" });
       expect(response.status).toBe(401);
     });
 
     it("should return 403 when user lacks journal:read permission", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/search")
         .set("Authorization", `Bearer ${regularUserToken}`)
         .query({ q: "test" });
@@ -294,7 +310,7 @@ describe("Journal Router", () => {
     });
 
     it("should return 400 when query parameter q is missing", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/search")
         .set("Authorization", `Bearer ${adminToken}`);
 
@@ -303,7 +319,7 @@ describe("Journal Router", () => {
     });
 
     it("should return empty results for non-matching query", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/search")
         .set("Authorization", `Bearer ${adminToken}`)
         .query({ q: "nonexistent_xyz_query" });
@@ -313,7 +329,7 @@ describe("Journal Router", () => {
     });
 
     it("should support pagination in search", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/journal/search")
         .set("Authorization", `Bearer ${adminToken}`)
         .query({ q: "node", limit: 1, offset: 0 });

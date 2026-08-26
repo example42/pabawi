@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "./helpers/httpHarness";
 import { BoltService } from "../src/integrations/bolt/BoltService";
 import { IntegrationManager } from "../src/integrations/IntegrationManager";
 import { createInventoryRouter } from "../src/routes/inventory";
@@ -12,6 +13,20 @@ import type { Node } from "../src/integrations/bolt/types";
 vi.mock("child_process", () => ({
   spawn: vi.fn(),
 }));
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Debug Inventory Route", () => {
   let app: Express;
@@ -53,7 +68,7 @@ describe("Debug Inventory Route", () => {
   });
 
   it("should NOT include debug info when expert mode is disabled", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/inventory")
       .expect(200);
 
@@ -64,7 +79,7 @@ describe("Debug Inventory Route", () => {
   });
 
   it("should include debug info when expert mode is enabled", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/inventory")
       .set("X-Expert-Mode", "true")
       .expect(200);

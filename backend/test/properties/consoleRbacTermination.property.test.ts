@@ -17,6 +17,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fc from "fast-check";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { randomUUID } from "crypto";
 
 import { SQLiteAdapter } from "../../src/database/SQLiteAdapter";
@@ -62,6 +63,20 @@ function makeMockIntegrationManager(): IntegrationManager {
     getConsoleAvailability: async () => [],
   } as unknown as IntegrationManager;
 }
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Feature: console-integration, Property 6: RBAC enforcement for cross-user termination", () => {
   let db: SQLiteAdapter;
@@ -224,7 +239,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
           const owner = await createUserWithToken("owner", true, false);
           const sessionId = await createOwnedSession(owner.userId);
 
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .delete(`/api/console/sessions/${sessionId}`)
             .set("Authorization", `Bearer ${token}`);
 
@@ -247,7 +262,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
           );
           const sessionId = await createOwnedSession(userId);
 
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .delete(`/api/console/sessions/${sessionId}`)
             .set("Authorization", `Bearer ${token}`);
 
@@ -267,7 +282,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
           const { token } = await createUserWithToken(`xr${String(seed)}`, true, false);
           const sessionId = await createOwnedSession(owner.userId);
 
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .delete(`/api/console/sessions/${sessionId}`)
             .set("Authorization", `Bearer ${token}`);
 
@@ -289,7 +304,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
           const { token } = await createUserWithToken(`ad${String(seed)}`, true, true);
           const sessionId = await createOwnedSession(owner.userId);
 
-          const res = await request(app)
+          const res = await request(harness.use(app))
             .delete(`/api/console/sessions/${sessionId}`)
             .set("Authorization", `Bearer ${token}`);
 

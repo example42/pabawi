@@ -2,9 +2,10 @@
  * Integration tests for Puppetserver node API endpoints
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { LoggerService } from "../../src/services/LoggerService";
 import { PuppetserverService } from "../../src/integrations/puppetserver/PuppetserverService";
@@ -244,6 +245,20 @@ class MockPuppetserverService extends PuppetserverService {
   }
 }
 
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("Puppetserver Node API", () => {
   let app: Express;
   let integrationManager: IntegrationManager;
@@ -284,7 +299,7 @@ describe("Puppetserver Node API", () => {
 
   describe("GET /api/integrations/puppetserver/nodes", () => {
     it("should return all nodes from Puppetserver CA", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes")
         .expect(200);
 
@@ -301,7 +316,7 @@ describe("Puppetserver Node API", () => {
 
   describe("GET /api/integrations/puppetserver/nodes/:certname", () => {
     it("should return specific node details", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/node1.example.com")
         .expect(200);
 
@@ -313,7 +328,7 @@ describe("Puppetserver Node API", () => {
     });
 
     it("should return 404 for non-existent node", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/nonexistent.example.com")
         .expect(404);
 
@@ -323,7 +338,7 @@ describe("Puppetserver Node API", () => {
 
     it("should return all nodes when path ends with slash", async () => {
       // When path ends with /, Express routes to /nodes instead of /nodes/:certname
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/")
         .expect(200);
 
@@ -334,7 +349,7 @@ describe("Puppetserver Node API", () => {
 
   describe("GET /api/integrations/puppetserver/nodes/:certname/status", () => {
     it("should return node status with activity categorization", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/node1.example.com/status")
         .expect(200);
 
@@ -354,7 +369,7 @@ describe("Puppetserver Node API", () => {
     });
 
     it("should return 404 for non-existent node status", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/nonexistent.example.com/status")
         .expect(404);
 
@@ -362,7 +377,7 @@ describe("Puppetserver Node API", () => {
     });
 
     it("should include activity metadata", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/node1.example.com/status")
         .expect(200);
 
@@ -375,7 +390,7 @@ describe("Puppetserver Node API", () => {
 
   describe("GET /api/integrations/puppetserver/nodes/:certname/facts", () => {
     it("should return node facts with categorization", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/node1.example.com/facts")
         .expect(200);
 
@@ -392,7 +407,7 @@ describe("Puppetserver Node API", () => {
     });
 
     it("should return facts with proper categorization", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/node1.example.com/facts")
         .expect(200);
 
@@ -405,7 +420,7 @@ describe("Puppetserver Node API", () => {
 
     it("should return empty facts structure for non-existent node (graceful handling)", async () => {
       // Requirement 4.4, 4.5: Handle missing facts gracefully
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/nonexistent.example.com/facts")
         .expect(200);
 
@@ -418,7 +433,7 @@ describe("Puppetserver Node API", () => {
     });
 
     it("should include timestamp for freshness comparison", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetserver/nodes/node1.example.com/facts")
         .expect(200);
 
@@ -443,7 +458,7 @@ describe("Puppetserver Node API", () => {
         createIntegrationsRouter(testManager, undefined, undefined),
       );
 
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/api/integrations/puppetserver/nodes")
         .expect(503);
 
@@ -463,7 +478,7 @@ describe("Puppetserver Node API", () => {
         createIntegrationsRouter(testManager, undefined, undefined),
       );
 
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/api/integrations/puppetserver/nodes/node1.example.com/status")
         .expect(503);
 
@@ -483,7 +498,7 @@ describe("Puppetserver Node API", () => {
         createIntegrationsRouter(testManager, undefined, undefined),
       );
 
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/api/integrations/puppetserver/nodes/node1.example.com/facts")
         .expect(503);
 

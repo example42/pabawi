@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express, type RequestHandler } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { createExecutionsRouter } from "../../src/routes/executions";
 import { errorHandler, requestIdMiddleware } from "../../src/middleware/errorHandler";
 import { BoltCommandWhitelistService } from "../../src/validation/CommandWhitelistService";
@@ -17,6 +18,20 @@ import type { BatchExecutionService } from "../../src/services/BatchExecutionSer
  *  2. validates command-type actions against the whitelist (blocking shell
  *     metacharacters) before delegating to BatchExecutionService.
  */
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe("H-1: /api/executions/batch authorization + whitelist", () => {
   let executionRepository: ExecutionRepository;
   let batchExecutionService: BatchExecutionService;
@@ -69,7 +84,7 @@ describe("H-1: /api/executions/batch authorization + whitelist", () => {
   });
 
   it("rejects the request with 403 when RBAC denies, without executing", async () => {
-    const res = await request(buildApp(denyRbac))
+    const res = await request(harness.use(buildApp(denyRbac)))
       .post("/api/executions/batch")
       .send({ targetNodeIds: ["node1"], type: "command", action: "ls", tool: "bolt" });
 
@@ -78,7 +93,7 @@ describe("H-1: /api/executions/batch authorization + whitelist", () => {
   });
 
   it("blocks shell-metacharacter commands with 403 COMMAND_NOT_ALLOWED", async () => {
-    const res = await request(buildApp(allowRbac))
+    const res = await request(harness.use(buildApp(allowRbac)))
       .post("/api/executions/batch")
       .send({
         targetNodeIds: ["node1"],
@@ -93,7 +108,7 @@ describe("H-1: /api/executions/batch authorization + whitelist", () => {
   });
 
   it("allows a clean command through to the batch service", async () => {
-    const res = await request(buildApp(allowRbac))
+    const res = await request(harness.use(buildApp(allowRbac)))
       .post("/api/executions/batch")
       .send({ targetNodeIds: ["node1"], type: "command", action: "ls -la", tool: "bolt" });
 

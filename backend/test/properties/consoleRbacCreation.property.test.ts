@@ -11,10 +11,11 @@
  *   otherwise 403 with FORBIDDEN error code.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } from "vitest";
 import * as fc from "fast-check";
 import express from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { randomUUID } from "crypto";
 
 import { createConsoleRouter } from "../../src/routes/console";
@@ -68,6 +69,20 @@ function makeMockSessionManager(): ConsoleSessionManager {
     createSession: vi.fn().mockResolvedValue(undefined),
   } as unknown as ConsoleSessionManager;
 }
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Feature: console-integration, Property 5: RBAC enforcement for session creation", () => {
   let db: SQLiteAdapter;
@@ -174,7 +189,7 @@ describe("Feature: console-integration, Property 5: RBAC enforcement for session
           const suffix = `access_${String(iteration)}_${String(Date.now())}`;
           const { token } = await createUserWithPermission(true, suffix);
 
-          const response = await request(app)
+          const response = await request(harness.use(app))
             .post("/api/console/sessions")
             .set("Authorization", `Bearer ${token}`)
             .send({ nodeId: "node-1", provider: "proxmox" });
@@ -196,7 +211,7 @@ describe("Feature: console-integration, Property 5: RBAC enforcement for session
           const suffix = `noaccess_${String(iteration)}_${String(Date.now())}`;
           const { token } = await createUserWithPermission(false, suffix);
 
-          const response = await request(app)
+          const response = await request(harness.use(app))
             .post("/api/console/sessions")
             .set("Authorization", `Bearer ${token}`)
             .send({ nodeId: "node-1", provider: "proxmox" });
@@ -220,7 +235,7 @@ describe("Feature: console-integration, Property 5: RBAC enforcement for session
           const suffix = `rbac_${String(hasAccess)}_${String(iteration)}_${String(Date.now())}`;
           const { token } = await createUserWithPermission(hasAccess, suffix);
 
-          const response = await request(app)
+          const response = await request(harness.use(app))
             .post("/api/console/sessions")
             .set("Authorization", `Bearer ${token}`)
             .send({ nodeId: "node-1", provider: "proxmox" });
