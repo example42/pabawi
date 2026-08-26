@@ -2,342 +2,116 @@
 
 ## Overview
 
-Pabawi includes comprehensive end-to-end (E2E) tests using Playwright to validate critical user flows through the application. These tests simulate real user interactions with the web interface.
+Pabawi runs a single Playwright suite, [`e2e/setup-check.spec.ts`](../../e2e/setup-check.spec.ts).
+It is a smoke test of the unauthenticated contract, not a user-flow suite.
 
-## Test Coverage
+## Current coverage
 
-The E2E test suite covers the following critical user flows:
+| Test | Asserts |
+| --- | --- |
+| serves the SPA shell | `GET /` returns 200 and the document title matches Pabawi |
+| renders the sign-in form when unauthenticated | heading, username field, password field, submit button are visible |
+| sends an unauthenticated deep link to the sign-in form | `/executions` renders the sign-in form rather than the page |
+| rejects unauthenticated API reads with 401 | `GET /api/inventory` answers 401 |
 
-### 1. Inventory to Command Execution
+Together these cover: the backend boots, static assets are served, the SPA
+mounts and routes, the frontend auth guard holds, and `authMiddleware` is
+actually mounted on protected routes.
 
-- Navigate from inventory page to node detail
-- Execute commands on target nodes
-- View command output (stdout, stderr, exit code)
-- Handle command execution errors
+The suite is hermetic — no seeded user, no database fixture, no reachable Bolt
+or PuppetDB inventory — so it runs on any checkout in about a second.
 
-### 2. Inventory to Facts Gathering
-
-- Navigate from inventory page to node detail
-- Gather system facts from target nodes
-- Display facts in readable format
-- Handle unreachable nodes gracefully
-
-### 3. Inventory to Task Execution
-
-- Navigate from inventory page to node detail
-- Select and execute Bolt tasks
-- Configure task parameters dynamically
-- Validate required parameters
-
-### 4. Executions Page
-
-- View execution history
-- Filter executions by status
-- View detailed execution results
-- Display summary statistics
-- Paginate through results
-
-## Prerequisites
-
-Before running E2E tests, ensure:
-
-1. **Bolt CLI is installed** and available in PATH
-2. **Valid Bolt inventory** exists at `bolt-project/inventory.yaml`
-3. **At least one node** is defined in the inventory
-4. **Backend and frontend are built** (or will be built automatically)
-5. **Port 3000 is available** (or configure a different port)
-
-## Installation
-
-Playwright and its dependencies are installed as part of the project setup:
+## Running
 
 ```bash
-npm install
-npm rebuild --ignore-scripts=false
+npm run test:e2e          # headless
+npm run test:e2e:ui       # interactive
+npm run test:e2e:headed   # visible browser
+npm run test:e2e:debug    # step through
+npx playwright test e2e/setup-check.spec.ts:18   # a single test by line
+npx playwright show-report                        # HTML report after a run
 ```
 
-To install Playwright browsers:
+Playwright starts the app itself via `webServer` (`npm run dev:fullstack`,
+port 3000) and reuses an already-running server unless `CI=true`.
 
-```bash
-npx playwright install chromium --with-deps
+### Browser binaries
+
+The chromium revision is pinned by the installed `playwright-core`, not by
+whatever is already in `~/Library/Caches/ms-playwright`. A cache holding only
+another revision fails every test with:
+
+```
+Executable doesn't exist at .../chromium_headless_shell-<rev>/...
 ```
 
-## Running Tests
+Fix with `npx playwright install chromium`. In CI use
+`npx playwright install --with-deps chromium`.
 
-### Run All E2E Tests
+## Not in CI
 
-```bash
-npm run test:e2e
-```
+`.github/workflows/ci.yml` runs lint, both typechecks, unit tests and both
+builds. It does not run this suite. Wire it in before relying on it as a gate —
+an E2E suite nobody runs drifts out of sync with the UI within a release or two.
 
-This runs all tests in headless mode and generates an HTML report.
+## History: why the flow suites were deleted
 
-### Interactive UI Mode
+`e2e/` previously held four suites — `inventory-to-command`,
+`inventory-to-facts`, `inventory-to-task` and `executions-page`, 13 tests
+across 4 files. All were removed. They were written before authentication
+existed and had two structural defects that made their results meaningless:
 
-```bash
-npm run test:e2e:ui
-```
+**They targeted a UI that was never built.** The specs selected on 17
+`data-testid` values; the frontend defines 4, with zero overlap. Every selector
+fell through to a substring fallback such as `[class*="node"]` or
+`[class*="output"]`, which match on utility-class fragments and pin nothing.
 
-Opens Playwright's interactive UI where you can:
+**They wrapped assertions in conditionals.** The recurring shape was:
 
-- Run tests individually
-- See test execution in real-time
-- Debug failing tests
-- View traces and screenshots
-
-### Headed Mode (Visible Browser)
-
-```bash
-npm run test:e2e:headed
-```
-
-Runs tests with a visible browser window, useful for debugging.
-
-### Debug Mode
-
-```bash
-npm run test:e2e:debug
-```
-
-Runs tests in debug mode with Playwright Inspector for step-by-step debugging.
-
-### Run Specific Test File
-
-```bash
-npx playwright test e2e/inventory-to-command.spec.ts
-```
-
-### Run Tests Matching a Pattern
-
-```bash
-npx playwright test --grep "command execution"
-```
-
-### Run Single Test
-
-```bash
-npx playwright test e2e/inventory-to-command.spec.ts:12
-```
-
-## Test Reports
-
-After running tests, view the HTML report:
-
-```bash
-npx playwright show-report
-```
-
-The report includes:
-
-- Test results with pass/fail status
-- Screenshots of failures
-- Execution traces for debugging
-- Timeline of test execution
-
-## Configuration
-
-E2E tests are configured in `playwright.config.ts`:
-
-```typescript
-{
-  testDir: './e2e',
-  baseURL: 'http://localhost:3000',
-  webServer: {
-    command: 'npm run dev:fullstack',
-    url: 'http://localhost:3000',
-    timeout: 120000
-  }
+```ts
+if (await executionsLink.isVisible()) {
+  ...real assertions...
+} else {
+  await page.goto('/executions');
+  expect(pageContent).toMatch(/executions|history|no executions/i);
 }
 ```
 
-### Customizing Configuration
+Once login was introduced the link was never visible, so the else branch was
+always taken. All five `executions-page` tests reported green while the browser
+sat on the sign-in screen, having verified nothing. False green is worse than
+red: red reports a problem, green hides one.
 
-To change the base URL:
+They were also non-hermetic — `inventory-to-command` executed `pwd` against
+whatever real hosts `BOLT_PROJECT_PATH` pointed at.
 
-```bash
-BASE_URL=http://localhost:8080 npm run test:e2e
-```
+## Extending past the login screen
 
-To skip automatic server startup (if server is already running):
+Authenticated tests are worth adding, but not before the harness underneath
+them is real. Required, in order:
 
-```bash
-npx playwright test --config=playwright.config.ts
-```
+1. **Isolate the backend.** Set `webServer.env` in `playwright.config.ts` to
+   override `DATABASE_PATH` to a scratch file and `BOLT_PROJECT_PATH` to the
+   checked-in `samples/integrations/bolt` fixture. Without this the suite runs
+   against the developer's own dev database and live infrastructure.
+2. **Seed and authenticate once.** Add a Playwright setup project that creates
+   the admin via `POST /api/setup/initialize`, logs in via
+   `POST /api/auth/login`, and saves `storageState`. The frontend reads its
+   token from `localStorage` under `authToken` (also `refreshToken`, `authUser`).
+3. **Add real selectors.** Put `data-testid` on the specific elements the tests
+   touch and select only on those, or use accessible-name selectors
+   (`getByRole`, `getByLabel`, `getByPlaceholder`) as `setup-check` does.
+4. **Add the CI step**, so the suite cannot rot unnoticed.
 
-## Writing New Tests
+## Rules for new tests
 
-When adding new E2E tests:
-
-1. Create a new `.spec.ts` file in the `e2e/` directory
-2. Use descriptive test names
-3. Add appropriate selectors (prefer `data-testid`)
-4. Include error handling scenarios
-5. Document which requirements the test validates
-
-Example:
-
-```typescript
-import { test, expect } from '@playwright/test';
-
-test.describe('My Feature', () => {
-  test('should perform user action', async ({ page }) => {
-    await page.goto('/');
-    
-    // Wait for element
-    await expect(page.locator('[data-testid="my-element"]')).toBeVisible();
-    
-    // Interact with element
-    await page.locator('[data-testid="my-button"]').click();
-    
-    // Verify result
-    await expect(page.locator('[data-testid="result"]')).toContainText('Success');
-  });
-});
-```
-
-## Troubleshooting
-
-### Tests Fail with "Target closed" Error
-
-**Cause:** Server didn't start properly.
-
-**Solution:**
-
-- Verify backend and frontend build successfully
-- Check that port 3000 is not in use
-- Ensure Bolt configuration is valid
-
-### Tests Timeout Waiting for Elements
-
-**Cause:** UI elements have changed or are slow to load.
-
-**Solution:**
-
-- Update selectors to match current UI
-- Increase timeout for slow operations
-- Check browser console for errors
-
-### Server Doesn't Start
-
-**Cause:** Configuration or dependency issues.
-
-**Solution:**
-
-- Run `npm run build` manually to check for errors
-- Verify all dependencies are installed
-- Check `playwright.config.ts` web server configuration
-
-### Tests Pass Locally but Fail in CI
-
-**Cause:** Environment differences.
-
-**Solution:**
-
-- Set `CI=true` environment variable
-- Install system dependencies: `npx playwright install --with-deps`
-- Increase timeouts for slower CI environments
-
-## CI/CD Integration
-
-To run E2E tests in CI/CD pipelines:
-
-```bash
-# Install and rebuild native modules
-npm install
-npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false
-npx playwright install --with-deps chromium
-
-# Run tests
-CI=true npm run test:e2e
-```
-
-### GitHub Actions Example
-
-```yaml
-- name: Install dependencies
-  run: |
-    npm install
-    npm rebuild bcrypt sqlite3 ssh2 --ignore-scripts=false
-
-- name: Install Playwright browsers
-  run: npx playwright install --with-deps chromium
-
-- name: Run E2E tests
-  run: npm run test:e2e
-  env:
-    CI: true
-
-- name: Upload test results
-  if: always()
-  uses: actions/upload-artifact@v3
-  with:
-    name: playwright-report
-    path: playwright-report/
-```
-
-## Test Data
-
-E2E tests use the actual Bolt inventory and configuration. Ensure:
-
-- **At least one node** is defined in `bolt-project/inventory.yaml`
-- **Nodes are reachable** (or tests handle unreachable nodes gracefully)
-- **Command whitelist** allows basic commands like `pwd`, `echo`
-- **Tasks are available** in Bolt modules
-
-## Best Practices
-
-1. **Use data-testid attributes** for reliable selectors
-2. **Test user flows**, not implementation details
-3. **Handle async operations** with proper waits
-4. **Test error scenarios** as well as happy paths
-5. **Keep tests independent** - each test should work in isolation
-6. **Use descriptive test names** that explain the user flow
-7. **Add comments** to explain complex test logic
-8. **Clean up after tests** if they create data
-
-## Performance
-
-E2E tests can be slow. To optimize:
-
-- Run tests in parallel (default in Playwright)
-- Use `--grep` to run specific tests during development
-- Mock external dependencies when possible
-- Use `--headed` only when debugging
-- Consider running full suite only in CI
-
-## Limitations
-
-Current E2E tests have some limitations:
-
-- **Require real Bolt setup** - tests use actual Bolt CLI and inventory
-- **Network dependent** - tests may fail if nodes are unreachable
-- **No mocking** - tests interact with real backend and Bolt
-- **Limited browser coverage** - only Chromium is configured
-
-## Future Enhancements
-
-Potential improvements:
-
-- Add Firefox and Safari browser testing
-- Mock Bolt CLI responses for faster tests
-- Add visual regression testing
-- Test expert mode features
-- Test realtime streaming output
-- Add accessibility testing
-- Add performance testing
-
-## Support
-
-For issues with E2E tests:
-
-1. Check the [troubleshooting section](#troubleshooting)
-2. Review test logs and screenshots in `test-results/`
-3. Run tests in debug mode: `npm run test:e2e:debug`
-4. Check Playwright documentation: <https://playwright.dev>
-
-## Related Documentation
-
-- [E2E Tests README](../e2e/README.md) - Detailed test documentation
-- [User Guide](user-guide.md) - Application usage guide
-- [API Documentation](api.md) - API endpoint reference
-- [Troubleshooting Guide](troubleshooting.md) - Common issues and solutions
+1. **Assert unconditionally.** No `if (visible) { assert } else { weaker assert }`.
+   If a precondition may be absent, fix the fixture or fail — never branch into
+   a softer claim.
+2. **Select on contracts, not fragments.** `getByRole` / `getByLabel` /
+   `getByPlaceholder` / `data-testid`. Never substring-match a class attribute.
+3. **Verify the test can fail.** After writing it, break the expectation on
+   purpose and confirm it goes red. An assertion never observed failing is an
+   assertion not known to work.
+4. **Stay hermetic.** A test that needs a reachable production host belongs in
+   manual integration checks, not here.
