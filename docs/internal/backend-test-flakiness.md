@@ -128,11 +128,16 @@ nothing. Every other row in that table was correct but irrelevant; the remaining
 
 ### Why CI never showed this
 
-Two CI runs six weeks apart (`32973348229`, `29428810351`) failed with the
-**identical three tests** — the property-test timeouts, unrelated to this — and
-204 files green both times. GitHub Actions runners have essentially nothing bound
-in the ephemeral range, and Linux's range starts at 32768. **Cause B is a
-local-development problem.**
+No Cause-B-shaped failure appears anywhere in the CI history examined. The two
+failing runs on record (`32973348229`, `29428810351`, six weeks apart) failed
+with the **identical three tests** — the property-test timeouts, unrelated to
+this — and 204 files green both times.
+
+Caveat: that is two data points, both on branch 150, both failing for the same
+unrelated reason. The mechanism argues the same way — Linux's ephemeral range
+starts at 32768 and a GHA runner binds almost nothing in it — but that was
+reasoned, not measured on a runner. Treat "Cause B is a local-development
+problem" as well-supported, not proven.
 
 ### Fix
 
@@ -149,6 +154,12 @@ Binding explicitly to loopback makes the kernel see the real conflict, so it
 never hands out a shadowed port. Measured with the same probe: **0 misroutes in
 9600 requests**, versus 7 unfixed.
 
+Verified that the mechanism actually engages, rather than inferring it from a
+green suite: with `net.Server.prototype.listen` instrumented, a full run of
+`test/routes/auth.test.ts` — 204 supertest requests — performs exactly **one**
+`listen()` call, `port=0 host=127.0.0.1`. Before the change that was 204
+wildcard binds.
+
 Two constraints shaped this design:
 
 - **A drop-in patch is not possible.** `listen(0, "127.0.0.1")` resolves the host
@@ -162,16 +173,29 @@ Two constraints shaped this design:
   high volume. Swapping the handler also keeps property tests that build a fresh
   Express app per iteration down to one socket instead of hundreds.
 
-### Converted files
+### One consequence worth knowing
 
-`auth`, `users`, `permissions`, `groups`, `auth-flow`, `batch-execution`,
-`error-handling`, `EntraIdProviders.property`, `consoleRbacCreation.property`,
-`consoleRbacTermination.property` — the files carrying the request volume.
+`afterAll` sets the mounted handler back to `null` and closes the server. A
+request issued after that — from a stray cleanup path or a dangling promise —
+gets `503 httpHarness: no app mounted` rather than a connection error. If a
+converted file ever shows an inexplicable 503, that is the source.
 
-**The remaining ~30 supertest files still use bare `request(app)`** and retain
-the ~0.07%-per-request exposure. They issue few enough requests that the residual
-rate is low, but the hazard is not zero. Convert them with the same helper if
-they start showing unexplained status-code failures.
+### Coverage
+
+**All 41 supertest files are converted** — there are no remaining bare
+`request(app)` call sites. A partial conversion was tried first, scoped to the
+files carrying the request volume; a verification run then failed in
+`puppetserver-catalogs-environments.test.ts` (`expected 200, got 401`) — an
+unconverted file, with the exact Cause B signature. The tail bites, so the
+conversion was completed.
+
+Three call shapes needed handling beyond the plain `request(app)` form:
+`request(buildApp(rbac))` (call-expression argument), files relying on vitest
+globals with no `vitest` import, and files doing
+`const request = (await import("supertest")).default` inside the test body.
+
+`test/routes/auth.test.ts.backup` is stray cruft — not matched by the include
+glob, not converted, and worth deleting.
 
 ---
 
