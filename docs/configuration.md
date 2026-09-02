@@ -73,6 +73,24 @@ DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
 | `JWT_SECRET` | **required** | Secret key for JWT token signing. Must be ≥ 32 chars of random entropy and not a placeholder (e.g. `your-secure-random-secret-here`, `change-me`). Generate with `openssl rand -base64 32`. The server refuses to start otherwise. Tokens are issued/verified with `iss=pabawi` / `aud=pabawi`. |
 | `PABAWI_LIFECYCLE_TOKEN` | _(empty)_ | Bearer token required for inventory lifecycle endpoints (`POST /api/nodes/:id/action`, `DELETE /api/inventory/:id`). When unset, those endpoints return 500 (`LIFECYCLE_AUTH_MISCONFIGURED`). |
 
+### Azure Entra ID SSO
+
+Optional federated authentication via OpenID Connect. When enabled, the login page shows "Sign in with Microsoft" alongside local login. See [integrations/entra-id.md](./integrations/entra-id.md) for Azure portal setup.
+
+| Variable | Default | Description |
+|---|---|---|
+| `ENTRA_ID_ENABLED` | `false` | Set to `"true"` to enable Entra ID SSO. All other `ENTRA_ID_*` vars are ignored unless this is `"true"`. |
+| `ENTRA_ID_TENANT_ID` | **required** | Azure tenant (directory) ID |
+| `ENTRA_ID_CLIENT_ID` | **required** | Application (client) ID from the app registration |
+| `ENTRA_ID_CLIENT_SECRET` | **required** | Client secret value |
+| `ENTRA_ID_REDIRECT_URI` | **required** | OAuth callback URL (must match Azure app registration). Format: `https://your-host/api/auth/entra-id/callback` |
+| `ENTRA_ID_SCOPES` | `openid,profile,email` | Comma-separated OAuth scopes. Empty entries are discarded. |
+| `ENTRA_ID_GROUP_MAPPING` | _(none)_ | JSON object mapping Azure group IDs to Pabawi role names. Example: `{"uuid-1":"administrator","uuid-2":"operator"}` |
+| `ENTRA_ID_POST_LOGOUT_REDIRECT_URI` | _(app base URL)_ | Where Microsoft redirects after SSO logout |
+| `ENTRA_ID_JWKS_CACHE_TTL_MS` | `86400000` | How long to cache JWKS signing keys (ms). Default: 24 hours. |
+
+When `ENTRA_ID_ENABLED=true`, all four required variables must be set or the server refuses to start with a validation error listing the missing ones.
+
 ## Bolt
 
 | Variable | Default | Description |
@@ -115,6 +133,13 @@ COMMAND_WHITELIST_MATCH_MODE=prefix
 
 Never set `COMMAND_WHITELIST_ALLOW_ALL=true` in production.
 
+The whitelist is enforced on **every** command-execution path — single-node
+(`POST /api/nodes/:id/command`), multi-node batch (`POST /api/executions/batch`),
+and re-execution (`POST /api/executions/:id/re-execute`). Shell metacharacters
+(`; | & \` $() {} * ? [] ~ < > \\` and newlines) and commands beginning with `-`
+are **always** rejected, even when `COMMAND_WHITELIST_ALLOW_ALL=true`, because
+they would be interpreted by the remote shell on the target node.
+
 ## Streaming
 
 | Variable | Default | Description |
@@ -122,6 +147,24 @@ Never set `COMMAND_WHITELIST_ALLOW_ALL=true` in production.
 | `STREAMING_BUFFER_MS` | `100` | Output batch interval in ms. Lower = more real-time, higher = less traffic |
 | `STREAMING_MAX_OUTPUT_SIZE` | `10485760` | Max output per execution in bytes (10 MB) |
 | `STREAMING_MAX_LINE_LENGTH` | `10000` | Max characters per output line before truncation |
+
+## Console (VNC / Terminal)
+
+Settings for the browser-based console proxy (VNC and terminal sessions).
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONSOLE_SESSION_TIMEOUT_MS` | `300000` | Idle session timeout in ms (5 min) |
+| `CONSOLE_MAX_SESSION_DURATION` | `28800000` | Absolute session lifetime in ms (8 h) |
+| `CONSOLE_MAX_CONCURRENT_SESSIONS` | `3` | Max simultaneous console sessions |
+| `CONSOLE_HEARTBEAT_INTERVAL_MS` | `30000` | Heartbeat interval in ms (must be less than the idle timeout) |
+| `CONSOLE_VERIFY_UPSTREAM_TLS` | `true` | Verify the TLS certificate of the upstream console host |
+
+`CONSOLE_VERIFY_UPSTREAM_TLS` defaults to `true` (secure). Set it to `false`
+**only** on trusted networks where the upstream console host uses a self-signed
+certificate — disabling verification exposes the proxied session (which may
+carry credentials and keystrokes) to man-in-the-middle attacks, and the server
+logs a warning at startup when it is disabled.
 
 ## Caching
 

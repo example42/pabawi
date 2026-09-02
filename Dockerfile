@@ -40,8 +40,16 @@ RUN npm run build
 # This runs on the target platform to ensure native modules (like sqlite3) are built correctly
 FROM node:20-bookworm-slim AS backend-deps
 WORKDIR /app/backend
+
+# Install build tools needed to compile sqlite3 from source
+# Pre-built binaries may target a newer glibc than bookworm provides (2.36)
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY backend/package*.json ./
-RUN npm install --omit=dev --no-audit
+RUN npm install --omit=dev --no-audit --build-from-source
 
 # Stage 3: Install OpenBolt from OpenVox upstream packages
 FROM node:20-bookworm-slim AS bolt-builder
@@ -67,7 +75,7 @@ ARG BUILDPLATFORM
 # Add metadata labels
 LABEL org.opencontainers.image.title="Pabawi"
 LABEL org.opencontainers.image.description="Puppet Ansible Bolt Awesome Web Interface"
-LABEL org.opencontainers.image.version="1.4.0"
+LABEL org.opencontainers.image.version="1.5.0"
 LABEL org.opencontainers.image.vendor="example42"
 LABEL org.opencontainers.image.source="https://github.com/example42/pabawi"
 

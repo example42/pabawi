@@ -31,7 +31,10 @@ import { CheckmkService } from "./CheckmkService";
 import { CheckmkLivestatusClient } from "./CheckmkLivestatusClient";
 import type { JournalEntry } from "../../services/journal/types";
 import type {
+  CheckmkAcknowledgeOptions,
+  CheckmkActionResult,
   CheckmkConfig,
+  CheckmkDowntimeOptions,
   CheckmkFailingService,
   CheckmkEvent,
   CheckmkHostEvent,
@@ -517,6 +520,30 @@ export class CheckmkPlugin
    */
   async getHostStateSummary(): Promise<CheckmkHostStateSummary> {
     return this.service.getHostStateSummary();
+  }
+
+  // ========================================
+  // Write Actions (acknowledge / downtime)
+  // ========================================
+
+  /**
+   * Acknowledge a service problem. Delegates to the REST service.
+   * Returns a structured result so the route can map failures to HTTP 502.
+   */
+  async acknowledgeServiceProblem(
+    options: CheckmkAcknowledgeOptions,
+  ): Promise<CheckmkActionResult> {
+    return this.service.acknowledgeServiceProblem(options);
+  }
+
+  /**
+   * Schedule a service downtime window. Delegates to the REST service.
+   * Returns a structured result so the route can map failures to HTTP 502.
+   */
+  async scheduleServiceDowntime(
+    options: CheckmkDowntimeOptions,
+  ): Promise<CheckmkActionResult> {
+    return this.service.scheduleServiceDowntime(options);
   }
 
   /**

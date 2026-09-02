@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { createAuthRouter } from '../../src/routes/auth';
 import { createUsersRouter } from '../../src/routes/users';
 import { DatabaseService } from '../../src/database/DatabaseService';
@@ -57,6 +58,20 @@ async function grantUsersReadPermission(
  *
  * Validates Requirements: 1.1, 6.3, 19.1
  */
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
+
 describe('Authentication Flow Integration Tests', () => {
   let app: Express;
   let databaseService: DatabaseService;
@@ -99,7 +114,7 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'Test',
       };
 
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -126,7 +141,7 @@ describe('Authentication Flow Integration Tests', () => {
         password: 'SecurePass123!',
       };
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send(loginData)
         .expect(200);
@@ -145,7 +160,7 @@ describe('Authentication Flow Integration Tests', () => {
       const accessToken = loginResponse.body.token;
 
       // Step 3: Access a protected endpoint with the token
-      const protectedResponse = await request(app)
+      const protectedResponse = await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
@@ -156,12 +171,12 @@ describe('Authentication Flow Integration Tests', () => {
       expect(protectedResponse.body.email).toBe('integration@example.com');
 
       // Step 4: Verify that accessing without token fails
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .expect(401);
 
       // Step 5: Verify that accessing with invalid token fails
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', 'Bearer invalid-token-here')
         .expect(401);
@@ -169,7 +184,7 @@ describe('Authentication Flow Integration Tests', () => {
 
     it('should prevent access to protected endpoints without authentication', async () => {
       // Try to access protected endpoint without token
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .expect(401);
 
@@ -187,12 +202,12 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'Test',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'tokentest', password: 'SecurePass123!' })
         .expect(200);
@@ -200,13 +215,13 @@ describe('Authentication Flow Integration Tests', () => {
       const userId = loginResponse.body.user.id;
 
       // Try with malformed token
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', 'Bearer malformed.token.here')
         .expect(401);
 
       // Try with completely invalid token
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', 'Bearer not-a-jwt-token')
         .expect(401);
@@ -222,7 +237,7 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'User',
       };
 
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
 .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -230,7 +245,7 @@ describe('Authentication Flow Integration Tests', () => {
       await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
 
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'sessionuser', password: 'SecurePass123!' })
         .expect(200);
@@ -240,7 +255,7 @@ describe('Authentication Flow Integration Tests', () => {
 
       // Make multiple requests with the same token
       for (let i = 0; i < 3; i++) {
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .get(`/api/users/${userId}`)
           .set('Authorization', `Bearer ${token}`)
           .expect(200);
@@ -261,7 +276,7 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'User',
       };
 
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
 .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -269,7 +284,7 @@ describe('Authentication Flow Integration Tests', () => {
       await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
 
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'refreshuser', password: 'SecurePass123!' })
         .expect(200);
@@ -279,7 +294,7 @@ describe('Authentication Flow Integration Tests', () => {
       const userId = loginResponse.body.user.id;
 
       // Step 2: Use refresh token to get new access token
-      const refreshResponse = await request(app)
+      const refreshResponse = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -294,7 +309,7 @@ describe('Authentication Flow Integration Tests', () => {
       expect(newToken).not.toBe(originalToken);
 
       // Step 3: Verify new token works for protected endpoints
-      const protectedResponse = await request(app)
+      const protectedResponse = await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${newToken}`)
         .expect(200);
@@ -302,14 +317,14 @@ describe('Authentication Flow Integration Tests', () => {
       expect(protectedResponse.body.username).toBe('refreshuser');
 
       // Step 4: Verify original token still works (not revoked by refresh)
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${originalToken}`)
         .expect(200);
     });
 
     it('should reject invalid refresh token', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken: 'invalid-refresh-token' })
         .expect(400);
@@ -319,7 +334,7 @@ describe('Authentication Flow Integration Tests', () => {
     });
 
     it('should reject missing refresh token', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({})
         .expect(400);
@@ -338,12 +353,12 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'Refresh',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'logoutrefresh', password: 'SecurePass123!' })
         .expect(200);
@@ -352,14 +367,14 @@ describe('Authentication Flow Integration Tests', () => {
       const refreshToken = loginResponse.body.refreshToken;
 
       // Logout
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
       // Try to use refresh token after logout
       // Note: Refresh token should still work as only access token is revoked
-      const refreshResponse = await request(app)
+      const refreshResponse = await request(harness.use(app))
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
@@ -379,7 +394,7 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'User',
       };
 
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
 .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -387,7 +402,7 @@ describe('Authentication Flow Integration Tests', () => {
       await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
 
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'logoutuser', password: 'SecurePass123!' })
         .expect(200);
@@ -396,13 +411,13 @@ describe('Authentication Flow Integration Tests', () => {
       const userId = loginResponse.body.user.id;
 
       // Step 2: Verify token works before logout
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
 
       // Step 3: Logout
-      const logoutResponse = await request(app)
+      const logoutResponse = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -411,14 +426,14 @@ describe('Authentication Flow Integration Tests', () => {
       expect(logoutResponse.body.message).toBe('Logout successful');
 
       // Step 4: Verify token is revoked and cannot be used
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(401);
     });
 
     it('should require authentication for logout', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .expect(401);
 
@@ -427,7 +442,7 @@ describe('Authentication Flow Integration Tests', () => {
     });
 
     it('should handle logout with invalid token', async () => {
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -443,7 +458,7 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'User',
       };
 
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
 .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -451,7 +466,7 @@ describe('Authentication Flow Integration Tests', () => {
       await grantUsersReadPermission(databaseService, registerResponse.body.user.id);
 
 
-      const loginResponse1 = await request(app)
+      const loginResponse1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'reloginuser', password: 'SecurePass123!' })
         .expect(200);
@@ -459,13 +474,13 @@ describe('Authentication Flow Integration Tests', () => {
       const token1 = loginResponse1.body.token;
 
       // Logout
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
       // Login again
-      const loginResponse2 = await request(app)
+      const loginResponse2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'reloginuser', password: 'SecurePass123!' })
         .expect(200);
@@ -477,13 +492,13 @@ describe('Authentication Flow Integration Tests', () => {
       const userId = loginResponse2.body.user.id;
 
       // Verify new token works
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token2}`)
         .expect(200);
 
       // Verify old token still doesn't work
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token1}`)
         .expect(401);
@@ -501,7 +516,7 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       // 1. Register
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
 .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -512,7 +527,7 @@ describe('Authentication Flow Integration Tests', () => {
 
 
       // 2. Login
-      const loginResponse1 = await request(app)
+      const loginResponse1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'lifecycleuser', password: 'SecurePass123!' })
         .expect(200);
@@ -521,25 +536,25 @@ describe('Authentication Flow Integration Tests', () => {
       const userId = loginResponse1.body.user.id;
 
       // 3. Use protected endpoint
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
       // 4. Logout
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
       // 5. Verify token is revoked
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token1}`)
         .expect(401);
 
       // 6. Re-login
-      const loginResponse2 = await request(app)
+      const loginResponse2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'lifecycleuser', password: 'SecurePass123!' })
         .expect(200);
@@ -547,7 +562,7 @@ describe('Authentication Flow Integration Tests', () => {
       const token2 = loginResponse2.body.token;
 
       // 7. Use protected endpoint with new token
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token2}`)
         .expect(200);
@@ -563,7 +578,7 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       // Register
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
 .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -572,7 +587,7 @@ describe('Authentication Flow Integration Tests', () => {
 
 
       // Login from "device 1"
-      const login1 = await request(app)
+      const login1 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'multiuser', password: 'SecurePass123!' })
         .expect(200);
@@ -581,7 +596,7 @@ describe('Authentication Flow Integration Tests', () => {
       const userId = login1.body.user.id;
 
       // Login from "device 2"
-      const login2 = await request(app)
+      const login2 = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'multiuser', password: 'SecurePass123!' })
         .expect(200);
@@ -589,30 +604,30 @@ describe('Authentication Flow Integration Tests', () => {
       const token2 = login2.body.token;
 
       // Verify both tokens work
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token2}`)
         .expect(200);
 
       // Logout from device 1
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token1}`)
         .expect(200);
 
       // Verify token1 is revoked
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token1}`)
         .expect(401);
 
       // Verify token2 still works
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token2}`)
         .expect(200);
@@ -628,7 +643,7 @@ describe('Authentication Flow Integration Tests', () => {
       };
 
       // Register
-      const registerResponse = await request(app)
+      const registerResponse = await request(harness.use(app))
 .post('/api/auth/register')
         .send(userData)
         .expect(201);
@@ -639,7 +654,7 @@ describe('Authentication Flow Integration Tests', () => {
       await grantUsersReadPermission(databaseService, userId);
 
       // Login successfully
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'inactiveuser', password: 'SecurePass123!' })
         .expect(200);
@@ -647,7 +662,7 @@ describe('Authentication Flow Integration Tests', () => {
       const token = loginResponse.body.token;
 
       // Verify token works
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -659,14 +674,14 @@ describe('Authentication Flow Integration Tests', () => {
       );
 
       // Try to login with inactive account
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'inactiveuser', password: 'SecurePass123!' })
         .expect(401);
 
       // Existing token should still work (token was issued when user was active)
       // Note: In production, you might want to check user status on each request
-      await request(app)
+      await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
@@ -681,12 +696,12 @@ describe('Authentication Flow Integration Tests', () => {
         lastName: 'Structure',
       };
 
-      await request(app)
+      await request(harness.use(app))
         .post('/api/auth/register')
         .send(userData)
         .expect(201);
 
-      const loginResponse = await request(app)
+      const loginResponse = await request(harness.use(app))
         .post('/api/auth/login')
         .send({ username: 'tokenstructure', password: 'SecurePass123!' })
         .expect(200);

@@ -11,6 +11,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BoltPlugin } from "../../src/integrations/bolt/BoltPlugin";
 import { BoltService } from "../../src/integrations/bolt/BoltService";
@@ -65,6 +67,9 @@ describe("Bolt Plugin Integration", () => {
   let boltPlugin: BoltPlugin;
   let testNode: Node | undefined;
   let boltAvailable = false;
+  // A second manager wired to a project path that is guaranteed not to exist,
+  // used only by the assertions that require Bolt to be UNAVAILABLE.
+  let brokenManager: IntegrationManager;
 
   beforeAll(async () => {
     // Check if Bolt is available
@@ -80,8 +85,18 @@ describe("Bolt Plugin Integration", () => {
       return;
     }
 
-    // Initialize BoltService with test project
-    const boltProjectPath = process.env.BOLT_PROJECT_PATH || "./bolt-project";
+    // Initialize BoltService with test project.
+    //
+    // The fallback is resolved against this file's location, not the process
+    // cwd. Vitest workers inherit the LAUNCH directory, so a bare
+    // "./bolt-project" resolved to <repo>/bolt-project when the suite was
+    // started from the repo root (where a real Bolt project exists) and to
+    // <repo>/backend/bolt-project when started from backend/ (where it does
+    // not). Same code, opposite results, depending only on where you typed the
+    // command.
+    const backendDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const boltProjectPath =
+      process.env.BOLT_PROJECT_PATH || join(backendDir, "bolt-project");
     boltService = new BoltService(boltProjectPath);
 
     // Create BoltPlugin
@@ -111,12 +126,28 @@ describe("Bolt Plugin Integration", () => {
     if (inventory.nodes.length > 0) {
       testNode = inventory.nodes[0];
     }
+
+    // Separate manager pointed at a project directory that cannot exist, so the
+    // degradation assertions exercise the failure path explicitly rather than
+    // relying on the primary path happening to be absent.
+    const brokenPath = join(backendDir, "does-not-exist-bolt-project");
+    const brokenPlugin = new BoltPlugin(new BoltService(brokenPath), logger);
+    brokenManager = new IntegrationManager({ logger });
+    brokenManager.registerPlugin(brokenPlugin, {
+      enabled: true,
+      name: "bolt",
+      type: "both",
+      config: { projectPath: brokenPath },
+      priority: 5,
+    });
+    await brokenManager.initializePlugins();
   });
 
   afterAll(() => {
     // Cleanup
     if (boltAvailable) {
       integrationManager.stopHealthCheckScheduler();
+      brokenManager.stopHealthCheckScheduler();
     }
   });
 
@@ -267,8 +298,10 @@ describe("Bolt Plugin Integration", () => {
         return;
       }
 
+      // Uses the broken-path manager: this asserts the DEGRADED shape, which is
+      // only reachable when Bolt's inventory actually fails.
       const aggregatedInventory =
-        await integrationManager.getAggregatedInventory();
+        await brokenManager.getAggregatedInventory();
 
       expect(aggregatedInventory).toBeDefined();
       expect(aggregatedInventory.nodes).toBeDefined();
@@ -408,7 +441,9 @@ describe("Bolt Plugin Integration", () => {
         return;
       }
 
-      const healthStatuses = await integrationManager.healthCheckAll();
+      // Broken-path manager: asserts an UNHEALTHY report, which requires Bolt
+      // to actually be failing.
+      const healthStatuses = await brokenManager.healthCheckAll();
 
       expect(healthStatuses).toBeDefined();
       expect(healthStatuses.has("bolt")).toBe(true);
@@ -518,14 +553,15 @@ describe("Bolt Plugin Integration", () => {
       }
 
       // This test verifies that if Bolt fails, the aggregated inventory
-      // still returns with Bolt marked as unavailable
+      // still returns with Bolt marked as unavailable. The broken-path manager
+      // makes "Bolt fails" a property of the fixture rather than an accident of
+      // the working directory.
       const aggregatedInventory =
-        await integrationManager.getAggregatedInventory();
+        await brokenManager.getAggregatedInventory();
 
       expect(aggregatedInventory).toBeDefined();
       expect(aggregatedInventory.sources).toHaveProperty("bolt");
 
-      // Bolt should be unavailable when not installed
       expect(aggregatedInventory.sources.bolt.status).toBe("unavailable");
     });
   });

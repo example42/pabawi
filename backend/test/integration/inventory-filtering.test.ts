@@ -3,13 +3,28 @@
  * Tests Requirement 2.2: Puppetserver source support with filtering and sorting
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import type { Node } from "../../src/integrations/bolt/types";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import type { BoltService } from "../../src/integrations/bolt/BoltService";
 import { createInventoryRouter } from "../../src/routes/inventory";
 import express, { type Express } from "express";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("Inventory Filtering and Sorting", () => {
   let app: Express;
@@ -114,7 +129,7 @@ describe("Inventory Filtering and Sorting", () => {
 
   describe("Source Filtering", () => {
     it("should filter nodes by Puppetserver source", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/inventory")
         .query({ sources: "puppetserver" });
 
@@ -129,7 +144,7 @@ describe("Inventory Filtering and Sorting", () => {
     });
 
     it("should filter nodes by multiple sources", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/inventory")
         .query({ sources: "puppetserver,puppetdb" });
 

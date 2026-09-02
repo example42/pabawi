@@ -16,6 +16,7 @@ import type {
   Action,
   NodeGroup,
 } from "./types";
+import type { ConsolePlugin, ConsoleTransport } from "./console/types";
 import type { Node, Facts, ExecutionResult } from "./bolt/types";
 import { NodeLinkingService, type LinkedNode } from "./NodeLinkingService";
 import { LoggerService } from "../services/LoggerService";
@@ -61,6 +62,15 @@ export interface ProvisioningCapabilitySource {
  */
 export interface ProvisioningCapableExecutionTool {
   listProvisioningCapabilities(): ProvisioningCapability[];
+}
+
+/**
+ * Entry in the console availability response for a node
+ */
+export interface ConsoleAvailabilityEntry {
+  provider: string;
+  transport: ConsoleTransport;
+  displayName: string;
 }
 
 /**
@@ -117,6 +127,7 @@ export class IntegrationManager {
   private plugins = new Map<string, PluginRegistration>();
   private executionTools = new Map<string, ExecutionToolPlugin>();
   private informationSources = new Map<string, InformationSourcePlugin>();
+  private consoleProviders = new Map<string, ConsolePlugin>();
   private initialized = false;
   private nodeLinkingService: NodeLinkingService;
   private logger: LoggerService;
@@ -181,6 +192,12 @@ export class IntegrationManager {
         plugin.name,
         plugin as InformationSourcePlugin,
       );
+    }
+
+    // Detect console plugin via duck-typing (a plugin can be both an
+    // information source and a console provider simultaneously)
+    if (this.isConsolePlugin(plugin)) {
+      this.consoleProviders.set(plugin.name, plugin);
     }
 
     this.logger.info(`Registered plugin: ${plugin.name} (${plugin.type})`, {
@@ -278,6 +295,131 @@ export class IntegrationManager {
   }
 
   /**
+   * Get a console provider by name
+   *
+   * @param name - Provider name
+   * @returns ConsolePlugin instance or null if not found
+   */
+  getConsoleProvider(name: string): ConsolePlugin | null {
+    return this.consoleProviders.get(name) ?? null;
+  }
+
+  /**
+   * Register a standalone console provider without going through registerPlugin.
+   *
+   * Use this when the console provider shares its logical name with an already-
+   * registered integration plugin (e.g., the Proxmox console provider coexists
+   * with ProxmoxIntegration). The provider is added only to the console providers
+   * map and is not tracked in the main plugins map.
+   *
+   * @param provider - ConsolePlugin instance to register
+   */
+  registerConsoleProvider(provider: ConsolePlugin): void {
+    this.consoleProviders.set(provider.name, provider);
+    this.logger.info(`Registered console provider: ${provider.name}`, {
+      component: "IntegrationManager",
+      operation: "registerConsoleProvider",
+      metadata: { providerName: provider.name },
+    });
+  }
+
+  /**
+   * Get all registered console providers
+   *
+   * @returns Array of console plugins
+   */
+  getAllConsoleProviders(): ConsolePlugin[] {
+    return Array.from(this.consoleProviders.values());
+  }
+
+  /**
+   * Query console availability for a specific node across all providers.
+   *
+   * Queries all registered console providers in parallel. Each provider call
+   * is given a 3-second timeout. Providers that timeout or throw are excluded
+   * from the response. Results are sorted by provider name ascending.
+   *
+   * When the caller passes a linked/merged node identifier (e.g. an FQDN from
+   * the aggregated inventory), this method resolves it to the provider-specific
+   * ID (e.g. "proxmox:pve1:101") before querying each provider. This avoids
+   * the mismatch where providers expect their own ID format but the frontend
+   * only knows the merged inventory name.
+   *
+   * @param nodeId - The node to query console availability for
+   * @returns Array of available console capabilities sorted by provider name
+   */
+  async getConsoleAvailability(nodeId: string): Promise<ConsoleAvailabilityEntry[]> {
+    const CONSOLE_AVAILABILITY_TIMEOUT_MS = 3000;
+
+    const providerEntries = Array.from(this.consoleProviders.entries());
+
+    // Resolve linked node sourceData so we can map nodeId → provider-specific ID.
+    // Uses cached inventory to avoid an extra fetch on every availability check.
+    let sourceData: Record<string, { id: string }> | undefined;
+    try {
+      const aggregated = await this.getAggregatedInventory(true);
+      const linkedNode = aggregated.nodes.find(
+        (n) => n.id === nodeId || n.name === nodeId,
+      );
+      if (linkedNode?.sourceData) {
+        sourceData = linkedNode.sourceData;
+      }
+    } catch {
+      // If inventory lookup fails, proceed with raw nodeId — providers will
+      // reject if the format doesn't match, which is the pre-existing behaviour.
+    }
+
+    const results = await Promise.all(
+      providerEntries.map(async ([name, provider]): Promise<ConsoleAvailabilityEntry[]> => {
+        try {
+          // Use provider-specific ID if available, otherwise fall back to raw nodeId.
+          const resolvedId = sourceData?.[name]?.id ?? nodeId;
+
+          let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(
+              () => { reject(new Error(`Console provider '${name}' timed out after ${String(CONSOLE_AVAILABILITY_TIMEOUT_MS)}ms`)); },
+              CONSOLE_AVAILABILITY_TIMEOUT_MS,
+            );
+          });
+          // Always handle the timeout promise rejection so an orphaned timer
+          // (e.g. if work setup throws before the race is built) cannot surface
+          // as an unhandled rejection polluting other tests.
+          timeoutPromise.catch(() => { /* handled: see clearTimeout below */ });
+
+          const workPromise = provider.getConsoleCapabilities(resolvedId);
+          workPromise.catch(() => { /* handled by race */ });
+
+          let capabilities;
+          try {
+            capabilities = await Promise.race([workPromise, timeoutPromise]);
+          } finally {
+            clearTimeout(timeoutHandle);
+          }
+
+          return capabilities.map((cap) => ({
+            provider: name,
+            transport: cap.transport,
+            displayName: cap.displayName,
+          }));
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.logger.warn(`Console provider '${name}' excluded from availability response`, {
+            component: "IntegrationManager",
+            operation: "getConsoleAvailability",
+            metadata: { provider: name, nodeId, reason: err.message },
+          });
+          return [];
+        }
+      }),
+    );
+
+    const entries = results.flat();
+    entries.sort((a, b) => a.provider.localeCompare(b.provider));
+    return entries;
+  }
+
+  /**
    * Get all registered plugins
    *
    * @returns Array of all plugin registrations
@@ -297,6 +439,21 @@ export class IntegrationManager {
     return (
       "listProvisioningCapabilities" in tool &&
       typeof (tool as ExecutionToolPlugin & ProvisioningCapableExecutionTool).listProvisioningCapabilities === "function"
+    );
+  }
+
+  /**
+   * Type guard: check whether a plugin implements the ConsolePlugin interface.
+   *
+   * Detection uses duck-typing rather than narrowing the `type` field, since a
+   * single plugin (e.g. Proxmox) may implement both InformationSourcePlugin and
+   * ConsolePlugin simultaneously.
+   */
+  private isConsolePlugin(plugin: IntegrationPlugin): plugin is ConsolePlugin {
+    return (
+      "getConsoleCapabilities" in plugin &&
+      "createSession" in plugin &&
+      "terminateSession" in plugin
     );
   }
 
@@ -501,6 +658,12 @@ export class IntegrationManager {
               SOURCE_TIMEOUT_MS,
             );
           });
+          // Always attach a rejection handler to the timeout promise. If the
+          // work setup below throws synchronously (so the race is never built
+          // and the timer is never cleared), the timer can still fire later and
+          // would otherwise surface as an unhandled rejection that pollutes
+          // unrelated tests sharing the same worker.
+          timeoutPromise.catch(() => { /* handled: see clearTimeout below */ });
 
           // Attach a no-op catch to the work promise so that, if the timeout
           // wins the race and the work later rejects, the rejection is silently
@@ -1064,6 +1227,7 @@ export class IntegrationManager {
     this.plugins.delete(name);
     this.executionTools.delete(name);
     this.informationSources.delete(name);
+    this.consoleProviders.delete(name);
 
     this.logger.info(`Unregistered plugin: ${name}`, {
       component: "IntegrationManager",

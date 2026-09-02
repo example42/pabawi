@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 import express, { Express } from 'express';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { createUsersRouter } from '../../src/routes/users';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { randomUUID } from 'crypto';
@@ -16,6 +17,20 @@ async function disableDefaultRoleAssignment(databaseService: DatabaseService): P
     "INSERT OR REPLACE INTO config (key, value, updated_at) VALUES ('default_new_user_role', '', datetime('now'))"
   );
 }
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('Users Router - GET /api/users', () => {
   let app: Express;
@@ -131,7 +146,7 @@ describe('Users Router - GET /api/users', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .expect(401);
 
@@ -140,7 +155,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -150,7 +165,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return 403 when user lacks users:read permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -164,7 +179,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return 200 when user has users:read permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -189,7 +204,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return first page with default limit of 20', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -204,7 +219,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return second page when page=2', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?page=2')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -219,7 +234,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should respect custom limit parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?limit=10')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -234,7 +249,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should handle page and limit together', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?page=2&limit=10')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -249,7 +264,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should enforce maximum limit of 100', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?limit=150')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(400); // Zod validation rejects values > 100
@@ -258,7 +273,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return empty array for page beyond total pages', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?page=100')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -270,7 +285,7 @@ describe('Users Router - GET /api/users', () => {
 
   describe('Response Format', () => {
     it('should return users as DTOs without password hashes', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -294,7 +309,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should include pagination metadata', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -309,7 +324,7 @@ describe('Users Router - GET /api/users', () => {
 
   describe('Validation Errors', () => {
     it('should return 400 for invalid page parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?page=0')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(400);
@@ -318,7 +333,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return 400 for invalid limit parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?limit=0')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(400);
@@ -327,7 +342,7 @@ describe('Users Router - GET /api/users', () => {
     });
 
     it('should return 400 for non-numeric page parameter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users?page=abc')
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(400);
@@ -350,7 +365,7 @@ describe('Users Router - GET /api/users', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/users')
         .set('Authorization', `Bearer ${superAdminToken}`)
         .expect(200);
@@ -484,7 +499,7 @@ describe('Users Router - GET /api/users/:id', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .expect(401);
 
@@ -493,7 +508,7 @@ describe('Users Router - GET /api/users/:id', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -503,7 +518,7 @@ describe('Users Router - GET /api/users/:id', () => {
     });
 
     it('should return 403 when user lacks users:read permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -517,7 +532,7 @@ describe('Users Router - GET /api/users/:id', () => {
     });
 
     it('should return 200 when user has users:read permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -530,7 +545,7 @@ describe('Users Router - GET /api/users/:id', () => {
   describe('User Retrieval', () => {
     it('should return 404 when user does not exist', async () => {
       const nonExistentId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${nonExistentId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -540,7 +555,7 @@ describe('Users Router - GET /api/users/:id', () => {
     });
 
     it('should return user without password hash', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -558,7 +573,7 @@ describe('Users Router - GET /api/users/:id', () => {
     });
 
     it('should include empty groups array when user has no groups', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -569,7 +584,7 @@ describe('Users Router - GET /api/users/:id', () => {
     });
 
     it('should include empty roles array when user has no roles', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -593,7 +608,7 @@ describe('Users Router - GET /api/users/:id', () => {
       // Add user to group
       await userService.addUserToGroup(testUserId, groupId);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -616,7 +631,7 @@ describe('Users Router - GET /api/users/:id', () => {
       // Assign role to user
       await userService.assignRoleToUser(testUserId, role.id);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -664,7 +679,7 @@ describe('Users Router - GET /api/users/:id', () => {
       await userService.assignRoleToUser(testUserId, role1.id);
       await userService.assignRoleToUser(testUserId, role2.id);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
@@ -696,7 +711,7 @@ describe('Users Router - GET /api/users/:id', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .expect(200);
@@ -848,7 +863,7 @@ describe('Users Router - PUT /api/users/:id', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .send({ firstName: 'Updated' })
         .expect(401);
@@ -858,7 +873,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', 'Bearer invalid-token')
         .send({ firstName: 'Updated' })
@@ -869,7 +884,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 403 when user lacks users:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .send({ firstName: 'Updated' })
@@ -884,7 +899,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 200 when user has users:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ firstName: 'Updated' })
@@ -897,7 +912,7 @@ describe('Users Router - PUT /api/users/:id', () => {
   describe('User Update', () => {
     it('should return 404 when user does not exist', async () => {
       const nonExistentId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${nonExistentId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ firstName: 'Updated' })
@@ -908,7 +923,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should update user email', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ email: 'newemail@test.com' })
@@ -919,7 +934,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should update user first_name', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ firstName: 'NewFirstName' })
@@ -930,7 +945,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should update user last_name', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ lastName: 'NewLastName' })
@@ -941,7 +956,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should update user password', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ password: 'NewPassword123!' })
@@ -955,7 +970,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should update user is_active status', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ isActive: false })
@@ -967,7 +982,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     it('should reject is_admin in the generic update endpoint (A1)', async () => {
       // Per A1: isAdmin is removed from the schema; elevation goes through
       // PUT /:id/admin-status. Sending it here hits the strict-mode unknown-key path.
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ isAdmin: true })
@@ -977,7 +992,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should update is_admin via the dedicated admin-status endpoint', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}/admin-status`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ isAdmin: true })
@@ -987,7 +1002,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should update multiple fields at once', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
@@ -1011,7 +1026,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       // Wait a bit to ensure timestamp difference
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ firstName: 'Updated' })
@@ -1023,7 +1038,7 @@ describe('Users Router - PUT /api/users/:id', () => {
 
   describe('Validation', () => {
     it('should return 400 for invalid email format', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ email: 'invalid-email' })
@@ -1034,7 +1049,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for empty firstName', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ firstName: '' })
@@ -1044,7 +1059,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for empty lastName', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ lastName: '' })
@@ -1054,7 +1069,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for firstName exceeding 100 characters', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ firstName: 'a'.repeat(101) })
@@ -1064,7 +1079,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for lastName exceeding 100 characters', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ lastName: 'a'.repeat(101) })
@@ -1074,7 +1089,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for password less than 8 characters', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ password: 'Short1!' })
@@ -1084,7 +1099,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for password without uppercase letter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ password: 'lowercase123!' })
@@ -1095,7 +1110,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for password without lowercase letter', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ password: 'UPPERCASE123!' })
@@ -1106,7 +1121,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for password without number', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ password: 'NoNumbers!' })
@@ -1117,7 +1132,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for password without special character', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ password: 'NoSpecial123' })
@@ -1128,7 +1143,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for invalid isActive type', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ isActive: 'not-a-boolean' })
@@ -1140,7 +1155,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     it('should return 400 for isAdmin field (unknown key per A1)', async () => {
       // Per A1, isAdmin is removed from this endpoint's schema entirely —
       // any value (boolean or otherwise) is rejected as an unknown key.
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ isAdmin: 'not-a-boolean' })
@@ -1150,7 +1165,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should return 400 for unknown fields (strict mode)', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ unknownField: 'value' })
@@ -1172,7 +1187,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       });
 
       // Try to update test user's email to the existing email
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ email: 'another@test.com' })
@@ -1184,7 +1199,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should allow updating email to the same email (no change)', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ email: 'test@test.com' })
@@ -1208,7 +1223,7 @@ describe('Users Router - PUT /api/users/:id', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send({ firstName: 'AdminUpdated' })
@@ -1220,7 +1235,7 @@ describe('Users Router - PUT /api/users/:id', () => {
 
   describe('Response Format', () => {
     it('should return updated user as DTO without password hash', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ firstName: 'Updated' })
@@ -1241,7 +1256,7 @@ describe('Users Router - PUT /api/users/:id', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty update object', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({})
@@ -1253,7 +1268,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should handle updating only password', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ password: 'NewSecurePass123!' })
@@ -1271,7 +1286,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     });
 
     it('should handle deactivating a user', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ isActive: false })
@@ -1453,7 +1468,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .expect(401);
 
@@ -1462,7 +1477,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -1472,7 +1487,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     });
 
     it('should return 403 when user lacks users:admin permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -1486,7 +1501,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     });
 
     it('should return 403 when user has users:write but not users:admin permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${writerUserToken}`)
         .expect(403);
@@ -1500,7 +1515,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     });
 
     it('should return 204 when user has users:admin permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1512,7 +1527,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
   describe('User Deletion', () => {
     it('should return 404 when user does not exist', async () => {
       const nonExistentId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${nonExistentId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -1522,7 +1537,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     });
 
     it('should soft delete user (set isActive to 0)', async () => {
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1534,7 +1549,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     });
 
     it('should return 204 No Content on successful deletion', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1545,7 +1560,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
 
     it('should prevent deleted user from authenticating', async () => {
       // Delete the user
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1562,7 +1577,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       // Wait a bit to ensure timestamp difference
       await new Promise(resolve => setTimeout(resolve, 10));
 
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1576,7 +1591,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       await userService.updateUser(testUserId, { isActive: false });
 
       // Then delete (should still work)
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1600,7 +1615,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .expect(204);
@@ -1623,7 +1638,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       await userService.addUserToGroup(testUserId, groupId);
 
       // Delete user should succeed
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1642,7 +1657,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       await userService.assignRoleToUser(testUserId, role.id);
 
       // Delete user should succeed
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1671,7 +1686,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       await userService.assignRoleToUser(testUserId, role.id);
 
       // Delete user should succeed
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1682,14 +1697,14 @@ describe('Users Router - DELETE /api/users/:id', () => {
 
     it('should return 404 when trying to delete same user twice', async () => {
       // First deletion
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Second deletion - getUserById returns inactive users, but they're still "found"
       // So this should succeed again (idempotent soft delete)
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1700,7 +1715,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
     it('should require users:admin permission, not just users:write', async () => {
       // This test verifies that DELETE requires higher privilege than PUT
       // Writer user has users:write but not users:admin
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}`)
         .set('Authorization', `Bearer ${writerUserToken}`)
         .expect(403);
@@ -1844,7 +1859,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .expect(401);
 
@@ -1853,7 +1868,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -1863,7 +1878,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     });
 
     it('should return 403 when user lacks users:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -1877,7 +1892,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     });
 
     it('should return 204 when user has users:write permission', async () => {
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1886,7 +1901,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
   describe('User-Group Association', () => {
     it('should successfully add user to group', async () => {
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1900,7 +1915,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
     it('should return 404 when user does not exist', async () => {
       const nonExistentUserId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${nonExistentUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -1911,7 +1926,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
     it('should return 404 when group does not exist', async () => {
       const nonExistentGroupId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${nonExistentGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -1922,13 +1937,13 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
     it('should return 409 when user is already in group', async () => {
       // Add user to group first time
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Try to add again
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(409);
@@ -1945,13 +1960,13 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
       });
 
       // Add user to first group
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Add user to second group
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${secondGroup.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -1993,7 +2008,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
       expect(hasPermissionBefore).toBe(false);
 
       // Add user to group via API
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2035,7 +2050,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
       expect(cachedBefore).toBe(false);
 
       // Add user to group via API (this should invalidate cache in the router's instance)
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2070,7 +2085,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .expect(204);
@@ -2084,7 +2099,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
   describe('Response Format', () => {
     it('should return 204 No Content with no response body on success', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2095,7 +2110,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
 
     it('should return proper error format for 404 errors', async () => {
       const nonExistentUserId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${nonExistentUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -2110,7 +2125,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
       // Add user to group first
       await userService.addUserToGroup(testUserId, testGroupId);
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(409);
@@ -2259,7 +2274,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .expect(401);
 
@@ -2268,7 +2283,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -2278,7 +2293,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     });
 
     it('should return 403 when user lacks users:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -2292,7 +2307,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     });
 
     it('should return 204 when user has users:write permission', async () => {
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2306,7 +2321,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       expect(groupsBefore).toHaveLength(1);
       expect(groupsBefore[0].id).toBe(testGroupId);
 
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2323,7 +2338,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
         description: 'Group user is not in',
       });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${secondGroup.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -2334,7 +2349,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
 
     it('should return 404 when trying to remove from non-existent group', async () => {
       const nonExistentGroupId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${nonExistentGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -2356,7 +2371,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       expect(groupsBefore).toHaveLength(2);
 
       // Remove user from first group
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2369,13 +2384,13 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
 
     it('should handle removing user from group twice (idempotency check)', async () => {
       // Remove user from group first time
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Try to remove again - should return 404
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -2413,7 +2428,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       expect(hasPermissionBefore).toBe(true);
 
       // Remove user from group via API
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2454,7 +2469,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       expect(cachedBefore).toBe(true);
 
       // Remove user from group via API (this should invalidate cache in the router's instance)
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2508,7 +2523,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       expect(hasPermissionBefore).toBe(true);
 
       // Remove user from group via API
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2538,7 +2553,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .expect(204);
@@ -2551,7 +2566,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
 
   describe('Response Format', () => {
     it('should return 204 No Content with no response body on success', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2567,7 +2582,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
         description: 'Group user is not in',
       });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${secondGroup.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -2711,7 +2726,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .expect(401);
 
@@ -2720,7 +2735,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -2730,7 +2745,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     });
 
     it('should return 403 when user lacks users:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -2744,7 +2759,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     });
 
     it('should return 204 when user has users:write permission', async () => {
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2753,7 +2768,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
   describe('User-Role Assignment', () => {
     it('should successfully assign role to user', async () => {
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2767,7 +2782,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
     it('should return 404 when user does not exist', async () => {
       const nonExistentUserId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${nonExistentUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -2778,7 +2793,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
     it('should return 404 when role does not exist', async () => {
       const nonExistentRoleId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${nonExistentRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -2789,13 +2804,13 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
     it('should return 409 when role is already assigned to user', async () => {
       // Assign role first time
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Try to assign again
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(409);
@@ -2812,13 +2827,13 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
       });
 
       // Assign first role
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Assign second role
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${secondRole.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2852,7 +2867,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
       expect(hasPermissionBefore).toBe(false);
 
       // Assign role to user via API
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2888,7 +2903,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
       expect(cachedBefore).toBe(false);
 
       // Assign role to user via API (this should invalidate cache in the router's instance)
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2926,7 +2941,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
       await roleService.assignPermissionToRole(testRoleId, writePermission.id);
 
       // Assign role to user via API
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2963,7 +2978,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .expect(204);
@@ -2977,7 +2992,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
   describe('Response Format', () => {
     it('should return 204 No Content with no response body on success', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -2988,7 +3003,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
     it('should return proper error format for 404 errors', async () => {
       const nonExistentUserId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${nonExistentUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -3001,13 +3016,13 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
 
     it('should return proper error format for 409 conflict errors', async () => {
       // Assign role first time
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Try to assign again
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(409);
@@ -3031,7 +3046,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
         return;
       }
 
-      await request(app)
+      await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${viewerRole.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3178,7 +3193,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
   describe('Authentication and Authorization', () => {
     it('should return 401 when no token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .expect(401);
 
@@ -3187,7 +3202,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     });
 
     it('should return 401 when invalid token is provided', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', 'Bearer invalid-token')
         .expect(401);
@@ -3197,7 +3212,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     });
 
     it('should return 403 when user lacks users:write permission', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
         .expect(403);
@@ -3211,7 +3226,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     });
 
     it('should return 204 when user has users:write permission', async () => {
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3225,7 +3240,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       expect(rolesBefore).toHaveLength(1);
       expect(rolesBefore[0].id).toBe(testRoleId);
 
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3242,7 +3257,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
         description: 'Role not assigned to user',
       });
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${unassignedRole.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -3253,13 +3268,13 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
     it('should return 404 when trying to remove role from user who already had it removed', async () => {
       // Remove role first time
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
 
       // Try to remove again
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -3281,7 +3296,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       expect(rolesBefore).toHaveLength(2);
 
       // Remove first role
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3294,7 +3309,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
     it('should handle removing role from user with non-existent user ID gracefully', async () => {
       const nonExistentUserId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${nonExistentUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -3305,7 +3320,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
     it('should handle removing non-existent role from user gracefully', async () => {
       const nonExistentRoleId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${nonExistentRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -3335,7 +3350,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       expect(hasPermissionBefore).toBe(true);
 
       // Remove role from user via API
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3374,7 +3389,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       expect(hasPermissionInitial).toBe(true);
 
       // Remove role from user via API (should invalidate cache)
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3393,7 +3408,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
   describe('Response Format', () => {
     it('should return 204 No Content with no response body on success', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3404,7 +3419,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
     it('should return proper error format for 404 errors', async () => {
       const nonExistentUserId = randomUUID();
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .delete(`/api/users/${nonExistentUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(404);
@@ -3437,7 +3452,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       expect(hasViewerRoleBefore).toBe(true);
 
       // Remove built-in role
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${viewerRole.id}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(204);
@@ -3463,7 +3478,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
 
       const superAdminToken = await authService.generateToken(superAdmin);
 
-      await request(app)
+      await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .expect(204);

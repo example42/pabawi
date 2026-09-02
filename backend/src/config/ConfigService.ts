@@ -1,11 +1,15 @@
 import { config as loadDotenv } from "dotenv";
 import {
   AppConfigSchema,
+  ConsoleConfigSchema,
   type AppConfig,
+  type ConsoleConfig,
+  type EntraIdConfig,
   type WhitelistConfig,
 } from "./schema";
 import { z } from "zod";
 import { parseJson } from "../utils/json";
+import { LoggerService } from "../services/LoggerService";
 
 /**
  * Configuration service to load and validate application settings
@@ -13,6 +17,8 @@ import { parseJson } from "../utils/json";
  */
 export class ConfigService {
   private config: AppConfig;
+  private entraIdConfig: EntraIdConfig | null = null;
+  private consoleConfig: ConsoleConfig;
 
   constructor() {
     // Load .env file only if not in test environment
@@ -20,8 +26,94 @@ export class ConfigService {
       loadDotenv();
     }
 
+    // Parse console config with validation and warning logging
+    this.consoleConfig = this.parseConsoleConfig();
+
     // Parse and validate configuration
     this.config = this.loadConfiguration();
+  }
+
+  /**
+   * Parse and validate console configuration from CONSOLE_* environment variables.
+   * Logs warnings via LoggerService for invalid values and cross-field constraint violations.
+   */
+  private parseConsoleConfig(): ConsoleConfig {
+    const logger = new LoggerService();
+    const context = { component: "ConfigService" };
+    const defaults = ConsoleConfigSchema.parse({});
+
+    const parsePositiveInt = (
+      envName: string,
+      defaultValue: number,
+      minValue = 1,
+    ): number => {
+      const raw = process.env[envName];
+      if (raw === undefined || raw === "") {
+        return defaultValue;
+      }
+
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < minValue) {
+        logger.warn(
+          `Invalid value for ${envName}="${raw}" (must be an integer >= ${String(minValue)}). Using default: ${String(defaultValue)}`,
+          context,
+        );
+        return defaultValue;
+      }
+
+      return parsed;
+    };
+
+    const sessionTimeoutMs = parsePositiveInt(
+      "CONSOLE_SESSION_TIMEOUT_MS",
+      defaults.sessionTimeoutMs,
+    );
+    const maxSessionDuration = parsePositiveInt(
+      "CONSOLE_MAX_SESSION_DURATION",
+      defaults.maxSessionDuration,
+    );
+    const maxConcurrentSessions = parsePositiveInt(
+      "CONSOLE_MAX_CONCURRENT_SESSIONS",
+      defaults.maxConcurrentSessions,
+    );
+    const heartbeatIntervalMs = parsePositiveInt(
+      "CONSOLE_HEARTBEAT_INTERVAL_MS",
+      defaults.heartbeatIntervalMs,
+    );
+
+    // TLS verification for the upstream console host. Secure by default; only a
+    // literal "false" opts out. Any other value keeps verification enabled.
+    const rawVerifyTls = process.env.CONSOLE_VERIFY_UPSTREAM_TLS;
+    const verifyUpstreamTls = !(rawVerifyTls?.toLowerCase() === "false");
+    if (!verifyUpstreamTls) {
+      logger.warn(
+        "CONSOLE_VERIFY_UPSTREAM_TLS=false — upstream console TLS certificate verification is DISABLED. The proxied console session is exposed to man-in-the-middle attacks. Only use this on trusted networks with self-signed upstream certificates.",
+        context,
+      );
+    }
+
+    // Cross-field validation: heartbeat must be less than session timeout (Req 11.6)
+    if (heartbeatIntervalMs >= sessionTimeoutMs) {
+      logger.warn(
+        `CONSOLE_HEARTBEAT_INTERVAL_MS (${String(heartbeatIntervalMs)}) must be less than CONSOLE_SESSION_TIMEOUT_MS (${String(sessionTimeoutMs)}). Using defaults for both: heartbeatIntervalMs=${String(defaults.heartbeatIntervalMs)}, sessionTimeoutMs=${String(defaults.sessionTimeoutMs)}`,
+        context,
+      );
+      return {
+        sessionTimeoutMs: defaults.sessionTimeoutMs,
+        maxSessionDuration,
+        maxConcurrentSessions,
+        heartbeatIntervalMs: defaults.heartbeatIntervalMs,
+        verifyUpstreamTls,
+      };
+    }
+
+    return {
+      sessionTimeoutMs,
+      maxSessionDuration,
+      maxConcurrentSessions,
+      heartbeatIntervalMs,
+      verifyUpstreamTls,
+    };
   }
 
   /**
@@ -611,6 +703,101 @@ export class ConfigService {
   }
 
   /**
+   * Parse Entra ID (Azure AD) authentication configuration from environment variables.
+   * Skips all parsing when ENTRA_ID_ENABLED is not "true".
+   * Throws with all missing variable names when enabled but required vars are absent.
+   */
+  private parseEntraIdConfig(): EntraIdConfig | null {
+    if (process.env.ENTRA_ID_ENABLED !== "true") {
+      return null;
+    }
+
+    // Collect all missing required variables
+    const missing: string[] = [];
+    const tenantId = process.env.ENTRA_ID_TENANT_ID;
+    const clientId = process.env.ENTRA_ID_CLIENT_ID;
+    const clientSecret = process.env.ENTRA_ID_CLIENT_SECRET; // pragma: allowlist secret
+    const redirectUri = process.env.ENTRA_ID_REDIRECT_URI;
+
+    if (!tenantId) missing.push("ENTRA_ID_TENANT_ID");
+    if (!clientId) missing.push("ENTRA_ID_CLIENT_ID");
+    if (!clientSecret) missing.push("ENTRA_ID_CLIENT_SECRET"); // pragma: allowlist secret
+    if (!redirectUri) missing.push("ENTRA_ID_REDIRECT_URI");
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Entra ID authentication is enabled but required configuration variables are missing: ${missing.join(", ")}`,
+      );
+    }
+
+    // After the guard above, these are guaranteed non-empty strings.
+    // Narrow explicitly so TypeScript tracks the guarantee without assertions.
+    if (!tenantId || !clientId || !clientSecret || !redirectUri) {
+      // Unreachable — the missing[] guard above already throws.
+      throw new Error("Unreachable: required Entra ID variables validated");
+    }
+
+    // Parse optional scopes (comma-separated, discard empty entries)
+    const scopesRaw = process.env.ENTRA_ID_SCOPES;
+    const scopes = scopesRaw
+      ? scopesRaw.split(",").map((s) => s.trim()).filter(Boolean)
+      : ["openid", "profile", "email"];
+
+    // Parse optional group mapping (JSON Record<string,string>)
+    let groupMapping: Record<string, string> | null = null;
+    const groupMappingRaw = process.env.ENTRA_ID_GROUP_MAPPING;
+    if (groupMappingRaw) {
+      try {
+        const parsed = parseJson(groupMappingRaw);
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
+          throw new Error("must be a JSON object");
+        }
+        // Validate all keys and values are strings
+        for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+          if (typeof key !== "string" || typeof value !== "string") {
+            throw new Error("all keys and values must be strings");
+          }
+        }
+        groupMapping = parsed as Record<string, string>;
+      } catch (error) {
+        throw new Error(
+          `ENTRA_ID_GROUP_MAPPING contains invalid JSON: ${error instanceof Error ? error.message : "parse error"}`,
+        );
+      }
+    }
+
+    // Parse optional post-logout redirect URI
+    const postLogoutRedirectUri =
+      process.env.ENTRA_ID_POST_LOGOUT_REDIRECT_URI ?? undefined;
+
+    // Parse optional JWKS cache TTL
+    const jwksCacheTtlMs = process.env.ENTRA_ID_JWKS_CACHE_TTL_MS
+      ? parseInt(process.env.ENTRA_ID_JWKS_CACHE_TTL_MS, 10)
+      : undefined;
+
+    // At this point tenantId, clientId, clientSecret, redirectUri are guaranteed non-empty
+    // (we threw above if any were falsy)
+    const config: EntraIdConfig = {
+      enabled: true,
+      tenantId,
+      clientId,
+      clientSecret, // pragma: allowlist secret
+      redirectUri,
+      scopes,
+      groupMapping,
+      postLogoutRedirectUri,
+      jwksCacheTtlMs: jwksCacheTtlMs ?? 86400000,
+    };
+
+    this.entraIdConfig = config;
+    return config;
+  }
+
+  /**
    * Load configuration from environment variables with validation
    */
   private loadConfiguration(): AppConfig {
@@ -728,6 +915,8 @@ export class ConfigService {
         ui,
         mcpEnabled: process.env.MCP_ENABLED === "true",
         mcpAuthToken: process.env.MCP_AUTH_TOKEN ?? undefined,
+        entraId: this.parseEntraIdConfig() ?? undefined,
+        console: this.consoleConfig,
       };
 
       // Validate with Zod schema
@@ -980,5 +1169,20 @@ export class ConfigService {
       return checkmk as typeof checkmk & { enabled: true };
     }
     return null;
+  }
+
+  /**
+   * Get Entra ID authentication configuration if enabled.
+   * Returns null when ENTRA_ID_ENABLED is not "true".
+   */
+  public getEntraIdConfig(): EntraIdConfig | null {
+    return this.entraIdConfig;
+  }
+
+  /**
+   * Get console session configuration
+   */
+  public getConsoleConfig(): ConsoleConfig {
+    return this.consoleConfig;
   }
 }

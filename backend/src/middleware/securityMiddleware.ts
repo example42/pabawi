@@ -65,9 +65,11 @@ export function createRateLimitMiddleware(): (req: Request, res: Response, next:
       return ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? "");
     },
 
-    // Skip rate limiting for health check and public endpoints
+    // Skip rate limiting for the health check only. `/api/health` is the sole
+    // truly public endpoint; `/api/config` requires authentication and must not
+    // be categorically exempt from per-user limits.
     skip: (req: Request): boolean => {
-      const publicPaths = ["/api/health", "/api/config"];
+      const publicPaths = ["/api/health"];
       return publicPaths.includes(req.path);
     },
 
@@ -104,7 +106,31 @@ export function createAuthRateLimitMiddleware(): (req: Request, res: Response, n
     // Use IP address as the key with proper IPv6 handling
     keyGenerator: (req: Request): string => ipKeyGenerator(req.ip ?? req.socket.remoteAddress ?? ""),
 
-    // Custom handler for rate limit exceeded
+    // Skip rate limiting for non-credential endpoints that happen to live
+    // under /api/auth. These are either read-only discovery endpoints or
+    // authenticated operations that are not brute-force targets.
+    //
+    // Also skip Entra ID SSO endpoints: these are not brute-forceable because
+    // /login is just a redirect to Microsoft, /callback is automated by the
+    // provider, and /token consumes a cryptographic single-use code with 60s TTL.
+    skip: (req: Request): boolean => {
+      // GET /api/auth/providers — public discovery, not an auth attempt
+      if (req.method === "GET" && req.path === "/providers") return true;
+      // POST /api/auth/refresh — token refresh, not a credential submission
+      if (req.method === "POST" && req.path === "/refresh") return true;
+      // POST /api/auth/logout — requires existing auth, not an attempt
+      if (req.method === "POST" && req.path === "/logout") return true;
+      // All Entra ID SSO paths — not brute-forceable credential submissions.
+      // /login → 302 redirect to Microsoft (no credentials accepted here)
+      // /callback → automated redirect from Microsoft with one-time code+state
+      // /token → exchanges a cryptographic single-use auth code (60s TTL)
+      // Use originalUrl to avoid false matches with local POST /login which
+      // shares the same req.path when mounted at /api/auth.
+      if (req.originalUrl.includes("/entra-id/")) return true;
+      return false;
+    },
+
+    // Custom handler for auth rate limit exceeded
     handler: (_req: Request, res: Response): void => {
       res.status(429).json({
         error: "Too many authentication attempts",

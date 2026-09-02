@@ -1,9 +1,24 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import express, { type Express } from "express";
 import { createPuppetDBRouter } from "../../src/routes/integrations/puppetdb";
 import { PuppetDBService } from "../../src/integrations/puppetdb/PuppetDBService";
 import { expertModeMiddleware } from "../../src/middleware/expertMode";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("PuppetDB Catalog Route - Expert Mode", () => {
   let app: Express;
@@ -60,7 +75,7 @@ describe("PuppetDB Catalog Route - Expert Mode", () => {
 
   describe("GET /api/integrations/puppetdb/nodes/:certname/catalog", () => {
     it("should return catalog when node exists", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/catalog")
         .expect(200);
 
@@ -71,7 +86,7 @@ describe("PuppetDB Catalog Route - Expert Mode", () => {
     });
 
     it("should return 404 when catalog does not exist", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/non-existent-node/catalog")
         .expect(404);
 
@@ -81,7 +96,7 @@ describe("PuppetDB Catalog Route - Expert Mode", () => {
     });
 
     it("should include debug info when expert mode is enabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/catalog")
         .set("X-Expert-Mode", "true")
         .expect(200);
@@ -99,7 +114,7 @@ describe("PuppetDB Catalog Route - Expert Mode", () => {
     });
 
     it("should not include debug info when expert mode is disabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/catalog")
         .expect(200);
 
@@ -109,7 +124,7 @@ describe("PuppetDB Catalog Route - Expert Mode", () => {
     });
 
     it("should include debug info in error responses when expert mode is enabled", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/non-existent-node/catalog")
         .set("X-Expert-Mode", "true")
         .expect(404);
@@ -124,7 +139,7 @@ describe("PuppetDB Catalog Route - Expert Mode", () => {
     });
 
     it("should support resourceType filter with expert mode", async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get("/api/integrations/puppetdb/nodes/test-node-1/catalog?resourceType=File")
         .set("X-Expert-Mode", "true")
         .expect(200);

@@ -377,6 +377,23 @@ export const CheckmkConfigSchema = z.object({
 export type CheckmkConfig = z.infer<typeof CheckmkConfigSchema>;
 
 /**
+ * Azure Entra ID (OpenID Connect) authentication provider configuration schema
+ */
+export const EntraIdConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  tenantId: z.string().min(1),
+  clientId: z.string().min(1),
+  clientSecret: z.string().min(1),
+  redirectUri: z.string().url(),
+  scopes: z.array(z.string()).default(["openid", "profile", "email"]),
+  groupMapping: z.record(z.string(), z.string()).nullable().default(null),
+  postLogoutRedirectUri: z.string().url().optional(),
+  jwksCacheTtlMs: z.number().int().positive().default(86400000), // 24 hours
+});
+
+export type EntraIdConfig = z.infer<typeof EntraIdConfigSchema>;
+
+/**
  * Integrations configuration schema
  */
 export const IntegrationsConfigSchema = z.object({
@@ -391,6 +408,25 @@ export const IntegrationsConfigSchema = z.object({
 });
 
 export type IntegrationsConfig = z.infer<typeof IntegrationsConfigSchema>;
+
+/**
+ * Console session configuration schema
+ */
+export const ConsoleConfigSchema = z.object({
+  sessionTimeoutMs: z.number().int().positive().default(300000),
+  maxSessionDuration: z.number().int().positive().default(28800000),
+  maxConcurrentSessions: z.number().int().min(1).default(3),
+  heartbeatIntervalMs: z.number().int().positive().default(30000),
+  /**
+   * Whether to verify the TLS certificate of the upstream console host
+   * (VNC/terminal websocket). Defaults to `true` (secure). Set to `false`
+   * only for trusted networks with self-signed upstream certificates —
+   * disabling it exposes the proxied session to MITM.
+   */
+  verifyUpstreamTls: z.boolean().default(true),
+});
+
+export type ConsoleConfig = z.infer<typeof ConsoleConfigSchema>;
 
 /**
  * Application configuration schema with Zod validation
@@ -432,8 +468,10 @@ export const AppConfigSchema = z.object({
   integrations: IntegrationsConfigSchema.default({}),
   provisioning: ProvisioningConfigSchema.default({ allowDestructiveActions: false }),
   ui: UIConfigSchema.default({ showHomePageRunChart: true }),
+  console: ConsoleConfigSchema.default({}),
   mcpEnabled: z.boolean().default(false),
   mcpAuthToken: z.string().optional(),
+  entraId: EntraIdConfigSchema.optional(),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

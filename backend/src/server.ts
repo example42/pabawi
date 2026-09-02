@@ -36,6 +36,7 @@ import { createAWSRouter } from "./routes/integrations/aws";
 import { createAzureRouter } from "./routes/integrations/azure";
 import { createMonitoringRouter } from "./routes/integrations/monitoring";
 import { createMonitoringOverviewRouter } from "./routes/integrations/monitoringOverview";
+import { createMonitoringActionsRouter } from "./routes/integrations/monitoringActions";
 import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import monitoringRouter from "./routes/monitoring";
@@ -61,6 +62,12 @@ import type { PuppetDBService } from "./integrations/puppetdb/PuppetDBService";
 import type { PuppetserverService } from "./integrations/puppetserver/PuppetserverService";
 import type { HieraPlugin } from "./integrations/hiera/HieraPlugin";
 import type { ProxmoxIntegration } from "./integrations/proxmox/ProxmoxIntegration";
+import type { ProxmoxClient } from "./integrations/proxmox/ProxmoxClient";
+import type { ProxmoxConfig } from "./integrations/proxmox/types";
+import { ProxmoxConsoleProvider } from "./integrations/proxmox/ProxmoxConsoleProvider";
+import { ConsoleSessionManager } from "./services/ConsoleSessionManager";
+import { ConsoleWebSocketProxy } from "./services/ConsoleWebSocketProxy";
+import { createConsoleRouter } from "./routes/console";
 import type { CheckmkPlugin } from "./integrations/checkmk/CheckmkPlugin";
 import { pluginRegistry } from "./plugins/registry";
 import { LoggerService } from "./services/LoggerService";
@@ -74,6 +81,9 @@ import { AuthenticationService } from "./services/AuthenticationService";
 import { UserService } from "./services/UserService";
 import { RoleService } from "./services/RoleService";
 import { PermissionService } from "./services/PermissionService";
+import { AuditLoggingService } from "./services/AuditLoggingService";
+import { EntraIdService } from "./services/EntraIdService";
+import { createEntraIdAuthRouter } from "./routes/entraIdAuth";
 import { provisionMcpServiceUser } from "./mcp/McpServiceUser";
 import { createMcpServer } from "./mcp/McpServer";
 
@@ -441,6 +451,26 @@ async function startServer(): Promise<Express> {
       });
     }
 
+    // Register ProxmoxConsoleProvider alongside the Proxmox plugin (Req 9.1, 2.6)
+    if (proxmoxPlugin) {
+      const rawClient = proxmoxPlugin.getClient();
+      const proxmoxCfg = proxmoxPlugin.getConfig().config as unknown as ProxmoxConfig;
+      if (rawClient) {
+        const proxmoxClient = rawClient as unknown as ProxmoxClient;
+        const consoleProvider = new ProxmoxConsoleProvider(proxmoxClient, proxmoxCfg, logger);
+        integrationManager.registerConsoleProvider(consoleProvider);
+        logger.info("ProxmoxConsoleProvider registered with IntegrationManager", {
+          component: "Server",
+          operation: "initializeConsole",
+        });
+      } else {
+        logger.warn("Proxmox client not available — skipping ProxmoxConsoleProvider registration", {
+          component: "Server",
+          operation: "initializeConsole",
+        });
+      }
+    }
+
     // Retrieve specific plugin instances needed by downstream consumers
     const puppetDBService = (integrationManager.getInformationSource("puppetdb") ?? undefined) as PuppetDBService | undefined;
     const puppetserverService = (integrationManager.getInformationSource("puppetserver") ?? undefined) as PuppetserverService | undefined;
@@ -561,7 +591,7 @@ async function startServer(): Promise<Express> {
       res.status(overall === "ok" ? 200 : 503).json({
         status: overall,
         message: "Backend API is running",
-        version: "1.4.0",
+        version: "1.5.0",
         checks: {
           database: dbError ? { status: dbStatus, error: dbError } : { status: dbStatus },
         },
@@ -575,6 +605,69 @@ async function startServer(): Promise<Express> {
     const authRateLimitMiddleware = createAuthRateLimitMiddleware();
     app.use("/api/auth", authRateLimitMiddleware, createAuthRouter(databaseService, container));
 
+    // Conditionally initialize Entra ID SSO authentication
+    const entraIdConfig = configService.getEntraIdConfig();
+    let entraIdCleanupInterval: ReturnType<typeof setInterval> | undefined;
+    if (entraIdConfig?.enabled) {
+      logger.info("Entra ID authentication enabled, initializing...", {
+        component: "Server",
+        operation: "initializeEntraId",
+      });
+
+      try {
+        const auditLogger = new AuditLoggingService(databaseService.getAdapter());
+        const authService = new AuthenticationService(
+          databaseService.getAdapter(),
+          configService.getJwtSecret(),
+          auditLogger,
+        );
+        const userService = new UserService(databaseService.getAdapter(), authService);
+        const roleService = new RoleService(databaseService.getAdapter());
+
+        const entraIdService = new EntraIdService(
+          databaseService.getAdapter(),
+          entraIdConfig,
+          authService,
+          userService,
+          roleService,
+          auditLogger,
+          logger,
+        );
+        container.register("entraId", entraIdService);
+
+        app.use(
+          "/api/auth/entra-id",
+          createEntraIdAuthRouter(databaseService, container),
+        );
+
+        // Periodic cleanup of expired OAuth state entries (every 5 minutes)
+        entraIdCleanupInterval = setInterval(() => {
+          entraIdService.cleanupExpiredState().catch((err: unknown) => {
+            logger.warn("Entra ID state cleanup failed", {
+              component: "Server",
+              operation: "entraIdCleanup",
+              metadata: { error: err instanceof Error ? err.message : String(err) },
+            });
+          });
+        }, 5 * 60 * 1000);
+
+        logger.info("Entra ID authentication initialized, /api/auth/entra-id routes mounted", {
+          component: "Server",
+          operation: "initializeEntraId",
+        });
+      } catch (error) {
+        logger.error("Failed to initialize Entra ID authentication", {
+          component: "Server",
+          operation: "initializeEntraId",
+        }, error instanceof Error ? error : undefined);
+      }
+    } else {
+      logger.info("Entra ID authentication disabled", {
+        component: "Server",
+        operation: "initializeEntraId",
+      });
+    }
+
     // Create authentication and RBAC middleware instances
     // Wrap async middleware with asyncHandler to satisfy Express's void return expectation
     const authMiddleware = asyncHandler(createAuthMiddleware(databaseService.getAdapter(), configService.getJwtSecret()));
@@ -585,17 +678,29 @@ async function startServer(): Promise<Express> {
     // Create rate limiting middleware for authenticated routes
     const rateLimitMiddleware = createRateLimitMiddleware();
 
-    // Configuration endpoint (security-sensitive — requires authentication)
-    app.get("/api/config", authMiddleware, (_req: Request, res: Response) => {
+    // Configuration endpoint (security-sensitive — requires authentication).
+    // The command whitelist (allow/deny policy) is only returned to callers who
+    // hold `bolt:execute`, since it is only actionable for users who can run
+    // commands. Non-executors receive execution timeout only. (Finding L-3)
+    const configPermissionService = new PermissionService(databaseService.getAdapter());
+    app.get("/api/config", authMiddleware, asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const canExecute = req.user?.userId
+        ? await configPermissionService.hasPermission(req.user.userId, "bolt", "execute")
+        : false;
+
       res.json({
-        commandWhitelist: {
-          allowAll: config.commandWhitelist.allowAll,
-          matchMode: config.commandWhitelist.matchMode,
-          whitelist: config.commandWhitelist.whitelist,
-        },
+        ...(canExecute
+          ? {
+              commandWhitelist: {
+                allowAll: config.commandWhitelist.allowAll,
+                matchMode: config.commandWhitelist.matchMode,
+                whitelist: config.commandWhitelist.whitelist,
+              },
+            }
+          : {}),
         executionTimeout: config.executionTimeout,
       });
-    });
+    }));
 
     // Config routes (UI settings — requires authentication)
     app.use("/api/config", authMiddleware, createConfigRouter(container));
@@ -628,6 +733,20 @@ async function startServer(): Promise<Express> {
       rateLimitMiddleware,
       rbacMiddleware('checkmk', 'read'),
       createMonitoringOverviewRouter(integrationManager, container),
+    );
+
+    // Checkmk monitoring write actions (acknowledge / downtime).
+    // Mounted AFTER the read overview so that GET /overview resolves there and
+    // never triggers the write-permission gate. Write actions additionally pass
+    // through the read mount above (read router does not match POST routes), so
+    // they require both checkmk:read and checkmk:write — both held by the
+    // Operator and Administrator roles.
+    app.use(
+      "/api/monitoring",
+      authMiddleware,
+      rateLimitMiddleware,
+      rbacMiddleware('checkmk', 'write'),
+      createMonitoringActionsRouter(integrationManager, databaseService, container),
     );
 
     // API Routes - Inventory routes (protected with RBAC)
@@ -752,18 +871,18 @@ async function startServer(): Promise<Express> {
       "/api/executions",
       authMiddleware,
       rateLimitMiddleware,
-      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService, container),
+      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService, container, rbacMiddleware('bolt', 'execute'), commandWhitelistService),
     );
     app.use(
       "/api/executions",
-      streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
+      streamAuthMiddleware, // resolve single-use ?ticket= before auth check
       authMiddleware,
       rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository, container),
     );
     app.use(
       "/api/streaming",
-      streamAuthMiddleware, // resolve ?ticket= / ?token= before auth check
+      streamAuthMiddleware, // resolve single-use ?ticket= before auth check
       authMiddleware,
       rateLimitMiddleware,
       createStreamingRouter(streamingManager, executionRepository, container),
@@ -977,6 +1096,26 @@ async function startServer(): Promise<Express> {
       });
     }
 
+    // === Console Integration Wiring (session manager + routes) ===
+    const consoleConfig = configService.getConsoleConfig();
+    const auditLoggingService = new AuditLoggingService(databaseService.getAdapter());
+    const consoleSessionManager = new ConsoleSessionManager(
+      databaseService.getAdapter(),
+      consoleConfig,
+      logger,
+      auditLoggingService,
+    );
+
+    // Mount console routes before SPA fallback so /api/console is handled correctly
+    app.use(
+      "/api/console",
+      createConsoleRouter(container, integrationManager, consoleSessionManager, databaseService.getAdapter()),
+    );
+    logger.info("Console routes mounted at /api/console", {
+      component: "Server",
+      operation: "initializeConsole",
+    });
+
     // Serve static frontend files in production
     const publicPath = path.resolve(__dirname, "..", "public");
     app.use(express.static(publicPath));
@@ -1002,6 +1141,42 @@ async function startServer(): Promise<Express> {
       });
     });
 
+    // Attach WebSocket proxy to the HTTP server (noServer: true, shared port)
+    new ConsoleWebSocketProxy(
+      server,
+      consoleSessionManager,
+      { allowedOrigins: config.corsAllowedOrigins, console: consoleConfig },
+      logger,
+    );
+    logger.info("ConsoleWebSocketProxy attached to HTTP server", {
+      component: "Server",
+      operation: "initializeConsole",
+    });
+
+    // Graceful restart: terminate all pre-existing sessions for each registered console provider (Req 2.6)
+    const consoleProviders = integrationManager.getAllConsoleProviders();
+    for (const cp of consoleProviders) {
+      await consoleSessionManager.terminateAllForProvider(cp.name);
+    }
+    if (consoleProviders.length > 0) {
+      logger.info("Terminated stale console sessions from previous run", {
+        component: "Server",
+        operation: "initializeConsole",
+        metadata: { providerCount: consoleProviders.length },
+      });
+    }
+
+    // Session cleanup interval: expire idle sessions periodically
+    const consoleCleanupInterval = setInterval(() => {
+      consoleSessionManager.cleanupExpiredSessions().catch((err: unknown) => {
+        logger.warn("Console session cleanup failed", {
+          component: "Server",
+          operation: "consoleCleanup",
+          metadata: { error: err instanceof Error ? err.message : String(err) },
+        });
+      });
+    }, consoleConfig.sessionTimeoutMs);
+
     // Graceful shutdown
     process.on("SIGTERM", () => {
       logger.info("SIGTERM received, shutting down gracefully...", {
@@ -1010,6 +1185,10 @@ async function startServer(): Promise<Express> {
       });
       streamingManager.cleanup();
       integrationManager.stopHealthCheckScheduler();
+      if (entraIdCleanupInterval) {
+        clearInterval(entraIdCleanupInterval);
+      }
+      clearInterval(consoleCleanupInterval);
       server.close(() => {
         void databaseService.close().then(() => {
           logger.info("Server closed", {

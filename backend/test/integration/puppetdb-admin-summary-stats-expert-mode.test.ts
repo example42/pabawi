@@ -1,9 +1,24 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import express, { type Express } from "express";
 import { createPuppetDBRouter } from "../../src/routes/integrations/puppetdb";
 import { PuppetDBService } from "../../src/integrations/puppetdb/PuppetDBService";
 import { expertModeMiddleware } from "../../src/middleware/expertMode";
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe("PuppetDB Admin Summary Stats - Expert Mode", () => {
   let app: Express;
@@ -35,7 +50,7 @@ describe("PuppetDB Admin Summary Stats - Expert Mode", () => {
   });
 
   it("should return summary stats without debug info when expert mode is disabled", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/integrations/puppetdb/admin/summary-stats")
       .expect(200);
 
@@ -46,7 +61,7 @@ describe("PuppetDB Admin Summary Stats - Expert Mode", () => {
   });
 
   it("should return summary stats with debug info when expert mode is enabled", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/integrations/puppetdb/admin/summary-stats")
       .set("X-Expert-Mode", "true")
       .expect(200);
@@ -99,7 +114,7 @@ describe("PuppetDB Admin Summary Stats - Expert Mode", () => {
     errorApp.use(expertModeMiddleware);
     errorApp.use("/api/integrations/puppetdb", createPuppetDBRouter(errorService));
 
-    const response = await request(errorApp)
+    const response = await request(harness.use(errorApp))
       .get("/api/integrations/puppetdb/admin/summary-stats")
       .set("X-Expert-Mode", "true")
       .expect(500);
@@ -131,7 +146,7 @@ describe("PuppetDB Admin Summary Stats - Expert Mode", () => {
     errorApp.use(expertModeMiddleware);
     errorApp.use("/api/integrations/puppetdb", createPuppetDBRouter(errorService));
 
-    const response = await request(errorApp)
+    const response = await request(harness.use(errorApp))
       .get("/api/integrations/puppetdb/admin/summary-stats")
       .expect(500);
 
@@ -140,7 +155,7 @@ describe("PuppetDB Admin Summary Stats - Expert Mode", () => {
   });
 
   it("should capture performance metrics in debug info", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/integrations/puppetdb/admin/summary-stats")
       .set("X-Expert-Mode", "true")
       .expect(200);
@@ -151,7 +166,7 @@ describe("PuppetDB Admin Summary Stats - Expert Mode", () => {
   });
 
   it("should capture request context in debug info", async () => {
-    const response = await request(app)
+    const response = await request(harness.use(app))
       .get("/api/integrations/puppetdb/admin/summary-stats")
       .set("X-Expert-Mode", "true")
       .set("User-Agent", "test-agent")

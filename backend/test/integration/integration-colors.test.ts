@@ -1,12 +1,27 @@
 /**
  * Integration tests for the integration colors API endpoint
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import express, { type Express } from 'express';
 import { createIntegrationsRouter } from '../../src/routes/integrations';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
 import { LoggerService } from '../../src/services/LoggerService';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('Integration Colors API', () => {
   let app: Express;
@@ -25,7 +40,7 @@ describe('Integration Colors API', () => {
 
   describe('GET /api/integrations/colors', () => {
     it('should return color configuration for all integrations', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/colors')
         .expect(200);
 
@@ -51,11 +66,11 @@ describe('Integration Colors API', () => {
     });
 
     it('should return consistent colors across multiple requests', async () => {
-      const response1 = await request(app)
+      const response1 = await request(harness.use(app))
         .get('/api/integrations/colors')
         .expect(200);
 
-      const response2 = await request(app)
+      const response2 = await request(harness.use(app))
         .get('/api/integrations/colors')
         .expect(200);
 
@@ -64,7 +79,7 @@ describe('Integration Colors API', () => {
     });
 
     it('should return distinct colors for each integration', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/colors')
         .expect(200);
 

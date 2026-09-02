@@ -130,8 +130,9 @@ export function createStreamingRouter(
    * GET /api/executions/:id/stream
    * Subscribe to streaming events for an execution
    *
-   * Preferred auth: pass ?ticket=<value> (obtained from POST /:id/stream-ticket)
-   * Fallback: ?token=<JWT> (deprecated — JWT will appear in access logs)
+   * Auth: pass ?ticket=<value> (obtained from POST /:id/stream-ticket).
+   * The legacy ?token=<JWT> fallback was removed — a JWT in the URL leaks into
+   * access logs, browser history, and proxy caches.
    */
   router.get(
     "/:id/stream",

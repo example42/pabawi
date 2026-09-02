@@ -8,6 +8,8 @@ import {
   beforeEach,
 } from "vitest";
 import express, { type Express } from "express";
+import { beforeAll, afterAll } from "vitest";
+import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { BoltService } from "../../src/integrations/bolt/BoltService";
 import { ExecutionRepository } from "../../src/database/ExecutionRepository";
 import { CommandWhitelistService } from "../../src/validation/CommandWhitelistService";
@@ -65,6 +67,20 @@ vi.mock("sqlite3", () => {
     Database: vi.fn(() => mockDb),
     verbose: vi.fn(() => ({ Database: vi.fn(() => mockDb) })),
   };
+});
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
 });
 
 describe("API Integration Tests", () => {
@@ -174,7 +190,7 @@ describe("API Integration Tests", () => {
       testApp.use(errorHandler);
 
       const request = (await import("supertest")).default;
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/test-validation-error")
         .expect(400);
 
@@ -201,7 +217,7 @@ describe("API Integration Tests", () => {
       testApp.use(errorHandler);
 
       const request = (await import("supertest")).default;
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/test-connection-error")
         .expect(503);
 
@@ -232,7 +248,7 @@ describe("API Integration Tests", () => {
       testApp.use(errorHandler);
 
       const request = (await import("supertest")).default;
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/test-expert-mode")
         .expect(500);
 
@@ -256,7 +272,7 @@ describe("API Integration Tests", () => {
       testApp.use(errorHandler);
 
       const request = (await import("supertest")).default;
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/test-header-only")
         .set("X-Expert-Mode", "true") // raw header, no middleware to grant it
         .expect(500);
@@ -278,7 +294,7 @@ describe("API Integration Tests", () => {
       testApp.use(errorHandler);
 
       const request = (await import("supertest")).default;
-      const response = await request(testApp)
+      const response = await request(harness.use(testApp))
         .get("/test-no-expert-mode")
         .expect(500);
 

@@ -141,7 +141,11 @@ paths:
   /config:
     get:
       summary: Get system configuration
-      description: Retrieve system configuration (excluding sensitive values)
+      description: >-
+        Retrieve system configuration (excluding sensitive values). The
+        `commandWhitelist` object is returned only to callers holding
+        `bolt:execute`; other authenticated users receive `executionTimeout`
+        only.
       tags:
         - System
       responses:
@@ -154,6 +158,9 @@ paths:
                 properties:
                   commandWhitelist:
                     type: object
+                    description: >-
+                      Command whitelist policy. Present only for callers with
+                      the `bolt:execute` permission.
                     properties:
                       allowAll:
                         type: boolean
@@ -1788,6 +1795,10 @@ paths:
       description: |
         Trigger re-execution of a previous execution with preserved parameters.
         Allows modification of parameters through request body.
+
+        Requires the `bolt:execute` permission. Command-type re-executions are
+        validated against the command whitelist (shell metacharacters are always
+        rejected).
       tags:
         - Executions
       parameters:
@@ -1830,6 +1841,14 @@ paths:
                     $ref: '#/components/schemas/ExecutionRecord'
                   message:
                     type: string
+        '403':
+          description: >-
+            Missing `bolt:execute` permission, or the command was rejected by
+            the whitelist (`COMMAND_NOT_ALLOWED`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Original execution not found
           content:
@@ -1932,7 +1951,9 @@ paths:
   /executions/{id}/cancel:
     post:
       summary: Cancel execution
-      description: Cancel or abort a running or stuck execution
+      description: >-
+        Cancel or abort a running or stuck execution. Requires the
+        `bolt:execute` permission.
       tags:
         - Executions
       parameters:
@@ -1945,6 +1966,12 @@ paths:
       responses:
         '200':
           description: Cancellation requested
+        '403':
+          description: Missing `bolt:execute` permission
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Execution not found
           content:

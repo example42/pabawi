@@ -13,12 +13,27 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import express, { type Express } from 'express';
 import { createIntegrationsRouter } from '../../src/routes/integrations';
 import { IntegrationManager } from '../../src/integrations/IntegrationManager';
 import { LoggerService } from '../../src/services/LoggerService';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import type { PuppetDBConfig } from '../../src/config/schema';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('Graceful Degradation', () => {
   let app: Express;
@@ -84,7 +99,7 @@ describe('Graceful Degradation', () => {
 
   describe('Integration Status', () => {
     it('should not show unconfigured integrations in status', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/status')
         .expect(200);
 
@@ -100,7 +115,7 @@ describe('Graceful Degradation', () => {
     });
 
     it('should show PuppetDB status independently', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/status')
         .expect(200);
 
@@ -119,7 +134,7 @@ describe('Graceful Degradation', () => {
 
   describe('Puppetserver Endpoints', () => {
     it('should return 503 for node status when not configured', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver/nodes/test-node/status')
         .expect(503);
 
@@ -128,7 +143,7 @@ describe('Graceful Degradation', () => {
     });
 
     it('should return 503 for node facts when not configured', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver/nodes/test-node/facts')
         .expect(503);
 
@@ -137,7 +152,7 @@ describe('Graceful Degradation', () => {
     });
 
     it('should return 503 for catalog compilation when not configured', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver/catalog/test-node/production')
         .expect(503);
 
@@ -153,7 +168,7 @@ describe('Graceful Degradation', () => {
         return;
       }
 
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes')
         .expect(200);
 
@@ -169,7 +184,7 @@ describe('Graceful Degradation', () => {
       }
 
       // First get a node
-      const nodesResponse = await request(app)
+      const nodesResponse = await request(harness.use(app))
         .get('/api/integrations/puppetdb/nodes')
         .expect(200);
 
@@ -181,7 +196,7 @@ describe('Graceful Degradation', () => {
       const testNode = nodesResponse.body.nodes[0];
 
       // Try to get facts for that node
-      const factsResponse = await request(app)
+      const factsResponse = await request(harness.use(app))
         .get(`/api/integrations/puppetdb/nodes/${testNode.id}/facts`)
         .expect((res) => {
           // Should be either 200 (success) or 404 (node not found)
@@ -199,7 +214,7 @@ describe('Graceful Degradation', () => {
 
   describe('Error Messages', () => {
     it('should provide clear error messages for not configured services', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver/nodes/test-node/status')
         .expect(503);
 
@@ -211,7 +226,7 @@ describe('Graceful Degradation', () => {
     });
 
     it('should include error code for programmatic handling', async () => {
-      const response = await request(app)
+      const response = await request(harness.use(app))
         .get('/api/integrations/puppetserver/nodes')
         .expect(503);
 
@@ -224,9 +239,9 @@ describe('Graceful Degradation', () => {
     it('should not crash when querying unconfigured Puppetserver', async () => {
       // Make multiple requests to ensure system stability
       const requests = [
-        request(app).get('/api/integrations/puppetserver/nodes'),
-        request(app).get('/api/integrations/puppetserver/nodes/test/status'),
-        request(app).get('/api/integrations/puppetserver/nodes/test/facts'),
+        request(harness.use(app)).get('/api/integrations/puppetserver/nodes'),
+        request(harness.use(app)).get('/api/integrations/puppetserver/nodes/test/status'),
+        request(harness.use(app)).get('/api/integrations/puppetserver/nodes/test/facts'),
       ];
 
       const responses = await Promise.all(requests);
@@ -241,7 +256,7 @@ describe('Graceful Degradation', () => {
     it('should handle concurrent requests gracefully', async () => {
       // Make many concurrent requests
       const requests = Array.from({ length: 10 }, () =>
-        request(app).get('/api/integrations/status')
+        request(harness.use(app)).get('/api/integrations/status')
       );
 
       const responses = await Promise.all(requests);

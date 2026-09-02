@@ -1,5 +1,7 @@
 import express, { Express } from 'express';
 import request from 'supertest';
+import { beforeAll, afterAll } from 'vitest';
+import { createHttpHarness, type HttpHarness } from '../helpers/httpHarness';
 import { createRolesRouter } from '../../src/routes/roles';
 import { DatabaseService } from '../../src/database/DatabaseService';
 import { randomUUID } from 'crypto';
@@ -7,6 +9,20 @@ import { AuthenticationService } from '../../src/services/AuthenticationService'
 import { UserService } from '../../src/services/UserService';
 import { PermissionService } from '../../src/services/PermissionService';
 import { RoleService } from '../../src/services/RoleService';
+
+// One loopback-bound HTTP server for the whole file. See
+// test/helpers/httpHarness.ts: supertest's default request(app) opens a
+// fresh wildcard-bound socket per request, which on macOS can be shadowed
+// by an unrelated process holding the same port on 127.0.0.1.
+let harness: HttpHarness;
+
+beforeAll(async () => {
+  harness = await createHttpHarness();
+});
+
+afterAll(async () => {
+  await harness.close();
+});
 
 describe('Roles Router - Role-Permission Association Routes', () => {
   let app: Express;
@@ -130,7 +146,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
   describe('POST /api/roles/:id/permissions/:permissionId', () => {
     describe('Authentication and Authorization', () => {
       it('should return 401 when no token is provided', async () => {
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .expect(401);
@@ -139,7 +155,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
       });
 
       it('should return 403 when user lacks roles:write permission', async () => {
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${regularUserToken}`)
@@ -152,7 +168,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
 
     describe('Success Cases', () => {
       it('should assign permission to role successfully', async () => {
-        await request(app)
+        await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -173,14 +189,14 @@ describe('Roles Router - Role-Permission Association Routes', () => {
         });
 
         // Assign first permission
-        await request(app)
+        await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
           .expect(204);
 
         // Assign second permission
-        await request(app)
+        await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${secondPermission.id}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -198,7 +214,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
     describe('Error Cases', () => {
       it('should return 404 when role does not exist', async () => {
         const fakeId = randomUUID();
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .post(`/api/roles/${fakeId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -210,7 +226,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
 
       it('should return 404 when permission does not exist', async () => {
         const fakeId = randomUUID();
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${fakeId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -222,14 +238,14 @@ describe('Roles Router - Role-Permission Association Routes', () => {
 
       it('should handle duplicate permission assignment gracefully (idempotent)', async () => {
         // Assign permission first time
-        await request(app)
+        await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
           .expect(204);
 
         // Try to assign again - should succeed (idempotent)
-        await request(app)
+        await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -244,7 +260,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
     describe('Permission Inheritance', () => {
       it('should grant permission to users with the role', async () => {
         // Assign permission to role
-        await request(app)
+        await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -272,7 +288,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
 
     describe('Authentication and Authorization', () => {
       it('should return 401 when no token is provided', async () => {
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .expect(401);
@@ -281,7 +297,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
       });
 
       it('should return 403 when user lacks roles:write permission', async () => {
-        const response = await request(app)
+        const response = await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${regularUserToken}`)
@@ -294,7 +310,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
 
     describe('Success Cases', () => {
       it('should remove permission from role successfully', async () => {
-        await request(app)
+        await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -318,7 +334,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
         expect(hasPermission).toBe(true);
 
         // Remove permission from role
-        await request(app)
+        await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -350,7 +366,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
         expect(permissions).toHaveLength(2);
 
         // Remove first permission
-        await request(app)
+        await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -368,7 +384,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
         const fakeId = randomUUID();
 
         // Should succeed even if permission doesn't exist (idempotent)
-        await request(app)
+        await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${fakeId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
@@ -377,14 +393,14 @@ describe('Roles Router - Role-Permission Association Routes', () => {
 
       it('should handle removing already removed permission gracefully (idempotent)', async () => {
         // Remove permission first time
-        await request(app)
+        await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)
           .expect(204);
 
         // Try to remove again - should succeed (idempotent)
-        await request(app)
+        await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
           .set('Authorization', `Bearer ${adminToken}`)

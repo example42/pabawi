@@ -1,47 +1,45 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Setup verification test
+ * Smoke test: the server boots, the SPA mounts, and the auth guard holds.
  *
- * This test verifies that the application starts correctly and
- * the basic infrastructure is working before running full E2E tests.
+ * This is deliberately the only E2E suite. It asserts the unauthenticated
+ * contract only, so it needs no seeded user, no database fixture and no
+ * reachable Bolt/PuppetDB inventory.
+ *
+ * Anything past the login screen requires an authenticated storageState and a
+ * hermetic backend (scratch DATABASE_PATH + sample BOLT_PROJECT_PATH); see
+ * docs/internal/e2e-testing.md before adding such a test here.
+ *
+ * Selectors are accessible names, not CSS class fragments. Keep it that way:
+ * a selector that matches loosely is a test that fails to fail.
  */
 test.describe('Setup Verification', () => {
-  test('should load the application homepage', async ({ page }) => {
-    // Navigate to the application
-    await page.goto('/');
+  test('serves the SPA shell', async ({ page }) => {
+    const response = await page.goto('/');
 
-    // Wait for page to load
-    await page.waitForLoadState('networkidle', { timeout: 10000 });
-
-    // Verify page loaded successfully
-    expect(page.url()).toContain('localhost:3000');
-
-    // Verify page has content
-    const bodyText = await page.textContent('body');
-    expect(bodyText).toBeTruthy();
-    expect(bodyText!.length).toBeGreaterThan(0);
+    expect(response?.status()).toBe(200);
+    await expect(page).toHaveTitle(/pabawi/i);
   });
 
-  test('should have navigation elements', async ({ page }) => {
+  test('renders the sign-in form when unauthenticated', async ({ page }) => {
     await page.goto('/');
 
-    // Wait for page to load
-    await page.waitForLoadState('networkidle', { timeout: 10000 });
-
-    // Look for navigation elements (links or buttons)
-    const navElements = page.locator('nav, header, [role="navigation"]');
-
-    // Should have some navigation
-    const count = await navElements.count();
-    expect(count).toBeGreaterThan(0);
+    await expect(page.getByRole('heading', { name: 'Sign in to Pabawi' })).toBeVisible();
+    await expect(page.getByPlaceholder('Enter your username')).toBeVisible();
+    await expect(page.getByPlaceholder('Enter your password')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
   });
 
-  test('should respond to API health check', async ({ page }) => {
-    // Try to access the API
-    const response = await page.request.get('/api/inventory');
+  test('sends an unauthenticated deep link to the sign-in form', async ({ page }) => {
+    await page.goto('/executions');
 
-    // Should get a response (even if it's an error, it means server is running)
-    expect(response.status()).toBeLessThan(500);
+    await expect(page.getByRole('heading', { name: 'Sign in to Pabawi' })).toBeVisible();
+  });
+
+  test('rejects unauthenticated API reads with 401', async ({ request }) => {
+    const response = await request.get('/api/inventory');
+
+    expect(response.status()).toBe(401);
   });
 });

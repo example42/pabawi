@@ -1,11 +1,13 @@
 import { LoggerService } from "../services/LoggerService";
 import { ExpertModeService } from "../services/ExpertModeService";
 import { ConfigService } from "../config/ConfigService";
+import type { EntraIdService } from "../services/EntraIdService";
 
 export interface ServiceRegistry {
   logger: LoggerService;
   expertMode: ExpertModeService;
   config: ConfigService;
+  entraId?: EntraIdService;
 }
 
 export class DIContainer {
