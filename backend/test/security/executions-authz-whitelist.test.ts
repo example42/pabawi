@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
-import express, { type Express, type RequestHandler } from "express";
+import express, { type Express } from "express";
 import request from "supertest";
 import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
 import { createExecutionsRouter } from "../../src/routes/executions";
@@ -8,6 +8,7 @@ import { BoltCommandWhitelistService } from "../../src/validation/CommandWhiteli
 import type { WhitelistConfig } from "../../src/config/schema";
 import type { ExecutionRepository } from "../../src/database/ExecutionRepository";
 import type { BatchExecutionService } from "../../src/services/BatchExecutionService";
+import type { PermissionMiddlewareFactory } from "../../src/middleware/routeAuthorization";
 
 /**
  * Security regression tests for finding H-1:
@@ -43,7 +44,7 @@ describe("H-1: /api/executions/batch authorization + whitelist", () => {
     matchMode: "exact",
   };
 
-  const buildApp = (rbac: RequestHandler): Express => {
+  const buildApp = (requirePermission: PermissionMiddlewareFactory): Express => {
     const app = express();
     app.use(express.json());
     app.use(requestIdMiddleware);
@@ -51,10 +52,10 @@ describe("H-1: /api/executions/batch authorization + whitelist", () => {
       "/api/executions",
       createExecutionsRouter(
         executionRepository,
+        requirePermission,
         undefined,
         batchExecutionService,
         undefined,
-        rbac,
         whitelistService,
       ),
     );
@@ -62,10 +63,16 @@ describe("H-1: /api/executions/batch authorization + whitelist", () => {
     return app;
   };
 
-  const allowRbac: RequestHandler = (_req, _res, next) => { next(); };
-  const denyRbac: RequestHandler = (_req, res) => {
-    res.status(403).json({ error: { code: "AUTHORIZATION_ERROR" } });
-  };
+  const allowRbac: PermissionMiddlewareFactory = () => (_req, _res, next) => { next(); };
+  /**
+   * Denies only `bolt:execute`; `executions:read` (the router-wide baseline
+   * gate) is allowed, so these cases still exercise the execute gate rather
+   * than being short-circuited by the read gate.
+   */
+  const denyRbac: PermissionMiddlewareFactory = (resource, action) =>
+    resource === "bolt" && action === "execute"
+      ? (_req, res): void => { res.status(403).json({ error: { code: "AUTHORIZATION_ERROR" } }); }
+      : (_req, _res, next): void => { next(); };
 
   beforeEach(() => {
     executionRepository = {} as ExecutionRepository;

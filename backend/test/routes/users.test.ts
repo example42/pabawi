@@ -98,7 +98,7 @@ describe('Users Router - GET /api/users', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersReadPermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'read'  // pragma: allowlist secret
       );
@@ -437,7 +437,7 @@ describe('Users Router - GET /api/users/:id', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersReadPermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'read'  // pragma: allowlist secret
       );
@@ -784,7 +784,7 @@ describe('Users Router - PUT /api/users/:id', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -797,7 +797,7 @@ describe('Users Router - PUT /api/users/:id', () => {
     // other users. The existing PUT tests here exercise password/firstName
     // updates and rely on a fully-authorised caller, so we also grant
     // users:admin to the test fixture.
-    const allPermsForPut = await permissionService.listPermissions();
+    const allPermsForPut = await permissionService.listPermissions({ limit: 500 });
     let usersAdminPermissionPut = allPermsForPut.items.find(
       p => p.resource === 'users' && p.action === 'admin'
     );
@@ -1364,7 +1364,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersAdminPermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'admin'  // pragma: allowlist secret
       );
@@ -1406,7 +1406,7 @@ describe('Users Router - DELETE /api/users/:id', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -1790,7 +1790,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -2202,7 +2202,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -2657,7 +2657,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -3121,7 +3121,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
         p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
       );

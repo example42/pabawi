@@ -134,7 +134,7 @@ describe("Feature: console-integration, Property 5: RBAC enforcement for session
     if (hasConsoleAccess) {
       // Find or create console:access permission
       let consoleAccessPerm;
-      const allPerms = await permissionService.listPermissions();
+      const allPerms = await permissionService.listPermissions({ limit: 500 });
       consoleAccessPerm = allPerms.items.find(
         (p) => p.resource === "console" && p.action === "access",
       );

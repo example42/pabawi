@@ -82,7 +82,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
         description: 'Write roles',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       rolesWritePermission = allPermissions.items.find(
         p => p.resource === 'roles' && p.action === 'write'  // pragma: allowlist secret
       );

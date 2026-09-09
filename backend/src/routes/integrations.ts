@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import type { DatabaseAdapter } from "../database/DatabaseAdapter";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import type { PuppetDBService } from "../integrations/puppetdb/PuppetDBService";
@@ -11,6 +11,7 @@ import { createProxmoxRouter } from "./integrations/proxmox";
 import { createProvisioningRouter } from "./integrations/provisioning";
 import { createAuthMiddleware } from "../middleware/authMiddleware";
 import { createRbacMiddleware } from "../middleware/rbacMiddleware";
+import { noPermissionCheck, type PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { asyncHandler } from "./asyncHandler";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
@@ -54,13 +55,33 @@ export function createIntegrationsRouter(
     router.use("/puppetdb", createPuppetDBRouter(puppetDBService, container));
   }
 
-  // Mount Puppetserver router (handles not configured case internally)
-  router.use("/puppetserver", createPuppetserverRouter(puppetserverService, puppetDBService, container));
+  // Authorization factory for the sub-routers mounted below (finding S01).
+  // `rbacMiddleware` returns 401 when no principal is attached and 403 when the
+  // principal lacks the permission, so these routers fail closed even if a
+  // caller mounts them without the auth middleware. Without a database there is
+  // no principal store at all, so the fallback is test-only; the assembled
+  // application always supplies `db`.
+  const rawRbac = db ? createRbacMiddleware(db) : null;
+  const requirePermission: PermissionMiddlewareFactory = rawRbac
+    ? (resource, action): RequestHandler => asyncHandler(rawRbac(resource, action))
+    : noPermissionCheck;
 
-  // Mount Proxmox router
-  router.use("/proxmox", createProxmoxRouter(integrationManager, {
-    allowDestructiveActions: options?.allowDestructiveProvisioning ?? true,
-  }, container));
+  // Mount Puppetserver router (handles the not-configured case internally).
+  // Every route is gated on puppetserver:read, with write/admin on deployment
+  // and cache flush.
+  router.use(
+    "/puppetserver",
+    createPuppetserverRouter(requirePermission, puppetserverService, puppetDBService, container),
+  );
+
+  // Mount Proxmox router. Every route is gated on proxmox:read, with
+  // provision/destroy/lifecycle on the mutating routes.
+  router.use(
+    "/proxmox",
+    createProxmoxRouter(integrationManager, requirePermission, {
+      allowDestructiveActions: options?.allowDestructiveProvisioning ?? true,
+    }, container),
+  );
 
   // Mount Provisioning router (integration discovery) with authentication
   // Validates Requirements: 1.3, 2.1, 9.1, 9.2

@@ -18,6 +18,7 @@ import {
 } from "../integrations/hiera/types";
 import { asyncHandler } from "./asyncHandler";
 import type { DIContainer } from "../container/DIContainer";
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { NodeParamSchema } from "../validation/commonSchemas";
 
 /**
@@ -155,10 +156,20 @@ function paginate<T>(
  * @param integrationManager - IntegrationManager instance
  * @returns Express router
  */
-export function createHieraRouter(integrationManager: IntegrationManager, container: DIContainer): Router {
+export function createHieraRouter(
+  integrationManager: IntegrationManager,
+  requirePermission: PermissionMiddlewareFactory,
+  container: DIContainer,
+): Router {
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
+
+  // Authorization (finding S01). Hiera values routinely contain operational
+  // secrets, so hiera:read is the baseline for every route in this router and
+  // reloading the control repo requires hiera:admin.
+  router.use(requirePermission("hiera", "read"));
+  const requireAdmin = requirePermission("hiera", "admin");
 
 
   // ============================================================================
@@ -308,6 +319,7 @@ export function createHieraRouter(integrationManager: IntegrationManager, contai
    */
   router.post(
     "/reload",
+    requireAdmin,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

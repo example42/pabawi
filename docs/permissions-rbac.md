@@ -74,6 +74,9 @@ Read-only access to all integrations.
 | `integration_config/read` | View integration status |
 | `hiera/read` | View Hiera data |
 | `ssh/read` | View SSH connections |
+| `puppetserver/read` | View Puppetserver nodes, catalogs, environments and status |
+| `executions/read` | View execution history, results and streamed output |
+| `provisioning/read` | List provisioning integrations and their capabilities |
 
 ## Permission Reference
 
@@ -91,8 +94,29 @@ Read-only access to all integrations.
 
 | Permission | Grants |
 |---|---|
-| `hiera/read` | View Hiera data |
-| `hiera/admin` | Manage Hiera configuration |
+| `hiera/read` | View Hiera data (required by every `/api/integrations/hiera` route) |
+| `hiera/admin` | Reload the Hiera control repository |
+
+### Puppetserver
+
+| Permission | Grants |
+|---|---|
+| `puppetserver/read` | View nodes, catalogs, environments, status and metrics (required by every `/api/integrations/puppetserver` route) |
+| `puppetserver/write` | Deploy a Puppet environment |
+| `puppetserver/admin` | Flush the environment cache |
+
+Granted to Administrator only for `write` and `admin`. Environment deployment
+and cache flush change what every managed node applies, so they are not part of
+the Operator role by default; grant them explicitly through a custom role if
+your operators need them.
+
+### Executions
+
+| Permission | Grants |
+|---|---|
+| `executions/read` | List executions, read execution detail, stored output and the SSE stream |
+
+Running or cancelling an execution additionally requires `bolt/execute`.
 
 ### SSH
 

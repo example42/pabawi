@@ -85,7 +85,7 @@ describe('Permissions Router', () => {
         description: 'Read permissions',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       permissionsWritePermission = allPermissions.items.find(
         p => p.resource === 'permissions' && p.action === 'write'  // pragma: allowlist secret
       );

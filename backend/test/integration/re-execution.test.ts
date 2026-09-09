@@ -7,6 +7,7 @@ import { createExecutionsRouter } from "../../src/routes/executions";
 import { errorHandler, requestIdMiddleware } from "../../src/middleware/errorHandler";
 import type { Database } from "sqlite3";
 import type { ExecutionRecord } from "../../src/database/ExecutionRepository";
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 
 // Mock sqlite3 database
 const mockDb = {
@@ -73,7 +74,7 @@ describe("Re-execution API Endpoints", () => {
     executionRepository = new ExecutionRepository(mockDb as unknown as Database);
 
     // Add routes
-    app.use("/api/executions", createExecutionsRouter(executionRepository));
+    app.use("/api/executions", createExecutionsRouter(executionRepository, noPermissionCheck));
 
     // Add error handler
     app.use(errorHandler);

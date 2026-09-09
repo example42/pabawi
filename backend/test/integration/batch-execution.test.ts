@@ -12,6 +12,7 @@ import type { BatchStatusResponse, BatchExecutionResponse } from "../../src/serv
 import { BatchExecutionService as RealBatchExecutionService } from "../../src/services/BatchExecutionService";
 import type { ExecutionQueue } from "../../src/services/ExecutionQueue";
 import type { IntegrationManager } from "../../src/integrations/IntegrationManager";
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 
 /**
  * Integration tests for batch execution API endpoints
@@ -56,7 +57,7 @@ describe("Batch Execution API Endpoints", () => {
     // Add routes
     app.use(
       "/api/executions",
-      createExecutionsRouter(executionRepository, undefined, batchExecutionService)
+      createExecutionsRouter(executionRepository, noPermissionCheck, undefined, batchExecutionService)
     );
 
     // Add error handler
@@ -269,7 +270,7 @@ describe("Batch Execution API Endpoints", () => {
       appWithoutService.use(requestIdMiddleware);
       appWithoutService.use(
         "/api/executions",
-        createExecutionsRouter(executionRepository, undefined, undefined)
+        createExecutionsRouter(executionRepository, noPermissionCheck, undefined, undefined)
       );
       appWithoutService.use(errorHandler);
 
@@ -454,7 +455,7 @@ describe("Batch Execution API Endpoints", () => {
       appWithoutService.use(requestIdMiddleware);
       appWithoutService.use(
         "/api/executions",
-        createExecutionsRouter(executionRepository, undefined, undefined)
+        createExecutionsRouter(executionRepository, noPermissionCheck, undefined, undefined)
       );
       appWithoutService.use(errorHandler);
 
@@ -534,7 +535,7 @@ describe("Batch Execution API Endpoints", () => {
       appWithoutService.use(requestIdMiddleware);
       appWithoutService.use(
         "/api/executions",
-        createExecutionsRouter(executionRepository, undefined, undefined)
+        createExecutionsRouter(executionRepository, noPermissionCheck, undefined, undefined)
       );
       appWithoutService.use(errorHandler);
 
@@ -695,7 +696,7 @@ describe("Batch Execution End-to-End Flow", () => {
     app.use(requestIdMiddleware);
     app.use(
       "/api/executions",
-      createExecutionsRouter(executionRepository, mockExecutionQueue, batchExecutionService)
+      createExecutionsRouter(executionRepository, noPermissionCheck, mockExecutionQueue, batchExecutionService)
     );
     app.use(errorHandler);
 

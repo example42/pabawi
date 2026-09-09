@@ -4,6 +4,7 @@ import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import type { ProxmoxIntegration } from "../../integrations/proxmox/ProxmoxIntegration";
 import { asyncHandler } from "../asyncHandler";
 import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
+import type { PermissionMiddlewareFactory } from "../../middleware/routeAuthorization";
 
 /**
  * Validation schemas for Proxmox API routes
@@ -53,12 +54,26 @@ const DestroyParamsSchema = z.object({
  */
 export function createProxmoxRouter(
   integrationManager: IntegrationManager,
+  requirePermission: PermissionMiddlewareFactory,
   options?: { allowDestructiveActions?: boolean },
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
+
+  // Authorization gates (finding S01). Node/storage/network discovery requires
+  // proxmox:read, VM and LXC creation proxmox:provision, deletion
+  // proxmox:destroy, and start/stop/reboot/suspend/resume/snapshot
+  // proxmox:lifecycle.
+  const requireRead = requirePermission("proxmox", "read");
+  const requireProvision = requirePermission("proxmox", "provision");
+  const requireDestroy = requirePermission("proxmox", "destroy");
+  const requireLifecycle = requirePermission("proxmox", "lifecycle");
+
+  // Baseline gate: every route in this router requires proxmox:read, so a route
+  // added later fails closed rather than shipping unauthorized.
+  router.use(requireRead);
 
   /**
    * Helper function to get Proxmox integration
@@ -222,6 +237,7 @@ export function createProxmoxRouter(
    */
   router.post(
     "/provision/vm",
+    requireProvision,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -425,6 +441,7 @@ export function createProxmoxRouter(
    */
   router.post(
     "/provision/lxc",
+    requireProvision,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -624,6 +641,7 @@ export function createProxmoxRouter(
    */
   router.delete(
     "/provision/:vmid",
+    requireDestroy,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       // Guard: reject if destructive provisioning actions are disabled
       if (options?.allowDestructiveActions === false) {
@@ -873,6 +891,7 @@ export function createProxmoxRouter(
    */
   router.post(
     "/action",
+    requireLifecycle,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

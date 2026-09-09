@@ -11,6 +11,7 @@ import type { ExecutionQueue } from "../services/ExecutionQueue";
 import { asyncHandler } from "./asyncHandler";
 import type { BatchExecutionService } from "../services/BatchExecutionService";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import type { BoltCommandWhitelistService } from "../validation/CommandWhitelistService";
 import { BoltCommandNotAllowedError } from "../validation/CommandWhitelistService";
 
@@ -55,32 +56,32 @@ const BatchExecutionRequestSchema = z.object({
 /**
  * Create executions router
  *
- * @param rbacExecuteMiddleware - Optional RBAC middleware (e.g. `bolt:execute`)
- *   applied to all command-executing / mutating routes (`/batch`,
- *   `/:id/re-execute`, `/:id/cancel`, `/batch/:batchId/cancel`). When omitted
- *   (tests), those routes fall back to a passthrough. In production `server.ts`
- *   MUST supply it so these routes match the authorization of the single-node
- *   command route.
+ * @param requirePermission - RBAC middleware factory. Required so a mount
+ *   cannot ship without authorization (finding S01). `executions:read` is the
+ *   baseline for every route, because execution records and their stored output
+ *   can contain operational secrets; the command-executing / mutating routes
+ *   (`/batch`, `/:id/re-execute`, `/:id/cancel`, `/batch/:batchId/cancel`)
+ *   additionally require `bolt:execute`, matching the single-node command route.
  * @param commandWhitelistService - Optional whitelist validator. When supplied,
  *   `type: "command"` batch/re-execute requests are validated against the same
  *   whitelist (and shell-metacharacter block) that guards the single-node route.
  */
 export function createExecutionsRouter(
   executionRepository: ExecutionRepository,
+  requirePermission: PermissionMiddlewareFactory,
   executionQueue?: ExecutionQueue,
   batchExecutionService?: BatchExecutionService,
   container: DIContainer = createDefaultContainer(),
-  rbacExecuteMiddleware?: RequestHandler,
   commandWhitelistService?: BoltCommandWhitelistService,
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
 
-  // Fall back to a passthrough when no RBAC middleware is injected (e.g. in
-  // unit tests that mount the router directly without the DI/auth stack).
-  const rbacExecute: RequestHandler =
-    rbacExecuteMiddleware ?? ((_req, _res, next): void => { next(); });
+  // Baseline read gate: applies to every route in this router, so a route added
+  // later fails closed rather than exposing execution history and output.
+  router.use(requirePermission("executions", "read"));
+  const rbacExecute: RequestHandler = requirePermission("bolt", "execute");
 
   /**
    * Validate a command against the whitelist for command-type executions.

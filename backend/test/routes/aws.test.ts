@@ -10,6 +10,7 @@ import { PermissionService } from "../../src/services/PermissionService";
 import { RoleService } from "../../src/services/RoleService";
 import { AWSAuthenticationError } from "../../src/integrations/aws/types";
 import type { AWSPlugin } from "../../src/integrations/aws/AWSPlugin";
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 
 /**
  * Create a mock AWSPlugin with vi.fn() stubs for all methods used by the router
@@ -105,7 +106,7 @@ describe("AWS Router", () => {
         const perm = await permissionService.createPermission(p);
         permIds.push(perm.id);
       } catch {
-        const all = await permissionService.listPermissions();
+        const all = await permissionService.listPermissions({ limit: 500 });
         const found = all.items.find(
           (x) => x.resource === p.resource && x.action === p.action
         );
@@ -129,7 +130,7 @@ describe("AWS Router", () => {
     // Build app with the mock plugin
     app = express();
     app.use(express.json());
-    app.use("/api/integrations/aws", createAWSRouter(mockPlugin));
+    app.use("/api/integrations/aws", createAWSRouter(mockPlugin, noPermissionCheck));
   });
 
   afterEach(async () => {
