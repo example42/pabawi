@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { asyncHandler } from "../asyncHandler";
@@ -7,6 +7,7 @@ import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import { AWSAuthenticationError } from "../../integrations/aws/types";
 import { sendValidationError, ERROR_CODES } from "../../utils/errorHandling";
 import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
+import type { PermissionMiddlewareFactory } from "../../middleware/routeAuthorization";
 
 /**
  * Zod schema for region query parameter
@@ -57,9 +58,33 @@ const LifecycleSchema = z.object({
  *
  * Requirements: 8.1, 9.1, 10.1, 11.1, 13.1-13.7, 27.2
  */
-export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: IntegrationManager, options?: { allowDestructiveActions?: boolean }, container: DIContainer = createDefaultContainer()): Router {
+export function createAWSRouter(awsPlugin: AWSPlugin, requirePermission: PermissionMiddlewareFactory, integrationManager?: IntegrationManager, options?: { allowDestructiveActions?: boolean }, container: DIContainer = createDefaultContainer()): Router {
   const router = Router();
   const logger = container.resolve("logger");
+
+  // Authorization gates (finding S01). Read-only discovery endpoints require
+  // aws:read; creating resources requires aws:provision; start/stop/reboot
+  // require aws:lifecycle; terminate requires aws:destroy.
+  const requireRead = requirePermission("aws", "read");
+  const requireProvision = requirePermission("aws", "provision");
+  const requireLifecycle = requirePermission("aws", "lifecycle");
+  const requireDestroy = requirePermission("aws", "destroy");
+
+  // Baseline gate: every route in this router requires aws:read, so a route
+  // added later fails closed rather than shipping unauthorized.
+  router.use(requireRead);
+
+  /**
+   * POST /lifecycle carries the action in its body, so the required permission
+   * is selected before dispatch: `terminate` destroys an instance and needs
+   * aws:destroy, everything else needs aws:lifecycle. An unparseable body falls
+   * through to the stricter gate, and Zod still rejects it in the handler.
+   */
+  const requireLifecycleOrDestroy: RequestHandler = (req, res, next) => {
+    const action = (req.body as { action?: unknown } | undefined)?.action;
+    const gate = action === "terminate" || typeof action !== "string" ? requireDestroy : requireLifecycle;
+    gate(req, res, next);
+  };
 
   /**
    * GET /api/integrations/aws/inventory
@@ -116,6 +141,7 @@ export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: Integ
    */
   router.post(
     "/provision",
+    requireProvision,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing AWS provision request", {
         component: "AWSRouter",
@@ -185,6 +211,7 @@ export function createAWSRouter(awsPlugin: AWSPlugin, integrationManager?: Integ
    */
   router.post(
     "/lifecycle",
+    requireLifecycleOrDestroy,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing AWS lifecycle request", {
         component: "AWSRouter",

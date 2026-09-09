@@ -18,6 +18,7 @@ import { expertModeMiddleware } from '../../src/middleware/expertMode';
 import { PuppetDBService } from '../../src/integrations/puppetdb/PuppetDBService';
 import { PuppetserverService } from '../../src/integrations/puppetserver/PuppetserverService';
 import { BoltService } from '../../src/integrations/bolt/BoltService';
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 import {
   PuppetDBConnectionError,
   PuppetDBAuthenticationError,
@@ -181,7 +182,7 @@ describe('External API Errors in Expert Mode', () => {
         },
       } as unknown as PuppetserverService;
 
-      const router = createPuppetserverRouter(mockPuppetserverService);
+      const router = createPuppetserverRouter(noPermissionCheck, mockPuppetserverService);
       app.use('/api/integrations/puppetserver', router);
 
       const response = await request(harness.use(app))
@@ -215,7 +216,7 @@ describe('External API Errors in Expert Mode', () => {
         },
       } as unknown as PuppetserverService;
 
-      const router = createPuppetserverRouter(mockPuppetserverService);
+      const router = createPuppetserverRouter(noPermissionCheck, mockPuppetserverService);
       app.use('/api/integrations/puppetserver-auth', router);
 
       const response = await request(harness.use(app))
@@ -248,7 +249,7 @@ describe('External API Errors in Expert Mode', () => {
         },
       } as unknown as PuppetserverService;
 
-      const router = createPuppetserverRouter(mockPuppetserverService);
+      const router = createPuppetserverRouter(noPermissionCheck, mockPuppetserverService);
       app.use('/api/integrations/puppetserver-error', router);
 
       const response = await request(harness.use(app))

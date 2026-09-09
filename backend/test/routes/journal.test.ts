@@ -79,7 +79,7 @@ describe("Journal Router", () => {
         description: "Read journal entries",
       });
     } catch {
-      const all = await permissionService.listPermissions();
+      const all = await permissionService.listPermissions({ limit: 500 });
       journalReadPerm = all.items.find(
         (p) => p.resource === "journal" && p.action === "read"
       );
@@ -91,7 +91,7 @@ describe("Journal Router", () => {
         description: "Add journal notes",
       });
     } catch {
-      const all = await permissionService.listPermissions();
+      const all = await permissionService.listPermissions({ limit: 500 });
       journalNotePerm = all.items.find(
         (p) => p.resource === "journal" && p.action === "note"
       );

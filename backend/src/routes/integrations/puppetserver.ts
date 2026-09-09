@@ -16,11 +16,13 @@ import {
   EnvironmentParamSchema,
 } from "./utils";
 import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
+import type { PermissionMiddlewareFactory } from "../../middleware/routeAuthorization";
 
 /**
  * Create Puppetserver router for all Puppetserver-related routes
  */
 export function createPuppetserverRouter(
+  requirePermission: PermissionMiddlewareFactory,
   puppetserverService?: PuppetserverService,
   puppetDBService?: PuppetDBService,
   container: DIContainer = createDefaultContainer(),
@@ -28,6 +30,14 @@ export function createPuppetserverRouter(
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
+
+  // Authorization (finding S01). puppetserver:read is the baseline for every
+  // route in this router, so a route added later fails closed instead of
+  // shipping unauthenticated. Environment deployment additionally requires
+  // puppetserver:write and flushing the environment cache puppetserver:admin.
+  router.use(requirePermission("puppetserver", "read"));
+  const requireWrite = requirePermission("puppetserver", "write");
+  const requireAdmin = requirePermission("puppetserver", "admin");
 
   router.get(
     "/nodes",
@@ -2208,6 +2218,7 @@ export function createPuppetserverRouter(
    */
   router.post(
     "/environments/:name/deploy",
+    requireWrite,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -2430,6 +2441,7 @@ export function createPuppetserverRouter(
    */
   router.delete(
     "/environments/:name/cache",
+    requireAdmin,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

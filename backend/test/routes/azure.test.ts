@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vites
 import { createAzureRouter } from "../../src/routes/integrations/azure";
 import { AzureAuthenticationError } from "../../src/integrations/azure/types";
 import type { AzurePlugin } from "../../src/integrations/azure/AzurePlugin";
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 
 /**
  * Create a mock AzurePlugin with vi.fn() stubs for all methods used by the router.
@@ -68,7 +69,7 @@ describe("Azure Router", () => {
     mockPlugin = createMockAzurePlugin();
     app = express();
     app.use(express.json());
-    app.use("/api/integrations/azure", createAzureRouter(mockPlugin, undefined, { allowDestructiveActions: true }));
+    app.use("/api/integrations/azure", createAzureRouter(mockPlugin, noPermissionCheck, undefined, { allowDestructiveActions: true }));
   });
 
   // ─── Inventory ───────────────────────────────────────────────────────────
@@ -236,7 +237,7 @@ describe("Azure Router", () => {
       restrictedApp.use(express.json());
       restrictedApp.use(
         "/api/integrations/azure",
-        createAzureRouter(mockPlugin, undefined, { allowDestructiveActions: false }),
+        createAzureRouter(mockPlugin, noPermissionCheck, undefined, { allowDestructiveActions: false }),
       );
 
       const response = await request(harness.use(restrictedApp))

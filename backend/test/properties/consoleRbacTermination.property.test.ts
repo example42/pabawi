@@ -113,7 +113,7 @@ describe("Feature: console-integration, Property 6: RBAC enforcement for cross-u
     );
 
     // Find or create console:access and console:admin permissions
-    const allPerms = await permissionService.listPermissions();
+    const allPerms = await permissionService.listPermissions({ limit: 500 });
     const existingAccess = allPerms.items.find(
       (p) => p.resource === "console" && p.action === "access",
     );

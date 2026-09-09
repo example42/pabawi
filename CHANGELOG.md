@@ -2,6 +2,32 @@
 
 ## [1.5.0] - 
 
+### Security: breaking for operators
+
+- **Infrastructure routes now enforce authorization, not just authentication**
+  (assessment finding S01). AWS, Azure, Proxmox, Puppetserver, Hiera, execution
+  history and SSE streaming previously accepted any authenticated user,
+  regardless of assigned permissions. Every route in those routers is now gated
+  on the matching `<resource>:read` permission, with `provision`, `lifecycle`,
+  `destroy`, `write` and `admin` enforced on the mutating routes.
+- Migration `020_route_authorization_permissions` adds the `puppetserver`,
+  `executions` and `provisioning` resources and grants them to the built-in
+  Viewer, Operator, Provisioner and Administrator roles. `puppetserver:write`
+  (environment deploy) and `puppetserver:admin` (environment cache flush) are
+  granted to Administrator only.
+- `provisioning:read` was referenced by `GET /api/integrations/provisioning`
+  but never existed as a permission row, so the route was reachable only by
+  `is_admin` users. It now exists and is granted like the other read
+  permissions.
+- Route factories for these surfaces take a required RBAC middleware factory,
+  so a future mount cannot ship without an authorization gate.
+- SSE stream tickets are now resolved before the first `/api/executions`
+  authentication chain. Previously an `EventSource` request carrying only
+  `?ticket=` was rejected with 401 by the executions chain before reaching the
+  streaming router.
+
+**Action required:** custom roles do not receive the new permissions
+automatically. See [docs/upgrading.md](docs/upgrading.md#upgrading-to-150).
 
 ## [1.4.0] - 2026-06-05
 

@@ -5,6 +5,7 @@ import type { StreamingExecutionManager } from "../services/StreamingExecutionMa
 import type { ExecutionRepository } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 
 /**
  * Request validation schemas
@@ -72,11 +73,17 @@ export function streamAuthMiddleware(
 export function createStreamingRouter(
   streamingManager: StreamingExecutionManager,
   executionRepository: ExecutionRepository,
+  requirePermission: PermissionMiddlewareFactory,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
   const expertModeService = container.resolve("expertMode");
+
+  // Authorization (finding S01). Streamed output is the same data the execution
+  // history exposes, so it carries the same executions:read gate. Applied to
+  // the whole router so a route added later fails closed.
+  router.use(requirePermission("executions", "read"));
 
   /**
    * POST /api/executions/:id/stream-ticket

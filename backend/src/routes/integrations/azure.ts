@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { asyncHandler } from "../asyncHandler";
@@ -7,6 +7,7 @@ import type { IntegrationManager } from "../../integrations/IntegrationManager";
 import { AzureAuthenticationError } from "../../integrations/azure/types";
 import { sendValidationError, ERROR_CODES } from "../../utils/errorHandling";
 import { type DIContainer, createDefaultContainer } from "../../container/DIContainer";
+import type { PermissionMiddlewareFactory } from "../../middleware/routeAuthorization";
 
 /**
  * Zod schema for provisioning request body
@@ -61,12 +62,37 @@ const ImageQuerySchema = z.object({
  */
 export function createAzureRouter(
   azurePlugin: AzurePlugin,
+  requirePermission: PermissionMiddlewareFactory,
   integrationManager?: IntegrationManager,
   options?: { allowDestructiveActions?: boolean },
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
+
+  // Authorization gates (finding S01). Read-only discovery requires azure:read,
+  // creating VMs requires azure:provision, start/stop/restart require
+  // azure:lifecycle, and deallocate requires azure:destroy (the same action the
+  // destructive-provisioning guard below already treats as destructive).
+  const requireRead = requirePermission("azure", "read");
+  const requireProvision = requirePermission("azure", "provision");
+  const requireLifecycle = requirePermission("azure", "lifecycle");
+  const requireDestroy = requirePermission("azure", "destroy");
+
+  // Baseline gate: every route in this router requires azure:read, so a route
+  // added later fails closed rather than shipping unauthorized.
+  router.use(requireRead);
+
+  /**
+   * POST /lifecycle carries the action in its body, so the required permission
+   * is selected before dispatch. An unparseable body falls through to the
+   * stricter gate; Zod still rejects it in the handler.
+   */
+  const requireLifecycleOrDestroy: RequestHandler = (req, res, next) => {
+    const action = (req.body as { action?: unknown } | undefined)?.action;
+    const gate = action === "deallocate" || typeof action !== "string" ? requireDestroy : requireLifecycle;
+    gate(req, res, next);
+  };
 
   /**
    * GET /api/integrations/azure/inventory
@@ -119,6 +145,7 @@ export function createAzureRouter(
    */
   router.post(
     "/provision",
+    requireProvision,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing Azure provision request", {
         component: "AzureRouter",
@@ -186,6 +213,7 @@ export function createAzureRouter(
    */
   router.post(
     "/lifecycle",
+    requireLifecycleOrDestroy,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       logger.info("Processing Azure lifecycle request", {
         component: "AzureRouter",

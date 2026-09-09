@@ -867,25 +867,30 @@ async function startServer(): Promise<Express> {
       rbacMiddleware('ansible', 'read'),
       createPlaybookBrowserRouter(integrationManager, container),
     );
+    // Resolve a single-use `?ticket=` into an Authorization header before ANY
+    // /api/executions chain authenticates. Both chains match this prefix, so the
+    // conversion has to happen ahead of the first one or an EventSource request
+    // (which cannot set headers) is rejected by the executions chain before it
+    // ever reaches the streaming router.
+    app.use("/api/executions", streamAuthMiddleware);
     app.use(
       "/api/executions",
       authMiddleware,
       rateLimitMiddleware,
-      createExecutionsRouter(executionRepository, executionQueue, batchExecutionService, container, rbacMiddleware('bolt', 'execute'), commandWhitelistService),
+      createExecutionsRouter(executionRepository, rbacMiddleware, executionQueue, batchExecutionService, container, commandWhitelistService),
     );
     app.use(
       "/api/executions",
-      streamAuthMiddleware, // resolve single-use ?ticket= before auth check
       authMiddleware,
       rateLimitMiddleware,
-      createStreamingRouter(streamingManager, executionRepository, container),
+      createStreamingRouter(streamingManager, executionRepository, rbacMiddleware, container),
     );
     app.use(
       "/api/streaming",
       streamAuthMiddleware, // resolve single-use ?ticket= before auth check
       authMiddleware,
       rateLimitMiddleware,
-      createStreamingRouter(streamingManager, executionRepository, container),
+      createStreamingRouter(streamingManager, executionRepository, rbacMiddleware, container),
     );
     app.use(
       "/api/integrations",
@@ -905,7 +910,7 @@ async function startServer(): Promise<Express> {
       "/api/integrations/hiera",
       authMiddleware,
       rateLimitMiddleware,
-      createHieraRouter(integrationManager, container),
+      createHieraRouter(integrationManager, rbacMiddleware, container),
     );
 
     // AWS integration routes (conditional on plugin availability)
@@ -915,7 +920,7 @@ async function startServer(): Promise<Express> {
         "/api/integrations/aws",
         authMiddleware,
         rateLimitMiddleware,
-        createAWSRouter(awsPluginInstance, integrationManager, {
+        createAWSRouter(awsPluginInstance, rbacMiddleware, integrationManager, {
           allowDestructiveActions: config.provisioning.allowDestructiveActions,
         }, container),
       );
@@ -928,7 +933,7 @@ async function startServer(): Promise<Express> {
         "/api/integrations/azure",
         authMiddleware,
         rateLimitMiddleware,
-        createAzureRouter(azurePluginInstance, integrationManager, {
+        createAzureRouter(azurePluginInstance, rbacMiddleware, integrationManager, {
           allowDestructiveActions: config.provisioning.allowDestructiveActions,
         }, container),
       );

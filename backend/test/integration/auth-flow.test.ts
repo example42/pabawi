@@ -31,7 +31,7 @@ async function grantUsersReadPermission(
     });
   } catch (error) {
     // Permission might already exist, fetch it
-    const allPermissions = await permissionService.listPermissions();
+    const allPermissions = await permissionService.listPermissions({ limit: 500 });
     permission = allPermissions.items.find(
       p => p.resource === 'users' && p.action === 'read'
     );

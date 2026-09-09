@@ -83,7 +83,7 @@ describe('Groups Router - POST /api/groups', () => {
         description: 'Write groups',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsWritePermission = allPermissions.items.find(
         p => p.resource === 'groups' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -280,7 +280,7 @@ describe('Groups Router - GET /api/groups', () => {
         description: 'Read groups',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsReadPermission = allPermissions.items.find(
         p => p.resource === 'groups' && p.action === 'read'  // pragma: allowlist secret
       );
@@ -448,7 +448,7 @@ describe('Groups Router - GET /api/groups/:id', () => {
         description: 'Read groups',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsReadPermission = allPermissions.items.find(
         p => p.resource === 'groups' && p.action === 'read'  // pragma: allowlist secret
       );
@@ -564,7 +564,7 @@ describe('Groups Router - PUT /api/groups/:id', () => {
         description: 'Write groups',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsWritePermission = allPermissions.items.find(
         p => p.resource === 'groups' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -703,7 +703,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
         description: 'Admin groups',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsAdminPermission = allPermissions.items.find(
         p => p.resource === 'groups' && p.action === 'admin'  // pragma: allowlist secret
       );
@@ -838,7 +838,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
         description: 'Write groups',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsWritePermission = allPermissions.items.find(
         p => p.resource === 'groups' && p.action === 'write'  // pragma: allowlist secret
       );
@@ -1055,7 +1055,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
         description: 'Write groups',
       });
     } catch (error) {
-      const allPermissions = await permissionService.listPermissions();
+      const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsWritePermission = allPermissions.items.find(
         p => p.resource === 'groups' && p.action === 'write'  // pragma: allowlist secret
       );

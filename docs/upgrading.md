@@ -221,6 +221,32 @@ New optional integration: **Checkmk monitoring**. No action required unless you
 want to enable it. Add `CHECKMK_ENABLED=true` and the related variables to
 `.env`. See [docs/integrations/checkmk.md](integrations/checkmk.md).
 
+### Upgrading to 1.5.0
+
+**Security: breaking for operators using custom roles.**
+
+Infrastructure routes that previously required only authentication now enforce
+RBAC (assessment finding S01). Migration `020` adds three resources and grants
+them to the built-in roles, so Viewer, Operator, Provisioner and Administrator
+keep working with no action. Custom roles do not receive the new permissions
+automatically.
+
+| Surface | Now requires |
+|---|---|
+| `/api/integrations/aws/*` | `aws:read` on every route, plus `aws:provision` / `aws:lifecycle` / `aws:destroy` (terminate) |
+| `/api/integrations/azure/*` | `azure:read` on every route, plus `azure:provision` / `azure:lifecycle` / `azure:destroy` (deallocate) |
+| `/api/integrations/proxmox/*` | `proxmox:read` on every route, plus `proxmox:provision` / `proxmox:lifecycle` / `proxmox:destroy` |
+| `/api/integrations/puppetserver/*` | `puppetserver:read`; `puppetserver:write` to deploy an environment; `puppetserver:admin` to flush the environment cache |
+| `/api/integrations/hiera/*` | `hiera:read`; `hiera:admin` for `POST /reload` |
+| `/api/executions/*`, `/api/streaming/*` | `executions:read`; mutating routes keep `bolt:execute` |
+| `/api/integrations/provisioning` | `provisioning:read` (the permission row was missing before, so only `is_admin` users could reach it) |
+
+After upgrading, review any custom role that previously relied on
+authentication alone and add the permissions above. `puppetserver:write` and
+`puppetserver:admin` are granted to Administrator only: environment deployment
+and cache flush change what every managed node applies, so Operators must be
+granted them deliberately.
+
 ---
 
 ## General Tips
