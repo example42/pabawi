@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { DatabaseAccessLock } from "./DatabaseAccessLock";
 import sqlite3 from "sqlite3";
 import { dirname } from "path";
 import { mkdirSync } from "fs";
@@ -11,7 +13,8 @@ export class SQLiteAdapter implements DatabaseAdapter {
   private _databasePath: string;
   private _db: sqlite3.Database | null = null;
   private _connected = false;
-  private _inTransaction = false;
+  private readonly access = new DatabaseAccessLock();
+  private readonly scope = new AsyncLocalStorage<{ active: boolean; transaction: boolean }>();
 
   constructor(databasePath: string) {
     this._databasePath = databasePath;
@@ -76,26 +79,27 @@ export class SQLiteAdapter implements DatabaseAdapter {
   }
 
   async close(): Promise<void> {
-    if (!this._db) {
-      return;
-    }
+    return this.withExclusiveConnection(async () => {
+      if (!this._db) {
+        return;
+      }
 
-    const db = this._db;
-    return new Promise<void>((resolve, reject) => {
-      db.close((err) => {
-        if (err) {
-          reject(
-            new DatabaseConnectionError(
-              `Failed to close SQLite database: ${err.message}`,
-              this._databasePath,
-            ),
-          );
-          return;
-        }
-        this._db = null;
-        this._connected = false;
-        this._inTransaction = false;
-        resolve();
+      const db = this._db;
+      return new Promise<void>((resolve, reject) => {
+        db.close((err) => {
+          if (err) {
+            reject(
+              new DatabaseConnectionError(
+                `Failed to close SQLite database: ${err.message}`,
+                this._databasePath,
+              ),
+            );
+            return;
+          }
+          this._db = null;
+          this._connected = false;
+          resolve();
+        });
       });
     });
   }
@@ -106,7 +110,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
     }
 
     const db = this._db;
-    return new Promise<T[]>((resolve, reject) => {
+    return this.withExclusiveConnection(() => new Promise<T[]>((resolve, reject) => {
       db.all(sql, params ?? [], (err, rows) => {
         if (err) {
           reject(new DatabaseQueryError(err.message, sql, params));
@@ -114,7 +118,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
         }
         resolve((rows as T[] | undefined) ?? ([] as T[]));
       });
-    });
+    }));
   }
 
   queryOne<T>(sql: string, params?: unknown[]): Promise<T | null> {
@@ -123,7 +127,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
     }
 
     const db = this._db;
-    return new Promise<T | null>((resolve, reject) => {
+    return this.withExclusiveConnection(() => new Promise<T | null>((resolve, reject) => {
       db.get(sql, params ?? [], (err, row) => {
         if (err) {
           reject(new DatabaseQueryError(err.message, sql, params));
@@ -131,7 +135,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
         }
         resolve((row as T) ?? null);
       });
-    });
+    }));
   }
 
   execute(sql: string, params?: unknown[]): Promise<{ changes: number }> {
@@ -140,7 +144,7 @@ export class SQLiteAdapter implements DatabaseAdapter {
     }
 
     const db = this._db;
-    return new Promise<{ changes: number }>((resolve, reject) => {
+    return this.withExclusiveConnection(() => new Promise<{ changes: number }>((resolve, reject) => {
       db.run(sql, params ?? [], function (err) {
         if (err) {
           reject(new DatabaseQueryError(err.message, sql, params));
@@ -148,43 +152,50 @@ export class SQLiteAdapter implements DatabaseAdapter {
         }
         resolve({ changes: this.changes });
       });
+    }));
+  }
+
+  async withExclusiveConnection<T>(fn: () => Promise<T>): Promise<T> {
+    const owner = this.scope.getStore();
+    if (owner) {
+      if (!owner.active) throw new DatabaseQueryError("Database scope has ended", "", []);
+      return fn();
+    }
+    return this.access.run(true, async () => {
+      const context = { active: true, transaction: false };
+      try {
+        return await this.scope.run(context, fn);
+      } finally {
+        context.active = false;
+      }
     });
   }
 
-  async beginTransaction(): Promise<void> {
-    if (this._inTransaction) {
-      throw new Error("Nested transactions are not supported in SQLite");
-    }
-    await this.execute("BEGIN TRANSACTION");
-    this._inTransaction = true;
-  }
-
-  async commit(): Promise<void> {
-    try {
-      await this.execute("COMMIT");
-    } finally {
-      this._inTransaction = false;
-    }
-  }
-
-  async rollback(): Promise<void> {
-    try {
-      await this.execute("ROLLBACK");
-    } finally {
-      this._inTransaction = false;
-    }
-  }
-
   async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
-    await this.beginTransaction();
-    try {
-      const result = await fn();
-      await this.commit();
-      return result;
-    } catch (error) {
-      await this.rollback();
-      throw error;
-    }
+    return this.withExclusiveConnection(async () => {
+      const parent = this.scope.getStore();
+      if (!parent || parent.transaction) throw new DatabaseQueryError("Nested transactions are not supported", "BEGIN", []);
+      parent.transaction = true;
+      const context = { active: true, transaction: true };
+      try {
+        await this.execute("BEGIN IMMEDIATE");
+      } catch (error) {
+        parent.transaction = false;
+        throw error;
+      }
+      try {
+        const result = await this.scope.run(context, fn);
+        context.active = false;
+        await this.execute("COMMIT");
+        return result;
+      } catch (error) {
+        await this.execute("ROLLBACK").catch(async () => { await this.close(); });
+        throw error;
+      } finally {
+        context.active = false;
+        parent.transaction = false;
+      }
+    });
   }
 
   isConnected(): boolean {

@@ -21,6 +21,8 @@ export const ENTRA_ID_ERROR_CODES = {
   JWKS_UNAVAILABLE: 'JWKS_UNAVAILABLE',
   PROVISIONING_FAILED: 'PROVISIONING_FAILED',
   INVALID_AUTH_CODE: 'INVALID_AUTH_CODE',
+  IDENTITY_COLLISION: 'IDENTITY_COLLISION',
+  GROUPS_UNAVAILABLE: 'GROUPS_UNAVAILABLE',
 } as const;
 
 export type EntraIdErrorCode = typeof ENTRA_ID_ERROR_CODES[keyof typeof ENTRA_ID_ERROR_CODES];
@@ -48,6 +50,7 @@ export interface IdTokenClaims {
   iss: string;
   exp: number;
   groups?: string[];
+  groupsUnavailable?: boolean;
 }
 
 export interface OAuthStateEntry {
@@ -129,7 +132,7 @@ export class EntraIdService {
    * stores them in oauth_state_store with a 10-minute TTL, then returns
    * the full authorization endpoint URL with all required query parameters.
    */
-  async generateAuthorizationUrl(): Promise<{ url: string; state: string }> {
+  async generateAuthorizationUrl(browserBinding: string): Promise<{ url: string; state: string }> {
     const state = randomBytes(32).toString('hex');
     const nonce = randomBytes(32).toString('hex');
     const codeVerifier = this.generateCodeVerifier(64);
@@ -140,9 +143,9 @@ export class EntraIdService {
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
 
     await this.db.execute(
-      `INSERT INTO oauth_state_store (state, nonce, code_verifier, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [state, nonce, codeVerifier, createdAt, expiresAt],
+      `INSERT INTO oauth_state_store (state, nonce, code_verifier, created_at, expires_at, browser_binding)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [state, nonce, codeVerifier, createdAt, expiresAt, this.hashBrowserBinding(browserBinding)],
     );
 
     const params = new URLSearchParams({
@@ -207,7 +210,7 @@ export class EntraIdService {
    * Returns an AuthCodeEntry containing the single-use authorization code
    * that the frontend will exchange for the actual JWT pair.
    */
-  async handleCallback(code: string, state: string): Promise<AuthCodeEntry> {
+  async handleCallback(code: string, state: string, browserBinding: string): Promise<AuthCodeEntry> {
     const logMeta = { component: 'EntraIdService', operation: 'handleCallback' };
 
     // 1. Look up state entry
@@ -219,18 +222,18 @@ export class EntraIdService {
       expires_at: string;
     }>(
       `SELECT state, nonce, code_verifier, created_at, expires_at
-       FROM oauth_state_store WHERE state = ?`,
-      [state],
+       FROM oauth_state_store WHERE state = ? AND browser_binding = ?`,
+      [state, this.hashBrowserBinding(browserBinding)],
     );
 
     // 2. Delete state entry immediately (one-time use, even on failure)
-    await this.db.execute(
-      `DELETE FROM oauth_state_store WHERE state = ?`,
-      [state],
+    const claim = await this.db.execute(
+      `DELETE FROM oauth_state_store WHERE state = ? AND browser_binding = ?`,
+      [state, this.hashBrowserBinding(browserBinding)],
     );
 
     // 3. Validate state exists
-    if (!stateEntry) {
+    if (!stateEntry || claim.changes !== 1) {
       this.logger.warn('OAuth callback received with invalid state', logMeta);
       throw new EntraIdError(
         ENTRA_ID_ERROR_CODES.INVALID_STATE,
@@ -274,12 +277,16 @@ export class EntraIdService {
     const user = await this.provisionUser(claims);
 
     // 9. Sync group-to-role mapping
-    await this.syncGroupRoles(user.id, claims.groups);
+    await this.syncGroupRoles(user.id, claims.groupsUnavailable ? [] : claims.groups);
+    if (claims.groupsUnavailable && this.config.groupMapping) {
+      throw new EntraIdError(ENTRA_ID_ERROR_CODES.GROUPS_UNAVAILABLE, "Complete group membership is required for login");
+    }
 
     // 10. Issue session tokens and generate auth code
     const authCodeEntry = await this.issueSessionTokens(
       user,
       tokenResponse.id_token,
+      browserBinding,
     );
 
     return authCodeEntry;
@@ -290,10 +297,10 @@ export class EntraIdService {
    *
    * Flow:
    * 1. Reject if email AND preferred_username are both missing
-   * 2. Look up federated_identities by (provider='entra-id', subject=sub)
+   * 2. Look up federated_identities by provider, issuer and subject
    * 3. If found: return existing user without updating profile (immutability)
    * 4. If not found: check users by email
-   * 5. If email match: link federated identity to existing account
+   * 5. Reject email collisions; enrollment requires explicit authority
    * 6. If no match: create new federated user
    *
    * @param claims - Validated ID token claims
@@ -314,6 +321,7 @@ export class EntraIdService {
     const existingUser = await this.userService.findByFederatedIdentity(
       'entra-id',
       claims.sub,
+      claims.iss,
     );
 
     if (existingUser) {
@@ -326,40 +334,13 @@ export class EntraIdService {
       return existingUser;
     }
 
-    // 4. No federated identity — check by email
-    if (claims.email) {
-      const emailMatch = await this.userService.findByEmail(claims.email);
-
-      if (emailMatch) {
-        this.requireActiveUser(emailMatch);
-        // 5. Email match — link federated identity to existing account
-        try {
-          await this.userService.linkFederatedIdentity(
-            emailMatch.id,
-            'entra-id',
-            claims.sub,
-            claims.iss,
-            claims.email,
-          );
-
-          this.logger.info('Linked federated identity to existing account', {
-            ...logMeta,
-            metadata: { userId: emailMatch.id, sub: claims.sub },
-          });
-
-          return emailMatch;
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          this.logger.error('Failed to link federated identity', {
-            ...logMeta,
-            metadata: { error: message },
-          });
-          throw new EntraIdError(
-            ENTRA_ID_ERROR_CODES.PROVISIONING_FAILED,
-            'Account creation failed',
-          );
-        }
+    if (claims.email && await this.userService.findByEmail(claims.email)) {
+      const winner = await this.userService.findByFederatedIdentity('entra-id', claims.sub, claims.iss);
+      if (winner) {
+        this.requireActiveUser(winner);
+        return winner;
       }
+      throw new EntraIdError(ENTRA_ID_ERROR_CODES.IDENTITY_COLLISION, 'Existing accounts require explicit administrative enrollment');
     }
 
     // 6. No match — create new federated user
@@ -373,6 +354,11 @@ export class EntraIdService {
 
       return newUser;
     } catch (err: unknown) {
+      const winner = await this.userService.findByFederatedIdentity('entra-id', claims.sub, claims.iss);
+      if (winner) {
+        this.requireActiveUser(winner);
+        return winner;
+      }
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error('Failed to create federated user', {
         ...logMeta,
@@ -406,6 +392,7 @@ export class EntraIdService {
   private async issueSessionTokens(
     user: User,
     idToken: string,
+    browserBinding: string,
   ): Promise<AuthCodeEntry> {
     const logMeta = { component: 'EntraIdService', operation: 'issueSessionTokens' };
 
@@ -422,9 +409,9 @@ export class EntraIdService {
     const expiresAt = new Date(now.getTime() + 60 * 1000).toISOString();
 
     await this.db.execute(
-      `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-      [authCode, accessToken, refreshToken, user.id, idToken, 'entra-id', createdAt, expiresAt],
+      `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged, browser_binding)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [authCode, accessToken, refreshToken, user.id, idToken, 'entra-id', createdAt, expiresAt, this.hashBrowserBinding(browserBinding)],
     );
 
     // 4. Update user's last_login_at
@@ -469,12 +456,15 @@ export class EntraIdService {
    *
    * @throws EntraIdError with INVALID_AUTH_CODE if code is invalid, expired, or already used.
    */
-  async exchangeAuthCode(code: string): Promise<{
+  async exchangeAuthCode(code: string, browserBinding: string): Promise<{
     accessToken: string;
     refreshToken: string;
     user: UserDTO;
   }> {
     const logMeta = { component: 'EntraIdService', operation: 'exchangeAuthCode' };
+    if (!/^[a-f0-9]{64}$/.test(browserBinding)) {
+      throw new EntraIdError(ENTRA_ID_ERROR_CODES.INVALID_AUTH_CODE, 'Authorization code invalid');
+    }
 
     // 1. Look up the code
     const entry = await this.db.queryOne<{
@@ -497,8 +487,8 @@ export class EntraIdService {
               created_at    AS "createdAt",
               expires_at    AS "expiresAt",
               exchanged
-       FROM oauth_auth_codes WHERE code = ?`,
-      [code],
+       FROM oauth_auth_codes WHERE code = ? AND browser_binding = ?`,
+      [code, this.hashBrowserBinding(browserBinding)],
     );
 
     // 2. Verify code exists
@@ -537,10 +527,14 @@ export class EntraIdService {
     }
 
     // 5. Mark as exchanged
-    await this.db.execute(
-      `UPDATE oauth_auth_codes SET exchanged = 1 WHERE code = ?`,
-      [code],
+    const claim = await this.db.execute(
+      `UPDATE oauth_auth_codes SET exchanged = 1 WHERE code = ? AND exchanged = 0 AND expires_at > ? AND browser_binding = ?`,
+      [code, new Date().toISOString(), this.hashBrowserBinding(browserBinding)],
     );
+    if (claim.changes !== 1) {
+      throw new EntraIdError(ENTRA_ID_ERROR_CODES.INVALID_AUTH_CODE, 'Authorization code invalid');
+    }
+    await this.authService.verifyToken(entry.accessToken);
 
     // 6. Look up the user
     const user = await this.userService.getUserById(entry.userId);
@@ -733,7 +727,7 @@ export class EntraIdService {
     const audClaim = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
 
     const missingClaims: string[] = [];
-    if (!payload.sub) missingClaims.push('sub');
+    if (typeof payload.sub !== 'string' || !payload.sub) missingClaims.push('sub');
     if (!payload.email && !payload.preferred_username) {
       missingClaims.push('email or preferred_username');
     }
@@ -765,7 +759,11 @@ export class EntraIdService {
       aud: audClaim,
       iss: payload.iss,
       exp: payload.exp,
-      groups: payload.groups as string[] | undefined,
+      groups: Array.isArray(payload.groups) && payload.groups.every((group: unknown) => typeof group === 'string')
+        ? payload.groups : undefined,
+      groupsUnavailable: 'hasgroups' in payload ||
+        (typeof payload._claim_names === 'object' && payload._claim_names !== null && 'groups' in payload._claim_names) ||
+        (payload.groups !== undefined && !(Array.isArray(payload.groups) && payload.groups.every((group: unknown) => typeof group === 'string'))),
     };
   }
 
@@ -785,98 +783,30 @@ export class EntraIdService {
     return publicKey.export({ type: 'spki', format: 'pem' }) as string;
   }
 
-  /**
-   * Synchronize Entra ID group memberships to Pabawi roles.
-   *
-   * Algorithm:
-   * 1. If groupMapping is null or groups is undefined → skip (preserve existing roles)
-   * 2. Get all Pabawi roles to validate mapping targets
-   * 3. Get user's current roles
-   * 4. Determine which mapped roles the user should have (based on groups claim)
-   * 5. Add roles that are in "should have" but not currently assigned
-   * 6. Remove roles that are currently assigned via mapping but no longer in "should have"
-   * 7. Never touch roles that are not part of the mapping (manually assigned roles preserved)
-   */
+  /** Replace only provider-owned grants, including grants from removed mappings. */
   async syncGroupRoles(userId: string, groups: string[] | undefined): Promise<void> {
-    const logMeta = { component: 'EntraIdService', operation: 'syncGroupRoles' };
-
-    // Skip sync if no mapping configured or no groups claim present
-    if (!this.config.groupMapping || groups === undefined) {
-      this.logger.info('Skipping group-to-role sync (no mapping or no groups claim)', logMeta);
-      return;
-    }
-
-    const groupMapping = this.config.groupMapping;
-
-    // Get all available Pabawi roles
-    const allRolesResult = await this.roleService.listRoles({ limit: 1000, offset: 0 });
-    const allRoles = allRolesResult.items;
-    const rolesByName = new Map(allRoles.map((r) => [r.name.toLowerCase(), r]));
-
-    // Get user's current roles
-    const currentRoles = await this.userService.getUserRoles(userId);
-    const currentRoleIds = new Set(currentRoles.map((r) => r.id));
-
-    // Normalize groups claim to lowercase for case-insensitive comparison
-    const normalizedGroups = new Set(groups.map((g) => g.toLowerCase()));
-
-    // Determine which role IDs are managed by the mapping (all valid mapping targets)
-    const managedRoleIds = new Set<string>();
-    // Determine which role IDs the user should have based on current groups
-    const shouldHaveRoleIds = new Set<string>();
-
-    for (const [groupId, roleName] of Object.entries(groupMapping)) {
-      const role = rolesByName.get(roleName.toLowerCase());
-
-      if (!role) {
-        this.logger.warn(`Group mapping references non-existent role "${roleName}", skipping`, {
-          ...logMeta,
-          metadata: { groupId, roleName },
-        });
-        continue;
+    await this.db.withTransaction(async () => {
+      // Serialize reconciliation of this account across PostgreSQL connections.
+      await this.db.execute('UPDATE users SET updated_at = updated_at WHERE id = ?', [userId]);
+      await this.db.execute(`DELETE FROM user_roles WHERE user_id = ? AND role_id IN
+        (SELECT role_id FROM legacy_federated_user_roles WHERE user_id = ?)`, [userId, userId]);
+      await this.db.execute('DELETE FROM federated_user_roles WHERE user_id = ?', [userId]);
+      const normalizedGroups = new Set((groups ?? []).map(group => group.toLowerCase()));
+      for (const [group, roleName] of Object.entries(this.config.groupMapping ?? {})) {
+        if (!normalizedGroups.has(group.toLowerCase())) continue;
+        const role = await this.db.queryOne<{ id: string }>('SELECT id FROM roles WHERE LOWER(name) = LOWER(?)', [roleName]);
+        if (!role) throw new EntraIdError(ENTRA_ID_ERROR_CODES.PROVISIONING_FAILED, 'Group mapping references an unknown role');
+        await this.db.execute(`INSERT INTO federated_user_roles (user_id, role_id) VALUES (?, ?)
+          ON CONFLICT(user_id, role_id) DO NOTHING`, [userId, role.id]);
       }
-
-      managedRoleIds.add(role.id);
-
-      // Case-insensitive UUID comparison
-      if (normalizedGroups.has(groupId.toLowerCase())) {
-        shouldHaveRoleIds.add(role.id);
-      }
-    }
-
-    // Assign roles that user should have but doesn't
-    let assigned = 0;
-    for (const roleId of shouldHaveRoleIds) {
-      if (!currentRoleIds.has(roleId)) {
-        try {
-          await this.userService.assignRoleToUser(userId, roleId);
-          assigned++;
-        } catch (err: unknown) {
-          // Role may already be assigned (race condition) — log and continue
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          this.logger.warn(`Failed to assign role during group sync: ${message}`, logMeta);
-        }
-      }
-    }
-
-    // Revoke managed roles that user currently has but should no longer have
-    let revoked = 0;
-    for (const roleId of managedRoleIds) {
-      if (currentRoleIds.has(roleId) && !shouldHaveRoleIds.has(roleId)) {
-        try {
-          await this.userService.removeRoleFromUser(userId, roleId);
-          revoked++;
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : 'Unknown error';
-          this.logger.warn(`Failed to revoke role during group sync: ${message}`, logMeta);
-        }
-      }
-    }
-
-    this.logger.info('Group-to-role sync completed', {
-      ...logMeta,
-      metadata: { userId, assigned, revoked, groupCount: groups.length },
     });
+  }
+
+  private hashBrowserBinding(binding: string): string {
+    if (!/^[a-f0-9]{64}$/.test(binding)) {
+      throw new EntraIdError(ENTRA_ID_ERROR_CODES.INVALID_STATE, 'Browser login binding is missing or invalid');
+    }
+    return createHash('sha256').update(binding).digest('hex');
   }
 
   /**

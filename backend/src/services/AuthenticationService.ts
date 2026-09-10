@@ -671,7 +671,7 @@ export class AuthenticationService {
     const roles = await this.db.query<{ name: string }>(
       `SELECT DISTINCT r.name FROM roles r
        WHERE r.id IN (
-         SELECT role_id FROM user_roles WHERE user_id = ?
+         SELECT role_id FROM effective_user_roles WHERE user_id = ?
          UNION
          SELECT gr.role_id FROM group_roles gr
          INNER JOIN user_groups ug ON ug.group_id = gr.group_id

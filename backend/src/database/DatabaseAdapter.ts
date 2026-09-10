@@ -13,14 +13,8 @@ export interface DatabaseAdapter {
   /** Execute a statement (INSERT/UPDATE/DELETE) and return the number of affected rows. */
   execute(sql: string, params?: unknown[]): Promise<{ changes: number }>;
 
-  /** Begin a transaction. */
-  beginTransaction(): Promise<void>;
-
-  /** Commit the current transaction. */
-  commit(): Promise<void>;
-
-  /** Rollback the current transaction. */
-  rollback(): Promise<void>;
+  /** Reserve a connection and exclude unrelated adapter work until the callback ends. */
+  withExclusiveConnection<T>(fn: () => Promise<T>): Promise<T>;
 
   /** Run a callback inside a transaction; commits on success, rolls back on error. */
   withTransaction<T>(fn: () => Promise<T>): Promise<T>;

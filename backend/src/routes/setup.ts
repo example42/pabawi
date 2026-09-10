@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { tokensEqual } from "../utils/tokensEqual";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
 import { UserService } from "../services/UserService";
@@ -124,11 +125,7 @@ export function createSetupRouter(
    * POST /api/setup/initialize
    * Complete initial setup by creating admin user and saving configuration.
    *
-   * Rate-limited (auth-style: 10 req / 15min / IP) to bound the initial-deploy
-   * race window. Inside the handler, a post-creation atomic count guards
-   * against the TOCTOU between `isSetupComplete()` and `createUser()` —
-   * SQLite has no row-level locking, so if a second concurrent request also
-   * created an admin we soft-delete the duplicate and 409 the caller.
+   * Installation ownership and a transactional claim are required.
    */
   router.post(
     "/initialize",
@@ -140,6 +137,18 @@ export function createSetupRouter(
       });
 
       try {
+        const bootstrapToken = configService.get("bootstrapToken");
+        const suppliedToken = req.get("X-Pabawi-Bootstrap-Token");
+        if (!bootstrapToken || !suppliedToken || !tokensEqual(bootstrapToken, suppliedToken)) {
+          logger.warn("Bootstrap credential rejected", {
+            component: "SetupRouter", operation: "initialize",
+          });
+          res.status(403).json({ error: {
+            code: "BOOTSTRAP_CREDENTIAL_REQUIRED",
+            message: "A valid installation bootstrap token is required",
+          } });
+          return;
+        }
         // Check if setup is already complete
         const isComplete = await setupService.isSetupComplete();
         if (isComplete) {
@@ -166,27 +175,19 @@ export function createSetupRouter(
         });
 
         // Create admin user account
-        const adminUser = await userService.createUser({
+        const adminUser = await setupService.initialize({
+          allowSelfRegistration: validatedData.allowSelfRegistration,
+          defaultNewUserRole: validatedData.defaultNewUserRole,
+        }, () => userService.createUser({
           username: validatedData.username,
           email: validatedData.email,
           password: validatedData.password,
           firstName: validatedData.firstName,
           lastName: validatedData.lastName,
           isAdmin: true,
-        });
+        }));
 
-        // TOCTOU guard: if a concurrent /initialize request also created an
-        // admin, the count is now > 1 — undo our creation and 409.
-        const adminCountRow = await databaseService.getAdapter().queryOne<{ count: number }>(
-          "SELECT COUNT(*) as count FROM users WHERE is_admin = 1",
-        );
-        if ((adminCountRow?.count ?? 0) > 1) {
-          logger.warn("TOCTOU detected during setup; rolling back duplicate admin creation", {
-            component: "SetupRouter",
-            operation: "initialize",
-            metadata: { username: adminUser.username, adminCount: adminCountRow?.count },
-          });
-          await userService.deleteUser(adminUser.id);
+        if (!adminUser) {
           res.status(409).json({
             error: {
               code: "SETUP_ALREADY_COMPLETE",
@@ -195,12 +196,6 @@ export function createSetupRouter(
           });
           return;
         }
-
-        // Save configuration
-        await setupService.saveConfig({
-          allowSelfRegistration: validatedData.allowSelfRegistration,
-          defaultNewUserRole: validatedData.defaultNewUserRole,
-        });
 
         // Convert to DTO (excludes password)
         const userDTO = userService.toUserDTO(adminUser);

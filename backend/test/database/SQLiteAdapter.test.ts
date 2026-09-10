@@ -149,31 +149,10 @@ describe("SQLiteAdapter", () => {
       );
     });
 
-    it("commits on success", async () => {
-      await adapter.beginTransaction();
-      await adapter.execute("INSERT INTO t (name) VALUES (?)", ["alice"]);
-      await adapter.commit();
-
-      const rows = await adapter.query("SELECT * FROM t");
-      expect(rows).toHaveLength(1);
-    });
-
-    it("rolls back on rollback()", async () => {
-      await adapter.execute("INSERT INTO t (name) VALUES (?)", ["before"]);
-      await adapter.beginTransaction();
-      await adapter.execute("INSERT INTO t (name) VALUES (?)", ["during"]);
-      await adapter.rollback();
-
-      const rows = await adapter.query("SELECT * FROM t");
-      expect(rows).toHaveLength(1);
-    });
-
-    it("throws on nested beginTransaction", async () => {
-      await adapter.beginTransaction();
-      await expect(adapter.beginTransaction()).rejects.toThrow(
-        "Nested transactions are not supported in SQLite",
-      );
-      await adapter.rollback();
+    it("rejects nested transactions", async () => {
+      await adapter.withTransaction(async () => {
+        await expect(adapter.withTransaction(async () => undefined)).rejects.toThrow("Nested transactions");
+      });
     });
 
     it("withTransaction commits on success", async () => {

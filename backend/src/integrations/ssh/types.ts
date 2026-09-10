@@ -29,6 +29,9 @@ export interface SSHConfig {
   /** Whether to verify SSH host keys */
   hostKeyCheck: boolean;
 
+  /** Managed destination-to-SHA256 fingerprint map. */
+  hostFingerprintsPath?: string;
+
   /** Connection timeout in seconds (5-300) */
   connectionTimeout: number;
 

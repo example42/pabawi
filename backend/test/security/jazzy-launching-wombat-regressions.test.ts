@@ -265,6 +265,7 @@ describe("C3: POST /api/setup/initialize is idempotent against TOCTOU", () => {
   let databaseService: DatabaseService;
 
   beforeEach(async () => {
+    vi.stubEnv("PABAWI_BOOTSTRAP_TOKEN", "bootstrap-regression-test-credential-32");
     process.env.JWT_SECRET = "test-jwt-secret-32-chars-padded-c3test";
     databaseService = new DatabaseService(":memory:");
     await databaseService.initialize();
@@ -275,6 +276,7 @@ describe("C3: POST /api/setup/initialize is idempotent against TOCTOU", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await databaseService.close();
   });
 
@@ -289,11 +291,11 @@ describe("C3: POST /api/setup/initialize is idempotent against TOCTOU", () => {
       defaultNewUserRole: null,
     };
 
-    await request(harness.use(app)).post("/api/setup/initialize").send(payload).expect(201);
+    await request(harness.use(app)).post("/api/setup/initialize").set("X-Pabawi-Bootstrap-Token", "bootstrap-regression-test-credential-32").send(payload).expect(201);
 
     // Second call with a different proposed admin: rejected because setup is complete.
     const second = await request(harness.use(app))
-      .post("/api/setup/initialize")
+      .post("/api/setup/initialize").set("X-Pabawi-Bootstrap-Token", "bootstrap-regression-test-credential-32")
       .send({ ...payload, username: "admin2", email: "admin2@example.com" });
     expect(second.status).toBe(409);
 

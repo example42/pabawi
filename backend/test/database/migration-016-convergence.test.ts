@@ -40,6 +40,12 @@ describe("I02: migration 016 feature convergence", () => {
       }
       const retainedTables = variant === "fresh" ? [] : ["users", "user_roles", ...(variant === "entra" ? ["federated_identities", "oauth_state_store", "oauth_auth_codes"] : [])];
       const before = await Promise.all(retainedTables.map(table => db.query(table === "users" ? 'SELECT id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at, last_login_at FROM users' : `SELECT * FROM ${table}`)));
+      // New nullable browser bindings intentionally invalidate legacy in-flight logins.
+      if (variant === "entra") {
+        for (const rows of before.slice(3)) {
+          for (const row of rows) Object.assign(row as object, { browser_binding: null });
+        }
+      }
       const runner = new MigrationRunner(db, migrationsDir);
       await runner.runPendingMigrations();
       expect(await Promise.all(retainedTables.map(table => db.query(table === "users" ? 'SELECT id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at, last_login_at FROM users' : `SELECT * FROM ${table}`)))).toEqual(before);

@@ -31,10 +31,8 @@ function createMockDb(): DatabaseAdapter {
     query: vi.fn().mockResolvedValue([]),
     queryOne: vi.fn().mockResolvedValue(null),
     execute: vi.fn().mockResolvedValue({ changes: 0 }),
-    beginTransaction: vi.fn().mockResolvedValue(undefined),
-    commit: vi.fn().mockResolvedValue(undefined),
-    rollback: vi.fn().mockResolvedValue(undefined),
-    withTransaction: vi.fn(),
+    withExclusiveConnection: vi.fn(async fn => fn()),
+    withTransaction: vi.fn(async fn => fn()),
     initialize: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
@@ -228,6 +226,7 @@ describe('EntraIdService — User Provisioning Properties', () => {
             expect(mockUserService.findByFederatedIdentity).toHaveBeenCalledWith(
               'entra-id',
               claims.sub,
+              claims.iss,
             );
 
             // No existing identity → called createFederatedUser with the claims

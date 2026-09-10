@@ -616,7 +616,7 @@ export class UserService {
               r.created_at  AS "createdAt",
               r.updated_at  AS "updatedAt"
          FROM roles r
-        INNER JOIN user_roles ur ON ur.role_id = r.id
+        INNER JOIN effective_user_roles ur ON ur.role_id = r.id
         WHERE ur.user_id = ?
         ORDER BY r.name`,
       [userId]
@@ -705,7 +705,7 @@ export class UserService {
       }
 
       // Check email uniqueness (a separate user with this email should not exist;
-      // email-match linking is handled by the caller before invoking this method)
+      // collisions must never implicitly link the existing account)
       const existingEmail = await this.getUserByEmail(claims.email);
       if (existingEmail) {
         throw new Error(
@@ -769,7 +769,7 @@ export class UserService {
   /**
    * Link an existing user account to a federated identity.
    *
-   * Used when a local user with the same email is found during SSO login —
+   * Only explicit administrative enrollment may link an existing account; this
    * preserves the existing password_hash so local login remains available.
    *
    * @param userId - Existing Pabawi user ID
@@ -825,11 +825,12 @@ export class UserService {
   public async findByFederatedIdentity(
     provider: string,
     subject: string,
+    issuer: string,
   ): Promise<User | null> {
     const identity = await this.db.queryOne<FederatedIdentity>(
       `SELECT ${FEDERATED_IDENTITY_COLUMNS} FROM federated_identities
-       WHERE provider = ? AND subject = ?`,
-      [provider, subject]
+       WHERE provider = ? AND subject = ? AND issuer = ?`,
+      [provider, subject, issuer]
     );
 
     if (!identity) {

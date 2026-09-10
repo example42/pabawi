@@ -179,6 +179,7 @@ describe('A05: token purpose and durable revocation', () => {
     await users.updateUser(user.id, { isAdmin: true });
     const config = ConsoleConfigSchema.parse({});
     const manager = new ConsoleSessionManager(database.getAdapter(), config, new LoggerService(), new AuditLoggingService(database.getAdapter()));
+    const termination = vi.spyOn(manager, "terminateSession");
     const upstream = new WebSocketServer({ host: '127.0.0.1', port: 0 });
     await once(upstream, 'listening');
     const upstreamAddress = upstream.address();
@@ -204,6 +205,7 @@ describe('A05: token purpose and durable revocation', () => {
       for (const peer of upstream.clients) peer.terminate();
       await new Promise<void>((resolve) => { upstream.close(() => { resolve(); }); });
       await local.close();
+      await Promise.all(termination.mock.results.map(result => result.value));
     }
   });
 });

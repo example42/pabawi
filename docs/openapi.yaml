@@ -3888,6 +3888,7 @@ paths:
     get:
       summary: Get setup status
       description: Return whether the initial setup wizard has been completed
+      security: []
       tags:
         - Setup
       responses:
@@ -3898,18 +3899,62 @@ paths:
               schema:
                 type: object
                 properties:
-                  completed:
+                  isComplete:
                     type: boolean
+                  hasAdminUser:
+                    type: boolean
+                  config:
+                    type: object
 
-  /setup/complete:
+  /setup/initialize:
     post:
-      summary: Mark setup as complete
-      description: Mark the initial setup wizard as completed
+      summary: Claim initial administrator enrollment
+      description: Atomically create the initial administrator and save setup configuration. Requires the installation bootstrap token.
+      security: []
       tags:
         - Setup
+      parameters:
+        - in: header
+          name: X-Pabawi-Bootstrap-Token
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password, firstName, lastName, allowSelfRegistration, defaultNewUserRole]
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                firstName:
+                  type: string
+                lastName:
+                  type: string
+                allowSelfRegistration:
+                  type: boolean
+                defaultNewUserRole:
+                  type: string
+                  nullable: true
       responses:
-        '200':
-          description: Setup marked as complete
+        '201':
+          description: Administrator and configuration created
+        '403':
+          description: Bootstrap token missing, invalid or unconfigured
+        '409':
+          description: Setup already complete or username/email conflict
+        '400':
+          description: Invalid setup data
+        '500':
+          description: Setup failed and the transaction was rolled back
 
   /monitoring/metrics:
     get:

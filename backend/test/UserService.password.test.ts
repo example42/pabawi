@@ -17,6 +17,8 @@ describe('UserService - Password Validation Integration', () => {
     // Initialize schema
     await initializeSchema(db);
 
+    await db.execute('CREATE VIEW effective_user_roles AS SELECT user_id, role_id FROM user_roles');
+
     authService = new AuthenticationService(db, testJwtSecret);
     userService = new UserService(db, authService);
   });

@@ -129,6 +129,83 @@ warnings remain. Tests used local HTTP transport, disposable SQLite databases
 and a disposable PostgreSQL container. Live browser/provider and cluster checks
 were not performed. A08 remains the next action.
 
+- **A08 / S07 and the SSO portion of S08: implemented and verified.**
+  Federation lookup includes issuer and subject; email collisions cannot link
+  accounts. Explicit enrollment requires both `rbac:admin` and `users:admin`
+  and records actor and target identity. OAuth state and final codes require
+  the initiating browser's HttpOnly cookie; stored records contain its digest.
+  Conditional claims admit exactly one callback and one final redemption,
+  including across independent database connections. Inactive/revoked accounts
+  fail callback or redemption. Signed fake-provider regressions cover email and
+  issuer collisions, absent/different browser bindings, concurrent attempts,
+  inactive accounts, malformed groups and both Entra overage markers.
+- **A08 group reconciliation:** migration 027 stores provider grants separately
+  from manual grants, and effective authorization includes both. Reconciliation
+  is atomic and serializes each account across connections. Missing groups and
+  removed mappings clear provider grants; overage/malformed claims also deny
+  login when mapping is enabled. Failed reconciliation cannot issue a session.
+  Existing direct grants on federated accounts have no trustworthy provenance:
+  migration 027 marks them for removal at the next reconciliation, followed by
+  the current mapping. Administrators must review and explicitly regrant intended
+  manual assignments as documented in the Entra guide. Old in-flight logins must
+  restart because they lack browser binding. Entra changes are observed at login;
+  this does not implement continuous Graph synchronization.
+- **I03 / A12 transaction ownership prerequisite: implemented and verified.**
+  Transactions use callback-scoped async ownership. SQLite excludes unrelated
+  queries for the whole transaction; PostgreSQL reserves separate pooled clients.
+  Nested/overlapping transactions within a reservation and detached work from an
+  ended transaction are rejected. Migrations hold an exclusive adapter reservation
+  around inspection, transactions and SQLite foreign-key restoration. Tests prove
+  unrelated writes survive rollback, concurrent transactions retain separate
+  ownership and maintenance excludes ordinary queries. This reservation is local
+  to an adapter; installations still require one migration process. Distributed
+  migration coordination and execution/session ownership are not established.
+
+A08 validation: full backend suite passed (3,565 tests, 19 skipped, 1 todo);
+full frontend suite passed (999 tests). A separate run against disposable
+PostgreSQL 15 passed 24 database tests, including SQLite/PostgreSQL transaction
+ownership, independent-connection SSO provisioning/redemption and grant revocation,
+fresh migrations, populated historical-016 upgrades, and authorization-state
+checks. Lint, complete build and `git diff --check` passed. Existing frontend
+accessibility and bundle warnings remain. Tests used local HTTP, a signed fake
+identity provider, disposable databases and a local PostgreSQL container.
+No real Entra tenant, production account, provider or cluster was exercised.
+Console ticket redemption remains part of A15. A09 is the next action.
+
+- **A09 / S05: implemented and verified.** SSH checks the raw server key against
+  an operator-managed SHA-256 fingerprint map keyed by destination hostname and
+  port. Unknown and changed keys, absent configuration and invalid/unreadable
+  trust files fail before authentication. Inventory aliases use the destination
+  HostName and Port. URI ports, IPv6 and pool identity share endpoint parsing.
+  Explicit insecure opt-out remains available with a warning. This supports
+  fingerprint enrollment, not OpenSSH known_hosts or host certificates. Operators
+  verify and audit enrollment through trusted configuration management. Trust
+  file changes affect new handshakes; restart to close existing pooled sessions.
+- **A09 / S12: implemented and verified.** Initial enrollment requires the
+  installation-specific `PABAWI_BOOTSTRAP_TOKEN` header credential, exposed in the
+  setup form as a password input. Missing configuration disables enrollment.
+  A unique database claim, account creation and configuration save commit together.
+  Migration 028 preserves completion for existing administrators. Completion
+  persists after account deactivation or administrator-status removal. Failed
+  saves roll back and permit retry. Independent SQLite and PostgreSQL connections
+  verify one concurrent winner, rollback visibility and legacy upgrade closure.
+  The setup script generates an independent token and restricts its environment
+  file to mode 0600. Operator guidance covers private first start and recovery.
+
+A09 validation: 83 focused SSH/setup regressions passed, including real loopback
+SSH handshakes. The full backend run passed 3,578 tests with 20 skipped and one
+todo, but failed one unchanged logging field-order property test. Its generated
+component and operation were identical (`?`), so `indexOf` matched the same field;
+seed `574637843`, path `41:0:0:5`. That file's 13 tests passed on a separate rerun;
+the full run is not recorded as green. The full frontend suite passed 999 tests,
+and the subsequently added setup-form credential regression passed separately.
+PostgreSQL 15 passed 18 adapter/bootstrap/fresh-migration/historical-upgrade tests;
+the extended independent-connection rollback tests then passed on both dialects.
+Lint, backend TypeScript, complete build, setup-script syntax and diff checks
+passed. Existing frontend accessibility and bundle warnings remain. Tests used
+disposable databases and local fake SSH/HTTP servers; no production infrastructure
+or real deployment was exercised. A10 is the next action.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.

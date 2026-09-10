@@ -6,6 +6,7 @@
  */
 
 import type { Client } from 'ssh2';
+import { resolveSSHEndpoint } from './endpoint';
 import type { SSHHost, PooledConnection, PoolConfig} from './types';
 import type { LoggerService } from '../../services/LoggerService';
 
@@ -302,22 +303,7 @@ export class ConnectionPool {
    * Format: user@host:port
    */
   private getHostKey(host: SSHHost): string {
-    const user = host.user ?? 'root';
-    const port = host.port ?? 22;
-
-    // Extract hostname from URI if present
-    let hostname = host.uri;
-    if (hostname.startsWith('ssh://')) {
-      hostname = hostname.substring(6);
-    }
-
-    // Remove any port from URI
-    const colonIndex = hostname.indexOf(':');
-    if (colonIndex !== -1) {
-      hostname = hostname.substring(0, colonIndex);
-    }
-
-    return `${user}@${hostname}:${String(port)}`;
+    return resolveSSHEndpoint(host).poolKey;
   }
 
   /**

@@ -2,6 +2,10 @@
 
 ## Quick Start
 
+Before starting a fresh container, configure `JWT_SECRET` and an independent
+`PABAWI_BOOTSTRAP_TOKEN` in its environment file. Keep access private and follow
+[Initial setup](../initial-setup.md) to claim the administrator account.
+
 ```bash
 # Using published image
 docker run -d \

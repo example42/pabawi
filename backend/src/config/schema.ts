@@ -444,6 +444,7 @@ export const AppConfigSchema = z.object({
       "JWT_SECRET must not be a placeholder string (e.g. 'your-secure-random-secret-here', 'change-me')",
     ),
   lifecycleToken: z.string().default(""),
+  bootstrapToken: z.union([z.literal(""), z.string().min(32).max(512)]).default(""),
   commandWhitelist: WhitelistConfigSchema,
   executionTimeout: z.number().int().positive().default(300000), // 5 minutes
   logLevel: z.enum(["error", "warn", "info", "debug"]).default("info"),

@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { DatabaseAccessLock } from "./DatabaseAccessLock";
 import pg from "pg";
 import type { DatabaseAdapter } from "./DatabaseAdapter";
 import { DatabaseQueryError, DatabaseConnectionError } from "./errors";
@@ -9,7 +11,8 @@ import { rewritePlaceholders } from "./rewritePlaceholders";
 export class PostgresAdapter implements DatabaseAdapter {
   private _databaseUrl: string;
   private _pool: pg.Pool | null = null;
-  private _txClient: pg.PoolClient | null = null;
+  private readonly access = new DatabaseAccessLock();
+  private readonly scope = new AsyncLocalStorage<{ active: boolean; transaction: boolean; broken: boolean; client: pg.PoolClient }>();
   private _connected = false;
 
   constructor(databaseUrl: string) {
@@ -74,7 +77,6 @@ export class PostgresAdapter implements DatabaseAdapter {
       await this._pool.end();
       this._pool = null;
     }
-    this._txClient = null;
     this._connected = false;
   }
 
@@ -90,13 +92,15 @@ export class PostgresAdapter implements DatabaseAdapter {
     sql: string,
     params?: unknown[],
   ): Promise<pg.QueryResult> {
-    const client = this._txClient ?? this._pool;
+    const owner = this.scope.getStore();
+    if (owner && !owner.active) throw new DatabaseQueryError("Database scope has ended", sql, params);
+    const client = owner?.client ?? this._pool;
     if (!client) {
       throw new DatabaseQueryError("Database not connected", sql, params);
     }
     const text = rewritePlaceholders(sql);
     try {
-      return await client.query(text, params);
+      return await (owner ? client.query(text, params) : this.access.run(false, () => client.query(text, params)));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Query failed";
       throw new DatabaseQueryError(message, text, params);
@@ -118,76 +122,56 @@ export class PostgresAdapter implements DatabaseAdapter {
     return { changes: result.rowCount ?? 0 };
   }
 
-  async beginTransaction(): Promise<void> {
-    if (!this._pool) {
-      throw new DatabaseQueryError("Database not connected", "BEGIN", []);
+  private async withConnection<T>(exclusive: boolean, fn: () => Promise<T>): Promise<T> {
+    const owner = this.scope.getStore();
+    if (owner) {
+      if (!owner.active) throw new DatabaseQueryError("Database scope has ended", "", []);
+      return fn();
     }
-    if (this._txClient) {
-      throw new Error("Nested transactions are not supported");
-    }
-    this._txClient = await this._pool.connect();
-    try {
-      await this._txClient.query("BEGIN");
-    } catch (err: unknown) {
-      this._txClient.release();
-      this._txClient = null;
-      throw err;
-    }
+    return this.access.run(exclusive, async () => {
+      if (!this._pool) throw new DatabaseQueryError("Database not connected", "", []);
+      const client = await this._pool.connect();
+      const context = { active: true, transaction: false, broken: false, client };
+      try {
+        return await this.scope.run(context, fn);
+      } finally {
+        context.active = false;
+        client.release(context.broken);
+      }
+    });
   }
 
-  async commit(): Promise<void> {
-    if (!this._txClient) {
-      throw new Error("No active transaction to commit");
-    }
-    try {
-      await this._txClient.query("COMMIT");
-    } finally {
-      this._txClient.release();
-      this._txClient = null;
-    }
-  }
-
-  async rollback(): Promise<void> {
-    if (!this._txClient) {
-      throw new Error("No active transaction to rollback");
-    }
-    try {
-      await this._txClient.query("ROLLBACK");
-    } finally {
-      this._txClient.release();
-      this._txClient = null;
-    }
+  async withExclusiveConnection<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.scope.getStore()) throw new DatabaseQueryError("Exclusive access cannot be nested", "", []);
+    return this.withConnection(true, fn);
   }
 
   async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
-    if (!this._pool) {
-      throw new DatabaseQueryError(
-        "Database not connected",
-        "BEGIN TRANSACTION",
-        [],
-      );
-    }
-    if (this._txClient) {
-      throw new DatabaseQueryError(
-        "Nested transactions are not supported",
-        "BEGIN TRANSACTION",
-        [],
-      );
-    }
-    const client = await this._pool.connect();
-    this._txClient = client;
-    try {
-      await client.query("BEGIN");
-      const result = await fn();
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK");
-      throw error;
-    } finally {
-      client.release();
-      this._txClient = null;
-    }
+    return this.withConnection(false, async () => {
+      const owner = this.scope.getStore();
+      if (!owner || owner.transaction) throw new DatabaseQueryError("Nested transactions are not supported", "BEGIN", []);
+      owner.transaction = true;
+      const context = { ...owner, transaction: true };
+      try {
+        await this.execute("BEGIN");
+      } catch (error) {
+        owner.transaction = false;
+        owner.broken = true;
+        throw error;
+      }
+      try {
+        const result = await this.scope.run(context, fn);
+        context.active = false;
+        await this.execute("COMMIT");
+        return result;
+      } catch (error) {
+        await this.execute("ROLLBACK").catch(() => { owner.broken = true; });
+        throw error;
+      } finally {
+        context.active = false;
+        owner.transaction = false;
+      }
+    });
   }
 
   isConnected(): boolean {

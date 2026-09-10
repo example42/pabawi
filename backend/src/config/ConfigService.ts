@@ -895,6 +895,7 @@ export class ConfigService {
         boltProjectPath: process.env.BOLT_PROJECT_PATH,
         jwtSecret: process.env.JWT_SECRET,
         lifecycleToken: process.env.PABAWI_LIFECYCLE_TOKEN,
+        bootstrapToken: process.env.PABAWI_BOOTSTRAP_TOKEN,
         commandWhitelist,
         executionTimeout: process.env.BOLT_EXECUTION_TIMEOUT
           ? parseInt(process.env.BOLT_EXECUTION_TIMEOUT, 10)
