@@ -1,3 +1,5 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
+import { allowAllSources } from "../helpers/sourceAuthorization";
 /**
  * Integration tests for inventory endpoint filtering and sorting
  * Tests Requirement 2.2: Puppetserver source support with filtering and sorting
@@ -123,7 +125,7 @@ describe("Inventory Filtering and Sorting", () => {
     app.use(express.json());
     app.use(
       "/api/inventory",
-      createInventoryRouter(mockBoltService, mockIntegrationManager),
+      createInventoryRouter(mockBoltService, allowAllSources, noPermissionCheck, mockIntegrationManager),
     );
   });
 

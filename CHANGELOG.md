@@ -4,6 +4,21 @@
 
 ### Security: breaking for operators
 
+- Production and tests share infrastructure route mounting. Per-route checks
+  protect package installation and Puppet runs without blocking unrelated node
+  reads. Integration routes require an explicit authorization policy.
+- The frontend loads the caller's effective permissions from
+  `GET /api/auth/permissions` and applies them to navigation, provisioning,
+  lifecycle actions and execution controls.
+
+- Generic command and batch routes authorize the selected execution tool.
+  Re-execution and cancellation authorize the tools stored on the executions.
+- Aggregated inventory and facts query only sources the caller may read.
+  Scoped results are isolated from the global inventory cache; response cache
+  keys include the current source scope.
+- Stream tickets can authenticate only GET requests to their execution's stream
+  endpoint, including the `/api/streaming` alias.
+
 - **Infrastructure routes now enforce authorization, not just authentication**
   (assessment finding S01). AWS, Azure, Proxmox, Puppetserver, Hiera, execution
   history and SSE streaming previously accepted any authenticated user,
@@ -28,6 +43,34 @@
 
 **Action required:** custom roles do not receive the new permissions
 automatically. See [docs/upgrading.md](docs/upgrading.md#upgrading-to-150).
+
+### Fixed: database migrations
+
+- **Migration 017 no longer destroys user relationships on SQLite**
+  (assessment finding I01). Rebuilding the `users` table with foreign keys
+  enabled fired `ON DELETE CASCADE` on `user_roles`, `user_groups`,
+  `revoked_tokens` and `federated_identities` and `ON DELETE SET NULL` on
+  `audit_logs` and `journal_entries`. Accounts survived; every role assignment,
+  group membership, SSO link and token revocation was deleted.
+- **Migration 017 no longer blocks PostgreSQL deployments.** `DROP TABLE users`
+  fails on PostgreSQL when other tables reference it, so every PostgreSQL
+  installation aborted at this migration and stayed at 016. The PostgreSQL
+  variant now uses `ALTER COLUMN password_hash DROP NOT NULL`.
+- Migration `018_console_sessions` gained a PostgreSQL variant. Its
+  `created_at` default used SQLite's `datetime('now')`, which does not exist in
+  PostgreSQL and was the next migration to fail once 017 was fixed. The full
+  migration set now applies cleanly on both backends, verified against a real
+  PostgreSQL server.
+- `MigrationRunner` supports a `-- pabawi:sqlite-foreign-keys-off` directive for
+  SQLite table rebuilds. The runner brackets the migration transaction with
+  `PRAGMA foreign_keys` (which is a no-op inside a transaction, so a migration
+  file cannot do this itself) and runs `PRAGMA foreign_key_check` before
+  committing.
+
+**Action required for installations that already ran the old migration 017 on
+SQLite:** the deleted assignments cannot be recovered automatically. See
+[docs/upgrading.md](docs/upgrading.md#upgrading-to-150) for the recovery
+procedure.
 
 ## [1.4.0] - 2026-06-05
 

@@ -1,3 +1,5 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
+import { allowAllSources } from "../helpers/sourceAuthorization";
 /**
  * Regression tests for the "jazzy-launching-wombat" security remediation PR.
  *
@@ -216,6 +218,8 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
       "/api/inventory",
       createInventoryRouter(
         boltService,
+        allowAllSources,
+        noPermissionCheck,
         integrationManager,
         { allowDestructiveActions: allowDestructive },
         container,
@@ -226,13 +230,13 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
 
   it("returns 401 when no Authorization header is present", async () => {
     const app = buildApp(LIFECYCLE_TOKEN);
-    await request(harness.use(app)).delete("/api/inventory/some-node-id").expect(401);
+    await request(harness.use(app)).delete("/api/inventory/aws:eu-west-1:i-test").expect(401);
   });
 
   it("returns 401 when the bearer token is wrong", async () => {
     const app = buildApp(LIFECYCLE_TOKEN);
     await request(harness.use(app))
-      .delete("/api/inventory/some-node-id")
+      .delete("/api/inventory/aws:eu-west-1:i-test")
       .set("Authorization", "Bearer wrong-token-32chars-padded-xx-xx")
       .expect(401);
   });
@@ -240,7 +244,7 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
   it("returns 500 (misconfigured) when no lifecycle token is configured", async () => {
     const app = buildApp("");
     await request(harness.use(app))
-      .delete("/api/inventory/some-node-id")
+      .delete("/api/inventory/aws:eu-west-1:i-test")
       .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`)
       .expect(500);
   });
@@ -248,7 +252,7 @@ describe("A2: DELETE /api/inventory/:id requires the lifecycle bearer", () => {
   it("returns 403 when destructive actions are disabled by config", async () => {
     const app = buildApp(LIFECYCLE_TOKEN, false);
     await request(harness.use(app))
-      .delete("/api/inventory/some-node-id")
+      .delete("/api/inventory/aws:eu-west-1:i-test")
       .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`)
       .expect(403);
   });

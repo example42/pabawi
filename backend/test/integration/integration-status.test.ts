@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 /**
  * Integration tests for /api/integrations/status endpoint
  */
@@ -152,7 +153,7 @@ describe("Integration Status API", () => {
     await integrationManager.initializePlugins();
 
     // Add routes
-    app.use("/api/integrations", createIntegrationsRouter(integrationManager));
+    app.use("/api/integrations", createIntegrationsRouter(integrationManager, noPermissionCheck));
   });
 
   describe("GET /api/integrations/status", () => {
@@ -221,7 +222,7 @@ describe("Integration Status API", () => {
       testApp.use(requestIdMiddleware);
       testApp.use(
         "/api/integrations",
-        createIntegrationsRouter(newManager),
+        createIntegrationsRouter(newManager, noPermissionCheck),
       );
 
       const response = await request(harness.use(testApp))
@@ -248,7 +249,7 @@ describe("Integration Status API", () => {
       testApp.use(requestIdMiddleware);
       testApp.use(
         "/api/integrations",
-        createIntegrationsRouter(emptyManager),
+        createIntegrationsRouter(emptyManager, noPermissionCheck),
       );
 
       const response = await request(harness.use(testApp))

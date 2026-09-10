@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 /**
  * Integration tests for Puppetserver catalog and environment endpoints
  *
@@ -145,7 +146,7 @@ describe("Puppetserver Catalog and Environment Endpoints", () => {
 
     // Create and mount integrations router
     const router = createIntegrationsRouter(
-      integrationManager,
+      integrationManager, noPermissionCheck,
       undefined,
       puppetserverService,
     );

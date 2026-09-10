@@ -129,6 +129,47 @@ describe.skipIf(!databaseUrl)(
       expect(names).toContain("users");
       expect(names).toContain("executions");
       expect(names).toContain("migrations");
+
+      // Every migration on disk must be recorded, not just the ones before the
+      // first dialect incompatibility. Migration 017 used to abort here with
+      // "cannot drop table users because other objects depend on it" (I01),
+      // which left every PostgreSQL deployment stuck at 016.
+      const status = await runner.getStatus();
+      expect(status.pending).toHaveLength(0);
+      const appliedIds = status.applied.map((m) => m.id);
+      expect(appliedIds).toContain("017");
+      expect(appliedIds).toContain("020");
+    });
+
+    it("supports nullable passwords and new role assignments after migration 017", async () => {
+      await new MigrationRunner(adapter).runPendingMigrations();
+
+      const column = await adapter.queryOne<{ is_nullable: string }>(
+        `SELECT is_nullable FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'password_hash'`,
+      );
+      expect(column?.is_nullable).toBe("YES");
+
+      const now = new Date().toISOString();
+      await adapter.execute(
+        `INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, ?, ?, 1, 0, ?, ?)`,
+        ["i01-user", "i01_user", "i01@example.test", "I01", "User", now, now],
+      );
+      await adapter.execute(
+        "INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES (?, ?, ?)",
+        ["i01-user", "role-admin-001", now],
+      );
+
+      try {
+        const rows = await adapter.query<{ c: string }>(
+          "SELECT COUNT(*) AS c FROM user_roles WHERE user_id = ?",
+          ["i01-user"],
+        );
+        expect(Number(rows[0]?.c)).toBe(1);
+      } finally {
+        await adapter.execute("DELETE FROM users WHERE id = ?", ["i01-user"]);
+      }
     });
   },
 );

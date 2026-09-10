@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { hasPermission } from '../lib/permissions';
+  import { authManager } from '../lib/auth.svelte';
   import { onMount } from 'svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
@@ -20,7 +22,7 @@
 
   // Filtered integrations - only show those with at least one capability (Validates Requirement: 2.3)
   const displayableIntegrations = $derived.by(() => {
-    return integrations.filter(integration => integration.capabilities.length > 0);
+    return integrations.filter(integration => integration.capabilities.length > 0 && hasPermission("provision", integration.name));
   });
 
   // Integrations to display in cards - show only selected when multiple available
@@ -40,6 +42,7 @@
     error = null;
 
     try {
+      await authManager.refreshPermissions();
       const response = await getProvisioningIntegrations();
       integrations = response.integrations || [];
 
@@ -326,7 +329,7 @@
       </div>
 
       <!-- Proxmox Compute Type Selector and Forms (Validates Requirements: 17.1, 17.2, 17.3) -->
-      {#if selectedIntegration === 'proxmox'}
+      {#if selectedIntegration === 'proxmox' && hasPermission('provision', 'proxmox')}
         <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
           <!-- Compute Type Selector -->
           <div class="border-b border-gray-200 dark:border-gray-700">
@@ -377,7 +380,7 @@
       {/if}
 
       <!-- AWS EC2 Form (Validates Requirements: 10.1, 13.1-13.7) -->
-      {#if selectedIntegration === 'aws'}
+      {#if selectedIntegration === 'aws' && hasPermission('provision', 'aws')}
         <div class="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
           <div class="border-b border-gray-200 dark:border-gray-700 px-6 py-4">
             <div class="flex items-center gap-2">

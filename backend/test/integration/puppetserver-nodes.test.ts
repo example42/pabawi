@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 /**
  * Integration tests for Puppetserver node API endpoints
  */
@@ -293,7 +294,7 @@ describe("Puppetserver Node API", () => {
     // Add routes
     app.use(
       "/api/integrations",
-      createIntegrationsRouter(integrationManager, undefined, puppetserverService),
+      createIntegrationsRouter(integrationManager, noPermissionCheck, undefined, puppetserverService),
     );
   });
 
@@ -455,7 +456,7 @@ describe("Puppetserver Node API", () => {
 
       testApp.use(
         "/api/integrations",
-        createIntegrationsRouter(testManager, undefined, undefined),
+        createIntegrationsRouter(testManager, noPermissionCheck, undefined, undefined),
       );
 
       const response = await request(harness.use(testApp))
@@ -475,7 +476,7 @@ describe("Puppetserver Node API", () => {
 
       testApp.use(
         "/api/integrations",
-        createIntegrationsRouter(testManager, undefined, undefined),
+        createIntegrationsRouter(testManager, noPermissionCheck, undefined, undefined),
       );
 
       const response = await request(harness.use(testApp))
@@ -495,7 +496,7 @@ describe("Puppetserver Node API", () => {
 
       testApp.use(
         "/api/integrations",
-        createIntegrationsRouter(testManager, undefined, undefined),
+        createIntegrationsRouter(testManager, noPermissionCheck, undefined, undefined),
       );
 
       const response = await request(harness.use(testApp))

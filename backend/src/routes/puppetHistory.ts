@@ -1,3 +1,4 @@
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 /**
  * Puppet Run History Routes
  *
@@ -28,6 +29,7 @@ const DaysQuerySchema = z.object({
  */
 export function createPuppetHistoryRouter(
   puppetRunHistoryService: PuppetRunHistoryService,
+  requirePermission: PermissionMiddlewareFactory,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -48,6 +50,7 @@ export function createPuppetHistoryRouter(
    */
   router.get(
     "/nodes/:id/history",
+    requirePermission("puppetdb", "read"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -256,6 +259,7 @@ export function createPuppetHistoryRouter(
    */
   router.get(
     "/history",
+    requirePermission("puppetdb", "read"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

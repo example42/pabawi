@@ -1,3 +1,4 @@
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { ExecutionRepository } from "../database/ExecutionRepository";
@@ -42,6 +43,7 @@ const TaskExecutionBodySchema = z.object({
  */
 export function createTasksRouter(
   integrationManager: IntegrationManager,
+  requirePermission: PermissionMiddlewareFactory,
   executionRepository: ExecutionRepository,
   streamingManager?: StreamingExecutionManager,
   container: DIContainer = createDefaultContainer(),
@@ -56,6 +58,7 @@ export function createTasksRouter(
    */
   router.get(
     "/",
+    requirePermission("bolt", "read"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -265,6 +268,7 @@ export function createTasksRouter(
    */
   router.get(
     "/by-module",
+    requirePermission("bolt", "read"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -474,6 +478,7 @@ export function createTasksRouter(
    */
   router.post(
     "/:id/task",
+    requirePermission("bolt", "execute"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

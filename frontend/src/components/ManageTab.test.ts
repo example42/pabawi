@@ -9,6 +9,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import ManageTab from './ManageTab.svelte';
+import { hasPermission } from '../lib/permissions';
+vi.mock('../lib/permissions', () => ({ hasPermission: vi.fn(() => true) }));
 import * as api from '../lib/api';
 import * as proxmoxApi from '../lib/proxmoxApi';
 import * as toast from '../lib/toast.svelte';
@@ -46,8 +48,17 @@ describe('ManageTab Component', () => {
     { name: 'destroy', displayName: 'Destroy', description: 'Destroy the VM', destructive: true, requiresConfirmation: true, availableWhen: ['stopped', 'running', 'suspended'] },
   ];
 
+  it('hides lifecycle actions without the provider permission', async () => {
+    vi.mocked(hasPermission).mockReturnValue(false);
+    render(ManageTab, { nodeId: 'proxmox:pve:100', currentStatus: 'running' });
+    await waitFor(() => expect(screen.queryByText('Loading available actions...')).toBeNull());
+    expect(screen.queryByRole('button', { name: /^stop/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^destroy/i })).toBeNull();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(hasPermission).mockReturnValue(true);
     // Default mock: fetchLifecycleActions returns actions for proxmox
     vi.mocked(proxmoxApi.fetchLifecycleActions).mockResolvedValue({
       provider: 'proxmox',

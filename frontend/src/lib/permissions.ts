@@ -22,7 +22,11 @@ export type PermissionResource =
   | 'ssh'
   | 'users'
   | 'groups'
-  | 'roles';
+  | 'roles'
+  | 'puppetserver'
+  | 'executions'
+  | 'provisioning'
+  | 'checkmk';
 
 /**
  * Permission action types matching backend RBAC model
@@ -49,7 +53,7 @@ export const RESOURCE_CATEGORIES: Record<string, { label: string; resources: Per
   },
   operations: {
     label: 'Operations',
-    resources: ['journal'],
+    resources: ['journal', 'executions', 'provisioning'],
   },
   configuration: {
     label: 'Configuration',
@@ -57,7 +61,7 @@ export const RESOURCE_CATEGORIES: Record<string, { label: string; resources: Per
   },
   system: {
     label: 'System',
-    resources: ['users', 'groups', 'roles', 'ansible', 'bolt', 'puppetdb', 'ssh'],
+    resources: ['users', 'groups', 'roles', 'ansible', 'bolt', 'puppetdb', 'puppetserver', 'ssh', 'checkmk'],
   },
 };
 
@@ -78,6 +82,10 @@ export const RESOURCE_LABELS: Record<PermissionResource, string> = {
   users: 'Users',
   groups: 'Groups',
   roles: 'Roles',
+  puppetserver: 'Puppetserver',
+  executions: 'Executions',
+  provisioning: 'Provisioning discovery',
+  checkmk: 'Checkmk',
 };
 
 /**
@@ -114,7 +122,7 @@ export function getResourceCategory(resource: string): string | null {
  * Validates Requirements: 1.3, 9.2, 9.3
  */
 export function hasProvisioningPermission(): boolean {
-  return authManager.isAuthenticated;
+  return authManager.hasPermission("provisioning", "read") && ["proxmox", "aws", "azure"].some(provider => hasPermission("provision", provider));
 }
 
 /**
@@ -126,14 +134,10 @@ export function hasProvisioningPermission(): boolean {
  *
  * Validates Requirements: 9.1, 9.2, 9.3
  */
-export function hasPermission(_action: string, _integration?: string): boolean {
-  if (!authManager.isAuthenticated) {
-    return false;
-  }
-
-  // For now, all authenticated users have all permissions
-  // This will be enhanced when backend RBAC provides permission details
-  return true;
+export function hasPermission(action: string, integration?: string): boolean {
+  if (!integration) return ["proxmox", "aws", "azure"].some(provider => hasPermission(action, provider));
+  return authManager.hasPermission(integration, action)
+    && (!['provision', 'lifecycle', 'destroy'].includes(action) || authManager.hasPermission(integration, 'read'));
 }
 
 /**
@@ -142,7 +146,7 @@ export function hasPermission(_action: string, _integration?: string): boolean {
  * Validates Requirements: 9.2, 9.3
  */
 export function hasManagePermission(): boolean {
-  return authManager.isAuthenticated;
+  return hasPermission("lifecycle");
 }
 
 /**
@@ -151,5 +155,5 @@ export function hasManagePermission(): boolean {
  * Validates Requirements: 9.2, 9.3
  */
 export function hasDestroyPermission(): boolean {
-  return authManager.isAuthenticated;
+  return hasPermission("destroy");
 }

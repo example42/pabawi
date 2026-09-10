@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 import express, { type Express } from "express";
 import request from "supertest";
 import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
@@ -83,7 +84,7 @@ function buildApp(
   app.use(express.json());
   app.use(
     "/api/nodes",
-    createMonitoringRouter(integrationManager, container ?? createMockContainer()),
+    createMonitoringRouter(integrationManager, noPermissionCheck, container ?? createMockContainer()),
   );
   return app;
 }

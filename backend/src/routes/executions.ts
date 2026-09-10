@@ -61,7 +61,7 @@ const BatchExecutionRequestSchema = z.object({
  *   baseline for every route, because execution records and their stored output
  *   can contain operational secrets; the command-executing / mutating routes
  *   (`/batch`, `/:id/re-execute`, `/:id/cancel`, `/batch/:batchId/cancel`)
- *   additionally require `bolt:execute`, matching the single-node command route.
+ *   additionally require `<execution-tool>:execute` for the selected or stored tool.
  * @param commandWhitelistService - Optional whitelist validator. When supplied,
  *   `type: "command"` batch/re-execute requests are validated against the same
  *   whitelist (and shell-metacharacter block) that guards the single-node route.
@@ -81,7 +81,21 @@ export function createExecutionsRouter(
   // Baseline read gate: applies to every route in this router, so a route added
   // later fails closed rather than exposing execution history and output.
   router.use(requirePermission("executions", "read"));
-  const rbacExecute: RequestHandler = requirePermission("bolt", "execute");
+  const requireStoredTool: RequestHandler = asyncHandler(async (req, res, next) => {
+    const execution = await executionRepository.findById(req.params.id);
+    if (!execution) {
+      res.status(404).json({ error: { code: "EXECUTION_NOT_FOUND", message: "Execution not found" } });
+      return;
+    }
+    req.authorizedExecution = execution;
+    requirePermission(execution.executionTool ?? "bolt", "execute")(req, res, next);
+  });
+  const requireBatchTools: RequestHandler = asyncHandler(async (req, res, next) => {
+    const tools = await executionRepository.findBatchExecutionTools(req.params.batchId);
+    const checks = Router();
+    for (const tool of tools.length > 0 ? tools : ["bolt"]) checks.use(requirePermission(tool, "execute"));
+    checks(req, res, next);
+  });
 
   /**
    * Validate a command against the whitelist for command-type executions.
@@ -785,7 +799,7 @@ export function createExecutionsRouter(
    */
   router.post(
     "/:id/re-execute",
-    rbacExecute,
+    requireStoredTool,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -808,8 +822,7 @@ export function createExecutionsRouter(
         });
 
         // Get the original execution
-        const originalExecution =
-          await executionRepository.findById(executionId);
+        const originalExecution = req.authorizedExecution;
         if (!originalExecution) {
           logger.warn("Execution not found for re-execution", {
             component: "ExecutionsRouter",
@@ -1337,7 +1350,7 @@ export function createExecutionsRouter(
    */
   router.post(
     "/:id/cancel",
-    rbacExecute,
+    requireStoredTool,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -1360,7 +1373,7 @@ export function createExecutionsRouter(
         });
 
         // Get execution by ID
-        const execution = await executionRepository.findById(executionId);
+        const execution = req.authorizedExecution;
 
         if (!execution) {
           logger.warn("Execution not found for cancellation", {
@@ -1616,7 +1629,14 @@ export function createExecutionsRouter(
    */
   router.post(
     "/batch",
-    rbacExecute,
+    (req, res, next): void => {
+      const parsed = BatchExecutionRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid request body", details: parsed.error.errors } });
+        return;
+      }
+      requirePermission(parsed.data.tool ?? "bolt", "execute")(req, res, next);
+    },
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -2052,7 +2072,7 @@ export function createExecutionsRouter(
    */
   router.post(
     "/batch/:batchId/cancel",
-    rbacExecute,
+    requireBatchTools,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

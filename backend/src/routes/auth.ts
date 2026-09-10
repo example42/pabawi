@@ -1,3 +1,4 @@
+import { PermissionService } from "../services/PermissionService";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
@@ -81,6 +82,18 @@ export function createAuthRouter(
   const userService = new UserService(databaseService.getAdapter(), authService);
   const setupService = new SetupService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
+  router.get("/permissions", asyncHandler(authMiddleware), asyncHandler(async (req, res) => {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Authentication required" } });
+      return;
+    }
+    const permissions = new PermissionService(databaseService.getAdapter());
+    const grants = await permissions.getUserPermissions(userId);
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ permissions: grants.map(({ resource, action }) => ({ resource, action })) });
+  }));
+
 
   /**
    * Resolve EntraIdService from the container (if registered).

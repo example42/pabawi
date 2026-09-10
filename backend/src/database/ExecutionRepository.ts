@@ -244,6 +244,14 @@ export class ExecutionRepository {
   /**
    * Find execution by ID
    */
+  public async findBatchExecutionTools(batchId: string): Promise<string[]> {
+    const rows = await this.db.query<{ tool: string }>(
+      "SELECT DISTINCT COALESCE(execution_tool, 'bolt') AS tool FROM executions WHERE batch_id = ?",
+      [batchId],
+    );
+    return rows.map(row => row.tool);
+  }
+
   public async findById(id: string): Promise<ExecutionRecord | null> {
     const sql = `SELECT * FROM executions WHERE id = ?`;
 

@@ -1,3 +1,4 @@
+import { allowAllSources } from "../helpers/sourceAuthorization";
 import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
@@ -87,7 +88,11 @@ function buildApp(...plugins: InformationSourcePlugin[]): {
   app.use(express.json());
   app.use(requestIdMiddleware);
   app.use(expertModeMiddleware);
-  app.use("/api/nodes", createFactsRouter(manager));
+  app.use((req, _res, next) => {
+    req.authorizedSources = (req.get("X-Test-Sources") ?? plugins.map(p => p.name).join(",")).split(",");
+    next();
+  });
+  app.use("/api/nodes", createFactsRouter(manager, allowAllSources));
 
   return { app, manager };
 }
@@ -185,4 +190,33 @@ describe("GET /api/nodes/:id/facts source selection", () => {
     expect(typeof sources.ssh.timestamp).toBe("string");
     expect(ssh.getNodeFactsCalls).toEqual(["host.example"]);
   });
+});
+
+
+describe("S01: facts respect the caller's source scope", () => {
+  it("does not query or return a restricted source", async () => {
+    const puppetdb = new FakeInformationSource("puppetdb", { node1: { secret: "restricted-canary" } });
+    const aws = new FakeInformationSource("aws", { node1: { os: "linux" } });
+    const { app } = buildApp(puppetdb, aws);
+    const response = await request(harness.use(app)).get("/api/nodes/node1/facts").set("X-Test-Sources", "aws");
+    expect(response.status).toBe(200);
+    expect(Object.keys(response.body.sources as Record<string, unknown>)).toEqual(["aws"]);
+    expect(puppetdb.getNodeFactsCalls).toEqual([]);
+    expect(JSON.stringify(response.body)).not.toContain("restricted-canary");
+  });
+});
+
+
+it("keeps scoped inventory isolated from the global cache", async () => {
+  const puppetdb = new FakeInformationSource("puppetdb");
+  const aws = new FakeInformationSource("aws");
+  const restricted = vi.spyOn(puppetdb, "getInventory");
+  const { manager } = buildApp(puppetdb, aws);
+  await manager.getAggregatedInventory();
+  restricted.mockClear();
+  const scoped = await manager.getAggregatedInventory(true, ["aws"]);
+  expect(Object.keys(scoped.sources)).toEqual(["aws"]);
+  expect(restricted).not.toHaveBeenCalled();
+  const global = await manager.getAggregatedInventory();
+  expect(Object.keys(global.sources).sort()).toEqual(["aws", "puppetdb"]);
 });

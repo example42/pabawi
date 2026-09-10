@@ -5,7 +5,7 @@
   import { authManager } from '../lib/auth.svelte';
   import { router } from '../lib/router.svelte';
   import { showSuccess } from '../lib/toast.svelte';
-  import { hasProvisioningPermission } from '../lib/permissions';
+  import { hasProvisioningPermission, hasPermission } from '../lib/permissions';
   import ChangePasswordDialog from './ChangePasswordDialog.svelte';
   import { get } from '../lib/api';
   import { onMount } from 'svelte';
@@ -54,7 +54,12 @@
   ];
 
   // Use only base nav items - admin items are in dropdown
-  const navItems = baseNavItems;
+  const navItems = $derived(baseNavItems.filter(item => {
+    if (item.path === '/executions') return hasPermission('read', 'executions');
+    if (item.path === '/monitor') return hasPermission('read', 'checkmk');
+    if (item.path === '/inventory') return ['bolt', 'ansible', 'ssh', 'puppetdb', 'puppetserver', 'hiera', 'proxmox', 'aws', 'azure', 'checkmk'].some(source => hasPermission('read', source));
+    return true;
+  }));
 
   function isActive(path: string): boolean {
     if (path === '/') {

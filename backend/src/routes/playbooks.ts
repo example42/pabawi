@@ -1,3 +1,4 @@
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
@@ -30,6 +31,7 @@ const PlaybookExecutionBodySchema = z.object({
 
 export function createPlaybooksRouter(
   integrationManager: IntegrationManager,
+  requirePermission: PermissionMiddlewareFactory,
   executionRepository: ExecutionRepository,
   streamingManager?: StreamingExecutionManager,
   container: DIContainer = createDefaultContainer(),
@@ -40,6 +42,7 @@ export function createPlaybooksRouter(
 
   router.post(
     "/:id/playbook",
+    requirePermission("ansible", "execute"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

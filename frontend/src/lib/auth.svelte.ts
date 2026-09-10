@@ -51,6 +51,7 @@ export interface AuthError {
 }
 
 class AuthManager {
+  private _permissions = $state<{ resource: string; action: string }[]>([]);
   private _token = $state<string | null>(null);
   private _refreshToken = $state<string | null>(null);
   private _user = $state<UserDTO | null>(null);
@@ -95,6 +96,31 @@ class AuthManager {
 
   get isAdmin(): boolean {
     return this._user?.isAdmin ?? false;
+  }
+
+  hasPermission(resource: string, action: string): boolean {
+    return this._isAuthenticated && this._permissions.some(permission => permission.resource === resource && permission.action === action);
+  }
+
+  async refreshPermissions(): Promise<void> {
+    const token = this._token;
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/permissions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        if (this._token === token) this._permissions = [];
+        return;
+      }
+      const data = await response.json() as { permissions: { resource: string; action: string }[] };
+      if (this._token === token) this._permissions = data.permissions;
+    } catch (error) {
+      if (this._token === token) this._permissions = [];
+      logger.warn("Auth", "refreshPermissions", "Unable to load permissions", {
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 
   /**
@@ -299,6 +325,7 @@ class AuthManager {
   // Private methods
 
   private setAuthData(data: AuthResponse): void {
+    this._permissions = [];
     this._token = data.token;
     this._refreshToken = data.refreshToken;
     this._user = data.user;
@@ -317,6 +344,7 @@ class AuthManager {
   }
 
   private clearAuthData(): void {
+    this._permissions = [];
     this._token = null;
     this._refreshToken = null;
     this._user = null;

@@ -9,8 +9,19 @@ see the main [README](../README.md#installation).
    sections labelled "Security — breaking for operators" or "Action required
    before upgrade" — these require configuration changes before starting the
    new version.
-2. **Back up your database.** SQLite: copy the `.db` file. PostgreSQL: run
-   `pg_dump`.
+2. **Back up your database consistently.** For SQLite, use the online backup
+   command below, or stop every writer cleanly before copying the database.
+   Copying only a live `.db` file can omit committed data still in its WAL.
+   PostgreSQL: use `pg_dump` and verify the dump in a separate database.
+
+   ```bash
+   sqlite3 /path/to/pabawi.db ".backup '/path/to/pabawi-backup.db'"
+   sqlite3 /path/to/pabawi-backup.db "PRAGMA integrity_check; PRAGMA foreign_key_check;"
+   ```
+
+   The integrity check must return `ok`; the foreign-key check must return no
+   rows. Restore to a separate location and verify user-role and user-group
+   assignments before upgrading.
 3. **Back up your `.env` file.** Some releases add required variables or change
    defaults.
 
@@ -228,7 +239,7 @@ want to enable it. Add `CHECKMK_ENABLED=true` and the related variables to
 Infrastructure routes that previously required only authentication now enforce
 RBAC (assessment finding S01). Migration `020` adds three resources and grants
 them to the built-in roles, so Viewer, Operator, Provisioner and Administrator
-keep working with no action. Custom roles do not receive the new permissions
+receive the new read grants. Custom roles do not receive the new permissions
 automatically.
 
 | Surface | Now requires |
@@ -238,14 +249,66 @@ automatically.
 | `/api/integrations/proxmox/*` | `proxmox:read` on every route, plus `proxmox:provision` / `proxmox:lifecycle` / `proxmox:destroy` |
 | `/api/integrations/puppetserver/*` | `puppetserver:read`; `puppetserver:write` to deploy an environment; `puppetserver:admin` to flush the environment cache |
 | `/api/integrations/hiera/*` | `hiera:read`; `hiera:admin` for `POST /reload` |
-| `/api/executions/*`, `/api/streaming/*` | `executions:read`; mutating routes keep `bolt:execute` |
+| `/api/executions/*`, `/api/streaming/*` | `executions:read`; batch submission, re-execution and cancellation require `<execution-tool>:execute` |
+| `/api/nodes/:id/command` | `<selected-tool>:execute`, including automatic tool selection |
+| `/api/inventory`, `/api/inventory/:id`, `/api/nodes/:id/facts` | Only sources with `<source>:read` are queried and returned; explicit restricted facts/PQL requests return 403 |
+| `/api/inventory/:id/action`, `DELETE /api/inventory/:id` | Provider read plus action-specific provision/lifecycle/destroy permission, in addition to the existing lifecycle credential requirement |
 | `/api/integrations/provisioning` | `provisioning:read` (the permission row was missing before, so only `is_admin` users could reach it) |
+
+Execution history and output are shared across users who hold `executions:read`;
+they are not restricted to the execution owner. Grant this permission only to
+operators who may inspect other users' execution output.
 
 After upgrading, review any custom role that previously relied on
 authentication alone and add the permissions above. `puppetserver:write` and
 `puppetserver:admin` are granted to Administrator only: environment deployment
 and cache flush change what every managed node applies, so Operators must be
 granted them deliberately.
+
+**Database: migration 017 was destructive on SQLite and fatal on PostgreSQL.**
+
+Migration `017_nullable_password_hash` made `users.password_hash` nullable for
+SSO accounts by rebuilding the `users` table. It shipped as a single shared file
+and was wrong on both backends:
+
+- **SQLite.** The rebuild dropped `users` with foreign keys enabled. SQLite runs
+  an implicit `DELETE` before the drop, which fired `ON DELETE CASCADE` on
+  `user_roles`, `user_groups`, `revoked_tokens` and `federated_identities`, and
+  `ON DELETE SET NULL` on `audit_logs.user_id` and `journal_entries.user_id`.
+  User accounts survived (they were copied); every role assignment, group
+  membership, SSO link and token revocation did not.
+- **PostgreSQL.** `DROP TABLE users` fails there with `cannot drop table users
+  because other objects depend on it`, so the migration aborted and the
+  deployment stayed at migration 016. PostgreSQL installations could not start
+  past that point at all.
+
+Migration 017 is now two dialect-specific files: SQLite suspends foreign-key
+enforcement around the rebuild (and verifies the result with
+`PRAGMA foreign_key_check` before committing), PostgreSQL uses
+`ALTER COLUMN ... DROP NOT NULL`. Migration `018` also gained a PostgreSQL
+variant, because its `datetime('now')` default is SQLite-only.
+
+**If you already ran the old 017 on SQLite,** the migration is recorded as
+applied and will not run again, and the deleted rows cannot be recovered by a
+later migration: nothing in the database records what they were. Recovery:
+
+1. Preserve the current database using the consistent backup procedure above.
+2. Restore your pre-upgrade backup to a separate file and read the assignments
+   out of it:
+
+   ```bash
+   sqlite3 pabawi-backup.db \
+     "SELECT user_id, role_id FROM user_roles;
+      SELECT user_id, group_id FROM user_groups;
+      SELECT id, user_id, provider, subject FROM federated_identities;"
+   ```
+
+3. Re-create the assignments through the API or UI so they are audit-logged,
+   rather than inserting them directly.
+
+Accounts with `is_admin = 1` are unaffected: that flag lives on `users` and was
+copied. Everyone else lost all permissions until their roles are re-assigned,
+which is what an affected installation looks like from the outside.
 
 ---
 

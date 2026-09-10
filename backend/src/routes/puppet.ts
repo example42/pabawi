@@ -1,4 +1,5 @@
-import { Router, type Request, type Response } from "express";
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import type { ExecutionRepository, ExecutionTool } from "../database/ExecutionRepository";
 import { asyncHandler } from "./asyncHandler";
@@ -281,6 +282,7 @@ export async function runPuppetOn(ctx: PuppetExecutionContext): Promise<void> {
  */
 export function createPuppetRouter(
   integrationManager: IntegrationManager,
+  requirePermission: PermissionMiddlewareFactory,
   executionRepository: ExecutionRepository,
   journalService?: JournalService,
   streamingManager?: StreamingExecutionManager,
@@ -306,12 +308,24 @@ export function createPuppetRouter(
     return null;
   }
 
+  const requireTool: RequestHandler = (req, res, next) => {
+    const requested = z.enum(["bolt", "ansible", "ssh"]).optional().safeParse((req.body as { tool?: unknown } | undefined)?.tool);
+    if (!requested.success) {
+      res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Invalid execution tool" } });
+      return;
+    }
+    const tool = selectTool(requested.data) ?? requested.data ?? "bolt";
+    req.body = { ...req.body as Record<string, unknown>, tool };
+    requirePermission(tool, "execute")(req, res, next);
+  };
+
   /**
    * POST /api/nodes/:id/puppet-run
    * Execute Puppet run on a single node
    */
   router.post(
     "/:id/puppet-run",
+    requireTool,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -497,6 +511,7 @@ export function createPuppetRouter(
    */
   router.post(
     "/",
+    requireTool,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

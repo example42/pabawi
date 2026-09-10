@@ -288,7 +288,7 @@ describe('External API Errors in Expert Mode', () => {
 
       const mockExecutionRepository = {} as any;
 
-      const router = createTasksRouter(mockIntegrationManager, mockExecutionRepository);
+      const router = createTasksRouter(mockIntegrationManager, noPermissionCheck, mockExecutionRepository);
       app.use('/api/tasks', router);
 
       const response = await request(harness.use(app))
@@ -327,7 +327,7 @@ describe('External API Errors in Expert Mode', () => {
 
       const mockExecutionRepository = {} as any;
 
-      const router = createTasksRouter(mockIntegrationManager, mockExecutionRepository);
+      const router = createTasksRouter(mockIntegrationManager, noPermissionCheck, mockExecutionRepository);
       app.use('/api/tasks-unreachable', router);
 
       const response = await request(harness.use(app))
@@ -364,7 +364,7 @@ describe('External API Errors in Expert Mode', () => {
 
       const mockExecutionRepository = {} as any;
 
-      const router = createTasksRouter(mockIntegrationManager, mockExecutionRepository);
+      const router = createTasksRouter(mockIntegrationManager, noPermissionCheck, mockExecutionRepository);
       app.use('/api/tasks-timeout', router);
 
       const response = await request(harness.use(app))

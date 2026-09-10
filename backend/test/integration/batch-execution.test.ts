@@ -45,7 +45,7 @@ describe("Batch Execution API Endpoints", () => {
     app.use(requestIdMiddleware);
 
     // Mock execution repository
-    executionRepository = {} as ExecutionRepository;
+    executionRepository = { findBatchExecutionTools: vi.fn().mockResolvedValue(["bolt"]) } as unknown as ExecutionRepository;
 
     // Mock batch execution service
     batchExecutionService = {

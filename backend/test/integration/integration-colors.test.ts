@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 /**
  * Integration tests for the integration colors API endpoint
  */
@@ -35,7 +36,7 @@ describe('Integration Colors API', () => {
     const integrationManager = new IntegrationManager({ logger: new LoggerService('error') });
 
     // Mount integrations router
-    app.use('/api/integrations', createIntegrationsRouter(integrationManager));
+    app.use('/api/integrations', createIntegrationsRouter(integrationManager, noPermissionCheck));
   });
 
   describe('GET /api/integrations/colors', () => {

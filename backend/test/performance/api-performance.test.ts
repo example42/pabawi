@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 /**
  * API Performance Tests
  *
@@ -80,7 +81,7 @@ describe('API Performance Tests', () => {
 
     // Create router
     const router = createIntegrationsRouter(
-      integrationManager,
+      integrationManager, noPermissionCheck,
       puppetDBService,
       puppetserverService,
     );

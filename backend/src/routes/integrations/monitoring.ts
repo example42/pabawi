@@ -1,3 +1,4 @@
+import type { PermissionMiddlewareFactory } from "../../middleware/routeAuthorization";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../../integrations/IntegrationManager";
@@ -23,8 +24,7 @@ const MonitoringEventsQuerySchema = z.object({
 /**
  * Create monitoring router for Checkmk service status and events.
  *
- * RBAC (`checkmk:read`) is applied at the mount level in server.ts,
- * not inside this router.
+ * Each endpoint enforces `checkmk:read` after matching its route.
  *
  * Endpoints (relative — mounted under /api/nodes):
  *   GET /:nodeId/services          — live service status
@@ -32,6 +32,7 @@ const MonitoringEventsQuerySchema = z.object({
  */
 export function createMonitoringRouter(
   integrationManager: IntegrationManager,
+  requirePermission: PermissionMiddlewareFactory,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -60,6 +61,7 @@ export function createMonitoringRouter(
    */
   router.get(
     "/:nodeId/services",
+    requirePermission("checkmk", "read"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -231,6 +233,7 @@ export function createMonitoringRouter(
    */
   router.get(
     "/:nodeId/monitoring-events",
+    requirePermission("checkmk", "read"),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

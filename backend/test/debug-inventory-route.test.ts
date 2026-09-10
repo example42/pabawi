@@ -1,3 +1,5 @@
+import { noPermissionCheck } from "../src/middleware/routeAuthorization";
+import { allowAllSources } from "./helpers/sourceAuthorization";
 import { describe, it, expect, beforeEach, vi, beforeAll, afterAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
@@ -62,7 +64,7 @@ describe("Debug Inventory Route", () => {
       } as Node,
     ]);
 
-    app.use("/api/inventory", createInventoryRouter(boltService, integrationManager));
+    app.use("/api/inventory", createInventoryRouter(boltService, allowAllSources, noPermissionCheck, integrationManager));
 
     vi.clearAllMocks();
   });
