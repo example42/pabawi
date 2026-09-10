@@ -67,6 +67,7 @@ function createMockDeps(overrides?: Partial<McpDependencies> & {
 
   return {
     integrationManager: {
+      getAllInformationSources: () => [{ name: 'ansible' }, { name: 'puppetdb' }],
       getAggregatedInventory: vi.fn().mockResolvedValue({ nodes: [], groups: [], sources: {} }),
       getNodeData: vi.fn().mockResolvedValue({ node: {}, facts: {}, executionHistory: [] }),
       healthCheckAll: vi.fn().mockResolvedValue(new Map()),
@@ -88,7 +89,8 @@ function createMockDeps(overrides?: Partial<McpDependencies> & {
     hieraPlugin: undefined,
     puppetDBService: undefined,
     puppetRunHistoryService: undefined,
-    mcpUserId: 'mcp-user-id',
+    principal: { userId: 'mcp-user-id', authMethod: 'static' },
+    revalidateAuth: vi.fn().mockResolvedValue(undefined),
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as unknown as McpDependencies['logger'],
     version: '1.4.0',
     ...depsOverrides,

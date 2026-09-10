@@ -1,4 +1,3 @@
-import { SessionAuthorization } from "./services/SessionAuthorization";
 import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import { mountInfrastructureRoutes } from "./routes/mountInfrastructureRoutes";
@@ -71,7 +70,7 @@ import { AuditLoggingService } from "./services/AuditLoggingService";
 import { EntraIdService } from "./services/EntraIdService";
 import { createEntraIdAuthRouter } from "./routes/entraIdAuth";
 import { provisionMcpServiceUser } from "./mcp/McpServiceUser";
-import { createMcpServer } from "./mcp/McpServer";
+import { createMcpRouter } from "./mcp/McpRouter";
 
 /**
  * Initialize and start the application
@@ -766,6 +765,8 @@ async function startServer(): Promise<Express> {
       createLogsRouter(container),
     );
 
+    let closeMcp: (() => Promise<void>) | undefined;
+
     // Conditionally initialize MCP server
     if (configService.isMcpEnabled()) {
       logger.info("MCP server enabled, initializing...", {
@@ -788,110 +789,17 @@ async function startServer(): Promise<Express> {
         const pkgJson = require("../package.json") as { version?: string };
         const version = pkgJson.version ?? "1.0.0";
 
-        // MCP SDK uses package.json "exports" which requires moduleResolution >= node16.
-        // The backend uses moduleResolution: "node", so we use require() for runtime compat.
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js") as typeof import("@modelcontextprotocol/sdk/server/streamableHttp.js"); // eslint-disable-line @typescript-eslint/consistent-type-imports
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { randomUUID } = require("node:crypto") as { randomUUID: () => string };
-
-        // Session-based transport registry for Streamable HTTP protocol.
-        // Limited to MCP_MAX_SESSIONS active sessions; stale sessions are evicted
-        // after MCP_SESSION_TTL_MS to prevent unbounded memory growth.
-        const MCP_MAX_SESSIONS = 100;
-        const MCP_SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-        interface McpSessionEntry {
-          transport: InstanceType<typeof StreamableHTTPServerTransport>;
-          createdAt: number;
-          authorization?: SessionAuthorization;
-        }
-
-        const mcpSessions = new Map<string, McpSessionEntry>();
-
-        function evictExpiredMcpSessions(): void {
-          const now = Date.now();
-          for (const [id, session] of mcpSessions) {
-            if (now - session.createdAt > MCP_SESSION_TTL_MS) {
-              mcpSessions.delete(id);
-              session.authorization?.close();
-              session.transport.close();
-            }
-          }
-        }
-
-        // Dependencies captured for creating per-session MCP server instances
-        const mcpDeps = {
-          integrationManager, executionRepository, journalService,
-          permissionService, hieraPlugin, puppetDBService,
-          puppetRunHistoryService, mcpUserId, logger, version,
-        };
-
-        // MCP-scoped auth: accepts MCP_AUTH_TOKEN (static) or falls through to JWT
         const mcpAuth = createMcpAuthMiddleware(
-          configService.getMcpAuthToken(),
-          mcpUserId,
-          authMiddleware,
+          configService.getMcpAuthToken(), mcpUserId, authMiddleware,
           databaseService.getAdapter(),
         );
-
-        app.post("/mcp", mcpAuth, asyncHandler(async (req: Request, res: Response) => {
-          const sessionId = req.headers["mcp-session-id"] as string | undefined;
-          let transport: InstanceType<typeof StreamableHTTPServerTransport> | undefined;
-
-          if (sessionId && mcpSessions.has(sessionId)) {
-            transport = mcpSessions.get(sessionId)?.transport;
-          } else if (!sessionId) {
-            // Evict stale sessions and enforce session limit before creating a new one
-            evictExpiredMcpSessions();
-            if (mcpSessions.size >= MCP_MAX_SESSIONS) {
-              res.status(503).json({ error: "Maximum MCP session limit reached" });
-              return;
-            }
-            // New session — create transport + server per session
-            transport = new StreamableHTTPServerTransport({
-              sessionIdGenerator: (): string => randomUUID(),
-              onsessioninitialized: (id: string): void => {
-                const authorization = req.revalidateAuth ? new SessionAuthorization(req.revalidateAuth, () => {
-                  mcpSessions.delete(id);
-                  transport?.close();
-                }) : undefined;
-                mcpSessions.set(id, { transport: transport!, createdAt: Date.now(), authorization }); // eslint-disable-line @typescript-eslint/no-non-null-assertion
-                transport!.onclose = (): void => { authorization?.close(); mcpSessions.delete(id); }; // eslint-disable-line @typescript-eslint/no-non-null-assertion
-              },
-            });
-            const sessionServer = createMcpServer({ ...mcpDeps, revalidateAuth: req.revalidateAuth });
-            await sessionServer.connect(transport);
-          } else {
-            res.status(400).json({ error: "Invalid or missing session" });
-            return;
-          }
-
-          await transport!.handleRequest(req, res, req.body); // eslint-disable-line @typescript-eslint/no-non-null-assertion
-        }));
-
-        app.get("/mcp", mcpAuth, asyncHandler(async (req: Request, res: Response) => {
-          const sessionId = req.headers["mcp-session-id"] as string | undefined;
-          const session = sessionId ? mcpSessions.get(sessionId) : undefined;
-          if (!session) {
-            res.status(400).json({ error: "Invalid or missing session" });
-            return;
-          }
-          await session.transport.handleRequest(req, res);
-        }));
-
-        app.delete("/mcp", mcpAuth, (req: Request, res: Response) => {
-          const sessionId = req.headers["mcp-session-id"] as string | undefined;
-          if (sessionId) {
-            const session = mcpSessions.get(sessionId);
-            mcpSessions.delete(sessionId);
-            if (session) {
-              session.authorization?.close();
-              session.transport.close();
-            }
-          }
-          res.sendStatus(200);
-        });
+        const mcp = createMcpRouter({
+          integrationManager, executionRepository, journalService,
+          permissionService, hieraPlugin, puppetDBService,
+          puppetRunHistoryService, logger, version,
+        }, mcpAuth);
+        app.use("/mcp", mcp.router);
+        closeMcp = mcp.close;
 
         logger.info("MCP server initialized, /mcp endpoint registered (session-based)", {
           component: "Server",
@@ -1003,8 +911,9 @@ async function startServer(): Promise<Express> {
         clearInterval(entraIdCleanupInterval);
       }
       clearInterval(consoleCleanupInterval);
+      const mcpClosed = closeMcp?.() ?? Promise.resolve();
       server.close(() => {
-        void databaseService.close().then(() => {
+        void mcpClosed.then(() => databaseService.close()).then(() => {
           logger.info("Server closed", {
             component: "Server",
             operation: "shutdown",

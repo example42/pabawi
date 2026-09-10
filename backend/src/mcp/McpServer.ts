@@ -45,6 +45,11 @@ export interface McpServerInstance {
   close: () => Promise<void>;
 }
 
+export interface McpPrincipal {
+  userId: string;
+  authMethod: 'jwt' | 'static';
+}
+
 export interface McpDependencies {
   integrationManager: IntegrationManager;
   executionRepository: ExecutionRepository;
@@ -53,8 +58,8 @@ export interface McpDependencies {
   hieraPlugin: HieraPlugin | undefined;
   puppetDBService: PuppetDBService | undefined;
   puppetRunHistoryService: PuppetRunHistoryService | undefined;
-  mcpUserId: string;
-  revalidateAuth?: () => Promise<void>;
+  principal: McpPrincipal;
+  revalidateAuth: () => Promise<void>;
   logger: LoggerService;
   version: string;
 }

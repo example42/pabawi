@@ -29,6 +29,7 @@ export function createMcpAuthMiddleware(
   };
 
   return asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    req.mcpAuthMethod = 'jwt';
     if (!mcpAuthToken) {
       // No static token configured — fall through to JWT auth
       jwtAuthMiddleware(req, res, next);
@@ -54,6 +55,7 @@ export function createMcpAuthMiddleware(
         res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'MCP account unavailable' } });
         return;
       }
+      req.mcpAuthMethod = 'static';
       // Static MCP token matched — authenticate as mcp-service user
       req.user = {
         userId: mcpUserId,

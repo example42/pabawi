@@ -57,15 +57,28 @@ function jsonResult(data: unknown): {
   };
 }
 
+async function authorizedSources(deps: McpDependencies): Promise<string[]> {
+  const names = [...new Set(['bolt', ...deps.integrationManager.getAllInformationSources().map(source => source.name)])];
+  const allowed: string[] = [];
+  for (const name of names) {
+    if (await deps.permissionService.hasPermission(deps.principal.userId, name, 'read')) allowed.push(name);
+  }
+  return allowed;
+}
+
 async function checkPermission(
   deps: McpDependencies,
   toolName: string,
 ): Promise<{ resource: string; action: string } | null> {
-  await deps.revalidateAuth?.();
+  await deps.revalidateAuth();
   const perm = TOOL_PERMISSIONS[toolName];
   const allowed = await deps.permissionService.hasPermission(
-    deps.mcpUserId, perm.resource, perm.action,
+    deps.principal.userId, perm.resource, perm.action,
   );
+  deps.logger.info('MCP tool authorization', {
+    component: 'McpServer', operation: 'authorizeTool',
+    metadata: { ...deps.principal, tool: toolName, allowed },
+  });
   return allowed ? null : perm;
 }
 
@@ -74,17 +87,36 @@ async function checkPermission(
 /* ------------------------------------------------------------------ */
 
 export function registerAllTools(server: McpServerInstance, deps: McpDependencies): void {
-  registerInventoryList(server, deps);
-  registerFactsGet(server, deps);
-  registerFactsBulk(server, deps);
-  registerReportsQuery(server, deps);
-  registerCatalogsGet(server, deps);
-  registerHieraLookup(server, deps);
-  registerExecutionsList(server, deps);
-  registerIntegrationsList(server, deps);
-  registerJournalQuery(server, deps);
-  registerMonitoringServicesGet(server, deps);
-  registerMonitoringEventsGet(server, deps);
+  const guarded: McpServerInstance = {
+    connect: server.connect.bind(server),
+    close: server.close.bind(server),
+    registerTool: (name, config, handler) => {
+      server.registerTool(name, config, async args => {
+        try {
+          const result = await handler(args);
+          const denied = await checkPermission(deps, name);
+          return denied ? permissionError(denied.resource, denied.action) : result;
+        } catch {
+          deps.logger.warn('MCP tool authentication failed', {
+            component: 'McpServer', operation: 'authorizeTool',
+            metadata: { ...deps.principal, tool: name, allowed: false },
+          });
+          return errorResult('MCP authorization unavailable or session revoked');
+        }
+      });
+    },
+  };
+  registerInventoryList(guarded, deps);
+  registerFactsGet(guarded, deps);
+  registerFactsBulk(guarded, deps);
+  registerReportsQuery(guarded, deps);
+  registerCatalogsGet(guarded, deps);
+  registerHieraLookup(guarded, deps);
+  registerExecutionsList(guarded, deps);
+  registerIntegrationsList(guarded, deps);
+  registerJournalQuery(guarded, deps);
+  registerMonitoringServicesGet(guarded, deps);
+  registerMonitoringEventsGet(guarded, deps);
 }
 
 function registerInventoryList(server: McpServerInstance, deps: McpDependencies): void {
@@ -98,7 +130,10 @@ function registerInventoryList(server: McpServerInstance, deps: McpDependencies)
     const denied = await checkPermission(deps, 'inventory_list');
     if (denied) return permissionError(denied.resource, denied.action);
     try {
-      const inventory = await deps.integrationManager.getAggregatedInventory();
+      const sources = await authorizedSources(deps);
+      const inventory = await deps.integrationManager.getAggregatedInventory(true, sources);
+      const currentSources = await authorizedSources(deps);
+      if (sources.some(source => !currentSources.includes(source))) return errorResult('MCP source permissions changed; retry the query');
       let nodes = inventory.nodes;
       if (search) {
         const q = search.toLowerCase();
@@ -125,7 +160,10 @@ function registerFactsGet(server: McpServerInstance, deps: McpDependencies): voi
     const denied = await checkPermission(deps, 'facts_get');
     if (denied) return permissionError(denied.resource, denied.action);
     try {
-      const data = await deps.integrationManager.getNodeData(certname);
+      const sources = await authorizedSources(deps);
+      const data = await deps.integrationManager.getNodeData(certname, sources);
+      const currentSources = await authorizedSources(deps);
+      if (sources.some(source => !currentSources.includes(source))) return errorResult('MCP source permissions changed; retry the query');
       const summarised = deduplicateFactSources(
         data.facts as Record<string, { facts: Record<string, unknown> }>,
         include_all === true,

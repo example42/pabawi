@@ -10,6 +10,6 @@ declare module "@modelcontextprotocol/sdk/server/streamableHttp.js" {
     constructor(options?: StreamableHTTPServerTransportOptions);
     onclose?: () => void;
     handleRequest(req: Request, res: Response, body?: unknown): Promise<void>;
-    close(): void;
+    close(): Promise<void>;
   }
 }

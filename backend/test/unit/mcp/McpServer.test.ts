@@ -40,6 +40,7 @@ function createMockServer(): McpServerInstance {
 function createMockDeps(overrides?: Partial<McpDependencies>): McpDependencies {
   return {
     integrationManager: {
+      getAllInformationSources: () => [{ name: 'ansible' }, { name: 'puppetdb' }],
       getAggregatedInventory: vi.fn().mockResolvedValue({
         nodes: [
           { id: 'node1.example.com', name: 'node1.example.com', uri: 'ssh://node1', transport: 'ssh', config: {}, sources: ['bolt'], linked: false, sourceData: {} },
@@ -94,7 +95,8 @@ function createMockDeps(overrides?: Partial<McpDependencies>): McpDependencies {
       }),
     } as unknown as McpDependencies['puppetDBService'],
     puppetRunHistoryService: undefined,
-    mcpUserId: 'mcp-user-id',
+    principal: { userId: 'mcp-user-id', authMethod: 'static' },
+    revalidateAuth: vi.fn().mockResolvedValue(undefined),
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as unknown as McpDependencies['logger'],
     version: '1.1.0',
     ...overrides,
@@ -116,6 +118,26 @@ describe('MCP Tool Handlers', () => {
     deps = createMockDeps();
     const server = createMockServer();
     registerAllTools(server, deps);
+  });
+
+  it('discards provider results if the opening credential is revoked in flight', async () => {
+    vi.mocked(deps.integrationManager.healthCheckAll).mockImplementation(async () => {
+      vi.mocked(deps.revalidateAuth).mockRejectedValue(new Error('revoked'));
+      return new Map();
+    });
+    const result = await callTool('integrations_list');
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('session revoked');
+  });
+
+  it('discards aggregate results if a source grant is removed in flight', async () => {
+    vi.mocked(deps.integrationManager.getAggregatedInventory).mockImplementation(async () => {
+      vi.mocked(deps.permissionService.hasPermission).mockImplementation(async (_user, resource) => resource !== 'bolt');
+      return { nodes: [], groups: [], sources: {} } as never;
+    });
+    const result = await callTool('inventory_list');
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('source permissions changed');
   });
 
   it('registers all 11 tools', () => {
@@ -217,7 +239,7 @@ describe('MCP Tool Handlers', () => {
     it('facts_get returns node facts', async () => {
       const r = await callTool('facts_get', { certname: 'node1' });
       expect(r.isError).toBeUndefined();
-      expect(deps.integrationManager.getNodeData).toHaveBeenCalledWith('node1');
+      expect(deps.integrationManager.getNodeData).toHaveBeenCalledWith('node1', ['bolt', 'ansible', 'puppetdb']);
     });
 
     it('reports_query returns reports', async () => {

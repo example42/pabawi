@@ -21,6 +21,7 @@ declare global {
         iat: number;
         exp: number;
       };
+      mcpAuthMethod?: 'jwt' | 'static';
       revalidateAuth?: () => Promise<void>;
       /** Execution snapshot checked by the mutation authorization middleware. */
       authorizedExecution?: ExecutionRecord;
