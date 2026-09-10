@@ -10,6 +10,7 @@
     defaultKey: '',
     defaultPort: 22,
     hostKeyCheck: true,
+    hostFingerprintsPath: '/etc/pabawi/ssh-host-fingerprints.json',
     connectionTimeout: 30,
     commandTimeout: 300,
   });
@@ -30,6 +31,7 @@
     lines.push(`SSH_DEFAULT_USER=${config.defaultUser || 'deploy'}`);
     lines.push(`SSH_DEFAULT_PORT=${config.defaultPort}`);
     lines.push(`SSH_HOST_KEY_CHECK=${config.hostKeyCheck}`);
+    lines.push(`SSH_HOST_FINGERPRINTS_PATH=${config.hostFingerprintsPath}`);
     lines.push(`SSH_CONNECTION_TIMEOUT=${config.connectionTimeout}`);
     lines.push(`SSH_COMMAND_TIMEOUT=${config.commandTimeout}`);
 
@@ -236,6 +238,11 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
           {#if !config.hostKeyCheck}
             <p class="mt-1 text-sm text-yellow-600 dark:text-yellow-400">⚠️ Host key checking disabled. Only use for testing.</p>
           {/if}
+        </div>
+        <div>
+          <label for="ssh-host-fingerprints" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Host fingerprint file</label>
+          <input id="ssh-host-fingerprints" type="text" bind:value={config.hostFingerprintsPath} class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white" />
+          <p class="mt-1 text-sm text-gray-500">Enroll verified host fingerprints before connecting. See the SSH integration guide.</p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -488,9 +495,9 @@ ssh -i ~/.ssh/pabawi_key deploy@web-server-01 sudo whoami`;
           <div class="p-4 text-gray-700 dark:text-gray-300">
             <p class="mb-3"><strong>Error:</strong> "Host key verification failed"</p>
             <ul class="space-y-2 list-disc list-inside">
-              <li>Add host key to known_hosts: <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">ssh-keyscan -H host >> ~/.ssh/known_hosts</code></li>
-              <li>Remove old host key: <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">ssh-keygen -R host</code></li>
-              <li>Temporarily disable checking (testing only): <code class="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">SSH_HOST_KEY_CHECK=false</code></li>
+              <li>Verify the destination's SHA-256 host-key fingerprint through a trusted console or configuration management.</li>
+              <li>Enroll the verified fingerprint in the managed file configured by <code>SSH_HOST_FINGERPRINTS_PATH</code>. See the SSH integration guide for the JSON format.</li>
+              <li>Investigate changed keys before updating trust. Network key collection alone does not establish identity.</li>
             </ul>
           </div>
         </details>

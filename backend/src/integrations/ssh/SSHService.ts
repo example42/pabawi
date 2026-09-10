@@ -10,6 +10,8 @@ import type { ConnectConfig } from 'ssh2';
 import { Client } from 'ssh2';
 import { readFileSync, statSync } from 'fs';
 import { ConnectionPool } from './ConnectionPool';
+import { verifyHostKey } from './hostTrust';
+import { resolveSSHEndpoint } from './endpoint';
 import { PackageManagerDetector } from './PackageManagerDetector';
 import type {
   SSHConfig,
@@ -95,8 +97,9 @@ export class SSHService {
     });
 
     try {
+      const endpoint = resolveSSHEndpoint(host, this.config.defaultUser, this.config.defaultPort);
       const client = await this.connectionPool.acquire(
-        host,
+        { ...host, user: endpoint.user, port: endpoint.port },
         (h) => this.createConnection(h)
       );
 
@@ -453,8 +456,7 @@ export class SSHService {
 
       // Parse host URI
       const hostname = this.parseHostname(host.uri);
-      const user = host.user ?? this.config.defaultUser;
-      const port = host.port ?? this.config.defaultPort;
+      const { user, port } = resolveSSHEndpoint(host, this.config.defaultUser, this.config.defaultPort);
 
       // Build connection config
       const connectConfig: ConnectConfig = {
@@ -489,10 +491,26 @@ export class SSHService {
       // Configure host key verification
       if (!this.config.hostKeyCheck) {
         this.logger.warn(
-          'SSH host key verification is DISABLED — connections are vulnerable to man-in-the-middle attacks. Set SSH_HOST_KEY_CHECK=true for production use.',
+          'SSH host key verification is DISABLED. Connections are vulnerable to man-in-the-middle attacks.',
           { component: 'SSHService', integration: 'ssh', operation: 'createConnection' },
         );
         connectConfig.hostVerifier = (): boolean => true;
+      } else {
+        connectConfig.hostVerifier = (key: Buffer): boolean => {
+          let trusted = false;
+          try {
+            trusted = verifyHostKey(this.config.hostFingerprintsPath, hostname, port, key);
+          } catch {
+            // Invalid or unreadable trust material must never allow authentication.
+          }
+          if (!trusted) {
+            this.logger.warn('SSH host key verification failed', {
+              component: 'SSHService', integration: 'ssh', operation: 'verifyHostKey',
+              metadata: { hostname, port },
+            });
+          }
+          return trusted;
+        };
       }
 
       // Set up event handlers
@@ -508,6 +526,7 @@ export class SSHService {
 
       client.on('error', (err) => {
         clearTimeout(timeout);
+        client.end();
         reject(err);
       });
 
@@ -608,25 +627,7 @@ export class SSHService {
    * @returns Hostname
    */
   private parseHostname(uri: string): string {
-    let hostname = uri;
-
-    if (hostname.startsWith('ssh://')) {
-      hostname = hostname.substring(6);
-    }
-
-    // Remove user if present (user@hostname format)
-    const atIndex = hostname.indexOf('@');
-    if (atIndex !== -1) {
-      hostname = hostname.substring(atIndex + 1);
-    }
-
-    // Remove port if present
-    const colonIndex = hostname.indexOf(':');
-    if (colonIndex !== -1) {
-      hostname = hostname.substring(0, colonIndex);
-    }
-
-    return hostname;
+    return resolveSSHEndpoint({ name: '', uri }).hostname;
   }
 
   /**
@@ -636,11 +637,7 @@ export class SSHService {
    * @returns Host key
    */
   private getHostKey(host: SSHHost): string {
-    const user = host.user ?? this.config.defaultUser;
-    const port = host.port ?? this.config.defaultPort;
-    const hostname = this.parseHostname(host.uri);
-
-    return `${user}@${hostname}:${String(port)}`;
+    return resolveSSHEndpoint(host, this.config.defaultUser, this.config.defaultPort).poolKey;
   }
 
   /**

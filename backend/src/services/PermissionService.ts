@@ -312,7 +312,7 @@ export class PermissionService {
       AND p.id IN (
         -- Path 1: Direct role assignment (user -> user_roles -> role_permissions -> permissions)
         SELECT rp.permission_id FROM role_permissions rp
-        INNER JOIN user_roles ur ON ur.role_id = rp.role_id
+        INNER JOIN effective_user_roles ur ON ur.role_id = rp.role_id
         WHERE ur.user_id = ?
 
         UNION
@@ -393,7 +393,7 @@ export class PermissionService {
   public async invalidateRolePermissionCache(roleId: string): Promise<void> {
     // Find all users affected by this role (direct + group-based)
     const affectedUsers = await this.db.query<{ userId: string }>(
-      `SELECT user_id AS "userId" FROM user_roles WHERE role_id = ?
+      `SELECT user_id AS "userId" FROM effective_user_roles WHERE role_id = ?
        UNION
        SELECT ug.user_id AS "userId" FROM user_groups ug
        INNER JOIN group_roles gr ON gr.group_id = ug.group_id
@@ -466,7 +466,7 @@ export class PermissionService {
        INNER JOIN role_permissions rp ON rp.permission_id = p.id
        WHERE rp.role_id IN (
         -- Path 1: Direct role assignments (user -> user_roles -> roles)
-        SELECT role_id FROM user_roles WHERE user_id = ?
+        SELECT role_id FROM effective_user_roles WHERE user_id = ?
 
         UNION
 
@@ -570,7 +570,7 @@ export class PermissionService {
       AND p.id IN (
         -- Path 1: Direct role assignment
         SELECT rp.permission_id FROM role_permissions rp
-        INNER JOIN user_roles ur ON ur.role_id = rp.role_id
+        INNER JOIN effective_user_roles ur ON ur.role_id = rp.role_id
         WHERE ur.user_id = ?
 
         UNION

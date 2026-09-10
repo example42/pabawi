@@ -53,11 +53,9 @@ function createMockDb(): DatabaseAdapter {
   return {
     query: vi.fn().mockResolvedValue([]),
     queryOne: vi.fn().mockResolvedValue(null),
-    execute: vi.fn().mockResolvedValue({ changes: 0 }),
-    beginTransaction: vi.fn().mockResolvedValue(undefined),
-    commit: vi.fn().mockResolvedValue(undefined),
-    rollback: vi.fn().mockResolvedValue(undefined),
-    withTransaction: vi.fn(),
+    execute: vi.fn().mockResolvedValue({ changes: 1 }),
+    withExclusiveConnection: vi.fn(async fn => fn()),
+    withTransaction: vi.fn(async fn => fn()),
     initialize: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
@@ -271,7 +269,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             const { getTokenCalls } = mockFetchThatTracksTokenCalls();
 
             try {
-              await service.handleCallback(code, state);
+              await service.handleCallback(code, state, 'a'.repeat(64));
               expect.fail('Should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -307,7 +305,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             const { getTokenCalls } = mockFetchThatTracksTokenCalls();
 
             try {
-              await service.handleCallback(code, state);
+              await service.handleCallback(code, state, 'a'.repeat(64));
               expect.fail('Should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -356,7 +354,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             const idToken = buildIdToken(config, storedNonce);
             mockFetchForToken(idToken);
 
-            const result = await service.handleCallback(code, 'valid-state');
+            const result = await service.handleCallback(code, 'valid-state', 'a'.repeat(64));
             expect(result.userId).toBe('mock-user-id-001');
             expect(result.authMethod).toBe('entra-id');
             expect(result.code).toBeDefined();
@@ -384,7 +382,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             mockFetchForToken(idToken);
 
             try {
-              await service.handleCallback(code, 'valid-state');
+              await service.handleCallback(code, 'valid-state', 'a'.repeat(64));
               expect.fail('Should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -434,7 +432,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             mockFetchForToken(idToken);
 
             try {
-              await service.handleCallback(code, 'valid-state');
+              await service.handleCallback(code, 'valid-state', 'a'.repeat(64));
               expect.fail('Should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -489,7 +487,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             mockFetchForToken(idToken);
 
             try {
-              await service.handleCallback(code, 'valid-state');
+              await service.handleCallback(code, 'valid-state', 'a'.repeat(64));
               expect.fail('Should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -513,7 +511,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             mockFetchForToken(idToken);
 
             try {
-              await service.handleCallback(code, 'valid-state');
+              await service.handleCallback(code, 'valid-state', 'a'.repeat(64));
               expect.fail('Should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -568,7 +566,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             const idToken = buildIdToken(config, storedNonce);
             mockFetchForToken(idToken);
 
-            await service.handleCallback(code, state);
+            await service.handleCallback(code, state, 'a'.repeat(64));
             assertStateDeleted(state);
           },
         ),
@@ -586,7 +584,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             mockFetchThatTracksTokenCalls();
 
             try {
-              await service.handleCallback(code, state);
+              await service.handleCallback(code, state, 'a'.repeat(64));
             } catch {
               // Expected INVALID_STATE
             }
@@ -624,7 +622,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
             mockFetchForToken(idToken);
 
             try {
-              await service.handleCallback(code, state);
+              await service.handleCallback(code, state, 'a'.repeat(64));
             } catch {
               // Expected INVALID_ID_TOKEN
             }

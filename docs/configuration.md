@@ -15,6 +15,14 @@ Run `scripts/setup.sh` for interactive setup that generates a complete `.env` fi
 
 ## Core Server
 
+Initial administrator enrollment requires `PABAWI_BOOTSTRAP_TOKEN`, an independently
+generated secret of 32 to 512 characters. An unset value disables enrollment.
+Remove it after setup and restart. See [Initial setup](initial-setup.md).
+
+The SSH integration requires a managed JSON fingerprint file configured by
+`SSH_HOST_FINGERPRINTS_PATH` when `SSH_HOST_KEY_CHECK=true` (the default).
+Missing, invalid or untrusted keys fail closed. See [SSH trust enrollment](integrations/ssh.md#security).
+
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | HTTP port |

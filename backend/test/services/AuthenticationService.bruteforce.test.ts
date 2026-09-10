@@ -126,6 +126,8 @@ describe('AuthenticationService - Brute Force Protection', () => {
     `);
 
     // Create test user
+    await db.execute('CREATE VIEW effective_user_roles AS SELECT user_id, role_id FROM user_roles');
+
     authService = new AuthenticationService(db, 'test-secret-key-for-route-tests-32chars');
     const passwordHash = await authService.hashPassword(testPassword);
     const userId = randomUUID();

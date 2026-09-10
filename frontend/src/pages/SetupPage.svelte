@@ -1,9 +1,10 @@
 <script lang="ts">
   import { showError, showSuccess } from '../lib/toast.svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
-  import { post } from '../lib/api';
+  import { fetchWithRetry } from '../lib/api';
 
   let username = $state('');
+  let bootstrapToken = $state('');
   let email = $state('');
   let password = $state(''); // pragma: allowlist secret
   let confirmPassword = $state(''); // pragma: allowlist secret
@@ -112,15 +113,23 @@
     isSubmitting = true;
 
     try {
-      await post('/api/setup/initialize', {
-        username,
-        email,
-        password,
-        firstName,
-        lastName,
-        allowSelfRegistration,
-        defaultNewUserRole,
-      });
+      await fetchWithRetry('/api/setup/initialize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Pabawi-Bootstrap-Token': bootstrapToken,
+        },
+        body: JSON.stringify({
+          username,
+          email,
+          password,
+          firstName,
+          lastName,
+          allowSelfRegistration,
+          defaultNewUserRole,
+        }),
+      }, { maxRetries: 0 });
+      bootstrapToken = '';
 
       showSuccess('Setup complete', 'Your administrator account has been created. You can now log in.');
 
@@ -157,6 +166,12 @@
 
     <form class="mt-8 space-y-6 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-8" onsubmit={handleSubmit}>
       <div class="space-y-6">
+        <div>
+          <label for="bootstrap-token" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Installation bootstrap token</label>
+          <input id="bootstrap-token" type="password" bind:value={bootstrapToken} required autocomplete="off"
+            class="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white" />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Enter the token configured by the installation operator.</p>
+        </div>
         <!-- Admin Account Section -->
         <div>
           <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">

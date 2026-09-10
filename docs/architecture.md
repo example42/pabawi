@@ -230,3 +230,12 @@ Schema is managed by sequential migration files in `database/migrations/`. A mig
 - [api.md](./api.md) — REST API reference
 - [permissions-rbac.md](./permissions-rbac.md) — RBAC model
 - [integrations/](./integrations/) — per-plugin setup guides
+
+
+## Database transaction ownership
+
+`DatabaseAdapter.withTransaction(callback)` owns a connection for the callback's async context, commits on success and rolls back on failure. Service calls inside the callback use that connection automatically. Nested transactions and database work inherited from a completed callback are rejected. Await all database work before returning from the callback.
+
+SQLite serializes the whole transaction and ordinary queries on its connection, so unrelated requests cannot accidentally join a transaction. PostgreSQL pins a separate pooled client to each transaction and allows unrelated requests to use other clients. `withExclusiveConnection(callback)` excludes unrelated work on that adapter for connection maintenance. The migration runner holds this reservation across schema inspection, each migration transaction, and SQLite foreign-key toggling and verification. Only one migration process should run against an installation; this reservation does not coordinate separate processes or adapters.
+
+Migration callers no longer use unscoped `beginTransaction`, `commit` or `rollback` methods. This storage boundary does not make process-local execution queues or sessions distributed.

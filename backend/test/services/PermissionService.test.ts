@@ -6,6 +6,8 @@ import { promises as fs } from 'fs';
 import path from 'path';
 
 async function initializeAuthorizationState(db: DatabaseAdapter): Promise<void> {
+  await db.execute('CREATE TABLE federated_user_roles (user_id TEXT, role_id TEXT)');
+  await db.execute('CREATE VIEW effective_user_roles AS SELECT user_id, role_id FROM user_roles UNION SELECT user_id, role_id FROM federated_user_roles');
   const migrations = path.join(__dirname, '../../src/database/migrations');
   const state = await fs.readFile(path.join(migrations, '023_authorization_state.sql'), 'utf8');
   for (const sql of state.split(';').filter(sql => sql.trim())) await db.execute(sql);

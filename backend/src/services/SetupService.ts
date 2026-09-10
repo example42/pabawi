@@ -32,12 +32,15 @@ export class SetupService {
 
   /**
    * Check if initial setup is complete
-   * Setup is complete if at least one admin user exists
+   * Historical administrators also close bootstrap, including inactive accounts.
    */
   public async isSetupComplete(): Promise<boolean> {
     try {
       const row = await this.db.queryOne<{ count: number }>(
-        "SELECT COUNT(*) as count FROM users WHERE is_admin = 1"
+        `SELECT COUNT(*) as count FROM (
+          SELECT id FROM users WHERE is_admin = 1
+          UNION ALL SELECT key FROM config WHERE key = 'setup_completed'
+        ) AS completed`
       );
       return (row?.count ?? 0) > 0;
     } catch (err) {
@@ -53,21 +56,43 @@ export class SetupService {
    * Get setup status including configuration
    */
   public async getSetupStatus(): Promise<SetupStatus> {
-    const hasAdminUser = await this.isSetupComplete();
+    const isComplete = await this.isSetupComplete();
+    const admin = await this.db.queryOne<{ count: number }>(
+      "SELECT COUNT(*) as count FROM users WHERE is_admin = 1 AND is_active = 1"
+    );
     const config = await this.getConfig();
 
     return {
-      isComplete: hasAdminUser,
-      hasAdminUser,
+      isComplete,
+      hasAdminUser: (admin?.count ?? 0) > 0,
       config,
     };
+  }
+
+  public async initialize<T>(config: SetupConfig, createAdmin: () => Promise<T>): Promise<T | null> {
+    return this.db.withTransaction(async () => {
+      // The unique config key serializes claims across independent database connections.
+      const claim = await this.db.execute(
+        `INSERT INTO config (key, value, updated_at) VALUES ('setup_completed', 'true', ?)
+         ON CONFLICT(key) DO NOTHING`,
+        [new Date().toISOString()]
+      );
+      if (claim.changes !== 1) return null;
+      const existing = await this.db.queryOne<{ count: number }>(
+        "SELECT COUNT(*) as count FROM users WHERE is_admin = 1"
+      );
+      if ((existing?.count ?? 0) > 0) return null;
+      const admin = await createAdmin();
+      await this.saveConfig(config);
+      return admin;
+    });
   }
 
   /**
    * Get setup configuration
    */
   public async getConfig(): Promise<SetupConfig> {
-    const allowSelfRegistration = await this.getConfigValue("allow_self_registration", "true");
+    const allowSelfRegistration = await this.getConfigValue("allow_self_registration", "false");
     const defaultNewUserRole = await this.getConfigValue("default_new_user_role", "role-viewer-001");
 
     return {

@@ -157,8 +157,8 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
             const expiresAt = new Date(now.getTime() + 60 * 1000).toISOString();
 
             await db.execute(
-              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, browser_binding, exchanged)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb', 0)`,
               [code, 'at', 'rt', TEST_USER_ID, 'idt', 'entra-id', createdAt, expiresAt],
             );
 
@@ -192,12 +192,12 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
             const expiresAt = new Date(now.getTime() + secondsRemaining * 1000).toISOString();
 
             await db.execute(
-              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, browser_binding, exchanged)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb', 0)`,
               [code, 'access-tok', 'refresh-tok', TEST_USER_ID, 'id-tok', 'entra-id', createdAt, expiresAt],
             );
 
-            const result = await service.exchangeAuthCode(code);
+            const result = await service.exchangeAuthCode(code, 'a'.repeat(64));
             expect(result.accessToken).toBe('access-tok');
             expect(result.refreshToken).toBe('refresh-tok');
             expect(result.user).toBeDefined();
@@ -226,18 +226,18 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
             const expiresAt = new Date(now.getTime() + 60 * 1000).toISOString();
 
             await db.execute(
-              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, browser_binding, exchanged)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb', 0)`,
               [code, 'at', 'rt', TEST_USER_ID, 'idt', 'entra-id', createdAt, expiresAt],
             );
 
             // First exchange succeeds
-            const result = await service.exchangeAuthCode(code);
+            const result = await service.exchangeAuthCode(code, 'a'.repeat(64));
             expect(result.accessToken).toBe('at');
 
             // Second exchange must fail
             try {
-              await service.exchangeAuthCode(code);
+              await service.exchangeAuthCode(code, 'a'.repeat(64));
               expect.fail('Second exchange should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -260,18 +260,18 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
             const expiresAt = new Date(now.getTime() + 60 * 1000).toISOString();
 
             await db.execute(
-              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, browser_binding, exchanged)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb', 0)`,
               [code, 'at', 'rt', TEST_USER_ID, 'idt', 'entra-id', createdAt, expiresAt],
             );
 
             // First exchange succeeds
-            await service.exchangeAuthCode(code);
+            await service.exchangeAuthCode(code, 'a'.repeat(64));
 
             // All subsequent attempts fail
             for (let i = 0; i < attempts; i++) {
               try {
-                await service.exchangeAuthCode(code);
+                await service.exchangeAuthCode(code, 'a'.repeat(64));
                 expect.fail(`Exchange attempt ${i + 2} should have thrown`);
               } catch (err) {
                 expect(err).toBeInstanceOf(EntraIdError);
@@ -303,13 +303,13 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
             const createdAt = new Date(now.getTime() - secondsExpiredAgo * 1000 - 60000).toISOString();
 
             await db.execute(
-              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, browser_binding, exchanged)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb', 0)`,
               [code, 'at', 'rt', TEST_USER_ID, 'idt', 'entra-id', createdAt, expiresAt],
             );
 
             try {
-              await service.exchangeAuthCode(code);
+              await service.exchangeAuthCode(code, 'a'.repeat(64));
               expect.fail('Expired code exchange should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -332,13 +332,13 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
             const createdAt = new Date(now.getTime() - secondsExpired * 1000 - 60000).toISOString();
 
             await db.execute(
-              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, exchanged)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+              `INSERT INTO oauth_auth_codes (code, access_token, refresh_token, user_id, id_token, auth_method, created_at, expires_at, browser_binding, exchanged)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb', 0)`,
               [code, 'at', 'rt', TEST_USER_ID, 'idt', 'entra-id', createdAt, expiresAt],
             );
 
             try {
-              await service.exchangeAuthCode(code);
+              await service.exchangeAuthCode(code, 'a'.repeat(64));
               expect.fail('Should have thrown for expired code');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);
@@ -363,7 +363,7 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
           fc.stringMatching(/^[a-f0-9]{16,64}$/),
           async (randomCode) => {
             try {
-              await service.exchangeAuthCode(randomCode);
+              await service.exchangeAuthCode(randomCode, 'a'.repeat(64));
               expect.fail('Non-existent code should have thrown EntraIdError');
             } catch (err) {
               expect(err).toBeInstanceOf(EntraIdError);

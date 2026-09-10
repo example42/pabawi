@@ -49,7 +49,7 @@ See [configuration.md](../configuration.md#azure-entra-id-sso) for the full vari
 
 1. Go to **API permissions → Add a permission → Microsoft Graph → Delegated permissions**
 2. Add: `openid`, `profile`, `email`
-3. If using group-to-role mapping, also add `GroupMember.Read.All` (requires admin consent)
+3. Configure ID-token group claims if using role mapping. Pabawi does not fetch group membership from Microsoft Graph.
 4. Click **Grant admin consent**
 
 ### 4. Configure Token Claims (Optional)
@@ -75,20 +75,29 @@ Microsoft login → user authenticates → callback to Pabawi with authorization
 Pabawi → exchanges code for ID token → validates token → provisions user → issues Pabawi JWT
 ```
 
-The flow uses OAuth 2.0 Authorization Code with PKCE (S256). State, nonce, and code verifier are stored server-side with a 10-minute TTL.
+The flow uses OAuth 2.0 Authorization Code with PKCE (S256). State, nonce, and code verifier are stored server-side with a 10-minute TTL. A random HttpOnly, SameSite=Lax cookie binds the callback and final token exchange to the initiating browser. Only its SHA-256 digest is stored with state and codes. HTTPS redirect URIs use a Secure, host-only `__Host-pabawi-sso` cookie. Plain HTTP is supported for local development.
+
+Start at `/api/auth/entra-id/login` in the browser that will complete the flow. Both the callback and `/api/auth/entra-id/token` require its cookie. Starting another login in that browser replaces the pending binding. State and final codes are claimed once using checked conditional writes; the final code expires after 60 seconds. These endpoints send `Cache-Control: no-store` and `Referrer-Policy: no-referrer`. Old in-flight logins without a browser binding must restart after upgrading.
 
 ## User Provisioning
 
-On first SSO login:
+Identity lookup uses the validated provider, issuer and subject. Email and display names are profile data, not evidence of ownership of a local account. A new identity with an existing account's email is rejected. An inactive account cannot obtain a session, including through a code issued before deactivation.
 
-1. If a Pabawi user with the same email already exists, the Entra ID identity is **linked** to that account. The existing password remains valid for local login.
-2. If no matching user exists, a new account is created with:
-   - Username derived from `preferred_username` or email local-part
-   - No password (federation-only — cannot use local login)
-   - Default viewer role assigned
-   - Active status
+If neither the identity nor the email exists, Pabawi creates an active federation-only account with a derived username and the configured default new-user role. Returning identities use the enrolled account without changing its profile. Tenant administrators control who may authenticate, including guest users: restrict assignment to this application in Entra before enabling SSO. Pabawi does not independently exclude guests.
 
-On subsequent logins, the existing account is used without modifying stored profile data.
+### Explicit enrollment of an existing account
+
+An administrator must verify the intended tenant, application-specific subject and local account through a trusted process. A signed token's email alone is insufficient. Use an authenticated Pabawi access JWT with both `rbac:admin` and `users:admin`:
+
+```http
+POST /api/auth/entra-id/enroll
+Authorization: Bearer <administrator-access-jwt>
+Content-Type: application/json
+
+{"userId":"<existing-pabawi-user-id>","subject":"<verified-id-token-sub>"}
+```
+
+The issuer is fixed to the configured tenant. Enrollment preserves the local password and records the actor, target account, issuer and subject in the audit log. Duplicate identities return 409 and cannot be silently reassigned. This is an API operation; there is no enrollment UI. Review pre-upgrade email-linked accounts separately: an upgrade cannot establish who originally controlled those identities.
 
 ## Group-to-Role Mapping
 
@@ -98,15 +107,13 @@ Map Azure group object IDs to Pabawi role names:
 ENTRA_ID_GROUP_MAPPING={"e5f3a1b2-...":"administrator","c7d8e9f0-...":"operator"}
 ```
 
-Behavior:
+At each SSO login, the mapped roles are replaced atomically from the current claims. Group IDs and role names match case-insensitively. Manual roles, including manual grants to the same role, are stored separately and remain effective when an SSO grant disappears. Permission checks and JWT role metadata use the union of both sources.
 
-- Groups present in the token claim → corresponding Pabawi roles are assigned
-- Groups removed since last login → corresponding mapped roles are revoked
-- Roles assigned outside the mapping (manually) → preserved unchanged
-- Mapping references a non-existent Pabawi role → warning logged, entry skipped
-- No `groups` claim in token → no role changes made
+Missing or empty `groups` removes provider-managed grants. Removing mappings, including the entire configuration, also removes obsolete provider grants at the next login. A mapped role that does not exist fails reconciliation and login; no partial role update commits. Group overage or malformed group claims remove provider grants and deny login when mapping is enabled. Pabawi does not follow claim-supplied endpoints or resolve overage through Graph. See Microsoft's [group overage documentation](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-web-app-role-based-access-control).
 
-Group IDs are matched case-insensitively (UUIDs).
+Migration 027 marks existing direct role assignments on federated accounts as legacy because their source was not recorded. They remain effective until the next SSO reconciliation, which removes them and applies the current mapping. Before upgrading, review these assignments. To preserve an intended manual grant across that reconciliation, an entitlement administrator must remove and reassign it after the upgrade; this clears its legacy marker. Group-derived grants are unaffected. New manual assignments have explicit provenance and survive subsequent reconciliation.
+
+Changes in Entra are observed at the next SSO login, not continuously. Disable an account or remove its Pabawi grants when immediate local revocation is required.
 
 ## Logout
 
@@ -124,7 +131,7 @@ Both authentication methods work simultaneously:
 - The login page shows "Sign in with Microsoft" alongside the local login form
 - Users with linked accounts can use either method
 - Federation-only users (no password) must use SSO
-- JWT tokens are identical regardless of auth method — middleware sees no difference
+- JWT tokens are identical regardless of auth method ; middleware sees no difference
 
 ## Security
 
@@ -145,5 +152,7 @@ Both authentication methods work simultaneously:
 | `INVALID_ID_TOKEN` | Tenant/client ID mismatch or clock skew | Verify `ENTRA_ID_TENANT_ID` and `ENTRA_ID_CLIENT_ID` match the app registration |
 | `MISSING_CLAIMS` | App registration missing `email` or `profile` scope | Add permissions in Azure portal and grant admin consent |
 | `JWKS_UNAVAILABLE` | Cannot reach Microsoft's key endpoint | Check outbound HTTPS; keys are cached so transient failures are tolerated |
-| Group roles not syncing | No `groups` claim in token | Configure group claims in Token configuration (Azure portal) |
+| Mapped roles disappear | Missing `groups` claim or removed mapping | Configure ID-token group claims and review mapping configuration |
+| `GROUPS_UNAVAILABLE` | Group overage or malformed claims | Reduce the groups emitted for this application; Graph overage resolution is not implemented |
+| `IDENTITY_COLLISION` | Existing local email without an enrolled identity | Verify ownership and use explicit administrative enrollment |
 | Config validation error at startup | Missing required variables | Set all of: `TENANT_ID`, `CLIENT_ID`, `CLIENT_SECRET`, `REDIRECT_URI` |

@@ -19,10 +19,8 @@ function createMockDb(): DatabaseAdapter {
     query: vi.fn().mockResolvedValue([]),
     queryOne: vi.fn().mockResolvedValue(null),
     execute: vi.fn().mockResolvedValue({ changes: 0 }),
-    beginTransaction: vi.fn().mockResolvedValue(undefined),
-    commit: vi.fn().mockResolvedValue(undefined),
-    rollback: vi.fn().mockResolvedValue(undefined),
-    withTransaction: vi.fn(),
+    withExclusiveConnection: vi.fn(async fn => fn()),
+    withTransaction: vi.fn(async fn => fn()),
     initialize: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     isConnected: vi.fn().mockReturnValue(true),
@@ -80,38 +78,38 @@ describe('EntraIdService', () => {
 
   describe('generateAuthorizationUrl()', () => {
     it('returns a URL targeting the correct Entra ID authorize endpoint', async () => {
-      const { url } = await service.generateAuthorizationUrl();
+      const { url } = await service.generateAuthorizationUrl('a'.repeat(64));
       expect(url).toContain(
         `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/authorize`,
       );
     });
 
     it('includes response_type=code', async () => {
-      const { url } = await service.generateAuthorizationUrl();
+      const { url } = await service.generateAuthorizationUrl('a'.repeat(64));
       const params = new URL(url).searchParams;
       expect(params.get('response_type')).toBe('code');
     });
 
     it('includes the configured client_id', async () => {
-      const { url } = await service.generateAuthorizationUrl();
+      const { url } = await service.generateAuthorizationUrl('a'.repeat(64));
       const params = new URL(url).searchParams;
       expect(params.get('client_id')).toBe(config.clientId);
     });
 
     it('includes the configured redirect_uri', async () => {
-      const { url } = await service.generateAuthorizationUrl();
+      const { url } = await service.generateAuthorizationUrl('a'.repeat(64));
       const params = new URL(url).searchParams;
       expect(params.get('redirect_uri')).toBe(config.redirectUri);
     });
 
     it('includes space-separated scopes', async () => {
-      const { url } = await service.generateAuthorizationUrl();
+      const { url } = await service.generateAuthorizationUrl('a'.repeat(64));
       const params = new URL(url).searchParams;
       expect(params.get('scope')).toBe('openid profile email');
     });
 
     it('includes a state parameter with at least 32 bytes of entropy (64 hex chars)', async () => {
-      const { url, state } = await service.generateAuthorizationUrl();
+      const { url, state } = await service.generateAuthorizationUrl('a'.repeat(64));
       const params = new URL(url).searchParams;
       expect(params.get('state')).toBe(state);
       expect(state).toHaveLength(64); // 32 bytes = 64 hex chars
@@ -119,7 +117,7 @@ describe('EntraIdService', () => {
     });
 
     it('includes a nonce parameter with at least 32 bytes of entropy', async () => {
-      const { url } = await service.generateAuthorizationUrl();
+      const { url } = await service.generateAuthorizationUrl('a'.repeat(64));
       const params = new URL(url).searchParams;
       const nonce = params.get('nonce');
       expect(nonce).toHaveLength(64);
@@ -127,7 +125,7 @@ describe('EntraIdService', () => {
     });
 
     it('includes code_challenge and code_challenge_method=S256', async () => {
-      const { url } = await service.generateAuthorizationUrl();
+      const { url } = await service.generateAuthorizationUrl('a'.repeat(64));
       const params = new URL(url).searchParams;
       expect(params.get('code_challenge_method')).toBe('S256');
       const challenge = params.get('code_challenge');
@@ -138,7 +136,7 @@ describe('EntraIdService', () => {
 
     it('stores state, nonce, code_verifier in oauth_state_store with 10-minute TTL', async () => {
       const before = Date.now();
-      await service.generateAuthorizationUrl();
+      await service.generateAuthorizationUrl('a'.repeat(64));
       const after = Date.now();
 
       expect(db.execute).toHaveBeenCalledTimes(1);
@@ -161,13 +159,13 @@ describe('EntraIdService', () => {
     });
 
     it('generates unique state values on each call', async () => {
-      const r1 = await service.generateAuthorizationUrl();
-      const r2 = await service.generateAuthorizationUrl();
+      const r1 = await service.generateAuthorizationUrl('a'.repeat(64));
+      const r2 = await service.generateAuthorizationUrl('a'.repeat(64));
       expect(r1.state).not.toBe(r2.state);
     });
 
     it('logs the generation without exposing secrets', async () => {
-      await service.generateAuthorizationUrl();
+      await service.generateAuthorizationUrl('a'.repeat(64));
       expect(logger.info).toHaveBeenCalledWith(
         'Generated authorization URL',
         expect.objectContaining({
@@ -305,6 +303,7 @@ describe('EntraIdService', () => {
       expect(mockUserService.findByFederatedIdentity).toHaveBeenCalledWith(
         'entra-id',
         baseClaims.sub,
+        baseClaims.iss,
       );
       // Must not call create or link
       expect(mockUserService.createFederatedUser).not.toHaveBeenCalled();
@@ -312,20 +311,10 @@ describe('EntraIdService', () => {
       expect(mockUserService.findByEmail).not.toHaveBeenCalled();
     });
 
-    it('links federated identity to existing email-match user', async () => {
-      mockUserService.findByFederatedIdentity.mockResolvedValue(null);
+    it('rejects an email collision without linking or creating an account', async () => {
       mockUserService.findByEmail.mockResolvedValue(baseUser);
-
-      const result = await provisionService.provisionUser(baseClaims);
-
-      expect(result).toBe(baseUser);
-      expect(mockUserService.linkFederatedIdentity).toHaveBeenCalledWith(
-        baseUser.id,
-        'entra-id',
-        baseClaims.sub,
-        baseClaims.iss,
-        baseClaims.email,
-      );
+      await expect(provisionService.provisionUser(baseClaims)).rejects.toMatchObject({ code: 'IDENTITY_COLLISION' });
+      expect(mockUserService.linkFederatedIdentity).not.toHaveBeenCalled();
       expect(mockUserService.createFederatedUser).not.toHaveBeenCalled();
     });
 
@@ -347,19 +336,6 @@ describe('EntraIdService', () => {
       mockUserService.findByEmail.mockResolvedValue(null);
       mockUserService.createFederatedUser.mockRejectedValue(
         new Error('UNIQUE constraint failed: users.username'),
-      );
-
-      await expect(provisionService.provisionUser(baseClaims)).rejects.toMatchObject({
-        code: ENTRA_ID_ERROR_CODES.PROVISIONING_FAILED,
-        message: 'Account creation failed',
-      });
-    });
-
-    it('wraps linkFederatedIdentity errors as PROVISIONING_FAILED', async () => {
-      mockUserService.findByFederatedIdentity.mockResolvedValue(null);
-      mockUserService.findByEmail.mockResolvedValue(baseUser);
-      mockUserService.linkFederatedIdentity.mockRejectedValue(
-        new Error('DB connection lost'),
       );
 
       await expect(provisionService.provisionUser(baseClaims)).rejects.toMatchObject({
@@ -410,247 +386,4 @@ describe('EntraIdService', () => {
     });
   });
 
-  describe('syncGroupRoles()', () => {
-    let mockUserService: {
-      findByFederatedIdentity: ReturnType<typeof vi.fn>;
-      findByEmail: ReturnType<typeof vi.fn>;
-      createFederatedUser: ReturnType<typeof vi.fn>;
-      linkFederatedIdentity: ReturnType<typeof vi.fn>;
-      getUserRoles: ReturnType<typeof vi.fn>;
-      assignRoleToUser: ReturnType<typeof vi.fn>;
-      removeRoleFromUser: ReturnType<typeof vi.fn>;
-    };
-    let mockRoleService: {
-      listRoles: ReturnType<typeof vi.fn>;
-    };
-    let syncService: EntraIdService;
-
-    const allRoles = [
-      { id: 'role-admin', name: 'Administrator', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-      { id: 'role-operator', name: 'Operator', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-      { id: 'role-viewer', name: 'Viewer', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-      { id: 'role-deploy', name: 'Deployer', description: '', isBuiltIn: 0, createdAt: '', updatedAt: '' },
-    ];
-
-    beforeEach(() => {
-      mockUserService = {
-        findByFederatedIdentity: vi.fn(),
-        findByEmail: vi.fn(),
-        createFederatedUser: vi.fn(),
-        linkFederatedIdentity: vi.fn(),
-        getUserRoles: vi.fn().mockResolvedValue([]),
-        assignRoleToUser: vi.fn().mockResolvedValue(undefined),
-        removeRoleFromUser: vi.fn().mockResolvedValue(undefined),
-      };
-
-      mockRoleService = {
-        listRoles: vi.fn().mockResolvedValue({ items: allRoles, total: allRoles.length, limit: 1000, offset: 0 }),
-      };
-    });
-
-    function createSyncService(groupMapping: Record<string, string> | null): EntraIdService {
-      const cfg = { ...createMockConfig(), groupMapping };
-      syncService = new EntraIdService(
-        db,
-        cfg,
-        {} as AuthenticationService,
-        mockUserService as unknown as UserService,
-        mockRoleService as unknown as RoleService,
-        {} as AuditLoggingService,
-        logger,
-      );
-      return syncService;
-    }
-
-    it('skips sync when groupMapping is null', async () => {
-      createSyncService(null);
-      await syncService.syncGroupRoles('user-1', ['group-a']);
-      expect(mockRoleService.listRoles).not.toHaveBeenCalled();
-      expect(mockUserService.getUserRoles).not.toHaveBeenCalled();
-    });
-
-    it('skips sync when groups is undefined', async () => {
-      createSyncService({ 'group-a': 'Operator' });
-      await syncService.syncGroupRoles('user-1', undefined);
-      expect(mockRoleService.listRoles).not.toHaveBeenCalled();
-      expect(mockUserService.getUserRoles).not.toHaveBeenCalled();
-    });
-
-    it('assigns roles for matched group IDs', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'Operator',
-        'bbbbbbbb-1111-2222-3333-444444444444': 'Deployer',
-      });
-      mockUserService.getUserRoles.mockResolvedValue([]);
-
-      await syncService.syncGroupRoles('user-1', [
-        'aaaaaaaa-1111-2222-3333-444444444444',
-        'bbbbbbbb-1111-2222-3333-444444444444',
-      ]);
-
-      expect(mockUserService.assignRoleToUser).toHaveBeenCalledWith('user-1', 'role-operator');
-      expect(mockUserService.assignRoleToUser).toHaveBeenCalledWith('user-1', 'role-deploy');
-      expect(mockUserService.assignRoleToUser).toHaveBeenCalledTimes(2);
-    });
-
-    it('performs case-insensitive UUID matching', async () => {
-      createSyncService({
-        'AAAAAAAA-1111-2222-3333-444444444444': 'Operator',
-      });
-      mockUserService.getUserRoles.mockResolvedValue([]);
-
-      await syncService.syncGroupRoles('user-1', [
-        'aaaaaaaa-1111-2222-3333-444444444444',
-      ]);
-
-      expect(mockUserService.assignRoleToUser).toHaveBeenCalledWith('user-1', 'role-operator');
-    });
-
-    it('revokes mapped roles whose group IDs are no longer in the claim', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'Operator',
-        'bbbbbbbb-1111-2222-3333-444444444444': 'Deployer',
-      });
-      // User currently has Operator and Deployer
-      mockUserService.getUserRoles.mockResolvedValue([
-        { id: 'role-operator', name: 'Operator', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-        { id: 'role-deploy', name: 'Deployer', description: '', isBuiltIn: 0, createdAt: '', updatedAt: '' },
-      ]);
-
-      // Only group-a is in the claim now (Operator stays, Deployer revoked)
-      await syncService.syncGroupRoles('user-1', [
-        'aaaaaaaa-1111-2222-3333-444444444444',
-      ]);
-
-      expect(mockUserService.removeRoleFromUser).toHaveBeenCalledWith('user-1', 'role-deploy');
-      expect(mockUserService.removeRoleFromUser).toHaveBeenCalledTimes(1);
-      expect(mockUserService.assignRoleToUser).not.toHaveBeenCalled();
-    });
-
-    it('preserves roles assigned independently of the mapping (manually assigned)', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'Operator',
-      });
-      // User has Viewer (manual) and Administrator (manual) — neither in mapping
-      mockUserService.getUserRoles.mockResolvedValue([
-        { id: 'role-viewer', name: 'Viewer', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-        { id: 'role-admin', name: 'Administrator', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-      ]);
-
-      // No groups match the mapping
-      await syncService.syncGroupRoles('user-1', []);
-
-      // Should NOT remove Viewer or Administrator (they are not managed by this mapping)
-      expect(mockUserService.removeRoleFromUser).not.toHaveBeenCalled();
-      expect(mockUserService.assignRoleToUser).not.toHaveBeenCalled();
-    });
-
-    it('logs warning and skips mapping entry when role does not exist in Pabawi', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'NonExistentRole',
-        'bbbbbbbb-1111-2222-3333-444444444444': 'Operator',
-      });
-      mockUserService.getUserRoles.mockResolvedValue([]);
-
-      await syncService.syncGroupRoles('user-1', [
-        'aaaaaaaa-1111-2222-3333-444444444444',
-        'bbbbbbbb-1111-2222-3333-444444444444',
-      ]);
-
-      // Should log warning about NonExistentRole
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('NonExistentRole'),
-        expect.objectContaining({ component: 'EntraIdService' }),
-      );
-      // Should still assign the valid Operator role
-      expect(mockUserService.assignRoleToUser).toHaveBeenCalledWith('user-1', 'role-operator');
-      expect(mockUserService.assignRoleToUser).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not assign roles the user already has', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'Operator',
-      });
-      // User already has Operator
-      mockUserService.getUserRoles.mockResolvedValue([
-        { id: 'role-operator', name: 'Operator', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-      ]);
-
-      await syncService.syncGroupRoles('user-1', [
-        'aaaaaaaa-1111-2222-3333-444444444444',
-      ]);
-
-      expect(mockUserService.assignRoleToUser).not.toHaveBeenCalled();
-      expect(mockUserService.removeRoleFromUser).not.toHaveBeenCalled();
-    });
-
-    it('handles empty groups claim by revoking all mapped roles', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'Operator',
-        'bbbbbbbb-1111-2222-3333-444444444444': 'Deployer',
-      });
-      // User has both mapped roles
-      mockUserService.getUserRoles.mockResolvedValue([
-        { id: 'role-operator', name: 'Operator', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-        { id: 'role-deploy', name: 'Deployer', description: '', isBuiltIn: 0, createdAt: '', updatedAt: '' },
-        { id: 'role-viewer', name: 'Viewer', description: '', isBuiltIn: 1, createdAt: '', updatedAt: '' },
-      ]);
-
-      // Empty groups array — all mapped roles should be revoked, Viewer preserved
-      await syncService.syncGroupRoles('user-1', []);
-
-      expect(mockUserService.removeRoleFromUser).toHaveBeenCalledWith('user-1', 'role-operator');
-      expect(mockUserService.removeRoleFromUser).toHaveBeenCalledWith('user-1', 'role-deploy');
-      expect(mockUserService.removeRoleFromUser).toHaveBeenCalledTimes(2);
-      // Viewer not touched
-      expect(mockUserService.assignRoleToUser).not.toHaveBeenCalled();
-    });
-
-    it('logs sync completion with counts', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'Operator',
-      });
-      mockUserService.getUserRoles.mockResolvedValue([]);
-
-      await syncService.syncGroupRoles('user-1', [
-        'aaaaaaaa-1111-2222-3333-444444444444',
-      ]);
-
-      expect(logger.info).toHaveBeenCalledWith(
-        'Group-to-role sync completed',
-        expect.objectContaining({
-          component: 'EntraIdService',
-          operation: 'syncGroupRoles',
-          metadata: expect.objectContaining({
-            userId: 'user-1',
-            assigned: 1,
-            revoked: 0,
-            groupCount: 1,
-          }),
-        }),
-      );
-    });
-
-    it('continues gracefully when assignRoleToUser throws (race condition)', async () => {
-      createSyncService({
-        'aaaaaaaa-1111-2222-3333-444444444444': 'Operator',
-        'bbbbbbbb-1111-2222-3333-444444444444': 'Deployer',
-      });
-      mockUserService.getUserRoles.mockResolvedValue([]);
-      mockUserService.assignRoleToUser
-        .mockRejectedValueOnce(new Error('Role is already assigned to this user'))
-        .mockResolvedValueOnce(undefined);
-
-      // Should not throw — the error is swallowed with a log
-      await expect(syncService.syncGroupRoles('user-1', [
-        'aaaaaaaa-1111-2222-3333-444444444444',
-        'bbbbbbbb-1111-2222-3333-444444444444',
-      ])).resolves.toBeUndefined();
-
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to assign role'),
-        expect.any(Object),
-      );
-    });
-  });
 });

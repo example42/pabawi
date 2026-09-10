@@ -322,58 +322,52 @@ export class MigrationRunner {
     dialect: "sqlite" | "postgres",
     verifyForeignKeys: boolean,
   ): Promise<void> {
-    await this.db.beginTransaction();
     try {
-      if (dialect === "postgres") {
-        // Execute the entire migration as a single statement so that
-        // dollar-quoted bodies (e.g. PL/pgSQL functions) are never split on
-        // the semicolons they contain.
-        await this.db.execute(sql);
-      } else {
-        // SQLite: split on `;` and execute each statement individually because
-        // the sqlite3 driver does not support multi-statement strings. Strip
-        // single-line comments BEFORE splitting so a `;` inside a comment is
-        // not mistaken for a statement terminator.
-        const withoutComments = sql
-          .split("\n")
-          .map((line) => line.replace(/--.*$/, ""))
-          .join("\n");
+      await this.db.withTransaction(async () => {
+        if (dialect === "postgres") {
+          // Execute the entire migration as a single statement so that
+          // dollar-quoted bodies (e.g. PL/pgSQL functions) are never split on
+          // the semicolons they contain.
+          await this.db.execute(sql);
+        } else {
+          // SQLite: split on `;` and execute each statement individually because
+          // the sqlite3 driver does not support multi-statement strings. Strip
+          // single-line comments BEFORE splitting so a `;` inside a comment is
+          // not mistaken for a statement terminator.
+          const withoutComments = sql
+            .split("\n")
+            .map((line) => line.replace(/--.*$/, ""))
+            .join("\n");
 
-        // Explicit boundaries preserve trigger bodies containing semicolons.
-        const statements = (/^-- pabawi:statement-breakpoint$/m.test(sql)
-          ? sql.split(/^-- pabawi:statement-breakpoint$/m)
-          : withoutComments.split(";"))
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
+          // Explicit boundaries preserve trigger bodies containing semicolons.
+          const statements = (/^-- pabawi:statement-breakpoint$/m.test(sql)
+            ? sql.split(/^-- pabawi:statement-breakpoint$/m)
+            : withoutComments.split(";"))
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
 
-        for (const statement of statements) {
-          await this.db.execute(statement);
+          for (const statement of statements) {
+            await this.db.execute(statement);
+          }
         }
-      }
 
-      if (verifyForeignKeys) {
-        // Enforcement was off for the rebuild, so prove the result is still
-        // referentially intact before committing. `foreign_key_check` runs
-        // inside the transaction, so a violation rolls the migration back.
-        const violations = await this.db.query<Record<string, unknown>>(
-          "PRAGMA foreign_key_check",
-        );
-        if (violations.length > 0) {
-          throw new Error(
-            `foreign_key_check reported ${String(violations.length)} violation(s) after the rebuild: ${JSON.stringify(violations.slice(0, 5))}`,
+        if (verifyForeignKeys) {
+          // Enforcement was off for the rebuild, so prove the result is still
+          // referentially intact before committing. `foreign_key_check` runs
+          // inside the transaction, so a violation rolls the migration back.
+          const violations = await this.db.query<Record<string, unknown>>(
+            "PRAGMA foreign_key_check",
           );
+          if (violations.length > 0) {
+            throw new Error(
+              `foreign_key_check reported ${String(violations.length)} violation(s) after the rebuild: ${JSON.stringify(violations.slice(0, 5))}`,
+            );
+          }
         }
-      }
 
-      await this.recordMigration(migration, sql);
-      await this.db.commit();
+        await this.recordMigration(migration, sql);
+      });
     } catch (error) {
-      try {
-        await this.db.rollback();
-      } catch {
-        // If rollback itself fails (e.g. connection lost), surface the
-        // original error rather than the rollback failure.
-      }
       throw new Error(
         `Failed to execute migration ${migration.filename}: ${error instanceof Error ? error.message : "Unknown error"}`
       );
@@ -400,25 +394,27 @@ export class MigrationRunner {
    * Returns the number of migrations applied
    */
   public async runPendingMigrations(): Promise<number> {
-    try {
-      await this.initializeMigrationsTable();
+    return this.db.withExclusiveConnection(async () => {
+      try {
+        await this.initializeMigrationsTable();
 
-      const pendingMigrations = await this.getPendingMigrations();
+        const pendingMigrations = await this.getPendingMigrations();
 
-      if (pendingMigrations.length === 0) {
-        return 0;
+        if (pendingMigrations.length === 0) {
+          return 0;
+        }
+
+        for (const migration of pendingMigrations) {
+          await this.executeMigration(migration);
+        }
+
+        return pendingMigrations.length;
+      } catch (error) {
+        throw new Error(
+          `Migration failed: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
       }
-
-      for (const migration of pendingMigrations) {
-        await this.executeMigration(migration);
-      }
-
-      return pendingMigrations.length;
-    } catch (error) {
-      throw new Error(
-        `Migration failed: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
-    }
+    });
   }
 
   /**

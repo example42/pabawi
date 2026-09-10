@@ -235,6 +235,7 @@ export function parseSSHConfig(env: NodeJS.ProcessEnv = process.env): SSHConfig 
     defaultPort,
     defaultKeyPath,
     hostKeyCheck,
+    hostFingerprintsPath: expandTilde(env.SSH_HOST_FINGERPRINTS_PATH),
     connectionTimeout,
     commandTimeout,
     maxConnections,

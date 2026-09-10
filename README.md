@@ -113,6 +113,9 @@ The interactive setup script will:
 
 ### Manual Setup
 
+First administrator enrollment requires an installation bootstrap token.
+See [Initial setup](docs/initial-setup.md) before exposing a fresh installation.
+
 ```bash
 git clone https://github.com/example42/pabawi
 cd pabawi

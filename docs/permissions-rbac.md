@@ -54,13 +54,13 @@ state distributed; the supported baseline remains a single backend process.
 
 Users who authenticate via Entra ID for the first time are automatically provisioned:
 
-- If a local user with the same email exists, the Entra ID identity is linked to that account
+- An email collision is rejected. Explicit identity enrollment requires both `rbac:admin` and `users:admin`.
 - Otherwise, a new account is created with federation-only access (no local password)
 - The default viewer role is assigned to new federated users
 
 ### Group-to-Role Mapping
 
-When `ENTRA_ID_GROUP_MAPPING` is configured, Pabawi synchronizes roles at each SSO login based on the user's Azure group memberships. Manually assigned roles are preserved. See [integrations/entra-id.md](./integrations/entra-id.md#group-to-role-mapping) for details.
+When `ENTRA_ID_GROUP_MAPPING` is configured, Pabawi synchronizes roles at each SSO login based on the user's Azure group memberships. New manual grants are stored separately and preserved. Missing group claims remove SSO grants; overage fails login when mapping is enabled. Migration 027 marks ambiguous legacy grants for reconciliation at the next SSO login. Review the upgrade procedure before relying on those grants. See [integrations/entra-id.md](./integrations/entra-id.md#group-to-role-mapping) for details.
 
 ## Permission Format
 
