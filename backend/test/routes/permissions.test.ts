@@ -59,7 +59,7 @@ describe('Permissions Router', () => {
   });
 
   beforeEach(async () => {
-    // Create admin user with permissions:write permission
+    // Create admin user with rbac:admin permission
     const adminUser = await userService.createUser({
       username: 'admin_user',
       email: 'admin@test.com',
@@ -70,34 +70,13 @@ describe('Permissions Router', () => {
     });
     adminUserId = adminUser.id;
 
-    // Create permissions:write and permissions:read permissions
-    let permissionsWritePermission;
-    let permissionsReadPermission;
-    try {
-      permissionsWritePermission = await permissionService.createPermission({
-        resource: 'permissions',
-        action: 'write',
-        description: 'Write permissions',
-      });
-      permissionsReadPermission = await permissionService.createPermission({
-        resource: 'permissions',
-        action: 'read',
-        description: 'Read permissions',
-      });
-    } catch (error) {
-      const allPermissions = await permissionService.listPermissions({ limit: 500 });
-      permissionsWritePermission = allPermissions.items.find(
-        p => p.resource === 'permissions' && p.action === 'write'  // pragma: allowlist secret
-      );
-      permissionsReadPermission = allPermissions.items.find(
-        p => p.resource === 'permissions' && p.action === 'read'  // pragma: allowlist secret
-      );
-      if (!permissionsWritePermission || !permissionsReadPermission) {
-        throw error;
-      }
-    }
+    // Create rbac:admin and permissions:read permissions
+    const permissionsWritePermission = await permissionService.getPermissionByResourceAction('rbac', 'admin')
+      ?? await permissionService.createPermission({ resource: 'rbac', action: 'admin' });
+    const permissionsReadPermission = await permissionService.getPermissionByResourceAction('permissions', 'read')
+      ?? await permissionService.createPermission({ resource: 'permissions', action: 'read' });
 
-    // Create role with permissions:write and permissions:read permissions
+    // Create role with rbac:admin and permissions:read permissions
     const adminRole = await roleService.createRole({
       name: 'PermissionAdmin',
       description: 'Can manage permissions',
@@ -165,7 +144,7 @@ describe('Permissions Router', () => {
       expect(response.status).toBe(401);
     });
 
-    it('should return 403 when user lacks permissions:write permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .post('/api/permissions')
         .set('Authorization', `Bearer ${regularUserToken}`)

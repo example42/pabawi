@@ -42,8 +42,9 @@ the issuing account version, so reset or deactivation also invalidates outstandi
 console tickets. MCP sessions revalidate their opening credentials before tool
 calls and during idle checks. JWT sessions must be recreated after the opening
 access token expires or is revoked. Static MCP authentication requires an active
-service account. This does not yet repair MCP's separate caller-permission and
-cross-user session-ownership finding (S02/A06).
+service account. MCP sessions bind the opening authentication method and caller identity;
+JWT callers use their own permissions and only static credentials use the
+service account.
 
 These checks do not undo already admitted infrastructure operations. Shared
 authorization state also does not make process-local execution, MCP or console
@@ -67,6 +68,41 @@ Permissions are database records with a `resource` and an `action`, written here
 as `<resource>/<action>`. Examples include `proxmox/provision`,
 `proxmox/lifecycle` and `proxmox/destroy`. Assign permission IDs to roles through
 the API. Wildcard strings are not supported.
+
+## Entitlement administration
+
+`rbac/admin` is explicit full delegation authority. Migration 026 grants it only
+to the built-in Administrator role. Active `is_admin` accounts retain their
+existing permission bypass. Existing custom roles are preserved and do not gain
+this permission merely because they hold user, group or role editing rights.
+
+| Operation | Required permission |
+| --- | --- |
+| Create users or edit profiles | `users/write`, with existing `users/admin` restrictions for privileged fields and targets |
+| Create groups or edit group metadata | `groups/write` |
+| Add or remove user roles or group memberships | `rbac/admin` |
+| Add or remove group roles or role permissions | `rbac/admin` |
+| Create, update or delete roles; create permission records | `rbac/admin` |
+| Delete groups, including their cascading assignments | `rbac/admin` |
+| Grant or revoke administrator status | `rbac/admin`; changing one's own admin flag remains forbidden |
+
+Read endpoints retain their existing resource-specific read permissions. Assign
+`users/read`, `groups/read`, `roles/read` and `permissions/read` alongside
+`rbac/admin` when delegating access through the management UI.
+
+Entitlement administrators can grant permissions they do not personally hold,
+including Administrator and `rbac/admin`, and may assign roles or memberships to
+themselves. Granting this authority is therefore an explicit approval of full
+privilege delegation, not a limited helpdesk capability. Role creation and name
+changes use the same gate because Entra group mappings resolve roles by name.
+`users/admin` remains a sensitive account-recovery permission, including password
+resets; delegate it only to trusted account administrators.
+
+Successful entitlement mutations persist actor ID, operation and affected IDs
+in the audit log. Denied permission checks also persist authorization failures.
+Revoking `rbac/admin` takes effect on the next server authorization check, even
+with a warmed permission cache. Built-in role deletion protection is unchanged.
+SSO linking and group-reconciliation repairs are tracked separately under A08.
 
 ## Built-in Roles
 

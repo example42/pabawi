@@ -23,6 +23,7 @@ export type PermissionResource =
   | 'users'
   | 'groups'
   | 'roles'
+  | 'rbac'
   | 'puppetserver'
   | 'executions'
   | 'provisioning'
@@ -61,7 +62,7 @@ export const RESOURCE_CATEGORIES: Record<string, { label: string; resources: Per
   },
   system: {
     label: 'System',
-    resources: ['users', 'groups', 'roles', 'ansible', 'bolt', 'puppetdb', 'puppetserver', 'ssh', 'checkmk'],
+    resources: ['users', 'groups', 'roles', 'rbac', 'ansible', 'bolt', 'puppetdb', 'puppetserver', 'ssh', 'checkmk'],
   },
 };
 
@@ -82,6 +83,7 @@ export const RESOURCE_LABELS: Record<PermissionResource, string> = {
   users: 'Users',
   groups: 'Groups',
   roles: 'Roles',
+  rbac: 'Entitlement administration',
   puppetserver: 'Puppetserver',
   executions: 'Executions',
   provisioning: 'Provisioning discovery',

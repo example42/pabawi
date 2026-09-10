@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { AuditLoggingService } from "../services/AuditLoggingService";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
@@ -38,6 +40,7 @@ export function createPermissionsRouter(
   const logger = container.resolve("logger");
   const configService = container.resolve("config");
   const jwtSecret = configService.getJwtSecret();
+  const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
@@ -51,9 +54,11 @@ export function createPermissionsRouter(
   router.post(
     "/",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("permissions", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
 
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing create permission request", {
         component: "PermissionsRouter",
         operation: "createPermission",
@@ -80,6 +85,12 @@ export function createPermissionsRouter(
           action: validatedData.action,
           description: validatedData.description,
         });
+
+        await auditLogger.logAdminAction(
+          "createPermission",
+          actor.userId,
+          { permissionId: permission.id }, req.ip, req.headers["user-agent"],
+        );
 
         logger.info("Permission created successfully", {
           component: "PermissionsRouter",

@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { AuditLoggingService } from "../services/AuditLoggingService";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
@@ -22,9 +24,9 @@ const PaginationSchema = z.object({
 /**
  * Zod schema for creating a user.
  *
- * `isAdmin` is intentionally NOT accepted here — admin elevation goes through
+ * `isAdmin` is intentionally NOT accepted here: admin elevation goes through
  * the dedicated `PUT /api/users/:id/admin-status` endpoint which requires
- * `users:admin`. This prevents callers with only `users:write` from creating
+ * `rbac:admin`. This prevents callers with only `users:write` from creating
  * themselves an admin via mass-assignment.
  */
 const CreateUserSchema = z.object({
@@ -57,6 +59,7 @@ export function createUsersRouter(
   const jwtSecret = configService.getJwtSecret();
   const authService = new AuthenticationService(databaseService.getAdapter(), jwtSecret);
   const userService = new UserService(databaseService.getAdapter(), authService);
+  const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
@@ -91,7 +94,7 @@ export function createUsersRouter(
           },
         });
 
-        // Create user — isAdmin always false on creation; elevation via PUT /admin-status
+        // Create user: isAdmin always false on creation; elevation via PUT /admin-status
         const user = await userService.createUser({
           username: validatedData.username,
           email: validatedData.email,
@@ -375,8 +378,8 @@ export function createUsersRouter(
   /**
    * Zod schema for updating user.
    *
-   * `isAdmin` is intentionally NOT accepted here — elevation goes through the
-   * dedicated `PUT /api/users/:id/admin-status` endpoint (gated by `users:admin`).
+   * `isAdmin` is intentionally NOT accepted here: elevation goes through the
+   * dedicated `PUT /api/users/:id/admin-status` endpoint (gated by `rbac:admin`).
    */
   const UpdateUserSchema = z.object({
     email: z.string().email().optional(),
@@ -604,7 +607,7 @@ export function createUsersRouter(
 
   /**
    * PUT /api/users/:id/admin-status
-   * Grant or revoke admin privileges. Dedicated route — gated by users:admin
+   * Grant or revoke admin privileges. Dedicated route, gated by rbac:admin
    * and forbids self-modification so an admin cannot lock themselves out of
    * admin (and conversely cannot escalate themselves silently via the
    * generic update endpoint).
@@ -612,8 +615,10 @@ export function createUsersRouter(
   router.put(
     "/:id/admin-status",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("users", "admin")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       const targetId = req.params.id;
       const callerId = req.user?.userId;
 
@@ -631,6 +636,11 @@ export function createUsersRouter(
         }
 
         const updated = await userService.updateUser(targetId, { isAdmin });
+        await auditLogger.logAdminAction(
+          "setAdminStatus",
+          actor.userId,
+          { targetUserId: targetId, isAdmin }, req.ip, req.headers["user-agent"],
+        );
 
         logger.info("User admin status changed", {
           component: "UsersRouter",
@@ -746,8 +756,10 @@ export function createUsersRouter(
   router.post(
     "/:id/groups/:groupId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("users", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing add user to group request", {
         component: "UsersRouter",
         operation: "addUserToGroup",
@@ -764,6 +776,11 @@ export function createUsersRouter(
 
         // Add user to group
         await userService.addUserToGroup(userId, groupId);
+        await auditLogger.logAdminAction(
+          "addUserToGroup",
+          actor.userId,
+          { targetUserId: userId, groupId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for the user
         permissionService.invalidateUserPermissionCache(userId);
@@ -874,8 +891,10 @@ export function createUsersRouter(
   router.delete(
     "/:id/groups/:groupId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("users", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing remove user from group request", {
         component: "UsersRouter",
         operation: "removeUserFromGroup",
@@ -892,6 +911,11 @@ export function createUsersRouter(
 
         // Remove user from group
         await userService.removeUserFromGroup(userId, groupId);
+        await auditLogger.logAdminAction(
+          "removeUserFromGroup",
+          actor.userId,
+          { targetUserId: userId, groupId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for the user
         permissionService.invalidateUserPermissionCache(userId);
@@ -960,8 +984,10 @@ export function createUsersRouter(
   router.post(
     "/:id/roles/:roleId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("users", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing assign role to user request", {
         component: "UsersRouter",
         operation: "assignRoleToUser",
@@ -978,6 +1004,11 @@ export function createUsersRouter(
 
         // Assign role to user
         await userService.assignRoleToUser(userId, roleId);
+        await auditLogger.logAdminAction(
+          "assignRoleToUser",
+          actor.userId,
+          { targetUserId: userId, roleId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for the user
         permissionService.invalidateUserPermissionCache(userId);
@@ -1088,8 +1119,10 @@ export function createUsersRouter(
   router.delete(
     "/:id/roles/:roleId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("users", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing remove role from user request", {
         component: "UsersRouter",
         operation: "removeRoleFromUser",
@@ -1106,6 +1139,11 @@ export function createUsersRouter(
 
         // Remove role from user
         await userService.removeRoleFromUser(userId, roleId);
+        await auditLogger.logAdminAction(
+          "removeRoleFromUser",
+          actor.userId,
+          { targetUserId: userId, roleId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for the user
         permissionService.invalidateUserPermissionCache(userId);

@@ -698,14 +698,14 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
     let groupsAdminPermission;
     try {
       groupsAdminPermission = await permissionService.createPermission({
-        resource: 'groups',
+        resource: 'rbac',
         action: 'admin',
         description: 'Admin groups',
       });
     } catch (error) {
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsAdminPermission = allPermissions.items.find(
-        p => p.resource === 'groups' && p.action === 'admin'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!groupsAdminPermission) {
         throw error;
@@ -750,7 +750,7 @@ describe('Groups Router - DELETE /api/groups/:id', () => {
   });
 
   describe('Authentication and Authorization', () => {
-    it('should return 403 when user lacks groups:admin permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
@@ -833,14 +833,14 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
     let groupsWritePermission;
     try {
       groupsWritePermission = await permissionService.createPermission({
-        resource: 'groups',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
         description: 'Write groups',
       });
     } catch (error) {
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsWritePermission = allPermissions.items.find(
-        p => p.resource === 'groups' && p.action === 'write'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!groupsWritePermission) {
         throw error;
@@ -915,7 +915,7 @@ describe('Groups Router - POST /api/groups/:id/roles/:roleId', () => {
       expect(response.body.error.message).toBeDefined();
     });
 
-    it('should return 403 when user lacks groups:write permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .post(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
@@ -1050,14 +1050,14 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
     let groupsWritePermission;
     try {
       groupsWritePermission = await permissionService.createPermission({
-        resource: 'groups',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
         description: 'Write groups',
       });
     } catch (error) {
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       groupsWritePermission = allPermissions.items.find(
-        p => p.resource === 'groups' && p.action === 'write'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!groupsWritePermission) {
         throw error;
@@ -1135,7 +1135,7 @@ describe('Groups Router - DELETE /api/groups/:id/roles/:roleId', () => {
       expect(response.body.error.message).toBeDefined();
     });
 
-    it('should return 403 when user lacks groups:write permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .delete(`/api/groups/${testGroupId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)

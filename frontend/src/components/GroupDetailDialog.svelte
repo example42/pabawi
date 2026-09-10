@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { authManager } from '../lib/auth.svelte';
   import { onMount } from 'svelte';
   import { get, post, del } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
@@ -46,6 +47,8 @@
     users: UserDTO[];
   }
 
+  const canManageEntitlements = $derived(authManager.hasPermission('rbac', 'admin'));
+
   // State
   let group = $state<GroupDetailDTO | null>(null);
   let availableRoles = $state<RoleDTO[]>([]);
@@ -73,8 +76,8 @@
   $effect(() => {
     if (isOpen && groupId) {
       loadGroupDetails();
-      loadAvailableRoles();
-      loadAvailableUsers();
+      if (canManageEntitlements) loadAvailableRoles();
+      if (canManageEntitlements) loadAvailableUsers();
     }
   });
 
@@ -299,7 +302,7 @@
                 </div>
 
                 <!-- Add User -->
-                {#if unassignedUsers.length > 0}
+                {#if canManageEntitlements && unassignedUsers.length > 0}
                   <div class="flex gap-2 mb-3">
                     <select
                       bind:value={selectedUserId}
@@ -316,7 +319,7 @@
                     <button
                       type="button"
                       onclick={handleAddUser}
-                      disabled={!selectedUserId || isSaving}
+                      disabled={!canManageEntitlements || !selectedUserId || isSaving}
                       class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Add
@@ -344,7 +347,7 @@
                         <button
                           type="button"
                           onclick={() => handleRemoveUser(member.id, member.username)}
-                          disabled={isSaving}
+                          disabled={!canManageEntitlements || isSaving}
                           class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Remove user from group"
                         >
@@ -367,7 +370,7 @@
                 </div>
 
                 <!-- Add Role -->
-                {#if unassignedRoles.length > 0}
+                {#if canManageEntitlements && unassignedRoles.length > 0}
                   <div class="flex gap-2 mb-3">
                     <select
                       bind:value={selectedRoleId}
@@ -384,7 +387,7 @@
                     <button
                       type="button"
                       onclick={handleAddRole}
-                      disabled={!selectedRoleId || isSaving}
+                      disabled={!canManageEntitlements || !selectedRoleId || isSaving}
                       class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Assign
@@ -419,7 +422,7 @@
                         <button
                           type="button"
                           onclick={() => handleRemoveRole(role.id, role.name)}
-                          disabled={isSaving}
+                          disabled={!canManageEntitlements || isSaving}
                           class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Remove role"
                         >

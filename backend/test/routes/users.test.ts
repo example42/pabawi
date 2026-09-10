@@ -991,7 +991,11 @@ describe('Users Router - PUT /api/users/:id', () => {
       expect(response.body.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('should update is_admin via the dedicated admin-status endpoint', async () => {
+    it('should update is_admin via the dedicated admin-status endpoint with entitlement authority', async () => {
+      const entitlement = await permissionService.getPermissionByResourceAction('rbac', 'admin')
+        ?? await permissionService.createPermission({ resource: 'rbac', action: 'admin' });
+      const assignedRoles = await userService.getUserRoles(adminUserId);
+      await roleService.assignPermissionToRole(assignedRoles[0].id, entitlement.id);
       const response = await request(harness.use(app))
         .put(`/api/users/${testUserId}/admin-status`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -1769,7 +1773,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
   });
 
   beforeEach(async () => {
-    // Create admin user with users:write permission
+    // Create admin user with rbac:admin permission
     const adminUser = await userService.createUser({
       username: 'admin_user',
       email: 'admin@test.com',
@@ -1780,26 +1784,26 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
     });
     adminUserId = adminUser.id;
 
-    // Create users:write permission (handle if already exists)
+    // Create rbac:admin permission (handle if already exists)
     let usersWritePermission;
     try {
       usersWritePermission = await permissionService.createPermission({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
         description: 'Write users',
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
-        p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!usersWritePermission) {
         throw error; // Re-throw if it's a different error
       }
     }
 
-    // Create role with users:write permission
+    // Create role with rbac:admin permission
     const adminRole = await roleService.createRole({
       name: 'UserWriter',
       description: 'Can write users',
@@ -1877,7 +1881,7 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
       expect(response.body.error.message).toBeDefined();
     });
 
-    it('should return 403 when user lacks users:write permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
@@ -1886,12 +1890,12 @@ describe('Users Router - POST /api/users/:id/groups/:groupId', () => {
       expect(response.body.error.code).toBe('INSUFFICIENT_PERMISSIONS');
       expect(response.body.error.message).toContain('Insufficient permissions');
       expect(response.body.error.required).toEqual({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
       });
     });
 
-    it('should return 204 when user has users:write permission', async () => {
+    it('should return 204 when user has rbac:admin permission', async () => {
       await request(harness.use(app))
         .post(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -2181,7 +2185,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
   });
 
   beforeEach(async () => {
-    // Create admin user with users:write permission
+    // Create admin user with rbac:admin permission
     const adminUser = await userService.createUser({
       username: 'admin_user',
       email: 'admin@test.com',
@@ -2192,26 +2196,26 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
     });
     adminUserId = adminUser.id;
 
-    // Create users:write permission (handle if already exists)
+    // Create rbac:admin permission (handle if already exists)
     let usersWritePermission;
     try {
       usersWritePermission = await permissionService.createPermission({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
         description: 'Write users',
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
-        p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!usersWritePermission) {
         throw error; // Re-throw if it's a different error
       }
     }
 
-    // Create role with users:write permission
+    // Create role with rbac:admin permission
     const adminRole = await roleService.createRole({
       name: 'UserWriter',
       description: 'Can write users',
@@ -2292,7 +2296,7 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       expect(response.body.error.message).toBeDefined();
     });
 
-    it('should return 403 when user lacks users:write permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
@@ -2301,12 +2305,12 @@ describe('Users Router - DELETE /api/users/:id/groups/:groupId', () => {
       expect(response.body.error.code).toBe('INSUFFICIENT_PERMISSIONS');
       expect(response.body.error.message).toContain('Insufficient permissions');
       expect(response.body.error.required).toEqual({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
       });
     });
 
-    it('should return 204 when user has users:write permission', async () => {
+    it('should return 204 when user has rbac:admin permission', async () => {
       await request(harness.use(app))
         .delete(`/api/users/${testUserId}/groups/${testGroupId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -2636,7 +2640,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
   });
 
   beforeEach(async () => {
-    // Create admin user with users:write permission
+    // Create admin user with rbac:admin permission
     const adminUser = await userService.createUser({
       username: 'admin_user',
       email: 'admin@test.com',
@@ -2647,26 +2651,26 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
     });
     adminUserId = adminUser.id;
 
-    // Create users:write permission (handle if already exists)
+    // Create rbac:admin permission (handle if already exists)
     let usersWritePermission;
     try {
       usersWritePermission = await permissionService.createPermission({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
         description: 'Write users',
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
-        p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!usersWritePermission) {
         throw error; // Re-throw if it's a different error
       }
     }
 
-    // Create role with users:write permission
+    // Create role with rbac:admin permission
     const adminRole = await roleService.createRole({
       name: 'UserWriter',
       description: 'Can write users',
@@ -2744,7 +2748,7 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
       expect(response.body.error.message).toBeDefined();
     });
 
-    it('should return 403 when user lacks users:write permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
@@ -2753,12 +2757,12 @@ describe('Users Router - POST /api/users/:id/roles/:roleId', () => {
       expect(response.body.error.code).toBe('INSUFFICIENT_PERMISSIONS');
       expect(response.body.error.message).toContain('Insufficient permissions');
       expect(response.body.error.required).toEqual({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
       });
     });
 
-    it('should return 204 when user has users:write permission', async () => {
+    it('should return 204 when user has rbac:admin permission', async () => {
       await request(harness.use(app))
         .post(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
@@ -3100,7 +3104,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
   });
 
   beforeEach(async () => {
-    // Create admin user with users:write permission
+    // Create admin user with rbac:admin permission
     const adminUser = await userService.createUser({
       username: 'admin_user',
       email: 'admin@test.com',
@@ -3111,26 +3115,26 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
     });
     adminUserId = adminUser.id;
 
-    // Create users:write permission (handle if already exists)
+    // Create rbac:admin permission (handle if already exists)
     let usersWritePermission;
     try {
       usersWritePermission = await permissionService.createPermission({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
         description: 'Write users',
       });
     } catch (error) {
       // Permission might already exist from previous test, fetch it
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       usersWritePermission = allPermissions.items.find(
-        p => p.resource === 'users' && p.action === 'write'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!usersWritePermission) {
         throw error; // Re-throw if it's a different error
       }
     }
 
-    // Create role with users:write permission
+    // Create role with rbac:admin permission
     const adminRole = await roleService.createRole({
       name: 'UserWriter',
       description: 'Can write users',
@@ -3211,7 +3215,7 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       expect(response.body.error.message).toBeDefined();
     });
 
-    it('should return 403 when user lacks users:write permission', async () => {
+    it('should return 403 when user lacks rbac:admin permission', async () => {
       const response = await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${regularUserToken}`)
@@ -3220,12 +3224,12 @@ describe('Users Router - DELETE /api/users/:id/roles/:roleId', () => {
       expect(response.body.error.code).toBe('INSUFFICIENT_PERMISSIONS');
       expect(response.body.error.message).toContain('Insufficient permissions');
       expect(response.body.error.required).toEqual({
-        resource: 'users',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
       });
     });
 
-    it('should return 204 when user has users:write permission', async () => {
+    it('should return 204 when user has rbac:admin permission', async () => {
       await request(harness.use(app))
         .delete(`/api/users/${testUserId}/roles/${testRoleId}`)
         .set('Authorization', `Bearer ${adminToken}`)
