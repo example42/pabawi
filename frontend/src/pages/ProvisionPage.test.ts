@@ -10,6 +10,8 @@ import { render, screen, waitFor, cleanup, within } from '@testing-library/svelt
 import '@testing-library/jest-dom/vitest';
 import fc from 'fast-check';
 import ProvisionPage from './ProvisionPage.svelte';
+import { hasPermission } from '../lib/permissions';
+vi.mock('../lib/permissions', () => ({ hasPermission: vi.fn(() => true) }));
 import * as proxmoxApi from '../lib/proxmoxApi';
 import type { ProvisioningIntegration } from '../lib/types/provisioning';
 import { integrationArbitrary } from '../__tests__/generators';
@@ -26,6 +28,7 @@ vi.mock('../lib/proxmoxApi', async (importOriginal) => {
 describe('ProvisionPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(hasPermission).mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -60,6 +63,18 @@ describe('ProvisionPage', () => {
   });
 
   describe('Integration Discovery', () => {
+    it('hides providers and forms without provisioning permission', async () => {
+      vi.mocked(hasPermission).mockReturnValue(false);
+      vi.mocked(proxmoxApi.getProvisioningIntegrations).mockResolvedValue({ integrations: [{
+        name: 'proxmox', displayName: 'Proxmox VE', type: 'virtualization', status: 'connected',
+        capabilities: [{ name: 'create_vm', description: 'Create VM', operation: 'create', parameters: [] }],
+      }] });
+      render(ProvisionPage);
+      await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
+      expect(screen.queryByText('Proxmox VE')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /create resource/i })).not.toBeInTheDocument();
+    });
+
     it('displays integrations with capabilities after successful fetch', async () => {
       const mockIntegrations: ProvisioningIntegration[] = [
         {

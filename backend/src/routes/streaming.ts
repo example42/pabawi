@@ -61,7 +61,14 @@ export function streamAuthMiddleware(
 ): void {
   if (!req.headers.authorization && typeof req.query.ticket === "string") {
     const ticketData = streamTickets.get(req.query.ticket);
-    if (ticketData && ticketData.expiresAt >= Date.now()) {
+    const streamPath = /^\/([^/]+)\/stream\/?$/i.exec(req.path);
+    let executionId: string | undefined;
+    try {
+      executionId = streamPath ? decodeURIComponent(streamPath[1]) : undefined;
+    } catch {
+      // Malformed path encodings cannot identify the ticket's execution.
+    }
+    if (req.method === "GET" && ticketData && ticketData.executionId === executionId && ticketData.expiresAt >= Date.now()) {
       streamTickets.delete(req.query.ticket); // single-use
       req.headers.authorization = `Bearer ${ticketData.bearerToken}`;
     }

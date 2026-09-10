@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import type { BoltService } from "../integrations/bolt/BoltService";
 import {
@@ -13,6 +13,7 @@ import type { PuppetDBService } from "../integrations/puppetdb/PuppetDBService";
 import type { ExecutionToolPlugin } from "../integrations/types";
 import { requestDeduplication } from "../middleware/deduplication";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { tokensEqual } from "../utils/tokensEqual";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
@@ -65,6 +66,8 @@ const InventoryQuerySchema = z.object({
  */
 export function createInventoryRouter(
   boltService: BoltService,
+  authorizeSources: RequestHandler,
+  requirePermission: PermissionMiddlewareFactory,
   integrationManager?: IntegrationManager,
   options?: { allowDestructiveActions?: boolean },
   container: DIContainer = createDefaultContainer(),
@@ -83,6 +86,34 @@ export function createInventoryRouter(
     // No config — protected lifecycle routes will refuse all requests.
   }
   const requireLifecycleAuth = createLifecycleAuth(lifecycleTokenValue);
+  const requireProviderPermission: RequestHandler = (req, res, next) => {
+    const provider = resolveProvider(req.params.id);
+    if (!provider) {
+      res.status(400).json({ error: { code: "UNSUPPORTED_PROVIDER", message: "Unknown lifecycle provider" } });
+      return;
+    }
+    let permission = "read";
+    if (req.method === "DELETE") permission = "destroy";
+    if (req.method === "POST") {
+      const action = (req.body as { action?: unknown }).action;
+      if (typeof action !== "string") {
+        res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Action is required" } });
+        return;
+      }
+      if (["destroy", "destroy_vm", "destroy_lxc", "terminate", "terminate_instance"].includes(action)) permission = "destroy";
+      else if (["provision", "create_instance", "create_vm", "create_lxc"].includes(action)) permission = "provision";
+      else if (["start", "stop", "shutdown", "reboot", "suspend", "resume", "snapshot"].includes(action)) permission = "lifecycle";
+      else {
+        res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Unsupported lifecycle action" } });
+        return;
+      }
+    }
+    const checks = Router();
+    checks.use(requirePermission(provider, "read"));
+    if (permission !== "read") checks.use(requirePermission(provider, permission));
+    checks(req, res, next);
+  };
+
 
   /**
    * GET /api/inventory
@@ -94,6 +125,7 @@ export function createInventoryRouter(
    */
   router.get(
     "/",
+    authorizeSources,
     requestDeduplication,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
@@ -112,6 +144,10 @@ export function createInventoryRouter(
       try {
         // Validate query parameters
         const query = InventoryQuerySchema.parse(req.query);
+        if (query.pql && !req.authorizedSources?.includes("puppetdb")) {
+          res.status(403).json({ error: { code: "FORBIDDEN", message: "PuppetDB read permission required" } });
+          return;
+        }
 
         // Parse sources parameter
         const requestedSources = query.sources
@@ -154,7 +190,7 @@ export function createInventoryRouter(
           }
 
           // Get aggregated inventory from all sources (includes groups)
-          const aggregated = await integrationManager.getAggregatedInventory();
+          const aggregated = await integrationManager.getAggregatedInventory(true, req.authorizedSources ?? []);
 
           // Filter by requested sources if specified
           let filteredNodes = aggregated.nodes;
@@ -469,6 +505,10 @@ export function createInventoryRouter(
           });
         }
 
+        if (!req.authorizedSources?.includes("bolt")) {
+          res.status(403).json({ error: { code: "FORBIDDEN", message: "Bolt read permission required" } });
+          return;
+        }
         const nodes = await boltService.getInventory();
         const duration = Date.now() - startTime;
 
@@ -687,6 +727,7 @@ export function createInventoryRouter(
    */
   router.get(
     "/sources",
+    authorizeSources,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -730,14 +771,14 @@ export function createInventoryRouter(
           > = {};
 
           // Add Bolt as a source
-          sources.bolt = {
+          if (req.authorizedSources?.includes("bolt")) sources.bolt = {
             type: "execution",
             status: "connected",
             lastCheck: new Date().toISOString(),
           };
 
           // Add other information sources
-          for (const source of integrationManager.getAllInformationSources()) {
+          for (const source of integrationManager.getAllInformationSources().filter(source => req.authorizedSources?.includes(source.name))) {
             const health = healthStatuses.get(source.name);
             sources[source.name] = {
               type: source.type,
@@ -899,6 +940,7 @@ export function createInventoryRouter(
    */
   router.get(
     "/:id",
+    authorizeSources,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -956,7 +998,7 @@ export function createInventoryRouter(
           }
 
           const useCache = req.query.nocache !== '1';
-          const aggregated = await integrationManager.getLinkedInventory(useCache);
+          const aggregated = await integrationManager.getLinkedInventory(useCache, req.authorizedSources ?? []);
           node = aggregated.nodes.find(
             (n) => n.id === nodeId || n.name === nodeId,
           );
@@ -981,6 +1023,10 @@ export function createInventoryRouter(
           }
 
           // Fallback to Bolt-only inventory
+          if (!req.authorizedSources?.includes("bolt")) {
+            res.status(403).json({ error: { code: "FORBIDDEN", message: "Bolt read permission required" } });
+            return;
+          }
           const nodes = await boltService.getInventory();
           node = nodes.find((n) => n.id === nodeId || n.name === nodeId);
         }
@@ -1268,6 +1314,7 @@ export function createInventoryRouter(
    */
   router.get(
     "/:id/lifecycle-actions",
+    requireProviderPermission,
     asyncHandler((req: Request, res: Response): void => {
       const params = NodeIdParamSchema.parse(req.params);
       const nodeId = params.id;
@@ -1337,6 +1384,7 @@ export function createInventoryRouter(
    */
   router.post(
     "/:id/action",
+    requireProviderPermission,
     requireLifecycleAuth,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
@@ -1466,6 +1514,7 @@ export function createInventoryRouter(
    */
   router.delete(
     "/:id",
+    requireProviderPermission,
     requireLifecycleAuth,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();

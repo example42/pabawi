@@ -7,6 +7,7 @@ import { BoltInventoryNotFoundError } from "../integrations/bolt/types";
 import { asyncHandler } from "./asyncHandler";
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { NodeIdParamSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 
@@ -23,6 +24,7 @@ export function createCommandsRouter(
   integrationManager: IntegrationManager,
   executionRepository: ExecutionRepository,
   commandWhitelistService: BoltCommandWhitelistService,
+  requirePermission: PermissionMiddlewareFactory,
   streamingManager?: StreamingExecutionManager,
   container: DIContainer = createDefaultContainer(),
 ): Router {
@@ -36,6 +38,17 @@ export function createCommandsRouter(
    */
   router.post(
     "/:id/command",
+    (req, res, next): void => {
+      const parsed = CommandExecutionBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Invalid command request" } });
+        return;
+      }
+      const tool = parsed.data.tool
+        ?? (["bolt", "ansible", "ssh"].find((name) => integrationManager.getExecutionTool(name)) ?? "bolt");
+      req.body = { ...parsed.data, tool };
+      requirePermission(tool, "execute")(req, res, next);
+    },
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

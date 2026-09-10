@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hasPermission } from "../lib/permissions";
   import { router } from '../lib/router.svelte';
 
   interface ExecutionResult {
@@ -25,7 +26,7 @@
   let navigating = $state(false);
 
   // Determine if button should be disabled
-  const isDisabled = $derived(disabled || execution.status === 'running' || navigating);
+  const isDisabled = $derived(!hasPermission("execute", execution.executionTool || "bolt") || disabled || execution.status === 'running' || navigating);
 
   // Handle re-execute click
   function handleReExecute(): void {

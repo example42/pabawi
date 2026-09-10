@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hasPermission } from "../lib/permissions";
   import { onMount } from 'svelte';
   import LoadingSpinner from '../components/LoadingSpinner.svelte';
   import ErrorAlert from '../components/ErrorAlert.svelte';
@@ -918,7 +919,7 @@
                     type="button"
                     class="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed dark:border-red-600 dark:bg-gray-700 dark:text-red-400 dark:hover:bg-red-900/20"
                     onclick={() => cancelExecution(selectedExecution.id)}
-                    disabled={cancelling}
+                    disabled={cancelling || !hasPermission("execute", selectedExecution.executionTool || "bolt")}
                   >
                     {cancelling ? 'Cancelling...' : 'Cancel Execution'}
                   </button>

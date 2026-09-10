@@ -1,3 +1,4 @@
+import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { BoltService } from "../integrations/bolt/BoltService";
@@ -18,7 +19,7 @@ const InstallPackageRequestSchema = z.object({
   version: z.string().optional(),
   settings: z.record(z.unknown()).optional(),
   expertMode: z.boolean().optional().default(false),
-  tool: z.enum(["bolt", "ansible", "ssh"]).optional(),
+  tool: z.enum(["bolt", "ansible"]).optional(),
 });
 
 /**
@@ -45,6 +46,7 @@ interface PackageTaskConfig {
  */
 export function createPackagesRouter(
   integrationManager: IntegrationManager,
+  requirePermission: PermissionMiddlewareFactory,
   boltService: BoltService,
   executionRepository: ExecutionRepository,
   packageTasks: PackageTaskConfig[],
@@ -59,7 +61,7 @@ export function createPackagesRouter(
    * GET /api/packages/package-tasks
    * Get available package installation tasks
    */
-  router.get("/package-tasks", (req: Request, res: Response) => {
+  router.get("/package-tasks", requirePermission("bolt", "read"), (req: Request, res: Response) => {
     const startTime = Date.now();
     const requestId = req.id ?? expertModeService.generateRequestId();
 
@@ -119,6 +121,17 @@ export function createPackagesRouter(
    */
   router.post(
     "/:id/install-package",
+    (req, res, next): void => {
+      const parsed = InstallPackageRequestSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: { code: "INVALID_REQUEST", message: "Invalid package request" } });
+        return;
+      }
+      const tool = parsed.data.tool
+        ?? (["bolt", "ansible"].find(name => integrationManager.getExecutionTool(name)) ?? "bolt");
+      req.body = { ...parsed.data, tool };
+      requirePermission(tool, "execute")(req, res, next);
+    },
     asyncHandler(async (req: Request, res: Response) => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();

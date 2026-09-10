@@ -1,3 +1,5 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
+import { allowAllSources } from "../helpers/sourceAuthorization";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { beforeAll, afterAll } from "vitest";
 import { createHttpHarness, type HttpHarness } from "../helpers/httpHarness";
@@ -60,8 +62,8 @@ describe("Expert Mode Routes Integration Tests", () => {
     ]);
 
     // Add routes - pass undefined for puppetDB and puppetserver services
-    app.use("/api/inventory", createInventoryRouter(boltService, integrationManager));
-    app.use("/api/integrations", createIntegrationsRouter(integrationManager, undefined, undefined));
+    app.use("/api/inventory", createInventoryRouter(boltService, allowAllSources, noPermissionCheck, integrationManager));
+    app.use("/api/integrations", createIntegrationsRouter(integrationManager, noPermissionCheck, undefined, undefined));
 
     vi.clearAllMocks();
   });

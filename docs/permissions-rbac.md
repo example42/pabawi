@@ -1,6 +1,6 @@
 # Permissions and RBAC
 
-Pabawi uses Role-Based Access Control (RBAC) when `AUTH_ENABLED=true`. Users are assigned roles. Roles contain permissions. Permissions gate specific actions.
+Pabawi uses Role-Based Access Control (RBAC) on authenticated API routes. Users are assigned roles. Roles contain permissions. Permissions gate specific actions.
 
 ## Authentication Methods
 
@@ -25,23 +25,17 @@ When `ENTRA_ID_GROUP_MAPPING` is configured, Pabawi synchronizes roles at each S
 
 ## Permission Format
 
-```
-<integration>:<category>:<action>
-```
-
-Examples:
-
-- `proxmox:provision:create_vm` — create VMs in Proxmox
-- `proxmox:lifecycle:start` — start Proxmox VMs/containers
-- `proxmox:lifecycle:destroy` — destroy Proxmox VMs/containers
-- `*:provision:*` — all provisioning actions on all integrations
-- `*:*:*` — full admin access
+Permissions are database records with a `resource` and an `action`, written here
+as `<resource>/<action>`. Examples include `proxmox/provision`,
+`proxmox/lifecycle` and `proxmox/destroy`. Assign permission IDs to roles through
+the API. Wildcard strings are not supported.
 
 ## Built-in Roles
 
 ### Administrator
 
-Full access. Permission: `*:*:*`
+The Administrator role receives explicit permission assignments. Active users
+with `is_admin` set also pass all permission checks.
 
 ### Operator
 
@@ -116,7 +110,13 @@ your operators need them.
 |---|---|
 | `executions/read` | List executions, read execution detail, stored output and the SSE stream |
 
-Running or cancelling an execution additionally requires `bolt/execute`.
+Commands, Puppet runs and batches require `<execution-tool>/execute` for the
+selected tool. Re-execution and cancellation require it for the stored tool;
+batch cancellation checks every tool in the batch. Package installation supports
+Bolt and Ansible and requires the selected tool's execute permission.
+
+Execution output is shared with all holders of `executions/read`, regardless of
+which user started the execution.
 
 ### SSH
 
@@ -126,46 +126,44 @@ Running or cancelling an execution additionally requires `bolt/execute`.
 | `ssh/execute` | Execute SSH commands |
 | `ssh/admin` | Full SSH management |
 
-### Provisioning
+### Provisioning and lifecycle
 
 | Permission | Grants |
 |---|---|
-| `<int>:provision:create_vm` | Create VMs (Proxmox, AWS) |
-| `<int>:provision:create_lxc` | Create LXC containers (Proxmox) |
-| `<int>:provision:*` | All provisioning for the integration |
+| `provisioning/read` | Discover provisioning integrations |
+| `<provider>/read` | Read provider inventory and discovery data |
+| `<provider>/provision` | Create provider resources |
+| `<provider>/lifecycle` | Start, stop, reboot and other non-destruction lifecycle operations |
+| `<provider>/destroy` | Destruction, AWS termination and Azure deallocation, also subject to `ALLOW_DESTRUCTIVE_PROVISIONING` |
 
-### Lifecycle
+Provider mutations also require that provider's read permission. These are
+resource/action pairs, not wildcard permission strings. The generic inventory
+lifecycle endpoints retain their additional lifecycle credential requirement.
 
-| Permission | Grants |
+### Inventory and facts
+
+Aggregated inventory and facts include only sources for which the caller holds
+`<source>/read`. Filtering happens before provider calls and node linking.
+Explicit restricted facts and PuppetDB PQL requests return 403. Scoped requests
+cannot reuse unrestricted inventory cache entries.
+
+## UI permission state
+
+The frontend loads the current caller's grants from `GET /api/auth/permissions`
+after login, token refresh or restoring a session. Controls remain unavailable
+until permissions load; grants are cleared on logout.
+
+| UI element | Required permission |
 |---|---|
-| `<int>:lifecycle:start` | Start stopped resources |
-| `<int>:lifecycle:stop` | Stop running resources |
-| `<int>:lifecycle:reboot` | Reboot resources |
-| `<int>:lifecycle:shutdown` | Graceful shutdown |
-| `<int>:lifecycle:destroy` | **Permanently delete** — also requires `ALLOW_DESTRUCTIVE_PROVISIONING=true` |
-| `<int>:lifecycle:*` | All lifecycle actions |
+| Provision navigation | `provisioning/read` and at least one provider's read/provision grants |
+| Provisioning form | Selected provider's read/provision grants |
+| Lifecycle action | Provider read plus lifecycle or destroy, with the destructive configuration gate |
+| Execution navigation | `executions/read` |
+| Re-execute and cancel controls | Stored execution tool's execute grant |
+| Inventory navigation | At least one source's read grant |
+| Monitoring navigation | `checkmk/read` |
 
-### Inventory and Data
-
-| Permission | Grants |
-|---|---|
-| `*:inventory:read` | View node inventory |
-| `*:facts:read` | View node facts |
-
-## UI Visibility Rules
-
-Pabawi hides UI elements the current user lacks permission for:
-
-| UI Element | Required Permission |
-|---|---|
-| Manage tab | Any `lifecycle:*` or `provision:*` permission |
-| Provision tab | Any `provision:*` permission |
-| VM creation form | `<int>:provision:create_vm` |
-| LXC creation form | `<int>:provision:create_lxc` |
-| Start button | `<int>:lifecycle:start` |
-| Stop button | `<int>:lifecycle:stop` |
-| Destroy button | `<int>:lifecycle:destroy` + `ALLOW_DESTRUCTIVE_PROVISIONING=true` |
-| Setup menu | Admin only |
+The backend enforces permissions independently of UI visibility.
 
 ## Managing Users, Roles, and Permissions
 
@@ -187,47 +185,26 @@ curl -X POST http://localhost:3000/api/roles \
   -d '{"name": "vm-operator", "description": "Create and manage VMs"}'
 
 # Assign permission to role
-curl -X POST http://localhost:3000/api/roles/<role-id>/permissions \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"permission": "proxmox:provision:create_vm"}'
+curl -X POST "http://localhost:3000/api/roles/<role-id>/permissions/<permission-id>" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 
 # Assign role to user
-curl -X POST http://localhost:3000/api/users/<user-id>/roles \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"roleId": "<role-id>"}'
+curl -X POST "http://localhost:3000/api/users/<user-id>/roles/<role-id>" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
 See [api.md](./api.md#rbac) for the full RBAC API reference.
 
 ## Example Role Setups
 
-**VM operator (Proxmox only):**
+A Proxmox VM operator needs `proxmox/read`, `proxmox/provision` and
+`proxmox/lifecycle`. Add `provisioning/read` for the provisioning page.
 
-```
-proxmox:provision:create_vm
-proxmox:lifecycle:start
-proxmox:lifecycle:stop
-proxmox:lifecycle:reboot
-proxmox:inventory:read
-```
+A viewer restricted to Bolt inventory and facts needs `bolt/read`. Grant other
+sources' read permissions individually to expand that scope.
 
-**Read-only viewer:**
-
-```
-*:inventory:read
-*:facts:read
-```
-
-**Full Proxmox access (including destroy):**
-
-```
-proxmox:provision:*
-proxmox:lifecycle:*
-```
-
-Also requires `ALLOW_DESTRUCTIVE_PROVISIONING=true` for destroy to work.
+Add `proxmox/destroy` to allow destruction. Destruction also requires
+`ALLOW_DESTRUCTIVE_PROVISIONING=true`.
 
 ## MCP Service User
 

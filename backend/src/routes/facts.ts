@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import type { IntegrationManager } from "../integrations/IntegrationManager";
 import {
@@ -29,6 +29,7 @@ const ACTIVE_FACT_SOURCES = new Set(["bolt", "ssh", "ansible"]);
  */
 export function createFactsRouter(
   integrationManager: IntegrationManager,
+  authorizeSources: RequestHandler,
   container: DIContainer = createDefaultContainer(),
 ): Router {
   const router = Router();
@@ -41,6 +42,7 @@ export function createFactsRouter(
    */
   router.post(
     "/:id/facts",
+    authorizeSources,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
       const requestId = req.id ?? expertModeService.generateRequestId();
@@ -78,7 +80,7 @@ export function createFactsRouter(
 
         // Verify node exists in inventory using IntegrationManager
         const aggregatedInventory =
-          await integrationManager.getAggregatedInventory();
+          await integrationManager.getAggregatedInventory(true, req.authorizedSources ?? []);
         const node = aggregatedInventory.nodes.find(
           (n) => n.id === nodeId || n.name === nodeId,
         );
@@ -119,7 +121,7 @@ export function createFactsRouter(
 
         // Try Bolt
         const boltSource = integrationManager.getInformationSource("bolt");
-        if (boltSource) {
+        if (boltSource && req.authorizedSources?.includes("bolt")) {
           try {
             if (debugInfo) {
               expertModeService.addDebug(debugInfo, {
@@ -142,7 +144,7 @@ export function createFactsRouter(
 
         // Try SSH
         const sshSource = integrationManager.getInformationSource("ssh");
-        if (sshSource) {
+        if (sshSource && req.authorizedSources?.includes("ssh")) {
           try {
             if (debugInfo) {
               expertModeService.addDebug(debugInfo, {
@@ -165,7 +167,7 @@ export function createFactsRouter(
 
         // Try Ansible
         const ansibleSource = integrationManager.getInformationSource("ansible");
-        if (ansibleSource) {
+        if (ansibleSource && req.authorizedSources?.includes("ansible")) {
           try {
             if (debugInfo) {
               expertModeService.addDebug(debugInfo, {
@@ -471,6 +473,7 @@ export function createFactsRouter(
    */
   router.get(
     "/:id/facts",
+    authorizeSources,
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
       const startTime = Date.now();
 
@@ -499,7 +502,12 @@ export function createFactsRouter(
         //   node facts tab, including bolt/ssh/ansible.
         // - Otherwise, fan out only to passive sources (skip bolt/ssh/ansible)
         //   so loading the page does not establish a remote connection.
-        const allSources = integrationManager.getAllInformationSources();
+        const allSources = integrationManager.getAllInformationSources().filter(source => req.authorizedSources?.includes(source.name));
+        if (requestedSource !== null && !req.authorizedSources?.includes(requestedSource)
+          && integrationManager.getInformationSource(requestedSource)) {
+          res.status(403).json({ error: { code: "FORBIDDEN", message: "Source access denied" } });
+          return;
+        }
         let sources;
         if (requestedSource !== null) {
           sources = allSources.filter((s) => s.name === requestedSource);

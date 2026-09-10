@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 import {
   describe,
   it,
@@ -123,12 +124,13 @@ describe("API Integration Tests", () => {
         integrationManager,
         executionRepository,
         commandWhitelistService,
+        noPermissionCheck,
         streamingManager,
       ),
     );
     app.use(
       "/api/nodes",
-      createTasksRouter(integrationManager, executionRepository, streamingManager),
+      createTasksRouter(integrationManager, noPermissionCheck, executionRepository, streamingManager),
     );
 
     // Add error handler

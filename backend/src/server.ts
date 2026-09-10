@@ -1,3 +1,6 @@
+import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
+import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
+import { mountInfrastructureRoutes } from "./routes/mountInfrastructureRoutes";
 import express, { type Express, type Request, type Response } from "express";
 import cors from "cors";
 import path from "path";
@@ -7,19 +10,6 @@ import { BoltValidator, BoltValidationError } from "./validation/BoltValidator";
 import { BoltService } from "./integrations/bolt/BoltService";
 import { ExecutionRepository } from "./database/ExecutionRepository";
 import { BoltCommandWhitelistService } from "./validation/CommandWhitelistService";
-import { createInventoryRouter } from "./routes/inventory";
-import { createFactsRouter } from "./routes/facts";
-import { createCommandsRouter } from "./routes/commands";
-import { createTasksRouter } from "./routes/tasks";
-import { createPlaybooksRouter } from "./routes/playbooks";
-import { createPlaybookBrowserRouter } from "./routes/playbookBrowser";
-import { createExecutionsRouter } from "./routes/executions";
-import { createPuppetRouter } from "./routes/puppet";
-import { createPuppetHistoryRouter } from "./routes/puppetHistory";
-import { createPackagesRouter } from "./routes/packages";
-import { createStreamingRouter, streamAuthMiddleware } from "./routes/streaming";
-import { createIntegrationsRouter } from "./routes/integrations";
-import { createHieraRouter } from "./routes/hiera";
 import { createDebugRouter } from "./routes/debug";
 import { createCrashDumpsRouter } from "./routes/crashDumps";
 import { createLogsRouter } from "./routes/logs";
@@ -32,13 +22,8 @@ import { createGroupsRouter } from "./routes/groups";
 import { createRolesRouter } from "./routes/roles";
 import { createPermissionsRouter } from "./routes/permissions";
 import { createJournalRouter } from "./routes/journal";
-import { createAWSRouter } from "./routes/integrations/aws";
-import { createAzureRouter } from "./routes/integrations/azure";
-import { createMonitoringRouter } from "./routes/integrations/monitoring";
 import { createMonitoringOverviewRouter } from "./routes/integrations/monitoringOverview";
 import { createMonitoringActionsRouter } from "./routes/integrations/monitoringActions";
-import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
-import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
@@ -749,195 +734,10 @@ async function startServer(): Promise<Express> {
       createMonitoringActionsRouter(integrationManager, databaseService, container),
     );
 
-    // API Routes - Inventory routes (protected with RBAC)
-    app.use(
-      "/api/inventory",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('ansible', 'read'),
-      createInventoryRouter(boltService, integrationManager, {
-        allowDestructiveActions: config.provisioning.allowDestructiveActions,
-      }, container),
-    );
-    app.use(
-      "/api/nodes",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'read'),
-      createFactsRouter(integrationManager, container),
-    );
-    app.use(
-      "/api/nodes",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'execute'),
-      createCommandsRouter(
-        integrationManager,
-        executionRepository,
-        commandWhitelistService,
-        streamingManager,
-        container,
-      ),
-    );
-    app.use(
-      "/api/nodes",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'execute'),
-      createTasksRouter(
-        integrationManager,
-        executionRepository,
-        streamingManager,
-        container,
-      ),
-    );
-    app.use(
-      "/api/nodes",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('ansible', 'execute'),
-      createPlaybooksRouter(
-        integrationManager,
-        executionRepository,
-        streamingManager,
-        container,
-      ),
-    );
-    app.use(
-      "/api/nodes",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'execute'),
-      createPuppetRouter(integrationManager, executionRepository, journalService, streamingManager, container),
-    );
-    app.use(
-      "/api/nodes",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('checkmk', 'read'),
-      createMonitoringRouter(integrationManager, container),
-    );
-    // Multi-node puppet run endpoint (global action)
-    app.use(
-      "/api/puppet-run",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'execute'),
-      createPuppetRouter(integrationManager, executionRepository, journalService, streamingManager, container),
-    );
-    // Add puppet history routes if PuppetDB is available
-    if (puppetRunHistoryService) {
-      app.use(
-        "/api/puppet",
-        authMiddleware,
-        rateLimitMiddleware,
-        createPuppetHistoryRouter(puppetRunHistoryService, container),
-      );
-    }
-    app.use(
-      "/api/packages",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'read'),
-      createPackagesRouter(
-        integrationManager,
-        boltService,
-        executionRepository,
-        config.packageTasks,
-        streamingManager,
-        container,
-      ),
-    );
-    app.use(
-      "/api/tasks",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('bolt', 'read'),
-      createTasksRouter(
-        integrationManager,
-        executionRepository,
-        streamingManager,
-        container,
-      ),
-    );
-    app.use(
-      "/api/playbooks",
-      authMiddleware,
-      rateLimitMiddleware,
-      rbacMiddleware('ansible', 'read'),
-      createPlaybookBrowserRouter(integrationManager, container),
-    );
-    // Resolve a single-use `?ticket=` into an Authorization header before ANY
-    // /api/executions chain authenticates. Both chains match this prefix, so the
-    // conversion has to happen ahead of the first one or an EventSource request
-    // (which cannot set headers) is rejected by the executions chain before it
-    // ever reaches the streaming router.
-    app.use("/api/executions", streamAuthMiddleware);
-    app.use(
-      "/api/executions",
-      authMiddleware,
-      rateLimitMiddleware,
-      createExecutionsRouter(executionRepository, rbacMiddleware, executionQueue, batchExecutionService, container, commandWhitelistService),
-    );
-    app.use(
-      "/api/executions",
-      authMiddleware,
-      rateLimitMiddleware,
-      createStreamingRouter(streamingManager, executionRepository, rbacMiddleware, container),
-    );
-    app.use(
-      "/api/streaming",
-      streamAuthMiddleware, // resolve single-use ?ticket= before auth check
-      authMiddleware,
-      rateLimitMiddleware,
-      createStreamingRouter(streamingManager, executionRepository, rbacMiddleware, container),
-    );
-    app.use(
-      "/api/integrations",
-      authMiddleware,
-      rateLimitMiddleware,
-      createIntegrationsRouter(
-        integrationManager,
-        puppetDBService,
-        puppetserverService,
-        databaseService.getAdapter(),
-        configService.getJwtSecret(),
-        { allowDestructiveProvisioning: config.provisioning.allowDestructiveActions },
-        container,
-      ),
-    );
-    app.use(
-      "/api/integrations/hiera",
-      authMiddleware,
-      rateLimitMiddleware,
-      createHieraRouter(integrationManager, rbacMiddleware, container),
-    );
-
-    // AWS integration routes (conditional on plugin availability)
-    const awsPluginInstance = integrationManager.getExecutionTool("aws") as AWSPlugin | null;
-    if (awsPluginInstance) {
-      app.use(
-        "/api/integrations/aws",
-        authMiddleware,
-        rateLimitMiddleware,
-        createAWSRouter(awsPluginInstance, rbacMiddleware, integrationManager, {
-          allowDestructiveActions: config.provisioning.allowDestructiveActions,
-        }, container),
-      );
-    }
-
-    // Azure integration routes (conditional on plugin availability)
-    const azurePluginInstance = integrationManager.getExecutionTool("azure") as AzurePlugin | null;
-    if (azurePluginInstance) {
-      app.use(
-        "/api/integrations/azure",
-        authMiddleware,
-        rateLimitMiddleware,
-        createAzureRouter(azurePluginInstance, rbacMiddleware, integrationManager, {
-          allowDestructiveActions: config.provisioning.allowDestructiveActions,
-        }, container),
-      );
-    }
+    mountInfrastructureRoutes(app, {
+      integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, rbacMiddleware, rateLimitMiddleware,
+      db: databaseService.getAdapter(),
+    });
 
     app.use(
       "/api/debug",

@@ -4,15 +4,22 @@ All endpoints return JSON. Base URL: `http://<host>:<port>` (default `http://loc
 
 ## Authentication
 
-When `AUTH_ENABLED=true`, most endpoints require a JWT token in the `Authorization: Bearer <token>` header. PuppetDB endpoints additionally accept a PuppetDB token via `X-Authentication-Token`.
+Infrastructure endpoints require a JWT in `Authorization: Bearer <token>` and
+the relevant RBAC permissions. `AUTH_ENABLED` does not disable these checks.
+Upstream PuppetDB credentials are configured on the server; they do not
+substitute for caller authentication.
+
+`GET /api/auth/permissions` requires caller authentication and returns that
+caller's current effective grants as `{"permissions":[{"resource":"aws","action":"read"}]}`.
+The response is not cached. It does not accept a target user ID.
+See [permissions and RBAC](permissions-rbac.md) for route policies.
 
 ## Common Headers
 
 | Header | Description |
 |---|---|
-| `Authorization: Bearer <token>` | JWT auth (required when auth enabled) |
+| `Authorization: Bearer <token>` | JWT caller authentication |
 | `X-Expert-Mode: true` | Add diagnostics to all responses (stack traces, raw output, request IDs) |
-| `X-Authentication-Token` | PuppetDB auth token (PuppetDB endpoints) |
 | `Content-Type: application/json` | Required for POST requests with a body |
 
 ## Error Format

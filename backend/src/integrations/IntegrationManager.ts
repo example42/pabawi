@@ -529,13 +529,13 @@ export class IntegrationManager {
    *
    * @returns Linked inventory with source attribution
    */
-  async getLinkedInventory(useCache = true): Promise<{
+  async getLinkedInventory(useCache = true, allowedSources?: readonly string[]): Promise<{
     nodes: LinkedNode[];
     sources: AggregatedInventory["sources"];
   }> {
     // getAggregatedInventory already deduplicates and links nodes via deduplicateNodes → linkNodes.
     // The returned nodes are already LinkedNode[] (with sources, sourceData, etc.).
-    const aggregated = await this.getAggregatedInventory(useCache);
+    const aggregated = await this.getAggregatedInventory(useCache, allowedSources);
 
     return {
       nodes: aggregated.nodes,
@@ -553,9 +553,9 @@ export class IntegrationManager {
    * @param useCache - If true, return cached results if available and not expired (default: true)
    * @returns Aggregated inventory with source attribution
    */
-  async getAggregatedInventory(useCache = true): Promise<AggregatedInventory> {
+  async getAggregatedInventory(useCache = true, allowedSources?: readonly string[]): Promise<AggregatedInventory> {
     // Check cache first if requested
-    if (useCache && this.inventoryCache) {
+    if (allowedSources === undefined && useCache && this.inventoryCache) {
       const now = Date.now();
       const cacheAge = now - this.inventoryCache.timestamp;
 
@@ -607,7 +607,9 @@ export class IntegrationManager {
     const now = new Date().toISOString();
 
     // Get inventory and groups from all sources in parallel
-    const inventoryPromises = Array.from(this.informationSources.entries()).map(
+    const selectedSources = Array.from(this.informationSources.entries())
+      .filter(([name]) => allowedSources === undefined || allowedSources.includes(name));
+    const inventoryPromises = selectedSources.map(
       async ([name, source]) => {
         const sourceStart = Date.now();
         this.logger.debug(`Processing source: ${name}`, {
@@ -897,16 +899,15 @@ export class IntegrationManager {
       fetchDiagnostics,
     };
 
-    // Update cache
-    this.inventoryCache = {
-      data: result,
-      timestamp: Date.now(),
-    };
-    this.logger.debug(`Cached inventory (${String(uniqueNodes.length)} nodes, ${String(linkedGroups.length)} groups) for ${String(this.inventoryCacheTTL)}ms`, {
+    // Scoped results must neither consume nor replace the unrestricted cache.
+    if (allowedSources === undefined) {
+      this.inventoryCache = { data: result, timestamp: Date.now() };
+      this.logger.debug(`Cached inventory (${String(uniqueNodes.length)} nodes, ${String(linkedGroups.length)} groups) for ${String(this.inventoryCacheTTL)}ms`, {
       component: "IntegrationManager",
       operation: "getAggregatedInventory",
       metadata: { nodeCount: uniqueNodes.length, groupCount: linkedGroups.length, cacheTTL: this.inventoryCacheTTL },
-    });
+      });
+    }
 
     return result;
   }
@@ -1034,8 +1035,7 @@ export class IntegrationManager {
           const status = await registration.plugin.healthCheck();
           healthStatuses.set(name, status);
 
-          // Update cache
-          this.healthCheckCache.set(name, {
+                this.healthCheckCache.set(name, {
             status,
             cachedAt: new Date().toISOString(),
           });

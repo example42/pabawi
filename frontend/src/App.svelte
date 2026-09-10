@@ -28,6 +28,10 @@
   import { get } from './lib/api';
   import { onMount } from 'svelte';
 
+  $effect(() => {
+    if (authManager.token) void authManager.refreshPermissions();
+  });
+
   // Public pages that should render without the navigation shell
   const PUBLIC_PATHS = new Set(['/login', '/register', '/setup']);
 

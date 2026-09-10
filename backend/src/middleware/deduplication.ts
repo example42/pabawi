@@ -72,7 +72,8 @@ export class RequestDeduplicationMiddleware {
     const isAdmin = req.user?.roles.includes('Administrator') ? 'admin' : 'non-admin';
 
     // Create a deterministic string representation of the request
-    const requestString = `${method}:${path}:${query}:${expertMode}:${userId}:${isAdmin}`;
+    const scope = [...(req.authorizedSources ?? [])].sort().join(",");
+    const requestString = `${method}:${path}:${query}:${expertMode}:${userId}:${isAdmin}:${scope}`;
 
     // Use cryptographic hash to generate cache key
     return crypto

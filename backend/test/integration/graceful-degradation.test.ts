@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 /**
  * Graceful Degradation Integration Tests
  *
@@ -83,7 +84,7 @@ describe('Graceful Degradation', () => {
 
     // Create routes with only PuppetDB (no Puppetserver)
     const router = createIntegrationsRouter(
-      integrationManager,
+      integrationManager, noPermissionCheck,
       puppetDBService,
       undefined // No Puppetserver service
     );

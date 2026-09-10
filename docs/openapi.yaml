@@ -3299,6 +3299,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
 
+  /auth/permissions:
+    get:
+      summary: Get the caller's effective permissions
+      description: Returns only the authenticated caller's grants. The response is not cached.
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Effective resource/action grants
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [permissions]
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      type: object
+                      required: [resource, action]
+                      properties:
+                        resource:
+                          type: string
+                        action:
+                          type: string
+        '401':
+          description: Authentication required
+
   /auth/logout:
     post:
       summary: Logout

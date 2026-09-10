@@ -1,3 +1,4 @@
+import { noPermissionCheck } from "../../src/middleware/routeAuthorization";
 /**
  * Integration tests for PuppetDB events API
  *
@@ -42,7 +43,7 @@ describe('PuppetDB Events API Integration', () => {
 
     // Create router with the service
     const router = createIntegrationsRouter(
-      undefined, // bolt service
+      undefined, noPermissionCheck, // bolt service
       puppetDBService,
       undefined, // puppetserver service
       undefined, // integration manager

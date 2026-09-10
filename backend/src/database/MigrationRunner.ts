@@ -3,6 +3,14 @@ import { join } from "path";
 import type { DatabaseAdapter } from "./DatabaseAdapter";
 
 /**
+ * Opt-in marker a SQLite migration puts on its own comment line to have the
+ * runner suspend foreign-key enforcement for the duration of the migration.
+ * Reserved for table rebuilds; `PRAGMA foreign_key_check` still has to pass
+ * before the transaction commits.
+ */
+const SQLITE_FOREIGN_KEYS_OFF_DIRECTIVE = /^\s*--\s*pabawi:sqlite-foreign-keys-off\s*$/m;
+
+/**
  * Migration metadata
  */
 interface Migration {
@@ -30,6 +38,12 @@ interface MigrationFile {
  * Each migration is executed inside a transaction so a partial failure
  * leaves the schema unchanged. Migration files MUST NOT contain explicit
  * BEGIN/COMMIT — the runner provides the transaction.
+ *
+ * A SQLite migration that rebuilds a table other tables reference (the only
+ * way to change a column constraint in SQLite) can declare
+ * `-- pabawi:sqlite-foreign-keys-off` on its own line. See
+ * SQLITE_FOREIGN_KEYS_OFF_DIRECTIVE below for what the runner then does and
+ * why the pragma cannot simply live in the migration file.
  *
  * Note on the meta-table column name: the `migrations` table uses
  * `applied_at` (snake_case, per .kiro/steering/database-conventions.md).
@@ -229,6 +243,72 @@ export class MigrationRunner {
     const sql = readFileSync(migration.path, "utf-8");
     const dialect = this.db.getDialect();
 
+    // SQLite drops the rows of every referencing table when a parent table is
+    // dropped (the implicit DELETE fires ON DELETE CASCADE / SET NULL), which
+    // is what a "rebuild the table to change a column constraint" migration
+    // does. SQLite's documented procedure is to turn foreign keys off around
+    // the rebuild, and `PRAGMA foreign_keys` is a no-op inside a transaction,
+    // so only the runner can do it: the toggle has to bracket the BEGIN.
+    const suspendForeignKeys =
+      dialect === "sqlite" && SQLITE_FOREIGN_KEYS_OFF_DIRECTIVE.test(sql);
+
+    if (suspendForeignKeys) {
+      await this.db.execute("PRAGMA foreign_keys = OFF");
+    }
+
+    // `executeMigrationStatements` only ever throws a wrapped Error, but
+    // normalize anyway so the failure can be re-thrown after the pragma is
+    // restored rather than from inside a finally block.
+    let migrationError: Error | null = null;
+    try {
+      await this.executeMigrationStatements(migration, sql, dialect, suspendForeignKeys);
+    } catch (error) {
+      migrationError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    // Restore enforcement whether the migration committed or rolled back.
+    if (suspendForeignKeys && !(await this.restoreForeignKeyEnforcement())) {
+      throw new Error(
+        `Failed to re-enable foreign key enforcement after ${migration.filename}. ` +
+          `Refusing to continue with an unenforced schema.` +
+          (migrationError ? ` The migration also failed: ${migrationError.message}` : ""),
+      );
+    }
+
+    if (migrationError) {
+      throw migrationError;
+    }
+  }
+
+  /**
+   * Turn SQLite foreign key enforcement back on and confirm it took effect.
+   *
+   * `PRAGMA foreign_keys` is silently ignored inside a transaction, so the
+   * value is read back: continuing to serve requests with enforcement off
+   * would let the next write create exactly the orphan rows the bracket around
+   * a table rebuild exists to prevent.
+   */
+  private async restoreForeignKeyEnforcement(): Promise<boolean> {
+    try {
+      await this.db.execute("PRAGMA foreign_keys = ON");
+      const [state] = await this.db.query<{ foreign_keys: number }>(
+        "PRAGMA foreign_keys",
+      );
+      return state.foreign_keys === 1;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Run one migration's statements inside a transaction and record it.
+   */
+  private async executeMigrationStatements(
+    migration: MigrationFile,
+    sql: string,
+    dialect: "sqlite" | "postgres",
+    verifyForeignKeys: boolean,
+  ): Promise<void> {
     await this.db.beginTransaction();
     try {
       if (dialect === "postgres") {
@@ -253,6 +333,20 @@ export class MigrationRunner {
 
         for (const statement of statements) {
           await this.db.execute(statement);
+        }
+      }
+
+      if (verifyForeignKeys) {
+        // Enforcement was off for the rebuild, so prove the result is still
+        // referentially intact before committing. `foreign_key_check` runs
+        // inside the transaction, so a violation rolls the migration back.
+        const violations = await this.db.query<Record<string, unknown>>(
+          "PRAGMA foreign_key_check",
+        );
+        if (violations.length > 0) {
+          throw new Error(
+            `foreign_key_check reported ${String(violations.length)} violation(s) after the rebuild: ${JSON.stringify(violations.slice(0, 5))}`,
+          );
         }
       }
 

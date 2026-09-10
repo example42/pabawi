@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { hasPermission } from "../lib/permissions";
   import { onMount } from 'svelte';
   import LoadingSpinner from './LoadingSpinner.svelte';
   import ErrorAlert from './ErrorAlert.svelte';
@@ -27,9 +28,15 @@
   let allowDestructiveActions = $state(false);
   let refreshing = $state(false);
 
+  function canRunAction(action: LifecycleAction): boolean {
+    const permission = action.destructive ? 'destroy'
+      : ['provision', 'create_instance', 'create_vm', 'create_lxc'].includes(action.name) ? 'provision' : 'lifecycle';
+    return provider !== null && hasPermission(permission, provider);
+  }
+
   // Derived: Filter actions based on current node status and destructive config
   const displayableActions = $derived.by(() => {
-    let filtered = availableActions;
+    let filtered = availableActions.filter(canRunAction);
 
     // Filter out destructive actions when disabled by config
     if (!allowDestructiveActions) {
@@ -98,6 +105,8 @@
 
   // Perform the actual action execution
   async function performAction(action: string): Promise<void> {
+    const selectedAction = availableActions.find(candidate => candidate.name === action);
+    if (!selectedAction || !canRunAction(selectedAction)) return;
     actionInProgress = action;
 
     try {
