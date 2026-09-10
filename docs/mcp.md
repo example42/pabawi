@@ -29,7 +29,7 @@ When enabled, Pabawi:
 3. Assigns the role to the service user
 4. Starts the MCP server and registers the `/mcp` endpoint
 
-All MCP endpoints require bearer authentication, using an access JWT or the configured static token. The MCP server calls services directly within the backend process. Caller-specific tool authorization and session ownership remain the separate S02/A06 remediation; do not infer personal JWT permission isolation from authentication alone.
+All MCP endpoints require bearer authentication, using an access JWT or the configured static token. The MCP server calls services directly within the backend process. Every tool uses the authenticated caller's current permissions. JWT callers use their own account; only the configured static credential uses `mcp-service`.
 
 ## Authentication
 
@@ -49,7 +49,7 @@ Generate a strong token:
 openssl rand -hex 32
 ```
 
-Use this token as the `Authorization: Bearer <token>` header in your MCP client configuration. It does not expire and is scoped exclusively to the `/mcp` endpoint — it cannot be used to access other API routes.
+Use this token as the `Authorization: Bearer <token>` header in your MCP client configuration. It does not expire and is scoped exclusively to the `/mcp` endpoint : it cannot be used to access other API routes.
 
 ### JWT authentication
 
@@ -59,6 +59,29 @@ their opening credential before tool calls and during idle checks, so recreate
 the MCP session after that JWT expires or is revoked. Static-token sessions
 require an active `mcp-service` account and close after account-session revocation.
 See [token purpose and revocation](permissions-rbac.md#token-purpose-and-revocation).
+
+## Session ownership and limits
+
+Initialize a session with `POST /mcp`, then send its `mcp-session-id` header on
+subsequent POST, GET and DELETE requests. Each request also requires bearer
+authentication. Sessions belong to a user ID and authentication method. Another
+user, or a different authentication method for the same user, receives 404 and
+cannot continue or delete the session.
+
+A fresh access JWT for the same user may continue a session only while its
+opening JWT remains valid. Expiry, revocation or account deactivation requires
+a new session. Idle sessions revalidate every second. Tool calls recheck
+permissions before provider access and before returning results.
+
+Each account can allocate at most 10 sessions, including pending initialization
+and both authentication methods combined. The process limit is 100 sessions;
+the maximum session lifetime is 24 hours. Account limits return 429, process
+capacity returns 503. Failed initialization, deletion, expiry, revocation and
+shutdown release capacity. These limits and session ownership are process-local.
+
+Structured server logs attribute tool authorization decisions and session
+creation, denial and deletion to the user ID and authentication method. They do
+not record bearer credentials or tool arguments.
 
 ## Client Configuration
 
@@ -159,23 +182,23 @@ Run `codex mcp list` to verify the server is configured.
 
 ### Any MCP Client
 
-The endpoint accepts standard MCP Streamable HTTP requests at `POST /mcp`. All requests require a bearer token in the `Authorization` header — either the static `MCP_AUTH_TOKEN` or a valid JWT from `POST /api/auth/login`.
+The endpoint accepts standard MCP Streamable HTTP requests at `POST /mcp`. All requests require a bearer token in the `Authorization` header : either the static `MCP_AUTH_TOKEN` or a valid JWT from `POST /api/auth/login`.
 
 ## Available Tools
 
 | Tool | Description | Parameters |
 |---|---|---|
-| `inventory_list` | List nodes from all active integrations | `search?` — filter by name or certname |
-| `facts_get` | Get system facts for a node | `certname` — node certname |
-| `facts_bulk` | Get specific facts across all nodes in one query | `fact_names` — array of top-level fact names, `include_all?` |
+| `inventory_list` | List nodes from all active integrations | `search?` : filter by name or certname |
+| `facts_get` | Get system facts for a node | `certname` : node certname |
+| `facts_bulk` | Get specific facts across all nodes in one query | `fact_names` : array of top-level fact names, `include_all?` |
 | `reports_query` | Query Puppet run reports | `certname?`, `limit?`, `status?` |
-| `catalogs_get` | Get compiled Puppet catalog for a node | `certname` — node certname |
+| `catalogs_get` | Get compiled Puppet catalog for a node | `certname` : node certname |
 | `hiera_lookup` | Look up a Hiera key value for a node | `key`, `node?` (certname for hierarchy resolution), `environment?` (default: production) |
 | `executions_list` | List execution history | `limit?`, `status?`, `tool?` |
 | `integrations_list` | List integrations and health status | _(none)_ |
 | `journal_query` | Search journal entries | `nodeId?`, `eventType?`, `limit?` |
-| `monitoring_services_get` | Get live Checkmk service status for a node | `nodeId` — node hostname |
-| `monitoring_events_get` | Get Checkmk state-change events for a node | `nodeId` — node hostname, `limit?` (1-1000, default 200) |
+| `monitoring_services_get` | Get live Checkmk service status for a node | `nodeId` : node hostname |
+| `monitoring_events_get` | Get Checkmk state-change events for a node | `nodeId` : node hostname, `limit?` (1-1000, default 200) |
 
 All tools are read-only. Each tool checks RBAC permissions before executing.
 
@@ -219,11 +242,13 @@ Once connected, you can ask your AI assistant things like:
 
 ## Permission Management
 
-The `MCP Service` role is created with all `read` permissions by default. To customize what the MCP server can access:
+The `MCP Service` role is created with all `read` permissions by default. It applies to static-token callers. JWT callers use their own effective permissions. To customize machine access:
 
 1. Go to the Role Management page in the Pabawi UI
 2. Find the `MCP Service` role
 3. Add or remove permissions as needed
+
+Effective permissions include all roles and groups assigned to the account. Check these assignments too: a default new-user role such as Viewer can independently grant a permission removed from `MCP Service`.
 
 The `mcp-service` user and `MCP Service` role are visible in the Users and Roles management pages like any other user/role.
 
@@ -231,7 +256,7 @@ The `mcp-service` user and `MCP Service` role are visible in the Users and Roles
 
 ### inventory_list
 
-Returns aggregated node inventory from all active integrations (Bolt, PuppetDB, Ansible, SSH, Proxmox, AWS, Azure).
+Requires `ansible/read`. Returns aggregated node inventory only from sources for which the caller also has the corresponding integration read permission. Restricted queries do not use or populate the global inventory cache.
 
 ```
 search: "web"  →  returns only nodes with "web" in name or certname
@@ -240,7 +265,7 @@ search: omitted  →  returns all nodes
 
 ### facts_get
 
-Returns facts gathered from all sources for a specific node. Facts are keyed by source (bolt, puppetdb, ansible, etc.).
+Requires `puppetdb/read`. Returns facts only from sources the caller can read for a specific node. Facts are keyed by source (bolt, puppetdb, ansible, etc.).
 
 ```
 certname: "web-01.example.com"
@@ -332,7 +357,7 @@ Each event includes: timestamp, service description, state transition, and outpu
 
 ### Docker and Container Deployments
 
-The MCP endpoint (`/mcp`) is served on the same port as the rest of the API (default 3000). No additional port mapping is needed — if the Pabawi UI is reachable, so is MCP.
+The MCP endpoint (`/mcp`) is served on the same port as the rest of the API (default 3000). No additional port mapping is needed : if the Pabawi UI is reachable, so is MCP.
 
 To enable MCP in Docker, add to your `.env` file (or the env_file referenced by docker-compose):
 
@@ -357,10 +382,10 @@ http://localhost:3000/mcp
 
 The MCP Streamable HTTP transport uses long-lived SSE connections on `GET /mcp`. If you place a reverse proxy (nginx, Traefik, HAProxy) or Kubernetes ingress in front of Pabawi:
 
-- **Disable response buffering** for the `/mcp` path — SSE requires unbuffered streaming
+- **Disable response buffering** for the `/mcp` path : SSE requires unbuffered streaming
 - **Increase idle/read timeouts** to at least 300s (the default 60s in nginx will drop MCP sessions)
 - **Disable request body size limits** or set them generously for `/mcp` POST (MCP messages can be large)
-- **Preserve headers** — the `mcp-session-id` header must pass through unmodified
+- **Preserve headers** : the `mcp-session-id` header must pass through unmodified
 
 Example nginx location block:
 
@@ -387,9 +412,9 @@ nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 
 When running Pabawi in a pod:
 
-1. The `/mcp` endpoint is part of the same container — expose it via the same Service/Ingress as the UI
+1. The `/mcp` endpoint is part of the same container : expose it via the same Service/Ingress as the UI
 2. Set `MCP_ENABLED=true` and `MCP_AUTH_TOKEN` in your ConfigMap/Secret
-3. If using horizontal pod autoscaling, note that MCP sessions are in-memory and not shared across replicas — a client must hit the same pod for the duration of a session (use sticky sessions or session affinity)
+3. If using horizontal pod autoscaling, note that MCP sessions are in-memory and not shared across replicas : a client must hit the same pod for the duration of a session (use sticky sessions or session affinity)
 
 ### MCP endpoint not responding
 
@@ -400,14 +425,14 @@ When running Pabawi in a pod:
 ### MCP endpoint returning 401 Unauthorized
 
 - If using `MCP_AUTH_TOKEN`: verify the token in your client config matches the value in `backend/.env` exactly
-- If using JWT: tokens expire — re-authenticate via `POST /api/auth/login` to get a fresh token
+- If using JWT: tokens expire : re-authenticate via `POST /api/auth/login` to get a fresh token
 - Ensure the `Authorization: Bearer <token>` header is being sent
-- Verify the user account is not locked or disabled (JWT path only)
+- Verify the corresponding user account is active for either authentication method
 
 ### Tools returning permission errors
 
-- The `MCP Service` role may be missing the required permission
-- Go to Role Management → MCP Service → add the missing permission
+- For JWT callers, inspect their own role and group permissions
+- For static-token callers, inspect the `mcp-service` account and `MCP Service` role
 - Permission format: `<resource>/<action>` (e.g., `puppetdb/read`)
 
 ### Service user not visible

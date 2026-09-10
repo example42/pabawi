@@ -83,13 +83,15 @@ function createMockDeps(permissionGranted: boolean) {
 
   return {
     permissionService: { hasPermission },
-    integrationManager: { getAggregatedInventory, getNodeData, healthCheckAll, getInformationSource },
+    integrationManager: {
+      getAllInformationSources: () => [{ name: 'ansible' }, { name: 'puppetdb' }], getAggregatedInventory, getNodeData, healthCheckAll, getInformationSource },
     puppetDBService: { getNodeReports, getAllReports, getNodeCatalog, getBulkFacts: vi.fn().mockResolvedValue({}) },
     hieraPlugin: { resolveKey },
     executionRepository: { findAll },
     journalService: { getNodeTimeline, searchEntries },
     puppetRunHistoryService: undefined,
-    mcpUserId: 'test-user-id',
+    principal: { userId: 'test-user-id', authMethod: 'jwt' },
+    revalidateAuth: vi.fn().mockResolvedValue(undefined),
     logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
     version: '1.0.0',
     checkmkPlugin,

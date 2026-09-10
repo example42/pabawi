@@ -936,13 +936,16 @@ export class IntegrationManager {
    * @param nodeId - Node identifier
    * @returns Aggregated node data from all sources
    */
-  async getNodeData(nodeId: string): Promise<AggregatedNodeData> {
+  async getNodeData(nodeId: string, allowedSources?: readonly string[]): Promise<AggregatedNodeData> {
     const facts: Record<string, Facts> = {};
     const additionalData: Record<string, Record<string, unknown>> = {};
 
+    const sources = [...this.informationSources.entries()]
+      .filter(([name]) => allowedSources === undefined || allowedSources.includes(name));
+
     // Get node from first available source
     let node: Node | null = null;
-    for (const source of this.informationSources.values()) {
+    for (const [, source] of sources) {
       if (!source.isInitialized()) continue;
 
       try {
@@ -964,7 +967,7 @@ export class IntegrationManager {
     }
 
     // Get facts from all sources in parallel
-    const factsPromises = Array.from(this.informationSources.entries()).map(
+    const factsPromises = sources.map(
       async ([name, source]) => {
         try {
           if (!source.isInitialized()) return;

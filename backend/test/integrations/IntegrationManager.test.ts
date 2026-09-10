@@ -2,7 +2,7 @@
  * Tests for IntegrationManager class
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import fc from "fast-check";
 import { IntegrationManager } from "../../src/integrations/IntegrationManager";
 import { BasePlugin } from "../../src/integrations/BasePlugin";
@@ -899,6 +899,25 @@ describe("IntegrationManager", () => {
       expect(nodeData.node.id).toBe("node1");
       expect(nodeData.facts).toHaveProperty("source");
       expect(nodeData.facts.source).toEqual(facts);
+    });
+
+    it("does not query excluded sources for node discovery or facts", async () => {
+      const node: Node = { id: "node1", name: "node1", uri: "ssh://node1", transport: "ssh", config: {} };
+      const allowed = new MockInformationSource("puppetdb", [node], logger);
+      const denied = new MockInformationSource("aws", [node], logger);
+      for (const source of [denied, allowed]) {
+        manager.registerPlugin(source, { enabled: true, name: source.name, type: "information", config: {} });
+      }
+      await manager.initializePlugins();
+      const deniedInventory = vi.spyOn(denied, "getInventory");
+      const deniedFacts = vi.spyOn(denied, "getNodeFacts");
+      const allowedFacts = vi.spyOn(allowed, "getNodeFacts");
+      await manager.getNodeData("node1", ["puppetdb"]);
+      expect(allowedFacts).toHaveBeenCalledWith("node1");
+      expect(deniedInventory).not.toHaveBeenCalled();
+      expect(deniedFacts).not.toHaveBeenCalled();
+      await expect(manager.getNodeData("node1", [])).rejects.toThrow("not found");
+      expect(deniedInventory).not.toHaveBeenCalled();
     });
 
     it("should throw error when node not found", async () => {

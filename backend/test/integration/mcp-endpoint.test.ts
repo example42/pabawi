@@ -106,7 +106,8 @@ describe('MCP Endpoint Integration Tests', () => {
       hieraPlugin: undefined,
       puppetDBService: undefined,
       puppetRunHistoryService: undefined,
-      mcpUserId,
+      principal: { userId: mcpUserId, authMethod: 'static' },
+      revalidateAuth: async () => {},
       logger,
       version: '1.0.0-test',
     };

@@ -58,8 +58,8 @@ This section records follow-up verification against the working tree after
   issuance and code exchange check account/session validity. Protected SSE and
   console deliveries revalidate, and idle sessions poll every second. A live
   local WebSocket regression verifies both ends close after deactivation.
-  MCP opening credentials also revalidate; S02/A06 caller identity and ownership
-  remain open, as do the other console lifecycle and SSO findings.
+  MCP opening credentials also revalidate. S02/A06 was subsequently repaired
+  as recorded below; the other console lifecycle and SSO findings remain open.
 
 Validation: full backend suite passed (3,501 tests, 12 skipped, 1 todo); full
 frontend suite passed (999 tests). The separate PostgreSQL run passed eight
@@ -79,8 +79,29 @@ upgrades, and independent-connection revocation/rollback tests. SQLite also
 passed the independent-connection tests. Live local SSE and fake upstream
 WebSocket tests verified revocation closure. Backend lint, backend TypeScript
 checking and `git diff --check` passed. No production providers or databases
-were used. A06 (MCP caller identity and session ownership) is next; the remaining
-findings retain their existing status.
+were used. A06 verification follows; the remaining findings retain their
+existing status.
+
+- **A06 / S02: implemented and verified.** Production mounts the same MCP router
+  exercised by HTTP regressions. Tool authorization uses the session caller:
+  personal JWTs retain their own grants and only static-token authentication uses
+  `mcp-service`. POST, GET and DELETE reject another user or authentication method,
+  including JWT/static crossover for the same account. Opening credentials are
+  revalidated on continuation, before and after tool work, and while idle.
+  Inventory and facts query only permitted sources; source removal during a query
+  suppresses its result. Per-account limits include pending initialization and
+  both authentication methods, alongside the process cap and session TTL.
+  Failed initialization, deletion, revocation, expiry and shutdown release sessions.
+  Structured logs attribute tool decisions and session boundary events to user ID
+  and authentication method without recording credentials or tool arguments.
+  The MCP guide now explains ownership, limits and effective role/group unions.
+
+A06 validation: full backend suite passed (3,555 tests, 13 skipped, 1 todo),
+including 13 new production-router security regressions, two in-flight result
+checks and provider-level facts isolation. Backend lint, TypeScript checking,
+backend build and `git diff --check` passed. These tests use disposable SQLite databases and local HTTP transport;
+no production providers, databases or external services were exercised.
+PostgreSQL, frontend, container and cluster checks were not repeated.
 
 ## Executive assessment
 
