@@ -113,6 +113,39 @@ describe("MigrationRunner", () => {
     expect(user?.name).toBe("sqlite");
   });
 
+  it.each(["001_other.sql", "001_other.sqlite.sql", "001_other.postgres.sql", "1_first.sql"])(
+    "rejects conflicting logical identities including inactive dialects: %s",
+    async (filename) => {
+      writeFileSync(join(testMigrationsDir, "001_first.sql"), "CREATE TABLE first (id TEXT)");
+      writeFileSync(join(testMigrationsDir, filename), "CREATE TABLE other (id TEXT)");
+      await expect(new MigrationRunner(db, testMigrationsDir).runPendingMigrations()).rejects.toThrow("Conflicting migration identity");
+      expect(await db.query("SELECT name FROM sqlite_master WHERE name IN ('first', 'other')")).toEqual([]);
+    },
+  );
+
+  it("rejects changed applied SQL before running any pending migration", async () => {
+    const file = join(testMigrationsDir, "001_first.sql");
+    writeFileSync(file, "CREATE TABLE first (id TEXT)");
+    const runner = new MigrationRunner(db, testMigrationsDir);
+    await runner.runPendingMigrations();
+    expect(await db.query("SELECT checksum FROM migrations")).toEqual([{ checksum: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
+    writeFileSync(file, "CREATE TABLE first (id INTEGER)");
+    writeFileSync(join(testMigrationsDir, "002_second.sql"), "CREATE TABLE second (id TEXT)");
+    await expect(runner.runPendingMigrations()).rejects.toThrow("Migration drift detected");
+    await expect(runner.getStatus()).rejects.toThrow("Migration drift detected");
+    expect(await db.query("SELECT name FROM sqlite_master WHERE name = 'second'")).toEqual([]);
+  });
+
+  it("allows legacy history without inventing checksums", async () => {
+    await db.execute("CREATE TABLE migrations (id TEXT PRIMARY KEY, name TEXT NOT NULL, appliedAt TEXT NOT NULL)");
+    await db.execute("INSERT INTO migrations VALUES ('016', '016_historical.sql', '2026-09-09')");
+    writeFileSync(join(testMigrationsDir, "017_next.sql"), "CREATE TABLE next (id TEXT)");
+    const runner = new MigrationRunner(db, testMigrationsDir);
+    expect(await runner.runPendingMigrations()).toBe(1);
+    expect((await runner.getStatus()).applied[0]).toEqual({ id: "016", name: "016_historical.sql", appliedAt: "2026-09-09", checksum: null });
+    expect(await runner.runPendingMigrations()).toBe(0);
+  });
+
   it("ignores files for the wrong dialect", async () => {
     // Only a postgres-specific file — should be skipped on sqlite
     writeFileSync(

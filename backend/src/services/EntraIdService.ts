@@ -317,6 +317,7 @@ export class EntraIdService {
     );
 
     if (existingUser) {
+      this.requireActiveUser(existingUser);
       // 3. Returning user — do NOT update profile claims (immutability)
       this.logger.info('Returning federated user found', {
         ...logMeta,
@@ -330,6 +331,7 @@ export class EntraIdService {
       const emailMatch = await this.userService.findByEmail(claims.email);
 
       if (emailMatch) {
+        this.requireActiveUser(emailMatch);
         // 5. Email match — link federated identity to existing account
         try {
           await this.userService.linkFederatedIdentity(
@@ -383,6 +385,12 @@ export class EntraIdService {
     }
   }
 
+  private requireActiveUser(user: User): void {
+    if (user.isActive !== 1) {
+      throw new EntraIdError(ENTRA_ID_ERROR_CODES.PROVISIONING_FAILED, 'Account is inactive');
+    }
+  }
+
   /**
    * Issue Pabawi JWT session tokens and generate a single-use authorization code.
    *
@@ -401,9 +409,9 @@ export class EntraIdService {
   ): Promise<AuthCodeEntry> {
     const logMeta = { component: 'EntraIdService', operation: 'issueSessionTokens' };
 
+    this.requireActiveUser(user);
     // 1. Generate Pabawi JWT tokens
-    const accessToken = await this.authService.generateToken(user);
-    const refreshToken = await this.authService.generateRefreshToken(user);
+    const { token: accessToken, refreshToken } = await this.authService.generateTokenPair(user);
 
     // 2. Generate single-use authorization code (32 bytes of entropy)
     const authCode = randomBytes(32).toString('hex');
@@ -522,6 +530,12 @@ export class EntraIdService {
       );
     }
 
+    try {
+      await this.authService.verifyToken(entry.accessToken);
+    } catch {
+      throw new EntraIdError(ENTRA_ID_ERROR_CODES.INVALID_AUTH_CODE, 'Authorization code invalid');
+    }
+
     // 5. Mark as exchanged
     await this.db.execute(
       `UPDATE oauth_auth_codes SET exchanged = 1 WHERE code = ?`,
@@ -530,7 +544,7 @@ export class EntraIdService {
 
     // 6. Look up the user
     const user = await this.userService.getUserById(entry.userId);
-    if (!user) {
+    if (user?.isActive !== 1) {
       throw new EntraIdError(
         ENTRA_ID_ERROR_CODES.INVALID_AUTH_CODE,
         'Authorization code invalid',

@@ -21,6 +21,7 @@ declare global {
         iat: number;
         exp: number;
       };
+      revalidateAuth?: () => Promise<void>;
       /** Execution snapshot checked by the mutation authorization middleware. */
       authorizedExecution?: ExecutionRecord;
       /** Information sources authorized for this request. */

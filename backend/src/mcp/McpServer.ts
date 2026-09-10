@@ -54,6 +54,7 @@ export interface McpDependencies {
   puppetDBService: PuppetDBService | undefined;
   puppetRunHistoryService: PuppetRunHistoryService | undefined;
   mcpUserId: string;
+  revalidateAuth?: () => Promise<void>;
   logger: LoggerService;
   version: string;
 }

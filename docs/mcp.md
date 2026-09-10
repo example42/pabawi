@@ -29,7 +29,7 @@ When enabled, Pabawi:
 3. Assigns the role to the service user
 4. Starts the MCP server and registers the `/mcp` endpoint
 
-All MCP endpoints require JWT authentication — the same `Authorization: Bearer <token>` header used by the REST API. Once authenticated, tool calls go through the same RBAC permission system as the REST API. The MCP server calls services directly (no HTTP round-trips) since it runs inside the backend process.
+All MCP endpoints require bearer authentication, using an access JWT or the configured static token. The MCP server calls services directly within the backend process. Caller-specific tool authorization and session ownership remain the separate S02/A06 remediation; do not infer personal JWT permission isolation from authentication alone.
 
 ## Authentication
 
@@ -53,7 +53,12 @@ Use this token as the `Authorization: Bearer <token>` header in your MCP client 
 
 ### JWT authentication
 
-Alternatively, any valid Pabawi JWT (obtained via `POST /api/auth/login`) is accepted on the MCP endpoint. This is useful for browser-based or short-lived integrations but requires periodic token renewal.
+Alternatively, a Pabawi access JWT (obtained via `POST /api/auth/login`) is
+accepted on the MCP endpoint. Refresh JWTs are rejected. Sessions revalidate
+their opening credential before tool calls and during idle checks, so recreate
+the MCP session after that JWT expires or is revoked. Static-token sessions
+require an active `mcp-service` account and close after account-session revocation.
+See [token purpose and revocation](permissions-rbac.md#token-purpose-and-revocation).
 
 ## Client Configuration
 

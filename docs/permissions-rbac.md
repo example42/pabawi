@@ -11,6 +11,44 @@ Pabawi supports two authentication methods that can work simultaneously:
 
 Both methods issue identical Pabawi JWT tokens. The RBAC middleware makes no distinction between authentication origins — permissions are determined by the user's assigned roles regardless of how they logged in.
 
+### Token purpose and revocation
+
+REST and SSE authentication require an access token. MCP accepts an access token
+or its configured static credential. Refresh tokens are accepted only by the
+refresh exchange. Access tokens require an explicit `type: access`, user ID,
+username, roles array, token ID, issued/expiry times and an opaque session version.
+The server resolves current roles when authenticating; token role claims do not
+preserve removed grants.
+
+Password changes and administrative resets, account activation/deactivation,
+soft deletion and administrator-status changes replace the user's session version
+in the same database operation. All previously issued access and refresh tokens
+then fail. Reactivating an account does not restore its old tokens. Revoking all
+sessions also replaces this version, allowing immediate fresh login without
+waiting for a timestamp boundary. Existing SSO authorization codes cannot return
+revoked credentials; inactive identities cannot receive a session.
+
+Role, group and permission changes take effect on the next authorization check
+without requiring logout. Database triggers replace a shared authorization
+revision when grants or account status change. Every permission-cache lookup
+checks that revision, including batch checks. This works across independent
+SQLite/PostgreSQL connections. Revisions are random rather than counters so a
+rolled-back transaction cannot later make its cached grants valid again.
+
+Open SSE subscriptions and console relays revalidate before delivering protected
+data and schedule idle checks every second. Invalid credentials, removed required
+permissions or failed revalidation close the connection. Console sessions retain
+the issuing account version, so reset or deactivation also invalidates outstanding
+console tickets. MCP sessions revalidate their opening credentials before tool
+calls and during idle checks. JWT sessions must be recreated after the opening
+access token expires or is revoked. Static MCP authentication requires an active
+service account. This does not yet repair MCP's separate caller-permission and
+cross-user session-ownership finding (S02/A06).
+
+These checks do not undo already admitted infrastructure operations. Shared
+authorization state also does not make process-local execution, MCP or console
+state distributed; the supported baseline remains a single backend process.
+
 ### Federated Users
 
 Users who authenticate via Entra ID for the first time are automatically provisioned:

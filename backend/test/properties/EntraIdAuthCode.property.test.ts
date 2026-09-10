@@ -103,7 +103,8 @@ describe('EntraIdService — Property 16: Authorization code single-use and TTL'
     );
 
     const mockAuthService = {
-      generateToken: vi.fn().mockResolvedValue('mock-access-token'),
+      verifyToken: vi.fn().mockResolvedValue({ userId: TEST_USER_ID }),
+      generateTokenPair: vi.fn().mockResolvedValue({ token: 'mock-access-token', refreshToken: 'mock-refresh-token' }),
       generateRefreshToken: vi.fn().mockResolvedValue('mock-refresh-token'),
     } as unknown as AuthenticationService;
 

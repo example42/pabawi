@@ -28,6 +28,52 @@ see the main [README](../README.md#installation).
 Database migrations run automatically on startup. They are forward-only — there
 is no built-in rollback. The backup is your rollback path.
 
+## Migration 016 convergence and migration integrity
+
+Older releases used ID `016` for both Checkmk write permissions and Entra ID
+authentication tables. The selected feature depended on the database dialect.
+The corrected migration set keeps Entra at `016`, moves Checkmk to `021`, and
+adds `022` to create missing Entra tables on installations that already recorded
+the Checkmk variant. Existing migration-history rows retain their original names.
+
+Both repairs preserve existing data. Migration `021` seeds Administrator and
+Operator Checkmk write grants for installations that missed that feature. If
+history records the Checkmk variant of `016`, it preserves subsequent grant
+removals. Migration `022` preserves federation links and OAuth records.
+These migrations cannot recover assignments lost by the original migration
+`017`; use the backup recovery procedure below for that case.
+
+Upgrade from a clean release checkout or freshly built image. Do not overlay
+new SQL files onto an old compiled migration directory: obsolete `016_checkmk_*`
+files would remain and the runner will correctly reject their conflicting IDs.
+Keep the previous installation and its consistent database backup for recovery.
+
+Newly applied migrations record SHA-256 checksums in the migration transaction.
+Startup and migration-status checks reject changed, renamed or missing files
+for those records before applying pending migrations. Restore the original
+release files when drift is reported; do not clear history or edit stored
+checksums to bypass it. Historical rows retain a null checksum because the
+original executed SQL cannot be verified retrospectively. Checksums detect file
+drift, not tampering by someone who can also modify the database.
+
+## Authentication upgrade: migrations 023 through 025
+
+This security upgrade requires every user to sign in again. Previous access and
+refresh tokens lack the required token purpose/session-version claims and are
+rejected. Existing console credentials also require a new authenticated session.
+
+Stop all old backend processes before migration, then start only the corrected
+version. Older binaries do not enforce the new revocation contract. Migration
+`023` adds account and permission revisions, `024` installs dialect-specific
+triggers, and `025` binds console credentials to account versions. Preserve the
+triggers when maintaining the database: they are part of authorization enforcement.
+
+After upgrade, verify login, refresh exchange and an authorized read. Reset a
+disposable test account's password or deactivate it, then verify its previous
+access and refresh tokens fail immediately. See
+[token purpose and revocation](permissions-rbac.md#token-purpose-and-revocation)
+for the policy, including role changes and long-lived connections.
+
 ## Upgrade Methods
 
 - [Git / source install](#git--source-install)

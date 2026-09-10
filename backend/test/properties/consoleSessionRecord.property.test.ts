@@ -1,3 +1,5 @@
+import { initializeTestSchema } from "../helpers/schema";
+import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
  * Property-Based Tests for Console Session Record Completeness
  *
@@ -20,26 +22,6 @@ import type { AuditLoggingService } from "../../src/services/AuditLoggingService
 import type { LoggerService } from "../../src/services/LoggerService";
 import type { ConsoleConfig } from "../../src/config/schema";
 
-const CREATE_TABLE_SQL = `
-  CREATE TABLE IF NOT EXISTS console_sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    node_id TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    transport TEXT NOT NULL,
-    state TEXT NOT NULL DEFAULT 'creating',
-    token TEXT,
-    token_created_at TEXT,
-    token_consumed INTEGER NOT NULL DEFAULT 0,
-    upstream_url TEXT,
-    started_at TEXT NOT NULL,
-    last_heartbeat_at TEXT,
-    terminated_at TEXT,
-    error_message TEXT,
-    CONSTRAINT chk_state CHECK (state IN ('creating', 'active', 'terminated', 'failed')),
-    CONSTRAINT chk_transport CHECK (transport IN ('websocket-vnc', 'websocket-terminal'))
-  )
-`;
 
 /** Arbitrary: hex string of given length */
 function hexStringArb(length: number): fc.Arbitrary<string> {
@@ -125,7 +107,7 @@ describe("Feature: console-integration, Property 8: Session record completeness"
   beforeEach(async () => {
     db = new SQLiteAdapter(":memory:");
     await db.initialize();
-    await db.execute(CREATE_TABLE_SQL);
+    await initializeTestSchema(db);
     sessionManager = new ConsoleSessionManager(
       db,
       defaultConfig,
@@ -141,6 +123,7 @@ describe("Feature: console-integration, Property 8: Session record completeness"
   it("stored session record always has non-null id, user_id, node_id, provider, started_at, last_heartbeat_at", async () => {
     await fc.assert(
       fc.asyncProperty(consoleSessionArb, async (session) => {
+        await ensureConsoleUser(db, session.userId);
         await sessionManager.createSession(session);
 
         const row = await db.queryOne<{
@@ -171,6 +154,7 @@ describe("Feature: console-integration, Property 8: Session record completeness"
   it("stored session record fields match the input values", async () => {
     await fc.assert(
       fc.asyncProperty(consoleSessionArb, async (session) => {
+        await ensureConsoleUser(db, session.userId);
         await sessionManager.createSession(session);
 
         const row = await db.queryOne<{

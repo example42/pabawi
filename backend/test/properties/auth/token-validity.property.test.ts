@@ -75,9 +75,15 @@ describe('Token Validity Properties', () => {
             roles: user.roles,
             iat: now,
             exp: now + expiryOffset,
+            type: 'access',
+            sessionVersion: '0',
             jti: 'test-token-id'
           };
 
+          await db.execute(
+            "INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES (?, ?, ?, 'hash', 'Test', 'User', 1, 0, 'now', 'now') ON CONFLICT DO NOTHING",
+            [user.userId, user.userId, `${user.userId}@example.test`],
+          );
           const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           if (expiryOffset <= 0) {
@@ -89,7 +95,7 @@ describe('Token Validity Properties', () => {
 
             expect(verifiedPayload.userId).toBe(user.userId);
             expect(verifiedPayload.username).toBe(user.username);
-            expect(verifiedPayload.roles).toEqual(user.roles);
+            expect(verifiedPayload.roles).toEqual([]);
           }
         }
       ),
@@ -125,10 +131,16 @@ describe('Token Validity Properties', () => {
             roles: user.roles,
             iat: now,
             exp: now + 3600, // Valid expiry
+            type: 'access',
+            sessionVersion: '0',
             jti: 'test-token-id'
           };
 
           // Sign with wrong secret
+          await db.execute(
+            "INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES (?, ?, ?, 'hash', 'Test', 'User', 1, 0, 'now', 'now') ON CONFLICT DO NOTHING",
+            [user.userId, user.userId, `${user.userId}@example.test`],
+          );
           const token = jwt.sign(payload, wrongSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Property: Token with invalid signature should be rejected
@@ -165,9 +177,15 @@ describe('Token Validity Properties', () => {
             roles: user.roles,
             iat: now,
             exp: now + 3600, // Valid for 1 hour
+            type: 'access',
+            sessionVersion: '0',
             jti: 'test-token-id'
           };
 
+          await db.execute(
+            "INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES (?, ?, ?, 'hash', 'Test', 'User', 1, 0, 'now', 'now') ON CONFLICT DO NOTHING",
+            [user.userId, user.userId, `${user.userId}@example.test`],
+          );
           const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Verify token is valid before revocation
@@ -210,9 +228,15 @@ describe('Token Validity Properties', () => {
             roles: user.roles,
             iat: now - 7200, // Issued 2 hours ago
             exp: now - 3600, // Expired 1 hour ago
+            type: 'access',
+            sessionVersion: '0',
             jti: 'test-token-id'
           };
 
+          await db.execute(
+            "INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES (?, ?, ?, 'hash', 'Test', 'User', 1, 0, 'now', 'now') ON CONFLICT DO NOTHING",
+            [user.userId, user.userId, `${user.userId}@example.test`],
+          );
           const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Property: Expired token should be rejected
@@ -248,9 +272,15 @@ describe('Token Validity Properties', () => {
             roles: user.roles,
             iat: now,
             exp: now + 3600,
+            type: 'access',
+            sessionVersion: '0',
             jti: 'test-token-id'
           };
 
+          await db.execute(
+            "INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES (?, ?, ?, 'hash', 'Test', 'User', 1, 0, 'now', 'now') ON CONFLICT DO NOTHING",
+            [user.userId, user.userId, `${user.userId}@example.test`],
+          );
           const token = jwt.sign(payload, testJwtSecret, { algorithm: 'HS256', issuer: 'pabawi', audience: 'pabawi' });
 
           // Verify multiple times
@@ -267,9 +297,9 @@ describe('Token Validity Properties', () => {
           expect(verified2.username).toBe(user.username);
           expect(verified3.username).toBe(user.username);
 
-          expect(verified1.roles).toEqual(user.roles);
-          expect(verified2.roles).toEqual(user.roles);
-          expect(verified3.roles).toEqual(user.roles);
+          expect(verified1.roles).toEqual([]);
+          expect(verified2.roles).toEqual([]);
+          expect(verified3.roles).toEqual([]);
         }
       ),
       {

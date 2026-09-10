@@ -1,3 +1,4 @@
+import { SessionAuthorization } from "./SessionAuthorization";
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server as HTTPServer, IncomingMessage } from "http";
 import type { Duplex } from "stream";
@@ -93,7 +94,9 @@ export class ConsoleWebSocketProxy {
 
       this.wss.handleUpgrade(req, socket, head, (clientWs: WebSocket) => {
         this.wss.emit("connection", clientWs, req);
-        void this.startRelay(clientWs, session, pathname);
+        void this.startRelay(clientWs, session, pathname).catch(() => {
+          clientWs.close(4403, "Session unavailable");
+        });
       });
     } catch (err) {
       this.logger.error("Error during WebSocket authentication", {
@@ -107,6 +110,7 @@ export class ConsoleWebSocketProxy {
   private async startRelay(
     clientWs: WebSocket, session: ConsoleSession, pathname: string,
   ): Promise<void> {
+    await this.sessionManager.assertSessionAuthorized(session.sessionId);
     const upstreamUrl = await this.sessionManager.getUpstreamUrl(session.sessionId);
     if (!upstreamUrl) {
       clientWs.close(CLOSE_CODES.UPSTREAM_FAILURE, "No upstream URL configured");
@@ -116,14 +120,30 @@ export class ConsoleWebSocketProxy {
     const upstream = await this.connectUpstream(clientWs, session, upstreamUrl);
     if (!upstream) return;
 
+    const authorization = new SessionAuthorization(
+      () => this.sessionManager.assertSessionAuthorized(session.sessionId),
+      () => {
+        clientWs.close(4403, "Session authorization revoked");
+        this.closeUpstreamGracefully(upstream);
+        void this.sessionManager.terminateSession(session.sessionId, "authorization_revoked").catch((error: unknown) => {
+          this.logger.error("Failed to persist revoked console session", {
+            component: COMPONENT,
+            metadata: { sessionId: session.sessionId, error: error instanceof Error ? error.message : String(error) },
+          });
+        });
+      },
+    );
+    clientWs.on("close", () => { authorization.close(); });
+    upstream.on("close", () => { authorization.close(); });
+
     const durationTimer = this.startDurationTimer(clientWs, upstream, session);
     const label = pathname === "/ws/console/vnc" ? "VNC" : "Terminal";
 
     // Wire message relay based on transport type
     if (pathname === "/ws/console/vnc") {
-      this.wireVncRelay(clientWs, upstream);
+      this.wireVncRelay(clientWs, upstream, authorization);
     } else {
-      this.wireTerminalRelay(clientWs, upstream, session);
+      this.wireTerminalRelay(clientWs, upstream, session, authorization);
     }
 
     // Shared lifecycle handlers
@@ -131,38 +151,46 @@ export class ConsoleWebSocketProxy {
   }
 
   /** VNC: bidirectional binary relay, no modification. */
-  private wireVncRelay(clientWs: WebSocket, upstream: WebSocket): void {
+  private wireVncRelay(clientWs: WebSocket, upstream: WebSocket, authorization: SessionAuthorization): void {
     upstream.on("message", (data: Buffer) => {
-      if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.send(data, { binary: true });
-      }
+      authorization.run(() => {
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(data, { binary: true });
+        }
+      });
     });
     clientWs.on("message", (data: Buffer) => {
-      if (upstream.readyState === WebSocket.OPEN) {
-        upstream.send(data, { binary: true });
-      }
+      authorization.run(() => {
+        if (upstream.readyState === WebSocket.OPEN) {
+          upstream.send(data, { binary: true });
+        }
+      });
     });
   }
 
   /** Terminal: text frames for I/O, binary frames for control messages. */
   private wireTerminalRelay(
-    clientWs: WebSocket, upstream: WebSocket, session: ConsoleSession,
+    clientWs: WebSocket, upstream: WebSocket, session: ConsoleSession, authorization: SessionAuthorization,
   ): void {
     upstream.on("message", (data: Buffer, isBinary: boolean) => {
-      if (clientWs.readyState !== WebSocket.OPEN) return;
-      if (isBinary) {
-        clientWs.send(data, { binary: true });
-      } else {
-        clientWs.send(data.toString("utf-8"), { binary: false });
-      }
+      authorization.run(() => {
+        if (clientWs.readyState !== WebSocket.OPEN) return;
+        if (isBinary) {
+          clientWs.send(data, { binary: true });
+        } else {
+          clientWs.send(data.toString("utf-8"), { binary: false });
+        }
+      });
     });
 
     clientWs.on("message", (data: Buffer, isBinary: boolean) => {
-      if (isBinary) {
-        this.handleTerminalControlMessage(data, upstream, session);
-      } else if (upstream.readyState === WebSocket.OPEN) {
-        upstream.send(data.toString("utf-8"), { binary: false });
-      }
+      authorization.run(() => {
+        if (isBinary) {
+          this.handleTerminalControlMessage(data, upstream, session);
+        } else if (upstream.readyState === WebSocket.OPEN) {
+          upstream.send(data.toString("utf-8"), { binary: false });
+        }
+      });
     });
   }
 

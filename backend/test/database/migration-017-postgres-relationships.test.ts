@@ -24,11 +24,13 @@ describe.skipIf(!databaseUrl)("I01: populated PostgreSQL upgrade", () => {
         await db.initialize();
         for (const file of readdirSync(migrationsDir)) {
           const id = /^(\d+)_/.exec(file)?.[1];
-          if (!id || id > "016") continue;
-          if (id === "016" && (variant === "entra" ? file.includes("checkmk") : file.includes("entra"))) continue;
+          if (!id || id >= "016") continue;
           copyFileSync(join(migrationsDir, file), join(partialDir, file));
         }
+        const historicalName = variant === "checkmk" ? "016_checkmk_write_permissions.postgres.sql" : "016_entra_id_auth.sql";
+        copyFileSync(join(__dirname, "fixtures/migration-016", historicalName), join(partialDir, historicalName));
         await new MigrationRunner(db, partialDir).runPendingMigrations();
+        await db.execute("ALTER TABLE migrations DROP COLUMN checksum");
         await db.execute("INSERT INTO users (id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at) VALUES ('u1', 'alice', 'alice@example.test', 'hash', 'Alice', 'Example', 1, 0, '2026-09-09', '2026-09-09')");
         await db.execute("INSERT INTO user_roles (user_id, role_id, assigned_at) VALUES ('u1', 'role-admin-001', '2026-09-09')");
         await db.execute("INSERT INTO groups (id, name, description, created_at, updated_at) VALUES ('g1', 'Ops', '', '2026-09-09', '2026-09-09')");
@@ -38,10 +40,14 @@ describe.skipIf(!databaseUrl)("I01: populated PostgreSQL upgrade", () => {
           await db.execute("INSERT INTO federated_identities (id, user_id, provider, subject, issuer, created_at, updated_at) VALUES ('f1', 'u1', 'entra-id', 'sub', 'https://issuer.test', '2026-09-09', '2026-09-09')");
         }
         const tables = ["users", "user_roles", "groups", "user_groups", "revoked_tokens", ...(variant === "entra" ? ["federated_identities"] : [])];
-        const before = await Promise.all(tables.map(table => db.query(`SELECT * FROM ${table}`)));
+        const before = await Promise.all(tables.map(table => db.query(table === "users" ? 'SELECT id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at, last_login_at FROM users' : `SELECT * FROM ${table}`)));
         await new MigrationRunner(db, migrationsDir).runPendingMigrations();
-        const after = await Promise.all(tables.map(table => db.query(`SELECT * FROM ${table}`)));
+        const after = await Promise.all(tables.map(table => db.query(table === "users" ? 'SELECT id, username, email, password_hash, first_name, last_name, is_active, is_admin, created_at, updated_at, last_login_at FROM users' : `SELECT * FROM ${table}`)));
         expect(after).toEqual(before);
+        expect(await db.query("SELECT resource FROM permissions WHERE resource = 'checkmk' AND action = 'write'")).toEqual([{ resource: "checkmk" }]);
+        for (const table of ["federated_identities", "oauth_state_store", "oauth_auth_codes"]) {
+          expect(await db.query(`SELECT COUNT(*) FROM ${table}`)).toHaveLength(1);
+        }
         await db.execute("UPDATE users SET password_hash = NULL WHERE id = 'u1'");
         expect(await db.query("SELECT password_hash FROM users WHERE id = 'u1'")).toEqual([{ password_hash: null }]);
         expect((await new MigrationRunner(db, migrationsDir).getStatus()).pending).toEqual([]);

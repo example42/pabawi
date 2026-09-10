@@ -69,12 +69,20 @@ export interface PaginatedResult<T> {
  */
 export class PermissionService {
   private db: DatabaseAdapter;
-  private cache: Map<string, { value: boolean; expiresAt: number }>;
+  private cache: Map<string, { value: boolean; expiresAt: number; revision: string }>;
   private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes in milliseconds
 
   constructor(db: DatabaseAdapter) {
     this.db = db;
     this.cache = new Map();
+  }
+
+  private async getAuthorizationRevision(): Promise<string> {
+    const state = await this.db.queryOne<{ revision: string }>(
+      'SELECT CAST(revision AS TEXT) AS revision FROM authorization_state WHERE id = 1',
+    );
+    if (!state) throw new Error('Authorization state is missing');
+    return state.revision;
   }
 
   /**
@@ -231,7 +239,7 @@ export class PermissionService {
    * Caching:
    * - Results are cached for 5 minutes (Requirement 15.1)
    * - Cache key format: perm:${userId}:${resource}:${action}
-   * - Cache is checked BEFORE database queries
+   * - The database revision is checked before using any cached grant
    * - Cache is updated AFTER successful permission checks
    *
    * @param userId - User ID to check
@@ -246,11 +254,13 @@ export class PermissionService {
     const startTime = Date.now();
     let cacheHit = false;
 
+    const revision = await this.getAuthorizationRevision();
+
     // Step 1: Check cache for permission result (Requirement 15.1)
     const cacheKey = `perm:${userId}:${resource}:${action}`;
     const cached = this.cache.get(cacheKey);
 
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached?.revision === revision && cached.expiresAt > Date.now()) {
       // Cache hit - return cached value
       cacheHit = true;
       const duration = Date.now() - startTime;
@@ -274,7 +284,7 @@ export class PermissionService {
       // Cache the negative result
       this.cache.set(cacheKey, {
         value: false,
-        expiresAt: Date.now() + this.CACHE_TTL_MS
+        revision, expiresAt: Date.now() + this.CACHE_TTL_MS
       });
       const duration = Date.now() - startTime;
       performanceMonitor.recordPermissionCheck(duration, cacheHit);
@@ -286,7 +296,7 @@ export class PermissionService {
       // Cache the positive result
       this.cache.set(cacheKey, {
         value: true,
-        expiresAt: Date.now() + this.CACHE_TTL_MS
+        revision, expiresAt: Date.now() + this.CACHE_TTL_MS
       });
       const duration = Date.now() - startTime;
       performanceMonitor.recordPermissionCheck(duration, cacheHit);
@@ -328,7 +338,7 @@ export class PermissionService {
     // Step 4: Cache the result (Requirement 15.1)
     this.cache.set(cacheKey, {
       value: hasAccess,
-      expiresAt: Date.now() + this.CACHE_TTL_MS
+      revision, expiresAt: Date.now() + this.CACHE_TTL_MS
     });
 
     // Record performance timing (cache miss)
@@ -489,6 +499,8 @@ export class PermissionService {
   ): Promise<{ resource: string; action: string; allowed: boolean }[]> {
     const startTime = Date.now();
 
+    const revision = await this.getAuthorizationRevision();
+
     // Step 1: Check cache for all permissions
     const results: { resource: string; action: string; allowed: boolean }[] = [];
     const uncachedChecks: { resource: string; action: string; index: number }[] = [];
@@ -498,7 +510,7 @@ export class PermissionService {
       const cacheKey = `perm:${userId}:${check.resource}:${check.action}`;
       const cached = this.cache.get(cacheKey);
 
-      if (cached && cached.expiresAt > Date.now()) {
+      if (cached?.revision === revision && cached.expiresAt > Date.now()) {
         // Cache hit
         results[i] = { ...check, allowed: cached.value };
       } else {
@@ -525,7 +537,7 @@ export class PermissionService {
       for (const check of uncachedChecks) {
         results[check.index] = { resource: check.resource, action: check.action, allowed: false };
         const cacheKey = `perm:${userId}:${check.resource}:${check.action}`;
-        this.cache.set(cacheKey, { value: false, expiresAt: Date.now() + this.CACHE_TTL_MS });
+        this.cache.set(cacheKey, { value: false, revision, expiresAt: Date.now() + this.CACHE_TTL_MS });
       }
       const duration = Date.now() - startTime;
       performanceMonitor.recordPermissionCheck(duration, false);
@@ -537,7 +549,7 @@ export class PermissionService {
       for (const check of uncachedChecks) {
         results[check.index] = { resource: check.resource, action: check.action, allowed: true };
         const cacheKey = `perm:${userId}:${check.resource}:${check.action}`;
-        this.cache.set(cacheKey, { value: true, expiresAt: Date.now() + this.CACHE_TTL_MS });
+        this.cache.set(cacheKey, { value: true, revision, expiresAt: Date.now() + this.CACHE_TTL_MS });
       }
       const duration = Date.now() - startTime;
       performanceMonitor.recordPermissionCheck(duration, false);
@@ -588,7 +600,7 @@ export class PermissionService {
 
       // Cache the result
       const cacheKey = `perm:${userId}:${check.resource}:${check.action}`;
-      this.cache.set(cacheKey, { value: allowed, expiresAt: Date.now() + this.CACHE_TTL_MS });
+      this.cache.set(cacheKey, { value: allowed, revision, expiresAt: Date.now() + this.CACHE_TTL_MS });
     }
 
     const duration = Date.now() - startTime;

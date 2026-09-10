@@ -5,6 +5,14 @@ import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+async function initializeAuthorizationState(db: DatabaseAdapter): Promise<void> {
+  const migrations = path.join(__dirname, '../../src/database/migrations');
+  const state = await fs.readFile(path.join(migrations, '023_authorization_state.sql'), 'utf8');
+  for (const sql of state.split(';').filter(sql => sql.trim())) await db.execute(sql);
+  const triggers = await fs.readFile(path.join(migrations, '024_authorization_triggers.sqlite.sql'), 'utf8');
+  for (const sql of triggers.split(/^-- pabawi:statement-breakpoint$/m)) await db.execute(sql);
+}
+
 describe('PermissionService', () => {
   let db: DatabaseAdapter;
   let permissionService: PermissionService;
@@ -35,6 +43,9 @@ describe('PermissionService', () => {
     `);
     await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
 
+    if (await db.queryOne("SELECT name FROM sqlite_master WHERE name = 'users'")) {
+      await initializeAuthorizationState(db);
+    }
     permissionService = new PermissionService(db);
   });
 
@@ -475,6 +486,7 @@ await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(rol
 await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permission_id)`);
 
       // Create test data
+      await initializeAuthorizationState(db);
       const now = new Date().toISOString();
 
       // Create users
@@ -831,6 +843,9 @@ await db.execute(`CREATE TABLE permissions ( id TEXT PRIMARY KEY, resource TEXT 
 await db.execute(`CREATE INDEX idx_permissions_resource_action ON permissions(resource, action)`);
 
     // Initialize permission service
+    if (await db.queryOne("SELECT name FROM sqlite_master WHERE name = 'users'")) {
+      await initializeAuthorizationState(db);
+    }
     permissionService = new PermissionService(db);
 
     // Create test data
@@ -1309,6 +1324,9 @@ await db.execute(`CREATE INDEX idx_role_permissions_role ON role_permissions(rol
 await db.execute(`CREATE INDEX idx_role_permissions_perm ON role_permissions(permission_id)`);
 
     // Initialize permission service
+    if (await db.queryOne("SELECT name FROM sqlite_master WHERE name = 'users'")) {
+      await initializeAuthorizationState(db);
+    }
     permissionService = new PermissionService(db);
 
     // Create test data
@@ -1656,6 +1674,9 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
     await db.execute(`CREATE TABLE group_roles ( group_id TEXT NOT NULL, role_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (group_id, role_id) )`);
     await db.execute(`CREATE TABLE role_permissions ( role_id TEXT NOT NULL, permission_id TEXT NOT NULL, assigned_at TEXT NOT NULL, PRIMARY KEY (role_id, permission_id) )`);
 
+    if (await db.queryOne("SELECT name FROM sqlite_master WHERE name = 'users'")) {
+      await initializeAuthorizationState(db);
+    }
     permissionService = new PermissionService(db);
     const now = new Date().toISOString();
 
@@ -1732,9 +1753,9 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
       // Remove the permission from the role at DB level
       await db.execute(`DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?`, [roleId, permissionId]);
 
-      // Without invalidation, cache still returns true
+      // The committed database revision invalidates the cached grant.
       const stale = await permissionService.hasPermission(userId, 'proxmox', 'execute');
-      expect(stale).toBe(true); // stale cache
+      expect(stale).toBe(false);
 
       // Invalidate
       await permissionService.invalidateRolePermissionCache(roleId);
@@ -1778,9 +1799,9 @@ describe('PermissionService - Role-level cache invalidation (Requirement 30.2)',
       // Remove all role_permissions at DB level
       await db.execute(`DELETE FROM role_permissions`);
 
-      // Stale cache still returns true
+      // Revocation is visible without explicit local invalidation.
       const stale1 = await permissionService.hasPermission(userId, 'proxmox', 'execute');
-      expect(stale1).toBe(true);
+      expect(stale1).toBe(false);
 
       // Clear entire cache
       permissionService.invalidateAllPermissionCache();

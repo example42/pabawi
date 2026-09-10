@@ -679,12 +679,11 @@ describe('Authentication Flow Integration Tests', () => {
         .send({ username: 'inactiveuser', password: 'SecurePass123!' })
         .expect(401);
 
-      // Existing token should still work (token was issued when user was active)
-      // Note: In production, you might want to check user status on each request
+      // Deactivation immediately invalidates the existing access token.
       await request(harness.use(app))
         .get(`/api/users/${userId}`)
         .set('Authorization', `Bearer ${token}`)
-        .expect(200);
+        .expect(401);
     });
 
     it('should validate token structure and payload', async () => {

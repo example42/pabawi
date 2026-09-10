@@ -26,7 +26,9 @@ export interface TokenPayload {
   roles: string[];
   iat: number;
   exp: number;
-  jti?: string; // Token ID for revocation tracking
+  jti: string;
+  type: 'access';
+  sessionVersion: string;
 }
 
 /**
@@ -53,6 +55,7 @@ interface User {
   username: string;
   email: string;
   passwordHash: string;
+  sessionVersion: string;
   firstName: string;
   lastName: string;
   isActive: number;
@@ -68,10 +71,11 @@ interface User {
 interface RefreshTokenPayload {
   userId: string;
   username: string;
-  type: string;
+  type: 'refresh';
+  sessionVersion: string;
   iat: number;
   exp: number;
-  jti?: string;
+  jti: string;
 }
 
 /**
@@ -212,6 +216,8 @@ export class AuthenticationService {
               return { success: false, error: 'Invalid credentials' };
             }
 
+            const sessionVersion = user.sessionVersion;
+
             // Verify password first (constant-time operation to prevent timing attacks)
             const isPasswordValid = await this.comparePassword(password, user.passwordHash);
 
@@ -259,8 +265,7 @@ export class AuthenticationService {
             await this.clearFailedLoginAttempts(username);
 
             // Generate tokens
-            const token = await this.generateToken(user);
-            const refreshToken = await this.generateRefreshToken(user);
+            const { token, refreshToken } = await this.generateTokenPair(user, sessionVersion);
 
             // Update last login timestamp
             await this.updateLastLogin(user.id);
@@ -314,13 +319,22 @@ export class AuthenticationService {
           }
         }
 
+  public async generateTokenPair(user: Pick<User, 'id' | 'username'>, expectedVersion?: string): Promise<{ token: string; refreshToken: string }> {
+    const version = expectedVersion ?? await this.getActiveSessionVersion(user.id);
+    const token = await this.generateToken(user, version);
+    const refreshToken = await this.generateRefreshToken(user, version);
+    return { token, refreshToken };
+  }
+
   /**
    * Generate JWT access token for user
    *
    * @param user - User object
    * @returns JWT access token string
    */
-  public async generateToken(user: User): Promise<string> {
+  public async generateToken(user: Pick<User, 'id' | 'username'>, expectedVersion?: string): Promise<string> {
+    const sessionVersion = await this.getActiveSessionVersion(user.id);
+    if (expectedVersion !== undefined && expectedVersion !== sessionVersion) throw new Error('Token has been revoked');
     // Fetch user roles for token
     const roles = await this.getUserRoles(user.id);
 
@@ -328,6 +342,8 @@ export class AuthenticationService {
       userId: user.id,
       username: user.username,
       roles: roles,
+      type: 'access',
+      sessionVersion,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + this.accessTokenLifetime,
       jti: crypto.randomBytes(16).toString('hex') // Token ID for revocation
@@ -346,11 +362,14 @@ export class AuthenticationService {
    * @param user - User object
    * @returns JWT refresh token string
    */
-  public generateRefreshToken(user: User): Promise<string> {
+  public async generateRefreshToken(user: Pick<User, 'id' | 'username'>, expectedVersion?: string): Promise<string> {
+    const sessionVersion = await this.getActiveSessionVersion(user.id);
+    if (expectedVersion !== undefined && expectedVersion !== sessionVersion) throw new Error('Token has been revoked');
     const payload = {
       userId: user.id,
       username: user.username,
       type: 'refresh',
+      sessionVersion,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + this.refreshTokenLifetime,
       jti: crypto.randomBytes(16).toString('hex')
@@ -377,7 +396,14 @@ export class AuthenticationService {
         algorithms: ['HS256'],
         issuer: AuthenticationService.JWT_ISSUER,
         audience: AuthenticationService.JWT_AUDIENCE,
-      }) as TokenPayload;
+      });
+      if (!this.isSessionPayload(payload) || payload.type !== 'access' ||
+          !Array.isArray(payload.roles) || !payload.roles.every((role: unknown) => typeof role === 'string')) {
+        throw new Error('Invalid token');
+      }
+      if (payload.sessionVersion !== await this.getActiveSessionVersion(payload.userId)) {
+        throw new Error('Token has been revoked');
+      }
 
       // Check if token is revoked
       const isRevoked = await this.isTokenRevoked(token);
@@ -385,7 +411,7 @@ export class AuthenticationService {
         throw new Error('Token has been revoked');
       }
 
-      return payload;
+      return { ...payload, type: 'access', roles: await this.getUserRoles(payload.userId) };
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
         throw new Error('Token expired');
@@ -418,11 +444,15 @@ export class AuthenticationService {
         algorithms: ['HS256'],
         issuer: AuthenticationService.JWT_ISSUER,
         audience: AuthenticationService.JWT_AUDIENCE,
-      }) as RefreshTokenPayload;
+      });
 
       // Must be a refresh token, not an access token
-      if (payload.type !== 'refresh') {
+      if (!this.isSessionPayload(payload) || payload.type !== 'refresh') {
         return { success: false, error: 'Invalid refresh token' };
+      }
+
+      if (payload.sessionVersion !== await this.getActiveSessionVersion(payload.userId)) {
+        return { success: false, error: 'Refresh token has been revoked' };
       }
 
       // Reuse detection: a revoked refresh token being presented is treated
@@ -448,8 +478,7 @@ export class AuthenticationService {
       // Order matters — revoke first so a concurrent reuse will see the revoked state.
       await this.revokeToken(refreshToken);
 
-      const newAccessToken = await this.generateToken(user);
-      const newRefreshToken = await this.generateRefreshToken(user);
+      const { token: newAccessToken, refreshToken: newRefreshToken } = await this.generateTokenPair(user, payload.sessionVersion);
 
       return {
         success: true,
@@ -463,7 +492,7 @@ export class AuthenticationService {
       } else if (error instanceof jwt.JsonWebTokenError) {
         return { success: false, error: 'Invalid refresh token' };
       }
-      return { success: false, error: 'Token refresh failed' };
+      return { success: false, error: error instanceof Error && error.message === 'User not found or inactive' ? error.message : 'Token refresh failed' };
     }
   }
 
@@ -535,33 +564,30 @@ export class AuthenticationService {
    * @param userId - User ID
    */
   public async revokeAllUserTokens(userId: string): Promise<void> {
-    // This is a simplified implementation
-    // In production, you might want to track all active tokens per user
-    // For now, we'll add a marker that invalidates all tokens issued before this time
-    const revokedAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + this.refreshTokenLifetime * 1000).toISOString();
-    const markerToken = `user_revoke_all_${userId}`;
-
-    // First, try to update existing marker
-    const existing = await this.db.queryOne<{ token: string }>(
-      'SELECT token FROM revoked_tokens WHERE token = ?',
-      [markerToken]
+    await this.db.execute(
+      'UPDATE users SET session_version = ? WHERE id = ?',
+      [crypto.randomBytes(16).toString('hex'), userId],
     );
+  }
 
-    if (existing) {
-      // Update existing marker with new revocation time
-      await this.db.execute(
-        `UPDATE revoked_tokens SET revoked_at = ?, expires_at = ? WHERE token = ?`,
-        [revokedAt, expiresAt, markerToken]
-      );
-    } else {
-      // Insert new marker
-      await this.db.execute(
-        `INSERT INTO revoked_tokens (token, user_id, revoked_at, expires_at)
-         VALUES (?, ?, ?, ?)`,
-        [markerToken, userId, revokedAt, expiresAt]
-      );
-    }
+  private async getActiveSessionVersion(userId: string): Promise<string> {
+    const user = await this.db.queryOne<{ isActive: number; sessionVersion: string }>(
+      'SELECT is_active AS "isActive", session_version AS "sessionVersion" FROM users WHERE id = ?',
+      [userId],
+    );
+    if (user?.isActive !== 1) throw new Error('User not found or inactive');
+    return user.sessionVersion;
+  }
+
+  private isSessionPayload(payload: string | jwt.JwtPayload): payload is jwt.JwtPayload & (TokenPayload | RefreshTokenPayload) {
+    return typeof payload !== 'string' &&
+      typeof payload.userId === 'string' && payload.userId.length > 0 &&
+      typeof payload.username === 'string' && payload.username.length > 0 &&
+      typeof payload.jti === 'string' && payload.jti.length > 0 &&
+      Number.isSafeInteger(payload.iat) && (payload.iat ?? -1) >= 0 &&
+      (payload.iat ?? Infinity) <= Math.floor(Date.now() / 1000) && Number.isSafeInteger(payload.exp) &&
+      (payload.exp ?? 0) > (payload.iat ?? 0) &&
+      typeof payload.sessionVersion === 'string' && /^[a-f0-9]{1,32}$/.test(payload.sessionVersion);
   }
 
   /**
@@ -590,27 +616,6 @@ export class AuthenticationService {
         return true;
       }
 
-      // Check if all user tokens are revoked
-      const userRevocation = await this.db.queryOne<{ revokedAt: string }>(
-        `SELECT revoked_at AS "revokedAt" FROM revoked_tokens
-         WHERE token = ? AND expires_at > ?`,
-        [`user_revoke_all_${decoded.userId}`, new Date().toISOString()]
-      );
-
-      if (userRevocation) {
-        // JWT `iat` is second-granularity, but `revokedAt` is stored with
-        // millisecond precision. Comparing `iat * 1000 < revokedAt` (strict, ms)
-        // left a sub-second ambiguity for tokens minted in the same wall-clock
-        // second as the revocation. Compare at second granularity and treat the
-        // revocation second as inclusive: any token whose `iat` is at or before
-        // the revocation second is rejected (fail-secure). A token minted in a
-        // later second survives.
-        const tokenIssuedAtSec = decoded.iat;
-        const revokedAtSec = Math.floor(
-          new Date(userRevocation.revokedAt).getTime() / 1000,
-        );
-        return tokenIssuedAtSec <= revokedAtSec;
-      }
 
       return false;
     } catch (error) {
@@ -626,6 +631,7 @@ export class AuthenticationService {
     return this.db.queryOne<User>(
       `SELECT id, username, email,
               password_hash AS "passwordHash",
+              session_version AS "sessionVersion",
               first_name    AS "firstName",
               last_name     AS "lastName",
               is_active     AS "isActive",
@@ -645,6 +651,7 @@ export class AuthenticationService {
     return this.db.queryOne<User>(
       `SELECT id, username, email,
               password_hash AS "passwordHash",
+              session_version AS "sessionVersion",
               first_name    AS "firstName",
               last_name     AS "lastName",
               is_active     AS "isActive",

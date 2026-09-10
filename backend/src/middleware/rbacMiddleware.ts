@@ -81,6 +81,17 @@ export function createRbacMiddleware(db: DatabaseAdapter) {
           return;
         }
 
+        const revalidateAuth = req.revalidateAuth;
+        if (revalidateAuth) {
+          const userId = req.user.userId;
+          req.revalidateAuth = async (): Promise<void> => {
+            await revalidateAuth();
+            if (!await permissionService.hasPermission(userId, resource, action)) {
+              throw new Error('Permission has been revoked');
+            }
+          };
+        }
+
         // User has permission - continue to next middleware/handler
         next();
       } catch (error) {

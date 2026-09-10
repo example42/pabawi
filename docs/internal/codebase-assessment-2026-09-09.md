@@ -35,9 +35,31 @@ This section records follow-up verification against the working tree after
 - **I08 remains open:** generic lifecycle routes retain their conflicting
   static-token/JWT credential contract, with provider authorization enforced
   before the extra credential check. This is a separate usability repair.
-- **I02 remains open.** The two historical migration-016 variants were exercised
-  for I01 preservation; they still do not converge on both Checkmk and Entra
-  features. Passing I01 does not establish that the complete upgrade gate is closed.
+- **I02: implementation verified in the follow-up working tree.** Unique
+  migrations 021 (Checkmk) and 022 (Entra repair) converge fresh installs and both
+  historical 016 variants. Real-file SQLite fixtures compare the resulting
+  schema and preserve federation/OAuth records and authorization assignments.
+  PostgreSQL 15 passes fresh migrations and both populated historical upgrades.
+  Checkmk repair preserves deliberate grant removals on previously seeded
+  installations. The runner rejects conflicting numeric IDs across dialects
+  and verifies SHA-256 checksums for newly applied migrations before proceeding.
+  Legacy history remains explicitly unverified, with null checksums. Upgrade
+  guidance requires clean release files to avoid stale compiled SQL collisions.
+
+- **A05 / S03: implemented.** Access JWTs require purpose and validated claims;
+  refresh JWTs fail REST, SSE and MCP JWT authentication. Pair issuance shares
+  an account version so revocation between issuance steps cannot produce a fresh
+  refresh credential. The upgrade deliberately requires fresh login.
+- **A05 / S04: revocation foundations implemented.** Migrations 023-025 persist
+  opaque account versions, a shared authorization revision and console account
+  bindings. Database triggers change revisions atomically with password/status
+  and RBAC mutations. Every cache lookup verifies the database revision across
+  instances/connections. Random revisions prevent rollback-value reuse. SSO
+  issuance and code exchange check account/session validity. Protected SSE and
+  console deliveries revalidate, and idle sessions poll every second. A live
+  local WebSocket regression verifies both ends close after deactivation.
+  MCP opening credentials also revalidate; S02/A06 caller identity and ownership
+  remain open, as do the other console lifecycle and SSO findings.
 
 Validation: full backend suite passed (3,501 tests, 12 skipped, 1 todo); full
 frontend suite passed (999 tests). The separate PostgreSQL run passed eight
@@ -45,6 +67,20 @@ integration tests and two populated-upgrade tests. Lint and the complete build
 passed, with existing frontend accessibility and bundle-size warnings. The
 additional frontend `tsc --noEmit` check reports 14 missing `global` declarations
 in unchanged test files; it reports no errors in the changed files.
+
+I02 follow-up validation: full backend suite passed (3,511 tests, 12 skipped,
+1 todo). A disposable PostgreSQL 15 instance passed eight adapter/fresh-migration
+tests and both populated historical-016 upgrades. Backend lint, backend
+TypeScript checking and `git diff --check` passed. No production database was
+used. Frontend, image and cluster checks were not repeated for this tranche.
+A05 follow-up validation: full backend suite passed (3,539 tests, 13 skipped,
+1 todo). PostgreSQL 15 passed fresh migrations, both historical-016 populated
+upgrades, and independent-connection revocation/rollback tests. SQLite also
+passed the independent-connection tests. Live local SSE and fake upstream
+WebSocket tests verified revocation closure. Backend lint, backend TypeScript
+checking and `git diff --check` passed. No production providers or databases
+were used. A06 (MCP caller identity and session ownership) is next; the remaining
+findings retain their existing status.
 
 ## Executive assessment
 
@@ -265,7 +301,7 @@ Using actual repository migration SQL in an in-memory SQLite database, an insert
 
 ### I02. P1: Migration ID 016 represents two unrelated changes
 
-**Reproduced selection and SQLite schema outcome.** [MigrationRunner.ts](../../backend/src/database/MigrationRunner.ts), lines 179-199, groups migrations only by numeric ID, overwrites shared candidates and prefers dialect-specific candidates. `016_checkmk_write_permissions.sql`, its PostgreSQL variant and `016_entra_id_auth.sql` therefore collide.
+**Reproduced selection and SQLite schema outcome.** [MigrationRunner.ts](../../backend/src/database/MigrationRunner.ts), assessed lines 179-199, groups migrations only by numeric ID, overwrites shared candidates and prefers dialect-specific candidates. `016_checkmk_write_permissions.sql`, its PostgreSQL variant and `016_entra_id_auth.sql` therefore collide.
 
 SQLite selects Entra and lacks `checkmk:write`; PostgreSQL selects the Checkmk-specific file and omits Entra tables. Databases already recording either 016 will not automatically receive the other feature. The existing MigrationRunner suite still passes.
 
