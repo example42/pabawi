@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { AuditLoggingService } from "../services/AuditLoggingService";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
@@ -46,6 +48,7 @@ export function createGroupsRouter(
   const configService = container.resolve("config");
   const jwtSecret = configService.getJwtSecret();
   const groupService = new GroupService(databaseService.getAdapter());
+  const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
@@ -432,8 +435,10 @@ export function createGroupsRouter(
   router.delete(
     "/:id",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("groups", "admin")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing delete group request", {
         component: "GroupsRouter",
         operation: "deleteGroup",
@@ -445,6 +450,11 @@ export function createGroupsRouter(
 
         // Delete group
         await groupService.deleteGroup(groupId);
+        await auditLogger.logAdminAction(
+          "deleteGroup",
+          actor.userId,
+          { groupId }, req.ip, req.headers["user-agent"],
+        );
 
         logger.info("Group deleted successfully", {
           component: "GroupsRouter",
@@ -501,8 +511,10 @@ export function createGroupsRouter(
   router.post(
     "/:id/roles/:roleId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("groups", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing assign role to group request", {
         component: "GroupsRouter",
         operation: "assignRoleToGroup",
@@ -519,6 +531,11 @@ export function createGroupsRouter(
 
         // Assign role to group
         await groupService.assignRoleToGroup(groupId, roleId);
+        await auditLogger.logAdminAction(
+          "assignRoleToGroup",
+          actor.userId,
+          { groupId, roleId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for all users in the group
         const groupMembers = await groupService.getGroupMembers(groupId);
@@ -633,8 +650,10 @@ export function createGroupsRouter(
   router.delete(
     "/:id/roles/:roleId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("groups", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing remove role from group request", {
         component: "GroupsRouter",
         operation: "removeRoleFromGroup",
@@ -651,6 +670,11 @@ export function createGroupsRouter(
 
         // Remove role from group
         await groupService.removeRoleFromGroup(groupId, roleId);
+        await auditLogger.logAdminAction(
+          "removeRoleFromGroup",
+          actor.userId,
+          { groupId, roleId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for all users in the group
         const groupMembers = await groupService.getGroupMembers(groupId);

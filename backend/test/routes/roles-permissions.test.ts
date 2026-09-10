@@ -62,7 +62,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
   });
 
   beforeEach(async () => {
-    // Create admin user with roles:write permission
+    // Create admin user with rbac:admin permission
     const adminUser = await userService.createUser({
       username: 'admin_user',
       email: 'admin@test.com',
@@ -73,25 +73,25 @@ describe('Roles Router - Role-Permission Association Routes', () => {
     });
     adminUserId = adminUser.id;
 
-    // Create roles:write permission
+    // Create rbac:admin permission
     let rolesWritePermission;
     try {
       rolesWritePermission = await permissionService.createPermission({
-        resource: 'roles',
-        action: 'write',
+        resource: 'rbac',
+        action: 'admin',
         description: 'Write roles',
       });
     } catch (error) {
       const allPermissions = await permissionService.listPermissions({ limit: 500 });
       rolesWritePermission = allPermissions.items.find(
-        p => p.resource === 'roles' && p.action === 'write'  // pragma: allowlist secret
+        p => p.resource === 'rbac' && p.action === 'admin'  // pragma: allowlist secret
       );
       if (!rolesWritePermission) {
         throw error;
       }
     }
 
-    // Create role with roles:write permission
+    // Create role with rbac:admin permission
     const adminRole = await roleService.createRole({
       name: 'RoleAdmin',
       description: 'Can write roles',
@@ -154,7 +154,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
         expect(response.body.error).toBeDefined();
       });
 
-      it('should return 403 when user lacks roles:write permission', async () => {
+      it('should return 403 when user lacks rbac:admin permission', async () => {
         const response = await request(harness.use(app))
           .post(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()
@@ -296,7 +296,7 @@ describe('Roles Router - Role-Permission Association Routes', () => {
         expect(response.body.error).toBeDefined();
       });
 
-      it('should return 403 when user lacks roles:write permission', async () => {
+      it('should return 403 when user lacks rbac:admin permission', async () => {
         const response = await request(harness.use(app))
           .delete(`/api/roles/${testRoleId}/permissions/${testPermissionId}`)
           .send()

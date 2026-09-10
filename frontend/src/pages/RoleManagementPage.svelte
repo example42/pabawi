@@ -189,7 +189,7 @@
       </div>
 
       <!-- Create Role Button -->
-      <button
+      <button disabled={!authManager.hasPermission('rbac', 'admin')}
         type="button"
         onclick={handleCreateRole}
         class="inline-flex items-center gap-2 px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-900"
@@ -299,7 +299,7 @@
                         onclick={() => handleDeleteRole(role.id, role.name, role.isBuiltIn)}
                         class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 {role.isBuiltIn ? 'opacity-50 cursor-not-allowed' : ''}"
                         title={role.isBuiltIn ? 'Cannot delete built-in role' : 'Delete role'}
-                        disabled={role.isBuiltIn}
+                        disabled={!authManager.hasPermission('rbac', 'admin') || role.isBuiltIn}
                       >
                         <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

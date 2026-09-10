@@ -50,6 +50,8 @@
     roles: RoleDTO[];
   }
 
+  const canManageEntitlements = $derived(authManager.hasPermission('rbac', 'admin'));
+
   // State
   let user = $state<UserDetailDTO | null>(null);
   let availableGroups = $state<GroupDTO[]>([]);
@@ -76,8 +78,8 @@
   $effect(() => {
     if (isOpen && userId) {
       loadUserDetails();
-      loadAvailableGroups();
-      loadAvailableRoles();
+      if (canManageEntitlements) loadAvailableGroups();
+      if (canManageEntitlements) loadAvailableRoles();
     }
   });
 
@@ -391,7 +393,7 @@
                 </div>
 
                 <!-- Add Group -->
-                {#if unassignedGroups.length > 0}
+                {#if canManageEntitlements && unassignedGroups.length > 0}
                   <div class="flex gap-2 mb-3">
                     <select
                       bind:value={selectedGroupId}
@@ -406,7 +408,7 @@
                     <button
                       type="button"
                       onclick={handleAddGroup}
-                      disabled={!selectedGroupId || isSaving}
+                      disabled={!canManageEntitlements || !selectedGroupId || isSaving}
                       class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Add
@@ -434,7 +436,7 @@
                         <button
                           type="button"
                           onclick={() => handleRemoveGroup(group.id, group.name)}
-                          disabled={isSaving}
+                          disabled={!canManageEntitlements || isSaving}
                           class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Remove from group"
                         >
@@ -457,7 +459,7 @@
                 </div>
 
                 <!-- Add Role -->
-                {#if unassignedRoles.length > 0}
+                {#if canManageEntitlements && unassignedRoles.length > 0}
                   <div class="flex gap-2 mb-3">
                     <select
                       bind:value={selectedRoleId}
@@ -474,7 +476,7 @@
                     <button
                       type="button"
                       onclick={handleAddRole}
-                      disabled={!selectedRoleId || isSaving}
+                      disabled={!canManageEntitlements || !selectedRoleId || isSaving}
                       class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Assign
@@ -509,7 +511,7 @@
                         <button
                           type="button"
                           onclick={() => handleRemoveRole(role.id, role.name)}
-                          disabled={isSaving}
+                          disabled={!canManageEntitlements || isSaving}
                           class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Remove role"
                         >
@@ -536,11 +538,11 @@
                   {/if}
                   {user.isActive ? 'Deactivate User' : 'Activate User'}
                 </button>
-                {#if authManager.user?.id !== user.id}
+                {#if canManageEntitlements && authManager.user?.id !== user.id}
                   <button
                     type="button"
                     onclick={handleToggleAdmin}
-                    disabled={isSaving}
+                    disabled={!canManageEntitlements || isSaving}
                     class="flex-1 min-w-[10rem] inline-flex justify-center items-center gap-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {#if isSaving}

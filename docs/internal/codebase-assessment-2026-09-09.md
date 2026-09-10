@@ -103,6 +103,32 @@ backend build and `git diff --check` passed. These tests use disposable SQLite d
 no production providers, databases or external services were exercised.
 PostgreSQL, frontend, container and cluster checks were not repeated.
 
+- **A07 / S06: implemented and verified.** Migration 026 introduces explicit
+  `rbac:admin` authority, seeded only to the built-in Administrator role. Legacy
+  user/group/role/permission editing grants do not confer entitlement authority.
+  User-role assignments, group memberships, group-role assignments, role-permission
+  changes, role creation/update/deletion, group deletion, permission creation and
+  administrator-status changes require the new permission. Role naming shares
+  this boundary because SSO mappings resolve roles by name. Profile and group
+  metadata editing retain their existing gates. Entitlement administrators may
+  delegate permissions they do not hold and assign roles to themselves; the
+  existing prohibition on changing one's own administrator flag remains.
+  Successful mutations persist actor and affected IDs in the audit log; denied
+  permission checks persist authorization failures. UI entitlement controls use
+  the new permission. The RBAC guide documents migration and delegation policy,
+  including the separate sensitive account-recovery authority of `users:admin`.
+
+A07 validation: full backend suite passed (3,562 tests, 13 skipped, 1 todo),
+including seven new security regressions covering the real route factories,
+16 mutation cases across anonymous/no-role/legacy-management callers, unchanged
+state after denials, direct and group-derived delegation, audit attribution and
+revocation. Full frontend suite passed (999 tests). PostgreSQL 15 passed ten
+fresh-migration/adapter and populated historical-016 upgrade tests. Lint, complete
+build and `git diff --check` passed. Existing frontend accessibility and bundle
+warnings remain. Tests used local HTTP transport, disposable SQLite databases
+and a disposable PostgreSQL container. Live browser/provider and cluster checks
+were not performed. A08 remains the next action.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.

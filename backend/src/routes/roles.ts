@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { AuditLoggingService } from "../services/AuditLoggingService";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "./asyncHandler";
@@ -47,6 +49,7 @@ export function createRolesRouter(
   const configService = container.resolve("config");
   const jwtSecret = configService.getJwtSecret();
   const roleService = new RoleService(databaseService.getAdapter());
+  const auditLogger = new AuditLoggingService(databaseService.getAdapter());
   const permissionService = new PermissionService(databaseService.getAdapter());
   const authMiddleware = createAuthMiddleware(databaseService.getAdapter(), jwtSecret);
   const rbacMiddleware = createRbacMiddleware(databaseService.getAdapter());
@@ -60,8 +63,10 @@ export function createRolesRouter(
   router.post(
     "/",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("roles", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing create role request", {
         component: "RolesRouter",
         operation: "createRole",
@@ -86,6 +91,12 @@ export function createRolesRouter(
           name: validatedData.name,
           description: validatedData.description,
         });
+
+        await auditLogger.logAdminAction(
+          "createRole",
+          actor.userId,
+          { roleId: role.id }, req.ip, req.headers["user-agent"],
+        );
 
         logger.info("Role created successfully", {
           component: "RolesRouter",
@@ -319,8 +330,10 @@ export function createRolesRouter(
   router.put(
     "/:id",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("roles", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing update role request", {
         component: "RolesRouter",
         operation: "updateRole",
@@ -345,6 +358,11 @@ export function createRolesRouter(
 
         // Update role
         const updatedRole = await roleService.updateRole(roleId, validatedData);
+        await auditLogger.logAdminAction(
+          "updateRole",
+          actor.userId,
+          { roleId }, req.ip, req.headers["user-agent"],
+        );
 
         logger.info("Role updated successfully", {
           component: "RolesRouter",
@@ -447,8 +465,10 @@ export function createRolesRouter(
   router.delete(
     "/:id",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("roles", "admin")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing delete role request", {
         component: "RolesRouter",
         operation: "deleteRole",
@@ -460,6 +480,11 @@ export function createRolesRouter(
 
         // Delete role
         await roleService.deleteRole(roleId);
+        await auditLogger.logAdminAction(
+          "deleteRole",
+          actor.userId,
+          { roleId }, req.ip, req.headers["user-agent"],
+        );
 
         logger.info("Role deleted successfully", {
           component: "RolesRouter",
@@ -533,8 +558,10 @@ export function createRolesRouter(
   router.post(
     "/:id/permissions/:permissionId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("roles", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing assign permission to role request", {
         component: "RolesRouter",
         operation: "assignPermissionToRole",
@@ -551,6 +578,11 @@ export function createRolesRouter(
 
         // Assign permission to role
         await roleService.assignPermissionToRole(roleId, permissionId);
+        await auditLogger.logAdminAction(
+          "assignPermissionToRole",
+          actor.userId,
+          { roleId, permissionId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for all users affected by this role (Requirement 30.2)
         await permissionService.invalidateRolePermissionCache(roleId);
@@ -656,8 +688,10 @@ export function createRolesRouter(
   router.delete(
     "/:id/permissions/:permissionId",
     asyncHandler(authMiddleware),
-    asyncHandler(rbacMiddleware("roles", "write")),
+    asyncHandler(rbacMiddleware("rbac", "admin")),
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
+      const actor = req.user;
+      assert(actor, "Entitlement mutations require an authenticated audit actor");
       logger.info("Processing remove permission from role request", {
         component: "RolesRouter",
         operation: "removePermissionFromRole",
@@ -674,6 +708,11 @@ export function createRolesRouter(
 
         // Remove permission from role
         await roleService.removePermissionFromRole(roleId, permissionId);
+        await auditLogger.logAdminAction(
+          "removePermissionFromRole",
+          actor.userId,
+          { roleId, permissionId }, req.ip, req.headers["user-agent"],
+        );
 
         // Invalidate permission cache for all users affected by this role (Requirement 30.2)
         await permissionService.invalidateRolePermissionCache(roleId);

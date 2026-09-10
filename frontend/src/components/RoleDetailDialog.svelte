@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { authManager } from '../lib/auth.svelte';
   import { onMount } from 'svelte';
   import { get, post, del } from '../lib/api';
   import { showError, showSuccess } from '../lib/toast.svelte';
@@ -41,6 +42,8 @@
   interface PermissionsResponse {
     permissions: PermissionDTO[];
   }
+
+  const canManageEntitlements = $derived(authManager.hasPermission('rbac', 'admin'));
 
   // State
   let role = $state<RoleDetailDTO | null>(null);
@@ -102,7 +105,7 @@
   $effect(() => {
     if (isOpen && roleId) {
       loadRoleDetails();
-      loadAvailablePermissions();
+      if (canManageEntitlements) loadAvailablePermissions();
     }
   });
 
@@ -290,7 +293,7 @@
                 </div>
 
                 <!-- Add Permission (grouped dropdown) -->
-                {#if unassignedPermissions.length > 0}
+                {#if canManageEntitlements && unassignedPermissions.length > 0}
                   <div class="flex gap-2 mb-3">
                     <select
                       bind:value={selectedPermissionId}
@@ -303,7 +306,7 @@
                           <optgroup label={groupedUnassignedPermissions[categoryKey].label}>
                             {#each groupedUnassignedPermissions[categoryKey].permissions as permission (permission.id)}
                               <option value={permission.id}>
-                                {getResourceLabel(permission.resource)}:{getActionLabel(permission.action)} — {permission.description}
+                                {getResourceLabel(permission.resource)}:{getActionLabel(permission.action)}: {permission.description}
                               </option>
                             {/each}
                           </optgroup>
@@ -313,7 +316,7 @@
                     <button
                       type="button"
                       onclick={handleAddPermission}
-                      disabled={!selectedPermissionId || isSaving}
+                      disabled={!canManageEntitlements || !selectedPermissionId || isSaving}
                       class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 dark:focus:ring-offset-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       Assign
@@ -353,7 +356,7 @@
                                 <button
                                   type="button"
                                   onclick={() => handleRemovePermission(permission.id, formatPermissionName(permission))}
-                                  disabled={isSaving}
+                                  disabled={!canManageEntitlements || isSaving}
                                   class="ml-3 text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Remove permission"
                                 >
