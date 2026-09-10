@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync } from "fs";
+import { createHash } from "crypto";
 import { join } from "path";
 import type { DatabaseAdapter } from "./DatabaseAdapter";
 
@@ -17,6 +18,7 @@ interface Migration {
   id: string;
   name: string;
   appliedAt: string;
+  checksum: string | null;
 }
 
 /**
@@ -36,8 +38,10 @@ interface MigrationFile {
  * NNN_name.postgres.sql) and shared files (NNN_name.sql).
  *
  * Each migration is executed inside a transaction so a partial failure
- * leaves the schema unchanged. Migration files MUST NOT contain explicit
- * BEGIN/COMMIT — the runner provides the transaction.
+ * leaves the schema unchanged. Migration files must not contain transaction
+ * control statements; the runner provides the transaction. SQLite trigger
+ * migrations separate complete statements with standalone
+ * `-- pabawi:statement-breakpoint` lines to preserve their BEGIN/END bodies.
  *
  * A SQLite migration that rebuilds a table other tables reference (the only
  * way to change a column constraint in SQLite) can declare
@@ -75,7 +79,8 @@ export class MigrationRunner {
       CREATE TABLE IF NOT EXISTS migrations (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        applied_at TEXT NOT NULL
+        applied_at TEXT NOT NULL,
+        checksum TEXT
       )
     `;
     await this.db.execute(createTableSQL);
@@ -98,6 +103,9 @@ export class MigrationRunner {
         "PRAGMA table_info(migrations)"
       );
       const names = new Set(cols.map((c) => c.name));
+      if (!names.has("checksum")) {
+        await this.db.execute("ALTER TABLE migrations ADD COLUMN checksum TEXT");
+      }
       if (!names.has("applied_at") && names.has("appliedAt")) {
         await this.db.execute(
           "ALTER TABLE migrations RENAME COLUMN appliedAt TO applied_at"
@@ -109,9 +117,12 @@ export class MigrationRunner {
     // PostgreSQL
     const pgCols = await this.db.query<{ column_name: string }>(
       `SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'migrations'`
+        WHERE table_name = 'migrations' AND table_schema = current_schema()`
     );
     const pgNames = new Set(pgCols.map((c) => c.column_name));
+    if (!pgNames.has("checksum")) {
+      await this.db.execute("ALTER TABLE migrations ADD COLUMN checksum TEXT");
+    }
     if (!pgNames.has("applied_at") && pgNames.has("appliedat")) {
       await this.db.execute(
         "ALTER TABLE migrations RENAME COLUMN appliedat TO applied_at"
@@ -120,28 +131,14 @@ export class MigrationRunner {
   }
 
   /**
-   * Get the list of applied migration IDs.
-   *
-   * Only the `id` column is read so this query works regardless of the
-   * timestamp column's spelling on legacy installs.
-   */
-  private async getAppliedMigrationIds(): Promise<string[]> {
-    const rows = await this.db.query<{ id: string }>(
-      "SELECT id FROM migrations ORDER BY id"
-    );
-    return rows.map((r) => r.id);
-  }
-
-  /**
-   * Get full applied-migration records (used by getStatus only).
+   * Get applied migration records for status and content verification.
    *
    * Aliases the snake_case column to camelCase per the database convention
-   * (see .kiro/steering/database-conventions.md). This is only safe to call
-   * after migration 014 has aligned the column name.
+   * (see .kiro/steering/database-conventions.md). The tracking table is normalized before this query runs.
    */
   private async getAppliedMigrations(): Promise<Migration[]> {
     return this.db.query<Migration>(
-      `SELECT id, name, applied_at AS "appliedAt" FROM migrations ORDER BY id`
+      `SELECT id, name, applied_at AS "appliedAt", checksum FROM migrations ORDER BY id`
     );
   }
 
@@ -154,7 +151,8 @@ export class MigrationRunner {
    *   - NNN_name.postgres.sql — PostgreSQL-specific
    *
    * If both a shared file and a dialect-specific file exist for the same ID,
-   * the dialect-specific file takes precedence.
+   * the dialect-specific file takes precedence. Different logical names or
+   * numeric ID spellings for the same ID are rejected across all dialects.
    */
   private getMigrationFiles(): MigrationFile[] {
     const dialect = this.db.getDialect();
@@ -168,7 +166,7 @@ export class MigrationRunner {
       // Collect candidates grouped by migration ID
       const candidatesByID = new Map<
         string,
-        { shared?: MigrationFile; dialectSpecific?: MigrationFile }
+        { id: string; name: string; shared?: MigrationFile; dialectSpecific?: MigrationFile }
       >();
 
       for (const filename of files) {
@@ -182,6 +180,7 @@ export class MigrationRunner {
         }
 
         const id = match[1];
+        const name = match[2];
         const fileDialect = match[3] as "sqlite" | "postgres" | undefined;
 
         const migrationFile: MigrationFile = {
@@ -190,10 +189,12 @@ export class MigrationRunner {
           path: join(this.migrationsDir, filename),
         };
 
-        if (!candidatesByID.has(id)) {
-          candidatesByID.set(id, {});
+        const numericId = BigInt(id).toString();
+        const entry = candidatesByID.get(numericId) ?? { id, name };
+        candidatesByID.set(numericId, entry);
+        if (entry.id !== id || entry.name !== name) {
+          throw new Error(`Conflicting migration identity for ID ${id}: ${entry.name} and ${name}`);
         }
-        const entry = candidatesByID.get(id) ?? {};
 
         if (fileDialect === undefined) {
           // Shared file
@@ -214,7 +215,7 @@ export class MigrationRunner {
         }
       }
 
-      return result.sort((a, b) => a.id.localeCompare(b.id));
+      return result.sort((a, b) => BigInt(a.id) < BigInt(b.id) ? -1 : 1);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return [];
@@ -227,8 +228,20 @@ export class MigrationRunner {
    * Get pending migrations that haven't been applied yet
    */
   private async getPendingMigrations(): Promise<MigrationFile[]> {
-    const appliedIds = new Set(await this.getAppliedMigrationIds());
     const allMigrations = this.getMigrationFiles();
+    const applied = await this.getAppliedMigrations();
+    const filesById = new Map(allMigrations.map(file => [file.id, file]));
+    for (const record of applied) {
+      // Legacy records have no trustworthy content digest. Never backfill one
+      // from today's files and claim that it describes the SQL originally run.
+      if (record.checksum === null) continue;
+      const file = filesById.get(record.id);
+      if (file?.filename !== record.name ||
+          createHash("sha256").update(readFileSync(file.path, "utf8")).digest("hex") !== record.checksum) {
+        throw new Error(`Migration drift detected for ${record.id} (${record.name}). Restore the original migration file before continuing.`);
+      }
+    }
+    const appliedIds = new Set(applied.map(record => record.id));
     return allMigrations.filter((migration) => !appliedIds.has(migration.id));
   }
 
@@ -326,8 +339,10 @@ export class MigrationRunner {
           .map((line) => line.replace(/--.*$/, ""))
           .join("\n");
 
-        const statements = withoutComments
-          .split(";")
+        // Explicit boundaries preserve trigger bodies containing semicolons.
+        const statements = (/^-- pabawi:statement-breakpoint$/m.test(sql)
+          ? sql.split(/^-- pabawi:statement-breakpoint$/m)
+          : withoutComments.split(";"))
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
 
@@ -350,7 +365,7 @@ export class MigrationRunner {
         }
       }
 
-      await this.recordMigration(migration);
+      await this.recordMigration(migration, sql);
       await this.db.commit();
     } catch (error) {
       try {
@@ -372,11 +387,11 @@ export class MigrationRunner {
    * schema. Migration 014 ensures the column is named `applied_at` before
    * any INSERT happens in this session.
    */
-  private async recordMigration(migration: MigrationFile): Promise<void> {
+  private async recordMigration(migration: MigrationFile, sql: string): Promise<void> {
     const now = new Date().toISOString();
     await this.db.execute(
-      "INSERT INTO migrations (id, name, applied_at) VALUES (?, ?, ?)",
-      [migration.id, migration.filename, now]
+      "INSERT INTO migrations (id, name, applied_at, checksum) VALUES (?, ?, ?, ?)",
+      [migration.id, migration.filename, now, createHash("sha256").update(sql).digest("hex")]
     );
   }
 

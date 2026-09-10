@@ -1,3 +1,4 @@
+import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
  * Property-Based Tests for Console Audit Log Completeness
  *
@@ -163,6 +164,7 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
         await db.execute("DELETE FROM console_sessions");
 
         const session = buildConsoleSession(data);
+        await ensureConsoleUser(db, session.userId);
         await sessionManager.createSession(session);
 
         expect(auditLogger.calls.length).toBe(1);
@@ -198,6 +200,7 @@ describe("Feature: console-integration, Property 9: Audit log completeness for s
 
           // First create the session so terminateSession can find it
           const session = buildConsoleSession(data);
+          await ensureConsoleUser(db, session.userId);
           await sessionManager.createSession(session);
 
           // Clear audit calls from createSession

@@ -61,6 +61,7 @@ async function checkPermission(
   deps: McpDependencies,
   toolName: string,
 ): Promise<{ resource: string; action: string } | null> {
+  await deps.revalidateAuth?.();
   const perm = TOOL_PERMISSIONS[toolName];
   const allowed = await deps.permissionService.hasPermission(
     deps.mcpUserId, perm.resource, perm.action,

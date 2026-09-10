@@ -1,3 +1,4 @@
+import { SessionAuthorization } from "./SessionAuthorization";
 import type { Response } from "express";
 import type { StreamingConfig } from "../config/schema";
 import { LoggerService } from "./LoggerService";
@@ -36,6 +37,7 @@ export interface StreamingCallback {
 interface Subscriber {
   response: Response;
   connectedAt: string;
+  authorization?: SessionAuthorization;
 }
 
 /**
@@ -176,6 +178,13 @@ export class StreamingExecutionManager {
       connectedAt: new Date().toISOString(),
     };
 
+    if (response.req.revalidateAuth) {
+      subscriber.authorization = new SessionAuthorization(response.req.revalidateAuth, () => {
+        response.end();
+        this.unsubscribe(executionId, response);
+      });
+    }
+
     // Add to subscribers map
     if (!this.subscribers.has(executionId)) {
       this.subscribers.set(executionId, new Set());
@@ -221,6 +230,8 @@ export class StreamingExecutionManager {
       return;
     }
 
+    if (![...subscribers].some(subscriber => subscriber.response === response)) return;
+
     // Decrement per-IP connection counter
     const clientIp = response.req.ip ?? response.req.socket.remoteAddress ?? 'unknown';
     const currentCount = this.connectionCountByIp.get(clientIp) ?? 0;
@@ -233,6 +244,7 @@ export class StreamingExecutionManager {
     // Find and remove subscriber
     for (const subscriber of subscribers) {
       if (subscriber.response === response) {
+        subscriber.authorization?.close();
         subscribers.delete(subscriber);
         this.logger.debug(`Subscriber disconnected from execution ${executionId}`, {
           component: "StreamingExecutionManager",
@@ -295,6 +307,7 @@ export class StreamingExecutionManager {
 
     // Remove dead subscribers
     for (const deadSubscriber of deadSubscribers) {
+      deadSubscriber.authorization?.close();
       subscribers.delete(deadSubscriber);
     }
   }
@@ -310,7 +323,11 @@ export class StreamingExecutionManager {
     event: StreamingEvent,
   ): void {
     const eventData = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
-    subscriber.response.write(eventData);
+    if (subscriber.authorization) {
+      subscriber.authorization.run(() => { subscriber.response.write(eventData); });
+    } else {
+      subscriber.response.write(eventData);
+    }
   }
 
   /**
@@ -604,6 +621,7 @@ export class StreamingExecutionManager {
 
     for (const subscriber of subscribers) {
       try {
+        subscriber.authorization?.close();
         subscriber.response.end();
       } catch (error) {
         this.logger.error(`Failed to close connection for execution ${executionId}`, {

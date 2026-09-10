@@ -23,6 +23,7 @@ describe('AuthenticationService - Brute Force Protection', () => {
         username TEXT NOT NULL UNIQUE,
         email TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
+        session_version TEXT NOT NULL DEFAULT '0',
         first_name TEXT NOT NULL,
         last_name TEXT NOT NULL,
         is_active INTEGER NOT NULL DEFAULT 1,

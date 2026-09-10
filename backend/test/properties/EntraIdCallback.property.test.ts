@@ -217,7 +217,7 @@ describe('EntraIdService — Callback Validation Properties', () => {
     logger = createMockLogger();
 
     const mockAuthService = {
-      generateToken: vi.fn().mockResolvedValue('mock-access-token'),
+      generateTokenPair: vi.fn().mockResolvedValue({ token: 'mock-access-token', refreshToken: 'mock-refresh-token' }),
       generateRefreshToken: vi.fn().mockResolvedValue('mock-refresh-token'),
     } as unknown as AuthenticationService;
 

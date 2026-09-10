@@ -1,3 +1,5 @@
+import { initializeTestSchema } from "../helpers/schema";
+import { ensureConsoleUser } from "../helpers/consoleUser";
 /**
  * Property-Based Tests for Concurrent Session Limit Enforcement
  *
@@ -59,27 +61,6 @@ function makeSession(userId: string, index: number): ConsoleSession {
   };
 }
 
-const CREATE_TABLE_SQL = `
-  CREATE TABLE console_sessions (
-    id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    node_id TEXT NOT NULL,
-    provider TEXT NOT NULL,
-    transport TEXT NOT NULL,
-    state TEXT NOT NULL DEFAULT 'creating',
-    token TEXT,
-    token_created_at TEXT,
-    token_consumed INTEGER NOT NULL DEFAULT 0,
-    upstream_url TEXT,
-    started_at TEXT NOT NULL,
-    last_heartbeat_at TEXT,
-    terminated_at TEXT,
-    error_message TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    CONSTRAINT chk_state CHECK (state IN ('creating', 'active', 'terminated', 'failed')),
-    CONSTRAINT chk_transport CHECK (transport IN ('websocket-vnc', 'websocket-terminal'))
-  )
-`;
 
 describe("Feature: console-integration, Property 7: Concurrent session limit enforcement", () => {
   let db: SQLiteAdapter;
@@ -87,7 +68,7 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
   beforeEach(async () => {
     db = new SQLiteAdapter(":memory:");
     await db.initialize();
-    await db.execute(CREATE_TABLE_SQL);
+    await initializeTestSchema(db);
   });
 
   afterEach(async () => {
@@ -114,6 +95,7 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
           // Insert N active sessions for this user
           for (let i = 0; i < activeCount; i++) {
             const session = makeSession(userId, i);
+            await ensureConsoleUser(db, session.userId);
             await manager.createSession(session);
           }
 
@@ -146,6 +128,7 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
           // Insert active sessions for this user
           for (let i = 0; i < activeCount; i++) {
             const session = makeSession(userId, i);
+            await ensureConsoleUser(db, session.userId);
             await manager.createSession(session);
           }
 
@@ -187,12 +170,14 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
           // Insert active sessions
           for (let i = 0; i < activeCount; i++) {
             const session = makeSession(userId, i);
+            await ensureConsoleUser(db, session.userId);
             await manager.createSession(session);
           }
 
           // Insert terminated sessions (create then terminate)
           for (let i = 0; i < terminatedCount; i++) {
             const session = makeSession(userId, activeCount + i);
+            await ensureConsoleUser(db, session.userId);
             await manager.createSession(session);
             await manager.terminateSession(session.sessionId, "test-termination");
           }
@@ -236,12 +221,14 @@ describe("Feature: console-integration, Property 7: Concurrent session limit enf
           // Insert sessions for user A
           for (let i = 0; i < countA; i++) {
             const session = makeSession(userA, i);
+            await ensureConsoleUser(db, session.userId);
             await manager.createSession(session);
           }
 
           // Insert sessions for user B
           for (let i = 0; i < countB; i++) {
             const session = makeSession(actualUserB, i + 100);
+            await ensureConsoleUser(db, session.userId);
             await manager.createSession(session);
           }
 

@@ -13,7 +13,7 @@
  * Run with: npm test -- backend/test/performance/rbac-performance.test.ts --silent
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import { SQLiteAdapter } from '../../src/database/SQLiteAdapter';
 import type { DatabaseAdapter } from '../../src/database/DatabaseAdapter';
 import { AuthenticationService } from '../../src/services/AuthenticationService';
@@ -431,6 +431,7 @@ describe('RBAC Performance Tests', () => {
     });
 
     it('should track cache invalidation impact on performance', async () => {
+      const querySpy = vi.spyOn(db, 'queryOne');
       const iterations = 10;
       const uncachedDurations: number[] = [];
       const cachedDurations: number[] = [];
@@ -443,11 +444,14 @@ describe('RBAC Performance Tests', () => {
         );
         uncachedDurations.push(uncachedDuration);
 
-        // Cached check
+        // A cached grant still requires a database revision check.
+        querySpy.mockClear();
         const { duration: cachedDuration } = await measureTime(() =>
           permissionService.hasPermission(testUserId, 'perftest', 'read')
         );
         cachedDurations.push(cachedDuration);
+        expect(querySpy).toHaveBeenCalledTimes(1);
+        expect(querySpy.mock.calls[0][0]).toContain('authorization_state');
       }
 
       const uncachedStats = calculateStats(uncachedDurations);
@@ -462,10 +466,9 @@ describe('RBAC Performance Tests', () => {
       console.log(`      - P95: ${cachedStats.p95}ms`);
       console.log(`    Performance improvement: ${(uncachedStats.avg / cachedStats.avg).toFixed(2)}x`);
 
-      // Cached should be significantly faster (or both near-zero which is fine)
-      if (uncachedStats.avg > 0) {
-        expect(cachedStats.avg).toBeLessThan(uncachedStats.avg / 2);
-      }
+      querySpy.mockRestore();
+      expect(cachedStats.p95).toBeLessThan(PERFORMANCE_THRESHOLDS.CACHED_PERMISSION_CHECK);
+      expect(uncachedStats.p95).toBeLessThan(PERFORMANCE_THRESHOLDS.UNCACHED_PERMISSION_CHECK);
     });
   });
 

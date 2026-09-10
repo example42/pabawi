@@ -28,8 +28,8 @@ describe('Migration Integration Test', () => {
   it('should apply all migrations on initialization', async () => {
     const status = await dbService.getMigrationStatus();
 
-    // Should have applied all migrations (000 through 020, no 012 in source)
-    expect(status.applied).toHaveLength(20);
+    // Should have applied all migrations (000 through 025, no 012 in source)
+    expect(status.applied).toHaveLength(25);
     expect(status.applied[0].id).toBe('000');
     expect(status.applied[1].id).toBe('001');
     expect(status.applied[2].id).toBe('002');
@@ -50,7 +50,8 @@ describe('Migration Integration Test', () => {
     expect(status.applied[17].id).toBe('018');
     expect(status.applied[18].id).toBe('019');
     expect(status.applied[19].id).toBe('020');
-    expect(status.applied[18].id).toBe('019');
+    expect(status.applied[20].id).toBe('021');
+    expect(status.applied[21].id).toBe('022');
     expect(status.pending).toHaveLength(0);
   });
 
@@ -91,8 +92,8 @@ describe('Migration Integration Test', () => {
 
     const status = await dbService2.getMigrationStatus();
 
-    // Should still have 20 applied, 0 pending
-    expect(status.applied).toHaveLength(20);
+    // Should still have 25 applied, 0 pending
+    expect(status.applied).toHaveLength(25);
     expect(status.pending).toHaveLength(0);
 
     await dbService2.close();

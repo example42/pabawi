@@ -1608,13 +1608,13 @@ describe('Auth Routes - POST /api/auth/logout', () => {
         ['testuser']
       );
 
-      // Logout should still work (token is still valid, just revoke it)
+      // Deactivation already invalidated this credential.
       const response = await request(harness.use(app))
         .post('/api/auth/logout')
         .set('Authorization', `Bearer ${token}`)
-        .expect(200);
+        .expect(401);
 
-      expect(response.body.message).toBe('Logout successful');
+      expect(response.body.error).toBeDefined();
     });
   });
 
@@ -2042,6 +2042,8 @@ describe('Auth Routes - POST /api/auth/refresh', () => {
           userId: 'non-existent-user-id',
           username: 'nonexistent',
           type: 'refresh',
+          sessionVersion: '0',
+          jti: 'nonexistent-user-token',
           iat: Math.floor(Date.now() / 1000),
           exp: Math.floor(Date.now() / 1000) + 604800,
         },

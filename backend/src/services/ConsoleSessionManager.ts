@@ -1,3 +1,4 @@
+import { PermissionService } from "./PermissionService";
 import { randomBytes } from "crypto";
 
 import type { ConsoleConfig } from "../config/schema";
@@ -45,12 +46,28 @@ const SESSION_SELECT = `
  * Requirements: 2.1–2.8, 8.1, 8.2, 8.4, 8.6, 8.7
  */
 export class ConsoleSessionManager {
+  private permissionService: PermissionService;
+
   constructor(
     private db: DatabaseAdapter,
     private config: ConsoleConfig,
     private logger: LoggerService,
     private auditLogger: AuditLoggingService,
-  ) {}
+  ) {
+    this.permissionService = new PermissionService(db);
+  }
+
+  async assertSessionAuthorized(sessionId: string): Promise<void> {
+    const session = await this.db.queryOne<{ userId: string }>(
+      `SELECT c.user_id AS "userId" FROM console_sessions c JOIN users u ON u.id = c.user_id
+       WHERE c.id = ? AND c.state IN ('creating', 'active') AND u.is_active = 1
+         AND c.session_version = u.session_version`,
+      [sessionId],
+    );
+    if (!session || !await this.permissionService.hasPermission(session.userId, 'console', 'access')) {
+      throw new Error('Console session authorization revoked');
+    }
+  }
 
   /** Generate a cryptographically random session token (32 bytes → 64 hex chars). */
   generateToken(): string {
@@ -61,12 +78,12 @@ export class ConsoleSessionManager {
   async createSession(session: ConsoleSession): Promise<void> {
     const now = new Date().toISOString();
 
-    await this.db.execute(
+    const inserted = await this.db.execute(
       `INSERT INTO console_sessions (
         id, user_id, node_id, provider, transport, state,
         token, token_created_at, token_consumed, upstream_url,
-        started_at, last_heartbeat_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+        started_at, last_heartbeat_at, session_version
+      ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, session_version FROM users WHERE id = ? AND is_active = 1`,
       [
         session.sessionId,
         session.userId,
@@ -79,8 +96,11 @@ export class ConsoleSessionManager {
         null,
         session.startedAt,
         now,
+        session.userId,
       ],
     );
+
+    if (inserted.changes !== 1) throw new Error("User not found or inactive");
 
     await this.auditLogger.logAdminAction(
       "console_session_create",
@@ -129,6 +149,7 @@ export class ConsoleSessionManager {
       return null;
     }
 
+    await this.assertSessionAuthorized(row.id);
     return this.rowToSession(row);
   }
 
@@ -170,6 +191,7 @@ export class ConsoleSessionManager {
       return null;
     }
 
+    await this.assertSessionAuthorized(row.id);
     return this.rowToSession(row);
   }
 

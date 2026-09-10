@@ -1,3 +1,4 @@
+import { SessionAuthorization } from "./services/SessionAuthorization";
 import type { AWSPlugin } from "./integrations/aws/AWSPlugin";
 import type { AzurePlugin } from "./integrations/azure/AzurePlugin";
 import { mountInfrastructureRoutes } from "./routes/mountInfrastructureRoutes";
@@ -803,6 +804,7 @@ async function startServer(): Promise<Express> {
         interface McpSessionEntry {
           transport: InstanceType<typeof StreamableHTTPServerTransport>;
           createdAt: number;
+          authorization?: SessionAuthorization;
         }
 
         const mcpSessions = new Map<string, McpSessionEntry>();
@@ -812,6 +814,7 @@ async function startServer(): Promise<Express> {
           for (const [id, session] of mcpSessions) {
             if (now - session.createdAt > MCP_SESSION_TTL_MS) {
               mcpSessions.delete(id);
+              session.authorization?.close();
               session.transport.close();
             }
           }
@@ -829,6 +832,7 @@ async function startServer(): Promise<Express> {
           configService.getMcpAuthToken(),
           mcpUserId,
           authMiddleware,
+          databaseService.getAdapter(),
         );
 
         app.post("/mcp", mcpAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -848,11 +852,15 @@ async function startServer(): Promise<Express> {
             transport = new StreamableHTTPServerTransport({
               sessionIdGenerator: (): string => randomUUID(),
               onsessioninitialized: (id: string): void => {
-                mcpSessions.set(id, { transport: transport!, createdAt: Date.now() }); // eslint-disable-line @typescript-eslint/no-non-null-assertion
-                transport!.onclose = (): void => { mcpSessions.delete(id); }; // eslint-disable-line @typescript-eslint/no-non-null-assertion
+                const authorization = req.revalidateAuth ? new SessionAuthorization(req.revalidateAuth, () => {
+                  mcpSessions.delete(id);
+                  transport?.close();
+                }) : undefined;
+                mcpSessions.set(id, { transport: transport!, createdAt: Date.now(), authorization }); // eslint-disable-line @typescript-eslint/no-non-null-assertion
+                transport!.onclose = (): void => { authorization?.close(); mcpSessions.delete(id); }; // eslint-disable-line @typescript-eslint/no-non-null-assertion
               },
             });
-            const sessionServer = createMcpServer(mcpDeps);
+            const sessionServer = createMcpServer({ ...mcpDeps, revalidateAuth: req.revalidateAuth });
             await sessionServer.connect(transport);
           } else {
             res.status(400).json({ error: "Invalid or missing session" });
@@ -878,6 +886,7 @@ async function startServer(): Promise<Express> {
             const session = mcpSessions.get(sessionId);
             mcpSessions.delete(sessionId);
             if (session) {
+              session.authorization?.close();
               session.transport.close();
             }
           }

@@ -67,6 +67,8 @@ export function createAuthMiddleware(db: DatabaseAdapter, jwtSecret?: string) {
         exp: payload.exp
       };
 
+      req.revalidateAuth = async (): Promise<void> => { await authService.verifyToken(token); };
+
       // Continue to next middleware
       next();
     } catch (error) {
