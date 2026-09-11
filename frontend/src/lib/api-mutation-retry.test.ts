@@ -19,7 +19,7 @@ import { defaultMaxRetriesFor, del, get, newIdempotencyKey, post, put } from './
 import { authManager } from './auth.svelte';
 
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+globalThis.fetch = mockFetch;
 
 const localStorageMock = (() => {
   let store: Record<string, string> = {};

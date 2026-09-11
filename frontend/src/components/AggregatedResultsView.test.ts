@@ -721,8 +721,8 @@ describe('AggregatedResultsView Component', () => {
 
       const createObjectURLMock = vi.fn(() => 'blob:mock-url');
       const revokeObjectURLMock = vi.fn();
-      global.URL.createObjectURL = createObjectURLMock;
-      global.URL.revokeObjectURL = revokeObjectURLMock;
+      globalThis.URL.createObjectURL = createObjectURLMock;
+      globalThis.URL.revokeObjectURL = revokeObjectURLMock;
 
       render(AggregatedResultsView, {
         props: {
@@ -754,8 +754,8 @@ describe('AggregatedResultsView Component', () => {
 
       const createObjectURLMock = vi.fn(() => 'blob:mock-url');
       const revokeObjectURLMock = vi.fn();
-      global.URL.createObjectURL = createObjectURLMock;
-      global.URL.revokeObjectURL = revokeObjectURLMock;
+      globalThis.URL.createObjectURL = createObjectURLMock;
+      globalThis.URL.revokeObjectURL = revokeObjectURLMock;
 
       render(AggregatedResultsView, {
         props: {
@@ -786,7 +786,7 @@ describe('AggregatedResultsView Component', () => {
       vi.mocked(getBatchStatus).mockResolvedValue(mockBatchStatusSuccess);
 
       const createObjectURLMock = vi.fn(() => 'blob:mock-url');
-      global.URL.createObjectURL = createObjectURLMock;
+      globalThis.URL.createObjectURL = createObjectURLMock;
 
       render(AggregatedResultsView, {
         props: {
@@ -1186,7 +1186,7 @@ describe('AggregatedResultsView Component', () => {
       vi.mocked(getBatchStatus).mockResolvedValue(mockBatchStatusWithFailures);
 
       const createObjectURLMock = vi.fn(() => 'blob:mock-url');
-      global.URL.createObjectURL = createObjectURLMock;
+      globalThis.URL.createObjectURL = createObjectURLMock;
 
       render(AggregatedResultsView, {
         props: {

@@ -584,6 +584,65 @@ already uses for discovery, so the generic path remains machine- and
 script-facing. Azure gained no destroy capability. No live provider, production
 database, publication or deployment was exercised. A18 is the next action.
 
+**A18 / I10, 2026-09-11: implemented and verified.** The gates that mattered
+existed but nothing ran them. Three of I10's four acceptance conditions were
+already satisfied by earlier actions: the assembled-app authorization matrix
+(A03), real-file populated migration fixtures for both dialects (A04), and fake
+upstreams proving console and execution lifecycle behaviour (A13/A15/A16). The
+migration and dialect work only ran when a maintainer happened to have a
+PostgreSQL server reachable, so CI now runs the backend suite against a
+PostgreSQL 15 service as well as SQLite.
+
+The fourth condition had nothing behind it. `eslint` ignores `**/*.svelte` and
+`tsc --noEmit` never parses component markup, so a type error inside a component
+passed lint, both typechecks and the build. `npm run check:components` runs
+`svelte-check` and compares the result with a recorded baseline keyed by file
+and message rather than line number: the 163 errors the components already carry
+are tolerated and anything else fails. Clearing them is a separate change
+touching around fifty components with no behavioural coverage, which is not what
+this action is for; the baseline makes the debt visible and stops it growing.
+
+The E2E suite was a single unauthenticated smoke test running on whatever
+database and inventory the developer happened to have. It now isolates the app
+under test (scratch database, `NODE_ENV=test` so no `.env` is read, Bolt
+unconfigured, one queue slot) and seeds an administrator through the API. The
+inventory is two SSH hosts that are unreachable in two different ways: one
+refuses the connection in about a millisecond, giving a deterministic terminal
+failure, and one points at a port a test opens itself with a listener that
+accepts and then never writes, so the SSH handshake waits for a banner that
+never arrives and work stays running for exactly as long as the test holds it.
+That is what makes a queued execution observable without a race. Three
+authenticated tests assert prompt admission, that a failed run is displayed as
+failed rather than as success, and that a queued execution cancelled from the UI
+is reported cancelled. The suite runs in about six seconds and is a CI job.
+
+The pre-commit secret scan excludes `docs/`, `backend/test/`, frontend test
+files and `e2e/`, so a credential under any of those paths passed every local
+check. A CI job scans the whole tracked tree against the reviewed baseline,
+which grew from 32 to 63 files; every added finding was read and is a test
+credential, a chart placeholder or a documentation example.
+
+A18 validation: five probes confirmed each gate behaves as claimed. A
+deliberate type error in a component passed `eslint` and both `tsc --noEmit`
+runs and was caught only by the component gate. An AWS-shaped key added under
+`docs/internal/` was caught by the secret scan and passed the pre-commit
+exclusion. The three authenticated E2E assertions were each inverted and each
+went red, so none of them is the false green that got the previous flow suites
+deleted. A spec whose name matches no project convention was added and confirmed
+to still run, because a suite that silently does not run is the same false
+green. The backend suite passed 3,708 tests on SQLite and 3,762 against a
+disposable PostgreSQL 15 database; 1,042 frontend tests, lint, both typechecks,
+the component gate and the build passed, and the E2E suite passed from an empty
+database.
+
+Not in scope for A18: component *lint* (`eslint-plugin-svelte` and un-ignoring
+`**/*.svelte`) would surface a fresh error class on top of the 163 recorded
+type errors and is left for the cleanup that clears them. Console lifecycle has
+no browser test: it needs a provider, and its fake-upstream coverage lives in
+the backend suite. Helm installation is still only rendered and linted, not
+installed, in CI. The new CI jobs are verified by their local equivalents; they
+have not yet run on a GitHub runner. A19 is the next action.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.
@@ -907,6 +966,10 @@ SQLite permits only one replica, but [values.yaml](../../charts/pabawi/values.ya
 **Acceptance:** clean external-PostgreSQL installation succeeds; SQLite upgrades avoid overlapping writers; multi-replica claims require tests for cross-pod tickets, session continuation, execution cancellation, aggregate capacity, rollout and node failure.
 
 ### I10. P2: Quality gates miss the relevant integration boundaries
+
+**Resolved by A18 on 2026-09-11 for the gating, with the recorded component
+backlog outstanding.** The following describes the original finding;
+implementation and validation are recorded above.
 
 **Source-confirmed.** [eslint.config.js](../../eslint.config.js), line 48, ignores Svelte components. Frontend lint targets TypeScript, CI runs `tsc --noEmit`, and Vite build does not provide Svelte semantic checking. No component checker is configured. Passing lint/type checks therefore do not establish that component code follows the same rules.
 

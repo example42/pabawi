@@ -1,0 +1,28 @@
+# SSH inventory fixture for the E2E suite.
+#
+# Both hosts are deliberately unreachable, in two different ways, so the suite
+# stays hermetic: it never touches infrastructure, and every run fails the same
+# way. Do not point these at anything real.
+
+# A closed port on the loopback interface: the connection is refused
+# immediately, so an execution against it reaches a terminal failure in
+# milliseconds. This is the target for admission and failure-display tests.
+# Groups: e2e
+Host e2e-refused
+  HostName 127.0.0.1
+  Port 1
+  User e2e
+
+# A port the test opens itself with a TCP listener that accepts the connection
+# and then says nothing, so the SSH handshake waits for a banner that never
+# arrives and the run stays busy until its timeout. This is the target for
+# tests that need work still running, such as cancelling the execution queued
+# behind it. Nothing listens here unless a test is running.
+#
+# It is addressed as "localhost" while the refused host uses the literal
+# 127.0.0.1, so node linking sees two hosts rather than merging them into one.
+# Groups: e2e
+Host e2e-stalled
+  HostName localhost
+  Port 45001
+  User e2e

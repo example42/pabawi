@@ -7,7 +7,7 @@ import { authManager, type AuthResponse, type UserDTO } from './auth.svelte';
 
 // Mock fetch
 const fetchMock = vi.fn();
-global.fetch = fetchMock;
+globalThis.fetch = fetchMock;
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -216,7 +216,7 @@ describe('AuthManager', () => {
 
       await authManager.logout();
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         '/api/auth/logout',
         expect.objectContaining({
           method: 'POST',

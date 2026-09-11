@@ -13,7 +13,7 @@ import ProxmoxLXCProvisionForm from './ProxmoxLXCProvisionForm.svelte';
 const mockFetch = vi.fn();
 
 beforeEach(() => {
-  global.fetch = mockFetch;
+  globalThis.fetch = mockFetch;
   vi.clearAllMocks();
 
   mockFetch.mockImplementation((url: string) => {

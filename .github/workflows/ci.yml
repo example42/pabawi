@@ -39,6 +39,9 @@ jobs:
         run: npx tsc --noEmit
         working-directory: ./frontend
 
+      - name: Check Svelte components
+        run: npm run check:components
+
       - name: Run unit tests
         run: npm test -- --silent
 
@@ -47,6 +50,69 @@ jobs:
 
       - name: Build frontend
         run: npm run build:frontend
+
+  postgres-suite:
+    # The migration, transaction and upgrade tests that only run when a real
+    # PostgreSQL server is reachable. Without this job they are skipped
+    # everywhere except a maintainer's laptop (finding I10).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: pabawi
+          POSTGRES_PASSWORD: pabawi
+          POSTGRES_DB: pabawi
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U pabawi"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - run: npm ci --ignore-scripts
+      - run: npm run install:approved
+      - name: Run the backend suite against PostgreSQL
+        run: npx vitest run --silent
+        working-directory: ./backend
+        env:
+          TEST_DATABASE_URL: postgres://pabawi:pabawi@localhost:5432/pabawi
+
+  e2e:
+    # The assembled app, served as it ships, against the hermetic SSH fixture.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - run: npm ci --ignore-scripts
+      - run: npm run install:approved
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+
+  secret-scan:
+    # The pre-commit hook excludes docs, tests and e2e fixtures. This job scans
+    # them too, so a credential committed under an excluded path is still
+    # caught before merge (finding I10).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install detect-secrets==1.5.0
+      - name: Scan the tracked tree against the reviewed baseline
+        run: bash scripts/quality/secret-scan.sh
 
   dependency-audit:
     runs-on: ubuntu-latest

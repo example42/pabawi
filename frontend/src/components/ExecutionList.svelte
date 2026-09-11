@@ -136,6 +136,7 @@
             class="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
             role="button"
             tabindex="0"
+            data-testid="execution-row-{execution.id}"
             onclick={() => handleExecutionClick(execution)}
             onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleExecutionClick(execution); } }}
           >
@@ -183,7 +184,7 @@
                 </div>
               </td>
             {/if}
-            <td class="whitespace-nowrap px-6 py-4 text-sm">
+            <td class="whitespace-nowrap px-6 py-4 text-sm" data-testid="execution-status">
               <StatusBadge status={execution.status} size="sm" />
             </td>
             <td class="whitespace-nowrap px-6 py-4 text-sm">

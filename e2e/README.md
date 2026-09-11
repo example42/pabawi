@@ -1,12 +1,16 @@
 # End-to-End Tests
 
-One Playwright suite, `setup-check.spec.ts`, covering the unauthenticated
-contract: the server serves the SPA, the auth guard redirects to the sign-in
-form, and protected API routes answer 401.
+Three Playwright projects against the assembled app:
 
-That is the whole suite on purpose. It is hermetic — no seeded user, no
-database fixture, no reachable Bolt/PuppetDB inventory — so it runs anywhere
-in about a second.
+- `setup` — seeds the administrator and saves its session.
+- `anonymous` — the unauthenticated contract: the SPA is served, the auth guard
+  redirects to the sign-in form, protected API routes answer 401.
+- `chromium` — authenticated execution flows: admission, failure display and
+  cancellation of queued work.
+
+Everything is hermetic. The app under test runs on a scratch database with an
+SSH inventory of two deliberately unreachable hosts, so the suite touches no
+infrastructure and finishes in about six seconds.
 
 ## Running
 
@@ -21,20 +25,11 @@ Playwright starts the app itself (`npm run dev:fullstack` on port 3000). The
 browser binary is pinned to the installed `playwright-core`; if you see
 `Executable doesn't exist`, run `npx playwright install chromium`.
 
+Delete `e2e/.auth` to start from an empty database.
+
 ## Adding tests
 
-Two rules, both learned the hard way — the four flow suites that used to live
-here (`inventory-to-*`, `executions-page`) were deleted because they broke both:
-
-1. **Assert unconditionally.** No `if (await thing.isVisible()) { … } else { … }`.
-   A conditional around an assertion produces a test that reports success on the
-   branch where it checked nothing. Five such tests passed for months while the
-   browser sat on the login screen.
-
-2. **Select on contracts, not fragments.** Use `getByRole`, `getByLabel`,
-   `getByPlaceholder`, or a `data-testid` you add to the component. Never
-   `[class*="node"]` — substring matching on utility classes matches anything
-   and pins nothing.
-
-Anything past the login screen needs authentication and a hermetic backend
-first. See [docs/internal/e2e-testing.md](../docs/internal/e2e-testing.md).
+Read [docs/internal/e2e-testing.md](../docs/internal/e2e-testing.md) first. It
+documents the fixture hosts and the four rules, all of which were learned the
+hard way: the flow suites that used to live here were deleted for breaking
+them.

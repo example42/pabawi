@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "check": "node ../scripts/quality/svelte-check-gate.mjs",
+    "check:update": "node ../scripts/quality/svelte-check-gate.mjs --update",
     "preview": "vite preview",
     "test": "vitest --run --passWithNoTests",
     "test:watch": "vitest",
@@ -28,6 +30,7 @@
     "fast-check": "^4.6.0",
     "jsdom": "^27.4.0",
     "postcss": "^8.4.38",
+    "svelte-check": "^4.7.6",
     "tailwindcss": "^3.4.3",
     "typescript": "^5.4.5",
     "vite": "^7.2.2",

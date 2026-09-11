@@ -64,6 +64,32 @@
 **Action required:** custom roles do not receive the new permissions
 automatically. See [docs/upgrading.md](docs/upgrading.md#upgrading-to-150).
 
+### Quality gates
+
+- **Svelte components are type-checked.** `eslint` ignores `**/*.svelte` and
+  `tsc --noEmit` never sees component markup, so a type error inside a
+  component passed every gate and reached deployment (assessment finding I10).
+  `npm run check:components` runs `svelte-check` and compares the result with a
+  recorded baseline: the 163 existing errors are tolerated, anything new fails.
+  Refresh the baseline with `npm run check:update --workspace=frontend` after
+  fixing some.
+- **CI runs the gates that only existed locally.** New jobs run the backend
+  suite against a real PostgreSQL 15 service (the migration, transaction and
+  populated-upgrade tests skip themselves without one), the Playwright suite,
+  and a secret scan over the whole tracked tree.
+- **The secret scan covers the paths the pre-commit hook excludes** — docs,
+  backend tests, frontend test files and the e2e fixtures. Run it with
+  `bash scripts/quality/secret-scan.sh`; the reviewed baseline grew from 32 to
+  63 files as a result, all of them test credentials, chart placeholders and
+  documentation examples.
+- **The E2E suite covers authenticated flows.** It was one unauthenticated
+  smoke test. It now seeds an administrator, and asserts that work is admitted
+  promptly, that a run which failed is displayed as failed, and that a queued
+  execution cancelled from the UI is reported as cancelled. The app under test
+  is isolated from the developer's environment (scratch database, no Bolt, an
+  SSH inventory of two deliberately unreachable hosts) and the whole suite runs
+  in about six seconds.
+
 ### Fixed: database migrations
 
 - **Migration 017 no longer destroys user relationships on SQLite**
