@@ -1,8 +1,12 @@
 import type { PuppetRunHistoryService } from "../../src/services/PuppetRunHistoryService";
 import { createAuthRouter } from "../../src/routes/auth";
 import { mountInfrastructureRoutes } from "../../src/routes/mountInfrastructureRoutes";
-import { createInventoryRouter } from "../../src/routes/inventory";
 import { createSourceAuthorization } from "../../src/middleware/sourceAuthorization";
+import { provisionLifecycleServiceUser } from "../../src/services/LifecycleServiceUser";
+import { createLifecycleAuthMiddleware } from "../../src/middleware/lifecycleAuthMiddleware";
+import { RoleService } from "../../src/services/RoleService";
+import { PermissionService } from "../../src/services/PermissionService";
+import { LoggerService } from "../../src/services/LoggerService";
 import type { InformationSourcePlugin } from "../../src/integrations/types";
 import type { BoltService } from "../../src/integrations/bolt/BoltService";
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
@@ -41,6 +45,7 @@ import type { PuppetserverService } from "../../src/integrations/puppetserver/Pu
  */
 
 const JWT_SECRET = "route-authorization-test-secret-32-chars"; // pragma: allowlist secret
+const LIFECYCLE_TOKEN = "route-authorization-lifecycle-token-32c"; // pragma: allowlist secret
 
 /** Built-in roles seeded by migrations 002 / 007 / 013 / 019 / 020. */
 const ROLE_IDS = {
@@ -83,6 +88,7 @@ let harness: HttpHarness;
 let databaseService: DatabaseService;
 let app: Express;
 let spies: Spies;
+let lifecycleServiceUserId: string;
 const restrictedInventory = vi.fn().mockResolvedValue([{ id: "private", name: "private", uri: "ssh://private", transport: "ssh" }]);
 const restrictedFacts = vi.fn().mockResolvedValue({ secret: "restricted-canary" });
 const createReExecution = vi.fn().mockResolvedValue("new-exec");
@@ -163,14 +169,26 @@ beforeAll(async () => {
   const rbacMiddleware: PermissionMiddlewareFactory = (resource, action) =>
     asyncHandler(rawRbac(resource, action));
 
+  // Capabilities mirror the real plugins: the generic lifecycle routes classify
+  // and dispatch actions from what the provider advertises.
   const awsPlugin = {
     getInventory: spies.awsInventory,
     executeAction: spies.awsAction,
+    listCapabilities: () => [
+      { name: "start", description: "" }, { name: "stop", description: "" },
+      { name: "reboot", description: "" }, { name: "terminate", description: "" },
+    ],
+    listProvisioningCapabilities: () => [{ name: "create_instance", description: "", operation: "create" }],
   } as unknown as AWSPlugin;
 
   const azurePlugin = {
     getInventory: spies.azureInventory,
     executeAction: spies.azureAction,
+    listCapabilities: () => [
+      { name: "start", description: "" }, { name: "stop", description: "" },
+      { name: "restart", description: "" }, { name: "deallocate", description: "" },
+    ],
+    listProvisioningCapabilities: () => [{ name: "create_vm", description: "", operation: "create" }],
   } as unknown as AzurePlugin;
 
   const proxmoxIntegration = {
@@ -180,7 +198,15 @@ beforeAll(async () => {
     provisionVM: spies.proxmoxProvisionVm,
     deleteVM: spies.proxmoxDestroy,
     getLastHealthCheck: () => ({ healthy: true }),
-    listProvisioningCapabilities: () => [],
+    listCapabilities: () => [
+      { name: "start", description: "" }, { name: "stop", description: "" },
+      { name: "shutdown", description: "" }, { name: "reboot", description: "" },
+    ],
+    listProvisioningCapabilities: () => [
+      { name: "create_vm", description: "", operation: "create" },
+      { name: "destroy_vm", description: "", operation: "destroy" },
+      { name: "destroy_lxc", description: "", operation: "destroy" },
+    ],
   };
 
   const hieraPlugin = {
@@ -235,14 +261,21 @@ beforeAll(async () => {
   await readManager.getAggregatedInventory();
   const authorizeSources = createSourceAuthorization(db, readManager);
 
+  // The machine credential for the generic lifecycle routes, assembled exactly
+  // as server.ts does: the static token authenticates to the provisioned
+  // lifecycle-service account, which is then authorized by the same RBAC
+  // middleware as any user (finding I08).
+  const { userId: lifecycleUserId } = await provisionLifecycleServiceUser(
+    userService, new RoleService(db), new PermissionService(db), new LoggerService(),
+  );
+  lifecycleServiceUserId = lifecycleUserId;
+  const inventoryAuthMiddleware = createLifecycleAuthMiddleware(
+    LIFECYCLE_TOKEN, lifecycleUserId, authMiddleware, db,
+  );
+
   app = express();
   app.use(express.json());
   app.use("/api/auth", createAuthRouter(databaseService, createDefaultContainer()));
-  const lifecycleContainer = createDefaultContainer();
-  lifecycleContainer.register("config", {
-    getLifecycleToken: () => tokens.get("boltOnly"),
-  } as unknown as ReturnType<typeof lifecycleContainer.resolve<"config">>);
-  app.use("/legacy-inventory", authMiddleware, createInventoryRouter({} as BoltService, authorizeSources, rbacMiddleware, readManager, { allowDestructiveActions: true }, lifecycleContainer));
   mountInfrastructureRoutes(app, {
     db, integrationManager, boltService: {} as BoltService,
     executionRepository, streamingManager,
@@ -252,7 +285,7 @@ beforeAll(async () => {
     commandWhitelistService: new BoltCommandWhitelistService({ allowAll: true, whitelist: [], matchMode: "exact" }),
     container: createDefaultContainer(),
     config: { provisioning: { allowDestructiveActions: true }, packageTasks: [] },
-    authMiddleware, rbacMiddleware,
+    authMiddleware, inventoryAuthMiddleware, rbacMiddleware,
     rateLimitMiddleware: (_req, _res, next) => { next(); },
   });
 });
@@ -483,12 +516,170 @@ describe("S01: stored execution tool authorization", () => {
 
 describe("S01: generic lifecycle retains provider authorization", () => {
   for (const action of ["start", "provision", "create_instance", "terminate"]) {
-    it(`denies AWS ${action} to a Bolt-only caller even with the configured lifecycle credential`, async () => {
-      const response = await request(harness.use(app)).post("/legacy-inventory/aws:eu-west-1:i-test/action")
+    it(`denies AWS ${action} to a Bolt-only caller`, async () => {
+      spies.awsAction.mockClear();
+      const response = await request(harness.use(app)).post("/api/inventory/aws:eu-west-1:i-test/action")
         .set("Authorization", `Bearer ${String(tokens.get("boltOnly"))}`).send({ action });
       expect(response.status).toBe(403);
+      expect(spies.awsAction).not.toHaveBeenCalled();
     });
   }
+});
+
+
+/**
+ * Finding I08: the generic lifecycle routes demanded
+ * `Authorization: Bearer <PABAWI_LIFECYCLE_TOKEN>` in the same header their
+ * mount already required a JWT in, so neither credential could satisfy both
+ * checks and every production request was refused. The token is now an
+ * alternative credential authenticating the provisioned lifecycle-service
+ * account; RBAC is the single authorization authority for both principals.
+ */
+describe("I08: generic lifecycle credential model", () => {
+  const node = "aws:eu-west-1:i-test";
+
+  it("authorizes a user JWT holding aws:lifecycle, with no machine credential involved", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).post(`/api/inventory/${node}/action`)
+      .set("Authorization", `Bearer ${String(tokens.get("awsOnly"))}`).send({ action: "stop" });
+    expect(response.status).toBe(200);
+    expect(spies.awsAction).toHaveBeenCalledOnce();
+  });
+
+  it("denies destruction to a JWT holding only aws:lifecycle", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).delete(`/api/inventory/${node}`)
+      .set("Authorization", `Bearer ${String(tokens.get("awsOnly"))}`);
+    expect(response.status).toBe(403);
+    expect(spies.awsAction).not.toHaveBeenCalled();
+  });
+
+  it("authorizes destruction for a JWT holding aws:destroy", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).delete(`/api/inventory/${node}`)
+      .set("Authorization", `Bearer ${String(tokens.get("provisioner"))}`);
+    expect(response.status).toBe(200);
+    expect(spies.awsAction).toHaveBeenCalledWith(expect.objectContaining({ action: "terminate" }));
+  });
+
+  it("accepts the machine credential with no JWT and dispatches as lifecycle-service", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).post(`/api/inventory/${node}/action`)
+      .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`).send({ action: "stop" });
+    expect(response.status).toBe(200);
+    expect(spies.awsAction).toHaveBeenCalledOnce();
+  });
+
+  it("accepts the machine credential on destruction", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).delete(`/api/inventory/${node}`)
+      .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`);
+    expect(response.status).toBe(200);
+    expect(spies.awsAction).toHaveBeenCalledOnce();
+  });
+
+  it("denies the machine credential an action its role does not grant", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).post(`/api/inventory/${node}/action`)
+      .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`).send({ action: "create_instance" });
+    expect(response.status).toBe(403);
+    expect(spies.awsAction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a wrong machine credential", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).post(`/api/inventory/${node}/action`)
+      .set("Authorization", "Bearer not-the-lifecycle-token-32-chars-x").send({ action: "stop" });
+    expect(response.status).toBe(401);
+    expect(spies.awsAction).not.toHaveBeenCalled();
+  });
+
+  it("rejects a request carrying no credential at all", async () => {
+    const response = await request(harness.use(app)).post(`/api/inventory/${node}/action`).send({ action: "stop" });
+    expect(response.status).toBe(401);
+  });
+
+  it("does not authenticate any other mount", async () => {
+    for (const call of [
+      request(harness.use(app)).post("/api/integrations/aws/lifecycle").send({ instanceId: "i-test", action: "stop" }),
+      request(harness.use(app)).get("/api/executions"),
+      request(harness.use(app)).post("/api/nodes/public/command").send({ command: "whoami", tool: "bolt" }),
+    ]) {
+      const response = await call.set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`);
+      expect(response.status).toBe(401);
+    }
+  });
+
+  it("holds exactly the role its scope is documented as", async () => {
+    const roles = await new UserService(databaseService.getAdapter(), new AuthenticationService(databaseService.getAdapter(), JWT_SECRET))
+      .getUserRoles(lifecycleServiceUserId);
+    expect(roles.map(r => r.name)).toEqual(["Lifecycle Service"]);
+  });
+
+  it("reads only the sources that role grants", async () => {
+    // The default role new accounts receive (Viewer) would widen the
+    // credential past its documented scope: bolt-sourced inventory is not part
+    // of it.
+    const response = await request(harness.use(app)).get("/api/inventory")
+      .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`);
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(response.body)).toContain("private");
+    expect(JSON.stringify(response.body)).not.toContain("public");
+  });
+
+  it("stops accepting the machine credential once the account is deactivated", async () => {
+    const db = databaseService.getAdapter();
+    await db.execute("UPDATE users SET is_active = 0 WHERE id = ?", [lifecycleServiceUserId]);
+    try {
+      const response = await request(harness.use(app)).post(`/api/inventory/${node}/action`)
+        .set("Authorization", `Bearer ${LIFECYCLE_TOKEN}`).send({ action: "stop" });
+      expect(response.status).toBe(401);
+    } finally {
+      await db.execute("UPDATE users SET is_active = 1 WHERE id = ?", [lifecycleServiceUserId]);
+    }
+  });
+});
+
+
+describe("I08: one action classification for discovery and execution", () => {
+  it("advertises Proxmox destruction as destructive and gates it on proxmox:destroy", async () => {
+    const listed = await request(harness.use(app)).get("/api/inventory/proxmox:pve:100/lifecycle-actions")
+      .set("Authorization", `Bearer ${String(tokens.get("operator"))}`);
+    expect(listed.status).toBe(200);
+    const destroy = (listed.body as { actions: { name: string; destructive: boolean }[] }).actions
+      .find(a => a.name === "destroy_vm");
+    expect(destroy?.destructive).toBe(true);
+
+    spies.proxmoxAction.mockClear();
+    const denied = await request(harness.use(app)).post("/api/inventory/proxmox:pve:100/action")
+      .set("Authorization", `Bearer ${String(tokens.get("operator"))}`).send({ action: "destroy_vm" });
+    expect(denied.status).toBe(403);
+    expect(spies.proxmoxAction).not.toHaveBeenCalled();
+  });
+
+  it("refuses an action the provider does not advertise", async () => {
+    spies.awsAction.mockClear();
+    const response = await request(harness.use(app)).post("/api/inventory/aws:eu-west-1:i-test/action")
+      .set("Authorization", `Bearer ${String(tokens.get("admin"))}`).send({ action: "suspend" });
+    expect(response.status).toBe(400);
+    expect(spies.awsAction).not.toHaveBeenCalled();
+  });
+
+  it("refuses destruction for a provider that advertises no destroy capability", async () => {
+    spies.azureAction.mockClear();
+    const response = await request(harness.use(app)).delete("/api/inventory/azure:sub:rg:vm1")
+      .set("Authorization", `Bearer ${String(tokens.get("admin"))}`);
+    expect(response.status).toBe(501);
+    expect(spies.azureAction).not.toHaveBeenCalled();
+  });
+
+  it("dispatches an Azure lifecycle action the provider does advertise", async () => {
+    spies.azureAction.mockClear();
+    const response = await request(harness.use(app)).post("/api/inventory/azure:sub:rg:vm1/action")
+      .set("Authorization", `Bearer ${String(tokens.get("operator"))}`).send({ action: "deallocate" });
+    expect(response.status).toBe(200);
+    expect(spies.azureAction).toHaveBeenCalledOnce();
+  });
 });
 
 

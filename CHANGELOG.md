@@ -18,6 +18,26 @@
   keys include the current source scope.
 - Stream tickets can authenticate only GET requests to their execution's stream
   endpoint, including the `/api/streaming` alias.
+- **The generic lifecycle endpoints work again, with one credential model**
+  (assessment finding I08). `POST /api/inventory/:id/action` and
+  `DELETE /api/inventory/:id` demanded `PABAWI_LIFECYCLE_TOKEN` in the same
+  `Authorization` header their mount already required a JWT in, so no caller
+  could satisfy both checks: an administrator's request was refused with 401
+  and the token itself was refused as an invalid JWT. The token is now an
+  alternative credential, matched ahead of JWT verification and authenticating
+  as a provisioned `lifecycle-service` account; RBAC (`<provider>:read` plus
+  the action's class) is the single authorization authority for both
+  principals. Scripts keep sending `Authorization: Bearer <token>` and must not
+  also send a JWT.
+- One classification now decides both which permission a lifecycle action
+  requires and whether the discovery endpoint marks it destructive. They were
+  separate lists, and disagreed: `terminate_instance` was advertised as
+  non-destructive while being gated as a destroy.
+- Azure nodes are reachable through the generic lifecycle endpoints, and every
+  provider accepts only the actions it advertises (`UNSUPPORTED_ACTION`, 400).
+  `DELETE` on a provider with no destroy capability returns
+  `DESTROY_NOT_SUPPORTED` (501) instead of dispatching an action the provider
+  does not implement.
 
 - **Infrastructure routes now enforce authorization, not just authentication**
   (assessment finding S01). AWS, Azure, Proxmox, Puppetserver, Hiera, execution
@@ -150,6 +170,8 @@ procedure.
 - **`DELETE /api/inventory/:id` now requires the lifecycle bearer token.**
   Any non-Pabawi client (custom scripts, cron jobs) calling the destroy
   endpoint must pass `Authorization: Bearer <PABAWI_LIFECYCLE_TOKEN>`.
+  (Superseded in 1.5.0: the token replaces the JWT rather than accompanying
+  it.)
 - **SSE `?token=` URL fallback removed.** Any non-Pabawi SSE client (custom
   dashboards, scripts) must obtain a single-use ticket via
   `POST /api/executions/:id/stream-ticket` and pass it as `?ticket=…` instead.

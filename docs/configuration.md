@@ -79,7 +79,34 @@ DATABASE_URL=postgres://pabawi:pabawi@postgres:5432/pabawi
 | Variable | Default | Description |
 |---|---|---|
 | `JWT_SECRET` | **required** | Secret key for JWT token signing. Must be ≥ 32 chars of random entropy and not a placeholder (e.g. `your-secure-random-secret-here`, `change-me`). Generate with `openssl rand -base64 32`. The server refuses to start otherwise. Tokens are issued/verified with `iss=pabawi` / `aud=pabawi`. |
-| `PABAWI_LIFECYCLE_TOKEN` | _(empty)_ | Bearer token required for inventory lifecycle endpoints (`POST /api/nodes/:id/action`, `DELETE /api/inventory/:id`). When unset, those endpoints return 500 (`LIFECYCLE_AUTH_MISCONFIGURED`). |
+| `PABAWI_LIFECYCLE_TOKEN` | _(empty)_ | Optional machine credential for the generic lifecycle endpoints (`POST /api/inventory/:id/action`, `DELETE /api/inventory/:id`, `GET /api/inventory/:id/lifecycle-actions`). Sent as `Authorization: Bearer <token>` instead of a user JWT. When unset, those endpoints accept a user JWT only. See [Lifecycle machine credential](#lifecycle-machine-credential). |
+
+### Lifecycle machine credential
+
+`PABAWI_LIFECYCLE_TOKEN` exists for unattended clients (scripts, cron jobs,
+webhooks) that drive the generic lifecycle endpoints without a user session. It
+is an *alternative* to a JWT in the `Authorization` header, not an extra header
+alongside one.
+
+When it is set, the server provisions a built-in `lifecycle-service` account
+with a "Lifecycle Service" role holding `read`, `lifecycle` and `destroy` on
+`proxmox`, `aws` and `azure`. A request carrying the token authenticates as
+that account and is authorized by the ordinary RBAC checks, so a refusal is
+audit-logged under `lifecycle-service` like any other principal's.
+
+- Anyone holding the token can perform those actions on any node of those
+  providers, subject to `ALLOW_DESTRUCTIVE_PROVISIONING`. Treat it like a
+  password: generate it with `openssl rand -base64 32` and store it in a
+  secret, not in a shell profile.
+- To change its scope, edit the "Lifecycle Service" role's permissions (for
+  example, remove `destroy`, or add `provision`). The role is not rewritten on
+  restart. Do not delete the role itself: the server refuses to start when the
+  account exists without it.
+- To revoke it, deactivate the `lifecycle-service` account (effective
+  immediately, no restart) or unset the variable and restart.
+- The account holds that role alone, not the default role new users receive.
+- The token is accepted on `/api/inventory` only; it cannot authenticate any
+  other endpoint.
 
 ### Azure Entra ID SSO
 

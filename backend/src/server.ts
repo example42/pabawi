@@ -72,6 +72,8 @@ import { AuditLoggingService } from "./services/AuditLoggingService";
 import { EntraIdService } from "./services/EntraIdService";
 import { createEntraIdAuthRouter } from "./routes/entraIdAuth";
 import { provisionMcpServiceUser } from "./mcp/McpServiceUser";
+import { provisionLifecycleServiceUser } from "./services/LifecycleServiceUser";
+import { createLifecycleAuthMiddleware } from "./middleware/lifecycleAuthMiddleware";
 import { createMcpRouter } from "./mcp/McpRouter";
 
 /**
@@ -677,6 +679,28 @@ async function startServer(): Promise<Express> {
     // Create rate limiting middleware for authenticated routes
     const rateLimitMiddleware = createRateLimitMiddleware();
 
+    // Machine credential for the generic lifecycle routes. When configured, it
+    // authenticates as the provisioned lifecycle-service account and is then
+    // authorized by the same RBAC middleware as any user; when it is not
+    // configured, /api/inventory authenticates with a JWT only (finding I08).
+    let inventoryAuthMiddleware = authMiddleware;
+    const lifecycleToken = configService.getLifecycleToken();
+    if (lifecycleToken) {
+      const lifecycleAuthService = new AuthenticationService(databaseService.getAdapter(), configService.getJwtSecret());
+      const { userId: lifecycleUserId } = await provisionLifecycleServiceUser(
+        new UserService(databaseService.getAdapter(), lifecycleAuthService),
+        new RoleService(databaseService.getAdapter()),
+        new PermissionService(databaseService.getAdapter()),
+        logger,
+      );
+      inventoryAuthMiddleware = createLifecycleAuthMiddleware(
+        lifecycleToken,
+        lifecycleUserId,
+        authMiddleware,
+        databaseService.getAdapter(),
+      );
+    }
+
     // Configuration endpoint (security-sensitive — requires authentication).
     // The command whitelist (allow/deny policy) is only returned to callers who
     // hold `bolt:execute`, since it is only actionable for users who can run
@@ -749,7 +773,7 @@ async function startServer(): Promise<Express> {
     );
 
     mountInfrastructureRoutes(app, {
-      integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, rbacMiddleware, rateLimitMiddleware,
+      integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, inventoryAuthMiddleware, rbacMiddleware, rateLimitMiddleware,
       db: databaseService.getAdapter(),
     });
 

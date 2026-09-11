@@ -94,6 +94,57 @@ receive `executionTimeout` only.
 | `sortBy` | Sort field |
 | `sortOrder` | `asc` or `desc` |
 
+### Generic lifecycle
+
+Provider-agnostic lifecycle endpoints. The provider is resolved from the node
+ID prefix (`proxmox:`, `aws:`, `azure:`); any other prefix is rejected with
+`UNSUPPORTED_PROVIDER`.
+
+| Method | Endpoint | Description | Permission |
+|---|---|---|---|
+| `GET` | `/api/inventory/:id/lifecycle-actions` | Actions the node's provider advertises | `<provider>:read` |
+| `POST` | `/api/inventory/:id/action` | Execute a lifecycle action | `<provider>:read` plus the action's class |
+| `DELETE` | `/api/inventory/:id` | Destroy the node | `<provider>:read` + `<provider>:destroy` |
+
+The permission an action requires follows its class, the same classification
+the discovery endpoint uses to mark an action destructive:
+
+| Class | Actions | Permission |
+|---|---|---|
+| State transition | `start`, `stop`, `shutdown`, `reboot`, `restart`, `suspend`, `resume`, `deallocate`, `snapshot` | `<provider>:lifecycle` |
+| Creation | `provision`, `create_vm`, `create_lxc`, `create_instance` | `<provider>:provision` |
+| Removal | `destroy`, `destroy_vm`, `destroy_lxc`, `terminate`, `terminate_instance` | `<provider>:destroy` |
+
+An action the provider does not advertise is rejected with `UNSUPPORTED_ACTION`
+(400), and `DELETE` on a provider with no destroy capability (Azure) returns
+`DESTROY_NOT_SUPPORTED` (501). Destructive actions are rejected with
+`DESTRUCTIVE_ACTION_DISABLED` (403) when `ALLOW_DESTRUCTIVE_PROVISIONING=false`.
+
+**Request body (`POST /api/inventory/:id/action`):**
+
+```json
+{
+  "action": "stop",
+  "parameters": {}
+}
+```
+
+**Credentials.** Either a user JWT, or — when `PABAWI_LIFECYCLE_TOKEN` is
+configured — that token, in the same `Authorization: Bearer` header:
+
+```bash
+curl -X POST https://pabawi.example.com/api/inventory/aws:eu-west-1:i-0abc/action \
+  -H "Authorization: Bearer $PABAWI_LIFECYCLE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"stop"}'
+```
+
+The token authenticates as the built-in `lifecycle-service` account and is then
+authorized like any other caller. It is accepted on `/api/inventory` only, and
+its "Lifecycle Service" role holds `read`, `lifecycle` and `destroy` on
+`proxmox`, `aws` and `azure`; grant or revoke permissions on that role to
+change its scope. It stops working as soon as the account is deactivated.
+
 ---
 
 ## Facts

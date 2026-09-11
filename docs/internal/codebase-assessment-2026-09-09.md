@@ -32,9 +32,8 @@ This section records follow-up verification against the working tree after
   `GET /api/auth/permissions` exposes the caller's own grants for navigation,
   provisioning forms, lifecycle controls and execution controls. Browser-level
   verification against live providers remains outside this test run.
-- **I08 remains open:** generic lifecycle routes retain their conflicting
-  static-token/JWT credential contract, with provider authorization enforced
-  before the extra credential check. This is a separate usability repair.
+- **I08: repaired by A17 on 2026-09-11,** recorded below. The generic lifecycle
+  routes no longer carry a conflicting static-token/JWT credential contract.
 - **I02: implementation verified in the follow-up working tree.** Unique
   migrations 021 (Checkmk) and 022 (Entra repair) converge fresh installs and both
   historical 016 variants. Real-file SQLite fixtures compare the resulting
@@ -523,6 +522,68 @@ and per-execution output state remains process-local. No live provider,
 production database, publication or deployment was exercised. A17 is the next
 action.
 
+**A17 / I08, 2026-09-11: implemented and verified.** The generic lifecycle
+endpoints have one credential model, and they work. `PABAWI_LIFECYCLE_TOKEN`
+was required in `Authorization` on top of the JWT the production mount already
+required in that same header, so neither credential satisfied both checks:
+through the assembled chain an administrator's `POST /api/inventory/:id/action`
+and `DELETE /api/inventory/:id` were refused with 401, and the token itself was
+refused as an invalid JWT signature. The token is now an alternative
+credential, matched ahead of JWT verification the way `MCP_AUTH_TOKEN` already
+was, and it authenticates a provisioned `lifecycle-service` account rather than
+granting anything by itself. `PermissionService` is therefore the single
+authorization authority for both principals, and no permission middleware can
+return allow without consulting the database.
+
+The machine account's scope is explicit and adjustable: a built-in "Lifecycle
+Service" role holding `read`, `lifecycle` and `destroy` on `proxmox`, `aws` and
+`azure`, provisioned only when a token is configured, reused as it stands on
+later starts so operator edits survive, and revocable by deactivating the
+account. It is the account's only role: account creation attaches the
+configured default role, which would have let the credential read every source
+a Viewer can read, so that assignment is dropped during provisioning. The
+credential is mounted on `/api/inventory` alone and is refused on every other
+route. Provisioning is deliberately not granted.
+
+One classification now decides both which permission an action requires and
+whether the discovery endpoint calls it destructive. The two lists disagreed:
+`terminate_instance` was advertised as non-destructive while being gated as a
+destroy. Providers are an allowlist (`proxmox`, `aws`, `azure`) rather than any
+registered execution tool, because node IDs also carry command-tool prefixes
+and that route bypasses the command whitelist. Within a provider the advertised
+capabilities are the contract: an action the provider does not publish is
+refused before dispatch, and `DELETE` takes the destroy action from the
+provider's own capabilities, so Azure is refused because it has no destroy
+capability rather than because the route had never heard of Azure. Azure nodes
+previously failed as an unknown provider.
+
+A17 validation: 3,708 backend tests passed on SQLite (56 skipped, one todo) and
+3,762 against a disposable PostgreSQL 15 database; 1,042 frontend tests passed.
+Sixteen new route tests run through `mountInfrastructureRoutes` with the real
+authentication and RBAC middleware, covering the authorized JWT, the
+under-scoped JWT, the machine credential with no JWT, a wrong credential, no
+credential, the account's exact role and source scope, deactivation of the
+machine account, refusal on other mounts, and the discovery/execution agreement
+including the Azure destroy refusal. Ten unit tests cover the classification
+table and the account's provisioning, default-role strip and reuse.
+The router-level regression in `jazzy-launching-wombat-regressions.test.ts` was
+rewritten: it asserted the old second-credential gate through a mount that had
+no authentication in front of it, so it would have passed over a fix that left
+the assembled app broken. Five probes confirmed the defects in the previous
+code: an administrator's action and destroy were both refused with 401, the
+machine token was refused as an invalid JWT, `terminate_instance` was advertised
+as non-destructive, and an Azure node resolved to no provider. Two further
+probes confirmed that, without the default-role strip, the machine account held
+Viewer alongside its own role and read bolt-sourced inventory. Backend lint and
+TypeScript and the full build passed, with the existing frontend bundle-size
+warning.
+
+Not in scope for A17: the frontend still dispatches lifecycle actions to the
+Proxmox provider routes directly instead of the provider-agnostic endpoints it
+already uses for discovery, so the generic path remains machine- and
+script-facing. Azure gained no destroy capability. No live provider, production
+database, publication or deployment was exercised. A18 is the next action.
+
 ## Executive assessment
 
 The principal risk is inconsistent enforcement at trust boundaries. Authentication and RBAC infrastructure exist, but several infrastructure-changing routes enforce authentication without authorization. AWS, Azure, Proxmox and Puppetserver handlers can therefore exercise server-held credentials on behalf of users who lack the corresponding permissions. Hiera data and execution output have related read-access gaps. This is especially serious where self-registration is enabled.
@@ -823,6 +884,9 @@ The assembled SSE route order also needs repair: [server.ts](../../backend/src/s
 **Acceptance:** live and replayed failures show failure; continuous output flushes within its interval; thousands of completed/disconnected executions leave bounded memory; the documented ticket URL works in the assembled app and cannot redeem a ticket for another execution.
 
 ### I08. P2: Generic lifecycle authentication is contradictory
+
+**Resolved by A17 on 2026-09-11.** The following describes the original finding;
+implementation and validation are recorded above.
 
 **Source-confirmed.** [inventory.ts](../../backend/src/routes/inventory.ts), lines 26-48 and 1340-1342, requires `PABAWI_LIFECYCLE_TOKEN` in `Authorization`. Its server mounts already require a JWT in that same header. An independently generated static token and a normal user JWT cannot satisfy both checks.
 
