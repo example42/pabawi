@@ -36,6 +36,13 @@ cd backend && npx vitest run test/unit/SomeService.test.ts
 # Linting
 npm run lint               # Lint both workspaces (0 warnings allowed)
 npm run lint:fix           # Auto-fix lint issues
+
+# Component type checking (eslint and tsc do not see .svelte files)
+npm run check:components   # svelte-check against the recorded baseline
+npm run check:update --workspace=frontend   # re-record it after fixing errors
+
+# Secret scan over the whole tracked tree, not just the pre-commit subset
+bash scripts/quality/secret-scan.sh
 ```
 
 Backend uses `tsx watch` for hot-reload during development. The frontend dev server proxies API calls to the backend.

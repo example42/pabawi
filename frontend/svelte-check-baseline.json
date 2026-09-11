@@ -1,0 +1,238 @@
+{
+  "total": 163,
+  "entries": {
+    "src/components/AggregatedResultsView.svelte": {
+      "'BatchExecution' is declared but its value is never read.": 1,
+      "'StatusBadge' is declared but its value is never read.": 1
+    },
+    "src/components/CatalogComparison.svelte": {
+      "Object literal may only specify known properties, and '\\\"showDeployButton\\\"' does not exist in type 'EnvironmentSelectorProps'.": 2
+    },
+    "src/components/ConsoleAccessWidget.svelte": {
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 2
+    },
+    "src/components/EnvironmentSelector.svelte": {
+      "'formatDate' is declared but its value is never read.": 1
+    },
+    "src/components/ErrorAlert.svelte": {
+      "'errorTypeInfo' is declared but its value is never read.": 1
+    },
+    "src/components/EventsViewer.svelte": {
+      "'filters' is declared but its value is never read.": 1
+    },
+    "src/components/ExpertModeDebugPanel.svelte": {
+      "'LogEntry' is declared but its value is never read.": 1,
+      "'debugCount' is declared but its value is never read.": 1
+    },
+    "src/components/FactsViewer.svelte": {
+      "Type '\\\"ansible\\\" | \\\"bolt\\\" | \\\"puppet\\\"' is not assignable to type 'keyof IntegrationColors'.\\n  Type '\\\"puppet\\\"' is not assignable to type 'keyof IntegrationColors'. Did you mean '\\\"puppetdb\\\"'?": 1
+    },
+    "src/components/GeneralInfoWidget.svelte": {
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 1
+    },
+    "src/components/GroupActionModal.svelte": {
+      "'IntegrationBadge' is declared but its value is never read.": 1,
+      "'groupId' is declared but its value is never read.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: ExecuteCommandFormData) => void'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'ExecuteCommandFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'ExecuteCommandFormData'.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: ExecutePlaybookFormData) => void | Promise<void>'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'ExecutePlaybookFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'ExecutePlaybookFormData'.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: ExecuteTaskFormData) => void'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'ExecuteTaskFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'ExecuteTaskFormData'.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: InstallSoftwareFormData) => void'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'InstallSoftwareFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'InstallSoftwareFormData'.": 1
+    },
+    "src/components/GroupDetailDialog.svelte": {
+      "'onMount' is declared but its value is never read.": 1
+    },
+    "src/components/IntegrationStatus.svelte": {
+      "'getTroubleshootingSteps' is declared but its value is never read.": 1
+    },
+    "src/components/JournalTimeline.svelte": {
+      "'isLoading' is declared but its value is never read.": 1,
+      "'pendingSources' is declared but its value is never read.": 1
+    },
+    "src/components/LatestActionsWidget.svelte": {
+      "Type 'ExecutionResult[]' is not assignable to type 'ExecutionResult[]'. Two different types with this name exist, but they are unrelated.\\n  Property 'createdAt' is missing in type 'ExecutionResult' but required in type 'ExecutionResult'.": 1
+    },
+    "src/components/ManageTab.svelte": {
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 1
+    },
+    "src/components/ManagedResourcesViewer.svelte": {
+      "'certname' is declared but its value is never read.": 1
+    },
+    "src/components/Navigation.svelte": {
+      "Not all code paths return a value.": 1
+    },
+    "src/components/NodeHieraTab.svelte": {
+      "'hieraData' is possibly 'null'.": 2,
+      "'showError' is declared but its value is never read.": 1
+    },
+    "src/components/NodeStatus.svelte": {
+      "'ErrorAlert' is declared but its value is never read.": 1,
+      "'getActivityLabel' is declared but its value is never read.": 1
+    },
+    "src/components/PaginationControls.svelte": {
+      "'handleKeyDown' is declared but its value is never read.": 1
+    },
+    "src/components/ParallelExecutionModal.svelte": {
+      "'IntegrationBadge' is declared but its value is never read.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: ExecuteCommandFormData) => void'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'ExecuteCommandFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'ExecuteCommandFormData'.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: ExecutePlaybookFormData) => void | Promise<void>'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'ExecutePlaybookFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'ExecutePlaybookFormData'.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: ExecuteTaskFormData) => void'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'ExecuteTaskFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'ExecuteTaskFormData'.": 1,
+      "Type '(data: Record<string, unknown>) => void' is not assignable to type '(data: InstallSoftwareFormData) => void'.\\n  Types of parameters 'data' and 'data' are incompatible.\\n    Type 'InstallSoftwareFormData' is not assignable to type 'Record<string, unknown>'.\\n      Index signature for type 'string' is missing in type 'InstallSoftwareFormData'.": 1
+    },
+    "src/components/ProxmoxVMProvisionForm.svelte": {
+      "'loadingStorages' is declared but its value is never read.": 1,
+      "'storages' is declared but its value is never read.": 1
+    },
+    "src/components/PuppetDBAdmin.svelte": {
+      "'formatBytes' is declared but its value is never read.": 1
+    },
+    "src/components/PuppetReportsListView.svelte": {
+      "'debugInfo' is declared but its value is never read.": 1,
+      "'getSuccessful' is declared but its value is never read.": 1
+    },
+    "src/components/PuppetRunChart.svelte": {
+      "'total' is declared but its value is never read.": 1
+    },
+    "src/components/PuppetRunInterface.svelte": {
+      "Property 'executionId' is missing in type '{ stream: ExecutionStream; autoConnect: false; }' but required in type 'Props'.": 1
+    },
+    "src/components/RealtimeOutputViewer.svelte": {
+      "Not all code paths return a value.": 1
+    },
+    "src/components/ReportFilterPanel.svelte": {
+      "'ReportFilters' is declared but its value is never read.": 1
+    },
+    "src/components/ReportViewer.svelte": {
+      "'resourceType' is of type 'unknown'.": 2,
+      "Argument of type '() => { name: string; time: number; }[]' is not assignable to parameter of type 'ArrayLike<unknown> | Iterable<unknown> | null | undefined'.": 1
+    },
+    "src/components/RoleDetailDialog.svelte": {
+      "'onMount' is declared but its value is never read.": 1
+    },
+    "src/components/RunPuppetForm.svelte": {
+      "'multiNode' is declared but its value is never read.": 1
+    },
+    "src/components/TaskRunInterface.svelte": {
+      "'formatTimestamp' is declared but its value is never read.": 1,
+      "Property 'executionId' is missing in type '{ stream: ExecutionStream; autoConnect: false; }' but required in type 'Props'.": 1
+    },
+    "src/components/UserDetailDialog.svelte": {
+      "'onMount' is declared but its value is never read.": 1
+    },
+    "src/components/WidgetFrame.svelte": {
+      "'state' implicitly has type 'any' because it does not have a type annotation and is referenced directly or indirectly in its own initializer.": 1,
+      "Block-scoped variable '$state' used before its declaration.": 1,
+      "Untyped function calls may not accept type arguments.": 2
+    },
+    "src/components/WidgetGrid.svelte": {
+      "'statusLoaded' is declared but its value is never read.": 1
+    },
+    "src/components/__tests__/MockErrorWidget.svelte": {
+      "'nodeId' is declared but its value is never read.": 1,
+      "'onReady' is declared but its value is never read.": 1
+    },
+    "src/components/__tests__/MockNeverReadyWidget.svelte": {
+      "All destructured elements are unused.": 1
+    },
+    "src/components/__tests__/MockReadyWidget.svelte": {
+      "'onError' is declared but its value is never read.": 1
+    },
+    "src/lib/formGenerator.example.svelte": {
+      "Type '{}' is not assignable to type 'string | number | string[] | null | undefined'.": 1
+    },
+    "src/lib/realtimeOutputViewer.example.svelte": {
+      "Property 'executionId' is missing in type '{ stream: ExecutionStream; }' but required in type 'Props'.": 1
+    },
+    "src/lib/widgets/consoleAccess.widget.ts": {
+      "Type 'Component<Props, {}, \\\"\\\">' is not assignable to type 'Component<{}, {}, string>'.\\n  Types of parameters 'props' and 'props' are incompatible.\\n    Type '{}' is missing the following properties from type 'Props': nodeId, onReady, onError": 1
+    },
+    "src/lib/widgets/generalInfo.widget.ts": {
+      "Type 'Component<Props, {}, \\\"\\\">' is not assignable to type 'Component<{}, {}, string>'.\\n  Types of parameters 'props' and 'props' are incompatible.\\n    Type '{}' is missing the following properties from type 'Props': nodeId, onReady, onError": 1
+    },
+    "src/lib/widgets/latestActions.widget.ts": {
+      "Type 'Component<Props, {}, \\\"\\\">' is not assignable to type 'Component<{}, {}, string>'.\\n  Types of parameters 'props' and 'props' are incompatible.\\n    Type '{}' is missing the following properties from type 'Props': nodeId, onReady, onError": 1
+    },
+    "src/lib/widgets/monitoringSummary.widget.ts": {
+      "Type 'Component<Props, {}, \\\"\\\">' is not assignable to type 'Component<{}, {}, string>'.\\n  Types of parameters 'props' and 'props' are incompatible.\\n    Type '{}' is missing the following properties from type 'Props': nodeId, onReady, onError": 1
+    },
+    "src/lib/widgets/puppetAgentActions.widget.ts": {
+      "Type 'Component<Props, {}, \\\"\\\">' is not assignable to type 'Component<{}, {}, string>'.\\n  Types of parameters 'props' and 'props' are incompatible.\\n    Type '{}' is missing the following properties from type 'Props': nodeId, onReady, onError": 1
+    },
+    "src/lib/widgets/puppetRuns.widget.ts": {
+      "Type 'Component<Props, {}, \\\"\\\">' is not assignable to type 'Component<{}, {}, string>'.\\n  Types of parameters 'props' and 'props' are incompatible.\\n    Type '{}' is missing the following properties from type 'Props': nodeId, onReady, onError": 1
+    },
+    "src/pages/ExecutionsPage.svelte": {
+      "'result.value' is possibly 'null'.": 2,
+      "'selectedExecution' is possibly 'null'.": 1,
+      "Property '_output' does not exist on type '{}'.": 2,
+      "Property 'executionId' is missing in type '{ stream: ExecutionStream; autoConnect: true; }' but required in type 'Props'.": 1,
+      "Property 'showFullResult' does not exist on type 'NodeResult'.": 5
+    },
+    "src/pages/GlobalJournalPage.svelte": {
+      "Type '\\\"xs\\\"' is not assignable to type '\\\"sm\\\" | \\\"md\\\" | \\\"lg\\\" | undefined'.": 2,
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 2
+    },
+    "src/pages/GroupDetailPage.svelte": {
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 3
+    },
+    "src/pages/HomePage.svelte": {
+      "'PuppetReportsSummary' is declared but its value is never read.": 1,
+      "'PuppetRunChart' is declared but its value is never read.": 1,
+      "'aggregatedRunHistory' is declared but its value is never read.": 1,
+      "'getSourceDisplayName' is declared but its value is never read.": 1,
+      "'handleTimeRangeChange' is declared but its value is never read.": 1,
+      "'puppetReportsError' is declared but its value is never read.": 1,
+      "'runHistoryError' is declared but its value is never read.": 1,
+      "'runHistoryLastUpdate' is declared but its value is never read.": 1,
+      "Property 'config' does not exist on type 'Node'.": 1,
+      "Type 'ExecutionRecord[]' is not assignable to type 'ExecutionResult[]'.\\n  Type 'ExecutionRecord' is missing the following properties from type 'ExecutionResult': createdAt, results": 1,
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 2
+    },
+    "src/pages/InventoryPage.svelte": {
+      "'getSourceDisplayName' is declared but its value is never read.": 1,
+      "'groupCountsBySource' is declared but its value is never read.": 1,
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 8
+    },
+    "src/pages/NodeDetailPage.svelte": {
+      "'Facts' is declared but never used.": 1,
+      "'FactsViewer' is declared but its value is never read.": 1,
+      "'ReExecutionButton' is declared but its value is never read.": 1,
+      "'_' is declared but its value is never read.": 1,
+      "'environmentsError' is declared but its value is never read.": 1,
+      "'environmentsLoading' is declared but its value is never read.": 1,
+      "'formatCompilationTime' is declared but its value is never read.": 1,
+      "'formatTimestamp' is declared but its value is never read.": 1,
+      "'getDuration' is declared but its value is never read.": 1,
+      "'getIntentionalChanges' is declared but its value is never read.": 1,
+      "'getSourceBadge' is declared but its value is never read.": 1,
+      "'getStatusBadgeStatus' is declared but its value is never read.": 1,
+      "'getUnchanged' is declared but its value is never read.": 1,
+      "'node' is possibly 'null'.": 1,
+      "'packageData' is declared but its value is never read.": 1,
+      "'puppetData' is declared but its value is never read.": 1,
+      "Argument of type '{}' is not assignable to parameter of type 'Record<TabId, any>'.\\n  Type '{}' is missing the following properties from type 'Record<TabId, any>': journal, hiera, facts, puppet, and 4 more.": 1,
+      "Block-scoped variable 'node' used before its declaration.": 2,
+      "Element implicitly has an 'any' type because expression of type '\\\"all-source-facts\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'all-source-facts' does not exist on type 'Record<TabId, any>'.": 1,
+      "Element implicitly has an 'any' type because expression of type '\\\"catalog\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'catalog' does not exist on type 'Record<TabId, any>'.": 3,
+      "Element implicitly has an 'any' type because expression of type '\\\"environments\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'environments' does not exist on type 'Record<TabId, any>'.": 3,
+      "Element implicitly has an 'any' type because expression of type '\\\"events\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'events' does not exist on type 'Record<TabId, any>'.": 3,
+      "Element implicitly has an 'any' type because expression of type '\\\"managed-resources\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'managed-resources' does not exist on type 'Record<TabId, any>'.": 3,
+      "Element implicitly has an 'any' type because expression of type '\\\"node-status\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'node-status' does not exist on type 'Record<TabId, any>'.": 3,
+      "Element implicitly has an 'any' type because expression of type '\\\"puppet-reports\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'puppet-reports' does not exist on type 'Record<TabId, any>'.": 3,
+      "Element implicitly has an 'any' type because expression of type '\\\"run-history-7\\\"' can't be used to index type 'Record<TabId, any>'.\\n  Property 'run-history-7' does not exist on type 'Record<TabId, any>'.": 1,
+      "Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'Record<TabId, any>'.\\n  No index signature with a parameter of type 'string' was found on type 'Record<TabId, any>'.": 3,
+      "Type 'ExecutionResult[]' is not assignable to type 'ExecutionResult[]'. Two different types with this name exist, but they are unrelated.\\n  Property 'createdAt' is missing in type 'ExecutionResult' but required in type 'ExecutionResult'.": 1,
+      "Variable 'node' is used before being assigned.": 1
+    },
+    "src/pages/ProvisionPage.svelte": {
+      "Type 'string' is not assignable to type 'keyof IntegrationColors'.": 1
+    },
+    "src/pages/PuppetPage.svelte": {
+      "'dataCache' is declared but its value is never read.": 1,
+      "'debugInfo' is declared but its value is never read.": 1,
+      "'isHieraActive' is declared but its value is never read.": 1,
+      "'isPuppetserverActive' is declared but its value is never read.": 1,
+      "'showError' is declared but its value is never read.": 1,
+      "Argument of type '{}' is not assignable to parameter of type 'Record<TabId, any>'.\\n  Type '{}' is missing the following properties from type 'Record<TabId, any>': status, hiera, admin, reports, and 3 more.": 1
+    }
+  }
+}

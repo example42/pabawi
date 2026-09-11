@@ -23,6 +23,7 @@
     "test:e2e:debug": "playwright test --debug",
     "lint": "npm run lint --workspace=backend && npm run lint --workspace=frontend",
     "lint:fix": "npm run lint:fix --workspace=backend && npm run lint:fix --workspace=frontend",
+    "check:components": "npm run check --workspace=frontend",
     "precommit": "pre-commit run --all-files",
     "precommit:update": "pre-commit autoupdate",
     "setup:hooks": "pre-commit install && pre-commit install --hook-type commit-msg",

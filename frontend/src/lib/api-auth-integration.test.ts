@@ -8,7 +8,7 @@ import { authManager } from './auth.svelte';
 
 // Mock fetch
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+globalThis.fetch = mockFetch;
 
 // Mock localStorage
 const localStorageMock = (() => {

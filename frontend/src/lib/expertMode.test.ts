@@ -27,14 +27,14 @@ const localStorageMock = ((): Storage => {
 })();
 
 // Setup global mocks
-Object.defineProperty(global, 'window', {
+Object.defineProperty(globalThis, 'window', {
   value: {
     localStorage: localStorageMock,
   },
   writable: true,
 });
 
-Object.defineProperty(global, 'localStorage', {
+Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
   writable: true,
 });

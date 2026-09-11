@@ -79,3 +79,6 @@ samples/stresstest/bolt/inventory.yaml
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
 # END swamp managed section
+e2e/.auth/
+test-results/
+playwright-report/

@@ -2,38 +2,66 @@
 
 ## Overview
 
-Pabawi runs a single Playwright suite, [`e2e/setup-check.spec.ts`](../../e2e/setup-check.spec.ts).
-It is a smoke test of the unauthenticated contract, not a user-flow suite.
+Pabawi runs three Playwright projects against the assembled app, served the way
+it ships (`npm run dev:fullstack`, port 3000):
 
-## Current coverage
+| Project | Spec | What it establishes |
+| --- | --- | --- |
+| `setup` | [`auth.setup.ts`](../../e2e/auth.setup.ts) | Seeds the administrator and saves its `storageState` |
+| `anonymous` | everything else | The unauthenticated contract |
+| `chromium` | `*.authenticated.spec.ts` | Authenticated execution flows |
 
-| Test | Asserts |
-| --- | --- |
-| serves the SPA shell | `GET /` returns 200 and the document title matches Pabawi |
-| renders the sign-in form when unauthenticated | heading, username field, password field, submit button are visible |
-| sends an unauthenticated deep link to the sign-in form | `/executions` renders the sign-in form rather than the page |
-| rejects unauthenticated API reads with 401 | `GET /api/inventory` answers 401 |
+A spec named `*.authenticated.spec.ts` runs with a seeded session; any other
+spec runs without one. Neither project ignores unmatched files, so a new spec
+always lands in a project rather than silently never running.
 
-Together these cover: the backend boots, static assets are served, the SPA
-mounts and routes, the frontend auth guard holds, and `authMiddleware` is
-actually mounted on protected routes.
+The whole suite runs in about six seconds and touches no infrastructure.
 
-The suite is hermetic — no seeded user, no database fixture, no reachable Bolt
-or PuppetDB inventory — so it runs on any checkout in about a second.
+## Isolation
+
+`playwright.config.ts` sets `webServer.env`, so the app under test never reads
+the developer's `.env`, database or inventory:
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `NODE_ENV` | `test` | Stops `ConfigService` from loading `backend/.env` |
+| `DATABASE_PATH` | `e2e/.auth/e2e.db` | A scratch database, git-ignored |
+| `BOLT_PROJECT_PATH` | `.` | Bolt stays unconfigured: no binary, no sample project |
+| `SSH_*` | the fixture below | The only inventory and the only execution tool |
+| `CONCURRENT_EXECUTION_LIMIT` | `1` | One slot, so a second submission is observably queued |
+
+The scratch database survives between local runs. The setup project therefore
+accepts `409 SETUP_ALREADY_COMPLETE` and logs in instead. Delete `e2e/.auth` for
+a clean run.
+
+## The SSH fixture
+
+[`e2e/fixtures/ssh/config`](../../e2e/fixtures/ssh/config) defines two hosts,
+both deliberately unreachable, in two different ways:
+
+- **`e2e-refused`** — `127.0.0.1:1`. Nothing listens, so the connection is
+  refused in about a millisecond and the run reaches a terminal failure
+  immediately. This is the target for admission and failure-display tests.
+- **`e2e-stalled`** — `localhost:45001`. Nothing listens either, unless a test
+  opens a listener that accepts the connection and then never writes a byte, so
+  the SSH handshake waits for a banner that never arrives and the run stays
+  busy for as long as the test holds it. This is how a queued execution is made
+  observable without a race.
+
+The two use different host *strings* (`127.0.0.1` versus `localhost`) on
+purpose: node linking merges hosts that share an address, and merged hosts
+cannot be used as two separate targets.
 
 ## Running
 
 ```bash
-npm run test:e2e          # headless
+npm run test:e2e          # headless, all projects
 npm run test:e2e:ui       # interactive
 npm run test:e2e:headed   # visible browser
 npm run test:e2e:debug    # step through
-npx playwright test e2e/setup-check.spec.ts:18   # a single test by line
+npx playwright test execution-cancellation        # one spec
 npx playwright show-report                        # HTML report after a run
 ```
-
-Playwright starts the app itself via `webServer` (`npm run dev:fullstack`,
-port 3000) and reuses an already-running server unless `CI=true`.
 
 ### Browser binaries
 
@@ -48,11 +76,12 @@ Executable doesn't exist at .../chromium_headless_shell-<rev>/...
 Fix with `npx playwright install chromium`. In CI use
 `npx playwright install --with-deps chromium`.
 
-## Not in CI
+## In CI
 
-`.github/workflows/ci.yml` runs lint, both typechecks, unit tests and both
-builds. It does not run this suite. Wire it in before relying on it as a gate —
-an E2E suite nobody runs drifts out of sync with the UI within a release or two.
+`.github/workflows/ci.yml` runs the suite in its own `e2e` job and uploads the
+Playwright report when it fails. Before that job existed the suite ran only on a
+maintainer's laptop, which is how an E2E suite drifts out of sync with the UI
+within a release or two.
 
 ## History: why the flow suites were deleted
 
@@ -85,24 +114,6 @@ red: red reports a problem, green hides one.
 They were also non-hermetic — `inventory-to-command` executed `pwd` against
 whatever real hosts `BOLT_PROJECT_PATH` pointed at.
 
-## Extending past the login screen
-
-Authenticated tests are worth adding, but not before the harness underneath
-them is real. Required, in order:
-
-1. **Isolate the backend.** Set `webServer.env` in `playwright.config.ts` to
-   override `DATABASE_PATH` to a scratch file and `BOLT_PROJECT_PATH` to the
-   checked-in `samples/integrations/bolt` fixture. Without this the suite runs
-   against the developer's own dev database and live infrastructure.
-2. **Seed and authenticate once.** Add a Playwright setup project that creates
-   the admin via `POST /api/setup/initialize`, logs in via
-   `POST /api/auth/login`, and saves `storageState`. The frontend reads its
-   token from `localStorage` under `authToken` (also `refreshToken`, `authUser`).
-3. **Add real selectors.** Put `data-testid` on the specific elements the tests
-   touch and select only on those, or use accessible-name selectors
-   (`getByRole`, `getByLabel`, `getByPlaceholder`) as `setup-check` does.
-4. **Add the CI step**, so the suite cannot rot unnoticed.
-
 ## Rules for new tests
 
 1. **Assert unconditionally.** No `if (visible) { assert } else { weaker assert }`.
@@ -110,8 +121,23 @@ them is real. Required, in order:
    a softer claim.
 2. **Select on contracts, not fragments.** `getByRole` / `getByLabel` /
    `getByPlaceholder` / `data-testid`. Never substring-match a class attribute.
+   Add a `data-testid` to the component when no accessible name identifies the
+   element, as `ExecutionList` does for rows and their status cell.
 3. **Verify the test can fail.** After writing it, break the expectation on
    purpose and confirm it goes red. An assertion never observed failing is an
    assertion not known to work.
-4. **Stay hermetic.** A test that needs a reachable production host belongs in
-   manual integration checks, not here.
+4. **Name it for the project it belongs to.** `*.authenticated.spec.ts` runs
+   with a session; anything else runs anonymously. A spec that matches no
+   project would not run at all, and a suite that does not run is the same
+   false green as one that asserts nothing.
+5. **Stay hermetic.** A test that needs a reachable production host belongs in
+   manual integration checks, not here. If a test needs work to still be
+   running, hold it open deliberately (see `e2e-stalled`) rather than relying on
+   something being slow.
+
+## Not covered here
+
+Console sessions. A console flow needs a provider to connect to, and the
+provider side is covered by the backend suite against a fake WebSocket upstream
+(`backend/test/security/console-lifecycle.test.ts`) rather than through the
+browser.
