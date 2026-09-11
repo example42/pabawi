@@ -28,6 +28,7 @@ import monitoringRouter from "./routes/monitoring";
 import { StreamingExecutionManager } from "./services/StreamingExecutionManager";
 import { ExecutionQueue } from "./services/ExecutionQueue";
 import { BatchExecutionService } from "./services/BatchExecutionService";
+import { RequestIdempotencyService } from "./services/RequestIdempotencyService";
 import { errorHandler, requestIdMiddleware } from "./middleware/errorHandler";
 import { expertModeMiddleware } from "./middleware/expertMode";
 import { requestRecorderMiddleware } from "./middleware/requestRecorder";
@@ -282,6 +283,17 @@ async function startServer(): Promise<Express> {
     logger.info("Batch execution service initialized successfully", {
       component: "Server",
       operation: "startServer",
+    });
+
+    // Durable idempotency for admission routes. Keys outlive any transport
+    // retry by a wide margin, so purging expired ones at startup cannot
+    // discard a submission a client is still retrying.
+    const requestIdempotency = new RequestIdempotencyService(databaseService.getAdapter());
+    const purgedKeys = await requestIdempotency.purgeExpired();
+    logger.info("Request idempotency store initialized successfully", {
+      component: "Server",
+      operation: "startServer",
+      metadata: { purgedKeys },
     });
 
     // Register all integration plugins via declarative registry
@@ -736,7 +748,7 @@ async function startServer(): Promise<Express> {
     );
 
     mountInfrastructureRoutes(app, {
-      integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, rbacMiddleware, rateLimitMiddleware,
+      integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, rbacMiddleware, rateLimitMiddleware,
       db: databaseService.getAdapter(),
     });
 

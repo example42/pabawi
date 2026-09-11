@@ -26,6 +26,7 @@ import type { BoltCommandWhitelistService } from "../validation/CommandWhitelist
 import type { StreamingExecutionManager } from "../services/StreamingExecutionManager";
 import type { ExecutionQueue } from "../services/ExecutionQueue";
 import type { BatchExecutionService } from "../services/BatchExecutionService";
+import type { RequestIdempotencyService } from "../services/RequestIdempotencyService";
 import type { PuppetDBService } from "../integrations/puppetdb/PuppetDBService";
 import type { PuppetserverService } from "../integrations/puppetserver/PuppetserverService";
 import type { PuppetRunHistoryService } from "../services/PuppetRunHistoryService";
@@ -43,6 +44,8 @@ interface InfrastructureRouteDependencies {
   streamingManager: StreamingExecutionManager;
   executionQueue?: ExecutionQueue;
   batchExecutionService?: BatchExecutionService;
+  /** Durable idempotency store for the batch and Puppet run admission routes. */
+  requestIdempotency?: RequestIdempotencyService;
   puppetDBService?: PuppetDBService;
   puppetserverService?: PuppetserverService;
   puppetRunHistoryService?: PuppetRunHistoryService;
@@ -55,7 +58,7 @@ interface InfrastructureRouteDependencies {
 }
 
 export function mountInfrastructureRoutes(app: Express, dependencies: InfrastructureRouteDependencies): void {
-  const { db, integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, rbacMiddleware, rateLimitMiddleware } = dependencies;
+  const { db, integrationManager, boltService, executionRepository, commandWhitelistService, streamingManager, executionQueue, batchExecutionService, requestIdempotency, puppetDBService, puppetserverService, puppetRunHistoryService, journalService, container, config, authMiddleware, rbacMiddleware, rateLimitMiddleware } = dependencies;
   const authorizeSources = createSourceAuthorization(db, integrationManager);
 
   // API Routes - Inventory routes (protected with RBAC)
@@ -114,7 +117,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     "/api/nodes",
     authMiddleware,
     rateLimitMiddleware,
-    createPuppetRouter(integrationManager, rbacMiddleware, executionRepository, journalService, streamingManager, container),
+    createPuppetRouter(integrationManager, rbacMiddleware, executionRepository, journalService, streamingManager, container, requestIdempotency),
   );
   app.use(
     "/api/nodes",
@@ -127,7 +130,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     "/api/puppet-run",
     authMiddleware,
     rateLimitMiddleware,
-    createPuppetRouter(integrationManager, rbacMiddleware, executionRepository, journalService, streamingManager, container),
+    createPuppetRouter(integrationManager, rbacMiddleware, executionRepository, journalService, streamingManager, container, requestIdempotency),
   );
   // Add puppet history routes if PuppetDB is available
   if (puppetRunHistoryService) {
@@ -181,7 +184,7 @@ export function mountInfrastructureRoutes(app: Express, dependencies: Infrastruc
     "/api/executions",
     authMiddleware,
     rateLimitMiddleware,
-    createExecutionsRouter(executionRepository, rbacMiddleware, executionQueue, batchExecutionService, container, commandWhitelistService),
+    createExecutionsRouter(executionRepository, rbacMiddleware, executionQueue, batchExecutionService, container, commandWhitelistService, requestIdempotency),
   );
   app.use(
     "/api/executions",

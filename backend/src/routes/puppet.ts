@@ -1,4 +1,5 @@
 import type { PermissionMiddlewareFactory } from "../middleware/routeAuthorization";
+import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response, type RequestHandler } from "express";
 import { z } from "zod";
 import type { ExecutionRepository, ExecutionTool } from "../database/ExecutionRepository";
@@ -11,6 +12,14 @@ import type { LoggerService } from "../services/LoggerService";
 import { NodeIdParamSchema, PuppetEnvironmentSchema, PuppetTagSchema } from "../validation/commonSchemas";
 import { type DIContainer, createDefaultContainer } from "../container/DIContainer";
 import type { ExecutionResult } from "../integrations/bolt/types";
+import {
+  IdempotencyConflictError,
+  IdempotencyKeyError,
+  RequestIdempotencyService,
+} from "../services/RequestIdempotencyService";
+
+/** Route identity the multi-node Puppet run key is scoped to. */
+const PUPPET_RUN_IDEMPOTENCY_SCOPE = "POST /api/puppet-run";
 
 const PuppetRunBodySchema = z.object({
   tags: z.array(PuppetTagSchema).optional(),
@@ -279,6 +288,12 @@ export async function runPuppetOn(ctx: PuppetExecutionContext): Promise<void> {
 
 /**
  * Create Puppet router
+ *
+ * @param requestIdempotency - Optional durable idempotency store. When supplied,
+ *   the multi-node run route persists its execution records in one transaction
+ *   and honours `Idempotency-Key`, so a lost response can be resent without
+ *   starting a second run. Without it the records are written individually and
+ *   the header is ignored.
  */
 export function createPuppetRouter(
   integrationManager: IntegrationManager,
@@ -287,6 +302,7 @@ export function createPuppetRouter(
   journalService?: JournalService,
   streamingManager?: StreamingExecutionManager,
   container: DIContainer = createDefaultContainer(),
+  requestIdempotency?: RequestIdempotencyService,
 ): Router {
   const router = Router();
   const logger = container.resolve("logger");
@@ -555,29 +571,70 @@ export function createPuppetRouter(
         const puppetCommand = buildPuppetCommand(body);
         const userId: string = req.user?.userId ?? "unknown";
 
-        // Create execution records for each node
-        const executionIds: string[] = [];
-        for (const nodeId of body.targetNodeIds) {
-          const executionId = await executionRepository.create({
-            type: "puppet",
-            targetNodes: [nodeId],
-            action: "puppet_agent",
-            parameters: {
-              ...(body.tags ? { tags: body.tags } : {}),
-              ...(body.environment ? { environment: body.environment } : {}),
-              ...(body.noop ? { noop: true } : {}),
-              ...(body.noNoop ? { noNoop: true } : {}),
-              ...(body.debug ? { debug: true } : {}),
-              ...(body.splay ? { splay: true, splayLimit: body.splayLimit } : {}),
+        // Identifiers are generated before the records exist so the response is
+        // known when the idempotency key is claimed: every replay of a lost
+        // response then names the same runs instead of starting new ones.
+        const executionIds = body.targetNodeIds.map(() => randomUUID());
+        const responseData = {
+          executionIds,
+          targetCount: body.targetNodeIds.length,
+          status: "running",
+          message: `Puppet run started on ${String(body.targetNodeIds.length)} node(s)`,
+          tool: selectedTool,
+        };
+
+        // Persist every record, or none. Provider work is dispatched only after
+        // the records are committed, so a failed admission cannot leave runs
+        // executing against rows that do not exist.
+        const admit = async (): Promise<void> => {
+          for (const [index, nodeId] of body.targetNodeIds.entries()) {
+            await executionRepository.create({
+              type: "puppet",
+              targetNodes: [nodeId],
+              action: "puppet_agent",
+              parameters: {
+                ...(body.tags ? { tags: body.tags } : {}),
+                ...(body.environment ? { environment: body.environment } : {}),
+                ...(body.noop ? { noop: true } : {}),
+                ...(body.noNoop ? { noNoop: true } : {}),
+                ...(body.debug ? { debug: true } : {}),
+                ...(body.splay ? { splay: true, splayLimit: body.splayLimit } : {}),
+              },
+              status: "running",
+              startedAt: new Date().toISOString(),
+              results: [],
+              expertMode,
+              executionTool: selectedTool,
+              command: puppetCommand,
+            }, executionIds[index]);
+          }
+        };
+
+        const suppliedKey = req.get("Idempotency-Key");
+        const outcome = requestIdempotency
+          ? await requestIdempotency.run(
+            {
+              userId,
+              key: suppliedKey === undefined
+                ? undefined
+                : RequestIdempotencyService.validateKey(suppliedKey),
+              scope: PUPPET_RUN_IDEMPOTENCY_SCOPE,
+              fingerprint: RequestIdempotencyService.fingerprint(PUPPET_RUN_IDEMPOTENCY_SCOPE, body),
             },
-            status: "running",
-            startedAt: new Date().toISOString(),
-            results: [],
-            expertMode,
-            executionTool: selectedTool,
-            command: puppetCommand,
+            { status: 202, body: responseData },
+            admit,
+          )
+          : await admit().then(() => ({ claimed: true as const }));
+
+        // A replay names runs that are already dispatched or finished; starting
+        // them again is exactly the duplication the key exists to prevent.
+        if (!outcome.claimed) {
+          logger.info("Replaying a decided multi-node Puppet run submission", {
+            component: "PuppetRouter",
+            operation: "puppet-run-multi",
           });
-          executionIds.push(executionId);
+          res.status(outcome.replay.status).json(outcome.replay.body);
+          return;
         }
 
         // Execute puppet runs asynchronously for each node via shared helper
@@ -603,14 +660,6 @@ export function createPuppetRouter(
 
         const duration = Date.now() - startTime;
 
-        const responseData = {
-          executionIds,
-          targetCount: body.targetNodeIds.length,
-          status: "running",
-          message: `Puppet run started on ${String(body.targetNodeIds.length)} node(s)`,
-          tool: selectedTool,
-        };
-
         if (req.expertMode) {
           const debugInfo = expertModeService.createDebugInfo(
             "POST /api/puppet-run",
@@ -629,6 +678,28 @@ export function createPuppetRouter(
         }
       } catch (error) {
         const duration = Date.now() - startTime;
+
+        // An unusable or reused key is the client's to correct; neither dispatches work.
+        if (error instanceof IdempotencyKeyError) {
+          logger.warn("Rejected Puppet run with an unusable idempotency key", {
+            component: "PuppetRouter",
+            operation: "puppet-run-multi",
+          });
+          res.status(400).json({
+            error: { code: "INVALID_IDEMPOTENCY_KEY", message: error.message },
+          });
+          return;
+        }
+        if (error instanceof IdempotencyConflictError) {
+          logger.warn("Rejected Puppet run reusing an idempotency key", {
+            component: "PuppetRouter",
+            operation: "puppet-run-multi",
+          });
+          res.status(409).json({
+            error: { code: "IDEMPOTENCY_KEY_CONFLICT", message: error.message },
+          });
+          return;
+        }
 
         if (error instanceof z.ZodError) {
           logger.warn("Request validation failed", {

@@ -104,7 +104,8 @@ describe("Batch Execution API Endpoints", () => {
           type: "command",
           action: "uptime",
         },
-        "unknown"
+        "unknown",
+        undefined,
       );
     });
 
@@ -139,7 +140,8 @@ describe("Batch Execution API Endpoints", () => {
           action: "package::install",
           parameters: { name: "nginx" },
         },
-        "unknown"
+        "unknown",
+        undefined,
       );
     });
 

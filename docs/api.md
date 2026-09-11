@@ -156,6 +156,12 @@ Response includes facts keyed by source name:
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/nodes/:id/puppet-run` | Run `puppet agent` on node |
+| `POST` | `/api/puppet-run` | Run `puppet agent` across several nodes |
+
+The multi-node route takes the same options plus a required `targetNodeIds`
+array, answers HTTP 202 with one `executionIds` entry per node, and accepts
+`Idempotency-Key` (see [request idempotency](#request-idempotency)). Its records
+are persisted together before any provider work starts.
 
 **Request body:**
 
@@ -278,9 +284,37 @@ cover every target. Terminal progress includes cancelled and interrupted targets
 Recovery supports one application process. Shutdown stops admission; shutdown and
 startup reconciliation mark undispatched batch work `cancelled` and dispatched
 work with an unknown outcome `interrupted`. Neither is automatically replayed.
-Verify provider state before retrying interrupted work. Multi-process ownership,
-global concurrency across direct execution routes, and durable request idempotency
-are separate work; a lost admission response must not be blindly resubmitted.
+Verify provider state before retrying interrupted work. Multi-process ownership
+and global concurrency across direct execution routes are separate work.
+
+### Request idempotency
+
+`POST /api/executions/batch` and `POST /api/puppet-run` accept an optional
+`Idempotency-Key` request header, so a client that loses an admission response
+can resend the submission instead of guessing whether the work started.
+
+| Aspect | Behaviour |
+|---|---|
+| Header | `Idempotency-Key`: printable ASCII, no whitespace, 1-255 characters |
+| Scope | Per user and per route. One caller's key can never reach another's submission |
+| Replay | The same key with the same request returns the original response and identifiers, and starts no further work |
+| Conflict | The same key with a different request or route returns HTTP 409 `IDEMPOTENCY_KEY_CONFLICT` and admits nothing |
+| Bad key | An unusable value returns HTTP 400 `INVALID_IDEMPOTENCY_KEY` and admits nothing |
+| Retention | Startup purges keys older than 24 hours. A key stays replayable until such a purge, so a long-running process keeps its keys until the next restart |
+
+The key and the work it admits are written in one transaction, so a failed
+admission releases the key and the submission can be retried. A submission with
+no key is single-shot: resending it admits a second batch or a second set of
+Puppet runs. Request bodies are compared by content, so property order does not
+matter, but any difference in values is a conflict rather than a replay.
+
+Generate one key per user-initiated submission before the first attempt and reuse
+it for every retry of that submission; a key regenerated per attempt provides no
+protection. A fresh submission is a fresh intent and needs a fresh key. The web
+UI does this for parallel command and Puppet run submissions. Other mutating
+routes have no durable key, so their clients must not retry them: the built-in
+API client applies no transport retry to `POST`, `PUT`, `PATCH` or `DELETE`
+unless the request carries a key.
 
 ---
 
