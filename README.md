@@ -86,7 +86,7 @@ Check this [recording](https://asciinema.org/a/1073835) for a sample MCP session
 
 ## Prerequisites
 
-- **Node.js 20+** and **npm 9+** (or a container engine for Docker deployment)
+- **Node.js 24 LTS** (see `.nvmrc`) and **npm 11** (or a container engine for Docker deployment)
 - **Bolt CLI** — for Bolt integration ([setup](docs/integrations/bolt.md))
 - **Ansible CLI** — for Ansible integration ([setup](docs/integrations/ansible.md))
 - **Puppet/OpenVox agent** — for [PuppetDB](docs/integrations/puppetdb.md) and [Puppetserver](docs/integrations/puppetserver.md) integrations; provides SSL certs

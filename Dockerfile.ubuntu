@@ -1,73 +1,52 @@
-# Stage 1: Build frontend with Vite
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS frontend-builder
-ARG TARGETPLATFORM
-ARG BUILDPLATFORM
+# Locked workspace builds; native addons are compiled on the target platform.
+FROM --platform=$BUILDPLATFORM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS build
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json .npmrc ./
+COPY backend/package.json ./backend/package.json
+COPY frontend/package.json ./frontend/package.json
+COPY scripts/supply-chain/install-approved.mjs ./scripts/supply-chain/install-approved.mjs
+ENV npm_config_build_from_source=true npm_config_nodedir=/usr/local
+RUN npm ci --ignore-scripts --no-audit --no-fund && npm run install:approved
+COPY backend/ ./backend/
+COPY frontend/ ./frontend/
+RUN npm run build:frontend && npm run build:backend
+RUN npm sbom --workspace=frontend --omit=dev --sbom-format=cyclonedx > frontend.cdx.json
 
-WORKDIR /app/frontend
+FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS backend-deps
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json .npmrc ./
+COPY backend/package.json ./backend/package.json
+COPY frontend/package.json ./frontend/package.json
+COPY scripts/supply-chain/install-approved.mjs ./scripts/supply-chain/install-approved.mjs
+ENV npm_config_build_from_source=true npm_config_nodedir=/usr/local
+RUN npm ci --workspace=backend --omit=dev --ignore-scripts --no-audit --no-fund && npm run install:approved
+# Keep both hoisted and workspace-local packages in their locked locations.
+RUN mkdir -p backend/node_modules
 
-# Copy frontend package files
-COPY frontend/package*.json ./
-
-# Install frontend dependencies
-RUN npm install --no-audit
-
-# Copy frontend source
-COPY frontend/ ./
-
-# Build frontend
-RUN npm run build
-
-# Stage 2: Build backend TypeScript
-FROM --platform=$BUILDPLATFORM node:20-bookworm-slim AS backend-builder
-ARG TARGETPLATFORM
-ARG BUILDPLATFORM
-
-WORKDIR /app/backend
-
-# Copy backend package files
-COPY backend/package*.json ./
-
-# Install backend dependencies
-RUN npm install --no-audit
-
-# Copy backend source
-COPY backend/ ./
-
-# Build backend
-RUN npm run build
-
-# Stage 2.5: Install backend production dependencies
-# This runs on the target platform to ensure native modules (like sqlite3) are built correctly
-FROM node:20-bookworm-slim AS backend-deps
-WORKDIR /app/backend
-
-# Install build tools needed to compile sqlite3 from source
-# Pre-built binaries may target a newer glibc than bookworm provides (2.36)
-# hadolint ignore=DL3008
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends python3 make g++ && \
-    rm -rf /var/lib/apt/lists/*
-
-COPY backend/package*.json ./
-RUN npm install --omit=dev --no-audit --build-from-source
-
-# Stage 3: Install Bolt CLI gems in a builder stage
-FROM ubuntu:24.04 AS bolt-builder
-
-ENV DEBIAN_FRONTEND=noninteractive
-
-# hadolint ignore=DL3008
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ruby \
-    ruby-dev \
-    build-essential \
-    && gem install openbolt -v 5.1.0 --no-document \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# Stage 3: Locked OpenBolt gems with the RubyZip 3 WinRM adapter.
+FROM ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254 AS bolt-builder
+ENV DEBIAN_FRONTEND=noninteractive GEM_HOME=/opt/bolt/tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ruby ruby-dev build-essential libffi-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN gem install bundler -v 2.6.9 --no-document
+ENV PATH=/opt/bolt/tools/bin:$PATH \
+    BUNDLE_PATH=/opt/bolt/bundle \
+    BUNDLE_GEMFILE=/opt/bolt/Gemfile \
+    BUNDLE_FROZEN=true
+WORKDIR /opt/bolt
+COPY docker/bolt/Gemfile docker/bolt/Gemfile.lock ./
+COPY docker/bolt/prepare-winrm-fs.rb docker/bolt/test-winrm-rubyzip.rb ./
+RUN gem fetch winrm-fs -v 1.3.5 \
+    && ruby prepare-winrm-fs.rb winrm-fs-1.3.5.gem \
+    && bundle install \
+    && bundle binstubs openbolt --path bin \
+    && bundle exec ruby test-winrm-rubyzip.rb
 
 # Stage 4: Production image
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:224a1869083a311ef3f13648a154ba79832fbef6364d31493642ca03082da254
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 
@@ -84,52 +63,41 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Set shell to bash with pipefail option
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Install Node.js and runtime dependencies only
-# hadolint ignore=DL3008
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    gnupg \
-    && mkdir -p /etc/apt/keyrings \
-    # Add NodeSource repository for Node.js 20
-    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
-    && apt-get update && \
-    apt-get install -y --no-install-recommends \
-    nodejs \
-    ruby \
-    bash \
-    openssh-client \
-    git \
-    coreutils \
-    ansible \
-    # Remove packages only needed for repo setup
-    && apt-get purge -y --auto-remove gnupg curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+# Use the same pinned Node binary as the dependency build stage.
+COPY --from=backend-deps /usr/local/bin/node /usr/local/bin/node
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates libstdc++6 ruby bash openssh-client git coreutils ansible \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy pre-built Bolt gems from builder stage
-COPY --from=bolt-builder /var/lib/gems /var/lib/gems
-COPY --from=bolt-builder /usr/local/bin/bolt /usr/local/bin/bolt
+COPY --from=bolt-builder /opt/bolt /opt/bolt
+ENV GEM_HOME=/opt/bolt/tools \
+    BUNDLE_PATH=/opt/bolt/bundle \
+    BUNDLE_GEMFILE=/opt/bolt/Gemfile \
+    BUNDLE_FROZEN=true \
+    PATH=/opt/bolt/bin:/opt/bolt/tools/bin:$PATH
 
 # Create non-root user
 RUN groupadd -g 1001 pabawi && \
     useradd -u 1001 -g pabawi -m -s /bin/bash pabawi
 
 # Create application directory
-WORKDIR /app
+WORKDIR /app/backend
 
 # Copy built backend
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/dist ./dist
+COPY --from=backend-deps /app/package.json /app/.npmrc /app/
+COPY --from=backend-deps /app/package-lock.json /app/root-lock.json
+COPY --from=build /app/frontend.cdx.json /app/sbom/frontend.cdx.json
+COPY --from=build --chown=pabawi:pabawi /app/backend/dist ./dist
+COPY --from=backend-deps --chown=pabawi:pabawi /app/node_modules /app/node_modules
 COPY --from=backend-deps --chown=pabawi:pabawi /app/backend/node_modules ./node_modules
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/package*.json ./
+COPY --from=build --chown=pabawi:pabawi /app/backend/package.json ./
 
 # Copy database migrations (not copied by TypeScript compiler)
-COPY --from=backend-builder --chown=pabawi:pabawi /app/backend/src/database/migrations ./dist/database/migrations
+COPY --from=build --chown=pabawi:pabawi /app/backend/src/database/migrations ./dist/database/migrations
 
 # Copy built frontend to public directory
-COPY --from=frontend-builder --chown=pabawi:pabawi /app/frontend/dist ./public
+COPY --from=build --chown=pabawi:pabawi /app/frontend/dist ./public
 
 # Create /opt/pabawi directory tree for all runtime data
 RUN mkdir -p /opt/pabawi/data \

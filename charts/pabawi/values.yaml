@@ -104,6 +104,8 @@ topologySpreadConstraints: []
 priorityClassName: ""
 terminationGracePeriodSeconds: 30
 
+# SQLite always uses Recreate to prevent overlapping writers during rollouts.
+# This strategy applies only to PostgreSQL.
 strategy:
   type: RollingUpdate
   rollingUpdate:

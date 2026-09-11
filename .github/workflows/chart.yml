@@ -1,0 +1,24 @@
+name: Helm chart checks
+
+on:
+  pull_request:
+    paths: ['charts/**', 'scripts/deployment/**', '.github/workflows/chart.yml']
+  push:
+    branches: [main, develop]
+    paths: ['charts/**', 'scripts/deployment/**', '.github/workflows/chart.yml']
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.2.4
+      - run: npm ci --ignore-scripts
+      - run: helm dependency build charts/pabawi
+      - run: helm lint charts/pabawi
+      - run: node --test scripts/deployment/chart.test.mjs

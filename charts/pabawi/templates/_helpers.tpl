@@ -71,6 +71,29 @@ Secret name for chart-managed or user-supplied secret environment.
 {{- end -}}
 {{- end -}}
 
+{{/* Resolve once so the Secret and its rollout checksum share generated values. */}}
+{{- define "pabawi.jwtSecret" -}}
+{{- if not (hasKey . "pabawiResolvedJwt") -}}
+{{- $jwt := .Values.secrets.jwtSecret -}}
+{{- if not $jwt -}}
+{{- $existing := lookup "v1" "Secret" .Release.Namespace (include "pabawi.secretName" .) -}}
+{{- if and $existing $existing.data -}}
+{{- $jwt = (get $existing.data "JWT_SECRET" | default "" | b64dec) -}}
+{{- end -}}
+{{- end -}}
+{{- $_ := set . "pabawiResolvedJwt" (default (randAlphaNum 48) $jwt) -}}
+{{- end -}}
+{{- get . "pabawiResolvedJwt" -}}
+{{- end -}}
+
+{{- define "pabawi.migrationServiceAccountName" -}}
+{{- if .Values.serviceAccount.create -}}
+{{- printf "%s-migrate" (include "pabawi.fullname" . | trunc 55 | trimSuffix "-") -}}
+{{- else -}}
+{{- include "pabawi.serviceAccountName" . -}}
+{{- end -}}
+{{- end -}}
+
 {{/*
 Bundled Bitnami PostgreSQL service name.
 */}}
